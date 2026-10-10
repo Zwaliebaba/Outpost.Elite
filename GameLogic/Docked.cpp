@@ -8,6 +8,7 @@
 #include "Galaxy.h"
 #include "Input.h"
 #include "Market.h"
+#include "SaveLoad.h"
 #include "Ships.h"
 #include "Text.h"
 #include "Video.h"
@@ -46,26 +47,15 @@ constexpr std::uint16_t FRAME_CORNER_BYTES = 3; // the cell's offset, then the c
 
 // The routines the docked screens call, each through its hook or the original (ADR-010 item 8).
 constexpr std::uint16_t FINISH_SPACE_VIEW_FRAME = 0x0570;
-constexpr std::uint16_t SHOW_GALACTIC_CHART = 0x0CAE;
-constexpr std::uint16_t SHOW_SHORT_RANGE_CHART = 0x0E52;
 constexpr std::uint16_t DRAW_VIEW_STRING = 0x31EC;
 constexpr std::uint16_t DRAW_SCREEN_STRING = 0x32D8;
 constexpr std::uint16_t CLEAR_MESSAGE_LINE = 0x3609;
 constexpr std::uint16_t TRANSFORM_AND_DRAW_OBJECTS = 0x3D25;
 constexpr std::uint16_t START_NEW_GAME = 0x4671;
 constexpr std::uint16_t CLEAR_ALL_OBJECTS = 0x52B2;
-constexpr std::uint16_t SHOW_SELL_CARGO_SCREEN = 0x5A30;
-constexpr std::uint16_t SHOW_BUY_CARGO_SCREEN = 0x5AE9;
-constexpr std::uint16_t SHOW_EQUIP_SHIP_SCREEN = 0x5BF2;
-constexpr std::uint16_t SHOW_SYSTEM_DATA_SCREEN = 0x5CDE;
-constexpr std::uint16_t SHOW_MARKET_PRICES_SCREEN = 0x5E2C;
-constexpr std::uint16_t SHOW_COMMANDER_STATUS_SCREEN = 0x5EA9;
-constexpr std::uint16_t SHOW_INVENTORY_SCREEN = 0x6020;
-constexpr std::uint16_t SHOW_DISC_CONTROL_SCREEN = 0x660B;
 constexpr std::uint16_t START_MUSIC = 0x7401;
 constexpr std::uint16_t STOP_ALL_SOUND = 0x7423;
 constexpr std::uint16_t GET_KEY = 0x7616;
-constexpr std::uint16_t RESET_KEYBOARD = 0x7668;
 constexpr std::uint16_t SHOW_COCKPIT_SCREEN = 0x7BC0;
 constexpr std::uint16_t DRAW_TITLE_PLANET = 0x7D4E;
 constexpr std::uint16_t SHOW_CREDITS = 0x8F02;
@@ -211,20 +201,6 @@ constexpr std::uint8_t TITLE_SHIP_FLAGS = 2;
 void AddToWord(GameState& _state, std::uint16_t _offset, std::uint16_t _value)
 {
   _state.SetWord(_offset, Offset(_state.Word(_offset), _value));
-}
-
-// CALL GetKey; JE _loop: GetKey until a key comes.
-void WaitForKey(Guest& _guest, std::uint16_t _loop)
-{
-  for (;;)
-  {
-    _guest.Call(GET_KEY);
-    if (!_guest.Flag(Machine::FLAG_ZERO))
-    {
-      return;
-    }
-    _guest.JumpBack(_loop);
-  }
 }
 
 // CALL GetKey; JE _loop, de-assembled: GetKey until a key comes, each empty turn ending at the jump back (ADR-015). The turns
@@ -410,61 +386,119 @@ void RunTitle(Guest& _guest)
   _guest.Set(DS.titleShown, 1);
 }
 
-// The docked screen for each F-key in DockedKeyDispatch (CS:0B40).
+// The screen each F-key shows in DockedKeyDispatch (CS:0B45), in the order it tests them, called as the dispatch calls it: with
+// the direction flag and BP, which the screens that select the system at the cursor take as the count when no system is on the
+// chart. The status screen's arm (CS:0B96) resets the keyboard first. Every screen leaves ES on B800h, the text page or the
+// graphics screen, so a chart shown after another finds it there.
 struct DockedScreen
 {
   std::uint8_t key;
-  std::uint16_t entry;
+  ScreenKey (*show)(GameState&, Hardware&, bool, std::uint16_t);
+  bool clearsDirection; // a chart: PresentChartFrame clears the direction flag, which no other screen changes
 };
 
 constexpr std::array<DockedScreen, 9> DOCKED_SCREENS = {{
-  {SCAN_F2, SHOW_SELL_CARGO_SCREEN},
-  {SCAN_F3, SHOW_BUY_CARGO_SCREEN},
-  {SCAN_F4, SHOW_EQUIP_SHIP_SCREEN},
-  {SCAN_F5, SHOW_GALACTIC_CHART},
-  {SCAN_F6, SHOW_SHORT_RANGE_CHART},
-  {SCAN_F7, SHOW_SYSTEM_DATA_SCREEN},
-  {SCAN_F8, SHOW_MARKET_PRICES_SCREEN},
-  {SCAN_F9, SHOW_COMMANDER_STATUS_SCREEN},
-  {SCAN_F10, SHOW_INVENTORY_SCREEN},
+  {SCAN_F2, [](GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t /*_countIfNone*/)
+   { return ShowSellCargoScreen(_state, _hardware, _backward); }, false},
+  {SCAN_F3, [](GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t /*_countIfNone*/)
+   { return ShowBuyCargoScreen(_state, _hardware, _backward); }, false},
+  {SCAN_F4, [](GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t /*_countIfNone*/)
+   { return ShowEquipShipScreen(_state, _hardware, _backward); }, false},
+  {SCAN_F5, [](GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t /*_countIfNone*/)
+   { return ShowGalacticChart(_state, _hardware, _backward, GameState::VIDEO_SEGMENT); }, true},
+  {SCAN_F6, [](GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t /*_countIfNone*/)
+   { return ShowShortRangeChart(_state, _hardware, _backward, GameState::VIDEO_SEGMENT); }, true},
+  {SCAN_F7, &ShowSystemDataScreen, false},
+  {SCAN_F8, &ShowMarketPricesScreen, false},
+  {SCAN_F9,
+   [](GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _countIfNone)
+   {
+     ResetKeyboard(_state, _hardware);
+     return ShowCommanderStatusScreen(_state, _hardware, _backward, _countIfNone);
+   },
+   false},
+  {SCAN_F10, &ShowInventoryScreen, false},
 }};
 
-// DockedKeyDispatch (CS:0B40), from the arm that shows _screen: each screen returns the key that closed
-// it, which picks the next screen, until F1 leaves. Esc is the disc menu; any other key waits for one.
-void DispatchDockedKeys(Guest& _guest, std::uint16_t _screen)
+// How DockedKeyDispatch ends.
+struct DockedExit
 {
-  Machine::Registers& regs = _guest.Regs();
-  for (std::uint16_t screen = _screen;;)
+  bool leaves;             // the disc menu left through LeaveGameLoopForDisk, which returns past RunTitleAndDocked (DiscMenuExit)
+  ScreenKey key;           // otherwise F1, with AL as the screen and the waits for a key leave it
+  std::uint16_t countLeft; // BP, as the screens leave it
+  bool backward;           // the direction flag, as they leave it
+};
+
+// DockedKeyDispatch (CS:0B40), from the arm that shows the screen for _screenKey: F9's status screen (CS:0B96), or Esc's disc menu
+// (CS:0BAC). Each screen returns the key that closed it, which picks the next screen, until F1 leaves; Esc is the disc menu, and
+// any other key waits for one (CS:0B40). _countIfNone is BP and _backward the direction flag as RunTitleAndDocked leaves them,
+// carried from screen to screen as the original's registers carry them. Every jump back to the tests carries the key and BP,
+// which the next screen reads; the wait's turns carry nothing, as WaitForKey's do.
+DockedExit DispatchDockedKeys(GameState& _state, Hardware& _hardware, std::uint8_t _screenKey, std::uint16_t _countIfNone, bool _backward)
+{
+  std::uint8_t screenKey = _screenKey;
+  std::uint16_t countLeft = _countIfNone;
+  bool backward = _backward;
+  for (;;)
   {
-    if (screen == SHOW_COMMANDER_STATUS_SCREEN)
+    ScreenKey key{};
+    if (screenKey == SCAN_ESCAPE)
     {
-      _guest.Call(RESET_KEYBOARD);
+      const DiscMenuExit exit = ShowDiscControlScreen(_state, _hardware, backward);
+      if (exit.leaves)
+      {
+        return DockedExit{true, ScreenKey{}, countLeft, backward};
+      }
+      key = ScreenKey{exit.scanCode, exit.al, std::nullopt};
     }
-    _guest.Call(screen);
-    _guest.JumpBack(DOCKED_KEY_TEST);
+    else
+    {
+      const auto screen = std::ranges::find(DOCKED_SCREENS, screenKey, &DockedScreen::key);
+      key = screen->show(_state, _hardware, backward, countLeft);
+      backward = backward && !screen->clearsDirection;
+    }
+    countLeft = key.countLeft.value_or(countLeft);
+    _hardware.LoopTurn(DOCKED_KEY_TEST, {Join(key.scanCode, key.al), countLeft});
     for (;;)
     {
-      const std::uint8_t key = High(regs.ax);
-      if (key == SCAN_F1)
+      if (key.scanCode == SCAN_F1)
       {
-        return;
+        return DockedExit{false, key, countLeft, backward};
       }
-      const auto found = std::ranges::find(DOCKED_SCREENS, key, &DockedScreen::key);
-      if (found != DOCKED_SCREENS.end())
+      if (std::ranges::find(DOCKED_SCREENS, key.scanCode, &DockedScreen::key) != DOCKED_SCREENS.end())
       {
-        screen = found->entry;
+        screenKey = key.scanCode;
         break;
       }
-      SetHigh(regs.ax, static_cast<std::uint8_t>(key - 1));
-      if (High(regs.ax) == 0)
+      // DEC AH: Esc reaches 0, and shows the disc menu.
+      if (key.scanCode == SCAN_ESCAPE)
       {
-        screen = SHOW_DISC_CONTROL_SCREEN;
+        screenKey = SCAN_ESCAPE;
         break;
       }
-      _guest.JumpBack(DOCKED_KEY_DISPATCH);
-      WaitForKey(_guest, DOCKED_KEY_DISPATCH);
+      _hardware.LoopTurn(DOCKED_KEY_DISPATCH, {});
+      const KeyPress next = WaitForKey(_state, _hardware, DOCKED_KEY_DISPATCH);
+      key = ScreenKey{next.scanCode, AlAfterKey(key.al, next), std::nullopt};
     }
   }
+}
+
+// What the screens leave that no value routine computes: BX, CX, DX, SI and DI, as the last of them leaves them.
+constexpr Machine::NativeContract DOCKED_SCREENS_LEAVE{
+  Machine::REGISTER_BX | Machine::REGISTER_CX | Machine::REGISTER_DX | Machine::REGISTER_SI | Machine::REGISTER_DI, 0};
+
+// What DockedKeyDispatch leaves for RunTitleAndDocked's register code: ES = B800h, as every screen leaves it; BP and the direction
+// flag as the screens carry them; and AX the F1 that ends it or, once the disc menu leaves for the disk, the return address
+// LeaveGameLoopForDisk's second POP AX takes, RunTitleAndDocked's own, so that its RET returns from GameLoop. The first POP takes
+// the disc menu's return address, which a value call has none of.
+void DockedExitOut(Guest& _guest, const DockedExit& _exit)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.es = Guest::VIDEO_SEGMENT;
+  regs.bp = _exit.countLeft;
+  _guest.SetFlag(Machine::FLAG_DIRECTION, _exit.backward);
+  regs.ax = _exit.leaves ? _guest.Pop() : Join(_exit.key.scanCode, _exit.key.al);
+  _guest.Clobber(DOCKED_SCREENS_LEAVE);
 }
 
 } // namespace
@@ -557,8 +591,8 @@ ScreenKey WaitForScreenExitKey(GameState& _state, Hardware& _hardware, std::uint
     const std::uint8_t scanCode = key.scanCode;
     if (scanCode != 0 && scanCode != _ownKey && (scanCode == SCAN_ESCAPE || (scanCode >= SCAN_F1 && scanCode <= SCAN_F10)))
     {
-      SelectSystemAtCursor(_state, _countIfNone);
-      return ScreenKey{scanCode, al};
+      const std::uint16_t countLeft = SelectSystemAtCursor(_state, _countIfNone);
+      return ScreenKey{scanCode, al, countLeft};
     }
     _hardware.LoopTurn(WAIT_FOR_SCREEN_EXIT_KEY, {});
   }
@@ -951,14 +985,18 @@ void RunTitleAndDocked(Guest& _guest)
     RunTitle(_guest);
   }
   // Into DockedKeyDispatch: back from a disk request, at the disc menu; otherwise at the status screen.
+  std::uint8_t screenKey = SCAN_F9;
   if (_guest.Get(DS.resumeAtDiskMenu) == 1)
   {
     _guest.JumpBack(DOCKED_DISK_MENU_ENTRY);
-    DispatchDockedKeys(_guest, SHOW_DISC_CONTROL_SCREEN);
-    return;
+    screenKey = SCAN_ESCAPE;
   }
-  _guest.JumpBack(DOCKED_STATUS_ENTRY);
-  DispatchDockedKeys(_guest, SHOW_COMMANDER_STATUS_SCREEN);
+  else
+  {
+    _guest.JumpBack(DOCKED_STATUS_ENTRY);
+  }
+  DockedExitOut(_guest,
+                DispatchDockedKeys(_guest.State(), _guest.Devices(), screenKey, _guest.Regs().bp, _guest.Flag(Machine::FLAG_DIRECTION)));
 }
 
 // ── Their entries ──

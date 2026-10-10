@@ -38,6 +38,7 @@ constexpr std::uint16_t PLACE_CHART_LABELS = 0x1505;
 constexpr std::uint16_t ADD_CHART_LABEL = 0x1552;
 constexpr std::uint16_t NUDGE_CHART_LABEL = 0x157D;
 constexpr std::uint16_t CHART_ITEM_OVERLAPS = 0x15A9;
+constexpr std::uint16_t CLEAR_CHART_TEXT_LINES = 0x15BC;
 constexpr std::uint16_t TERMINATE_SELECTED_SYSTEM_NAME = 0x60EB;
 constexpr std::uint16_t FORMAT_SELECTED_SYSTEM_DISTANCE = 0x60F7;
 constexpr std::uint16_t SHOW_SYSTEM_DESCRIPTION = 0x6FC0;
@@ -601,6 +602,26 @@ public:
       }
     }
     rig.AssertAllAgreed(SHOW_NEAREST_SYSTEM_DISTANCE, calls);
+  }
+
+  // The two text lines under a chart cleared in each ink, on no paper and on some: the charts clear them in colour 1 on none
+  // as they open, and call ClearChartTextLines as a value since level 5, so only this test compares it at its entry.
+  TEST_METHOD(ChartTextLinesClearInEveryInk)
+  {
+    ComparisonRig rig("ClearChartTextLines");
+    Elite::Guest guest = GuestOf(rig);
+    std::uint64_t calls = 0;
+    for (const std::uint16_t paper : {std::uint16_t{0}, std::uint16_t{0xAAAA}})
+    {
+      guest.Set(DS.textPaperPattern, paper);
+      for (const std::uint16_t ink : {std::uint16_t{0x5555}, std::uint16_t{0xAAAA}, std::uint16_t{0xFFFF}})
+      {
+        CallOnScreen(rig, CLEAR_CHART_TEXT_LINES,
+                     {.ax = 0x1111, .bx = ink, .cx = 0x3333, .dx = 0x4444, .si = 0x5555, .di = 0x6666, .bp = 0x7777});
+        ++calls;
+      }
+    }
+    rig.AssertAllAgreed(CLEAR_CHART_TEXT_LINES, calls);
   }
 
   // The control codes' handlers called at their entries, as ExpandDescriptionText jumps to them: names ending in

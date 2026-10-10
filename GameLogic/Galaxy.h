@@ -12,24 +12,11 @@
 namespace Elite
 {
 
-// The reference's galaxy routines, ported (plan §5 Phase 3, ADR-010): the procedural galaxy, its systems and the charts. Each body is declared
-// here once it is ported, on the registers of its contract in Symbols.tsv. The routines de-assembled so far (ADR-012) take values and
-// give values back, and their entries, at the end, keep the register contracts.
+// The reference's galaxy routines, ported (plan §5 Phase 3, ADR-010): the procedural galaxy, its systems and the charts. All of them
+// are de-assembled (ADR-012): they take values and give values back, and their entries, at the end, keep the register contracts.
 
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> GalaxyEntries() noexcept;
-
-/// ShowGalacticChart (CS:0CAE): F5's chart of the galaxy's 256 systems, a frame at a time until Esc or another F key
-/// closes it, the cursor moved by the steering. D shows the distance to the system nearest the cursor, F finds one
-/// by name, keypad 5 or fire recentres the cursor. Waits for keys. Out: AX the closing key.
-void ShowGalacticChart(Guest& _guest);
-
-/// ShowShortRangeChart (CS:0E52): F6's chart of the systems around the current one, labelled, as ShowGalacticChart
-/// runs its own. Waits for keys. Out: AX the closing key.
-void ShowShortRangeChart(Guest& _guest);
-
-/// DrawChartItems (CS:14C5): the short-range chart's discs and labels.
-void DrawChartItems(Guest& _guest);
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
@@ -134,8 +121,10 @@ void MoveCursorToSystem(GameState& _state);
 
 /// SelectSystemAtCursor (CS:1199): the system nearest the chart cursor selected (FindNearestSystem, with _countIfNone),
 /// its distance into distanceDigits, then from its seeds its government, economy, tech level, population, species,
-/// productivity and radius, the description's seeds, and its name.
-void SelectSystemAtCursor(GameState& _state, std::uint16_t _countIfNone);
+/// productivity and radius, the description's seeds, and its name. Returns what FindNearestSystem leaves in BP: the count its
+/// loop had left at the system, 100h less the index in the low byte and 0 in the high, or _countIfNone when no system is on
+/// the chart.
+std::uint16_t SelectSystemAtCursor(GameState& _state, std::uint16_t _countIfNone);
 
 /// FindNearestSystem (CS:1292): the system nearest the chart cursor, by dx^2 + (dy/2)^2 in chart units, of those on the
 /// current chart: its index into selectedSystemIndex, its seeds into systemSeed0-2, and the cursor onto it. A distance whose
@@ -172,6 +161,22 @@ void FindSystemByName(GameState& _state, Hardware& _hardware, std::uint16_t _seg
 /// key (WaitForScreenExitKey, with _countIfNone), which selects the system at the chart cursor again. _backward is the
 /// direction flag, which DrawDockedFrame and ShowSystemDescription go by. Waits for keys as a rule (ADR-015).
 ScreenKey ShowSystemDataScreen(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _countIfNone);
+
+/// ShowGalacticChart (CS:0CAE): F5's chart of the galaxy's 256 systems: the current system and the cursor kept for the galactic
+/// chart, a frame at a time until Esc or another F key closes it, the cursor moved by the steering. D shows the distance to the
+/// system nearest the cursor, F finds one by name, keypad 5 or fire recentres the cursor; a key that closes it selects the system
+/// at the cursor unless the hyperspace countdown runs. _backward is the direction flag on the first frame, and _segment the ES it
+/// draws its title through when the chart frame shows already (DrawChartFrame). Waits for keys as a rule (ADR-015).
+ScreenKey ShowGalacticChart(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _segment);
+
+/// ShowShortRangeChart (CS:0E52): F6's chart of the systems around the current one, each a disc and a label placed clear of the
+/// others (PlaceChartLabels), run as ShowGalacticChart runs its own.
+ScreenKey ShowShortRangeChart(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _segment);
+
+/// DrawChartItems (CS:14C5): the short-range chart's chartItemCount items in colour 3: a label by DrawSmallViewString in ink
+/// FFFFh at its top-left corner, a disc (DrawDisc, which goes by _backward, the direction flag) at its centre. Returns whether it
+/// drew a disc, which leaves the original's ES on the data segment.
+bool DrawChartItems(GameState& _state, bool _backward);
 
 /// PlaceChartLabels (CS:1505): each of chartItemCount pending labels, nudged clear of every chart item until
 /// NudgeChartLabel runs out of tries, added to chartItems by AddChartLabel.
@@ -243,6 +248,11 @@ std::uint16_t CopySelectedNameLower(GameState& _state);
 // Each reads its routine's inputs from the registers Symbols.tsv's contract names, calls it, and writes its
 // results back there. The registers the contract leaves to the routine it hands to Guest::Clobber.
 
+/// In: ES the screen, as ShowGalacticChart's _segment. Out: AX the closing key, BP as SelectSystemAtCursor's search leaves it,
+/// ES = B800h and DF clear; BX, CX, DX, SI and DI clobbered.
+void ShowGalacticChartEntry(Guest& _guest);
+void ShowShortRangeChartEntry(Guest& _guest); ///< As ShowGalacticChartEntry.
+void DrawChartItemsEntry(Guest& _guest);      ///< Out: ES = DS once a disc is drawn. Every other register but DS clobbered.
 void GetShortRangeOffsetEntry(Guest& _guest);
 void IsSystemOnChartEntry(Guest& _guest);
 void TwistSystemSeedsEntry(Guest& _guest);

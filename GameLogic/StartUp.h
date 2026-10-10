@@ -27,10 +27,6 @@ void Start(Guest& _guest);
 /// Left only by LeaveGameLoopForDisk, which returns past it into Start.
 void GameLoop(Guest& _guest);
 
-/// ShowCredits (CS:8F02): the nine lines of creditsScreenText in the view, presented, then 3000 timer ticks
-/// (3 s). Clobbers all but DS.
-void ShowCredits(Guest& _guest);
-
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState and the devices (ADR-014) ──
 
 /// InstallDivideAndKeyboardInterrupts (CS:0105): int 0 and int 9 in the interrupt table at _vectors:0000 saved and,
@@ -57,6 +53,10 @@ void WipeProgram(GameState& _state, Hardware& _hardware, bool _backward);
 /// _backward, down (REP MOVSB), and the per-game state reset.
 void StartNewGame(GameState& _state, bool _backward);
 
+/// ShowCredits (CS:8F02): the space view's buffer cleared (ClearDrawBuffer, which goes by _backward, the direction flag), the
+/// nine lines of creditsScreenText drawn in it, presented (FinishSpaceViewFrame), then 3000 timer ticks, about 3 s. Waits.
+void ShowCredits(GameState& _state, Hardware& _hardware, bool _backward);
+
 // ── Their entries: the register contracts, for the hooks and for callers not yet converted ──
 
 void InstallDivideAndKeyboardInterruptsEntry(Guest& _guest); ///< In: ES=0. Out: ES=B800, IF=1; AX clobbered.
@@ -65,5 +65,6 @@ void CheckCheatArgumentEntry(Guest& _guest);                 ///< AX, BX, CX and
 void CopyProtectionEntry(Guest& _guest);                     ///< Clobbers all. Waits sometimes.
 void WipeProgramEntry(Guest& _guest);                        ///< Out: IF=0; AX, CX, DI and ES clobbered.
 void StartNewGameEntry(Guest& _guest);                       ///< Out: ES=DS; AX, CX, SI and DI clobbered.
+void ShowCreditsEntry(Guest& _guest);                        ///< Out: DF clear, BP=20h; all but DS clobbered. Waits.
 
 } // namespace Elite

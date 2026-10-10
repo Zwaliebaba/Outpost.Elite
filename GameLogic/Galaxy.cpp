@@ -6,8 +6,10 @@
 #include "Arithmetic.h"
 #include "DataOverlay.h"
 #include "Input.h"
+#include "Video.h"
 
 #include <initializer_list>
+#include <optional>
 
 namespace Elite
 {
@@ -15,32 +17,12 @@ namespace Elite
 namespace
 {
 
-// The original routines these call, which other subsystems port.
-constexpr std::uint16_t PRESENT_CHART_FRAME = 0x0587;
-constexpr std::uint16_t PLOT_PIXEL = 0x15E0;
-constexpr std::uint16_t DRAW_CLIPPED_LINE = 0x1603;
-constexpr std::uint16_t DRAW_LINE = 0x16D1;
-constexpr std::uint16_t DRAW_DISC = 0x1826;
-constexpr std::uint16_t DRAW_SCREEN_STRING = 0x32D8;
-constexpr std::uint16_t DRAW_SMALL_VIEW_STRING = 0x3527;
-constexpr std::uint16_t READ_FIRE_BUTTON = 0x74E0;
-constexpr std::uint16_t GET_KEY = 0x7616;
-constexpr std::uint16_t DRAW_CHART_FRAME = 0x7C25;
-
-// This subsystem's routines, which the routines that wait call through their entries.
-constexpr std::uint16_t GET_SHORT_RANGE_OFFSET = 0x1076;
-constexpr std::uint16_t TWIST_SYSTEM_SEEDS = 0x10C0;
-constexpr std::uint16_t LOAD_GALAXY_SEEDS = 0x10D6;
-constexpr std::uint16_t SELECT_SYSTEM_AT_CURSOR = 0x1199;
-constexpr std::uint16_t SHOW_NEAREST_SYSTEM_DISTANCE = 0x1341;
-constexpr std::uint16_t LOAD_SYSTEM_SEEDS = 0x139C;
-constexpr std::uint16_t ADVANCE_TO_NEXT_SYSTEM = 0x13B4;
-constexpr std::uint16_t FIND_SYSTEM_BY_NAME = 0x140D;
-constexpr std::uint16_t DRAW_CHART_ITEMS = 0x14C5;
-constexpr std::uint16_t PLACE_CHART_LABELS = 0x1505;
-constexpr std::uint16_t CLEAR_CHART_TEXT_LINES = 0x15BC;
+// What PresentChartFrame leaves in BP, CopyChartBufferToScreen's MOV BP,20h, the words of a line it copies: the count a chart
+// hands ShowNearestSystemDistance, FindSystemByName and SelectSystemAtCursor for when no system is on the chart.
+constexpr std::uint16_t PRESENT_CHART_FRAME_BP = 0x20;
 
 // Where the loops of the routines that wait jump back to.
+constexpr std::uint16_t SHOW_NEAREST_SYSTEM_DISTANCE = 0x1341; // FindSystemByName jumps to its entry when nothing is typed
 constexpr std::uint16_t GALACTIC_CHART_FRAME = 0x0CF9;
 constexpr std::uint16_t GALACTIC_SYSTEM_DOT = 0x0D92;
 constexpr std::uint16_t GALACTIC_KEY_IGNORED = 0x0E0A;
@@ -337,38 +319,25 @@ void ContinueOutput(DescriptionOutput& _outer, const DescriptionOutput& _inner)
   return Join(_name.length, _name.fourthPair);
 }
 
-// A chart's cross (CS:0D33, CS:0D61, CS:0FAD): _arm either way of (DX, BX) across and down, as two clipped
-// lines, with CX = DX and AX = BX on entry.
-void DrawCross(Guest& _guest, std::uint16_t _arm)
+// A chart's cross (CS:0D33, CS:0D61, CS:0FAD): _arm either way of (_x, _row), across and then down, each a clipped line. The
+// original keeps the centre on the stack between them (PUSH BX / PUSH DX). Returns whether either line's DrawLine filled a
+// horizontal line's bytes, after which the direction flag is clear.
+bool DrawCross(GameState& _state, std::uint16_t _x, std::uint16_t _row, std::uint16_t _arm)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Push(regs.bx);
-  _guest.Push(regs.dx);
-  regs.cx = static_cast<std::uint16_t>(regs.cx - _arm);
-  regs.dx = static_cast<std::uint16_t>(regs.dx + _arm);
-  _guest.Call(DRAW_CLIPPED_LINE);
-  regs.dx = _guest.Pop();
-  regs.bx = _guest.Pop();
-  regs.ax = regs.bx;
-  regs.cx = regs.dx;
-  regs.ax = static_cast<std::uint16_t>(regs.ax - _arm);
-  regs.bx = static_cast<std::uint16_t>(regs.bx + _arm);
-  _guest.Call(DRAW_CLIPPED_LINE);
+  const bool across = DrawClippedLine(_state, Offset(_x, _arm), _row, static_cast<std::uint16_t>(_x - _arm), _row);
+  const bool down = DrawClippedLine(_state, _x, Offset(_row, _arm), _x, static_cast<std::uint16_t>(_row - _arm));
+  return across || down;
 }
 
-// The chart cursor's cross and the dot at its centre, in colour 1 then 0 (CS:0D4D, CS:0F99).
-void DrawChartCursor(Guest& _guest)
+// The chart cursor's cross in colour 1 and the dot at its centre in colour 0 (CS:0D4D, CS:0F99). Returns whether a line of the
+// cross filled, as DrawCross.
+bool DrawChartCursor(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Set(DS.drawColor, 1);
-  regs.cx = _guest.Get(DS.chartCursorX);
-  regs.dx = regs.cx;
-  regs.ax = _guest.Get(DS.chartCursorY);
-  regs.bx = regs.ax;
-  DrawCross(_guest, CURSOR_ARM);
-  _guest.Set(DS.drawColor, 0);
-  regs.dx = Join(_guest.Get(DS.chartCursorY), _guest.Get(DS.chartCursorX));
-  _guest.Call(PLOT_PIXEL);
+  _state.Set(DS.drawColor, 1);
+  const bool filled = DrawCross(_state, _state.Get(DS.chartCursorX), _state.Get(DS.chartCursorY), CURSOR_ARM);
+  _state.Set(DS.drawColor, 0);
+  PlotPixel(_state, _state.Get(DS.chartCursorX), _state.Get(DS.chartCursorY));
+  return filled;
 }
 
 // The steering moves a chart's cursor (CS:0DB4, CS:0FDA): the roll across, clamped to the chart, and the pitch negated down,
@@ -405,18 +374,58 @@ ChartPoint MoveChartCursor(GameState& _state, Hardware& _hardware, std::uint8_t 
   return cursor;
 }
 
-// MoveChartCursor on the chart loop's registers: AL in, the cursor out in AX. ReadSteering's BX, CX and DX, which no caller
-// reads, are not reproduced.
-void MoveChartCursorOnRegisters(Guest& _guest)
+// One frame of the galactic chart up to its presentation (CS:0CF9): the fuel range about the current system, its cross, the
+// cursor, and a dot for each of the galaxy's 256 systems, the seeds twisted four times from one to the next. _backward is the
+// direction flag, which DrawDisc goes by. The dots' loop carries its count, in AL, and reports its turns to _hardware.
+void DrawGalacticChart(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const ChartPoint cursor = MoveChartCursor(_guest.State(), _guest.Devices(), Low(regs.ax));
-  regs.ax = Join(cursor.row, cursor.x);
+  LoadGalaxySeeds(_state);
+  const auto fuelRadius = static_cast<std::uint16_t>((_state.Get(DS.fuel) >> 3) + 3);
+  _state.Set(DS.drawColor, 2);
+  DrawDisc(_state, fuelRadius, _state.Get(DS.currentSystemX), _state.Get(DS.currentSystemChartY), _backward);
+  _state.Set(DS.drawColor, 0);
+  (void)DrawCross(_state, _state.Get(DS.currentSystemX), _state.Get(DS.currentSystemChartY), CURRENT_SYSTEM_ARM);
+  (void)DrawChartCursor(_state);
+  _state.Set(DS.drawColor, CHART_DISC_COLOR);
+  // XOR AL,AL, then PUSH AX / POP AX round each dot.
+  for (std::uint8_t systems = 0;;)
+  {
+    PlotPixel(_state, _state.Get(DS.systemX), static_cast<std::uint8_t>(_state.Get(DS.systemY) >> 1));
+    TwistSystemSeeds(_state);
+    TwistSystemSeeds(_state);
+    TwistSystemSeeds(_state);
+    TwistSystemSeeds(_state);
+    systems = static_cast<std::uint8_t>(systems + 1);
+    if (systems == 0)
+    {
+      return;
+    }
+    _hardware.LoopTurn(GALACTIC_SYSTEM_DOT, {systems});
+  }
 }
 
-// What tells the two charts' key handling apart.
+// One frame of the short-range chart up to its presentation (CS:0F60): the fuel range about the centre, the current system's
+// cross, the chart's discs and labels, and the cursor. _backward is the direction flag, which DrawDisc goes by; the cross's
+// horizontal line clears it before the chart's discs.
+void DrawShortRangeChart(GameState& _state, Hardware& /*_hardware*/, bool _backward)
+{
+  const auto fuelRadius = static_cast<std::uint16_t>(_state.Get(DS.fuel) >> 1);
+  _state.Set(DS.drawColor, 2);
+  DrawDisc(_state, fuelRadius, SHORT_RANGE_CENTER_X, SHORT_RANGE_CENTER_ROW, _backward);
+  _state.Set(DS.drawColor, 0);
+  // The current system's cross, from (50h, 51h) to (50h, 2Fh) and from (61h, 40h) to (3Fh, 40h).
+  const bool downFilled = DrawLine(_state, 0x50, 0x51, 0x50, 0x2F);
+  const bool acrossFilled = DrawLine(_state, 0x61, 0x40, 0x3F, 0x40);
+  _state.Set(DS.drawColor, CHART_DISC_COLOR);
+  (void)DrawChartItems(_state, _backward && !downFilled && !acrossFilled);
+  (void)DrawChartCursor(_state);
+}
+
+// What tells the two charts apart: how a frame is drawn and paced, where the loop jumps back to, and the keys.
 struct ChartKeys
 {
+  void (*drawFrame)(GameState&, Hardware&, bool);
+  PacingPoint pacing;    // the IBM PC's redraw (D18), paid before PresentChartFrame
   std::uint16_t frame;   // the start of the chart's frame, where its loop jumps back to
   std::uint16_t ignored; // the jump to it that the key tests reach (CS:0E0A, CS:1030)
   std::uint8_t ownKey;   // the chart's own F key, which leaves it open
@@ -440,14 +449,18 @@ void RecenterShortRangeCursor(GameState& _state)
   _state.Set(DS.chartCursorY, static_cast<std::uint8_t>(SHORT_RANGE_CENTER_ROW));
 }
 
-constexpr ChartKeys GALACTIC_CHART_KEYS{.frame = GALACTIC_CHART_FRAME,
+constexpr ChartKeys GALACTIC_CHART_KEYS{.drawFrame = &DrawGalacticChart,
+                                        .pacing = GALACTIC_CHART_PACING,
+                                        .frame = GALACTIC_CHART_FRAME,
                                         .ignored = GALACTIC_KEY_IGNORED,
                                         .ownKey = SCAN_F5,
                                         .recenter = &RecenterGalacticCursor,
                                         .recenterThroughAl = true,
                                         .keptCursorX = DS.galacticCursorX,
                                         .keptCursorY = DS.galacticCursorY};
-constexpr ChartKeys SHORT_RANGE_CHART_KEYS{.frame = SHORT_RANGE_CHART_FRAME,
+constexpr ChartKeys SHORT_RANGE_CHART_KEYS{.drawFrame = &DrawShortRangeChart,
+                                           .pacing = SHORT_RANGE_CHART_PACING,
+                                           .frame = SHORT_RANGE_CHART_FRAME,
                                            .ignored = SHORT_RANGE_KEY_IGNORED,
                                            .ownKey = SCAN_F6,
                                            .recenter = &RecenterShortRangeCursor,
@@ -455,139 +468,105 @@ constexpr ChartKeys SHORT_RANGE_CHART_KEYS{.frame = SHORT_RANGE_CHART_FRAME,
                                            .keptCursorX = DS.shortRangeCursorX,
                                            .keptCursorY = DS.shortRangeCursorY};
 
-// A chart's key (CS:0DEF, CS:1015): D shows the distance to the system nearest the cursor, F finds one by
-// name, keypad 5 or fire recentres the cursor, and Esc or an F key other than the chart's own closes it,
-// selecting the system at the cursor unless the hyperspace countdown runs. True when it closes, with the
-// key in AX; otherwise it jumps back to the chart's frame.
-[[nodiscard]] bool ReadChartKey(Guest& _guest, const ChartKeys& _chart)
+// A chart's key (CS:0DEF, CS:1015), with AL _al, the cursor's x as the frame leaves it: D shows the distance to the system
+// nearest the cursor, F finds one by name, keypad 5 or fire recentres the cursor, and Esc or an F key other than the chart's
+// own closes it, selecting the system at the cursor unless the hyperspace countdown runs. Returns the key that closes it, with
+// AL as GetKey and the recentring leave it and BP as the original leaves it. Otherwise it takes the turns the original takes back
+// to the chart's frame, which carry nothing: the frame loads every register it reads, and the direction flag is clear from the
+// first PresentChartFrame on.
+std::optional<ScreenKey> ReadChartKey(GameState& _state, Hardware& _hardware, const ChartKeys& _chart, std::uint8_t _al)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Call(GET_KEY);
-  if (_guest.Flag(Machine::FLAG_ZERO))
+  const KeyPress key = GetKey(_state, _hardware);
+  // GetKey turns interrupts on, and its hook call took the interrupts due then: ReadSteering leaves them off when the IBM stick
+  // does not answer, and its read counts the time an interrupt can fall due in (ADR-014 item 10).
+  _hardware.TakeDueInterrupts();
+  std::uint8_t al = AlAfterKey(_al, key);
+  const std::uint8_t scanCode = key.scanCode;
+  if (scanCode == 0)
   {
-    _guest.JumpBack(_chart.frame);
-    return false;
+    _hardware.LoopTurn(_chart.frame, {});
+    return std::nullopt;
   }
-  const std::uint8_t key = High(regs.ax);
-  if (key == SCAN_D || key == SCAN_F)
+  // PresentChartFrame leaves ES on the screen, BP the words of a line it copied and the direction flag clear; the steering and
+  // GetKey keep them.
+  if (scanCode == SCAN_D)
   {
-    _guest.Call(key == SCAN_D ? SHOW_NEAREST_SYSTEM_DISTANCE : FIND_SYSTEM_BY_NAME);
-    _guest.JumpBack(_chart.frame);
-    return false;
+    ShowNearestSystemDistance(_state, PRESENT_CHART_FRAME_BP, GameState::VIDEO_SEGMENT);
+    _hardware.LoopTurn(_chart.frame, {});
+    return std::nullopt;
   }
-  bool recenter = key == SCAN_KEYPAD_5;
-  if (!recenter)
+  if (scanCode == SCAN_F)
   {
-    _guest.Push(regs.ax);
-    _guest.Call(READ_FIRE_BUTTON);
-    regs.ax = _guest.Pop();
-    recenter = _guest.Flag(Machine::FLAG_CARRY);
+    FindSystemByName(_state, _hardware, GameState::VIDEO_SEGMENT, PRESENT_CHART_FRAME_BP, false);
+    _hardware.LoopTurn(_chart.frame, {});
+    return std::nullopt;
   }
-  if (recenter)
+  // PUSH AX / POP AX round ReadFireButton keep the key.
+  if (scanCode == SCAN_KEYPAD_5 || ReadFireButton(_state, _hardware))
   {
-    _chart.recenter(_guest.State());
+    _chart.recenter(_state);
     if (_chart.recenterThroughAl)
     {
-      SetLow(regs.ax, _guest.Get(DS.chartCursorY));
+      al = _state.Get(DS.chartCursorY);
     }
   }
-  const bool closes = key == SCAN_ESCAPE || (key >= SCAN_F1 && key <= SCAN_F10 && key != _chart.ownKey);
+  const bool closes = scanCode == SCAN_ESCAPE || (scanCode >= SCAN_F1 && scanCode <= SCAN_F10 && scanCode != _chart.ownKey);
   if (!closes)
   {
-    _guest.JumpBack(_chart.ignored);
-    _guest.JumpBack(_chart.frame);
-    return false;
+    _hardware.LoopTurn(_chart.ignored, {});
+    _hardware.LoopTurn(_chart.frame, {});
+    return std::nullopt;
   }
-  _guest.Push(regs.ax);
-  if (_guest.Get(DS.hyperspaceCountdown) == 0)
+  // PUSH AX / POP AX round the selection keep the key.
+  std::uint16_t countLeft = PRESENT_CHART_FRAME_BP;
+  if (_state.Get(DS.hyperspaceCountdown) == 0)
   {
-    _guest.Call(SELECT_SYSTEM_AT_CURSOR);
-    SetLow(regs.ax, _guest.Get(DS.chartCursorX));
-    _guest.Set(_chart.keptCursorX, Low(regs.ax));
-    SetLow(regs.ax, _guest.Get(DS.chartCursorY));
-    _guest.Set(_chart.keptCursorY, Low(regs.ax));
+    countLeft = SelectSystemAtCursor(_state, PRESENT_CHART_FRAME_BP);
+    _state.Set(_chart.keptCursorX, _state.Get(DS.chartCursorX));
+    _state.Set(_chart.keptCursorY, _state.Get(DS.chartCursorY));
   }
-  regs.ax = _guest.Pop();
-  return true;
+  return ScreenKey{scanCode, al, countLeft};
 }
 
-// One frame of the galactic chart up to its presentation (CS:0CF9): the fuel range about the current
-// system, its cross, the cursor, and a dot for each of the galaxy's 256 systems.
-void DrawGalacticChart(Guest& _guest)
+// A chart's frames until a key closes it (CS:0CF9, CS:0F60): the frame drawn, the IBM PC's redraw paid (D18), presented, the
+// cursor steered with AL 0, as PresentChartFrame's MOV AX,B800h leaves it, and the key read. _backward is the direction flag on
+// the first frame; PresentChartFrame clears it for the rest.
+ScreenKey RunChartFrames(GameState& _state, Hardware& _hardware, const ChartKeys& _chart, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Call(LOAD_GALAXY_SEEDS);
-  regs.bx = static_cast<std::uint16_t>((_guest.Get(DS.fuel) >> 3) + 3);
-  regs.dx = _guest.Get(DS.currentSystemX);
-  regs.cx = _guest.Get(DS.currentSystemChartY);
-  _guest.Set(DS.drawColor, 2);
-  _guest.Call(DRAW_DISC);
-  _guest.Set(DS.drawColor, 0);
-  regs.cx = _guest.Get(DS.currentSystemX);
-  regs.dx = regs.cx;
-  regs.ax = _guest.Get(DS.currentSystemChartY);
-  regs.bx = regs.ax;
-  DrawCross(_guest, CURRENT_SYSTEM_ARM);
-  DrawChartCursor(_guest);
-  _guest.Set(DS.drawColor, CHART_DISC_COLOR);
-  SetLow(regs.ax, 0);
-  for (;;)
+  for (bool backward = _backward;; backward = false)
   {
-    _guest.Push(regs.ax);
-    regs.dx = Join(static_cast<std::uint8_t>(_guest.Get(DS.systemY) >> 1), _guest.Get(DS.systemX));
-    _guest.Call(PLOT_PIXEL);
-    _guest.Call(TWIST_SYSTEM_SEEDS);
-    _guest.Call(TWIST_SYSTEM_SEEDS);
-    _guest.Call(TWIST_SYSTEM_SEEDS);
-    _guest.Call(TWIST_SYSTEM_SEEDS);
-    regs.ax = _guest.Pop();
-    SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) + 1));
-    if (Low(regs.ax) == 0)
+    _chart.drawFrame(_state, _hardware, backward);
+    _hardware.Spend(_chart.pacing);
+    PresentChartFrame(_state, _hardware);
+    const ChartPoint cursor = MoveChartCursor(_state, _hardware, Low(GameState::VIDEO_SEGMENT));
+    if (const std::optional<ScreenKey> key = ReadChartKey(_state, _hardware, _chart, cursor.x))
     {
-      return;
+      return *key;
     }
-    _guest.JumpBack(GALACTIC_SYSTEM_DOT);
   }
 }
 
-// One frame of the short-range chart up to its presentation (CS:0F60): the fuel range about the centre, the
-// current system's cross, the chart's discs and labels, and the cursor.
-void DrawShortRangeChart(Guest& _guest)
+// What both charts draw first: the title at DS:_title in colour 1 on no paper (textPaperPattern 0) at the top of the chart, and the
+// two text lines under it cleared, at _segment, the screen as DrawChartFrame leaves ES.
+void DrawChartTitle(GameState& _state, std::uint16_t _title, std::uint16_t _segment)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.bx = static_cast<std::uint16_t>(_guest.Get(DS.fuel) >> 1);
-  regs.dx = SHORT_RANGE_CENTER_X;
-  regs.cx = SHORT_RANGE_CENTER_ROW;
-  _guest.Set(DS.drawColor, 2);
-  _guest.Call(DRAW_DISC);
-  _guest.Set(DS.drawColor, 0);
-  // The current system's cross, from (50h, 2Fh) to (50h, 51h) and from (3Fh, 40h) to (61h, 40h).
-  regs.cx = 0x2F50;
-  regs.dx = 0x5150;
-  _guest.Call(DRAW_LINE);
-  regs.cx = 0x403F;
-  regs.dx = 0x4061;
-  _guest.Call(DRAW_LINE);
-  _guest.Set(DS.drawColor, CHART_DISC_COLOR);
-  _guest.Call(DRAW_CHART_ITEMS);
-  DrawChartCursor(_guest);
+  _state.Set(DS.textPaperPattern, 0);
+  (void)DrawScreenString(_state, _title, INK_1, _segment, CHART_TITLE);
+  (void)ClearChartTextLines(_state, INK_1, _segment);
 }
 
-// What AddShortRangeSystem leaves of its label: the x range and the rows it gave it, where its copy of the name stopped in
-// selectedSystemName, and the label's end.
-struct ShortRangeLabel
+// The segment a chart draws its title in: B800h once DrawChartFrame has made the screen ready (MOV ES,AX), otherwise _segment,
+// the ES the chart was entered with.
+[[nodiscard]] std::uint16_t ChartSegment(ScreenChange _change, std::uint16_t _segment) noexcept
 {
-  ChartSpan x;
-  ChartSpan rows;
-  std::uint16_t nameEnd;
-  std::uint16_t next; ///< past the label's NUL: chartLabelCursor
-};
+  return _change == ScreenChange::None ? _segment : GameState::VIDEO_SEGMENT;
+}
 
 // ShowShortRangeChart's item for the system in systemSeeds (CS:0E9F), _x and _row its offsets from the current system: a
 // disc of radius 4 or 6 at 3.5 times them about the centre, and a label to place to its right, the name GenerateSystemName
 // makes. The seeds are left on the next system. The disc's centre, which the original keeps on the stack for the label
 // (PUSH CX / PUSH DX, then POP DX / POP BX), is a local; its loops' turns go to _hardware (ADR-015).
-ShortRangeLabel AddShortRangeSystem(GameState& _state, Hardware& _hardware, std::int16_t _x, std::int16_t _row)
+void AddShortRangeSystem(GameState& _state, Hardware& _hardware, std::int16_t _x, std::int16_t _row)
 {
   const std::uint8_t centerX = Low(GalaxyToChart(Word(_x), SHORT_RANGE_CENTER_X));
   const std::uint8_t centerRow = Low(GalaxyToChart(Word(_row), SHORT_RANGE_CENTER_ROW));
@@ -649,7 +628,6 @@ ShortRangeLabel AddShortRangeSystem(GameState& _state, Hardware& _hardware, std:
   _state.SetByte(to, 0);
   to = Offset(to, 1);
   _state.Set(DS.chartLabelCursor, to);
-  return ShortRangeLabel{x, rows, from, to};
 }
 
 // What REPE CMPSB finds.
@@ -706,111 +684,102 @@ PrintedText PrintNamed(GameState& _state, std::uint16_t _table, std::uint16_t _b
   return PrintTextModeString(_state, _state.Word(Offset(_table, _bytes)), _cell);
 }
 
-// What SelectSystemAtCursor and ShowNearestSystemDistance begin with: FindNearestSystem, ComputeDistanceToSystem, and the
-// distance, read back from selectedDistanceTenthsLy, into distanceDigits with up to three leading zeros blanked.
-void SelectNearestSystem(GameState& _state, std::uint16_t _countIfNone)
+// FindNearestSystem's search (CS:1292): what it leaves in BP, the count its loop had left at the nearest system on the current
+// chart, CL with CH cleared (XOR CH,CH / MOV BP,CX); or _countIfNone, BP as it came, when no system is on the chart. The index it
+// selects is 100h less that count.
+std::uint16_t SearchNearestSystem(GameState& _state, std::uint16_t _countIfNone)
 {
-  FindNearestSystem(_state, _countIfNone);
+  LoadGalaxySeeds(_state);
+  const ChartPoint cursor = GetCursorGalaxyPosition(_state);
+  // SI the nearest distance so far, and BP the loop's count, CL, at the nearest.
+  std::uint16_t nearest = 0xFFFF;
+  std::uint16_t nearestCount = _countIfNone;
+  for (std::uint16_t count = GALAXY_SYSTEMS; count != 0; --count)
+  {
+    // dx^2 + (dy/2)^2 to the cursor, each square a byte multiply; a sum that carries is passed over.
+    const std::uint16_t across = Square(Low(Magnitude(static_cast<std::uint16_t>(_state.Get(DS.systemX) - cursor.x))));
+    const std::uint16_t down = Square(Low(Magnitude(static_cast<std::uint16_t>((_state.Get(DS.systemY) >> 1) - cursor.row))));
+    const std::uint32_t distance = std::uint32_t{across} + down;
+    if (distance <= 0xFFFF && distance < nearest && IsSystemOnChart(_state))
+    {
+      nearest = static_cast<std::uint16_t>(distance);
+      nearestCount = Low(count);
+    }
+    AdvanceToNextSystem(_state);
+  }
+  const auto index = static_cast<std::uint8_t>(GALAXY_SYSTEMS - nearestCount);
+  _state.Set(DS.selectedSystemIndex, index);
+  LoadSystemSeeds(_state, index);
+  MoveCursorToSystem(_state);
+  return nearestCount;
+}
+
+// What SelectSystemAtCursor and ShowNearestSystemDistance begin with: FindNearestSystem, ComputeDistanceToSystem, and the
+// distance, read back from selectedDistanceTenthsLy, into distanceDigits with up to three leading zeros blanked. Returns the BP
+// FindNearestSystem leaves.
+std::uint16_t SelectNearestSystem(GameState& _state, std::uint16_t _countIfNone)
+{
+  const std::uint16_t countLeft = SearchNearestSystem(_state, _countIfNone);
   ComputeDistanceToSystem(_state);
   FormatDecimal5(_state, _state.Get(DS.selectedDistanceTenthsLy), DS.distanceDigits.offset);
   BlankLeadingZeros(_state, DS.distanceDigits.offset, DISTANCE_ZEROS_BLANKED);
+  return countLeft;
 }
 
 } // namespace
 
-void ShowGalacticChart(Guest& _guest)
+ScreenKey ShowGalacticChart(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _segment)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Set(DS.sunFringeMask, 0);
-  SetLow(regs.cx, _guest.Get(DS.currentSystemIndex));
-  _guest.Call(LOAD_SYSTEM_SEEDS);
-  SetLow(regs.ax, _guest.Get(DS.systemX));
-  _guest.Set(DS.currentSystemX, Low(regs.ax));
-  SetLow(regs.ax, static_cast<std::uint8_t>(_guest.Get(DS.systemY) >> 1));
-  _guest.Set(DS.currentSystemChartY, Low(regs.ax));
-  _guest.Call(DRAW_CHART_FRAME);
-  SetLow(regs.ax, static_cast<std::uint8_t>(_guest.Get(DS.galaxyNumber) + '1'));
-  _guest.Set(DS.galacticChartNumber, Low(regs.ax));
-  regs.si = DS.galacticChartTitle.offset;
-  regs.di = CHART_TITLE;
-  _guest.Set(DS.textPaperPattern, 0);
-  regs.bx = INK_1;
-  _guest.Call(DRAW_SCREEN_STRING);
-  _guest.Call(CLEAR_CHART_TEXT_LINES);
-  SetLow(regs.ax, _guest.Get(DS.galacticCursorX));
-  _guest.Set(DS.chartCursorX, Low(regs.ax));
-  SetLow(regs.ax, _guest.Get(DS.galacticCursorY));
-  _guest.Set(DS.chartCursorY, Low(regs.ax));
-  _guest.Set(DS.chartIsShortRange, 0);
-  do
-  {
-    DrawGalacticChart(_guest);
-    _guest.Spend(GALACTIC_CHART_PACING); // the IBM PC's redraw (D18)
-    _guest.Call(PRESENT_CHART_FRAME);
-    MoveChartCursorOnRegisters(_guest);
-  } while (!ReadChartKey(_guest, GALACTIC_CHART_KEYS));
+  _state.Set(DS.sunFringeMask, 0);
+  LoadSystemSeeds(_state, _state.Get(DS.currentSystemIndex));
+  _state.Set(DS.currentSystemX, _state.Get(DS.systemX));
+  _state.Set(DS.currentSystemChartY, static_cast<std::uint8_t>(_state.Get(DS.systemY) >> 1));
+  const std::uint16_t segment = ChartSegment(DrawChartFrame(_state, _hardware, _backward), _segment);
+  _state.Set(DS.galacticChartNumber, static_cast<std::uint8_t>(_state.Get(DS.galaxyNumber) + '1'));
+  DrawChartTitle(_state, DS.galacticChartTitle.offset, segment);
+  _state.Set(DS.chartCursorX, _state.Get(DS.galacticCursorX));
+  _state.Set(DS.chartCursorY, _state.Get(DS.galacticCursorY));
+  _state.Set(DS.chartIsShortRange, 0);
+  return RunChartFrames(_state, _hardware, GALACTIC_CHART_KEYS, _backward);
 }
 
-void ShowShortRangeChart(Guest& _guest)
+ScreenKey ShowShortRangeChart(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _segment)
 {
-  Machine::Registers& regs = _guest.Regs();
-  _guest.Set(DS.sunFringeMask, 0);
-  _guest.Call(DRAW_CHART_FRAME);
-  regs.si = DS.shortRangeChartTitle.offset;
-  regs.di = CHART_TITLE;
-  _guest.Set(DS.textPaperPattern, 0);
-  regs.bx = INK_1;
-  _guest.Call(DRAW_SCREEN_STRING);
-  _guest.Call(CLEAR_CHART_TEXT_LINES);
-  SetLow(regs.ax, _guest.Get(DS.shortRangeCursorX));
-  _guest.Set(DS.chartCursorX, Low(regs.ax));
-  SetLow(regs.ax, _guest.Get(DS.shortRangeCursorY));
-  _guest.Set(DS.chartCursorY, Low(regs.ax));
-  _guest.Set(DS.chartIsShortRange, 1);
-  _guest.Set(DS.chartItemCount, 0);
-  regs.ax = DS.chartItems.offset;
-  _guest.Set(DS.chartItemEnd, regs.ax);
-  regs.ax = DS.pendingChartLabels.offset;
-  _guest.Set(DS.chartLabelCursor, regs.ax);
-  _guest.Call(LOAD_GALAXY_SEEDS);
-  SetLow(regs.ax, 0);
-  for (;;)
+  _state.Set(DS.sunFringeMask, 0);
+  const std::uint16_t segment = ChartSegment(DrawChartFrame(_state, _hardware, _backward), _segment);
+  DrawChartTitle(_state, DS.shortRangeChartTitle.offset, segment);
+  _state.Set(DS.chartCursorX, _state.Get(DS.shortRangeCursorX));
+  _state.Set(DS.chartCursorY, _state.Get(DS.shortRangeCursorY));
+  _state.Set(DS.chartIsShortRange, 1);
+  _state.Set(DS.chartItemCount, 0);
+  _state.Set(DS.chartItemEnd, DS.chartItems.offset);
+  _state.Set(DS.chartLabelCursor, DS.pendingChartLabels.offset);
+  LoadGalaxySeeds(_state);
+  // Each of the 256 systems that is on the chart becomes an item. XOR AL,AL, then PUSH AX round the system and POP AX at its end,
+  // where a system off the chart jumps back to (CS:0F50) with the count on the stack; the jump back to the next system carries it
+  // in AL.
+  for (std::uint8_t systems = 0;;)
   {
-    _guest.Push(regs.ax);
-    _guest.Call(GET_SHORT_RANGE_OFFSET);
-    if (_guest.Flag(Machine::FLAG_CARRY))
+    const ShortRangeOffset offset = GetShortRangeOffset(_state);
+    if (offset.onChart)
     {
-      const ShortRangeLabel label =
-        AddShortRangeSystem(_guest.State(), _guest.Devices(), static_cast<std::int16_t>(regs.dx), static_cast<std::int16_t>(regs.cx));
-      // The registers as the original leaves them, but AX, which the POP below takes: the label's x range in DX and rows
-      // in BX, SI past the name it copied, DI past the label's NUL, and CX counted down to 0.
-      regs.bx = Word(label.rows);
-      regs.cx = 0;
-      regs.dx = Word(label.x);
-      regs.si = label.nameEnd;
-      regs.di = label.next;
+      // The short-range chart measures both offsets of a system on it.
+      AddShortRangeSystem(_state, _hardware, offset.x.value_or(0), offset.row.value_or(0));
     }
     else
     {
-      _guest.Call(ADVANCE_TO_NEXT_SYSTEM);
-      _guest.JumpBack(SHORT_RANGE_SYSTEM_DONE);
+      AdvanceToNextSystem(_state);
+      _hardware.LoopTurn(SHORT_RANGE_SYSTEM_DONE, {});
     }
-    regs.ax = _guest.Pop();
-    SetLow(regs.ax, static_cast<std::uint8_t>(Low(regs.ax) + 1));
-    if (Low(regs.ax) == 0)
+    systems = static_cast<std::uint8_t>(systems + 1);
+    if (systems == 0)
     {
       break;
     }
-    _guest.JumpBack(SHORT_RANGE_NEXT_SYSTEM);
+    _hardware.LoopTurn(SHORT_RANGE_NEXT_SYSTEM, {systems});
   }
-  _guest.Call(PLACE_CHART_LABELS);
-  do
-  {
-    DrawShortRangeChart(_guest);
-    _guest.Spend(SHORT_RANGE_CHART_PACING); // the IBM PC's redraw (D18)
-    _guest.Call(PRESENT_CHART_FRAME);
-    MoveChartCursorOnRegisters(_guest);
-  } while (!ReadChartKey(_guest, SHORT_RANGE_CHART_KEYS));
+  PlaceChartLabels(_state);
+  return RunChartFrames(_state, _hardware, SHORT_RANGE_CHART_KEYS, _backward);
 }
 
 SystemSeeds ReadSystemSeeds(const GameState& _state)
@@ -887,9 +856,9 @@ void MoveCursorToSystem(GameState& _state)
   _state.Set(DS.chartCursorY, Low(GalaxyToChart(down, SHORT_RANGE_CENTER_ROW)));
 }
 
-void SelectSystemAtCursor(GameState& _state, std::uint16_t _countIfNone)
+std::uint16_t SelectSystemAtCursor(GameState& _state, std::uint16_t _countIfNone)
 {
-  SelectNearestSystem(_state, _countIfNone);
+  const std::uint16_t countLeft = SelectNearestSystem(_state, _countIfNone);
 
   const std::uint8_t seed1 = Low(_state.Get(DS.systemSeed1));
   const std::uint8_t seed2 = Low(_state.Get(DS.systemSeed2));
@@ -935,33 +904,12 @@ void SelectSystemAtCursor(GameState& _state, std::uint16_t _countIfNone)
   _state.Set(DS.descriptionSeed0, descriptionSeed0);
   _state.Set(DS.descriptionSeed1, static_cast<std::uint16_t>(descriptionSeed0 ^ _state.Get(DS.systemSeed2)));
   GenerateSystemName(_state);
+  return countLeft;
 }
 
 std::uint8_t FindNearestSystem(GameState& _state, std::uint16_t _countIfNone)
 {
-  LoadGalaxySeeds(_state);
-  const ChartPoint cursor = GetCursorGalaxyPosition(_state);
-  // SI the nearest distance so far, and BP the loop's count, CL, at the nearest.
-  std::uint16_t nearest = 0xFFFF;
-  std::uint16_t nearestCount = _countIfNone;
-  for (std::uint16_t count = GALAXY_SYSTEMS; count != 0; --count)
-  {
-    // dx^2 + (dy/2)^2 to the cursor, each square a byte multiply; a sum that carries is passed over.
-    const std::uint16_t across = Square(Low(Magnitude(static_cast<std::uint16_t>(_state.Get(DS.systemX) - cursor.x))));
-    const std::uint16_t down = Square(Low(Magnitude(static_cast<std::uint16_t>((_state.Get(DS.systemY) >> 1) - cursor.row))));
-    const std::uint32_t distance = std::uint32_t{across} + down;
-    if (distance <= 0xFFFF && distance < nearest && IsSystemOnChart(_state))
-    {
-      nearest = static_cast<std::uint16_t>(distance);
-      nearestCount = Low(count);
-    }
-    AdvanceToNextSystem(_state);
-  }
-  const auto index = static_cast<std::uint8_t>(GALAXY_SYSTEMS - nearestCount);
-  _state.Set(DS.selectedSystemIndex, index);
-  LoadSystemSeeds(_state, index);
-  MoveCursorToSystem(_state);
-  return index;
+  return static_cast<std::uint8_t>(GALAXY_SYSTEMS - SearchNearestSystem(_state, _countIfNone));
 }
 
 std::uint16_t ComputeDistanceToSystem(GameState& _state)
@@ -987,7 +935,7 @@ std::uint16_t ComputeDistanceToSystem(GameState& _state)
 
 void ShowNearestSystemDistance(GameState& _state, std::uint16_t _countIfNone, std::uint16_t _segment)
 {
-  SelectNearestSystem(_state, _countIfNone);
+  (void)SelectNearestSystem(_state, _countIfNone);
   // The distance's four digits into distanceText, either side of its point.
   constexpr std::array<std::uint16_t, 4> PLACES = {DISTANCE_TEXT_HUNDREDS, DISTANCE_TEXT_TENS, DISTANCE_TEXT_UNITS, DISTANCE_TEXT_TENTHS};
   constexpr std::array<DataField<std::uint8_t>, 4> DIGITS = {DS.distanceHundredsDigit, DS.distanceTensDigit, DS.distanceUnitsDigit,
@@ -1124,40 +1072,37 @@ void FindSystemByName(GameState& _state, Hardware& _hardware, std::uint16_t _seg
   ShowNotOnMap(_state, GameState::VIDEO_SEGMENT);
 }
 
-void DrawChartItems(Guest& _guest)
+bool DrawChartItems(GameState& _state, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.cx = _guest.Get(DS.chartItemCount);
-  if (regs.cx == 0)
+  // MOV CL,[chartItemCount] / AND CX,0FFh: CH stays 0, the high byte of a disc's centre row.
+  const std::uint8_t items = _state.Get(DS.chartItemCount);
+  if (items == 0)
   {
-    return;
+    return false;
   }
-  _guest.Set(DS.drawColor, CHART_DISC_COLOR);
-  regs.di = DS.chartItems.offset;
-  do
+  _state.Set(DS.drawColor, CHART_DISC_COLOR);
+  bool discDrawn = false;
+  std::uint16_t item = DS.chartItems.offset;
+  // PUSH CX / PUSH DI round each item keep the count and the item: the LOOP's count is a local.
+  for (std::uint8_t itemsLeft = items; itemsLeft != 0; --itemsLeft)
   {
-    const std::uint16_t count = regs.cx;
-    const std::uint16_t item = regs.di;
-    regs.bx = _guest.Word(static_cast<std::uint16_t>(item + 6));
-    if (High(regs.bx) != 0)
+    const std::uint16_t mark = _state.Word(Offset(item, CHART_ITEM_RADIUS));
+    if (High(mark) != 0)
     {
-      // A label, its text at its top-left corner.
-      regs.si = _guest.Word(static_cast<std::uint16_t>(item + 4));
-      regs.dx = MakeWord(_guest.Byte(item), _guest.Byte(static_cast<std::uint16_t>(item + 2)));
-      regs.di = regs.dx;
-      regs.bx = 0xFFFF;
-      _guest.Call(DRAW_SMALL_VIEW_STRING);
+      // A label, its text at its top-left corner: the x range's first byte in DL and the rows' first in DH.
+      (void)DrawSmallViewString(_state, _state.Word(Offset(item, CHART_ITEM_TEXT)), INK_3,
+                                MakeWord(_state.Byte(Offset(item, CHART_ITEM_X)), _state.Byte(Offset(item, CHART_ITEM_ROWS))));
     }
     else
     {
-      regs.dx = _guest.Word(static_cast<std::uint16_t>(item + 4));
-      SetLow(regs.cx, High(regs.dx));
-      SetHigh(regs.dx, 0);
-      _guest.Call(DRAW_DISC);
+      // A disc: the radius in BX, the centre's x in DX and its row in CX.
+      const std::uint16_t center = _state.Word(Offset(item, CHART_ITEM_TEXT));
+      DrawDisc(_state, mark, Low(center), High(center), _backward);
+      discDrawn = true;
     }
-    regs.di = static_cast<std::uint16_t>(item + CHART_ITEM_BYTES);
-    regs.cx = count;
-  } while (--regs.cx != 0);
+    item = Offset(item, CHART_ITEM_BYTES);
+  }
+  return discDrawn;
 }
 
 void PlaceChartLabels(GameState& _state)
@@ -1557,6 +1502,22 @@ constexpr NativeContract FINDS_BY_NAME{static_cast<std::uint16_t>(GENERAL | REGI
 constexpr NativeContract SHOWS_SCREEN{static_cast<std::uint16_t>((GENERAL | REGISTER_ES) & ~REGISTER_AX), 0};
 // ShowSystemDescription's: all but DS, which the original leaves alone and ShowSystemDataScreen goes on with.
 constexpr NativeContract SHOWS_DESCRIPTION{static_cast<std::uint16_t>(REGISTER_ALL & ~REGISTER_DS), 0};
+// The charts': all but AX, the closing key in AH, BP and ES, which the screen shown next reads, and DS (ChartOut).
+constexpr NativeContract SHOWS_CHART{REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI, 0};
+// DrawChartItems': all but ES, which DrawDisc leaves on the data segment, and DS.
+constexpr NativeContract DRAWS_CHART_ITEMS{GENERAL, 0};
+
+// What a chart leaves once _key closes it: AX the key, BP as SelectSystemAtCursor's search leaves it, and ES on the screen and
+// the direction flag clear, as PresentChartFrame leaves them: the screen shown next draws through ES once the chart frame shows
+// (DrawChartFrame), and the docked screens read BP as SelectSystemAtCursor's count when no system is on the chart.
+void ChartOut(Guest& _guest, const ScreenKey& _key)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.ax = Join(_key.scanCode, _key.al);
+  regs.bp = _key.countLeft.value_or(regs.bp);
+  regs.es = GameState::VIDEO_SEGMENT;
+  _guest.SetFlag(Machine::FLAG_DIRECTION, false);
+}
 
 // What the control codes that expand a name leave of _output: DI past it, DX as the last GenerateSystemName leaves it
 // when one ran, and BX the length TerminateSelectedSystemName indexes the name by. A name is letters (systemNameDigrams),
@@ -1573,6 +1534,31 @@ void InsertedNameOut(Guest& _guest, const DescriptionOutput& _output)
 }
 
 } // namespace
+
+void ShowGalacticChartEntry(Guest& _guest)
+{
+  const ScreenKey key = ShowGalacticChart(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION), _guest.Regs().es);
+  ChartOut(_guest, key);
+  _guest.Clobber(SHOWS_CHART);
+}
+
+void ShowShortRangeChartEntry(Guest& _guest)
+{
+  const ScreenKey key = ShowShortRangeChart(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION), _guest.Regs().es);
+  ChartOut(_guest, key);
+  _guest.Clobber(SHOWS_CHART);
+}
+
+void DrawChartItemsEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  // DrawDisc's MOV AX,DS / MOV ES,AX, once a disc is drawn.
+  if (DrawChartItems(_guest.State(), _guest.Flag(Machine::FLAG_DIRECTION)))
+  {
+    regs.es = regs.ds;
+  }
+  _guest.Clobber(DRAWS_CHART_ITEMS);
+}
 
 void GetShortRangeOffsetEntry(Guest& _guest)
 {
@@ -1853,8 +1839,8 @@ namespace
 
 // The charts and the data screen wait for keys, and FindSystemByName for a line typed: each waits as a rule.
 constexpr std::array ENTRIES = {
-  NativeEntry{0x0CAE, "ShowGalacticChart", &ShowGalacticChart, PRESERVES_ALL, NativeReturn::Near, 0, NativeWait::Always},
-  NativeEntry{0x0E52, "ShowShortRangeChart", &ShowShortRangeChart, PRESERVES_ALL, NativeReturn::Near, 0, NativeWait::Always},
+  NativeEntry{0x0CAE, "ShowGalacticChart", &ShowGalacticChartEntry, SHOWS_CHART, NativeReturn::Near, 0, NativeWait::Always},
+  NativeEntry{0x0E52, "ShowShortRangeChart", &ShowShortRangeChartEntry, SHOWS_CHART, NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x1076, "GetShortRangeOffset", &GetShortRangeOffsetEntry, CLOBBERS_AX_RETURNS_CARRY},
   NativeEntry{0x10AF, "IsSystemOnChart", &IsSystemOnChartEntry, RETURNS_CARRY},
   NativeEntry{0x10C0, "TwistSystemSeeds", &TwistSystemSeedsEntry, PRESERVES_ALL},
@@ -1869,7 +1855,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x13B4, "AdvanceToNextSystem", &AdvanceToNextSystemEntry, PRESERVES_ALL},
   NativeEntry{0x13C1, "GenerateSystemName", &GenerateSystemNameEntry, CLOBBERS_BX_CX_SI},
   NativeEntry{0x140D, "FindSystemByName", &FindSystemByNameEntry, FINDS_BY_NAME, NativeReturn::Near, 0, NativeWait::Always},
-  NativeEntry{0x14C5, "DrawChartItems", &DrawChartItems, Machine::NativeContract{GENERAL, 0}},
+  NativeEntry{0x14C5, "DrawChartItems", &DrawChartItemsEntry, DRAWS_CHART_ITEMS},
   NativeEntry{0x1505, "PlaceChartLabels", &PlaceChartLabelsEntry, PLACES_LABELS},
   NativeEntry{0x1552, "AddChartLabel", &AddChartLabelEntry, CLOBBERS_BX_DI},
   NativeEntry{0x157D, "NudgeChartLabel", &NudgeChartLabelEntry, RETURNS_CARRY},

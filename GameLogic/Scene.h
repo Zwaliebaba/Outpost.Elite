@@ -23,10 +23,6 @@ namespace Elite
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
 [[nodiscard]] std::span<const NativeEntry> SceneEntries() noexcept;
 
-/// TransformShip (CS:3C7E): slot DI's position to the view, scooping where it may, then
-/// ClassifyViewPosition. Out: CF clear when visible.
-void TransformShip(Guest& _guest);
-
 /// TransformAndDrawObjects (CS:3D25): classifies and transforms every slot, then draws the visible ones
 /// from the farthest in. Clobbers every register.
 void TransformAndDrawObjects(Guest& _guest);
@@ -102,6 +98,14 @@ struct ViewWithBlip
   std::optional<DashboardPixel> blip;
 };
 
+/// What TransformShip finds of a ship.
+struct TransformedShip
+{
+  Vector view;      ///< its position in the view
+  ViewTest test;    ///< how far ClassifyViewPosition got with it
+  bool blipTouched; ///< UpdateScannerBlip drew its blip, or the scoop's RemoveObject erased it: both leave ES on the video segment
+};
+
 /// ProjectVertices (CS:2340): the first projectedVertexCount 6-byte vertices of vertexBuffer projected in place to 4-byte points,
 /// 80h + 256x/z and 40h + 256y/z rounded; a vertex nearer than nearPlaneZ gets x = 8000h and keeps a stale y. Each divide takes a
 /// memory operand, so the trap saturates only AL when it overflows; it saves BX, _trapHigh over the coordinate's sign, _trapHigh
@@ -152,6 +156,10 @@ ShipRangeCheck CheckShipInRange(GameState& _state, ObjectSlot _slot);
 /// (+0Ah) and depth (+3Dh), turned to the view (TransformToViewWithBlip) and stored at +10h/+12h/+14h, and byte 0 bit 7 set.
 ViewWithBlip TransformSunOrPlanet(GameState& _state, ObjectSlot _slot);
 
+/// TransformShip (CS:3C7E): _slot's position, the low words, turned to the view (TransformToViewWithBlip); offered to the hold
+/// (TryScoopObject) while fuel scoops are fitted and the game is not over; _slot's depth (+3Dh) cleared; then ClassifyViewPosition.
+TransformedShip TransformShip(GameState& _state, ObjectSlot _slot);
+
 /// RunBlueprintHandler (CS:3CDD): boxHalfWidth from the blueprint at _blueprint, the handler it names run (BuildBoxCornerVertices
 /// or BuildDodoVertices), then what the handler returns into at RenderBlueprintBody (CS:3CF2): the vertex program, the projection
 /// and the faces. Returns the direction flag as they leave it.
@@ -198,6 +206,9 @@ void DrawVisibleFacesEntry(Guest& _guest);
 void CheckShipInRangeEntry(Guest& _guest); ///< DI = the slot. Out: CF clear in range; every register as the original leaves it.
 /// DI = the slot. Out: AX, BX, CX the view position; ES = B800h once UpdateScannerBlip draws a blip. DX, BP clobbered.
 void TransformSunOrPlanetEntry(Guest& _guest);
+/// DI = the slot. Out: CF clear when visible; AX, BX and CX the view position, AX doubled |x| once z passes and BX doubled |y| once
+/// x does; ES = B800h once a blip is drawn or erased. DX clobbered.
+void TransformShipEntry(Guest& _guest);
 /// DI = the slot. Out: CF clear when visible; AX, BX and CX the compass position, AX doubled |x| once z passes and BX doubled |y|
 /// once x does, as the original leaves them.
 void ClassifyStationPositionEntry(Guest& _guest);

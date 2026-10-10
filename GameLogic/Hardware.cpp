@@ -420,4 +420,11 @@ void Hardware::TakeDueInterrupts()
   m_pc.TakeDueInterrupts();
 }
 
+// ── Docked, Galaxy, StartUp and Scene (level 5, group B3) ──
+
+void Hardware::Spend(const PacingPoint& _point)
+{
+  m_pc.Spend(_point.cycles);
+}
+
 } // namespace Elite

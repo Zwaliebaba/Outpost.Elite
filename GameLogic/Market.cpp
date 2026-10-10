@@ -535,7 +535,7 @@ ScreenKey RunCargoTradeMenu(GameState& _state, Hardware& _hardware)
       const auto own = static_cast<std::uint8_t>(SCAN_F2 + _state.Get(DS.tradeScreenIsBuy));
       if (code != own && IsScreenKey(code))
       {
-        return ScreenKey{code, loop.al};
+        return ScreenKey{code, loop.al, std::nullopt};
       }
       _hardware.LoopTurn(CARGO_STEER, {loop.row, loop.al});
       break;
