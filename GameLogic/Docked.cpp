@@ -4,8 +4,10 @@
 
 #include "Arithmetic.h"
 #include "DataOverlay.h"
+#include "Market.h"
 #include "Ships.h"
 #include "Text.h"
+#include "Video.h"
 
 #include <algorithm>
 #include <initializer_list>
@@ -15,9 +17,6 @@ namespace Elite
 
 namespace
 {
-
-constexpr std::uint16_t CLEAR_TEXT_SCREEN = 0x7C12;
-constexpr std::uint16_t SET_TEXT_MODE = 0x7D11;
 
 constexpr std::uint16_t CREDITS_ON_MESSAGE_LINE = 0x78; // B800:0078
 
@@ -67,7 +66,6 @@ constexpr std::uint16_t ADD_CREDITS = 0x65EE;
 constexpr std::uint16_t SHOW_DISC_CONTROL_SCREEN = 0x660B;
 constexpr std::uint16_t FORMAT_FUEL_LIGHT_YEARS = 0x6923;
 constexpr std::uint16_t FORMAT_TENTHS = 0x69B3;
-constexpr std::uint16_t COMPUTE_MARKET_PRICES = 0x69CE;
 constexpr std::uint16_t NEXT_MARKET_RANDOM = 0x6A85;
 constexpr std::uint16_t RUN_CARGO_TRADE_MENU = 0x6B1E;
 constexpr std::uint16_t PRINT_TEXT_LINES = 0x6DDE;
@@ -263,31 +261,29 @@ void FormatQuantityOnRegisters(Guest& _guest, std::uint16_t _text)
   regs.si = _text;
 }
 
-// What both trade screens start with: the frame, the help text and the header, and the prices. Out: the
-// registers for the first row.
-void DrawTradeScreenHeader(Guest& _guest, std::uint16_t _frame, std::uint16_t _help)
+// What both trade screens start with: the frame from the descriptor at DS:_frame and its title, the two lines of help from
+// DS:_help, the header in its attribute, the rows' attribute, and the prices; cargoRowPointer on the first product held.
+// _backward is the direction flag, which DrawDockedFrame goes by.
+void DrawTradeScreenHeader(GameState& _state, Hardware& _hardware, std::uint16_t _frame, std::uint16_t _help, bool _backward)
+{
+  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, _frame, _backward), TITLE_CELL);
+  const PrintedText help = PrintTextModeString(_state, _help, LINE_3);
+  PrintTextModeString(_state, Offset(help.end, 1), LINE_4); // INC SI: the second line, after the first's NUL
+  _state.Set(DS.textAttribute, HEADER_ATTRIBUTE);
+  PrintTextModeString(_state, TRADE_HEADER_TEXT, LINE_5);
+  _state.Set(DS.textAttribute, ROW_ATTRIBUTE);
+  ComputeMarketPrices(_state);
+  _state.Set(DS.cargoRowPointer, DS.cargoHold.offset);
+}
+
+// DrawTradeScreenHeader, and the registers the first row starts from: SI on the first product's name, DI on its row, BX on
+// its prices, and CX the count of rows.
+void DrawTradeScreenHeaderOnRegisters(Guest& _guest, std::uint16_t _frame, std::uint16_t _help)
 {
   Machine::Registers& regs = _guest.Regs();
-  regs.si = _frame;
-  _guest.Call(DRAW_DOCKED_FRAME);
-  regs.di = TITLE_CELL;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  regs.si = _help;
-  regs.di = LINE_3;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  ++regs.si;
-  regs.di = LINE_4;
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  regs.si = TRADE_HEADER_TEXT;
-  regs.di = LINE_5;
-  _guest.Set(DS.textAttribute, HEADER_ATTRIBUTE);
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  _guest.Set(DS.textAttribute, ROW_ATTRIBUTE);
-  _guest.Call(COMPUTE_MARKET_PRICES);
+  DrawTradeScreenHeader(_guest.State(), _guest.Devices(), _frame, _help, _guest.Flag(Machine::FLAG_DIRECTION));
   regs.si = DS.productNames.offset;
   regs.di = LINE_6;
-  regs.bx = DS.cargoHold.offset;
-  _guest.Set(DS.cargoRowPointer, regs.bx);
   regs.bx = DS.screenPrices.offset;
   regs.cx = TRADE_ROWS;
 }
@@ -495,45 +491,31 @@ void FormatFuelLightYears(GameState& _state)
   _state.Set(DS.data83F9, _state.Get(DS.data840B));
 }
 
-void DrawDockedFrame(Guest& _guest)
+std::uint16_t DrawDockedFrame(GameState& _state, Hardware& _hardware, std::uint16_t _descriptor, bool _backward)
 {
-  Machine::Registers& regs = _guest.Regs();
-  if ((_guest.Get(DS.screenLayout) & TEXT_LAYOUT) == 0)
+  if ((_state.Get(DS.screenLayout) & TEXT_LAYOUT) == 0)
   {
-    _guest.Set(DS.screenLayout, TEXT_LAYOUT);
-    _guest.Call(SET_TEXT_MODE);
+    _state.Set(DS.screenLayout, TEXT_LAYOUT);
+    SetTextMode(_hardware);
   }
   // The screen's attribute, and its background as the border.
-  regs.dx = BORDER_COLOR_PORT;
-  const auto attribute = static_cast<std::uint8_t>(_guest.Byte(regs.si) & ATTRIBUTE_MASK);
-  ++regs.si;
-  _guest.Set(DS.textAttribute, attribute);
-  regs.ax = static_cast<std::uint16_t>((attribute << 8) | (attribute >> 4));
-  _guest.Out8(regs.dx, Low(regs.ax));
-  _guest.Call(CLEAR_TEXT_SCREEN);
+  const auto attribute = static_cast<std::uint8_t>(_state.Byte(_descriptor) & ATTRIBUTE_MASK);
+  _state.Set(DS.textAttribute, attribute);
+  _hardware.SetColorSelect(static_cast<std::uint8_t>(attribute >> 4));
+  ClearTextScreen(_state, _backward);
 
-  regs.ax = Guest::VIDEO_SEGMENT;
-  regs.es = Guest::VIDEO_SEGMENT;
-  regs.ax = static_cast<std::uint16_t>((_guest.Byte(regs.si) << 8) | FRAME_ROW_CHARACTER);
-  ++regs.si;
+  const std::uint8_t frame = _state.Byte(Offset(_descriptor, 1));
   for (const std::uint16_t row : {FRAME_TOP_ROW, FRAME_TITLE_ROW, FRAME_BOTTOM_ROW})
   {
-    regs.di = row;
-    DrawFrameRowEntry(_guest);
+    DrawFrameRow(_state, GameState::VIDEO_SEGMENT, row, Join(frame, FRAME_ROW_CHARACTER), _backward);
   }
-  regs.di = FRAME_SIDES;
-  regs.cx = FRAME_SIDE_ROWS;
-  DrawFrameSidesEntry(_guest);
-  regs.bx = DS.frameCorners.offset;
-  regs.cx = FRAME_CORNERS;
-  do
+  DrawFrameSides(_state, GameState::VIDEO_SEGMENT, FRAME_SIDES, FRAME_SIDE_ROWS, frame);
+  for (std::uint16_t corner = 0; corner < FRAME_CORNERS; ++corner)
   {
-    regs.di = _guest.Word(regs.bx);
-    regs.ax = WithLow(regs.ax, _guest.Byte(static_cast<std::uint16_t>(regs.bx + 2)));
-    regs.bx = static_cast<std::uint16_t>(regs.bx + FRAME_CORNER_BYTES);
-    _guest.SetFarWord(regs.es, regs.di, regs.ax);
-    --regs.cx;
-  } while (regs.cx != 0);
+    const auto place = static_cast<std::uint16_t>(DS.frameCorners.offset + corner * FRAME_CORNER_BYTES);
+    _state.SetVideoWord(_state.Word(place), Join(frame, _state.Byte(Offset(place, 2))));
+  }
+  return Offset(_descriptor, 2);
 }
 
 std::uint16_t DrawFrameSides(GameState& _state, std::uint16_t _segment, std::uint16_t _cell, std::uint16_t _rows, std::uint8_t _attribute)
@@ -593,7 +575,7 @@ void AwardArchangelTitle(GameState& _state)
 void ShowSellCargoScreen(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  DrawTradeScreenHeader(_guest, DS.sellCargoFrame.offset, SELL_CARGO_HELP_TEXT);
+  DrawTradeScreenHeaderOnRegisters(_guest, DS.sellCargoFrame.offset, SELL_CARGO_HELP_TEXT);
   for (;;)
   {
     for (const std::uint16_t value : {regs.cx, regs.si, regs.di, regs.bx})
@@ -640,7 +622,7 @@ void ShowBuyCargoScreen(Guest& _guest)
   _guest.Set(DS.data8C20, regs.ax);
   regs.ax = _guest.Get(DS.randomState2);
   _guest.Set(DS.data8C22, regs.ax);
-  DrawTradeScreenHeader(_guest, DS.buyCargoFrame.offset, BUY_CARGO_HELP_TEXT);
+  DrawTradeScreenHeaderOnRegisters(_guest, DS.buyCargoFrame.offset, BUY_CARGO_HELP_TEXT);
   for (;;)
   {
     for (const std::uint16_t value : {regs.cx, regs.si, regs.di, regs.bx})
@@ -1168,6 +1150,24 @@ void FormatFuelLightYearsEntry(Guest& _guest)
   _guest.Clobber(CLOBBERS_AX_BX_DI);
 }
 
+void DrawDockedFrameEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  const std::uint16_t descriptor = regs.si;
+  regs.si = DrawDockedFrame(_guest.State(), _guest.Devices(), descriptor, _guest.Flag(Machine::FLAG_DIRECTION));
+  // The contract keeps every register, so the entry leaves what the original does: DX the colour select port it wrote,
+  // ES on the text page, and from the corners' LOOP, BX past frameCorners, CX = 0, DI on the last corner, and AX its
+  // character in the frame's attribute.
+  const auto lastCorner = static_cast<std::uint16_t>(DS.frameCorners.offset + (FRAME_CORNERS - 1) * FRAME_CORNER_BYTES);
+  regs.dx = BORDER_COLOR_PORT;
+  regs.es = Guest::VIDEO_SEGMENT;
+  regs.bx = Offset(lastCorner, FRAME_CORNER_BYTES);
+  regs.cx = 0;
+  regs.di = _guest.Word(lastCorner);
+  regs.ax = Join(_guest.Byte(Offset(descriptor, 1)), _guest.Byte(Offset(lastCorner, 2)));
+  _guest.Clobber(PRESERVES_ALL);
+}
+
 void DrawFrameSidesEntry(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
@@ -1203,7 +1203,7 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x6923, "FormatFuelLightYears", &FormatFuelLightYearsEntry, CLOBBERS_AX_BX_DI},
   NativeEntry{0x6DF2, "ShowMissionBriefing", &ShowMissionBriefing, CLOBBERS_ALL, NEAR, 0, ALWAYS},
   NativeEntry{0x6EB7, "ShowMissionDebriefing", &ShowMissionDebriefing, CLOBBERS_ALL, NEAR, 0, ALWAYS},
-  NativeEntry{0x7C88, "DrawDockedFrame", &DrawDockedFrame, PRESERVES_ALL},
+  NativeEntry{0x7C88, "DrawDockedFrame", &DrawDockedFrameEntry, PRESERVES_ALL},
   NativeEntry{0x7CE9, "DrawFrameSides", &DrawFrameSidesEntry, PRESERVES_ALL},
   NativeEntry{0x7CF8, "DrawFrameRow", &DrawFrameRowEntry, PRESERVES_ALL},
   NativeEntry{0x7D81, "RunTitleAndDocked", &RunTitleAndDocked, CLOBBERS_ALL, NEAR, 0, ALWAYS},

@@ -14,7 +14,9 @@ namespace
 {
 
 constexpr std::uint16_t DOS_NO_MORE_FILES = 0x12;
-constexpr std::uint8_t IGNORE_ERROR = 0; // what a critical-error handler answers DOS in AL
+constexpr std::uint8_t IGNORE_ERROR = 0;   // what a critical-error handler answers DOS in AL
+constexpr std::uint8_t READ_ACCESS = 0;    // a file opened to read
+constexpr std::uint16_t NO_ATTRIBUTES = 0; // a commander's file is neither read-only, hidden nor system
 
 constexpr std::uint16_t FOUND_ATTRIBUTE = 0x15; // in the transfer area, after find-first or find-next
 constexpr std::uint16_t FOUND_NAME = 0x1E;
@@ -119,16 +121,6 @@ constexpr std::uint16_t TEXT_ERROR_POSITION = 0x0330;
 constexpr std::uint16_t DISK_ERROR_CHARACTERS = 10;
 constexpr std::uint16_t ERROR_INK = 0xFFFF; // colour 3
 
-// What a DOS file service leaves in the registers, AX and CF, as the register code that calls it has them after its INT 21h.
-// True when the service failed.
-bool LeaveDosAnswer(Machine::Registers& _regs, DosAnswer _answer) noexcept
-{
-  _regs.ax = _answer.value;
-  const auto carry = static_cast<std::uint16_t>(_regs.flags & ~Machine::FLAG_CARRY);
-  _regs.flags = _answer.failed ? static_cast<std::uint16_t>(carry | Machine::FLAG_CARRY) : carry;
-  return _answer.failed;
-}
-
 // The common failure (0x039D): DOS's _error, which is no failure when it only ran out of files.
 void Fail(GameState& _state, std::uint16_t _error)
 {
@@ -138,155 +130,120 @@ void Fail(GameState& _state, std::uint16_t _error)
   }
 }
 
-// A failed read or write (0x0393): the file is closed, keeping the error.
-void CloseAndFail(Guest& _guest)
+// A failed read or write (0x0393): the file is closed, and the failure is DOS's _error, which the original keeps on the stack
+// round the close.
+void CloseAndFail(GameState& _state, Hardware& _hardware, std::uint16_t _error)
 {
-  Machine::Registers& regs = _guest.Regs();
-  const std::uint16_t error = regs.ax;
-  regs.bx = _guest.Get(DS.fileHandle);
-  static_cast<void>(LeaveDosAnswer(regs, _guest.Devices().CloseFile(regs.bx)));
-  regs.ax = error;
-  Fail(_guest.State(), regs.ax);
+  static_cast<void>(_hardware.CloseFile(_state.Get(DS.fileHandle)));
+  Fail(_state, _error);
 }
 
 // LoadCommanderFile (0x031A): only a file with no attributes, read whole into commanderBlock.
-void LoadCommanderFile(Guest& _guest)
+void LoadCommanderFile(GameState& _state, Hardware& _hardware)
 {
-  Machine::Registers& regs = _guest.Regs();
-  Hardware& dos = _guest.Devices();
-  const std::uint16_t data = _guest.DataSegment();
-  regs.dx = DS.commanderFileName.offset;
-  regs.ax = WithLow(regs.ax, 0);
-  const DosFileAttributes attributes = dos.ReadFileAttributes(data, regs.dx);
-  regs.cx = attributes.attributes;
-  if (LeaveDosAnswer(regs, attributes.answer))
+  const std::uint16_t data = _state.DataSegment();
+  const DosFileAttributes attributes = _hardware.ReadFileAttributes(data, DS.commanderFileName.offset);
+  if (attributes.answer.failed)
   {
-    Fail(_guest.State(), regs.ax);
+    Fail(_state, attributes.answer.value);
     return;
   }
-  if (regs.cx != 0)
+  if (attributes.attributes != 0)
   {
-    _guest.Set(DS.diskError, 1);
+    _state.Set(DS.diskError, 1);
     return;
   }
-  regs.dx = DS.commanderFileName.offset;
-  regs.ax = WithLow(regs.ax, 0);
-  if (LeaveDosAnswer(regs, dos.OpenFile(data, regs.dx, Low(regs.ax))))
+  const DosAnswer opened = _hardware.OpenFile(data, DS.commanderFileName.offset, READ_ACCESS);
+  if (opened.failed)
   {
-    Fail(_guest.State(), regs.ax);
+    Fail(_state, opened.value);
     return;
   }
-  _guest.Set(DS.fileHandle, regs.ax);
-  regs.bx = _guest.Get(DS.fileHandle);
-  regs.cx = _guest.Get(DS.commanderFileBytes);
-  regs.dx = DS.commanderBlock.offset;
-  if (LeaveDosAnswer(regs, dos.ReadFile(regs.bx, data, regs.dx, regs.cx)))
+  _state.Set(DS.fileHandle, opened.value);
+  const DosAnswer read = _hardware.ReadFile(_state.Get(DS.fileHandle), data, DS.commanderBlock.offset, _state.Get(DS.commanderFileBytes));
+  if (read.failed)
   {
-    CloseAndFail(_guest);
+    CloseAndFail(_state, _hardware, read.value);
     return;
   }
-  regs.bx = _guest.Get(DS.fileHandle);
-  if (LeaveDosAnswer(regs, dos.CloseFile(regs.bx)))
+  const DosAnswer closed = _hardware.CloseFile(_state.Get(DS.fileHandle));
+  if (closed.failed)
   {
-    Fail(_guest.State(), regs.ax);
+    Fail(_state, closed.value);
   }
 }
 
 // SaveCommanderFile (0x0358): commanderBlock written to a new file, whose attributes are then cleared.
-void SaveCommanderFile(Guest& _guest)
+void SaveCommanderFile(GameState& _state, Hardware& _hardware)
 {
-  Machine::Registers& regs = _guest.Regs();
-  Hardware& dos = _guest.Devices();
-  const std::uint16_t data = _guest.DataSegment();
-  regs.dx = DS.commanderFileName.offset;
-  regs.cx = 0;
-  if (LeaveDosAnswer(regs, dos.CreateFile(data, regs.dx, regs.cx)))
+  const std::uint16_t data = _state.DataSegment();
+  const DosAnswer created = _hardware.CreateFile(data, DS.commanderFileName.offset, NO_ATTRIBUTES);
+  if (created.failed)
   {
-    Fail(_guest.State(), regs.ax);
+    Fail(_state, created.value);
     return;
   }
-  _guest.Set(DS.fileHandle, regs.ax);
-  regs.bx = _guest.Get(DS.fileHandle);
-  regs.cx = _guest.Get(DS.commanderFileBytes);
-  regs.dx = DS.commanderBlock.offset;
-  if (LeaveDosAnswer(regs, dos.WriteFile(regs.bx, data, regs.dx, regs.cx)))
+  _state.Set(DS.fileHandle, created.value);
+  const DosAnswer written =
+    _hardware.WriteFile(_state.Get(DS.fileHandle), data, DS.commanderBlock.offset, _state.Get(DS.commanderFileBytes));
+  if (written.failed)
   {
-    CloseAndFail(_guest);
+    CloseAndFail(_state, _hardware, written.value);
     return;
   }
-  regs.bx = _guest.Get(DS.fileHandle);
-  if (LeaveDosAnswer(regs, dos.CloseFile(regs.bx)))
+  const DosAnswer closed = _hardware.CloseFile(_state.Get(DS.fileHandle));
+  if (closed.failed)
   {
-    Fail(_guest.State(), regs.ax);
+    Fail(_state, closed.value);
     return;
   }
-  regs.dx = DS.commanderFileName.offset;
-  regs.cx = 0;
-  regs.ax = WithLow(regs.ax, 1);
-  if (LeaveDosAnswer(regs, dos.SetFileAttributes(data, regs.dx, regs.cx)))
+  const DosAnswer cleared = _hardware.SetFileAttributes(data, DS.commanderFileName.offset, NO_ATTRIBUTES);
+  if (cleared.failed)
   {
-    Fail(_guest.State(), regs.ax);
+    Fail(_state, cleared.value);
   }
 }
 
 // ListCommanderFiles (0x03A8): the names of up to 40 *.cdr files with no attributes, without their extension, into
-// commanderFileList. CX, the attributes searched for, is the caller's.
-void ListCommanderFiles(Guest& _guest)
+// commanderFileList. _attributes, the attributes searched for, are the caller's CX.
+void ListCommanderFiles(GameState& _state, Hardware& _hardware, std::uint16_t _attributes)
 {
-  Machine::Registers& regs = _guest.Regs();
-  Hardware& dos = _guest.Devices();
-  _guest.Set(DS.commanderFileCount, 0);
-  _guest.Set(DS.commanderFileListNext, DS.commanderFileList.offset);
-  regs.dx = DS.commanderFilePattern.offset;
-  if (LeaveDosAnswer(regs, dos.FindFirstFile(_guest.DataSegment(), regs.dx, regs.cx)))
+  _state.Set(DS.commanderFileCount, 0);
+  _state.Set(DS.commanderFileListNext, DS.commanderFileList.offset);
+  DosAnswer found = _hardware.FindFirstFile(_state.DataSegment(), DS.commanderFilePattern.offset, _attributes);
+  while (!found.failed)
   {
-    Fail(_guest.State(), regs.ax);
-    return;
-  }
-  for (;;)
-  {
-    regs.di = DS.diskTransferArea.At(FOUND_ATTRIBUTE);
-    if (_guest.Byte(regs.di) == 0)
+    if (_state.Byte(DS.diskTransferArea.At(FOUND_ATTRIBUTE)) == 0)
     {
-      regs.di = DS.diskTransferArea.At(FOUND_NAME);
-      regs.si = _guest.Get(DS.commanderFileListNext);
-      for (;;)
+      std::uint16_t from = DS.diskTransferArea.At(FOUND_NAME);
+      std::uint16_t to = _state.Get(DS.commanderFileListNext);
+      for (std::uint8_t character = _state.Byte(from); character != '.'; character = _state.Byte(from))
       {
-        regs.ax = WithLow(regs.ax, _guest.Byte(regs.di));
-        ++regs.di;
-        if (static_cast<std::uint8_t>(regs.ax) == '.')
-        {
-          break;
-        }
-        _guest.SetByte(regs.si, static_cast<std::uint8_t>(regs.ax));
-        ++regs.si;
+        from = Offset(from, 1);
+        _state.SetByte(to, character);
+        to = Offset(to, 1);
       }
-      _guest.SetByte(regs.si, 0);
-      ++regs.si;
-      _guest.Set(DS.commanderFileListNext, regs.si);
-      const auto count = static_cast<std::uint8_t>(_guest.Get(DS.commanderFileCount) + 1);
-      _guest.Set(DS.commanderFileCount, count);
+      _state.SetByte(to, 0);
+      _state.Set(DS.commanderFileListNext, Offset(to, 1));
+      const auto count = static_cast<std::uint8_t>(_state.Get(DS.commanderFileCount) + 1);
+      _state.Set(DS.commanderFileCount, count);
       if (count == MOST_COMMANDER_FILES)
       {
         return;
       }
     }
-    if (LeaveDosAnswer(regs, dos.FindNextFile()))
-    {
-      Fail(_guest.State(), regs.ax);
-      return;
-    }
+    found = _hardware.FindNextFile();
   }
+  Fail(_state, found.value);
 }
 
 // DeleteCommanderFile (0x03F2).
-void DeleteCommanderFile(Guest& _guest)
+void DeleteCommanderFile(GameState& _state, Hardware& _hardware)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.dx = DS.commanderFileName.offset;
-  if (LeaveDosAnswer(regs, _guest.Devices().DeleteFile(_guest.DataSegment(), regs.dx)))
+  const DosAnswer deleted = _hardware.DeleteFile(_state.DataSegment(), DS.commanderFileName.offset);
+  if (deleted.failed)
   {
-    Fail(_guest.State(), regs.ax);
+    Fail(_state, deleted.value);
   }
 }
 
@@ -298,16 +255,21 @@ PrintedText PrintAt(GameState& _state, std::uint16_t _text, std::uint16_t _posit
   return PrintTextModeString(_state, _text, _position);
 }
 
-// PrintAt, and the registers as the original leaves them: PrintTextModeString's SI, DI and ES, and AX the attribute
-// it printed in with the NUL in AL.
-void PrintAtOnRegisters(Guest& _guest, std::uint16_t _text, std::uint16_t _position)
+// What PrintTextModeString leaves in the registers after a print that stopped at _printed: SI on the text's NUL, DI past the
+// last cell, ES = B800h, and AX the attribute it printed in with the NUL in AL.
+void PrintedOut(Guest& _guest, PrintedText _printed)
 {
   Machine::Registers& regs = _guest.Regs();
-  const PrintedText printed = PrintAt(_guest.State(), _text, _position);
-  regs.si = printed.end;
-  regs.di = printed.nextCell;
+  regs.si = _printed.end;
+  regs.di = _printed.nextCell;
   regs.es = Guest::VIDEO_SEGMENT;
   regs.ax = Join(_guest.Get(DS.textAttribute), 0);
+}
+
+// PrintAt, and the registers as the original leaves them.
+void PrintAtOnRegisters(Guest& _guest, std::uint16_t _text, std::uint16_t _position)
+{
+  PrintedOut(_guest, PrintAt(_guest.State(), _text, _position));
 }
 
 // CALL GetKey / JZ back: the wait for a key at CS:_loop. Out: AH the key's scan code.
@@ -324,11 +286,11 @@ void WaitForKey(Guest& _guest, std::uint16_t _loop)
   }
 }
 
-// The two help rows blanked (CS:6664 and CS:671F).
-void BlankHelpRows(Guest& _guest)
+// The two help rows blanked (CS:6664 and CS:671F). Returns where the second blank stops.
+PrintedText BlankHelpRows(GameState& _state)
 {
-  PrintAtOnRegisters(_guest, BLANK_LINE_TEXT, HELP_POSITION);
-  PrintAtOnRegisters(_guest, BLANK_LINE_TEXT, SECOND_HELP_POSITION);
+  PrintAt(_state, BLANK_LINE_TEXT, HELP_POSITION);
+  return PrintAt(_state, BLANK_LINE_TEXT, SECOND_HELP_POSITION);
 }
 
 // LeaveGameLoopForDisk (CS:7E90): diskOperation=_operation, and resumeAtDiskMenu=1, so that the menu shows what Start's disk
@@ -350,30 +312,40 @@ void LeaveGameLoopForDiskOnRegisters(Guest& _guest)
   regs.ax = _guest.Pop();
 }
 
-// ShowControlDevice (CS:6705): "DEVICE:" and the input device's name, and the help rows blanked.
-void ShowControlDevice(Guest& _guest)
+// Where ShowControlDevice reads the input device's name from, in inputDeviceNames: what it leaves in BX.
+[[nodiscard]] std::uint16_t InputDeviceName(const GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  PrintAtOnRegisters(_guest, DEVICE_TEXT, STATUS_POSITION);
-  regs.bx = Join(0, _guest.Get(DS.inputDevice));
-  regs.bx = static_cast<std::uint16_t>((regs.bx << 1) + DS.inputDeviceNames.offset);
-  regs.si = _guest.Word(regs.bx);
-  _guest.Call(PRINT_TEXT_MODE_STRING);
-  BlankHelpRows(_guest);
+  return static_cast<std::uint16_t>((_state.Get(DS.inputDevice) << 1) + DS.inputDeviceNames.offset);
 }
 
-// The joystick could not be read (CS:67C4), or the Amstrad's never moved.
-void ShowNoJoystick(Guest& _guest)
+// ShowControlDevice (CS:6705): "DEVICE:" and the input device's name, and the help rows blanked. Returns where the second
+// blank stops.
+PrintedText ShowControlDevice(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  PrintAtOnRegisters(_guest, NO_JOYSTICK_TEXT, STATUS_POSITION);
-  PrintAtOnRegisters(_guest, JOYSTICK_HELP_TEXT, HELP_POSITION);
-  if (_guest.Get(DS.joystickIsAmstrad) != 1)
+  const PrintedText label = PrintAt(_state, DEVICE_TEXT, STATUS_POSITION);
+  PrintAt(_state, _state.Word(InputDeviceName(_state)), label.nextCell);
+  return BlankHelpRows(_state);
+}
+
+// ShowControlDevice, and the registers as the original leaves them: BX where it read the name from, and the last print's.
+void ShowControlDeviceOnRegisters(Guest& _guest)
+{
+  PrintedOut(_guest, ShowControlDevice(_guest.State()));
+  _guest.Regs().bx = InputDeviceName(_guest.State());
+}
+
+// The joystick could not be read (CS:67C4), or the Amstrad's never moved: the error, and the help's two lines, or only its
+// first for the Amstrad's. Returns where the last print stops.
+PrintedText ShowNoJoystick(GameState& _state)
+{
+  PrintAt(_state, NO_JOYSTICK_TEXT, STATUS_POSITION);
+  const PrintedText help = PrintAt(_state, JOYSTICK_HELP_TEXT, HELP_POSITION);
+  if (_state.Get(DS.joystickIsAmstrad) == 1)
   {
-    ++regs.si;
-    regs.di = SECOND_HELP_POSITION;
-    _guest.Call(PRINT_TEXT_MODE_STRING);
+    return help;
   }
+  // INC SI: the second line starts after the first's NUL.
+  return PrintAt(_state, Offset(help.end, 1), SECOND_HELP_POSITION);
 }
 
 // J (CS:6743): which joystick, then the Amstrad's moves or the IBM's centre. True when it is selected, and
@@ -447,13 +419,13 @@ void RunDiscControlKeys(Guest& _guest, bool _showDevice)
   {
     if (showDevice)
     {
-      ShowControlDevice(_guest);
+      ShowControlDeviceOnRegisters(_guest);
       _guest.JumpBack(DISC_CONTROL_KEY_LOOP);
       showDevice = false;
     }
     WaitForKey(_guest, DISC_CONTROL_KEY_LOOP);
     _guest.Push(regs.ax);
-    BlankHelpRows(_guest);
+    PrintedOut(_guest, BlankHelpRows(_guest.State()));
     regs.ax = _guest.Pop();
     const std::uint8_t scan = High(regs.ax);
     if (scan == SCAN_E)
@@ -524,7 +496,7 @@ void RunDiscControlKeys(Guest& _guest, bool _showDevice)
         showDevice = true;
         continue;
       }
-      ShowNoJoystick(_guest);
+      PrintedOut(_guest, ShowNoJoystick(_guest.State()));
       _guest.JumpBack(DISC_CONTROL_KEY_LOOP);
       continue;
     }
@@ -605,36 +577,25 @@ void ShowDiskResult(Guest& _guest)
 
 } // namespace
 
-void PerformDiskRequest(Guest& _guest)
+void PerformDiskRequest(GameState& _state, Hardware& _hardware, std::uint8_t _request, std::uint16_t _attributes)
 {
-  Machine::Registers& regs = _guest.Regs();
-  // PUSH AX / POP AX round the transfer area: what DOS leaves in AH goes no further.
-  const std::uint16_t request = regs.ax;
-  regs.dx = DS.diskTransferArea.offset;
-  _guest.Devices().SetDiskTransferArea(_guest.DataSegment(), regs.dx);
-  regs.ax = request;
+  _hardware.SetDiskTransferArea(_state.DataSegment(), DS.diskTransferArea.offset);
   // DEC AL until it reaches 0: 1 load, 2 save, 3 delete.
-  for (std::uint8_t step = 1; step <= 3; ++step)
+  switch (_request)
   {
-    regs.ax = WithLow(regs.ax, static_cast<std::uint8_t>(static_cast<std::uint8_t>(regs.ax) - 1));
-    if (static_cast<std::uint8_t>(regs.ax) == 0)
-    {
-      if (step == 1)
-      {
-        LoadCommanderFile(_guest);
-      }
-      else if (step == 2)
-      {
-        SaveCommanderFile(_guest);
-      }
-      else
-      {
-        DeleteCommanderFile(_guest);
-      }
-      return;
-    }
+  case LOAD_COMMANDER:
+    LoadCommanderFile(_state, _hardware);
+    return;
+  case SAVE_COMMANDER:
+    SaveCommanderFile(_state, _hardware);
+    return;
+  case DELETE_COMMANDER:
+    DeleteCommanderFile(_state, _hardware);
+    return;
+  default:
+    ListCommanderFiles(_state, _hardware, _attributes);
+    return;
   }
-  ListCommanderFiles(_guest);
 }
 
 void SaveStartupCommander(GameState& _state, bool _backward)
@@ -868,6 +829,13 @@ void CriticalErrorInterruptEntry(Guest& _guest)
   _guest.Clobber(PRESERVES_ALL);
 }
 
+void PerformDiskRequestEntry(Guest& _guest)
+{
+  const Machine::Registers& regs = _guest.Regs();
+  PerformDiskRequest(_guest.State(), _guest.Devices(), Low(regs.ax), regs.cx);
+  _guest.Clobber(DISK_REQUEST);
+}
+
 void ShowDiskErrorEntry(Guest& _guest)
 {
   ShowDiskError(_guest.State());
@@ -886,7 +854,7 @@ namespace
 
 constexpr std::array ENTRIES = {
   NativeEntry{0x02F0, "CriticalErrorInterrupt", &CriticalErrorInterruptEntry, PRESERVES_ALL, Machine::NativeReturn::Interrupt},
-  NativeEntry{0x02FF, "PerformDiskRequest", &PerformDiskRequest, DISK_REQUEST},
+  NativeEntry{0x02FF, "PerformDiskRequest", &PerformDiskRequestEntry, DISK_REQUEST},
   NativeEntry{0x0470, "ShowDiskError", &ShowDiskErrorEntry, SHOWS_DISK_ERROR},
   NativeEntry{0x4660, "SaveStartupCommander", &SaveStartupCommanderEntry, COPY},
   NativeEntry{0x660B, "ShowDiscControlScreen", &ShowDiscControlScreen, CLOBBERS_GENERAL, Machine::NativeReturn::Near, 0, WAITS},

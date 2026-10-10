@@ -23,18 +23,14 @@ using Machine::Registers;
 
 // The routines these call by their entries: whatever is hooked there runs, so each work routine that a routine that
 // waits calls is compared on its own (ADR-010 item 8).
-constexpr std::uint16_t CLEAR_OBJECT_SLOT = 0x2FD8;
 constexpr std::uint16_t FORMAT_DECIMAL5 = 0x3407;
 constexpr std::uint16_t BLANK_LEADING_ZEROS = 0x3432;
-constexpr std::uint16_t INIT_ABANDONED_COBRA = 0x4CA6;
-constexpr std::uint16_t RECLAIM_SHIP_SLOT = 0x51FD;
 constexpr std::uint16_t PRINT_TEXT_MODE_STRING = 0x60D2;
 constexpr std::uint16_t RUN_EQUIP_SHIP_MENU = 0x6111;
 constexpr std::uint16_t SELECT_LASER_TYPE = 0x633B;
 constexpr std::uint16_t DRAW_LASER_MOUNT_MENU = 0x6367;
 constexpr std::uint16_t CHOOSE_MOUNT_TO_FIT_LASER = 0x63B2;
 constexpr std::uint16_t CHOOSE_MOUNT_TO_REMOVE_LASER = 0x646F;
-constexpr std::uint16_t REDRAW_EQUIP_HELP_TEXT = 0x653F;
 constexpr std::uint16_t CLEAR_DOCKED_MESSAGE_LINE = 0x6553;
 constexpr std::uint16_t PRINT_CREDITS_ON_MESSAGE_LINE = 0x658F;
 constexpr std::uint16_t PAY_FOR_EQUIPMENT_ITEM = 0x65A3;
@@ -584,54 +580,84 @@ struct MountBit
   return MountBit{((fitted >> mount) & 1) != 0, static_cast<std::uint8_t>(mount + 1), static_cast<std::uint8_t>(fitted >> (mount + 1u))};
 }
 
-// 642A: Space in ChooseMountToFitLaser. A free mount gets the bought laser; true once it has.
-bool FitLaserOnMount(Guest& _guest)
+// What Space did on a mount chooser's mount (642A and 64F7).
+struct MountSpace
 {
-  Registers& regs = _guest.Regs();
-  const MountBit bit = ShiftOutMountBit(_guest.State());
-  regs.cx = Join(bit.mountsAbove, bit.shiftCount);
-  if (bit.fitted)
+  bool done;           ///< the laser is fitted or removed, and the help text redrawn over the mount menu
+  PrintedText message; ///< when it is not, where the message saying why stopped
+  PrintedLines help;   ///< when it is, where RedrawEquipHelpText stopped
+};
+
+// 642A: Space in ChooseMountToFitLaser. A free mount gets the bought laser: its bit of laserMountsFitted set, and its two bits
+// of laserMountTypes cleared and then set to the type.
+MountSpace FitLaserOnMount(GameState& _state, Hardware& _hardware)
+{
+  if (ShiftOutMountBit(_state).fitted)
   {
-    MountMessageOut(regs, PrintMountMessage(_guest.State(), _guest.Devices(), MOUNT_OCCUPIED_TEXT, 0));
-    return false;
+    return MountSpace{false, PrintMountMessage(_state, _hardware, MOUNT_OCCUPIED_TEXT, 0), {}};
   }
-  SetLow(regs.cx, _guest.Get(DS.selectedLaserMount));
-  SetLow(regs.ax, static_cast<std::uint8_t>(1u << Low(regs.cx)));
-  _guest.Set(DS.laserMountsFitted, static_cast<std::uint8_t>(_guest.Get(DS.laserMountsFitted) | Low(regs.ax)));
-  // The mount's two bits of laserMountTypes: 3 and the type, shifted up together as AX.
-  regs.ax = Join(_guest.Get(DS.selectedLaserType), MOUNT_TYPE_BITS);
-  SetLow(regs.cx, static_cast<std::uint8_t>(Low(regs.cx) << 1));
-  regs.ax = static_cast<std::uint16_t>(regs.ax << Low(regs.cx));
-  SetLow(regs.ax, static_cast<std::uint8_t>(~Low(regs.ax)));
-  _guest.Set(DS.laserMountTypes, static_cast<std::uint8_t>((_guest.Get(DS.laserMountTypes) & Low(regs.ax)) | High(regs.ax)));
-  _guest.Call(REDRAW_EQUIP_HELP_TEXT);
-  return true;
+  const std::uint8_t mount = _state.Get(DS.selectedLaserMount);
+  _state.Set(DS.laserMountsFitted, static_cast<std::uint8_t>(_state.Get(DS.laserMountsFitted) | (1u << mount)));
+  // 3 and the type, shifted up together as AX to the mount's two bits.
+  const auto bits = static_cast<std::uint16_t>(Join(_state.Get(DS.selectedLaserType), MOUNT_TYPE_BITS) << (mount * 2u));
+  _state.Set(DS.laserMountTypes, static_cast<std::uint8_t>(_state.Get(DS.laserMountTypes) & ~Low(bits)));
+  _state.Set(DS.laserMountTypes, static_cast<std::uint8_t>(_state.Get(DS.laserMountTypes) | High(bits)));
+  return MountSpace{true, {}, RedrawEquipHelpText(_state)};
 }
 
-// 64F7: Space in ChooseMountToRemoveLaser. A mount holding the sold laser's type is freed; true once it is.
-bool RemoveLaserFromMount(Guest& _guest)
+// 64F7: Space in ChooseMountToRemoveLaser. A mount holding the sold laser's type is freed: its bit of laserMountsFitted
+// cleared. "Wrong laser type!" jumps back into the message code the other message runs on into (653D to 6509).
+MountSpace RemoveLaserFromMount(GameState& _state, Hardware& _hardware)
 {
-  Registers& regs = _guest.Regs();
+  if (!ShiftOutMountBit(_state).fitted)
+  {
+    return MountSpace{false, PrintMountMessage(_state, _hardware, NO_LASER_ON_MOUNT_TEXT, 0), {}};
+  }
+  const std::uint8_t mount = _state.Get(DS.selectedLaserMount);
+  if (((_state.Get(DS.laserMountTypes) >> (mount * 2u)) & MOUNT_TYPE_BITS) != _state.Get(DS.selectedLaserType))
+  {
+    return MountSpace{false, PrintMountMessage(_state, _hardware, WRONG_LASER_TYPE_TEXT, REMOVE_MOUNT_MESSAGE), {}};
+  }
+  _state.Set(DS.laserMountsFitted, static_cast<std::uint8_t>(_state.Get(DS.laserMountsFitted) & ~(1u << mount)));
+  return MountSpace{true, {}, RedrawEquipHelpText(_state)};
+}
+
+// What Space leaves in the registers for the chooser's loop: when the laser is fitted or removed, RedrawEquipHelpText's
+// print, AX the help's attribute with the NUL in AL, and its LOOP's CX = 0; otherwise _count, CX as the shifts leave it, and
+// the message's DI, ES and AX, SI kept.
+void MountSpaceOut(Registers& _regs, const MountSpace& _space, std::uint16_t _count)
+{
+  if (_space.done)
+  {
+    _regs.si = _space.help.end;
+    _regs.di = _space.help.nextLine;
+    _regs.es = Guest::VIDEO_SEGMENT;
+    _regs.ax = Join(HELP_ATTRIBUTE, 0);
+    _regs.cx = 0;
+    return;
+  }
+  _regs.cx = _count;
+  MountMessageOut(_regs, _space.message);
+}
+
+// FitLaserOnMount, and the registers as the original leaves them: CL the selected mount + 1 and CH what SHR CH,CL left.
+bool FitLaserOnMountOnRegisters(Guest& _guest)
+{
   const MountBit bit = ShiftOutMountBit(_guest.State());
-  regs.cx = Join(bit.mountsAbove, bit.shiftCount);
-  if (!bit.fitted)
-  {
-    MountMessageOut(regs, PrintMountMessage(_guest.State(), _guest.Devices(), NO_LASER_ON_MOUNT_TEXT, 0));
-    return false;
-  }
-  SetLow(regs.ax, _guest.Get(DS.laserMountTypes));
-  SetLow(regs.cx, static_cast<std::uint8_t>((Low(regs.cx) - 1) << 1));
-  SetLow(regs.ax, static_cast<std::uint8_t>((Low(regs.ax) >> Low(regs.cx)) & MOUNT_TYPE_BITS));
-  if (Low(regs.ax) != _guest.Get(DS.selectedLaserType))
-  {
-    MountMessageOut(regs, PrintMountMessage(_guest.State(), _guest.Devices(), WRONG_LASER_TYPE_TEXT, REMOVE_MOUNT_MESSAGE));
-    return false;
-  }
-  SetLow(regs.cx, static_cast<std::uint8_t>(Low(regs.cx) >> 1));
-  SetLow(regs.ax, static_cast<std::uint8_t>(~(1u << Low(regs.cx))));
-  _guest.Set(DS.laserMountsFitted, static_cast<std::uint8_t>(_guest.Get(DS.laserMountsFitted) & Low(regs.ax)));
-  _guest.Call(REDRAW_EQUIP_HELP_TEXT);
-  return true;
+  const MountSpace space = FitLaserOnMount(_guest.State(), _guest.Devices());
+  MountSpaceOut(_guest.Regs(), space, Join(bit.mountsAbove, bit.shiftCount));
+  return space.done;
+}
+
+// RemoveLaserFromMount, and the registers as the original leaves them: CL as FitLaserOnMountOnRegisters leaves it, or, once
+// the mount is found fitted with the wrong laser, its two bits' shift.
+bool RemoveLaserFromMountOnRegisters(Guest& _guest)
+{
+  const MountBit bit = ShiftOutMountBit(_guest.State());
+  const MountSpace space = RemoveLaserFromMount(_guest.State(), _guest.Devices());
+  const std::uint8_t count = bit.fitted ? static_cast<std::uint8_t>((bit.shiftCount - 1) << 1) : bit.shiftCount;
+  MountSpaceOut(_guest.Regs(), space, Join(bit.mountsAbove, count));
+  return space.done;
 }
 
 // The two mount choosers are one loop at two addresses: where each backward jump lands, and what Space does.
@@ -644,8 +670,8 @@ struct MountChooser
   bool (*space)(Guest&);  // true once the laser is fitted or removed
 };
 
-constexpr MountChooser FIT_CHOOSER{0x63B5, 0x63C3, 0x63E1, 0x6405, &FitLaserOnMount};
-constexpr MountChooser REMOVE_CHOOSER{0x6482, 0x6490, 0x64AE, 0x64D2, &RemoveLaserFromMount};
+constexpr MountChooser FIT_CHOOSER{0x63B5, 0x63C3, 0x63E1, 0x6405, &FitLaserOnMountOnRegisters};
+constexpr MountChooser REMOVE_CHOOSER{0x6482, 0x6490, 0x64AE, 0x64D2, &RemoveLaserFromMountOnRegisters};
 
 // 63B5-6448 and 6482-6515: the box moved by the steering or the arrow keys until Space does its work.
 void RunMountChooser(Guest& _guest, const MountChooser& _chooser)
@@ -708,38 +734,29 @@ void RunMountChooser(Guest& _guest, const MountChooser& _chooser)
 
 } // namespace
 
-void LaunchEscapePod(Guest& _guest)
+void LaunchEscapePod(GameState& _state)
 {
-  Registers& regs = _guest.Regs();
-  _guest.Set(DS.hyperspaceCountdown, 0);
-  _guest.Set(DS.escapePodFrames, ESCAPE_POD_FRAMES);
-  FindFreeShipSlotEntry(_guest);
-  if (!_guest.Flag(FLAG_CARRY))
+  _state.Set(DS.hyperspaceCountdown, 0);
+  _state.Set(DS.escapePodFrames, ESCAPE_POD_FRAMES);
+  const SlotSearch free = FindFreeShipSlot(_state);
+  const std::uint16_t slot = free.found ? free.slot : ReclaimShipSlot(_state).slot;
+  ClearObjectSlot(_state, slot);
+  InitAbandonedCobra(_state, ObjectSlot(_state, slot));
+  _state.Set(DS.playerPitchAngle, static_cast<std::uint16_t>(_state.Get(DS.playerPitchAngle) + HALF_TURN));
+  _state.Set(DS.viewAngle, HALF_TURN);
+  _state.Set(DS.viewLocked, 1);
+  _state.Set(DS.playerSpeed, ESCAPE_POD_SPEED);
+  _state.Set(DS.velocityDirty, 1);
+  _state.Set(DS.escapePodFitted, 0);
+  UpdatePlayerVelocity(_state);
+  for (std::uint16_t move = 0; move < ESCAPE_POD_MOVES; ++move)
   {
-    _guest.Call(RECLAIM_SHIP_SLOT);
-  }
-  regs.di = regs.si;
-  _guest.Call(CLEAR_OBJECT_SLOT);
-  _guest.Call(INIT_ABANDONED_COBRA);
-  _guest.Set(DS.playerPitchAngle, static_cast<std::uint16_t>(_guest.Get(DS.playerPitchAngle) + HALF_TURN));
-  _guest.Set(DS.viewAngle, HALF_TURN);
-  _guest.Set(DS.viewLocked, 1);
-  _guest.Set(DS.playerSpeed, ESCAPE_POD_SPEED);
-  _guest.Set(DS.velocityDirty, 1);
-  _guest.Set(DS.escapePodFitted, 0);
-  UpdatePlayerVelocityEntry(_guest);
-  for (regs.cx = ESCAPE_POD_MOVES; regs.cx != 0; --regs.cx)
-  {
-    const std::uint16_t count = regs.cx;
-    MoveObjectsByVelocityEntry(_guest);
-    regs.cx = count;
+    MoveObjectsByVelocity(_state);
   }
   // MOV [DI],CH, which is 0 throughout: the 17 amounts held emptied.
-  regs.di = DS.cargoHold.offset;
-  for (regs.cx = CARGO_KINDS; regs.cx != 0; --regs.cx)
+  for (std::uint16_t kind = 0; kind < CARGO_KINDS; ++kind)
   {
-    _guest.SetByte(regs.di, High(regs.cx));
-    regs.di = static_cast<std::uint16_t>(regs.di + 2);
+    _state.SetByte(DS.cargoHold.At(kind), 0);
   }
 }
 
@@ -1281,9 +1298,17 @@ using Machine::NativeWait;
 using Machine::REGISTER_ALL;
 
 constexpr NativeContract CLOBBERS_ALL{REGISTER_ALL, 0};
+// Symbols.tsv's "clobbers all", but for DS, which the original keeps and its caller goes on with.
+constexpr NativeContract CLOBBERS_ALL_BUT_DS{static_cast<std::uint16_t>(REGISTER_ALL & ~Machine::REGISTER_DS), 0};
 constexpr NativeContract RETURNS_ZERO{0, FLAG_ZERO};
 
 } // namespace
+
+void LaunchEscapePodEntry(Guest& _guest)
+{
+  LaunchEscapePod(_guest.State());
+  _guest.Clobber(CLOBBERS_ALL_BUT_DS);
+}
 
 void SelectLaserTypeEntry(Guest& _guest)
 {
@@ -1363,7 +1388,7 @@ namespace
 {
 
 constexpr std::array ENTRIES = {
-  NativeEntry{0x2F0F, "LaunchEscapePod", &LaunchEscapePod, CLOBBERS_ALL},
+  NativeEntry{0x2F0F, "LaunchEscapePod", &LaunchEscapePodEntry, CLOBBERS_ALL_BUT_DS},
   NativeEntry{0x4401, "TryScoopObject", &TryScoopObject, PRESERVES_ALL},
   NativeEntry{0x5BF2, "ShowEquipShipScreen", &ShowEquipShipScreen, CLOBBERS_ALL, NativeReturn::Near, 0, NativeWait::Always},
   NativeEntry{0x6111, "RunEquipShipMenu", &RunEquipShipMenu, CLOBBERS_ALL, NativeReturn::Near, 0, NativeWait::Always},
