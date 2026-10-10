@@ -1,0 +1,24 @@
+# Trading at Lave, from the start of a game: buys food and firearms, is refused alien items and, with the
+# last 0.1 credits, radioactives; then sells both, the firearms as contraband that makes the commander an
+# offender. The menus read the cursor keys once each 100-tick poll, hence one key a row, 0.15 s apart.
+wait 0.5; key space; wait 3.5      # any key: the credits, then the status screen
+key F3; wait 0.5                   # Buy Cargo, its cursor on Food
+key b; wait 0.2; key 5; key Return; wait 0.3
+digest bought-food b5cab46babfa6671b994d89a78019058d22fb0b2d02a1dfc627ae01946e00f7b
+key Up; wait 0.15                  # round to Alien Items, which cannot be bought
+key b; wait 0.3
+key Up; wait 0.15; key Up; wait 0.15; key Up; wait 0.15; key Up; wait 0.15; key Up; wait 0.15; key Up; wait 0.15
+key b; wait 0.2; key 1; key Return; wait 0.3   # a tonne of firearms: 6.4 credits left
+digest bought-firearms 54a9fa7a2fb4a13f88303061e1109805793f192bf60299d690dba89fe16d6184
+key Up; wait 0.15; key Up; wait 0.15; key Up; wait 0.15; key Up; wait 0.15
+key Up; wait 0.15; key Up; wait 0.15; key Up; wait 0.15; key Up; wait 0.15
+key b; wait 0.2; key 1; key Return; wait 0.3   # radioactives cost more than is left
+digest refused 1192743267c735c0335b59531966a2160c587df3136aeb36653735da7b477518
+key F2; wait 0.5                   # Sell Cargo
+key s; wait 0.2; key 5; key Return; wait 0.3
+key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15
+key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15
+key s; wait 0.2; key 1; key Return; wait 0.3   # the firearms: legal status 1
+digest sold e66f1aa537db786180b77feea11ed1cffc325cc95b46b6591e7856cec9858406
+key F9; wait 0.8
+digest offender 57d78850327541737aa7c79caf567205f61513ad06e0f354153fd7a4f04fb7cf
