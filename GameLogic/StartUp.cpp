@@ -114,11 +114,17 @@ std::uint16_t MoveBytes(GameState& _state, std::uint16_t _sourceSegment, std::ui
 void ExitToDos(Guest& _guest)
 {
   Hardware& hardware = _guest.Devices();
+  Machine::Registers& regs = _guest.Regs();
   hardware.SetVideoMode(VIDEO_MODE_TEXT_80);
   hardware.PrintDosString(_guest.DataSegment(), DS.exitMessage.offset);
+  // At the jump back the original holds the key int 16h took out in AX, the message's offset from the print in DX, and
+  // ZF clear from the peek that found the key: the registers JumpBack compares (ADR-010 item 8). Every turn takes a key,
+  // a change paced time sees, so no turn idles.
+  regs.dx = DS.exitMessage.offset;
   while (hardware.PeekBiosKey().has_value())
   {
-    hardware.ReadBiosKey();
+    regs.ax = hardware.ReadBiosKey();
+    _guest.SetFlag(Machine::FLAG_ZERO, false);
     _guest.JumpBack(EXIT_KEY_DRAIN);
   }
 }

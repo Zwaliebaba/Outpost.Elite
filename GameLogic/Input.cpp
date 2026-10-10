@@ -353,7 +353,7 @@ void ReadSteering(Guest& _guest)
 void GetKey(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  _guest.SetFlag(Machine::FLAG_INTERRUPT, false);
+  _guest.Devices().DisableInterrupts();
   regs.ax = WithHigh(regs.ax, 0);
   const std::uint8_t count = _guest.Get(DS.keyBufferCount);
   if (count != 0)
@@ -368,7 +368,7 @@ void GetKey(Guest& _guest)
     const auto rotated = static_cast<std::uint16_t>((word << 1) | (word >> 15));
     regs.ax = Join(static_cast<std::uint8_t>(High(rotated) >> 1), Low(rotated));
   }
-  _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
+  _guest.Devices().EnableInterrupts();
   SaveScreenshotIfAsked(_guest);
   _guest.SetFlag(Machine::FLAG_ZERO, High(regs.ax) == 0);
 }
@@ -464,7 +464,7 @@ void ReadJoystickAxes(Guest& _guest)
   // With interrupts off, the one-shots fired, and each axis's polls counted until its bit drops. The game port times its one-shots
   // by the instructions executed, so each of the original's is counted (CountCycles) before the port access after it, and each of
   // its backward jumps ends a turn (JumpBack): the wait for both bits idles as the original's does.
-  _guest.SetFlag(Machine::FLAG_INTERRUPT, false);
+  _guest.Devices().DisableInterrupts();
   regs.bx = AXIS_COUNT_START;
   regs.cx = regs.bx;
   regs.dx = GAME_PORT;
@@ -540,7 +540,7 @@ void ReadJoystickAxes(Guest& _guest)
     _guest.JumpBack(Y_COUNT_TURN);
   }
   _guest.CountCycles(NOT_TAKEN_CYCLES);
-  _guest.SetFlag(Machine::FLAG_INTERRUPT, true);
+  _guest.Devices().EnableInterrupts();
   regs.cx = static_cast<std::uint16_t>(regs.cx - AXIS_COUNT_START);
   regs.bx = static_cast<std::uint16_t>(regs.bx - AXIS_COUNT_START);
   regs.dx = GAME_PORT;

@@ -370,7 +370,7 @@ void RestoreTimerInterrupt(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
   regs.es = 0;
-  _guest.SetFlag(Machine::FLAG_INTERRUPT, false);
+  _guest.Devices().DisableInterrupts();
   _guest.SetFarWord(regs.es, TIMER_VECTOR_SEGMENT, _guest.CodeWord(SAVED_TIMER_SEGMENT));
   regs.ax = _guest.CodeWord(SAVED_TIMER_OFFSET);
   _guest.SetFarWord(regs.es, TIMER_VECTOR_OFFSET, regs.ax);
