@@ -790,7 +790,7 @@ void PrintCommanderCatalogue(Guest& _guest)
     _guest.Push(regs.cx);
     _guest.Push(regs.di);
     regs.si = BLANK_LINE_TEXT;
-    PrintTextModeString(_guest);
+    PrintTextModeStringEntry(_guest);
     regs.di = _guest.Pop();
     regs.di = static_cast<std::uint16_t>(regs.di + TEXT_ROW_BYTES);
     regs.cx = _guest.Pop();
@@ -820,7 +820,7 @@ void PrintCommanderCatalogue(Guest& _guest)
     regs.bx = static_cast<std::uint16_t>(regs.bx >> 2);
     regs.di = static_cast<std::uint16_t>(regs.di + regs.bx);
     regs.di = static_cast<std::uint16_t>(regs.di + CATALOGUE_POSITION);
-    PrintTextModeString(_guest);
+    PrintTextModeStringEntry(_guest);
     ++regs.si;
     SetHigh(regs.dx, static_cast<std::uint8_t>(High(regs.dx) + 1));
   } while (--regs.cx != 0);

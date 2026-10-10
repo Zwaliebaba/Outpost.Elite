@@ -220,9 +220,9 @@ constexpr std::uint16_t TITLE_ROLL_STEP = 0x1E;
 constexpr std::uint8_t TITLE_SHIP_FLAGS = 2;
 
 // ADD WORD PTR [_offset],_value.
-void AddToWord(Guest& _guest, std::uint16_t _offset, std::uint16_t _value)
+void AddToWord(GameState& _state, std::uint16_t _offset, std::uint16_t _value)
 {
-  _guest.SetWord(_offset, Offset(_guest.Word(_offset), _value));
+  _state.SetWord(_offset, Offset(_state.Word(_offset), _value));
 }
 
 // CALL GetKey; JE _loop: GetKey until a key comes.
@@ -363,9 +363,9 @@ void RunTitle(Guest& _guest)
     SetLow(regs.bx, static_cast<std::uint8_t>(Low(regs.bx) + 1));
     _guest.SetByte(regs.di, Low(regs.bx));
     _guest.SetWord(Offset(regs.di, SLOT_Z), regs.ax); // at the type's own distance
-    AddToWord(_guest, Offset(regs.di, SLOT_ROLL), TITLE_ROLL_STEP);
-    AddToWord(_guest, Offset(regs.di, SLOT_YAW), TITLE_YAW_STEP);
-    AddToWord(_guest, Offset(regs.di, SLOT_PITCH), TITLE_PITCH_STEP);
+    AddToWord(_guest.State(), Offset(regs.di, SLOT_ROLL), TITLE_ROLL_STEP);
+    AddToWord(_guest.State(), Offset(regs.di, SLOT_YAW), TITLE_YAW_STEP);
+    AddToWord(_guest.State(), Offset(regs.di, SLOT_PITCH), TITLE_PITCH_STEP);
     regs.si = DS.pressAnyKeyText.offset;
     regs.di = PRESS_ANY_KEY_PLACE;
     _guest.Set(DS.textPaperPattern, 0);
@@ -468,15 +468,15 @@ void DispatchDockedKeys(Guest& _guest, std::uint16_t _screen)
 void PrintCreditsOnMessageLine(Guest& _guest)
 {
   Machine::Registers& regs = _guest.Regs();
-  SwapTextAttributeNibbles(_guest);
+  SwapTextAttributeNibblesEntry(_guest);
   const std::uint16_t cx = regs.cx;
   const std::uint16_t si = regs.si;
   regs.si = DS.creditBalanceText.offset;
   regs.di = CREDITS_ON_MESSAGE_LINE;
-  PrintTextModeString(_guest);
+  PrintTextModeStringEntry(_guest);
   regs.si = si;
   regs.cx = cx;
-  SwapTextAttributeNibbles(_guest);
+  SwapTextAttributeNibblesEntry(_guest);
 }
 
 void FormatFuelLightYears(Guest& _guest)
@@ -487,7 +487,7 @@ void FormatFuelLightYears(Guest& _guest)
   // DIV BL, which cannot overflow: at most 2550/36.
   regs.ax = static_cast<std::uint8_t>(tenths / FUEL_UNITS_PER_TENTH);
   regs.di = FUEL_DIGITS;
-  FormatDecimal5(_guest);
+  FormatDecimal5Entry(_guest);
   regs.ax = WithLow(regs.ax, _guest.Get(DS.data840A));
   _guest.Set(DS.data83F7, Low(regs.ax));
   regs.ax = WithLow(regs.ax, _guest.Get(DS.data840B));
@@ -519,11 +519,11 @@ void DrawDockedFrame(Guest& _guest)
   for (const std::uint16_t row : {FRAME_TOP_ROW, FRAME_TITLE_ROW, FRAME_BOTTOM_ROW})
   {
     regs.di = row;
-    DrawFrameRow(_guest);
+    DrawFrameRowEntry(_guest);
   }
   regs.di = FRAME_SIDES;
   regs.cx = FRAME_SIDE_ROWS;
-  DrawFrameSides(_guest);
+  DrawFrameSidesEntry(_guest);
   regs.bx = DS.frameCorners.offset;
   regs.cx = FRAME_CORNERS;
   do
@@ -536,29 +536,29 @@ void DrawDockedFrame(Guest& _guest)
   } while (regs.cx != 0);
 }
 
-void DrawFrameSides(Guest& _guest)
+std::uint16_t DrawFrameSides(GameState& _state, std::uint16_t _segment, std::uint16_t _cell, std::uint16_t _rows, std::uint8_t _attribute)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.ax = WithLow(regs.ax, FRAME_SIDE_CHARACTER);
-  do
+  const std::uint16_t side = Join(_attribute, FRAME_SIDE_CHARACTER);
+  std::uint16_t cell = _cell;
+  for (std::uint32_t row = 0; row < LoopCount(_rows); ++row)
   {
-    _guest.SetFarWord(regs.es, regs.di, regs.ax);
-    _guest.SetFarWord(regs.es, static_cast<std::uint16_t>(regs.di + FRAME_RIGHT_SIDE), regs.ax);
-    regs.di = static_cast<std::uint16_t>(regs.di + TEXT_ROW_BYTES);
-    --regs.cx;
-  } while (regs.cx != 0);
+    _state.SetFarWord(_segment, cell, side);
+    _state.SetFarWord(_segment, Offset(cell, FRAME_RIGHT_SIDE), side);
+    cell = Offset(cell, TEXT_ROW_BYTES);
+  }
+  return cell;
 }
 
-void DrawFrameRow(Guest& _guest)
+std::uint16_t DrawFrameRow(GameState& _state, std::uint16_t _segment, std::uint16_t _cell, std::uint16_t _value, bool _backwards)
 {
-  Machine::Registers& regs = _guest.Regs();
-  // REP STOSW, forwards or, with DF set, backwards.
-  const auto step = static_cast<std::uint16_t>((regs.flags & Machine::FLAG_DIRECTION) != 0 ? 0xFFFE : 2);
-  for (regs.cx = FRAME_ROW_CELLS; regs.cx != 0; --regs.cx)
+  const auto step = static_cast<std::uint16_t>(_backwards ? 0xFFFE : 2);
+  std::uint16_t cell = _cell;
+  for (std::uint16_t left = FRAME_ROW_CELLS; left != 0; --left)
   {
-    _guest.SetFarWord(regs.es, regs.di, regs.ax);
-    regs.di = static_cast<std::uint16_t>(regs.di + step);
+    _state.SetFarWord(_segment, cell, _value);
+    cell = Offset(cell, step);
   }
+  return cell;
 }
 
 void WaitForScreenExitKey(Guest& _guest)
@@ -582,19 +582,12 @@ void WaitForScreenExitKey(Guest& _guest)
   regs.ax = _guest.Pop();
 }
 
-void AwardArchangelTitle(Guest& _guest)
+void AwardArchangelTitle(GameState& _state)
 {
-  Machine::Registers& regs = _guest.Regs();
-  regs.si = DS.archangelTitle.offset;
-  regs.di = DS.commanderRankText.offset;
-  regs.cx = RANK_LETTERS;
-  do
+  for (std::uint16_t letter = 0; letter < RANK_LETTERS; ++letter)
   {
-    SetLow(regs.ax, _guest.Byte(regs.si));
-    ++regs.si;
-    _guest.SetByte(regs.di, Low(regs.ax));
-    ++regs.di;
-  } while (--regs.cx != 0);
+    _state.SetByte(DS.commanderRankText.At(letter), _state.Byte(DS.archangelTitle.At(letter)));
+  }
 }
 
 void ShowSellCargoScreen(Guest& _guest)
@@ -1127,6 +1120,8 @@ void RunTitleAndDocked(Guest& _guest)
   DispatchDockedKeys(_guest, SHOW_COMMANDER_STATUS_SCREEN);
 }
 
+// ── Their entries ──
+
 namespace
 {
 
@@ -1145,11 +1140,41 @@ constexpr Machine::NativeContract CLOBBERS_AX_CX_SI_DI{REGISTER_AX | REGISTER_CX
 constexpr Machine::NativeContract CLOBBERS_ALL{
   REGISTER_AX | REGISTER_BX | REGISTER_CX | REGISTER_DX | REGISTER_SI | REGISTER_DI | REGISTER_BP | REGISTER_ES, 0};
 
+} // namespace
+
+void AwardArchangelTitleEntry(Guest& _guest)
+{
+  AwardArchangelTitle(_guest.State());
+  _guest.Clobber(CLOBBERS_AX_CX_SI_DI);
+}
+
+void DrawFrameSidesEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.di = DrawFrameSides(_guest.State(), regs.es, regs.di, regs.cx, High(regs.ax));
+  // The original puts the side's character in AL, and its LOOP leaves CX at 0.
+  SetLow(regs.ax, FRAME_SIDE_CHARACTER);
+  regs.cx = 0;
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+void DrawFrameRowEntry(Guest& _guest)
+{
+  Machine::Registers& regs = _guest.Regs();
+  regs.di = DrawFrameRow(_guest.State(), regs.es, regs.di, regs.ax, _guest.Flag(Machine::FLAG_DIRECTION));
+  // Its REP STOSW leaves CX at 0.
+  regs.cx = 0;
+  _guest.Clobber(PRESERVES_ALL);
+}
+
+namespace
+{
+
 constexpr Machine::NativeReturn NEAR = Machine::NativeReturn::Near;
 constexpr Machine::NativeWait ALWAYS = Machine::NativeWait::Always;
 
 constexpr std::array ENTRIES = {
-  NativeEntry{0x49E4, "AwardArchangelTitle", &AwardArchangelTitle, CLOBBERS_AX_CX_SI_DI},
+  NativeEntry{0x49E4, "AwardArchangelTitle", &AwardArchangelTitleEntry, CLOBBERS_AX_CX_SI_DI},
   NativeEntry{0x5A30, "ShowSellCargoScreen", &ShowSellCargoScreen, CLOBBERS_ALL, NEAR, 0, ALWAYS},
   NativeEntry{0x5AE9, "ShowBuyCargoScreen", &ShowBuyCargoScreen, CLOBBERS_ALL, NEAR, 0, ALWAYS},
   NativeEntry{0x5EA9, "ShowCommanderStatusScreen", &ShowCommanderStatusScreen, CLOBBERS_ALL, NEAR, 0, ALWAYS},
@@ -1159,8 +1184,8 @@ constexpr std::array ENTRIES = {
   NativeEntry{0x6DF2, "ShowMissionBriefing", &ShowMissionBriefing, CLOBBERS_ALL, NEAR, 0, ALWAYS},
   NativeEntry{0x6EB7, "ShowMissionDebriefing", &ShowMissionDebriefing, CLOBBERS_ALL, NEAR, 0, ALWAYS},
   NativeEntry{0x7C88, "DrawDockedFrame", &DrawDockedFrame, PRESERVES_ALL},
-  NativeEntry{0x7CE9, "DrawFrameSides", &DrawFrameSides, PRESERVES_ALL},
-  NativeEntry{0x7CF8, "DrawFrameRow", &DrawFrameRow, PRESERVES_ALL},
+  NativeEntry{0x7CE9, "DrawFrameSides", &DrawFrameSidesEntry, PRESERVES_ALL},
+  NativeEntry{0x7CF8, "DrawFrameRow", &DrawFrameRowEntry, PRESERVES_ALL},
   NativeEntry{0x7D81, "RunTitleAndDocked", &RunTitleAndDocked, CLOBBERS_ALL, NEAR, 0, ALWAYS},
 };
 

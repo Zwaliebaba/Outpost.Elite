@@ -223,7 +223,7 @@ void PrintEquipmentSellColumn(Guest& _guest)
   regs.di = static_cast<std::uint16_t>(_guest.Get(DS.menuFirstRowAttr) + regs.ax);
   regs.ax = static_cast<std::uint16_t>(regs.ax >> 2);
   regs.di = static_cast<std::uint16_t>(regs.di + regs.ax + SELL_PRICE_COLUMN);
-  PrintTextModeString(_guest);
+  PrintTextModeStringEntry(_guest);
   _guest.Set(DS.textAttribute, MENU_ATTRIBUTE);
 }
 
@@ -1005,7 +1005,7 @@ void DrawLaserMountMenu(Guest& _guest)
       regs.bx = DS.laserTypeNames.At(Low(regs.dx) & MOUNT_TYPE_BITS);
       regs.si = _guest.Word(regs.bx);
     }
-    PrintTextModeString(_guest);
+    PrintTextModeStringEntry(_guest);
     SetLow(regs.dx, static_cast<std::uint8_t>(Low(regs.dx) >> 2));
   }
   regs.si = FIRST_MOUNT_BOX;
