@@ -2,8 +2,6 @@
 
 #include "Hardware.h"
 
-#include "Arithmetic.h"
-
 #include <algorithm>
 #include <array>
 #include <span>
@@ -18,18 +16,10 @@ namespace
 constexpr std::uint8_t TIMER_CHANNEL_2_SQUARE_WAVE = 0xB6; // channel 2, low then high byte, mode 3
 constexpr std::uint8_t KEYBOARD_ACKNOWLEDGE = 0x80;        // port 61h bit 7, the XT's PB7
 
-constexpr std::uint8_t VIDEO_VECTOR = 0x10;
-constexpr std::uint8_t BIOS_KEYBOARD_VECTOR = 0x16;
 constexpr std::uint8_t MOUSE_VECTOR = 0x33;
-constexpr std::uint8_t VIDEO_SET_MODE = 0x00;
-constexpr std::uint8_t BIOS_READ_KEY = 0x00;
 constexpr std::uint16_t MOUSE_BUTTON_PRESSES = 0x0005;
 
 constexpr std::uint8_t CRTC_CURSOR_ADDRESS_HIGH = 0x0E;
-
-// DOS 3.30, as the emulated DOS was (ADR-006 item 3).
-constexpr std::uint8_t DOS_MAJOR_VERSION = 3;
-constexpr std::uint8_t DOS_MINOR_VERSION = 30;
 
 } // namespace
 
@@ -116,23 +106,18 @@ void Hardware::ResetMouse()
     m_platform.SoftwareInterrupt(MOUSE_VECTOR);
     return;
   }
-  (void)mouse.Reset();
+  mouse.Reset();
 }
 
-MousePresses Hardware::ReadMousePresses(std::uint16_t _button)
+std::uint16_t Hardware::ReadMousePresses()
 {
-  Mouse& mouse = m_platform.MouseDriver();
+  const Mouse& mouse = m_platform.MouseDriver();
   if (!mouse.Present())
   {
     m_platform.SoftwareInterrupt(MOUSE_VECTOR);
-    return MousePresses{MOUSE_BUTTON_PRESSES, _button, 0, 0};
+    return MOUSE_BUTTON_PRESSES;
   }
-  const std::optional<MousePresses> presses = mouse.Presses(_button);
-  if (!presses)
-  {
-    m_platform.Refuse(FaultKind::UnsupportedRequest, MOUSE_VECTOR, High(MOUSE_BUTTON_PRESSES), Low(MOUSE_BUTTON_PRESSES));
-  }
-  return *presses;
+  return mouse.Buttons();
 }
 
 MouseMotion Hardware::ReadMouseMotion()
@@ -150,28 +135,13 @@ void Hardware::SetVideoMode(std::uint8_t _mode)
 {
   if (!m_platform.BiosServices().SetMode(_mode))
   {
-    m_platform.Refuse(FaultKind::UnsupportedRequest, VIDEO_VECTOR, VIDEO_SET_MODE, _mode);
+    throw std::logic_error("Hardware::SetVideoMode: a mode the game never sets");
   }
 }
 
 void Hardware::PrintDosString(std::uint16_t _segment, std::uint16_t _offset)
 {
   m_platform.PrintDosString(_segment, _offset);
-}
-
-std::optional<std::uint16_t> Hardware::PeekBiosKey()
-{
-  return m_platform.BiosServices().PeekKey();
-}
-
-std::uint16_t Hardware::ReadBiosKey()
-{
-  const std::optional<std::uint16_t> key = m_platform.BiosServices().ReadKey();
-  if (!key)
-  {
-    m_platform.Refuse(FaultKind::WouldBlock, BIOS_KEYBOARD_VECTOR, BIOS_READ_KEY, 0);
-  }
-  return *key;
 }
 
 std::uint8_t Hardware::CgaStatus()
@@ -221,16 +191,6 @@ void Hardware::CountInstructionCycles(Cycles _cycles) noexcept
 BiosClock Hardware::ReadBiosClock()
 {
   return m_platform.BiosServices().ReadClock();
-}
-
-void Hardware::SetBiosClock(std::uint32_t _ticks)
-{
-  m_platform.BiosServices().SetClock(_ticks);
-}
-
-void Hardware::RunBiosTimerTick(std::uint16_t _segment, std::uint16_t _offset)
-{
-  m_platform.CallHandler(FarAddress{_segment, _offset});
 }
 
 // DOS's file services, native (D27): the platform's DosFiles. A stamp is DOS's time at the platform's clock, as the emulated
@@ -294,17 +254,6 @@ DosAnswer Hardware::FindNextFile()
 void Hardware::Spend(const PacingPoint& _point)
 {
   m_platform.Spend(_point.cycles);
-}
-
-DosVersion Hardware::ReadDosVersion(std::uint8_t /*_al*/)
-{
-  return DosVersion{DOS_MAJOR_VERSION, DOS_MINOR_VERSION};
-}
-
-DosTime Hardware::ReadDosTime()
-{
-  const DosDateTime now = m_platform.Files().Now(m_platform.Clock());
-  return DosTime{now.hour, now.minute, now.second, now.hundredths};
 }
 
 // ── What the emulated PC kept in memory, outside the game's (D33) ──

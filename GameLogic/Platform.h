@@ -10,7 +10,6 @@
 #include "IntervalTimer.h"
 #include "Keyboard.h"
 #include "Mouse.h"
-#include "ServiceFault.h"
 #include "Speaker.h"
 #include "Timing.h"
 
@@ -20,7 +19,6 @@
 #include <exception>
 #include <functional>
 #include <map>
-#include <optional>
 #include <semaphore>
 #include <span>
 #include <string>
@@ -35,10 +33,8 @@ class GameState;
 enum class StopReason : std::uint8_t
 {
   Reached,    ///< The clock reached the cycle asked for.
-  Fault,      ///< A BIOS, DOS or mouse service refused a call; Platform::Fault says which.
   Terminated, ///< The program ended: its start routine returned, to DOS's int 20h.
-  Spinning,   ///< The program ran SpinLimit() turns without waiting once.
-  Unported    ///< An interrupt's vector named code no native routine stands in for; Platform::UnportedAt says where.
+  Spinning    ///< The program ran SpinLimit() turns without waiting once.
 };
 
 /// A far address, segment and offset: what an interrupt vector holds. A plain record (R8).
@@ -59,9 +55,9 @@ using NativeRoutine = std::function<void()>;
 ///
 /// It holds, each the emulated PC's model moved here without its port bus, its registers or its interrupt-vector plumbing:
 /// the clock and its scheduler; the 8259 and the 8253 (InterruptController, IntervalTimer); the keyboard and the system control
-/// port (Keyboard); the speaker (Speaker); the game port (GamePort); the mouse driver (Mouse); the CGA (Cga); the BIOS's video,
-/// keyboard-buffer and clock services and its data area (Bios), and its two hardware interrupt handlers; DOS's file services
-/// (DosFiles) and its print-string, read-line, version and time; the interrupt vector table; and the ROM bytes the game reads.
+/// port (Keyboard); the speaker (Speaker); the game port (GamePort); the mouse driver (Mouse); the CGA (Cga); the BIOS's video
+/// and clock services and its data area (Bios), and its two hardware interrupt handlers; DOS's file services (DosFiles) and its
+/// print-string; the interrupt vector table; and the ROM bytes the game reads.
 ///
 /// Time is the 8088's cycle count, a third of the crystal (Timing.h), and it is paced (ADR-008): the game's work takes no
 /// time. The clock moves only while the game waits, and then straight to the next thing a device will do: the timer's next
@@ -102,7 +98,6 @@ public:
   /// A native routine at an address, and how often it ran.
   struct HookedRoutine
   {
-    std::string name;
     NativeRoutine routine;
     std::uint64_t calls = 0;
   };
@@ -132,15 +127,9 @@ public:
 
   // ── The program ──
 
-  /// DOS starts the program whose PSP is at _pspSegment: its files closed, and its start routine (SetEntry) run from the next
-  /// RunUntil. The PSP itself is not memory any more; the game keeps its segment.
-  void StartProgram(std::uint16_t _pspSegment) noexcept;
-
-  /// The segment of the program's PSP: what DOS leaves in DS for its start.
-  [[nodiscard]] std::uint16_t PspSegment() const noexcept
-  {
-    return m_pspSegment;
-  }
+  /// DOS starts the program: its files closed, and its start routine (SetEntry) run from the next RunUntil. The PSP is not
+  /// memory any more.
+  void StartProgram() noexcept;
 
   /// The program's command tail (Desc::commandTail).
   [[nodiscard]] const std::string& CommandTail() const noexcept
@@ -150,11 +139,11 @@ public:
 
   /// _routine is the program's start, where DOS starts it. It runs on the native thread; when it returns, the program has
   /// ended. Throws std::logic_error if the program has one already.
-  void SetEntry(std::string _name, NativeRoutine _routine);
+  void SetEntry(NativeRoutine _routine);
 
   /// From now on an interrupt whose vector names _address runs _routine, which stands in for the program's code there, and
   /// returns from it as IRET does. Throws std::logic_error if a routine is there already.
-  void Hook(FarAddress _address, std::string _name, NativeRoutine _routine);
+  void Hook(FarAddress _address, NativeRoutine _routine);
 
   /// The program's start routine, and how often it ran.
   [[nodiscard]] const HookedRoutine& Entry() const noexcept
@@ -202,18 +191,6 @@ public:
   [[nodiscard]] std::uint64_t InterruptsTaken() const noexcept
   {
     return m_interruptsTaken;
-  }
-
-  /// The first service call refused, if any (StopReason::Fault).
-  [[nodiscard]] const std::optional<ServiceFault>& Fault() const noexcept
-  {
-    return m_fault;
-  }
-
-  /// The address with no native routine that an interrupt reached, if one did (StopReason::Unported).
-  [[nodiscard]] const std::optional<FarAddress>& UnportedAt() const noexcept
-  {
-    return m_unported;
   }
 
   // ── The devices, for the hosts: the keys, the stick, the mouse, the picture and the sound ──
@@ -346,18 +323,11 @@ public:
   /// INT _vector, to the handler its vector names, which runs to its IRET: a native routine (Hook), or the ROM's IRET.
   void SoftwareInterrupt(std::uint8_t _vector);
 
-  /// The handler at _handler, run to its IRET as INT runs one, with the interrupt's frame in place: how the game's timer
-  /// handler chains to the BIOS's by a far jump.
+  /// The handler at _handler, run to its IRET as INT runs one, with the interrupt's frame in place.
   void CallHandler(FarAddress _handler);
 
-  /// Int 21h AH=09h: the string at _segment:_offset up to its '$' printed through the BIOS's teletype, a tab expanded to the
-  /// next multiple of 8 columns as DOS's CON driver does. Refused, printing nothing, in a graphics mode, for a BEL, or with
-  /// no '$' in 64 KiB.
+  /// Int 21h AH=09h: the string at _segment:_offset up to its '$' printed through the BIOS's teletype.
   void PrintDosString(std::uint16_t _segment, std::uint16_t _offset);
-
-  /// Refuses a service call: it is recorded as the run's fault, unless one is already, and the native code is abandoned; the
-  /// run stops (StopReason::Fault).
-  [[noreturn]] void Refuse(FaultKind _kind, std::uint8_t _vector, std::uint8_t _ah, std::uint8_t _al);
 
 private:
   // The state at a loop's turn, kept to tell whether the next turn changed anything.
@@ -403,7 +373,6 @@ private:
   std::uint64_t m_vectorChanges = 0;
   std::uint64_t m_portWrites = 0;
   std::uint16_t m_flags;
-  std::uint16_t m_pspSegment = 0;
   std::string m_commandTail;
 
   HookedRoutine m_entry;
@@ -415,8 +384,6 @@ private:
   Cycles m_runLimit = NO_EVENT;
   Turn m_lastTurn{};
 
-  std::optional<ServiceFault> m_fault;
-  std::optional<FarAddress> m_unported;
   bool m_started = false;    // the program's start routine has been begun
   bool m_terminated = false; // and it has returned
 

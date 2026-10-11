@@ -46,16 +46,6 @@ constexpr std::uint8_t POST_MODE_CONTROL = 0x29;
 constexpr std::uint32_t VIDEO_WORDS = 8192;
 constexpr std::uint8_t BLANK_CHARACTER = 0x20;
 constexpr std::uint8_t BLANK_ATTRIBUTE = 0x07;
-constexpr std::uint8_t LAST_ROW = 24;
-
-constexpr std::uint8_t CHARACTER_BELL = 0x07;
-constexpr std::uint8_t CHARACTER_BACKSPACE = 0x08;
-constexpr std::uint8_t CHARACTER_LINE_FEED = 0x0A;
-constexpr std::uint8_t CHARACTER_CARRIAGE_RETURN = 0x0D;
-
-// The keyboard buffer's place in the data area: KB_BUFFER to KB_BUFFER_END, and its head and tail are offsets from 0040:0000.
-constexpr std::uint16_t KEYBOARD_BUFFER = 0x1E;
-constexpr std::uint16_t KEYBOARD_BUFFER_END = 0x3E;
 
 // The timer handler's day: 1800B0h ticks, its high word 18h and its low B0h.
 constexpr std::uint16_t TICKS_PER_DAY_HIGH = 0x18;
@@ -85,8 +75,6 @@ constexpr std::uint16_t Word(std::uint8_t _high, std::uint8_t _low) noexcept
 Bios::Bios(GameState& _state, Cga& _cga, std::uint32_t _timerTicks)
   : m_state(_state),
     m_cga(_cga),
-    m_keyboardHead(KEYBOARD_BUFFER),
-    m_keyboardTail(KEYBOARD_BUFFER),
     m_videoMode(POWER_ON_VIDEO_MODE),
     m_videoColumns(MODE_COLUMNS[POWER_ON_VIDEO_MODE]),
     m_videoPageBytes(MODE_PAGE_BYTES[POWER_ON_VIDEO_MODE]),
@@ -180,68 +168,16 @@ void Bios::SelectPalette(std::uint8_t _palette)
   Store(m_colorSelect, colorSelect);
 }
 
-bool Bios::TeletypeAvailable() const noexcept
+void Bios::WriteTeletype(std::uint8_t _character)
 {
-  return m_videoMode < FIRST_GRAPHICS_MODE;
-}
-
-std::uint8_t Bios::CursorColumn() const noexcept
-{
-  return Low(m_cursorPositions[m_activePage % CURSOR_PAGES]);
-}
-
-bool Bios::WriteTeletype(std::uint8_t _character)
-{
-  if (!TeletypeAvailable() || _character == CHARACTER_BELL)
-  {
-    return false;
-  }
   const std::uint8_t page = m_activePage;
-  const std::uint16_t columns = m_videoColumns;
   const std::uint16_t position = m_cursorPositions[page % CURSOR_PAGES];
-  std::uint8_t row = High(position);
-  std::uint8_t column = Low(position);
-
-  bool scroll = false;
-  switch (_character)
-  {
-  case CHARACTER_BACKSPACE:
-    if (column > 0)
-    {
-      --column;
-    }
-    break;
-  case CHARACTER_CARRIAGE_RETURN:
-    column = 0;
-    break;
-  case CHARACTER_LINE_FEED:
-    scroll = row >= LAST_ROW;
-    row = scroll ? LAST_ROW : static_cast<std::uint8_t>(row + 1);
-    break;
-  default:
-  {
-    const std::uint32_t pageStart = std::uint32_t{m_videoPageBytes} * page;
-    const std::uint32_t cell = pageStart + (std::uint32_t{row} * columns + column) * 2u;
-    m_state.SetVideoByte(static_cast<std::uint16_t>(cell), _character);
-    ++column;
-    if (column >= columns)
-    {
-      column = 0;
-      scroll = row >= LAST_ROW;
-      row = scroll ? LAST_ROW : static_cast<std::uint8_t>(row + 1);
-    }
-    break;
-  }
-  }
-
-  SetCursor(row, column);
-  if (scroll)
-  {
-    // As WRITE_TTY: the cursor is placed first, and the new line takes the attribute found under it.
-    const std::uint32_t cell = m_videoStart + (std::uint32_t{row} * columns + column) * 2u;
-    ScrollUp(m_state.VideoByte(static_cast<std::uint16_t>(cell + 1)));
-  }
-  return true;
+  const std::uint8_t row = High(position);
+  const std::uint8_t column = Low(position);
+  const std::uint32_t pageStart = std::uint32_t{m_videoPageBytes} * page;
+  const std::uint32_t cell = pageStart + (std::uint32_t{row} * m_videoColumns + column) * 2u;
+  m_state.SetVideoByte(static_cast<std::uint16_t>(cell), _character);
+  SetCursor(row, static_cast<std::uint8_t>(column + 1));
 }
 
 void Bios::SetCursor(std::uint8_t _row, std::uint8_t _column) noexcept
@@ -252,70 +188,6 @@ void Bios::SetCursor(std::uint8_t _row, std::uint8_t _column) noexcept
   const std::uint32_t address = (m_videoStart + (_row * columns + _column) * 2u) / 2u;
   WriteCrtc(CRTC_CURSOR_HIGH, static_cast<std::uint8_t>((address >> 8) & 0xFF));
   WriteCrtc(CRTC_CURSOR_LOW, static_cast<std::uint8_t>(address & 0xFF));
-}
-
-void Bios::ScrollUp(std::uint8_t _attribute) noexcept
-{
-  const std::uint32_t columns = m_videoColumns;
-  const std::uint32_t start = m_videoStart;
-  const std::uint32_t rowBytes = columns * 2u;
-  for (std::uint32_t row = 0; row < LAST_ROW; ++row)
-  {
-    for (std::uint32_t index = 0; index < rowBytes; ++index)
-    {
-      const std::uint32_t target = start + row * rowBytes + index;
-      const std::uint8_t value = m_state.VideoByte(static_cast<std::uint16_t>(target + rowBytes));
-      m_state.SetVideoByte(static_cast<std::uint16_t>(target), value);
-    }
-  }
-  const std::uint32_t lastRow = start + LAST_ROW * rowBytes;
-  for (std::uint32_t column = 0; column < columns; ++column)
-  {
-    m_state.SetVideoWord(static_cast<std::uint16_t>(lastRow + column * 2u), Word(_attribute, BLANK_CHARACTER));
-  }
-}
-
-std::uint16_t& Bios::KeyAt(std::uint16_t _offset) noexcept
-{
-  return m_keyboardBuffer[((_offset - KEYBOARD_BUFFER) / 2u) % KEYBOARD_BUFFER_WORDS];
-}
-
-std::uint16_t Bios::KeyAt(std::uint16_t _offset) const noexcept
-{
-  return m_keyboardBuffer[((_offset - KEYBOARD_BUFFER) / 2u) % KEYBOARD_BUFFER_WORDS];
-}
-
-std::optional<std::uint16_t> Bios::PeekKey() const noexcept
-{
-  if (m_keyboardHead == m_keyboardTail)
-  {
-    return std::nullopt;
-  }
-  return KeyAt(m_keyboardHead);
-}
-
-std::optional<std::uint16_t> Bios::ReadKey() noexcept
-{
-  if (m_keyboardHead == m_keyboardTail)
-  {
-    return std::nullopt;
-  }
-  const std::uint16_t key = KeyAt(m_keyboardHead);
-  auto head = static_cast<std::uint16_t>(m_keyboardHead + 2);
-  if (head == KEYBOARD_BUFFER_END)
-  {
-    head = KEYBOARD_BUFFER;
-  }
-  Store(m_keyboardHead, head);
-  return key;
-}
-
-void Bios::InsertKey(std::uint16_t _key) noexcept
-{
-  const std::uint16_t tail = m_keyboardTail;
-  const auto next = static_cast<std::uint16_t>(tail + 2 == KEYBOARD_BUFFER_END ? KEYBOARD_BUFFER : tail + 2);
-  Store(KeyAt(tail), _key);
-  Store(m_keyboardTail, next);
 }
 
 BiosClock Bios::ReadClock() noexcept

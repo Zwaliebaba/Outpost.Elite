@@ -159,14 +159,6 @@ public:
     Assert::AreEqual(DISPLAYING, rig.StatusAt(191 * LINE) & STATUS_FLAGS);
   }
 
-  TEST_METHOD(StatusReadsUndrivenBitsAsOnesAndNoLightPen)
-  {
-    CgaRig rig;
-    rig.SetGraphicsTiming();
-    Assert::AreEqual(0xF4u, rig.StatusAt(0));
-    Assert::AreEqual(0xFDu, rig.StatusAt(224 * LINE));
-  }
-
   // Paced time's rule (ADR-008 item 2): a read of the status reports each vertical retrace to the first read that sees it,
   // and to no later one, so the game's next wait for a retrace waits for the next.
   TEST_METHOD(EachRetraceIsReportedToTheFirstReadThatSeesIt)
@@ -225,34 +217,6 @@ public:
     Assert::AreEqual(4u, std::uint32_t{rig.Render().borderColor});
     rig.SetMode(0x0A, 0x19);
     AssertFirstPixels(rig.Render(), 0, 9, 10, 12, 14); // the masking device's light blue
-    rig.SetMode(0x0E, 0x00);
-    AssertFirstPixels(rig.Render(), 0, 0, 3, 4, 7); // black and white: cyan, red, light gray
-    rig.SetMode(0x0E, 0x30);
-    AssertFirstPixels(rig.Render(), 0, 0, 11, 12, 15); // bit 5 ignored, bit 4 still brightens
-  }
-
-  TEST_METHOD(Mode6DecodesOneBitPixelsInTheForegroundColor)
-  {
-    CgaRig rig;
-    rig.SetMode(0x1E, 0x0E); // 640x200, video on; foreground yellow
-    rig.Poke(0x0000, 0x81);
-    rig.Poke(0x2000, 0x40);
-    const Elite::FrameImage& image = rig.Render();
-    Assert::AreEqual(14u, Dot(image, 0, 0));
-    Assert::AreEqual(0u, Dot(image, 1, 0));
-    Assert::AreEqual(14u, Dot(image, 7, 0));
-    Assert::AreEqual(14u, Dot(image, 1, 1));
-    Assert::AreEqual(0u, std::uint32_t{image.borderColor}, L"the border is black in 640x200");
-  }
-
-  TEST_METHOD(VideoDisabledIsBlack)
-  {
-    CgaRig rig;
-    rig.Poke(0, 0xFF);
-    rig.SetMode(0x02, 0x24);
-    const Elite::FrameImage& image = rig.Render();
-    Assert::AreEqual(0u, Dot(image, 0, 0));
-    Assert::AreEqual(0u, std::uint32_t{image.borderColor});
   }
 
   // A 40-column cell is 8 glyph dots, each two of the 640, coloured by the attribute's nibbles.

@@ -21,7 +21,7 @@ bool Game::Load(std::uint16_t _pspSegment)
     return false;
   }
   m_state.Load(loadSegment, *image);
-  m_platform.StartProgram(_pspSegment);
+  m_platform.StartProgram();
   InstallNativeRoutines(m_platform, m_state);
   return true;
 }

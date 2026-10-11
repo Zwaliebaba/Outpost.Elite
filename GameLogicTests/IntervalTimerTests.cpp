@@ -138,38 +138,8 @@ public:
     Assert::AreEqual(static_cast<std::size_t>((cycle - 1004) / GAME_PERIOD_CYCLES), raised, L"no edge lost or gained");
   }
 
-  // Mode 2 counts N ... 1 and drops its output for the tick on which the count is 1.
-  TEST_METHOD(RateGeneratorPulsesLowOnItsLastCount)
-  {
-    TimerRig rig;
-    rig.Timer().Program(0x74, 5); // channel 1, both bytes, mode 2: loaded on tick 1
-
-    constexpr std::array<bool, 7> HIGH = {true, true, true, true, false, true, true}; // counts 5 4 3 2 1 5 4
-    for (std::size_t index = 0; index < HIGH.size(); ++index)
-    {
-      const Elite::Cycles cycle = (1 + index) * Elite::CYCLES_PER_PIT_TICK;
-      Assert::AreEqual(HIGH[index], rig.Timer().OutputAt(1, cycle));
-    }
-  }
-
-  // Mode 0: the output is low from the control word until the count runs out, then stays high.
-  TEST_METHOD(InterruptOnTerminalCount)
-  {
-    TimerRig rig;
-    rig.Timer().Program(0x70, 10); // channel 1, both bytes, mode 0: loaded on tick 1, terminal on tick 11
-    Assert::IsFalse(rig.Timer().OutputAt(1, 0), L"low after the control word");
-    Assert::IsFalse(rig.Timer().OutputAt(1, 43));
-    Assert::IsTrue(rig.Timer().OutputAt(1, 44));
-    Assert::IsTrue(rig.Timer().OutputAt(1, 4000), L"and it stays high");
-
-    rig.SetClock(400);
-    rig.Timer().Program(0x70, 256); // loaded on tick 101
-    Assert::IsFalse(rig.Timer().OutputAt(1, (101 + 256) * TICK - 1));
-    Assert::IsTrue(rig.Timer().OutputAt(1, (101 + 256) * TICK));
-  }
-
-  // The game writes both bytes of every count it programs. Any other access, and the 8254's read-back, it never writes, and
-  // the timer refuses them rather than guess (D33).
+  // The game writes both bytes of every count it programs, in mode 3. Any other access or mode, and the 8254's read-back, it
+  // never writes, and the timer refuses them rather than guess (D33).
   TEST_METHOD(OnlyBothBytesAreProgrammed)
   {
     TimerRig rig;
@@ -177,6 +147,7 @@ public:
     Assert::ExpectException<std::invalid_argument>([&rig] { rig.Timer().Program(0x60, 1); }, L"channel 1, high byte only");
     Assert::ExpectException<std::invalid_argument>([&rig] { rig.Timer().Program(0x00, 0); }, L"a counter-latch command");
     Assert::ExpectException<std::invalid_argument>([&rig] { rig.Timer().Program(0xC2, 0); }, L"the 8254's read-back");
+    Assert::ExpectException<std::invalid_argument>([&rig] { rig.Timer().Program(0x34, 0x5555); }, L"mode 2, the Amstrad's");
   }
 
   // A control word sets a mode 3 output high at once. When it was low, that is a rising edge on IRQ 0's line, and the

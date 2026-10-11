@@ -109,18 +109,10 @@ std::string Describe(Elite::StopReason _reason, const Elite::Platform& _platform
 {
   switch (_reason)
   {
-  case Elite::StopReason::Fault:
-    if (const std::optional<Elite::ServiceFault>& fault = _platform.Fault(); fault.has_value())
-      return std::format("refused call: int {:02X}h AH={:02X}h AL={:02X}h", fault->vector, fault->ah, fault->al);
-    break;
   case Elite::StopReason::Terminated:
     return "the program ended";
   case Elite::StopReason::Spinning:
     return std::format("{} turns without waiting", _platform.SpinLimit());
-  case Elite::StopReason::Unported:
-    if (const std::optional<Elite::FarAddress>& at = _platform.UnportedAt(); at.has_value())
-      return std::format("an interrupt to code no native routine stands in for, at {:04X}:{:04X}", at->segment, at->offset);
-    break;
   case Elite::StopReason::Reached:
     break;
   }

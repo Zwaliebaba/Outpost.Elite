@@ -10,7 +10,6 @@ namespace
 
 constexpr std::uint8_t LINE_COUNT = 8;
 constexpr std::uint8_t LEVEL_MASK = 0x07;
-constexpr std::uint8_t SPURIOUS_LINE = 7;
 
 [[nodiscard]] constexpr std::uint8_t Bit(std::uint8_t _line) noexcept
 {
@@ -62,10 +61,6 @@ bool InterruptController::InterruptPending() const noexcept
 std::uint8_t InterruptController::Acknowledge() noexcept
 {
   const std::uint8_t line = GrantableRequest();
-  if (line == NO_LINE)
-  {
-    return static_cast<std::uint8_t>(VECTOR_BASE | SPURIOUS_LINE);
-  }
   m_requests = static_cast<std::uint8_t>(m_requests & ~Bit(line));
   m_inService = static_cast<std::uint8_t>(m_inService | Bit(line));
   return static_cast<std::uint8_t>(VECTOR_BASE | line);

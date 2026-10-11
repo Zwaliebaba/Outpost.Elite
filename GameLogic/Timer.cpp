@@ -3,7 +3,6 @@
 #include "Timer.h"
 
 #include "Arithmetic.h"
-#include "Input.h"
 #include "Sound.h"
 
 namespace Elite
@@ -17,16 +16,12 @@ constexpr std::uint16_t TIMER_INTERRUPT = 0x0215;
 constexpr std::uint8_t TIMER_VECTOR = 0x08;
 
 constexpr std::uint8_t PIT_CHANNEL0_SQUARE_WAVE = 0x36; // channel 0, both bytes, mode 3
-constexpr std::uint8_t PIT_CHANNEL0_RATE = 0x34;        // channel 0, both bytes, mode 2: the Amstrad's mouse
 constexpr std::uint16_t TICK_DIVISOR = 0x04A9;          // about 1000.15 Hz
-constexpr std::uint16_t AMSTRAD_MOUSE_DIVISOR = 0x5555;
 constexpr std::uint32_t TICKS_PER_DAY = 0x1800B0;
 constexpr std::uint8_t SPEAKER_BITS = 0x03; // gate and data, cleared at start-up
 constexpr std::uint8_t SPEAKER_DATA = 0x02;
 
 constexpr std::uint8_t SWEEP_LAST_PERIOD = 7;
-constexpr std::uint8_t BIOS_CHAIN_TICKS_WITH_MOUSE = 55;
-constexpr std::uint8_t BIOS_CHAIN_TICKS = 18;
 
 constexpr std::uint8_t TUNE_RESTART = 'G';
 constexpr std::uint8_t TUNE_REST = 'F';
@@ -179,16 +174,6 @@ void TickSoundEffects(GameState& _state, Hardware& _hardware)
   }
 }
 
-// TimerInterrupt's chain to the BIOS (0x0255): a far jump, through savedTimerVector, to the BIOS's handler for the tick, with
-// the interrupt's frame in place, so that the BIOS's IRET ends the interrupt. Here the handler is run to its IRET, which comes
-// back to this routine, and TimerInterrupt's own IRET takes the frame. savedTimerVector, in the code segment, holds what
-// InstallTimerInterrupt found on int 8, the BIOS's own handler: native code chains to that.
-void ChainToBiosTimer(Hardware& _hardware)
-{
-  const FarAddress bios = _hardware.BiosInterruptVector(TIMER_VECTOR);
-  _hardware.RunBiosTimerTick(bios.segment, bios.offset);
-}
-
 } // namespace
 
 void InstallTimerInterrupt(GameState& _state, Hardware& _hardware)
@@ -200,7 +185,7 @@ void InstallTimerInterrupt(GameState& _state, Hardware& _hardware)
   _state.Data().speakerPortImage = image;
   _hardware.SetSystemControl(image);
   // The game's own handler installed in place of the BIOS's, which the original keeps in savedTimerVector and native code takes
-  // from the BIOS (ChainToBiosTimer, RestoreTimerInterrupt).
+  // from the BIOS (RestoreTimerInterrupt).
   _hardware.SetInterruptVector(TIMER_VECTOR, FarAddress{_state.CodeSegment(), TIMER_INTERRUPT});
   _hardware.EnableInterrupts();
 }
@@ -211,27 +196,9 @@ BiosClock RestoreTimerInterrupt(GameState& _state, Hardware& _hardware)
   // The BIOS's handler put back, as InstallTimerInterrupt found it.
   _hardware.SetInterruptVector(TIMER_VECTOR, _hardware.BiosInterruptVector(TIMER_VECTOR));
   _hardware.SetSystemControl(_state.Data().savedSpeakerPort);
-  std::uint8_t mode = PIT_CHANNEL0_SQUARE_WAVE;
-  std::uint16_t divisor = 0;
-  if (_state.Data().amstradPresent == 1)
-  {
-    // The Amstrad's mouse driver keeps its own rate.
-    mode = PIT_CHANNEL0_RATE;
-    if (IsMouseDriverInstalled(_hardware).installed)
-    {
-      divisor = AMSTRAD_MOUSE_DIVISOR;
-    }
-  }
-  _hardware.SetTickDivisor(mode, divisor);
+  _hardware.SetTickDivisor(PIT_CHANNEL0_SQUARE_WAVE, 0);
   _hardware.EnableInterrupts();
-
-  // The BIOS clock past a day is set back by one: SUB DX / SBB CX.
-  const BiosClock clock = _hardware.ReadBiosClock();
-  if (clock.ticks >= TICKS_PER_DAY)
-  {
-    _hardware.SetBiosClock(clock.ticks - TICKS_PER_DAY);
-  }
-  return clock;
+  return _hardware.ReadBiosClock();
 }
 
 std::uint16_t ClockLessADayHigh(const BiosClock& _clock) noexcept
@@ -245,18 +212,6 @@ void TimerInterrupt(GameState& _state, Hardware& _hardware)
   // and the end of the interrupt's 20h, goes no further.
   TimerTick(_state, _hardware);
   _hardware.EndOfInterrupt();
-  if (_state.Data().amstradPresent != 1)
-  {
-    return;
-  }
-  // The Amstrad's BIOS clock still needs its 18.2 Hz: every 18th tick, or every 55th with the mouse driver's rate.
-  const bool mouse = IsMouseDriverInstalled(_hardware).installed;
-  if (Decrement(_state.Data().biosTimerChainCountdown) != 0)
-  {
-    return;
-  }
-  _state.Data().biosTimerChainCountdown = mouse ? BIOS_CHAIN_TICKS_WITH_MOUSE : BIOS_CHAIN_TICKS;
-  ChainToBiosTimer(_hardware);
 }
 
 void TimerTick(GameState& _state, Hardware& _hardware)
@@ -301,7 +256,7 @@ namespace
 {
 
 constexpr std::array ENTRIES = {
-  NativeEntry{TIMER_INTERRUPT, "TimerInterrupt", &TimerInterruptEntry, EntryReturn::Interrupt},
+  NativeEntry{TIMER_INTERRUPT, &TimerInterruptEntry, EntryReturn::Interrupt},
 };
 
 } // namespace

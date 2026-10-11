@@ -121,7 +121,6 @@
     <ClInclude Include="SaveLoadTables.h" />
     <ClInclude Include="Scene.h" />
     <ClInclude Include="SceneTables.h" />
-    <ClInclude Include="ServiceFault.h" />
     <ClInclude Include="Sha256.h" />
     <ClInclude Include="Ships.h" />
     <ClInclude Include="Sound.h" />

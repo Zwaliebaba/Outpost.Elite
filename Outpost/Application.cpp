@@ -85,16 +85,8 @@ std::wstring Describe(Elite::StopReason _reason, const Elite::Platform& _platfor
 {
   switch (_reason)
   {
-  case Elite::StopReason::Fault:
-    return L"The game made a DOS or BIOS call the host does not provide.";
   case Elite::StopReason::Spinning:
     return std::format(L"The game ran {} turns without waiting.", _platform.SpinLimit());
-  case Elite::StopReason::Unported:
-    if (const std::optional<Elite::FarAddress>& at = _platform.UnportedAt(); at.has_value())
-    {
-      return std::format(L"The game reached code no native routine stands in for, at {:04X}:{:04X}.", at->segment, at->offset);
-    }
-    break;
   case Elite::StopReason::Terminated:
   case Elite::StopReason::Reached:
     break;

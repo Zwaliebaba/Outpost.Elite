@@ -7,7 +7,6 @@
 #include "StateDumps.h"
 
 #include <algorithm>
-#include <format>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -23,13 +22,6 @@ namespace
 std::wstring Widen(std::string_view _text)
 {
   return std::wstring(_text.begin(), _text.end());
-}
-
-// A far address, as the listing writes one.
-std::wstring Address(const std::optional<Elite::FarAddress>& _address)
-{
-  const Elite::FarAddress address = _address.value_or(Elite::FarAddress{});
-  return Widen(std::format("{:04X}:{:04X}", address.segment, address.offset));
 }
 
 std::string ReadText(const std::filesystem::path& _path)
@@ -80,9 +72,6 @@ template <typename Check> void PlayEveryReplay(bool _recording, GuardReport& _re
       Elite::Checkpoint checkpoint;
       const Elite::StopReason reason = player.Play(step, checkpoint);
       const std::wstring where = name + L" line " + std::to_wstring(step.line);
-      if (reason == Elite::StopReason::Unported)
-        Assert::Fail(
-          (where + L": sent an interrupt to code no native routine stands in for, at " + Address(rig.Host().UnportedAt())).c_str());
       // Only an end step may end the program, and it must (Replay.h): a replay that leaves for DOS ends with one.
       if (step.kind == Elite::StepKind::End && reason == Elite::StopReason::Reached)
         Assert::Fail((where + L": the program has not ended by the end of its end step").c_str());

@@ -97,13 +97,6 @@ public:
     Assert::AreEqual(0x01u, std::uint32_t{controller.RequestRegister()}, L"an edge while in service is latched again");
     Assert::IsFalse(controller.InterruptPending(), L"but waits for the end of interrupt");
   }
-
-  TEST_METHOD(AcknowledgeWithNothingPendingIsSpuriousIrq7)
-  {
-    Elite::InterruptController controller;
-    Assert::AreEqual(0x0Fu, std::uint32_t{controller.Acknowledge()});
-    Assert::AreEqual(0x00u, std::uint32_t{controller.InServiceRegister()});
-  }
 };
 
 } // namespace GameLogicTests

@@ -16,9 +16,6 @@ namespace
 constexpr std::uint16_t WAIT_FOR_KEY_PRESS = 0x6DEC;
 
 constexpr std::uint8_t MOUSE_VECTOR = 0x33;
-// The button int 33h AX=5 is asked about: BX=1, the right. The game reads only AX, the buttons held, and discards the
-// right button's presses.
-constexpr std::uint16_t MOUSE_RIGHT_BUTTON = 1;
 constexpr std::uint8_t IRET_OPCODE = 0xCF;
 constexpr std::uint8_t MOST_MOUSE_STEP = 0x3F; // mickeys / 8, either way
 constexpr std::uint16_t MOUSE_STEP_LIMIT = 0x40;
@@ -401,13 +398,8 @@ bool ReadFireButton(const GameState& _state, Hardware& _hardware)
     const std::uint8_t buttons = _hardware.GamePortButtons();
     return (buttons & STICK_BUTTON_A) == 0 || (buttons & STICK_BUTTON_B) == 0;
   }
-  if (_state.Data().amstradPresent == 1)
-  {
-    return Pressed(
-      static_cast<std::uint8_t>(_state.Data().keyDown.keyDownAmstradMouseRight | _state.Data().keyDown.keyDownAmstradMouseLeft));
-  }
   // SHR AL,1 twice: the left button, then the right.
-  return (Low(_hardware.ReadMousePresses(MOUSE_RIGHT_BUTTON).buttons) & MOUSE_LEFT_AND_RIGHT) != 0;
+  return (Low(_hardware.ReadMousePresses()) & MOUSE_LEFT_AND_RIGHT) != 0;
 }
 
 StickAxes ReadJoystickAxes(GameState& _state, Hardware& _hardware)
@@ -558,16 +550,7 @@ Steering ReadMouseSteering(GameState& _state, Hardware& _hardware)
   const MouseMotion motion = _hardware.ReadMouseMotion();
   const std::uint8_t rollStep = MouseAxis(motion.acrossMickeys);
   const std::uint8_t pitchStep = MouseAxis(motion.downMickeys);
-  std::uint8_t buttons = 0;
-  if (_state.Data().amstradPresent == 1)
-  {
-    buttons =
-      static_cast<std::uint8_t>((_state.Data().keyDown.keyDownAmstradMouseRight << 1) | _state.Data().keyDown.keyDownAmstradMouseLeft);
-  }
-  else
-  {
-    buttons = Low(_hardware.ReadMousePresses(MOUSE_RIGHT_BUTTON).buttons);
-  }
+  const std::uint8_t buttons = Low(_hardware.ReadMousePresses());
   _state.Data().mouseButtons = buttons;
   if ((buttons & 1) != 0)
   {
@@ -619,7 +602,7 @@ namespace
 {
 
 constexpr std::array ENTRIES = {
-  NativeEntry{0x0201, "KeyboardInterrupt", &KeyboardInterruptEntry, EntryReturn::Interrupt},
+  NativeEntry{0x0201, &KeyboardInterruptEntry, EntryReturn::Interrupt},
 };
 
 } // namespace

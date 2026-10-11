@@ -42,7 +42,6 @@ constexpr std::uint16_t CRITICAL_ERROR_INTERRUPT = 0x02F0;
 // Where the original jumps back (Hardware::LoopTurn).
 constexpr std::uint16_t RESTART_PLAY = 0x003B;
 constexpr std::uint16_t GAME_LOOP = 0x7D30;
-constexpr std::uint16_t EXIT_KEY_DRAIN = 0x00B9;
 constexpr std::uint16_t CREDITS_LINE = 0x8F0E;
 constexpr std::uint16_t CREDITS_WAIT = 0x8F2B;
 
@@ -72,20 +71,13 @@ void MoveBytes(GameState& _state, std::uint16_t _sourceSegment, std::uint16_t _s
   }
 }
 
-// ExitToDos (CS:00AD): the BIOS's text mode, the farewell, and the BIOS's key buffer emptied. The RETF that follows, to
-// PSP:0000 where Start pushed it, is Start's own return, and the program ends there: of what the services leave in the
-// registers, the original reads only ZF, the loop's test, which is PeekBiosKey's answer here.
+// ExitToDos (CS:00AD): the BIOS's text mode and the farewell. The original then empties the BIOS's key buffer, which the ROM's
+// int 9 handler keeps empty. The RETF that follows, to PSP:0000 where Start pushed it, is Start's own return, and the program
+// ends there.
 void ExitToDos(GameState& _state, Hardware& _hardware)
 {
   _hardware.SetVideoMode(VIDEO_MODE_TEXT_80);
   _hardware.PrintDosString(_state.DataSegment(), _state.OffsetOf(_state.Data().exitMessage));
-  // At the jump back the original holds in AX the key int 16h took out, and the next turn reads no register before it writes
-  // it but DX, the message, which does not change. Every turn takes a key, a change paced time sees, so no turn idles.
-  while (_hardware.PeekBiosKey().has_value())
-  {
-    const std::uint16_t key = _hardware.ReadBiosKey();
-    _hardware.LoopTurn(EXIT_KEY_DRAIN, {key});
-  }
 }
 
 } // namespace
@@ -168,17 +160,10 @@ void StartNewGame(GameState& _state, bool _backward)
   _state.Data().commanderBlock.maskSystemJumps = 0;
 }
 
-void Start(GameState& _state, Hardware& _hardware, std::uint16_t _psp, std::uint16_t _countIfNone, bool _backward)
+void Start(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward)
 {
-  // The original keeps _psp in pspSegment to read its command tail from; the platform gives the tail (CheckCheatArgument).
-  // MOV AX,DS / MOV AH,30h: AL goes in as the PSP's low byte.
-  if (_hardware.ReadDosVersion(Low(_psp)).major == 0)
-  {
-    // DOS 1 reports no major version, and is not enough.
-    _hardware.PrintDosString(_state.DataSegment(), _state.OffsetOf(_state.Data().dosVersionMessage));
-    ExitToDos(_state, _hardware);
-    return;
-  }
+  // The original keeps the PSP's segment in pspSegment to read its command tail from, and asks DOS's version, which is 3.30
+  // (ADR-006 item 3): the platform gives the tail (CheckCheatArgument), and DOS 1's refusal never comes.
   SaveStartupCommander(_state, _backward);
 
   // CLD / REPE CMPSB of amstradSignature against the ROM at FC00:0016: not an Amstrad if a byte before the last differs.
@@ -203,10 +188,6 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _psp, std::uint
   bool backward = false;
   for (;;)
   {
-    // RestartPlay: the DOS clock read twice for a 7-second wait, whose closing branch the NOPs at StartupWaitPatched replaced, so
-    // only the reads remain, and nothing reads what they give.
-    (void)_hardware.ReadDosTime();
-    (void)_hardware.ReadDosTime();
     InstallTimerInterrupt(_state, _hardware);
     // CopyProtection (CS:04A3) came here: it does nothing once protectionShown is set, as the D5 byte sets it (ADR-001).
     InstallDivideAndKeyboardInterrupts(_state, _hardware);
@@ -307,17 +288,17 @@ void ShowCredits(GameState& _state, Hardware& _hardware, bool _backward)
 
 void StartEntry(Guest& _guest)
 {
-  // DOS leaves the PSP's segment in DS, which the original saves in pspSegment, BP as Start takes it, and the direction flag
-  // clear. Its first instructions push the far return to PSP:0000, where DOS's INT 20h ends the program, for its RETF to take
-  // once Start returns; on the platform the program ends when Start returns.
-  Start(_guest.State(), _guest.Devices(), _guest.PspSegment(), Guest::EntryBasePointer(), false);
+  // DOS leaves BP as Start takes it, and the direction flag clear. Start's first instructions push the far return to PSP:0000,
+  // where DOS's INT 20h ends the program, for its RETF to take once Start returns; on the platform the program ends when Start
+  // returns.
+  Start(_guest.State(), _guest.Devices(), Guest::EntryBasePointer(), false);
 }
 
 namespace
 {
 
 constexpr std::array ENTRIES = {
-  NativeEntry{0x0000, "Start", &StartEntry, EntryReturn::Far},
+  NativeEntry{0x0000, &StartEntry, EntryReturn::Far},
 };
 
 } // namespace

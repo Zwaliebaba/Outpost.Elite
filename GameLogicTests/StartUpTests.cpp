@@ -10,9 +10,6 @@ namespace GameLogicTests
 namespace
 {
 
-// The scan code and character of 'q' in the BIOS's key buffer.
-constexpr std::uint16_t BIOS_KEY_Q = 0x1071;
-
 // Sets the byte _member names to _value on the twin.
 template <typename Struct> void SetBoth(TwinRig& _rig, DataByte<Struct> _member, std::uint8_t _value)
 {
@@ -37,13 +34,11 @@ TEST_CLASS(StartUpTests)
 {
 public:
   // Start when DOS's clock reads 55 seconds, where the start-up wait's target second wraps
-  // past the minute; then the disc menu's Exit to DOS, with a key left in the BIOS's buffer to empty:
-  // WipeProgram and ExitToDos, to the end of the program.
+  // past the minute; then the disc menu's Exit to DOS: WipeProgram and ExitToDos, to the end of the program.
   TEST_METHOD(StartAgreesLateInAMinuteAndOnTheWayOut)
   {
     TwinRig twin("TwinStartAndExit", {.startMoment = Elite::DosDateTime{1980, 1, 1, 0, 0, 55, 0}, .fromPowerOn = true});
     twin.Play("wait 3\ndigest title\nkey space; wait 3.2\nkey Escape; wait 0.2\nkey e; wait 0.2\ndigest exit-asked");
-    twin.Both([](Elite::Platform& _platform, Elite::GameState&) { _platform.BiosServices().InsertKey(BIOS_KEY_Q); });
     twin.Play("key y; wait 0.5", Elite::StopReason::Terminated);
   }
 
