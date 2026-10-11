@@ -44,7 +44,7 @@ Window::~Window()
   }
 }
 
-bool Window::Create(HINSTANCE _instance, const wchar_t* _title, int _clientWidth, int _clientHeight)
+bool Window::Create(HINSTANCE _instance, const wchar_t* _title, int _clientWidth, int _clientHeight, bool _fullScreen)
 {
   WNDCLASSEXW windowClass{};
   windowClass.cbSize = sizeof(windowClass);
@@ -66,6 +66,12 @@ bool Window::Create(HINSTANCE _instance, const wchar_t* _title, int _clientWidth
     return false;
   }
   m_open = true;
+  if (_fullScreen)
+  {
+    // Before it is first shown: F11 returns it to the window it was created as, shown.
+    ToggleFullScreen();
+    m_windowedPlacement.showCmd = SW_SHOWNORMAL;
+  }
   ShowWindow(m_window, SW_SHOWNORMAL);
   UpdateWindow(m_window);
   return true;
@@ -204,7 +210,9 @@ void Window::ToggleFullScreen()
     {
       return;
     }
-    SetWindowLongPtrW(m_window, GWL_STYLE, WS_POPUP | WS_VISIBLE);
+    // A window not yet shown stays hidden, for ShowWindow to show and activate.
+    const LONG_PTR visible = IsWindowVisible(m_window) ? WS_VISIBLE : 0;
+    SetWindowLongPtrW(m_window, GWL_STYLE, WS_POPUP | visible);
     SetWindowPos(m_window, HWND_TOP, monitor.rcMonitor.left, monitor.rcMonitor.top, monitor.rcMonitor.right - monitor.rcMonitor.left,
                  monitor.rcMonitor.bottom - monitor.rcMonitor.top, SWP_FRAMECHANGED | SWP_NOOWNERZORDER);
     m_fullScreen = true;
