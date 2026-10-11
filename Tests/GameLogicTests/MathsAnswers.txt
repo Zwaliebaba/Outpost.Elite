@@ -1,4 +1,4 @@
-# GameLogicTests/MathsAnswers.txt
+# Tests/GameLogicTests/MathsAnswers.txt
 #
 # The maths' known answers (D33): the value routines of GameLogic/Maths.h, the multiplies, divides, random numbers and
 # trigonometry the game uses, over a spread of inputs that takes in the edges, as the game computes them. They were

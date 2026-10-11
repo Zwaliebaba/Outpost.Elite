@@ -1,4 +1,4 @@
-# GameLogicTests/MarketAnswers.txt
+# Tests/GameLogicTests/MarketAnswers.txt
 #
 # The markets' known answers (D33): the prices of every market and the quantities on sale, 515 answers, as the game's own
 # routines compute them. They were recorded from the native code while every state digest of the corpus and every twin

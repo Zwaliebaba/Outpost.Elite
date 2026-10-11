@@ -2,7 +2,7 @@
 r"""Every named member's value at every digest point, keyed by its name and not its offset, and two such sets compared: the
 proof a change that moves the game's state gives before its state digests are re-based (D32, D38).
 
-GameLogicTests dumps the game's state (OUTPOST_ELITE_DUMP_STATE, GameLogicTests/StateDumps.h): GameData's bytes for every
+GameLogicTests dumps the game's state (OUTPOST_ELITE_DUMP_STATE, Tests/GameLogicTests/StateDumps.h): GameData's bytes for every
 digest step of every replay and every known answer of every twin,
 
   DIR/replays/<replay>/<line>.bin    the digest step on that line of Replays/<replay>.replay
