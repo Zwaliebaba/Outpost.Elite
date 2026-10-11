@@ -1,6 +1,5 @@
 #include "pch.h"
 
-#include "DataOverlay.h"
 #include "GameState.h"
 #include "Maths.h"
 #include "SpaceObject.h"
@@ -15,7 +14,7 @@ namespace GameLogicTests
 namespace
 {
 
-using Elite::DS;
+using Commander = Elite::GameData::CommanderBlock;
 
 // The twins' prepared commanders, from Replays/ (Tools/PrepareCommanders.py).
 constexpr std::string_view ARMED = "armed.cdr";
@@ -49,11 +48,11 @@ void DrawRandomNumbers(TwinRig& _rig, std::uint32_t _draws)
     (void)Elite::NextRandom(state);
 }
 
-// The byte _field as the twin holds it.
-[[nodiscard]] std::uint8_t TwinByte(TwinRig& _rig, Elite::DataField<std::uint8_t> _field)
+// The byte _member names, as the twin holds it.
+template <typename Struct> [[nodiscard]] std::uint8_t TwinByte(TwinRig& _rig, DataByte<Struct> _member)
 {
   std::uint8_t value = 0;
-  _rig.Both([&value, _field](Elite::Platform&, Elite::GameState& _state) { value = _state.Byte(_field.offset); });
+  _rig.Both([&value, _member](Elite::Platform&, Elite::GameState& _state) { value = DataByteIn(_state, _member); });
   return value;
 }
 
@@ -76,10 +75,10 @@ struct ShipCount
 {
   ShipCount count{0, 0};
   Elite::GameState& state = _rig.State();
-  const Elite::SpaceObject& station = state.ObjectAt(DS.stationSlot.offset);
+  const Elite::SpaceObject& station = state.Data().shipSlots.stationSlot;
   for (std::uint16_t index = FIRST_SHIP_SLOT; index < state.Data().objectSlotCount; ++index)
   {
-    const Elite::SpaceObject& ship = state.ObjectAt(static_cast<std::uint16_t>(DS.shipSlots.offset + index * Elite::SLOT_BYTES));
+    const Elite::SpaceObject& ship = state.Slot(static_cast<Elite::SlotIndex>(index));
     const std::uint8_t type = ship.type;
     if ((type & Elite::SLOT_ACTIVE) == 0 || ((type >> 1) & Elite::TYPE_MASK) != _type)
       continue;
@@ -126,14 +125,14 @@ public:
     LoadCommander(rig, INVASION_MISSION);
     rig.Play("key F1; wait 0.5\ndown g; wait 1; up g\ndown h; wait 0.1; up h\nwait 8\ndigest mission-given");
     rig.Play("down c; wait 0.1; up c\nwait 5\ndigest briefing\nkey space; wait 1");
-    Assert::AreEqual(std::uint8_t{1}, TwinByte(rig, DS.thargoidInvasionActive), L"the invasion on");
+    Assert::AreEqual(std::uint8_t{1}, TwinByte(rig, &Commander::thargoidInvasionActive), L"the invasion on");
     // Equip Ship, its cursor on Fuel: the fuel, and seven rows down an escape capsule.
     rig.Play("key F4; wait 0.8\nkey b; wait 0.3\n"
              "key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15\n"
              "key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15\nkey b; wait 0.3\ndigest bought");
     rig.Play("key F6; wait 1\ndown Right; wait 0.55; up Right; wait 0.05\nkey F1; wait 1\ndown h; wait 0.2; up h\nwait 7.5\n"
              "digest arrived");
-    Assert::AreEqual(std::uint8_t{1}, TwinByte(rig, DS.jumpedSinceBriefing), L"a jump since the briefing");
+    Assert::AreEqual(std::uint8_t{1}, TwinByte(rig, &Commander::jumpedSinceBriefing), L"a jump since the briefing");
     rig.Play("down c; wait 0.1; up c\nwait 5\nkey F1; wait 1.5\ndigest launched");
     Assert::IsTrue(CountShips(rig, Elite::TYPE_THARGOID).all != 0, L"the first Thargoid");
     rig.Play("wait 1\ndigest invaded");

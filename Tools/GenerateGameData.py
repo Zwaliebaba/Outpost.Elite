@@ -1,29 +1,21 @@
 #!/usr/bin/env python3
-"""Generate GameLogic/DataOverlay.h and GameLogic/GameData.h from Design/Symbols.tsv (ADR-010, D19).
+"""Generate GameLogic/GameData.h from Design/Symbols.tsv (D19).
 
 Native code names the reference's data by the symbol table's names (plan §3): it reads
-`guest.Get(DS.playerDocked)`, not a byte at 0x75xx. Every DS row of kind data, table or text becomes
-one field of `Elite::DataOverlay`, typed from its size and, for a table, from the element type its
-contract column gives:
-
-  data, 1 byte         DataField<std::uint8_t>
-  data, 2 bytes        DataField<std::uint16_t>
-  data, other sizes    DataBlock<bytes>
-  table                DataTable<element bytes, entries> when the element type is one this tool can
-                       size ("byte", "word", "pointer", "code", "dword", "N-byte ...", "N bytes",
-                       "N words", "N characters", "byte pair", "word pair", or a record of words and
-                       bytes such as "word sin, word cos"), else DataAt
-  text                 DataBlock<bytes> with a size, else DataAt
-
-The same rows make `Elite::GameData`, the data segment as one packed struct of exactly 64 KiB that the
-GameState holds (D19), every row a member at its offset. Each byte and word is a `Counted` (Counted.h),
-which counts its own changes, so that native code writes members directly (D33's piece 3):
+`_state.Data().playerDocked`, not a byte at 0x75xx. Every DS row of kind data, table or text becomes a
+member of `Elite::GameData`, the data segment as one packed struct of exactly 64 KiB that the GameState
+holds (D19), every row a member at its offset. Each byte and word is a `Counted` (Counted.h), which
+counts its own changes, so that native code writes members directly (D33's piece 3):
 
   data, 1 byte         Counted<std::uint8_t>
   data, 2 bytes        Counted<std::uint16_t>
   table of words       Counted<std::uint16_t>[entries], for an element of "word", "pointer" or "code"
   table, other         Counted<std::uint8_t>[entries][element bytes], or Counted<std::uint8_t>[entries] for bytes
   anything else        Counted<std::uint8_t>[bytes]
+
+A table's element is sized from the element type its contract column gives, when it is one this tool
+can size: "byte", "word", "pointer", "code", "dword", "N-byte ...", "N bytes", "N words",
+"N characters", "byte pair", "word pair", or a record of words and bytes such as "word sin, word cos".
 
 A word in WORD_TYPES, where the original stores an address and native code an index or a message (D33, piece 3), is a
 Counted of the enumeration it names instead, from the header that declares it.
@@ -40,13 +32,12 @@ end of the row it lies in. A row that lies inside another is its child:
 
 Bytes no row names become byte arrays named for their offset, `gapXXXX`. A row that starts inside
 another and ends past it is an error. Every member's offset is checked by a static_assert, and so is
-every struct's size, and that GameData is trivially copyable and standard-layout; DataOverlay.h checks
-each of its fields against its member in GameData, so the two cannot drift.
+every struct's size, and that GameData is trivially copyable and standard-layout.
 
-The headers are generated, never edited: change the symbol table and run this again. With --check it
-writes nothing and fails if a header in the tree is not what it would write. Standard library only.
+The header is generated, never edited: change the symbol table and run this again. With --check it
+writes nothing and fails if the header in the tree is not what it would write. Standard library only.
 
-    python Tools/GenerateOverlay.py [--check]
+    python Tools/GenerateGameData.py [--check]
 """
 
 import argparse
@@ -58,7 +49,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SYMBOLS = ROOT / "Design" / "Symbols.tsv"
-HEADER = ROOT / "GameLogic" / "DataOverlay.h"
 GAME_DATA = ROOT / "GameLogic" / "GameData.h"
 IDENTIFIER = re.compile(r"[a-z][A-Za-z0-9]*")
 SEGMENT_BYTES = 0x10000
@@ -118,27 +108,12 @@ def is_word_element(_contract: str) -> bool:
   return element_bytes(_contract) == 2 and re.match(r"(word|pointer|code)\b", text) is not None
 
 
-def field_type(_kind: str, _size: str, _contract: str) -> str:
-  size = int(_size) if _size.strip() else None
-  if _kind == "data":
-    if size == 1:
-      return "DataField<std::uint8_t>"
-    if size == 2:
-      return "DataField<std::uint16_t>"
-    return f"DataBlock<{size}>" if size else "DataAt"
-  if _kind == "table":
-    element = element_bytes(_contract)
-    return f"DataTable<{element}, {size}>" if element and size else "DataAt"
-  return f"DataBlock<{size}>" if size else "DataAt"
-
-
 ASCII = {"—": "-", "–": "-", "±": "+-", "×": "x", "·": ".", "‘": "'", "’": "'",
          "“": '"', "”": '"', "…": "...", "→": "->", "≥": ">=", "≤": "<=", "°": " degrees"}
-MOST_COMMENT_CHARACTERS = 132
 COLUMN_LIMIT = 140
 
 
-def comment(_row: dict[str, str], _most: int = MOST_COMMENT_CHARACTERS) -> str:
+def comment(_row: dict[str, str], _most: int) -> str:
   """The row's notes (and a table's element type) as one line of ASCII of at most _most characters."""
   parts = [part for part in (_row["contract"].strip() if _row["kind"] == "table" else "", _row["notes"].strip()) if part]
   text = re.sub(r"\s+", " ", "; ".join(parts))
@@ -158,65 +133,18 @@ def read_rows() -> list[dict[str, str]]:
       continue
     name = row["name"].strip()
     if not IDENTIFIER.fullmatch(name):
-      sys.exit(f"GenerateOverlay: {address} is named '{name}', which is not a camelCase identifier")
+      sys.exit(f"GenerateGameData: {address} is named '{name}', which is not a camelCase identifier")
     row["name"] = name
     row["offset"] = int(address[3:], 16)
     rows.append(row)
   rows.sort(key=lambda _row: _row["offset"])
   names = [row["name"] for row in rows]
   if len(names) != len(set(names)):
-    sys.exit("GenerateOverlay: two data rows share a name")
+    sys.exit("GenerateGameData: two data rows share a name")
   offsets = [row["offset"] for row in rows]
   if len(offsets) != len(set(offsets)):
-    sys.exit("GenerateOverlay: two data rows share an offset")
+    sys.exit("GenerateGameData: two data rows share an offset")
   return rows
-
-
-def generate(_rows: list[dict[str, str]], _members: list["Member"]) -> str:
-  out = [
-    "// GameLogic/DataOverlay.h",
-    "// Generated by Tools/GenerateOverlay.py from Design/Symbols.tsv. Do not edit: change the symbol table",
-    "// and run the tool again (ADR-010).",
-    "#pragma once",
-    "",
-    '#include "DataField.h"',
-    '#include "GameData.h"',
-    "",
-    "#include <cstddef>",
-    "#include <cstdint>",
-    "",
-    "namespace Elite",
-    "{",
-    "",
-    "/// The reference's data segment by name (plan §3, ADR-010): one field for every data, table and text",
-    "/// row of the symbol table, at its offset. Native code reads and writes GameData's members (D33); it",
-    "/// names a field here for its offset: an address it stores, a table of addresses, or bytes it reaches",
-    "/// by offset.",
-    "struct DataOverlay",
-    "{",
-  ]
-  for row in _rows:
-    note = comment(row)
-    if note:
-      out.append(f"  /// {note}")
-    out.append(f"  {field_type(row['kind'], row['size'], row['contract'])} {row['name']}{{0x{row['offset']:04X}}};")
-  out += [
-    "};",
-    "",
-    "/// The overlay native code uses: `DS.playerDocked`.",
-    "inline constexpr DataOverlay DS{};",
-    "",
-    "// Every field at its member's offset in GameData, the struct the GameState holds (D19), so the two cannot drift.",
-  ]
-  paths = {member.name: member.path for member in walk(_members) if member.row is not None}
-  for row in _rows:
-    out.append(f"static_assert(DS.{row['name']}.offset == GAME_DATA_OFFSET({paths[row['name']]}));")
-  out += [
-    "",
-    "} // namespace Elite",
-    "",
-  ]
-  return "\r\n".join(out)
 
 
 @dataclass
@@ -260,7 +188,7 @@ def build_members(_rows: list[dict[str, str]]) -> list[Member]:
       size = min(following, parent.end) - row["offset"]
     member = Member(row["offset"], size, row["name"], row)
     if size <= 0 or member.end > parent.end:
-      sys.exit(f"GenerateOverlay: {row['name']} at DS:{row['offset']:04X} ({size} bytes) does not fit inside "
+      sys.exit(f"GenerateGameData: {row['name']} at DS:{row['offset']:04X} ({size} bytes) does not fit inside "
                f"{parent.name}")
     parent.children.append(member)
     open_members.append(member)
@@ -325,7 +253,7 @@ def record_declaration(_member: Member, _container: Member) -> str:
   """The declaration of a run of whole records in a container of RECORDS: one record, or an array of them."""
   record, _, record_bytes = RECORDS[_container.name]
   if (_member.offset - _container.offset) % record_bytes != 0 or _member.size % record_bytes != 0 or _member.children:
-    sys.exit(f"GenerateOverlay: {_member.name} at DS:{_member.offset:04X} ({_member.size} bytes) is not whole records of "
+    sys.exit(f"GenerateGameData: {_member.name} at DS:{_member.offset:04X} ({_member.size} bytes) is not whole records of "
              f"{record} in {_container.name}")
   count = _member.size // record_bytes
   return f"{record} {_member.name};" if count == 1 else f"{record} {_member.name}[{count}];"
@@ -407,7 +335,7 @@ def generate_game_data(_members: list[Member]) -> str:
   headers = sorted({header for _, header, _ in RECORDS.values()} | {header for _, header in WORD_TYPES.values()} | {"Counted.h"})
   out = [
     "// GameLogic/GameData.h",
-    "// Generated by Tools/GenerateOverlay.py from Design/Symbols.tsv. Do not edit: change the symbol table",
+    "// Generated by Tools/GenerateGameData.py from Design/Symbols.tsv. Do not edit: change the symbol table",
     "// and run the tool again (D19).",
     "#pragma once",
     "",
@@ -477,24 +405,19 @@ def measure(_members: list[Member]) -> str:
 
 def main() -> int:
   parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-  parser.add_argument("--check", action="store_true", help="fail if a header in the tree is out of date")
+  parser.add_argument("--check", action="store_true", help="fail if the header in the tree is out of date")
   arguments = parser.parse_args()
-  rows = read_rows()
-  members = build_members(rows)
-  outputs = {HEADER: generate(rows, members), GAME_DATA: generate_game_data(members)}
+  members = build_members(read_rows())
+  text = generate_game_data(members)
   if arguments.check:
-    stale = [path for path, text in outputs.items()
-             if (path.read_bytes().decode("utf-8") if path.exists() else "") != text]
-    for path in stale:
-      print(f"GenerateOverlay: {path.relative_to(ROOT)} is out of date; run python Tools/GenerateOverlay.py")
-    if stale:
+    if (GAME_DATA.read_bytes().decode("utf-8") if GAME_DATA.exists() else "") != text:
+      print(f"GenerateGameData: {GAME_DATA.relative_to(ROOT)} is out of date; run python Tools/GenerateGameData.py")
       return 1
-    print(f"GenerateOverlay: up to date ({measure(members)})")
+    print(f"GenerateGameData: up to date ({measure(members)})")
     return 0
-  for path, text in outputs.items():
-    path.write_bytes(text.encode("utf-8"))
-    print(f"GenerateOverlay: wrote {path.relative_to(ROOT)}")
-  print(f"GenerateOverlay: {measure(members)}")
+  GAME_DATA.write_bytes(text.encode("utf-8"))
+  print(f"GenerateGameData: wrote {GAME_DATA.relative_to(ROOT)}")
+  print(f"GenerateGameData: {measure(members)}")
   return 0
 
 

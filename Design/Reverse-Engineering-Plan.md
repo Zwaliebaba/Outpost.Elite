@@ -160,11 +160,13 @@ The native platform comes first, and it changes nothing on purpose (D23). Video 
 3. **The natural layout,** in three changes, in the order an inventory of the code (measured at `a97fd78`) sets:
    - **member syntax on the 1987 layout.** Native code makes 2,166 `DS.` uses of 613 fields, in 19 files; a prototype script rewrites 69% of them to `state.x` unaided. The fields stay packed at their offsets, and each counts the bytes it changes, so paced time's idle test and every state digest are unchanged;
    - **stored offsets become indices, enums or tables:** 28 fields the game changes (132 words) and 21 constant pointer tables (387 words), and what native code still reads from the code segment. A converted word changes value, so the state digests are re-based here, after a dump of every digest point shows that only converted fields differ;
-   - **the data segment distributed (D38):** read-only tables become `constexpr` in the one `.cpp` that uses them, or in the subsystem's header when several share them; mutable state becomes per-subsystem structs that the `GameState` holds in its counted block, with a small shared struct for the rest. `DataOverlay.h`, `DataField.h`, the packed `GameData` and its 1,501 asserts are deleted, with the fields nothing reads, and the state digests are re-based (D32) after a field-by-field comparison at every digest point. It is built in parallel by subsystem, on a skeleton landed first.
+   - **the data segment distributed (D38):** read-only tables become `constexpr` in the one `.cpp` that uses them, or in the subsystem's header when several share them; mutable state becomes per-subsystem structs that the `GameState` holds in its counted block, with a small shared struct for the rest. the packed `GameData` and its 842 layout asserts are deleted, with the fields nothing reads, and the state digests are re-based (D32) after a field-by-field comparison at every digest point. It is built in parallel by subsystem, on a skeleton landed first.
 
    *Change 1 done 2026-10-11 (ADR-024): 1,725 of 2,222 `DS.` uses are members; the fields count their own changes, so every digest and the turn-by-turn timing are unchanged.*
 
    *Change 2 done 2026-10-11 (ADR-025): no `DS.` use is left; the stored addresses are messages, slot indexes and indexes, the tables are generated per subsystem from the checked-in image, the code segment and the copy protection are out of the game's memory, and nothing reads `ELITES.EXE`. Only converted fields differed, the turn probe did not move, and the state digests are re-based.*
+
+   *`DataOverlay.h` and `DataField.h` are deleted 2026-10-11, ahead of change 3: after change 2 no game code used them, and the tests' 131 uses became members. `Tools/GenerateOverlay.py` is `Tools/GenerateGameData.py`, writing `GameData.h` alone.*
 
    *Before change 3, a dead-code sweep removes what the owner's inventory found (D37).*
 

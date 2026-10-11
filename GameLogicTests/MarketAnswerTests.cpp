@@ -1,7 +1,6 @@
 #include "pch.h"
 
 #include "AnswerFile.h"
-#include "DataOverlay.h"
 #include "Market.h"
 #include "Maths.h"
 #include "ReferenceRig.h"
@@ -18,8 +17,6 @@ namespace GameLogicTests
 namespace
 {
 
-using Elite::DS;
-
 /// The markets' known answers, from the repository's root. The file's header documents its format and states the count.
 constexpr std::string_view MARKET_ANSWERS_FILE = "GameLogicTests/MarketAnswers.txt";
 constexpr std::size_t ECONOMIES = 8;
@@ -29,6 +26,8 @@ constexpr std::size_t GOVERNMENTS = 8;
 // factor in productTradeRecords is 0 (Symbols.tsv), so these four check that it still reads the level, and nothing more.
 constexpr auto TECH_LEVELS = std::to_array<std::uint8_t>({0, 1, 9, 15});
 constexpr std::size_t COMMODITIES = 17;
+// A commodity's entry in screenPrices: its price, then its resale price, a word each.
+constexpr std::size_t PRICE_ENTRY_BYTES = 4;
 // The random states the quantities are rolled from: the loaded commander's and the next 255 NextRandom makes, and three edges.
 constexpr std::size_t WALKED_RANDOM_STATES = 256;
 constexpr std::array<std::array<std::uint16_t, 3>, 3> EDGE_RANDOM_STATES = {
@@ -43,10 +42,12 @@ constexpr std::array<std::array<std::uint16_t, 3>, 3> EDGE_RANDOM_STATES = {
   _state.Data().commanderBlock.currentTechLevel = _techLevel;
   Elite::ComputeMarketPrices(_state);
   std::string line = std::format("prices {} {} {}", _economy, _government, _techLevel);
+  const std::span<const Elite::Counted<std::uint8_t>> prices =
+    _state.BytesFrom(_state.Data().screenPrices, sizeof(Elite::GameData::ScreenPrices));
   for (std::size_t commodity = 0; commodity < COMMODITIES; ++commodity)
   {
-    const std::uint16_t at = DS.screenPrices.At(commodity);
-    line += std::format(" {}/{}", _state.Word(at), _state.Word(static_cast<std::uint16_t>(at + 2)));
+    const std::size_t at = commodity * PRICE_ENTRY_BYTES;
+    line += std::format(" {}/{}", Elite::WordIn(prices, at), Elite::WordIn(prices, at + 2));
   }
   return line;
 }

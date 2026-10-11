@@ -143,12 +143,12 @@ jobs:
         shell: pwsh
         run: python Build\CheckProjectFiles.py
 
-      # GameLogic/DataOverlay.h and GameLogic/GameData.h are generated from Design/Symbols.tsv and
-      # never edited (ADR-010, D19): a symbol renamed or resized without regenerating them fails here,
-      # not in a native routine.
-      - name: Check the data overlay
+      # GameLogic/GameData.h, the data segment's struct, is generated from Design/Symbols.tsv and never
+      # edited (D19): a symbol renamed or resized without regenerating it fails here, not in a native
+      # routine.
+      - name: Check the data segment's struct
         shell: pwsh
-        run: python Tools\GenerateOverlay.py --check
+        run: python Tools\GenerateGameData.py --check
 
       # Each subsystem's GameLogic/<Subsystem>Tables.h, and GameLogic/Message.h, are generated from the checked-in
       # image, GameLogic/ReferenceImage.cpp, and Design/Symbols.tsv (D33, D38): the reference's tables of addresses as

@@ -1,6 +1,5 @@
 #include "pch.h"
 
-#include "DataOverlay.h"
 #include "GameState.h"
 #include "TwinRig.h"
 
@@ -12,20 +11,12 @@ namespace GameLogicTests
 namespace
 {
 
-using Elite::DS;
+using Commander = Elite::GameData::CommanderBlock;
 
-// An object slot's bytes.
-constexpr std::uint16_t SLOT_BYTES = 0x40;
-
-[[nodiscard]] std::uint16_t Slot(std::uint16_t _index) noexcept
+// A byte of the game's data set on the twin.
+template <typename Struct> void SetBoth(TwinRig& _rig, DataByte<Struct> _member, std::uint8_t _value)
 {
-  return static_cast<std::uint16_t>(Elite::DS.shipSlots.offset + _index * SLOT_BYTES);
-}
-
-// A byte of the data segment set on the twin.
-void SetBoth(TwinRig& _rig, Elite::DataField<std::uint8_t> _field, std::uint8_t _value)
-{
-  _rig.Both([&](Elite::Platform&, Elite::GameState& _state) { _state.SetByte(_field.offset, _value); });
+  _rig.Both([&](Elite::Platform&, Elite::GameState& _state) { DataByteIn(_state, _member) = _value; });
 }
 
 // Launches from Lave, and flies on for 6 seconds.
@@ -45,10 +36,10 @@ public:
   {
     TwinRig rig("TwinGameOver");
     Launch(rig);
-    SetBoth(rig, DS.cheatEnabled, 1);
-    SetBoth(rig, DS.playerDead, 1);
+    SetBoth(rig, &Elite::GameData::cheatEnabled, 1);
+    SetBoth(rig, &Elite::GameData::playerDead, 1);
     rig.Play("wait 0.5");
-    SetBoth(rig, DS.cheatEnabled, 0);
+    SetBoth(rig, &Elite::GameData::cheatEnabled, 0);
     rig.Play("wait 5\ndigest game-over");
   }
 
@@ -57,19 +48,20 @@ public:
   {
     TwinRig rig("TwinGameOverCargo");
     Launch(rig);
-    SetBoth(rig, DS.cargoUsedTonnes, 1);
+    SetBoth(rig, &Commander::CargoHold::cargoUsedTonnes, 1);
     Elite::GameState& state = rig.State();
     for (std::uint16_t index = 3; index < 20; ++index)
     {
-      const std::uint16_t slot = Slot(index);
-      state.SetByte(slot, 0x85); // a Sidewinder, active
-      for (std::uint16_t offset = 1; offset < SLOT_BYTES; ++offset)
-        state.SetByte(static_cast<std::uint16_t>(slot + offset), 0);
-      state.SetWord(static_cast<std::uint16_t>(slot + 4), static_cast<std::uint16_t>(index * 0x100));
-      state.SetWord(static_cast<std::uint16_t>(slot + 8), 0x2000);
-      state.SetByte(static_cast<std::uint16_t>(slot + 0x1E), 2); // its blip drawn
+      Elite::SpaceObject& ship = state.Slot(static_cast<Elite::SlotIndex>(index));
+      const std::span<Elite::Counted<std::uint8_t>> bytes = state.BytesFrom(ship, Elite::SpaceObject::BYTES);
+      ship.type = 0x85; // a Sidewinder, active
+      for (std::size_t offset = 1; offset < bytes.size(); ++offset)
+        bytes[offset] = 0;
+      ship.x = static_cast<std::uint16_t>(index * 0x100);
+      ship.z = 0x2000;
+      ship.flags = 2; // its blip drawn
     }
-    SetBoth(rig, DS.playerDead, 1);
+    SetBoth(rig, &Elite::GameData::playerDead, 1);
     rig.Play("wait 5\ndigest game-over");
   }
 
@@ -78,7 +70,7 @@ public:
   {
     TwinRig rig("TwinEscapePod");
     Launch(rig);
-    SetBoth(rig, DS.escapePodFrames, 3);
+    SetBoth(rig, &Elite::GameData::escapePodFrames, 3);
     rig.Play("wait 3\ndigest docked");
   }
 
@@ -101,9 +93,9 @@ public:
     TwinRig rig("TwinWitchScreens");
     Launch(rig);
     rig.Play("down F10; wait 0.1; up F10; wait 1\nkey Escape; wait 1\nkey F1; wait 1\ndigest after-escape");
-    SetBoth(rig, DS.witchspaceCountdown, 1);
+    SetBoth(rig, &Commander::witchspaceCountdown, 1);
     rig.Play("down F6; wait 0.1; up F6; wait 1\nkey F9; wait 1\nkey Escape; wait 1\ndigest witch-chart");
-    SetBoth(rig, DS.witchspaceCountdown, 2);
+    SetBoth(rig, &Commander::witchspaceCountdown, 2);
     rig.Play("down F6; wait 0.1; up F6; wait 0.5\ndown F10; wait 0.1; up F10; wait 1\nkey F1; wait 1\ndigest witch-inventory");
   }
 };

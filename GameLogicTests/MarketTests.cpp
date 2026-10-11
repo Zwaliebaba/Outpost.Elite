@@ -1,6 +1,5 @@
 #include "pch.h"
 
-#include "DataOverlay.h"
 #include "TwinRig.h"
 
 #include <string>
@@ -14,17 +13,15 @@ namespace GameLogicTests
 namespace
 {
 
-using Elite::DS;
+using Commander = Elite::GameData::CommanderBlock;
 
-// The data segment byte at _offset, set to _value on the twin.
-void SetByte(TwinRig& _rig, std::uint16_t _offset, std::uint8_t _value)
-{
-  _rig.Both([_offset, _value](Elite::Platform&, Elite::GameState& _state) { _state.SetByte(_offset, _value); });
-}
+// A product's cargoHold entry: the units held, then the units on sale.
+constexpr std::size_t HOLD_ENTRY_BYTES = 2;
 
-void SetByte(TwinRig& _rig, Elite::DataField<std::uint8_t> _field, std::uint8_t _value)
+// The byte _member names, set to _value on the twin.
+template <typename Struct> void SetByte(TwinRig& _rig, DataByte<Struct> _member, std::uint8_t _value)
 {
-  SetByte(_rig, _field.offset, _value);
+  _rig.Both([_member, _value](Elite::Platform&, Elite::GameState& _state) { DataByteIn(_state, _member) = _value; });
 }
 
 // The cash, in tenths of credits, on the twin.
@@ -33,20 +30,28 @@ void SetCredits(TwinRig& _rig, std::uint32_t _tenths)
   _rig.Both(
     [_tenths](Elite::Platform&, Elite::GameState& _state)
     {
-      _state.SetWord(DS.creditsTenths.offset, static_cast<std::uint16_t>(_tenths));
-      _state.SetWord(DS.data75F5.offset, static_cast<std::uint16_t>(_tenths >> 16));
+      Commander::CreditsTenths& credits = _state.Data().commanderBlock.creditsTenths;
+      _state.SetWordOf(credits, static_cast<std::uint16_t>(_tenths));
+      credits.data75F5 = static_cast<std::uint16_t>(_tenths >> 16);
     });
 }
 
-// The cargo menu row _row's cargoHold entry: the amount held, then (+1) the amount on sale.
-[[nodiscard]] std::uint16_t Held(std::uint8_t _row)
+// The cargo menu row _row's cargoHold entry, as an index of the hold's bytes: the amount held, then (+1) the amount on sale.
+[[nodiscard]] std::size_t Held(std::uint8_t _row)
 {
-  return DS.cargoHold.At(_row - 1u);
+  return (std::size_t{_row} - 1) * HOLD_ENTRY_BYTES;
 }
 
-[[nodiscard]] std::uint16_t OnSale(std::uint8_t _row)
+[[nodiscard]] std::size_t OnSale(std::uint8_t _row)
 {
-  return static_cast<std::uint16_t>(DS.cargoHold.At(_row - 1u) + 1);
+  return Held(_row) + 1;
+}
+
+// The byte _index of cargoHold's entries, set to _value on the twin.
+void SetHold(TwinRig& _rig, std::size_t _index, std::uint8_t _value)
+{
+  _rig.Both([_index, _value](Elite::Platform&, Elite::GameState& _state)
+            { _state.BytesFrom(_state.Data().commanderBlock.cargoHold, sizeof(Commander::CargoHold))[_index] = _value; });
 }
 
 // B or S on the cargo menu, then the keys _typed names at "Quantity?", separated by spaces, and Return: Replay.h's
@@ -84,30 +89,30 @@ public:
     rig.Play("key space; wait 4");
     SetCredits(rig, 1000000);
     rig.Play("key F3; wait 1");
-    SetByte(rig, OnSale(1), 0);
+    SetHold(rig, OnSale(1), 0);
     rig.Play("key b; wait 0.2");
-    SetByte(rig, OnSale(1), 20);
-    SetByte(rig, DS.cargoUsedTonnes, 20);
+    SetHold(rig, OnSale(1), 20);
+    SetByte(rig, &Commander::CargoHold::cargoUsedTonnes, 20);
     rig.Play("key b; wait 0.2");
-    SetByte(rig, DS.cargoUsedTonnes, 0);
+    SetByte(rig, &Commander::CargoHold::cargoUsedTonnes, 0);
     rig.Play("key b; wait 0.3\ndown Shift_L; wait 0.05\nkey a; wait 0.05\nup Shift_L; wait 0.05\nkey Return; wait 0.3\n" + Trade("b", "0") +
              Trade("b", "3 0") + Trade("b", "2 5") + Trade("b", "BackSpace 1 0 0 0 BackSpace BackSpace"));
-    SetByte(rig, DS.largeCargoBayFitted, 1);
+    SetByte(rig, &Commander::largeCargoBayFitted, 1);
     rig.Play(Trade("b", "1"));
     SetCredits(rig, 0);
     rig.Play(Trade("b", "1") + "digest tonnes\nkey s; wait 0.2\nkey F3; wait 0.2\nkey x; wait 0.2\nkey Up; wait 0.2\nkey b; wait 0.2\n"
                                "key Up; wait 0.2");
     SetCredits(rig, 1000000);
-    SetByte(rig, Held(16), 0xFA);
-    SetByte(rig, OnSale(16), 50);
+    SetHold(rig, Held(16), 0xFA);
+    SetHold(rig, OnSale(16), 50);
     rig.Play("key b; wait 0.2");
-    SetByte(rig, Held(16), 0xF0);
+    SetHold(rig, Held(16), 0xF0);
     rig.Play(Trade("b", "2 0") + Trade("b", "1 2"));
-    SetByte(rig, Held(16), 0);
+    SetHold(rig, Held(16), 0);
     rig.Play(Trade("b", "5") + "key Down; wait 0.2\nkey Down; wait 0.2");
-    SetByte(rig, DS.keyboardPitchRate, 5);
+    SetByte(rig, &Elite::GameData::keyboardPitchRate, 5);
     rig.Play("wait 0.3");
-    SetByte(rig, DS.keyboardPitchRate, 0xFB);
+    SetByte(rig, &Elite::GameData::keyboardPitchRate, 0xFB);
     rig.Play("wait 0.3\ndigest gems\nkey F9; wait 0.5\ndigest left");
   }
 
@@ -117,18 +122,18 @@ public:
   {
     TwinRig rig("TwinCargoSell");
     rig.Play("key space; wait 4\nkey F2; wait 1");
-    SetByte(rig, Held(1), 0);
+    SetHold(rig, Held(1), 0);
     rig.Play("key s; wait 0.2");
-    SetByte(rig, Held(1), 10);
-    SetByte(rig, OnSale(1), 250);
-    SetByte(rig, DS.cargoUsedTonnes, 10);
+    SetHold(rig, Held(1), 10);
+    SetHold(rig, OnSale(1), 250);
+    SetByte(rig, &Commander::CargoHold::cargoUsedTonnes, 10);
     rig.Play(Trade("s", "x") + Trade("s", "0") + Trade("s", "2 0") + Trade("s", "1 0") + "key Down; wait 0.2\nkey Down; wait 0.2");
-    SetByte(rig, Held(3), 5);
+    SetHold(rig, Held(3), 5);
     rig.Play(Trade("s", "5") + "key Up; wait 0.2\nkey Up; wait 0.2\nkey Up; wait 0.2");
-    SetByte(rig, Held(17), 3);
-    SetByte(rig, DS.cargoUsedTonnes, 3);
+    SetHold(rig, Held(17), 3);
+    SetByte(rig, &Commander::CargoHold::cargoUsedTonnes, 3);
     rig.Play(Trade("s", "3") + "key Up; wait 0.2\nkey Up; wait 0.2\nkey Up; wait 0.2");
-    SetByte(rig, Held(14), 10);
+    SetHold(rig, Held(14), 10);
     rig.Play(Trade("s", "5") + "digest sold\nkey b; wait 0.2\nkey F2; wait 0.2\nkey F9; wait 0.5\ndigest left");
   }
 
@@ -142,7 +147,7 @@ public:
       [](Elite::Platform&, Elite::GameState& _state)
       {
         constexpr std::string_view NAME = "LA VE";
-        for (std::size_t index = 0; index < DS.currentSystemName.SIZE_BYTES; ++index)
+        for (std::size_t index = 0; index < std::size(_state.Data().commanderBlock.currentSystemName); ++index)
         {
           _state.Data().commanderBlock.currentSystemName[index] =
             index < NAME.size() ? static_cast<std::uint8_t>(NAME[index]) : std::uint8_t{0};

@@ -1,6 +1,5 @@
 #include "pch.h"
 
-#include "DataOverlay.h"
 #include "GameState.h"
 #include "TwinRig.h"
 
@@ -13,8 +12,6 @@ namespace GameLogicTests
 
 namespace
 {
-
-using Elite::DS;
 
 // A jump set up to happen on the next frame: galactic or not, from which galaxy, with the random
 // numbers all 0 (randomState0-2 all 0 stay so, below the 200 of a mis-jump and the 300 of the ninth
@@ -44,10 +41,12 @@ void PlayJump(TwinRig& _rig, const Jump& _jump)
 {
   Elite::GameState& state = _rig.State();
   state.Data().commanderBlock.hyperspaceTargetIndex = std::uint8_t{state.Data().commanderBlock.selectedSystemIndex};
-  for (std::uint16_t index = 0; index < state.Data().systemRecordBytes; ++index)
+  const std::size_t bytes = state.Data().systemRecordBytes;
+  const std::span<const Elite::Counted<std::uint8_t>> from = state.BytesFrom(state.Data().commanderBlock.selectedSystemName, bytes);
+  const std::span<Elite::Counted<std::uint8_t>> to = state.BytesFrom(state.Data().hyperspaceTargetRecord, bytes);
+  for (std::size_t index = 0; index < bytes; ++index)
   {
-    state.SetByte(static_cast<std::uint16_t>(DS.hyperspaceTargetRecord.offset + index),
-                  state.Byte(static_cast<std::uint16_t>(DS.selectedSystemName.offset + index)));
+    to[index] = std::uint8_t{from[index]};
   }
   state.Data().galacticJumpPending = _jump.galactic;
   state.Data().commanderBlock.galaxyNumber = _jump.galaxy;

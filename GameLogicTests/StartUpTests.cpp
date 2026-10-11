@@ -1,6 +1,5 @@
 #include "pch.h"
 
-#include "DataOverlay.h"
 #include "TwinRig.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -14,10 +13,10 @@ namespace
 // The scan code and character of 'q' in the BIOS's key buffer.
 constexpr std::uint16_t BIOS_KEY_Q = 0x1071;
 
-// Sets the byte _field to _value on the twin.
-void SetBoth(TwinRig& _rig, Elite::DataField<std::uint8_t> _field, std::uint8_t _value)
+// Sets the byte _member names to _value on the twin.
+template <typename Struct> void SetBoth(TwinRig& _rig, DataByte<Struct> _member, std::uint8_t _value)
 {
-  _rig.Both([_field, _value](Elite::Platform&, Elite::GameState& _state) { _state.SetByte(_field.offset, _value); });
+  _rig.Both([_member, _value](Elite::Platform&, Elite::GameState& _state) { DataByteIn(_state, _member) = _value; });
 }
 
 // The twin is back at the title, out of flight.
@@ -26,8 +25,8 @@ void AssertAtTheTitle(TwinRig& _rig)
   _rig.Both(
     [](Elite::Platform&, Elite::GameState& _state)
     {
-      Assert::AreEqual(std::uint8_t{0}, _state.Byte(Elite::DS.titleShown.offset), L"the title runs again");
-      Assert::AreEqual(std::uint8_t{0}, _state.Byte(Elite::DS.inFlight.offset), L"out of flight");
+      Assert::AreEqual(std::uint8_t{0}, std::uint8_t{_state.Data().titleShown}, L"the title runs again");
+      Assert::AreEqual(std::uint8_t{0}, std::uint8_t{_state.Data().inFlight}, L"out of flight");
     });
 }
 
@@ -54,7 +53,7 @@ public:
   {
     TwinRig rig("TwinDeath");
     rig.Play("key space; wait 3.2");
-    SetBoth(rig, Elite::DS.playerDead, 1);
+    SetBoth(rig, &Elite::GameData::playerDead, 1);
     rig.Play("key F1; wait 4.5\ndigest title-again");
     AssertAtTheTitle(rig);
   }

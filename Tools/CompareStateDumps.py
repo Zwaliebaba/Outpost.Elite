@@ -26,7 +26,7 @@ A field is named as one of:
   PATH[*]+OFFSET:BYTES  BYTES bytes at OFFSET (hex) into every entry of a table member: chartItems[*]+4:2
   SpaceObject.FIELD     a field of the ship slots' record (SpaceObject.h) in every one of shipSlots' 36 slots
 
-GameData's layout is read as Tools/GenerateOverlay.py builds it from Design/Symbols.tsv, and SpaceObject's from the offsets
+GameData's layout is read as Tools/GenerateGameData.py builds it from Design/Symbols.tsv, and SpaceObject's from the offsets
 SpaceObject.h asserts, so the tool follows the tree it is run in. Standard library only.
 
     python Tools/CompareStateDumps.py compare BASE NEW --field messagePointer --field SpaceObject.target ...
@@ -47,9 +47,9 @@ SLOT_BYTES = 0x40
 SLOTS = 36
 
 
-def load_overlay():
-  """Tools/GenerateOverlay.py as a module: its parser of the symbol table and its tree of GameData's members."""
-  spec = importlib.util.spec_from_file_location("GenerateOverlay", ROOT / "Tools" / "GenerateOverlay.py")
+def load_generator():
+  """Tools/GenerateGameData.py as a module: its parser of the symbol table and its tree of GameData's members."""
+  spec = importlib.util.spec_from_file_location("GenerateGameData", ROOT / "Tools" / "GenerateGameData.py")
   module = importlib.util.module_from_spec(spec)
   spec.loader.exec_module(module)
   return module
@@ -66,9 +66,9 @@ class Layout:
   """GameData's members by path, and SpaceObject's fields by name."""
 
   def __init__(self):
-    overlay = load_overlay()
-    self.overlay = overlay
-    self.members = list(overlay.walk(overlay.build_members(overlay.read_rows())))
+    generator = load_generator()
+    self.generator = generator
+    self.members = list(generator.walk(generator.build_members(generator.read_rows())))
     self.by_path = {member.path: member for member in self.members}
     self.slot_fields = self.read_slot_fields()
     ship_slots = self.by_path.get("shipSlots")
@@ -99,7 +99,7 @@ class Layout:
     match = re.fullmatch(r"([\w.]+)\[\*\]\+([0-9A-Fa-f]+):(\d+)", _field)
     if match:
       member = self.member(match.group(1))
-      entry = self.overlay.element_bytes(member.row["contract"]) if member.row and member.row["kind"] == "table" else None
+      entry = self.generator.element_bytes(member.row["contract"]) if member.row and member.row["kind"] == "table" else None
       if entry is None:
         sys.exit(f"CompareStateDumps: {member.path} is not a table of entries of a size")
       offset, size = int(match.group(2), 16), int(match.group(3))

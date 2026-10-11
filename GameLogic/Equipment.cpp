@@ -3,7 +3,6 @@
 #include "Equipment.h"
 
 #include "Arithmetic.h"
-#include "DataOverlay.h"
 #include "Docked.h"
 #include "EquipmentTables.h"
 #include "Flight.h"

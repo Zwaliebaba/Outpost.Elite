@@ -1,7 +1,6 @@
 #include "pch.h"
 
 #include "AnswerFile.h"
-#include "DataOverlay.h"
 #include "Galaxy.h"
 #include "ReferenceRig.h"
 
@@ -14,8 +13,6 @@ namespace GameLogicTests
 
 namespace
 {
-
-using Elite::DS;
 
 /// The galaxies' known answers, from the repository's root. The file's header documents its format and states the count.
 constexpr std::string_view GALAXY_ANSWERS_FILE = "GameLogicTests/GalaxyAnswers.txt";
@@ -38,9 +35,11 @@ constexpr std::size_t SYSTEMS = 256;
   Elite::DescribeSystem(_state);
 
   std::string name;
-  for (std::size_t index = 0; index < _state.Data().commanderBlock.selectedSystemNameLength; ++index)
+  const std::span<const Elite::Counted<std::uint8_t>> characters =
+    _state.BytesFrom(_state.Data().commanderBlock.selectedSystemName, _state.Data().commanderBlock.selectedSystemNameLength);
+  for (const std::uint8_t character : characters)
   {
-    name += static_cast<char>(_state.Byte(DS.selectedSystemName.At(index)));
+    name += static_cast<char>(character);
   }
   const Elite::GameData::CommanderBlock& commander = _state.Data().commanderBlock;
   std::string answer = std::format("{} {} {} {} {} {} {} {} {} {} {}", _galaxy, _system, name, x, y,

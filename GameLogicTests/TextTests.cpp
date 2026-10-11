@@ -1,7 +1,6 @@
 #include "pch.h"
 
 #include "Combat.h"
-#include "DataOverlay.h"
 #include "GameState.h"
 #include "Maths.h"
 #include "SpaceObject.h"
@@ -18,8 +17,6 @@ namespace GameLogicTests
 
 namespace
 {
-
-using Elite::DS;
 
 // The spawners the game makes ships with outside witch space, each picking one of its records by its first random draw.
 enum class Spawner : std::uint8_t
@@ -135,7 +132,7 @@ std::uint16_t LaunchMissileAtPlayer(TwinRig& _rig, std::uint16_t _launcher)
     {
       name.clear();
       for (std::size_t index = 0; index < IDENTITY_CLASS_BYTES; ++index)
-        name += static_cast<char>(_state.Byte(static_cast<std::uint16_t>(DS.shipIdentityText.offset + IDENTITY_CLASS_OFFSET + index)));
+        name += static_cast<char>(std::uint8_t{_state.Data().shipIdentityText[IDENTITY_CLASS_OFFSET + index]});
     });
   return name;
 }

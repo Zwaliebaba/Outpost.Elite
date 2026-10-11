@@ -1,7 +1,6 @@
 #include "pch.h"
 
 #include "AnswerFile.h"
-#include "DataOverlay.h"
 #include "Maths.h"
 #include "ReferenceRig.h"
 
@@ -15,8 +14,6 @@ namespace GameLogicTests
 
 namespace
 {
-
-using Elite::DS;
 
 /// The maths' known answers, from the repository's root. The file's header documents its format and states the count.
 constexpr std::string_view MATHS_ANSWERS_FILE = "GameLogicTests/MathsAnswers.txt";

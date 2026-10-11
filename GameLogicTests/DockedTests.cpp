@@ -1,6 +1,5 @@
 #include "pch.h"
 
-#include "DataOverlay.h"
 #include "TwinRig.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -11,22 +10,29 @@ namespace GameLogicTests
 namespace
 {
 
+using Commander = Elite::GameData::CommanderBlock;
+
+// A product's cargoHold entry: the units held, then the units on sale.
+constexpr std::size_t HOLD_ENTRY_BYTES = 2;
+
 // From the title: the credits, then the status screen.
 constexpr std::string_view TO_THE_DOCK = "key space; wait 3.2";
 
 // The status screen ignores its own F9, so F10 first and back.
 constexpr std::string_view STATUS_AGAIN = "key F10; wait 0.2\nkey F9; wait 0.2\n";
 
-// Sets the byte _field to _value on the twin.
-void SetBoth(TwinRig& _rig, Elite::DataField<std::uint8_t> _field, std::uint8_t _value)
+// Sets the byte _member names to _value on the twin.
+template <typename Struct> void SetBoth(TwinRig& _rig, DataByte<Struct> _member, std::uint8_t _value)
 {
-  _rig.Both([_field, _value](Elite::Platform&, Elite::GameState& _state) { _state.SetByte(_field.offset, _value); });
+  _rig.Both([_member, _value](Elite::Platform&, Elite::GameState& _state) { DataByteIn(_state, _member) = _value; });
 }
 
-// Sets the byte at _offset in the data segment to _value on the twin.
-void SetBoth(TwinRig& _rig, std::uint16_t _offset, std::uint8_t _value)
+// Sets the units of product _product held, the first byte of its cargoHold entry, to _value on the twin.
+void SetHeld(TwinRig& _rig, std::size_t _product, std::uint8_t _value)
 {
-  SetBoth(_rig, Elite::DataField<std::uint8_t>{_offset}, _value);
+  _rig.Both(
+    [_product, _value](Elite::Platform&, Elite::GameState& _state)
+    { _state.BytesFrom(_state.Data().commanderBlock.cargoHold, sizeof(Commander::CargoHold))[_product * HOLD_ENTRY_BYTES] = _value; });
 }
 
 // The status screen again, then _steps.
@@ -54,16 +60,20 @@ void LoadCommander(TwinRig& _rig, std::string_view _source)
 [[nodiscard]] std::uint32_t TwinCreditsTenths(TwinRig& _rig)
 {
   std::uint32_t tenths = 0;
-  _rig.Both([&tenths](Elite::Platform&, Elite::GameState& _state)
-            { tenths = _state.Word(Elite::DS.creditsTenths.offset) | (std::uint32_t{_state.Word(Elite::DS.data75F5.offset)} << 16); });
+  _rig.Both(
+    [&tenths](Elite::Platform&, Elite::GameState& _state)
+    {
+      const Commander::CreditsTenths& credits = _state.Data().commanderBlock.creditsTenths;
+      tenths = _state.WordOf(credits) | (std::uint32_t{credits.data75F5} << 16);
+    });
   return tenths;
 }
 
-// The byte _field as the twin holds it.
-[[nodiscard]] std::uint8_t TwinByte(TwinRig& _rig, Elite::DataField<std::uint8_t> _field)
+// The byte _member names, as the twin holds it.
+template <typename Struct> [[nodiscard]] std::uint8_t TwinByte(TwinRig& _rig, DataByte<Struct> _member)
 {
   std::uint8_t value = 0;
-  _rig.Both([&value, _field](Elite::Platform&, Elite::GameState& _state) { value = _state.Byte(_field.offset); });
+  _rig.Both([&value, _member](Elite::Platform&, Elite::GameState& _state) { value = DataByteIn(_state, _member); });
   return value;
 }
 
@@ -80,17 +90,17 @@ public:
   {
     TwinRig rig("TwinDockedCargo");
     rig.Play(TO_THE_DOCK);
-    SetBoth(rig, Elite::DS.cargoHold.At(0), 5);
-    SetBoth(rig, Elite::DS.cargoHold.At(6), 1);
-    SetBoth(rig, Elite::DS.cargoHold.At(16), 2);
-    SetBoth(rig, Elite::DS.refugeesTonnes, 3);
+    SetHeld(rig, 0, 5);
+    SetHeld(rig, 6, 1);
+    SetHeld(rig, 16, 2);
+    SetBoth(rig, &Commander::CargoHold::refugeesTonnes, 3);
     rig.Play("key F2; wait 0.2\ndigest sell\nkey F3; wait 0.2\nkey F2; wait 0.2\nkey F3; wait 0.2\ndigest buy-again\n"
              "key F10; wait 0.2\ndigest inventory");
-    SetBoth(rig, Elite::DS.legalStatus, 5);
-    SetBoth(rig, Elite::DS.witchspaceCountdown, 3);
-    SetBoth(rig, Elite::DS.militaryLaserCount, 1);
+    SetBoth(rig, &Commander::legalStatus, 5);
+    SetBoth(rig, &Commander::witchspaceCountdown, 3);
+    SetBoth(rig, &Commander::militaryLaserCount, 1);
     rig.Play("key F9; wait 0.2\ndigest offender");
-    SetBoth(rig, Elite::DS.legalStatus, 0x30);
+    SetBoth(rig, &Commander::legalStatus, 0x30);
     rig.Play(StatusAgain("digest fugitive"));
   }
 
@@ -101,17 +111,17 @@ public:
   {
     TwinRig rig("TwinSupernova");
     rig.Play(TO_THE_DOCK);
-    SetBoth(rig, Elite::DS.missionNumber, 1);
-    SetBoth(rig, Elite::DS.playerDocked, 1);
+    SetBoth(rig, &Commander::missionNumber, 1);
+    SetBoth(rig, &Elite::GameData::playerDocked, 1);
     rig.Play(StatusAgain("digest briefing\nkey a; wait 0.2\nkey n; wait 0.2\ndigest refused\nkey space; wait 0.2"));
     rig.Play(StatusAgain("digest not-yet"));
-    SetBoth(rig, Elite::DS.jumpedSinceBriefing, 1);
+    SetBoth(rig, &Commander::jumpedSinceBriefing, 1);
     rig.Play(StatusAgain("digest no-refugees\nkey space; wait 0.2"));
-    SetBoth(rig, Elite::DS.missionNumber, 1);
-    SetBoth(rig, Elite::DS.largeCargoBayFitted, 1);
+    SetBoth(rig, &Commander::missionNumber, 1);
+    SetBoth(rig, &Commander::largeCargoBayFitted, 1);
     rig.Play(StatusAgain("key y; wait 0.2\ndigest accepted\nkey space; wait 0.2"));
-    SetBoth(rig, Elite::DS.jumpedSinceBriefing, 1);
-    SetBoth(rig, Elite::DS.refugeesTonnes, 0x14);
+    SetBoth(rig, &Commander::jumpedSinceBriefing, 1);
+    SetBoth(rig, &Commander::CargoHold::refugeesTonnes, 0x14);
     rig.Play(StatusAgain("digest rewarded\nkey space; wait 0.2\ndigest after"));
   }
 
@@ -122,22 +132,22 @@ public:
   {
     TwinRig rig("TwinMaskAndInvasion");
     rig.Play(TO_THE_DOCK);
-    SetBoth(rig, Elite::DS.missionNumber, 2);
-    SetBoth(rig, Elite::DS.playerDocked, 1);
+    SetBoth(rig, &Commander::missionNumber, 2);
+    SetBoth(rig, &Elite::GameData::playerDocked, 1);
     rig.Play(StatusAgain("digest mask-briefing\nkey space; wait 0.2"));
     rig.Play(StatusAgain("digest not-yet"));
-    SetBoth(rig, Elite::DS.maskShipDestroyed, 1);
-    SetBoth(rig, Elite::DS.fledMaskShip, 1);
+    SetBoth(rig, &Commander::maskShipDestroyed, 1);
+    SetBoth(rig, &Commander::fledMaskShip, 1);
     rig.Play(StatusAgain("digest fled\nkey space; wait 0.2"));
     for (const bool recovered : {false, true})
     {
-      SetBoth(rig, Elite::DS.missionNumber, 2);
-      SetBoth(rig, Elite::DS.missionStage, 1);
-      SetBoth(rig, Elite::DS.maskShipDestroyed, 1);
-      SetBoth(rig, Elite::DS.maskingDeviceRecovered, static_cast<std::uint8_t>(recovered ? 1 : 0));
+      SetBoth(rig, &Commander::missionNumber, 2);
+      SetBoth(rig, &Commander::missionStage, 1);
+      SetBoth(rig, &Commander::maskShipDestroyed, 1);
+      SetBoth(rig, &Commander::maskingDeviceRecovered, static_cast<std::uint8_t>(recovered ? 1 : 0));
       rig.Play(StatusAgain("digest destroyed\nkey space; wait 0.2"));
     }
-    SetBoth(rig, Elite::DS.missionNumber, 3);
+    SetBoth(rig, &Commander::missionNumber, 3);
     rig.Play(StatusAgain("digest invasion-briefing\nkey space; wait 0.2"));
     rig.Play(StatusAgain("digest invasion-debriefing\nkey space; wait 0.2\ndigest archangel"));
   }
@@ -154,7 +164,7 @@ public:
     LoadCommander(rig, "supernova-mission.cdr");
     rig.Play("key F1; wait 0.5\ndown g; wait 1; up g\ndown h; wait 0.1; up h\nwait 8\ndigest mission-given");
     rig.Play("down c; wait 0.1; up c\nwait 5\ndigest briefing\nkey n; wait 1\ndigest declined\nkey space; wait 1");
-    Assert::AreEqual(std::uint8_t{0}, TwinByte(rig, Elite::DS.refugeesTonnes), L"no refugees aboard");
+    Assert::AreEqual(std::uint8_t{0}, TwinByte(rig, &Commander::CargoHold::refugeesTonnes), L"no refugees aboard");
     // Equip Ship, its cursor on Fuel, which the mission does not sell: seven rows down an escape capsule, four more a galactic
     // hyperdrive.
     rig.Play("key F4; wait 0.8\n"

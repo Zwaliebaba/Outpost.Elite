@@ -4,7 +4,6 @@
 #include "Galaxy.h"
 
 #include "Arithmetic.h"
-#include "DataOverlay.h"
 #include "GalaxyTables.h"
 #include "Input.h"
 #include "Video.h"

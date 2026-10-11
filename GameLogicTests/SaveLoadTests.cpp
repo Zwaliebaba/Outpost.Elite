@@ -1,6 +1,5 @@
 #include "pch.h"
 
-#include "DataOverlay.h"
 #include "Sha256.h"
 #include "TwinRig.h"
 
@@ -179,13 +178,13 @@ public:
     twin.Play("key space; wait 3.3\nkey F5; wait 0.1");
     twin.Play(CHART_SCREENSHOT_KEYS);
     // The numbers run '99', then '00', the name of a directory.
-    twin.Both([](Elite::Platform&, Elite::GameState& _state) { _state.SetWord(Elite::DS.screenshotNumber.offset, 0x3939); });
+    twin.Both([](Elite::Platform&, Elite::GameState& _state) { _state.Data().screenshotNumber = 0x3939; });
     std::filesystem::create_directories(twin.Files() / "ELITE00.HI");
     twin.Play(CHART_SCREENSHOT_KEYS);
     // GetKey hands the chart one key a frame: the screenshots' Alt and PrtSc go first, then Escape closes it.
     twin.Play("wait 0.6; key Escape; wait 0.15; key s; wait 0.05");
     // '09', then '10'; then '11', a directory.
-    twin.Both([](Elite::Platform&, Elite::GameState& _state) { _state.SetWord(Elite::DS.screenshotNumber.offset, 0x3930); });
+    twin.Both([](Elite::Platform&, Elite::GameState& _state) { _state.Data().screenshotNumber = 0x3930; });
     twin.Play(QUICK_SCREENSHOT_KEYS);
     std::filesystem::create_directories(twin.Files() / "ELITE11.LO");
     twin.Play(QUICK_SCREENSHOT_KEYS);

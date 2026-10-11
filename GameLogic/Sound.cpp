@@ -3,7 +3,6 @@
 #include "Sound.h"
 
 #include "Arithmetic.h"
-#include "DataOverlay.h"
 #include "SoundTables.h"
 
 namespace Elite

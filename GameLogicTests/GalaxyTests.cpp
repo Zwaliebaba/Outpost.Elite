@@ -1,6 +1,5 @@
 #include "pch.h"
 
-#include "DataOverlay.h"
 #include "TwinRig.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -11,7 +10,7 @@ namespace GameLogicTests
 namespace
 {
 
-using Elite::DS;
+using Commander = Elite::GameData::CommanderBlock;
 
 // From the title screen: the commander loaded, docked at Lave, on the status screen.
 constexpr std::string_view DOCKED = "key space; wait 4";
@@ -26,10 +25,10 @@ struct Position
 // Leesti, near Lave in the first galaxy: of tech level 10.
 constexpr Position LEESTI = {13, 186};
 
-// _value into the data segment's _field, on the twin.
-void PokeBoth(TwinRig& _rig, Elite::DataField<std::uint8_t> _field, std::uint8_t _value)
+// _value into the byte _member names, on the twin.
+template <typename Struct> void PokeBoth(TwinRig& _rig, DataByte<Struct> _member, std::uint8_t _value)
 {
-  _rig.Both([_field, _value](Elite::Platform&, Elite::GameState& _state) { _state.SetByte(_field.offset, _value); });
+  _rig.Both([_member, _value](Elite::Platform&, Elite::GameState& _state) { DataByteIn(_state, _member) = _value; });
 }
 
 } // namespace
@@ -45,8 +44,8 @@ public:
   {
     TwinRig rig("TwinGalacticChart");
     rig.Play(DOCKED);
-    PokeBoth(rig, DS.galacticCursorX, 3);
-    PokeBoth(rig, DS.galacticCursorY, 2);
+    PokeBoth(rig, &Commander::galacticCursorX, 3);
+    PokeBoth(rig, &Commander::galacticCursorY, 2);
     rig.Play("key F5; wait 0.3\n"
              "down Left; down Up; wait 0.5; up Left; up Up; wait 0.1\n"
              "key KP_Begin; wait 0.1\n"
@@ -56,8 +55,8 @@ public:
              "key f; wait 0.1; key l; key a; key v; key e; key Return; wait 0.1\n"
              "key f; wait 0.1; key z; key z; key Return; wait 0.1\n"
              "key f; wait 0.1; key Return; wait 0.1");
-    PokeBoth(rig, DS.chartCursorX, 0xFC);
-    PokeBoth(rig, DS.chartCursorY, 0x7C);
+    PokeBoth(rig, &Commander::chartCursorX, 0xFC);
+    PokeBoth(rig, &Commander::chartCursorY, 0x7C);
     rig.Play("down Right; down Down; wait 0.5; up Right; up Down; wait 0.1\nkey Escape; wait 0.3\ndigest closed");
   }
 
@@ -67,12 +66,12 @@ public:
   {
     TwinRig rig("TwinShortRangeChart");
     rig.Play(DOCKED);
-    PokeBoth(rig, DS.shortRangeCursorX, 0xFC);
-    PokeBoth(rig, DS.shortRangeCursorY, 0x7C);
+    PokeBoth(rig, &Commander::shortRangeCursorX, 0xFC);
+    PokeBoth(rig, &Commander::shortRangeCursorY, 0x7C);
     rig.Play("key F6; wait 0.3\n"
              "down Right; down Down; wait 0.5; up Right; up Down; wait 0.1");
-    PokeBoth(rig, DS.chartCursorX, 3);
-    PokeBoth(rig, DS.chartCursorY, 2);
+    PokeBoth(rig, &Commander::chartCursorX, 3);
+    PokeBoth(rig, &Commander::chartCursorY, 2);
     rig.Play("down Left; down Up; wait 0.5; up Left; up Up; wait 0.1\n"
              "key d; wait 0.1; key KP_Begin; wait 0.1; key F6; wait 0.1\n"
              "key f; wait 0.1; key t; key i; key b; key e; key d; key i; key e; key d; key Return; wait 0.1\n"
@@ -86,9 +85,9 @@ public:
   {
     TwinRig rig("TwinSystemData");
     rig.Play(DOCKED);
-    PokeBoth(rig, DS.chartIsShortRange, 0);
-    PokeBoth(rig, DS.chartCursorX, LEESTI.x);
-    PokeBoth(rig, DS.chartCursorY, static_cast<std::uint8_t>(LEESTI.y / 2));
+    PokeBoth(rig, &Commander::chartIsShortRange, 0);
+    PokeBoth(rig, &Commander::chartCursorX, LEESTI.x);
+    PokeBoth(rig, &Commander::chartCursorY, static_cast<std::uint8_t>(LEESTI.y / 2));
     rig.Play("key F7; wait 0.5\ndigest data");
     rig.Both([](Elite::Platform&, Elite::GameState& _state)
              { Assert::AreEqual(std::uint8_t{'1'}, std::uint8_t{_state.Data().data7D48}, L"two digits"); });
