@@ -66,7 +66,7 @@ public:
     Assert::IsTrue(std::ranges::equal(state.DataBytes().first(data.size()), data), L"the data segment's image");
     Assert::IsTrue(std::ranges::all_of(state.DataBytes().subspan(data.size()), [](std::uint8_t _byte) { return _byte == 0; }),
                    L"zeros past it");
-    Assert::AreEqual(1u, std::uint32_t{state.Get(Elite::DS.protectionShown)}, L"with the D5 byte");
+    Assert::AreEqual(1u, std::uint32_t{state.Data().protectionShown}, L"with the D5 byte");
     Assert::AreEqual(std::uint32_t{state.CodeSegment()} + Elite::DATA_SEGMENT_PARAGRAPH, std::uint32_t{state.CodeWord(0x0007)},
                      L"Start's MOV BX,<data>, relocated");
     for (std::uint16_t offset = 0; offset < Elite::Cga::VIDEO_MEMORY_BYTES; offset += 2)
@@ -76,10 +76,10 @@ public:
     }
 
     const std::uint64_t changes = state.ChangeCount();
-    const std::uint8_t fuel = state.Get(Elite::DS.fuel);
-    state.Set(Elite::DS.fuel, static_cast<std::uint8_t>(fuel ^ 0xFF));
+    const std::uint8_t fuel = state.Data().commanderBlock.fuel;
+    state.Data().commanderBlock.fuel = static_cast<std::uint8_t>(fuel ^ 0xFF);
     Assert::AreEqual(changes + 1, state.ChangeCount(), L"a write that changes a byte is counted");
-    state.Set(Elite::DS.fuel, static_cast<std::uint8_t>(fuel ^ 0xFF));
+    state.Data().commanderBlock.fuel = static_cast<std::uint8_t>(fuel ^ 0xFF);
     Assert::AreEqual(changes + 1, state.ChangeCount(), L"a write of the byte already there is not");
     Assert::AreEqual(std::uint32_t{fuel ^ 0xFFu}, std::uint32_t{state.FarByte(state.DataSegment(), Elite::DS.fuel.offset)},
                      L"a far read finds it");

@@ -120,13 +120,13 @@ constexpr std::uint8_t STATE_CLOSING = 4;
 
 // WithinRange: whether _slot is within the box whose half size has its range byte for the high byte and _low, what DL holds
 // there, for the low.
-[[nodiscard]] bool WithinRange(const ObjectSlot& _slot, std::uint8_t _low)
+[[nodiscard]] bool WithinRange(const SpaceObject& _slot, std::uint8_t _low)
 {
-  return ObjectWithinBox(_slot, Join(_slot.Get(SlotByte::Range), _low));
+  return ObjectWithinBox(_slot, Join(_slot.range, _low));
 }
 
 // TurnToVector: _slot turned toward the angles of _vector, ConvertVectorToAngles' then TurnTowardAngles'.
-Turn TurnToVector(GameState& _state, ObjectSlot _slot, Vector _vector)
+Turn TurnToVector(GameState& _state, SpaceObject& _slot, Vector _vector)
 {
   return TurnTowardAngles(_slot, ConvertVectorToAngles(_state, _vector));
 }
@@ -156,10 +156,10 @@ struct SpawnLimit
 
 // The government's entry, at spawnLimitOffset, of the column of spawnLimitsByGovernment at _column, against the class count
 // _count: below while there is room.
-[[nodiscard]] SpawnLimit BelowSpawnLimit(const GameState& _state, std::uint16_t _column, DataField<std::uint8_t> _count)
+[[nodiscard]] SpawnLimit BelowSpawnLimit(const GameState& _state, std::uint16_t _column, const Counted<std::uint8_t>& _count)
 {
   const std::uint8_t limit = _state.Byte(At(_column, _state.Get(DS.spawnLimitOffset)));
-  return SpawnLimit{_state.Get(_count) < limit, limit};
+  return SpawnLimit{_count < limit, limit};
 }
 
 // FindFreeShipSlot for a spawner: the slot it fills, when one is free. None ends UpdateObjectsAndSpawn.
@@ -174,69 +174,71 @@ struct SpawnLimit
 // slot ends it.
 void SpawnByGovernment(GameState& _state)
 {
-  _state.Set(DS.spawnOddsOffset, static_cast<std::uint16_t>(_state.Get(DS.currentGovernment) << 3));
-  _state.Set(DS.spawnLimitOffset, static_cast<std::uint16_t>(_state.Get(DS.spawnGovernment) << 2));
-  if (_state.Get(DS.witchspaceCountdown) == 0)
+  _state.Set(DS.spawnOddsOffset, static_cast<std::uint16_t>(_state.Data().commanderBlock.currentGovernment << 3));
+  _state.Set(DS.spawnLimitOffset, static_cast<std::uint16_t>(_state.Data().spawnGovernment << 2));
+  if (_state.Data().commanderBlock.witchspaceCountdown == 0)
   {
     // MOV AL,[BX+spawnLimitsByGovernment], INC AL with a mining laser fitted.
     auto drifters = _state.Byte(At(DS.spawnLimitsByGovernment.offset, _state.Get(DS.spawnLimitOffset)));
-    if (_state.Get(DS.miningLaserCount) == 1)
+    if (_state.Data().commanderBlock.miningLaserCount == 1)
     {
       drifters = static_cast<std::uint8_t>(drifters + 1);
     }
-    if (_state.Get(DS.drifterCount) < drifters && SpawnOddsMet(_state, DS.spawnOddsByGovernment.offset).met)
+    if (_state.Data().behaviorClassCounts.drifterCount < drifters && SpawnOddsMet(_state, DS.spawnOddsByGovernment.offset).met)
     {
       const SlotSearch free = TakeFreeShipSlot(_state);
       if (!free.found)
       {
         return;
       }
-      SpawnRandomDrifter(_state, ObjectSlot(_state, free.slot));
+      SpawnRandomDrifter(_state, _state.ObjectAt(free.slot));
     }
-    if (BelowSpawnLimit(_state, DS.traderLimitColumn.offset, DS.traderCount).below && SpawnOddsMet(_state, DS.traderOddsColumn.offset).met)
+    if (BelowSpawnLimit(_state, DS.traderLimitColumn.offset, _state.Data().behaviorClassCounts.traderCount).below &&
+        SpawnOddsMet(_state, DS.traderOddsColumn.offset).met)
     {
       const SlotSearch free = TakeFreeShipSlot(_state);
       if (!free.found)
       {
         return;
       }
-      (void)SpawnRandomTrader(_state, ObjectSlot(_state, free.slot));
+      (void)SpawnRandomTrader(_state, _state.ObjectAt(free.slot));
     }
-    if (BelowSpawnLimit(_state, DS.hunterLimitColumn.offset, DS.hunterCount).below && SpawnOddsMet(_state, DS.hunterOddsColumn.offset).met)
+    if (BelowSpawnLimit(_state, DS.hunterLimitColumn.offset, _state.Data().behaviorClassCounts.hunterCount).below &&
+        SpawnOddsMet(_state, DS.hunterOddsColumn.offset).met)
     {
       const SlotSearch free = TakeFreeShipSlot(_state);
       if (!free.found)
       {
         return;
       }
-      SpawnRandomHunter(_state, ObjectSlot(_state, free.slot));
+      SpawnRandomHunter(_state, _state.ObjectAt(free.slot));
     }
   }
-  if (!BelowSpawnLimit(_state, DS.wolfLimitColumn.offset, DS.wolfCount).below)
+  if (!BelowSpawnLimit(_state, DS.wolfLimitColumn.offset, _state.Data().behaviorClassCounts.wolfCount).below)
   {
     return;
   }
-  if (_state.Get(DS.witchspaceCountdown) == 0)
+  if (_state.Data().commanderBlock.witchspaceCountdown == 0)
   {
     const SpawnOdds odds = SpawnOddsMet(_state, DS.wolfOddsColumn.offset);
-    if (!odds.met || (_state.Get(DS.spawnGovernment) != 0 && odds.random >= WOLF_ODDS_LIMIT))
+    if (!odds.met || (_state.Data().spawnGovernment != 0 && odds.random >= WOLF_ODDS_LIMIT))
     {
       return;
     }
   }
   if (const SlotSearch free = TakeFreeShipSlot(_state); free.found)
   {
-    SpawnRandomWolf(_state, ObjectSlot(_state, free.slot));
+    SpawnRandomWolf(_state, _state.ObjectAt(free.slot));
   }
 }
 
 // The mask mission's Asp made the mask ship: it carries the device, its flashing starts with 20 frames shown (in the cargo's
 // byte, which DropCargo does not read for a ship that carries the device), and no aggression yet.
-void MarkMaskShip(ObjectSlot _slot)
+void MarkMaskShip(SpaceObject& _slot)
 {
-  _slot.Set(SlotByte::Flags, static_cast<std::uint8_t>(_slot.Get(SlotByte::Flags) | FLAG_DEVICE));
-  _slot.Set(SlotByte::FlashFrames, MASK_SHIP_FLASH_FRAMES);
-  _slot.Set(SlotByte::Aggression, 0);
+  _slot.flags = static_cast<std::uint8_t>(_slot.flags | FLAG_DEVICE);
+  _slot.flashFrames = MASK_SHIP_FLASH_FRAMES;
+  _slot.aggression = 0;
 }
 
 // SpawnMaskMissionShip in a free slot, _maskShip saying whether it is the mask ship. Returns the slot, or nothing when none
@@ -248,7 +250,7 @@ std::optional<std::uint16_t> SpawnMaskMissionShipInFreeSlot(GameState& _state, b
   {
     return std::nullopt;
   }
-  SpawnMaskMissionShip(_state, ObjectSlot(_state, free.slot), _maskShip);
+  SpawnMaskMissionShip(_state, _state.ObjectAt(free.slot), _maskShip);
   return free.slot;
 }
 
@@ -257,16 +259,16 @@ std::optional<std::uint16_t> SpawnMaskMissionShipInFreeSlot(GameState& _state, b
 // device. Nothing once the mask ship is destroyed, or with three wolves or more.
 void SpawnMaskMissionShips(GameState& _state)
 {
-  if (_state.Get(DS.maskShipDestroyed) == 1)
+  if (_state.Data().commanderBlock.maskShipDestroyed == 1)
   {
     return;
   }
-  const std::uint8_t wolves = _state.Get(DS.wolfCount);
+  const std::uint8_t wolves = _state.Data().behaviorClassCounts.wolfCount;
   if (wolves != 0 && wolves >= MOST_WOLVES_WITH_MASK_SHIP)
   {
     return;
   }
-  if (wolves == 0 && _state.Get(DS.maskShipDestroyed) != 1)
+  if (wolves == 0 && _state.Data().commanderBlock.maskShipDestroyed != 1)
   {
     const SlotSearch free = TakeFreeShipSlot(_state);
     if (!free.found)
@@ -274,7 +276,7 @@ void SpawnMaskMissionShips(GameState& _state)
       return;
     }
     _state.Set(DS.maskShipSlot, free.slot);
-    const ObjectSlot maskShip(_state, free.slot);
+    SpaceObject& maskShip = _state.ObjectAt(free.slot);
     SpawnMaskMissionShip(_state, maskShip, true);
     MarkMaskShip(maskShip);
     for (int escort = 0; escort < 2; ++escort)
@@ -284,30 +286,30 @@ void SpawnMaskMissionShips(GameState& _state)
       {
         return;
       }
-      PlaceEscortNear(_state, ObjectSlot(_state, *slot), _state.Get(DS.maskShipSlot));
+      PlaceEscortNear(_state, _state.ObjectAt(*slot), _state.Get(DS.maskShipSlot));
     }
     return;
   }
   const std::optional<std::uint16_t> slot = SpawnMaskMissionShipInFreeSlot(_state, false);
-  if (!slot || IsMaskShipPresent(_state).found || _state.Get(DS.maskShipDestroyed) == 1)
+  if (!slot || IsMaskShipPresent(_state).found || _state.Data().commanderBlock.maskShipDestroyed == 1)
   {
     return;
   }
-  ObjectSlot ship(_state, *slot);
+  SpaceObject& ship = _state.ObjectAt(*slot);
   MarkMaskShip(ship);
-  ship.Set(SlotByte::Type, ASP_ACTIVE);
+  ship.type = ASP_ACTIVE;
 }
 
 // SpawnInvasionWave (4BF7): a Thargoid in a free slot while the player is in the safe zone and fewer than 8 wolves fly.
 void SpawnInvasionWave(GameState& _state)
 {
-  if (!InSafeZone(_state).inside || _state.Get(DS.wolfCount) >= MOST_INVADERS)
+  if (!InSafeZone(_state).inside || _state.Data().behaviorClassCounts.wolfCount >= MOST_INVADERS)
   {
     return;
   }
   if (const SlotSearch free = TakeFreeShipSlot(_state); free.found)
   {
-    SpawnInvasionThargoid(_state, ObjectSlot(_state, free.slot));
+    SpawnInvasionThargoid(_state, _state.ObjectAt(free.slot));
   }
 }
 
@@ -321,14 +323,14 @@ struct OffenderLaunch
 // From 55A9: the station at _station, near, launches a police Viper, a shuttle or a trader at an offender out of the box it
 // guards: a copy of itself (CopyObject, backwards when _backward) in a free slot, out along z, turned round, its roll reversed,
 // and its velocity set. PUSH DI and POP DI keep the station.
-OffenderLaunch LaunchAtOffender(GameState& _state, ObjectSlot _station, bool _backward)
+OffenderLaunch LaunchAtOffender(GameState& _state, SpaceObject& _station, bool _backward)
 {
   OffenderLaunch launch{IsObjectNear(_state, _station), std::nullopt};
   if (!launch.near.nearby || ObjectWithinBox(_station, STATION_GUARD_BOX))
   {
     return launch;
   }
-  const std::uint8_t status = _state.Get(DS.legalStatus);
+  const std::uint8_t status = _state.Data().commanderBlock.legalStatus;
   if (status < OFFENDER || NextRandom(_state) >= (status >= FUGITIVE ? FUGITIVE_LAUNCH_ODDS : OFFENDER_LAUNCH_ODDS))
   {
     return launch;
@@ -338,8 +340,8 @@ OffenderLaunch LaunchAtOffender(GameState& _state, ObjectSlot _station, bool _ba
   {
     return launch;
   }
-  CopyObject(_state, _station.Offset(), free.slot, _backward);
-  ObjectSlot ship(_state, free.slot);
+  CopyObject(_state, _state.OffsetOf(_station), free.slot, _backward);
+  SpaceObject& ship = _state.ObjectAt(free.slot);
   const std::uint16_t pick = NextRandom(_state);
   if (pick >= POLICE_FROM)
   {
@@ -354,11 +356,11 @@ OffenderLaunch LaunchAtOffender(GameState& _state, ObjectSlot _station, bool _ba
     SpawnRandomTrader(_state, ship);
   }
   // ADD [DI+8],0F0h / ADC [DI+3],0: out along z, turned round, its roll reversed.
-  const std::uint32_t z = std::uint32_t{ship.Get(SlotWord::Z)} + LAUNCH_DISTANCE;
-  ship.Set(SlotWord::Z, static_cast<std::uint16_t>(z));
-  ship.Set(SlotByte::ZHigh, static_cast<std::uint8_t>(ship.Get(SlotByte::ZHigh) + (z >> 16)));
-  ship.Set(SlotWord::Yaw, Offset(ship.Get(SlotWord::Yaw), LAUNCH_TURN));
-  ship.Set(SlotWord::Roll, Negate(ship.Get(SlotWord::Roll)));
+  const std::uint32_t z = std::uint32_t{ship.z} + LAUNCH_DISTANCE;
+  ship.z = static_cast<std::uint16_t>(z);
+  ship.zHigh = static_cast<std::uint8_t>(ship.zHigh + (z >> 16));
+  ship.yaw = Offset(ship.yaw, LAUNCH_TURN);
+  ship.roll = Negate(ship.roll);
   launch.launched = ComputeVelocity(_state, ship);
   return launch;
 }
@@ -367,50 +369,50 @@ OffenderLaunch LaunchAtOffender(GameState& _state, ObjectSlot _station, bool _ba
 // added to legalStatus up to FFh (the sum written, then FFh over it on a carry, 5650 and 5656), and starts the station's ECM
 // unless the player's anti-ECM is on; while npcEcmFrames runs, the ECM removes every missile, and an invasion stops it. Returns
 // the last pixel of the last scanner blip the ECM erased, if it erased one.
-std::optional<DashboardPixel> CheckMissilesAtStation(GameState& _state, const ObjectSlot& _station)
+std::optional<DashboardPixel> CheckMissilesAtStation(GameState& _state, const SpaceObject& _station)
 {
-  if (_state.Get(DS.npcEcmFrames) == 0)
+  if (_state.Data().npcEcmFrames == 0)
   {
     // MOV CL,objectSlotCount / XOR CH,CH, then LOOP: a count of 0 runs 65,536 times.
     std::optional<std::uint8_t> crime;
     std::uint16_t slot = DS.shipSlots.offset;
-    for (std::uint32_t count = LoopCount(_state.Get(DS.objectSlotCount)); count != 0 && !crime; --count)
+    for (std::uint32_t count = LoopCount(_state.Data().objectSlotCount); count != 0 && !crime; --count)
     {
-      const ObjectSlot missile(_state, slot);
-      const std::uint8_t type = missile.Get(SlotByte::Type);
-      const std::uint16_t target = missile.Get(SlotWord::Target);
-      if ((type & ObjectSlot::ACTIVE) != 0 && ((type >> 1) & TYPE_MASK) == TYPE_MISSILE && target != 0)
+      const SpaceObject& missile = _state.ObjectAt(slot);
+      const std::uint8_t type = missile.type;
+      const std::uint16_t target = missile.target;
+      if ((type & SpaceObject::ACTIVE) != 0 && ((type >> 1) & TYPE_MASK) == TYPE_MISSILE && target != 0)
       {
-        if (target == _station.Offset())
+        if (target == _state.OffsetOf(_station))
         {
           crime = STATION_MISSILE_CRIME;
         }
-        else if (IsPoliceViper(ObjectSlot(_state, target)) && InSafeZone(_state).inside)
+        else if (IsPoliceViper(_state.ObjectAt(target)) && InSafeZone(_state).inside)
         {
           crime = POLICE_MISSILE_CRIME;
         }
       }
-      slot = Offset(slot, ObjectSlot::BYTES);
+      slot = Offset(slot, SpaceObject::BYTES);
     }
     if (!crime)
     {
       return std::nullopt;
     }
-    AddSaturating(_state, DS.legalStatus, *crime);
-    if (_state.Get(DS.antiEcmActive) == 1)
+    AddSaturating(_state.Data().commanderBlock.legalStatus, *crime);
+    if (_state.Data().antiEcmActive == 1)
     {
       return std::nullopt;
     }
-    _state.Set(DS.npcEcmFrames, STATION_ECM_FRAMES);
+    _state.Data().npcEcmFrames = STATION_ECM_FRAMES;
   }
-  if (_state.Get(DS.thargoidInvasionActive) == 1)
+  if (_state.Data().commanderBlock.thargoidInvasionActive == 1)
   {
-    _state.Set(DS.npcEcmFrames, 0);
+    _state.Data().npcEcmFrames = 0;
     return std::nullopt;
   }
-  _state.Set(DS.ecmFired, 1);
+  _state.Data().ecmFired = 1;
   const std::optional<DashboardPixel> erased = RemoveAllMissiles(_state);
-  _state.Set(DS.npcEcmFrames, static_cast<std::uint8_t>(_state.Get(DS.npcEcmFrames) - 1));
+  _state.Data().npcEcmFrames = static_cast<std::uint8_t>(_state.Data().npcEcmFrames - 1);
   return erased;
 }
 
@@ -418,7 +420,7 @@ std::optional<DashboardPixel> CheckMissilesAtStation(GameState& _state, const Ob
 // what DL holds there, for its low byte; then a pass is counted off. After the last it rests, calmed (aggression 9) and no
 // longer hostile, and a Thargon drifts (state 0Ah); so does one whose mother is gone or is no Thargoid with a blip. Returns what
 // MoveObject did.
-MovedObject WolfTurnAway(GameState& _state, ObjectSlot _slot, std::uint8_t _rangeLow, bool _backward)
+MovedObject WolfTurnAway(GameState& _state, SpaceObject& _slot, std::uint8_t _rangeLow, bool _backward)
 {
   if (WithinRange(_slot, _rangeLow))
   {
@@ -427,32 +429,32 @@ MovedObject WolfTurnAway(GameState& _state, ObjectSlot _slot, std::uint8_t _rang
     TryLaunchThargon(_state, _slot, _backward);
     return MoveObject(_state, _slot);
   }
-  const auto passes = static_cast<std::uint8_t>(_slot.Get(SlotByte::Passes) - 1);
-  _slot.Set(SlotByte::Passes, passes);
+  const auto passes = static_cast<std::uint8_t>(_slot.passes - 1);
+  _slot.passes = passes;
   bool rest = passes == 0;
   if (!rest && IsThargonType(_slot))
   {
     // A Thargon goes back to its run only while its mother is a Thargoid with a blip.
-    const std::uint16_t mother = _slot.Get(SlotWord::Owner);
+    const std::uint16_t mother = _slot.owner;
     if (mother != 0)
     {
-      const ObjectSlot owner(_state, mother);
-      rest = ((owner.Get(SlotByte::Type) >> 1) & TYPE_MASK) != TYPE_THARGOID || (owner.Get(SlotByte::Flags) & FLAG_BLIP_DRAWN) == 0;
+      const SpaceObject& owner = _state.ObjectAt(mother);
+      rest = ((owner.type >> 1) & TYPE_MASK) != TYPE_THARGOID || (owner.flags & FLAG_BLIP_DRAWN) == 0;
     }
   }
   if (rest)
   {
-    _slot.Set(SlotByte::Aggression, RESTING_AGGRESSION);
-    _slot.Set(SlotByte::Flags, static_cast<std::uint8_t>(_slot.Get(SlotByte::Flags) & ~FLAG_HOSTILE));
-    _slot.Set(SlotByte::State, STATE_ATTACK);
+    _slot.aggression = RESTING_AGGRESSION;
+    _slot.flags = static_cast<std::uint8_t>(_slot.flags & ~FLAG_HOSTILE);
+    _slot.aiState = STATE_ATTACK;
     if (IsThargonType(_slot))
     {
-      _slot.Set(SlotByte::State, THARGON_ADRIFT);
+      _slot.aiState = THARGON_ADRIFT;
     }
   }
   else
   {
-    _slot.Set(SlotByte::State, STATE_ATTACK_RUN);
+    _slot.aiState = STATE_ATTACK_RUN;
   }
   return MoveObject(_state, _slot);
 }
@@ -469,35 +471,34 @@ MovedObject WolfTurnAway(GameState& _state, ObjectSlot _slot, std::uint8_t _rang
 // The evasive jinks of HunterEvade and TraderFlee: with no frames left, a new jink of the pitch and of the yaw and 10 frames;
 // then a frame counted off, and at the last the jinks reversed and 10 frames again. Returns the angles turned half round from
 // the player's direction, plus the jinks: where the ship turns to.
-[[nodiscard]] Angles JinkAway(GameState& _state, ObjectSlot _slot)
+[[nodiscard]] Angles JinkAway(GameState& _state, SpaceObject& _slot)
 {
-  if (_slot.Get(SlotByte::JinkFrames) == 0)
+  if (_slot.jinkFrames == 0)
   {
-    _slot.Set(SlotWord::JinkPitch, Jink(NextRandom(_state)));
-    _slot.Set(SlotWord::JinkYaw, Jink(NextRandom(_state)));
-    _slot.Set(SlotByte::JinkFrames, JINK_FRAMES);
+    _slot.jinkPitch = Jink(NextRandom(_state));
+    _slot.jinkYaw = Jink(NextRandom(_state));
+    _slot.jinkFrames = JINK_FRAMES;
   }
-  const auto frames = static_cast<std::uint8_t>(_slot.Get(SlotByte::JinkFrames) - 1);
-  _slot.Set(SlotByte::JinkFrames, frames);
+  const auto frames = static_cast<std::uint8_t>(_slot.jinkFrames - 1);
+  _slot.jinkFrames = frames;
   if (frames == 0)
   {
-    _slot.Set(SlotByte::JinkFrames, JINK_FRAMES);
-    _slot.Set(SlotWord::JinkPitch, Negate(_slot.Get(SlotWord::JinkPitch)));
-    _slot.Set(SlotWord::JinkYaw, Negate(_slot.Get(SlotWord::JinkYaw)));
+    _slot.jinkFrames = JINK_FRAMES;
+    _slot.jinkPitch = Negate(_slot.jinkPitch);
+    _slot.jinkYaw = Negate(_slot.jinkYaw);
   }
   // ConvertVectorToAngles of GetVectorToPlayer, then ADD AX,400h / ADD AX,[DI+36h] / ADD BX,[DI+38h].
   const Angles toPlayer = ConvertVectorToAngles(_state, GetVectorToPlayer(_slot));
-  return Angles{Offset(Offset(toPlayer.first, HALF_TURN), _slot.Get(SlotWord::JinkPitch)),
-                Offset(toPlayer.second, _slot.Get(SlotWord::JinkYaw))};
+  return Angles{Offset(Offset(toPlayer.first, HALF_TURN), _slot.jinkPitch), Offset(toPlayer.second, _slot.jinkYaw)};
 }
 
 // UpdateHunterAi's state 3 (5987): evading with random jinks, and a missile at odds of 5DCh in 65536, until beyond its range,
 // whose box takes _rangeLow, what DL holds there, for its low byte. Returns what MoveObject did.
-MovedObject HunterEvade(GameState& _state, ObjectSlot _slot, std::uint8_t _rangeLow, bool _backward)
+MovedObject HunterEvade(GameState& _state, SpaceObject& _slot, std::uint8_t _rangeLow, bool _backward)
 {
   if (!WithinRange(_slot, _rangeLow))
   {
-    _slot.Set(SlotByte::State, STATE_IDLE);
+    _slot.aiState = STATE_IDLE;
     return MoveObject(_state, _slot);
   }
   (void)TurnTowardAngles(_slot, JinkAway(_state, _slot));
@@ -509,9 +510,9 @@ MovedObject HunterEvade(GameState& _state, ObjectSlot _slot, std::uint8_t _range
 // UpdateHunterAi's state 0 (58E4): flying at the player until it turns hostile, then picking how to hunt: with two or more
 // pack mates on the scanner it attacks a fugitive, or at odds of 32h in 65536 anyone; with one it flies in formation with it.
 // Returns what MoveObject did.
-MovedObject HunterIdle(GameState& _state, ObjectSlot _slot)
+MovedObject HunterIdle(GameState& _state, SpaceObject& _slot)
 {
-  const std::uint8_t flags = _slot.Get(SlotByte::Flags);
+  const std::uint8_t flags = _slot.flags;
   if ((flags & FLAG_BLIP_DRAWN) == 0)
   {
     (void)TurnToVector(_state, _slot, GetVectorToPlayer(_slot));
@@ -520,23 +521,23 @@ MovedObject HunterIdle(GameState& _state, ObjectSlot _slot)
   }
   if ((flags & FLAG_HOSTILE) != 0)
   {
-    _slot.Set(SlotByte::State, STATE_TURN_AWAY);
+    _slot.aiState = STATE_TURN_AWAY;
   }
   else
   {
-    const HunterCount hunters = CountOtherHuntersOnScanner(_state, _slot.Offset());
+    const HunterCount hunters = CountOtherHuntersOnScanner(_state, _state.OffsetOf(_slot));
     if (hunters.count >= 2)
     {
-      if (_state.Get(DS.legalStatus) >= FUGITIVE || NextRandom(_state) < PACK_ATTACK_ODDS)
+      if (_state.Data().commanderBlock.legalStatus >= FUGITIVE || NextRandom(_state) < PACK_ATTACK_ODDS)
       {
-        _slot.Set(SlotByte::State, STATE_ATTACK);
+        _slot.aiState = STATE_ATTACK;
       }
     }
     else if (hunters.count == 1 && hunters.last)
     {
       // MOV [DI+29h],BP: the mate CountOtherHuntersOnScanner found last, which a count of 1 always has.
-      _slot.Set(SlotWord::Target, *hunters.last);
-      _slot.Set(SlotByte::State, STATE_FORMATION);
+      _slot.target = *hunters.last;
+      _slot.aiState = STATE_FORMATION;
     }
   }
   return MoveObject(_state, _slot);
@@ -544,36 +545,36 @@ MovedObject HunterIdle(GameState& _state, ObjectSlot _slot)
 
 // UpdateTraderOrPoliceAi's state 1 (56CE): a police Viper attacks a player of legal status 5 or more; otherwise one the player
 // has hit flees, at odds of 53FCh in 65536, or attacks. Returns what MoveObject did.
-MovedObject TraderDecide(GameState& _state, ObjectSlot _slot)
+MovedObject TraderDecide(GameState& _state, SpaceObject& _slot)
 {
-  if (IsPoliceViper(_slot) && _state.Get(DS.legalStatus) >= POLICE_ATTACK_STATUS)
+  if (IsPoliceViper(_slot) && _state.Data().commanderBlock.legalStatus >= POLICE_ATTACK_STATUS)
   {
-    _slot.Set(SlotByte::State, TRADER_ATTACKING);
+    _slot.aiState = TRADER_ATTACKING;
   }
-  else if ((_slot.Get(SlotByte::Flags) & FLAG_HOSTILE) != 0)
+  else if ((_slot.flags & FLAG_HOSTILE) != 0)
   {
-    _slot.Set(SlotByte::State, NextRandom(_state) < TRADER_FLEE_ODDS ? TRADER_FLEEING : TRADER_ATTACKING);
+    _slot.aiState = NextRandom(_state) < TRADER_FLEE_ODDS ? TRADER_FLEEING : TRADER_ATTACKING;
   }
   return MoveObject(_state, _slot);
 }
 
 // UpdateTraderOrPoliceAi's state 2 (56FC): at the player, firing, the police with missiles against an offender, until within
 // 320h on every axis, or, for any but the police, until its energy is below 8. Returns what MoveObject did.
-MovedObject TraderAttack(GameState& _state, ObjectSlot _slot, bool _backward)
+MovedObject TraderAttack(GameState& _state, SpaceObject& _slot, bool _backward)
 {
-  if (!IsPoliceViper(_slot) && _slot.Get(SlotByte::Energy) < TRADER_FLEE_ENERGY)
+  if (!IsPoliceViper(_slot) && _slot.energy < TRADER_FLEE_ENERGY)
   {
-    _slot.Set(SlotByte::State, TRADER_FLEEING);
+    _slot.aiState = TRADER_FLEEING;
     return MoveObject(_state, _slot);
   }
   if (ObjectWithinBox(_slot, TRADER_BREAK_OFF_BOX))
   {
-    _slot.Set(SlotByte::State, TRADER_BREAKING_OFF);
+    _slot.aiState = TRADER_BREAKING_OFF;
     return MoveObject(_state, _slot);
   }
   const Turn turn = TurnToVector(_state, _slot, GetVectorToPlayer(_slot));
   TryFireLaserAtPlayer(_state, _slot, turn.pitch.errorMagnitude, turn.yaw.errorMagnitude);
-  const std::uint8_t status = _state.Get(DS.legalStatus);
+  const std::uint8_t status = _state.Data().commanderBlock.legalStatus;
   if (IsPoliceViper(_slot) && status != 0)
   {
     TryLaunchMissileAtPlayer(_state, _slot, status >= FUGITIVE_FOR_POLICE ? FUGITIVE_MISSILE_ODDS : POLICE_MISSILE_ODDS, _backward);
@@ -584,9 +585,9 @@ MovedObject TraderAttack(GameState& _state, ObjectSlot _slot, bool _backward)
 
 // UpdateTraderOrPoliceAi's state 3 (5750): fleeing from the player with random jinks, a missile when nearly dead, and now and
 // then an ECM. Returns what MoveObject did.
-MovedObject TraderFlee(GameState& _state, ObjectSlot _slot, bool _backward)
+MovedObject TraderFlee(GameState& _state, SpaceObject& _slot, bool _backward)
 {
-  if (_slot.Get(SlotByte::Energy) < DESPERATE_ENERGY)
+  if (_slot.energy < DESPERATE_ENERGY)
   {
     TryLaunchMissileAtPlayer(_state, _slot, DESPERATE_MISSILE_ODDS, _backward);
   }
@@ -594,23 +595,23 @@ MovedObject TraderFlee(GameState& _state, ObjectSlot _slot, bool _backward)
   (void)ComputeVelocity(_state, _slot);
   if (NextRandom(_state) < TRADER_ECM_ODDS)
   {
-    _state.Set(DS.npcEcmFrames, TRADER_ECM_FRAMES);
+    _state.Data().npcEcmFrames = TRADER_ECM_FRAMES;
   }
   return MoveObject(_state, _slot);
 }
 
 // UpdateTraderOrPoliceAi's state 4 and above (57BC): flying on away until beyond its range, then attacking again; weak, any but
 // the police flee. Its range's box takes _rangeLow, what DL holds there, for its low byte. Returns what MoveObject did.
-MovedObject TraderBreakOff(GameState& _state, ObjectSlot _slot, std::uint8_t _rangeLow)
+MovedObject TraderBreakOff(GameState& _state, SpaceObject& _slot, std::uint8_t _rangeLow)
 {
   if (!WithinRange(_slot, _rangeLow))
   {
-    _slot.Set(SlotByte::State, TRADER_ATTACKING);
+    _slot.aiState = TRADER_ATTACKING;
     return MoveObject(_state, _slot);
   }
-  if (_slot.Get(SlotByte::Energy) < RETURN_ENERGY && !IsPoliceViper(_slot))
+  if (_slot.energy < RETURN_ENERGY && !IsPoliceViper(_slot))
   {
-    _slot.Set(SlotByte::State, TRADER_FLEEING);
+    _slot.aiState = TRADER_FLEEING;
     return MoveObject(_state, _slot);
   }
   (void)TurnToVector(_state, _slot, GetObjectPosition(_slot));
@@ -623,7 +624,7 @@ MovedObject TraderBreakOff(GameState& _state, ObjectSlot _slot, std::uint8_t _ra
 // a launch's copy runs by, _backward. BX holds the class doubled, which UpdateMissileAi's explosion would save in the divide
 // trap. Returns what the handler leaves in DX. The table's eight words, which nothing writes, name these eight handlers; a class
 // of 8 or more, which no template gives, would run data as code, and runs nothing.
-std::uint16_t RunBehaviorHandler(GameState& _state, Hardware& _hardware, ObjectSlot _slot, std::uint8_t _behavior, bool _backward,
+std::uint16_t RunBehaviorHandler(GameState& _state, Hardware& _hardware, SpaceObject& _slot, std::uint8_t _behavior, bool _backward,
                                  std::uint16_t _dx)
 {
   switch (_behavior)
@@ -669,15 +670,15 @@ void UpdateObjectsAndSpawn(GameState& _state, Hardware& _hardware, bool _backwar
   // run, CX and DI pushed round it. DX goes on from one handler to the next.
   std::uint16_t dx = _dx;
   std::uint16_t slot = DS.shipSlots.offset;
-  for (std::uint32_t slots = LoopCount(_state.Get(DS.shipSlotCount)); slots != 0; --slots)
+  for (std::uint32_t slots = LoopCount(_state.Data().shipSlotCount); slots != 0; --slots)
   {
-    const ObjectSlot object(_state, slot);
-    if ((object.Get(SlotByte::Type) & SLOT_ACTIVE) != 0)
+    SpaceObject& object = _state.ObjectAt(slot);
+    if ((object.type & SLOT_ACTIVE) != 0)
     {
-      const std::uint8_t behavior = object.Get(SlotByte::Class);
+      const std::uint8_t behavior = object.behaviorClass;
       if (behavior != DEBRIS_CLASS)
       {
-        _state.Set(DS.activeObjectCount, static_cast<std::uint8_t>(_state.Get(DS.activeObjectCount) + 1));
+        _state.Data().activeObjectCount = static_cast<std::uint8_t>(_state.Data().activeObjectCount + 1);
       }
       const std::uint16_t classCount = At(DS.behaviorClassCounts.offset, behavior);
       _state.SetByte(classCount, static_cast<std::uint8_t>(_state.Byte(classCount) + 1));
@@ -686,20 +687,21 @@ void UpdateObjectsAndSpawn(GameState& _state, Hardware& _hardware, bool _backwar
     slot = At(slot, SLOT_BYTES);
   }
 
-  _state.Set(DS.maskingBackgroundColor, 0);
-  if (_state.Get(DS.activeObjectCount) >= MOST_ACTIVE_FOR_SPAWNING || _state.Get(DS.objectSlotCount) < _state.Get(DS.activeObjectCount))
+  _state.Data().maskingBackgroundColor = 0;
+  if (_state.Data().activeObjectCount >= MOST_ACTIVE_FOR_SPAWNING || _state.Data().objectSlotCount < _state.Data().activeObjectCount)
   {
     return;
   }
-  if (_state.Get(DS.maskMissionShipsLeft) != 0)
+  if (_state.Data().commanderBlock.maskMissionShipsLeft != 0)
   {
-    if (_state.Get(DS.maskSystemJumps) == 1)
+    if (_state.Data().commanderBlock.maskSystemJumps == 1)
     {
       SpawnMaskMissionShips(_state);
       return;
     }
   }
-  else if ((_state.Get(DS.thargoidInvasionActive) & _state.Get(DS.jumpedSinceBriefing)) != 0 && _state.Get(DS.invadedStationDestroyed) != 1)
+  else if ((_state.Data().commanderBlock.thargoidInvasionActive & _state.Data().commanderBlock.jumpedSinceBriefing) != 0 &&
+           _state.Data().commanderBlock.invadedStationDestroyed != 1)
   {
     SpawnInvasionWave(_state);
     return;
@@ -709,7 +711,7 @@ void UpdateObjectsAndSpawn(GameState& _state, Hardware& _hardware, bool _backwar
 
 std::uint16_t ScaleSpawnOdds(const GameState& _state, std::uint16_t _odds)
 {
-  if (_state.Get(DS.jumpDriveEngaged) != 1)
+  if (_state.Data().jumpDriveEngaged != 1)
   {
     return _odds;
   }
@@ -720,23 +722,23 @@ SlotSearch IsMaskShipPresent(GameState& _state)
 {
   // Every object slot, active or not, for the device's bit: LOOP from CX = objectSlotCount.
   std::uint16_t slot = DS.shipSlots.offset;
-  for (std::uint32_t count = LoopCount(_state.Get(DS.objectSlotCount)); count != 0; --count)
+  for (std::uint32_t count = LoopCount(_state.Data().objectSlotCount); count != 0; --count)
   {
-    if ((ObjectSlot(_state, slot).Get(SlotByte::Flags) & FLAG_DEVICE) != 0)
+    if ((_state.ObjectAt(slot).flags & FLAG_DEVICE) != 0)
     {
       return SlotSearch{true, slot};
     }
-    slot = Offset(slot, ObjectSlot::BYTES);
+    slot = Offset(slot, SpaceObject::BYTES);
   }
   return SlotSearch{false, slot};
 }
 
-void PlaceEscortNear(GameState& _state, ObjectSlot _escort, std::uint16_t _leader)
+void PlaceEscortNear(GameState& _state, SpaceObject& _escort, std::uint16_t _leader)
 {
   // The leader's first 16 bytes, byte by byte: its type too.
   for (std::uint16_t index = 0; index < ESCORT_BYTES_COPIED; ++index)
   {
-    _state.SetByte(Offset(_escort.Offset(), index), _state.Byte(Offset(_leader, index)));
+    _state.SetByte(Offset(_state.OffsetOf(_escort), index), _state.Byte(Offset(_leader, index)));
   }
   for (int axis = 0; axis < 3; ++axis)
   {
@@ -745,21 +747,21 @@ void PlaceEscortNear(GameState& _state, ObjectSlot _escort, std::uint16_t _leade
   }
 }
 
-Turn TurnTowardAngles(ObjectSlot _slot, Angles _wanted)
+Turn TurnTowardAngles(SpaceObject& _slot, Angles _wanted)
 {
-  const TurnStep pitch = ClampTurnStep(_slot, _wanted.first, _slot.Get(SlotWord::Pitch));
-  _slot.Set(SlotWord::Pitch, Offset(_slot.Get(SlotWord::Pitch), static_cast<std::uint16_t>(pitch.step)));
-  const TurnStep yaw = ClampTurnStep(_slot, _wanted.second, _slot.Get(SlotWord::Yaw));
-  _slot.Set(SlotWord::Yaw, Offset(_slot.Get(SlotWord::Yaw), static_cast<std::uint16_t>(yaw.step)));
+  const TurnStep pitch = ClampTurnStep(_slot, _wanted.first, _slot.pitch);
+  _slot.pitch = Offset(_slot.pitch, static_cast<std::uint16_t>(pitch.step));
+  const TurnStep yaw = ClampTurnStep(_slot, _wanted.second, _slot.yaw);
+  _slot.yaw = Offset(_slot.yaw, static_cast<std::uint16_t>(yaw.step));
   return Turn{pitch, yaw};
 }
 
-TurnStep ClampTurnStep(const ObjectSlot& _slot, std::uint16_t _wanted, std::uint16_t _current)
+TurnStep ClampTurnStep(const SpaceObject& _slot, std::uint16_t _wanted, std::uint16_t _current)
 {
   // The error is not wrapped at 2048, so a turn across 0 goes the long way.
   const auto error = static_cast<std::uint16_t>((_wanted & ANGLE_MASK) - (_current & ANGLE_MASK));
   const std::uint16_t magnitude = (error & 0x8000) != 0 ? Negate(error) : error;
-  const std::uint16_t rate = _slot.Get(SlotByte::TurnRate);
+  const std::uint16_t rate = _slot.turnRate;
   if (magnitude < rate)
   {
     return TurnStep{static_cast<std::int16_t>(error), magnitude};
@@ -771,33 +773,33 @@ HunterCount CountOtherHuntersOnScanner(GameState& _state, std::uint16_t _slot)
 {
   HunterCount hunters{0, std::nullopt};
   std::uint16_t slot = DS.shipSlots.offset;
-  for (std::uint32_t count = LoopCount(_state.Get(DS.objectSlotCount)); count != 0; --count)
+  for (std::uint32_t count = LoopCount(_state.Data().objectSlotCount); count != 0; --count)
   {
-    const ObjectSlot other(_state, slot);
-    if (other.Get(SlotByte::Class) == HUNTER_CLASS && (other.Get(SlotByte::Flags) & FLAG_BLIP_DRAWN) != 0 && slot != _slot)
+    const SpaceObject& other = _state.ObjectAt(slot);
+    if (other.behaviorClass == HUNTER_CLASS && (other.flags & FLAG_BLIP_DRAWN) != 0 && slot != _slot)
     {
       hunters.last = slot;
       hunters.count = static_cast<std::uint8_t>(hunters.count + 1);
     }
-    slot = Offset(slot, ObjectSlot::BYTES);
+    slot = Offset(slot, SpaceObject::BYTES);
   }
   return hunters;
 }
 
-VectorToObject GetVectorToObject(const ObjectSlot& _slot, const ObjectSlot& _object, std::uint16_t _halfSize)
+VectorToObject GetVectorToObject(const SpaceObject& _slot, const SpaceObject& _object, std::uint16_t _halfSize)
 {
   // Each coordinate quartered (SAR twice) before the difference.
-  const auto difference = [&_slot, &_object](SlotWord _axis)
-  { return static_cast<std::int16_t>(Sar(_object.Get(_axis), 2) - Sar(_slot.Get(_axis), 2)); };
-  const Vector vector{difference(SlotWord::X), difference(SlotWord::Y), difference(SlotWord::Z)};
+  const auto difference = [&_slot, &_object](ObjectWord _axis)
+  { return static_cast<std::int16_t>(Sar(_object.*_axis, 2) - Sar(_slot.*_axis, 2)); };
+  const Vector vector{difference(&SpaceObject::x), difference(&SpaceObject::y), difference(&SpaceObject::z)};
   return VectorToObject{vector, VectorWithinBox(vector, static_cast<std::uint16_t>(_halfSize >> 2))};
 }
 
-std::uint16_t UpdateStationAi(GameState& _state, ObjectSlot _station, bool _backward, std::uint16_t _dx)
+std::uint16_t UpdateStationAi(GameState& _state, SpaceObject& _station, bool _backward, std::uint16_t _dx)
 {
-  _station.Set(SlotWord::Roll, Offset(_station.Get(SlotWord::Roll), STATION_SPIN));
+  _station.roll = Offset(_station.roll, STATION_SPIN);
   std::uint16_t dx = _dx;
-  if (_state.Get(DS.spawnGovernment) >= 1 && (_station.Get(SlotByte::Flags) & FLAG_HOSTILE) != 0)
+  if (_state.Data().spawnGovernment >= 1 && (_station.flags & FLAG_HOSTILE) != 0)
   {
     // DX: the last pixel of the blip IsObjectNear erased, or MOV DX,1C2h, the guarded box, once it is near; then what
     // ComputeVelocity leaves once it launched.
@@ -823,7 +825,7 @@ std::uint16_t UpdateStationAi(GameState& _state, ObjectSlot _station, bool _back
   return dx;
 }
 
-MovedObject UpdateDriftingObjectAi(GameState& _state, ObjectSlot _slot)
+MovedObject UpdateDriftingObjectAi(GameState& _state, SpaceObject& _slot)
 {
   const MovedObject moved = MoveObject(_state, _slot);
   if (!IsDebrisType(_slot))
@@ -832,28 +834,28 @@ MovedObject UpdateDriftingObjectAi(GameState& _state, ObjectSlot _slot)
   }
   // MOV AX,37h / MOV BX,0FFDFh, exchanged unless bit 1 of the type byte is set: AX to the pitch, then BX to the roll.
   Pair tumble{static_cast<std::int16_t>(ROCK_TUMBLE_A), static_cast<std::int16_t>(ROCK_TUMBLE_B)};
-  if ((_slot.Get(SlotByte::Type) & ROCK_TUMBLE_SWAP) == 0)
+  if ((_slot.type & ROCK_TUMBLE_SWAP) == 0)
   {
     std::swap(tumble.first, tumble.second);
   }
-  _slot.Set(SlotWord::Pitch, Offset(_slot.Get(SlotWord::Pitch), static_cast<std::uint16_t>(tumble.first)));
-  _slot.Set(SlotWord::Roll, Offset(_slot.Get(SlotWord::Roll), static_cast<std::uint16_t>(tumble.second)));
+  _slot.pitch = Offset(_slot.pitch, static_cast<std::uint16_t>(tumble.first));
+  _slot.roll = Offset(_slot.roll, static_cast<std::uint16_t>(tumble.second));
   return moved;
 }
 
-MovedObject UpdateTraderOrPoliceAi(GameState& _state, ObjectSlot _slot, std::uint8_t _rangeLow, bool _backward)
+MovedObject UpdateTraderOrPoliceAi(GameState& _state, SpaceObject& _slot, std::uint8_t _rangeLow, bool _backward)
 {
   if (IsDebrisType(_slot))
   {
     // A rock only spins. The split at 56B1 (LaunchShipFromObject with DL=5) never runs: 56A5 jumps past it when bit 0 of +1Eh is
     // clear, and 56AB when it is set.
-    _slot.Set(SlotWord::Roll, Offset(_slot.Get(SlotWord::Roll), ROCK_SPIN));
+    _slot.roll = Offset(_slot.roll, ROCK_SPIN);
     return MoveObject(_state, _slot);
   }
-  switch (_slot.Get(SlotByte::State))
+  switch (_slot.aiState)
   {
   case STATE_IDLE:
-    _slot.Set(SlotByte::State, TRADER_DECIDING);
+    _slot.aiState = TRADER_DECIDING;
     return MoveObject(_state, _slot);
   case TRADER_DECIDING:
     return TraderDecide(_state, _slot);
@@ -866,7 +868,7 @@ MovedObject UpdateTraderOrPoliceAi(GameState& _state, ObjectSlot _slot, std::uin
   }
 }
 
-MovedObject UpdateWolfAi(GameState& _state, ObjectSlot _slot, std::uint8_t _rangeLow, bool _backward)
+MovedObject UpdateWolfAi(GameState& _state, SpaceObject& _slot, std::uint8_t _rangeLow, bool _backward)
 {
   // A Thargoid sets off its ECM at odds of 100 in 65536; a Thargoid or a Thargon spins.
   bool spins = IsThargoidType(_slot);
@@ -874,7 +876,7 @@ MovedObject UpdateWolfAi(GameState& _state, ObjectSlot _slot, std::uint8_t _rang
   {
     if (NextRandom(_state) < THARGOID_ECM_ODDS)
     {
-      _state.Set(DS.npcEcmFrames, THARGOID_ECM_FRAMES);
+      _state.Data().npcEcmFrames = THARGOID_ECM_FRAMES;
     }
   }
   else
@@ -883,26 +885,26 @@ MovedObject UpdateWolfAi(GameState& _state, ObjectSlot _slot, std::uint8_t _rang
   }
   if (spins)
   {
-    _slot.Set(SlotWord::Roll, Offset(_slot.Get(SlotWord::Roll), WOLF_SPIN));
+    _slot.roll = Offset(_slot.roll, WOLF_SPIN);
   }
-  switch (_slot.Get(SlotByte::State))
+  switch (_slot.aiState)
   {
   case STATE_IDLE:
-    _slot.Set(SlotByte::State, STATE_ATTACK);
+    _slot.aiState = STATE_ATTACK;
     return MoveObject(_state, _slot);
   case STATE_ATTACK:
     // Resting: a new set of 2-5 passes once it is not hostile, or calm no more: AND AH,3 / ADD AH,2.
-    if ((_slot.Get(SlotByte::Flags) & FLAG_HOSTILE) == 0 || _slot.Get(SlotByte::Aggression) >= CALM)
+    if ((_slot.flags & FLAG_HOSTILE) == 0 || _slot.aggression >= CALM)
     {
-      _slot.Set(SlotByte::Passes, static_cast<std::uint8_t>((High(NextRandom(_state)) & PASS_COUNT_MASK) + FEWEST_PASSES));
-      _slot.Set(SlotByte::State, STATE_ATTACK_RUN);
+      _slot.passes = static_cast<std::uint8_t>((High(NextRandom(_state)) & PASS_COUNT_MASK) + FEWEST_PASSES);
+      _slot.aiState = STATE_ATTACK_RUN;
     }
     return MoveObject(_state, _slot);
   case STATE_ATTACK_RUN:
   {
     if (ObjectWithinBox(_slot, BREAK_OFF_BOX))
     {
-      _slot.Set(SlotByte::State, STATE_TURN_AWAY);
+      _slot.aiState = STATE_TURN_AWAY;
       return MoveObject(_state, _slot);
     }
     const Turn turn = TurnToVector(_state, _slot, GetVectorToPlayer(_slot));
@@ -911,25 +913,25 @@ MovedObject UpdateWolfAi(GameState& _state, ObjectSlot _slot, std::uint8_t _rang
     TryLaunchThargon(_state, _slot, _backward);
     (void)ComputeVelocity(_state, _slot);
     const MovedObject moved = MoveObject(_state, _slot);
-    _slot.Set(SlotWord::Roll, Offset(_slot.Get(SlotWord::Roll), ATTACK_RUN_SPIN));
+    _slot.roll = Offset(_slot.roll, ATTACK_RUN_SPIN);
     return moved;
   }
   case STATE_TURN_AWAY:
     return WolfTurnAway(_state, _slot, _rangeLow, _backward);
   default:
     // A Thargon adrift slows down to 10.
-    if (_slot.Get(SlotByte::Speed) >= SLOWEST_ADRIFT)
+    if (_slot.speed >= SLOWEST_ADRIFT)
     {
-      _slot.Set(SlotByte::Speed, static_cast<std::uint8_t>(_slot.Get(SlotByte::Speed) - ADRIFT_SLOWING));
+      _slot.speed = static_cast<std::uint8_t>(_slot.speed - ADRIFT_SLOWING);
       (void)ComputeVelocity(_state, _slot);
     }
     return MoveObject(_state, _slot);
   }
 }
 
-MovedObject UpdateHunterAi(GameState& _state, ObjectSlot _slot, std::uint8_t _rangeLow, bool _backward)
+MovedObject UpdateHunterAi(GameState& _state, SpaceObject& _slot, std::uint8_t _rangeLow, bool _backward)
 {
-  switch (_slot.Get(SlotByte::State))
+  switch (_slot.aiState)
   {
   case STATE_IDLE:
     return HunterIdle(_state, _slot);
@@ -937,23 +939,23 @@ MovedObject UpdateHunterAi(GameState& _state, ObjectSlot _slot, std::uint8_t _ra
   {
     if (ObjectWithinBox(_slot, BREAK_OFF_BOX))
     {
-      _slot.Set(SlotByte::State, STATE_TURN_AWAY);
+      _slot.aiState = STATE_TURN_AWAY;
       return MoveObject(_state, _slot);
     }
     const Turn turn = TurnToVector(_state, _slot, GetVectorToPlayer(_slot));
     TryFireLaserAtPlayer(_state, _slot, turn.pitch.errorMagnitude, turn.yaw.errorMagnitude);
     TryLaunchMissileAtPlayer(_state, _slot, HUNTER_MISSILE_ODDS, _backward);
     (void)ComputeVelocity(_state, _slot);
-    _slot.Set(SlotWord::Roll, Offset(_slot.Get(SlotWord::Roll), HUNTER_SPIN));
+    _slot.roll = Offset(_slot.roll, HUNTER_SPIN);
     return MoveObject(_state, _slot);
   }
   case STATE_FORMATION:
   {
     // In formation with its pack mate, until within 7D0h of it on every axis (GetVectorToObject).
-    const VectorToObject toMate = GetVectorToObject(_slot, ObjectSlot(_state, _slot.Get(SlotWord::Target)), FORMATION_BOX);
+    const VectorToObject toMate = GetVectorToObject(_slot, _state.ObjectAt(_slot.target), FORMATION_BOX);
     if (toMate.within)
     {
-      _slot.Set(SlotByte::State, STATE_CLOSING);
+      _slot.aiState = STATE_CLOSING;
       return MoveObject(_state, _slot);
     }
     (void)TurnToVector(_state, _slot, toMate.vector);
@@ -967,7 +969,7 @@ MovedObject UpdateHunterAi(GameState& _state, ObjectSlot _slot, std::uint8_t _ra
     // Closing on the player while farther than 5000 on some axis.
     if (ObjectWithinBox(_slot, CLOSING_BOX))
     {
-      _slot.Set(SlotByte::State, STATE_IDLE);
+      _slot.aiState = STATE_IDLE;
       return MoveObject(_state, _slot);
     }
     const Turn turn = TurnToVector(_state, _slot, GetVectorToPlayer(_slot));
@@ -979,9 +981,9 @@ MovedObject UpdateHunterAi(GameState& _state, ObjectSlot _slot, std::uint8_t _ra
   }
 }
 
-bool CheckSafeZoneHoldFire(const GameState& _state, const ObjectSlot& _slot)
+bool CheckSafeZoneHoldFire(const GameState& _state, const SpaceObject& _slot)
 {
-  if (_state.Get(DS.thargoidInvasionActive) == 1 || IsPoliceViper(_slot))
+  if (_state.Data().commanderBlock.thargoidInvasionActive == 1 || IsPoliceViper(_slot))
   {
     return false;
   }

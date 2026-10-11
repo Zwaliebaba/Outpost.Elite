@@ -106,15 +106,15 @@ constexpr std::uint8_t QUANTITY_BASE = 10; // ParseQuantity's decimal, which the
 // DEC BX / SHL BX,1 / ADD BX,cargoHold.
 [[nodiscard]] std::uint16_t HoldEntry(const GameState& _state) noexcept
 {
-  return static_cast<std::uint16_t>((_state.Get(DS.menuSelectedRow) - 1) * 2 + DS.cargoHold.offset);
+  return static_cast<std::uint16_t>((_state.Data().menuSelectedRow - 1) * 2 + DS.cargoHold.offset);
 }
 
 // 6C05 and 6CB3: SI and textAttribute pushed for ShowCargoMessage, and the message's attribute set. Returns the attribute, which
 // the original pushes in AL.
 [[nodiscard]] std::uint8_t OpenCargoMessage(GameState& _state)
 {
-  const std::uint8_t saved = _state.Get(DS.textAttribute);
-  _state.Set(DS.textAttribute, CARGO_MESSAGE_ATTRIBUTE);
+  const std::uint8_t saved = _state.Data().textAttribute;
+  _state.Data().textAttribute = CARGO_MESSAGE_ATTRIBUTE;
   return saved;
 }
 
@@ -122,9 +122,9 @@ constexpr std::uint8_t QUANTITY_BASE = 10; // ParseQuantity's decimal, which the
 // AL before its jump back to the steering.
 void ShowCargoMessage(GameState& _state, std::uint16_t _text, std::uint8_t _saved)
 {
-  _state.Set(DS.textAttribute, CARGO_MESSAGE_ATTRIBUTE);
+  _state.Data().textAttribute = CARGO_MESSAGE_ATTRIBUTE;
   PrintTextModeString(_state, _text, MESSAGE_OFFSET);
-  _state.Set(DS.textAttribute, _saved);
+  _state.Data().textAttribute = _saved;
 }
 
 // 6C25 and 6D10: "Quantity?", up to three characters typed into quantityText, and ParseQuantity on them.
@@ -174,15 +174,16 @@ void ShowCargoMessage(GameState& _state, std::uint16_t _text, std::uint8_t _save
   {
     _state.SetByte(Offset(held, 1), 0xFF);
   }
-  const std::uint8_t row = _state.Get(DS.menuSelectedRow);
+  const std::uint8_t row = _state.Data().menuSelectedRow;
   if (row == ALIEN_ITEMS_ROW || row < FIRST_PRECIOUS_ROW)
   {
-    _state.Set(DS.cargoUsedTonnes, static_cast<std::uint8_t>(_state.Get(DS.cargoUsedTonnes) - amount));
+    _state.Data().commanderBlock.cargoHold.cargoUsedTonnes =
+      static_cast<std::uint8_t>(_state.Data().commanderBlock.cargoHold.cargoUsedTonnes - amount);
   }
   PrintCargoQuantity(_state, _state.Byte(held));
   AddContrabandPenalty(_state);
   // The quantity times the sell price, the word after the row's buy price, by MUL into DX:AX.
-  const auto price = static_cast<std::uint16_t>((_state.Get(DS.menuSelectedRow) * 2 - 1) * 2 + DS.screenPrices.offset);
+  const auto price = static_cast<std::uint16_t>((_state.Data().menuSelectedRow * 2 - 1) * 2 + DS.screenPrices.offset);
   AddCredits(_state, std::uint32_t{quantity.value} * _state.Word(price));
   return ToCargoMessage(_hardware, SOLD_TEXT);
 }
@@ -204,19 +205,19 @@ void ShowCargoMessage(GameState& _state, std::uint16_t _text, std::uint8_t _save
     _hardware.LoopTurn(CARGO_MESSAGE_JUMP, {});
     return ToCargoMessage(_hardware, NOTHING_TO_BUY_TEXT);
   }
-  const std::uint8_t bay = _state.Get(DS.largeCargoBayFitted) == 1 ? LARGE_CARGO_BAY_TONNES : CARGO_BAY_TONNES;
-  if (_state.Get(DS.menuSelectedRow) == ALIEN_ITEMS_ROW)
+  const std::uint8_t bay = _state.Data().commanderBlock.largeCargoBayFitted == 1 ? LARGE_CARGO_BAY_TONNES : CARGO_BAY_TONNES;
+  if (_state.Data().menuSelectedRow == ALIEN_ITEMS_ROW)
   {
     return ToCargoMessage(_hardware, CANNOT_BUY_TEXT);
   }
-  if (_state.Get(DS.menuSelectedRow) >= FIRST_PRECIOUS_ROW)
+  if (_state.Data().menuSelectedRow >= FIRST_PRECIOUS_ROW)
   {
     if (_state.Byte(HoldEntry(_state)) == PRECIOUS_MOST)
     {
       return ToCargoMessage(_hardware, FULL_TO_CAPACITY_TEXT);
     }
   }
-  else if (_state.Get(DS.cargoUsedTonnes) == bay)
+  else if (_state.Data().commanderBlock.cargoHold.cargoUsedTonnes == bay)
   {
     _hardware.LoopTurn(CARGO_MESSAGE_JUMP, {});
     return ToCargoMessage(_hardware, CARGO_BAY_FULL_TEXT);
@@ -236,7 +237,7 @@ void ShowCargoMessage(GameState& _state, std::uint16_t _text, std::uint8_t _save
   {
     return RefuseBuy(_hardware, NOT_ENOUGH_TO_BUY_TEXT);
   }
-  if (_state.Get(DS.menuSelectedRow) >= FIRST_PRECIOUS_ROW)
+  if (_state.Data().menuSelectedRow >= FIRST_PRECIOUS_ROW)
   {
     // Up to 250 of each, kept apart from the tonnes: ADD CL,AL, which may carry.
     const auto after = static_cast<std::uint16_t>(_state.Byte(held) + amount);
@@ -248,8 +249,9 @@ void ShowCargoMessage(GameState& _state, std::uint16_t _text, std::uint8_t _save
   else
   {
     // The tonnes after it must fit the hold, in 8 bits as the original adds them.
-    const auto tonnes = static_cast<std::uint8_t>(_state.Get(DS.cargoUsedTonnes) + amount);
-    const auto limit = static_cast<std::uint8_t>((_state.Get(DS.largeCargoBayFitted) == 1 ? LARGE_CARGO_BAY_TONNES : CARGO_BAY_TONNES) + 1);
+    const auto tonnes = static_cast<std::uint8_t>(_state.Data().commanderBlock.cargoHold.cargoUsedTonnes + amount);
+    const auto limit =
+      static_cast<std::uint8_t>((_state.Data().commanderBlock.largeCargoBayFitted == 1 ? LARGE_CARGO_BAY_TONNES : CARGO_BAY_TONNES) + 1);
     if (tonnes >= limit)
     {
       _hardware.LoopTurn(BUY_MESSAGE_JUMP, {});
@@ -258,15 +260,16 @@ void ShowCargoMessage(GameState& _state, std::uint16_t _text, std::uint8_t _save
     _hardware.LoopTurn(BUY_PAYMENT, {});
   }
   // The quantity times the buy price, by MUL into DX:AX, the original pushing the quantity and the entry round SpendCredits.
-  const auto price = static_cast<std::uint16_t>((_state.Get(DS.menuSelectedRow) - 1) * 4 + DS.screenPrices.offset);
+  const auto price = static_cast<std::uint16_t>((_state.Data().menuSelectedRow - 1) * 4 + DS.screenPrices.offset);
   if (!SpendCredits(_state, std::uint32_t{quantity.value} * _state.Word(price)))
   {
     return RefuseBuy(_hardware, NOT_ENOUGH_CREDITS_TEXT);
   }
   _state.SetByte(held, static_cast<std::uint8_t>(_state.Byte(held) + amount));
-  if (_state.Get(DS.menuSelectedRow) < FIRST_PRECIOUS_ROW)
+  if (_state.Data().menuSelectedRow < FIRST_PRECIOUS_ROW)
   {
-    _state.Set(DS.cargoUsedTonnes, static_cast<std::uint8_t>(_state.Get(DS.cargoUsedTonnes) + amount));
+    _state.Data().commanderBlock.cargoHold.cargoUsedTonnes =
+      static_cast<std::uint8_t>(_state.Data().commanderBlock.cargoHold.cargoUsedTonnes + amount);
   }
   const auto left = static_cast<std::uint8_t>(_state.Byte(Offset(held, 1)) - amount);
   _state.SetByte(Offset(held, 1), left);
@@ -328,14 +331,15 @@ ScreenKey ShowMarketPricesScreen(GameState& _state, Hardware& _hardware, bool _b
 bool SubtractCredits(GameState& _state, std::uint32_t _tenths)
 {
   // SUB, then SBB: the 32-bit credits less _tenths, then ADD and ADC to put them back if that borrows.
-  const std::uint32_t credits = _state.Word(DS.creditsTenths.offset) | (std::uint32_t{_state.Get(DS.data75F5)} << 16);
+  const std::uint32_t credits =
+    _state.Word(DS.creditsTenths.offset) | (std::uint32_t{_state.Data().commanderBlock.creditsTenths.data75F5} << 16);
   const std::uint32_t left = credits - _tenths;
   _state.SetWord(DS.creditsTenths.offset, static_cast<std::uint16_t>(left));
-  _state.Set(DS.data75F5, static_cast<std::uint16_t>(left >> 16));
+  _state.Data().commanderBlock.creditsTenths.data75F5 = static_cast<std::uint16_t>(left >> 16);
   if (credits < _tenths)
   {
     _state.SetWord(DS.creditsTenths.offset, static_cast<std::uint16_t>(credits));
-    _state.Set(DS.data75F5, static_cast<std::uint16_t>(credits >> 16));
+    _state.Data().commanderBlock.creditsTenths.data75F5 = static_cast<std::uint16_t>(credits >> 16);
     return false;
   }
   FormatCredits(_state);
@@ -352,13 +356,14 @@ void AddCredits(GameState& _state, std::uint32_t _tenths)
   // ADD the low word, then ADC the high word with the carry it makes.
   const std::uint32_t low = std::uint32_t{_state.Word(DS.creditsTenths.offset)} + (_tenths & 0xFFFF);
   _state.SetWord(DS.creditsTenths.offset, static_cast<std::uint16_t>(low));
-  _state.Set(DS.data75F5, static_cast<std::uint16_t>(_state.Get(DS.data75F5) + (_tenths >> 16) + (low >> 16)));
+  _state.Data().commanderBlock.creditsTenths.data75F5 =
+    static_cast<std::uint16_t>(_state.Data().commanderBlock.creditsTenths.data75F5 + (_tenths >> 16) + (low >> 16));
   FormatCredits(_state);
 }
 
 std::uint16_t ComputeResalePrice(const GameState& _state)
 {
-  const std::uint16_t price = _state.Get(DS.resalePriceInput);
+  const std::uint16_t price = _state.Data().resalePriceInput;
   if (price == 0)
   {
     return 0;
@@ -373,15 +378,16 @@ std::uint16_t ComputeResalePrice(const GameState& _state)
 
 void ComputeMarketPrices(GameState& _state)
 {
-  _state.Set(DS.data8C10, static_cast<std::uint16_t>(_state.Get(DS.currentEconomy) * 2 + DS.economyPriceFactors.offset));
-  _state.Set(DS.data8C12, static_cast<std::uint16_t>(_state.Get(DS.currentGovernment) * 2 + DS.governmentPriceFactors.offset));
+  _state.Set(DS.data8C10, static_cast<std::uint16_t>(_state.Data().commanderBlock.currentEconomy * 2 + DS.economyPriceFactors.offset));
+  _state.Set(DS.data8C12,
+             static_cast<std::uint16_t>(_state.Data().commanderBlock.currentGovernment * 2 + DS.governmentPriceFactors.offset));
   // The species branch at 0x69EE (data75BC, data75BF) loads AL only for the tech level to replace it.
-  std::uint8_t techLevel = _state.Get(DS.currentTechLevel);
+  std::uint8_t techLevel = _state.Data().commanderBlock.currentTechLevel;
   if (techLevel > MARKET_TECH_LEVEL_MOST)
   {
     techLevel = MARKET_TECH_LEVEL_MOST;
   }
-  _state.Set(DS.marketTechLevel, techLevel);
+  _state.Data().marketTechLevel = techLevel;
   _state.Set(DS.data8C14, DS.productTradeRecords.offset);
   std::uint16_t prices = DS.screenPrices.offset;
   std::uint16_t basePrice = DS.productBasePrices.offset;
@@ -400,14 +406,14 @@ void ComputeMarketPrices(GameState& _state)
     // 256 + the price adjustment + the tech-level factor times marketTechLevel, both signed bytes.
     const std::uint16_t record = _state.Get(DS.data8C14);
     const auto techFactor = static_cast<std::int8_t>(_state.Byte(Offset(record, 1)));
-    const auto techTerm = static_cast<std::uint16_t>(techFactor * static_cast<std::int8_t>(_state.Get(DS.marketTechLevel)));
+    const auto techTerm = static_cast<std::uint16_t>(techFactor * static_cast<std::int8_t>(_state.Data().marketTechLevel));
     const auto adjustment = static_cast<std::int8_t>(_state.Byte(record));
     const auto factor = static_cast<std::uint16_t>(static_cast<std::uint16_t>(adjustment) + UNIT_FACTOR + techTerm);
     _state.Set(DS.data8C14, Offset(record, TRADE_RECORD_BYTES));
     price = ScaledProduct(price, factor);
 
     _state.SetWord(prices, price);
-    _state.Set(DS.resalePriceInput, price);
+    _state.Data().resalePriceInput = price;
     _state.SetWord(Offset(prices, 2), ComputeResalePrice(_state));
     prices = Offset(prices, 4);
   }
@@ -416,21 +422,21 @@ void ComputeMarketPrices(GameState& _state)
 std::uint16_t NextMarketRandom(GameState& _state)
 {
   const std::uint16_t a = _state.Word(DS.marketRandomState.offset);
-  const std::uint16_t b = _state.Get(DS.data8C20);
-  const std::uint16_t c = _state.Get(DS.data8C22);
+  const std::uint16_t b = _state.Data().marketRandomState.data8C20;
+  const std::uint16_t c = _state.Data().marketRandomState.data8C22;
   const auto sum = static_cast<std::uint16_t>(a + b);
   // In the order the original's two XCHGs and its ADD write them.
-  _state.Set(DS.data8C20, c);
+  _state.Data().marketRandomState.data8C20 = c;
   _state.SetWord(DS.marketRandomState.offset, b);
-  _state.Set(DS.data8C22, static_cast<std::uint16_t>(c + sum));
+  _state.Data().marketRandomState.data8C22 = static_cast<std::uint16_t>(c + sum);
   return sum;
 }
 
 void StartMarketRandom(GameState& _state)
 {
-  _state.SetWord(DS.marketRandomState.offset, _state.Get(DS.randomState0));
-  _state.Set(DS.data8C20, _state.Get(DS.randomState1));
-  _state.Set(DS.data8C22, _state.Get(DS.randomState2));
+  _state.SetWord(DS.marketRandomState.offset, _state.Data().commanderBlock.randomState0);
+  _state.Data().marketRandomState.data8C20 = std::uint16_t{_state.Data().commanderBlock.randomState1};
+  _state.Data().marketRandomState.data8C22 = std::uint16_t{_state.Data().commanderBlock.randomState2};
 }
 
 std::optional<std::uint8_t> RollQuantityOnSale(GameState& _state)
@@ -495,23 +501,23 @@ PrintedText PrintCargoQuantity(GameState& _state, std::uint16_t _quantity)
     BlankLeadingZeros(_state, DS.quantityText.offset, QUANTITY_DIGITS_BLANKED);
     text = DS.quantityText.offset;
   }
-  const std::uint8_t attribute = _state.Get(DS.textAttribute);
-  _state.Set(DS.textAttribute, QUANTITY_ATTRIBUTE);
+  const std::uint8_t attribute = _state.Data().textAttribute;
+  _state.Data().textAttribute = QUANTITY_ATTRIBUTE;
   // (row-1)*80 bytes, as (row-1)*256/4 and that /4 again.
-  const auto quarter = static_cast<std::uint16_t>((static_cast<std::uint8_t>(_state.Get(DS.menuSelectedRow) - 1) << 8) >> 2);
+  const auto quarter = static_cast<std::uint16_t>((static_cast<std::uint8_t>(_state.Data().menuSelectedRow - 1) << 8) >> 2);
   const auto cell = static_cast<std::uint16_t>(_state.Get(DS.menuFirstRowAttr) + QUANTITY_COLUMN + quarter + (quarter >> 2));
   const PrintedText printed = PrintTextModeString(_state, text, cell);
-  _state.Set(DS.textAttribute, attribute);
+  _state.Data().textAttribute = attribute;
   return printed;
 }
 
 ScreenKey RunCargoTradeMenu(GameState& _state, Hardware& _hardware)
 {
   _state.Set(DS.menuFirstRowAttr, CARGO_MENU_FIRST_ROW);
-  _state.Set(DS.menuRowCount, static_cast<std::uint8_t>(COMMODITY_COUNT));
+  _state.Data().menuRowCount = static_cast<std::uint8_t>(COMMODITY_COUNT);
   // StartMenu's last ToggleMenuRowHighlight leaves AL the attribute it toggled the row to, which it left in textAttribute.
   MenuLoop loop{StartMenu(_state).row, 0};
-  loop.al = _state.Get(DS.textAttribute);
+  loop.al = _state.Data().textAttribute;
   for (;;)
   {
     // 6B43: the steering; then the keys, each turn to the steering carrying the cursor and AL, each to a cursor's move the
@@ -534,7 +540,7 @@ ScreenKey RunCargoTradeMenu(GameState& _state, Hardware& _hardware)
         // B on the buy screen and S on the sell screen: a typed quantity bought or sold, and its message, after which AL is
         // the attribute it pops back. On the other screen the key does nothing.
         const bool buy = code == SCAN_B;
-        if ((_state.Get(DS.tradeScreenIsBuy) == 1) == buy)
+        if ((_state.Data().tradeScreenIsBuy == 1) == buy)
         {
           const std::uint8_t saved = OpenCargoMessage(_state);
           ShowCargoMessage(_state, buy ? BuyCargo(_state, _hardware) : SellCargo(_state, _hardware), saved);
@@ -547,11 +553,11 @@ ScreenKey RunCargoTradeMenu(GameState& _state, Hardware& _hardware)
       {
         _hardware.LoopTurn(code == SCAN_UP ? CARGO_CURSOR_UP : CARGO_CURSOR_DOWN, {loop.row});
         loop.row = (code == SCAN_UP ? MoveMenuCursorUp(_state, loop.row) : MoveMenuCursorDown(_state, loop.row)).row;
-        loop.al = _state.Get(DS.textAttribute);
+        loop.al = _state.Data().textAttribute;
         continue;
       }
       // The screen's own key, F2 to sell or F3 to buy, does nothing here.
-      const auto own = static_cast<std::uint8_t>(SCAN_F2 + _state.Get(DS.tradeScreenIsBuy));
+      const auto own = static_cast<std::uint8_t>(SCAN_F2 + _state.Data().tradeScreenIsBuy);
       if (code != own && IsScreenKey(code))
       {
         return ScreenKey{code, loop.al, std::nullopt};
@@ -565,12 +571,12 @@ ScreenKey RunCargoTradeMenu(GameState& _state, Hardware& _hardware)
 std::uint8_t AddContrabandPenalty(GameState& _state)
 {
   // The row's trade record, three bytes from data8BDD, in 8 bits: its third byte is the commodity's legal penalty.
-  const auto index = static_cast<std::uint8_t>(_state.Get(DS.menuSelectedRow) - 1);
+  const auto index = static_cast<std::uint8_t>(_state.Data().menuSelectedRow - 1);
   const auto record = static_cast<std::uint8_t>(index * 2 + index);
-  const auto status = static_cast<std::uint8_t>(_state.Byte(Offset(DS.data8BDF.offset, record)) + _state.Get(DS.legalStatus));
+  const auto status = static_cast<std::uint8_t>(_state.Byte(Offset(DS.data8BDF.offset, record)) + _state.Data().commanderBlock.legalStatus);
   if (status != 0)
   {
-    _state.Set(DS.legalStatus, status);
+    _state.Data().commanderBlock.legalStatus = status;
   }
   return status;
 }

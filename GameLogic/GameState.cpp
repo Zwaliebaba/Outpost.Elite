@@ -3,10 +3,22 @@
 #include "GameState.h"
 
 #include <algorithm>
+#include <new>
 #include <stdexcept>
 
 namespace Elite
 {
+
+GameState::GameState()
+  : m_block(new (::operator new(sizeof(Block), std::align_val_t{COUNTED_BLOCK_ALIGNMENT})) Block{})
+{
+}
+
+void GameState::FreeBlock::operator()(Block* _block) const noexcept
+{
+  _block->~Block();
+  ::operator delete(_block, std::align_val_t{COUNTED_BLOCK_ALIGNMENT});
+}
 
 void GameState::Load(std::uint16_t _codeSegment, std::span<const std::uint8_t> _image) noexcept
 {
@@ -27,6 +39,11 @@ void GameState::Load(std::uint16_t _codeSegment, std::span<const std::uint8_t> _
 void GameState::RefuseAddress()
 {
   throw std::out_of_range("GameState: an address outside the game's code segment, data segment and video memory");
+}
+
+void GameState::RefuseObject()
+{
+  throw std::out_of_range("GameState: an object record past the data segment's end");
 }
 
 } // namespace Elite

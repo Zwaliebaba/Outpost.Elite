@@ -29,25 +29,26 @@ constexpr std::size_t SYSTEMS = 256;
 // screens select one: itself, or an earlier system at the same place.
 [[nodiscard]] std::string SystemAnswer(Elite::GameState& _state, std::uint8_t _galaxy, std::uint8_t _system)
 {
-  _state.Set(DS.galaxyNumber, _galaxy);
-  _state.Set(DS.chartIsShortRange, 0);
+  _state.Data().commanderBlock.galaxyNumber = _galaxy;
+  _state.Data().commanderBlock.chartIsShortRange = 0;
   Elite::LoadSystemSeeds(_state, _system);
-  const std::uint8_t x = _state.Get(DS.systemX);
-  const std::uint8_t y = _state.Get(DS.systemY);
+  const std::uint8_t x = _state.Data().systemSeed1Bytes.systemX;
+  const std::uint8_t y = _state.Data().systemSeed0Bytes.systemY;
   Elite::MoveCursorToSystem(_state);
   Elite::DescribeSystem(_state);
 
   std::string name;
-  for (std::size_t index = 0; index < _state.Get(DS.selectedSystemNameLength); ++index)
+  for (std::size_t index = 0; index < _state.Data().commanderBlock.selectedSystemNameLength; ++index)
   {
     name += static_cast<char>(_state.Byte(DS.selectedSystemName.At(index)));
   }
-  std::string answer =
-    std::format("{} {} {} {} {} {} {} {} {} {} {}", _galaxy, _system, name, x, y, _state.Get(DS.selectedEconomy),
-                _state.Get(DS.selectedGovernment), _state.Get(DS.selectedTechLevel), _state.Get(DS.selectedPopulationTenthsBillion),
-                _state.Get(DS.selectedProductivityMillionCredits), _state.Get(DS.selectedRadiusKm));
+  const Elite::GameData::CommanderBlock& commander = _state.Data().commanderBlock;
+  std::string answer = std::format("{} {} {} {} {} {} {} {} {} {} {}", _galaxy, _system, name, x, y,
+                                   std::uint8_t{commander.selectedEconomy}, std::uint8_t{commander.selectedGovernment},
+                                   std::uint8_t{commander.selectedTechLevel}, std::uint8_t{commander.selectedPopulationTenthsBillion},
+                                   std::uint16_t{commander.selectedProductivityMillionCredits}, std::uint16_t{commander.selectedRadiusKm});
   (void)Elite::SelectSystemAtCursor(_state, 0);
-  return answer + std::format(" {}", _state.Get(DS.selectedSystemIndex));
+  return answer + std::format(" {}", std::uint8_t{commander.selectedSystemIndex});
 }
 
 } // namespace

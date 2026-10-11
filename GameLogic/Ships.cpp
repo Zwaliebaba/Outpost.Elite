@@ -28,15 +28,15 @@ constexpr std::size_t THARGOID_TEMPLATE = 27;
 constexpr std::size_t THARGON_TEMPLATE = 28;
 constexpr std::uint16_t TEMPLATE_BYTES = 10;
 // Where InitObjectFromTemplate puts bytes 1-9 of a record.
-constexpr std::array<SlotByte, 9> TEMPLATE_FIELDS = {SlotByte::Speed,    SlotByte::TurnRate, SlotByte::Bounty,
-                                                     SlotByte::Missiles, SlotByte::Cargo,    SlotByte::Fragments,
-                                                     SlotByte::Energy,   SlotByte::Detail,   SlotByte::Range};
+constexpr std::array<ObjectByte, 9> TEMPLATE_FIELDS = {&SpaceObject::speed,    &SpaceObject::turnRate, &SpaceObject::bounty,
+                                                       &SpaceObject::missiles, &SpaceObject::cargo,    &SpaceObject::fragments,
+                                                       &SpaceObject::energy,   &SpaceObject::detail,   &SpaceObject::range};
 
 // The 24-bit position, by axis: the low words and the high bytes.
-constexpr std::array<SlotWord, 3> POSITION_LOW = {SlotWord::X, SlotWord::Y, SlotWord::Z};
-constexpr std::array<SlotByte, 3> POSITION_HIGH = {SlotByte::XHigh, SlotByte::YHigh, SlotByte::ZHigh};
+constexpr std::array<ObjectWord, 3> POSITION_LOW = {&SpaceObject::x, &SpaceObject::y, &SpaceObject::z};
+constexpr std::array<ObjectByte, 3> POSITION_HIGH = {&SpaceObject::xHigh, &SpaceObject::yHigh, &SpaceObject::zHigh};
 // The velocity, by axis: signed bytes.
-constexpr std::array<SlotByte, 3> VELOCITY = {SlotByte::VelocityX, SlotByte::VelocityY, SlotByte::VelocityZ};
+constexpr std::array<ObjectByte, 3> VELOCITY = {&SpaceObject::velocityX, &SpaceObject::velocityY, &SpaceObject::velocityZ};
 
 constexpr std::uint8_t ABANDONED_CLASS = 0; // no behaviour
 constexpr std::uint8_t BARREL_CLASS = 3;
@@ -82,18 +82,18 @@ constexpr std::uint16_t SPAWN_SCATTER_MASK = 0x7FF; // halved and signed by its 
 }
 
 // MOV AL,[DI] / SHR AL,1 / AND AL,1Fh.
-[[nodiscard]] std::uint8_t TypeOf(const ObjectSlot& _slot) noexcept
+[[nodiscard]] std::uint8_t TypeOf(const SpaceObject& _slot) noexcept
 {
-  return static_cast<std::uint8_t>((_slot.Get(SlotByte::Type) >> 1) & TYPE_MASK);
+  return static_cast<std::uint8_t>((_slot.type >> 1) & TYPE_MASK);
 }
 
 // CWD / MOV [slot+4+2*axis],AX / MOV [slot+1+axis],DL: _value as the 24-bit coordinate _axis (0 x, 1 y, 2 z) of _slot, the low
 // word, then its sign as the high byte.
-void SetCoordinate(ObjectSlot _slot, std::size_t _axis, std::int16_t _value)
+void SetCoordinate(SpaceObject& _slot, std::size_t _axis, std::int16_t _value)
 {
   const auto value = static_cast<std::uint16_t>(_value);
-  _slot.Set(POSITION_LOW[_axis], value);
-  _slot.Set(POSITION_HIGH[_axis], Low(SignWord(value)));
+  _slot.*POSITION_LOW[_axis] = value;
+  _slot.*POSITION_HIGH[_axis] = Low(SignWord(value));
 }
 
 // What PositionFitsWords finds.
@@ -105,13 +105,13 @@ struct PositionFit
 
 // The test IsObjectNear and IsObjectNearKeepBlip share: each high byte of _slot's 24-bit position is the sign extension of
 // its low word, axis by axis until one is not.
-[[nodiscard]] PositionFit PositionFitsWords(const ObjectSlot& _slot) noexcept
+[[nodiscard]] PositionFit PositionFitsWords(const SpaceObject& _slot) noexcept
 {
   std::uint8_t lastHigh = 0;
   for (std::size_t axis = 0; axis < POSITION_HIGH.size(); ++axis)
   {
-    const std::uint8_t high = _slot.Get(POSITION_HIGH[axis]);
-    const bool negative = (_slot.Get(POSITION_LOW[axis]) & 0x8000) != 0;
+    const std::uint8_t high = _slot.*POSITION_HIGH[axis];
+    const bool negative = (_slot.*POSITION_LOW[axis] & 0x8000) != 0;
     lastHigh = high == 0xFF ? std::uint8_t{0} : high;
     const bool fits = high == 0xFF ? negative : high == 0 && !negative;
     if (!fits)
@@ -147,15 +147,15 @@ struct PositionFit
 
 // MOV BX,record / XOR AL,AL / CALL InitObjectFromTemplate / MOV [DI+33h],_class: _slot from one fixed record of spawnTemplates,
 // of behaviour class _class.
-void InitFromRecord(GameState& _state, ObjectSlot _slot, std::size_t _record, std::uint8_t _class)
+void InitFromRecord(GameState& _state, SpaceObject& _slot, std::size_t _record, std::uint8_t _class)
 {
   InitObjectFromTemplate(_state, _slot, DS.spawnTemplates.At(_record), 0);
-  _slot.Set(SlotByte::Class, _class);
+  _slot.behaviorClass = _class;
 }
 
 // The start every spawned ship shares: _slot from record _index of the table at _table, placed at the spawn point and turned to
 // the player.
-void SpawnFromRecord(GameState& _state, ObjectSlot _slot, std::uint16_t _table, std::uint8_t _index)
+void SpawnFromRecord(GameState& _state, SpaceObject& _slot, std::uint16_t _table, std::uint8_t _index)
 {
   InitObjectFromTemplate(_state, _slot, _table, _index);
   PlaceAtSpawnPoint(_state, _slot);
@@ -164,64 +164,64 @@ void SpawnFromRecord(GameState& _state, ObjectSlot _slot, std::uint16_t _table, 
 
 } // namespace
 
-void AddToCoordinate(ObjectSlot _slot, int _axis, std::int16_t _value)
+void AddToCoordinate(SpaceObject& _slot, int _axis, std::int16_t _value)
 {
   const auto axis = static_cast<std::size_t>(_axis);
   const auto value = static_cast<std::uint16_t>(_value);
-  const std::uint32_t sum = std::uint32_t{_slot.Get(POSITION_LOW[axis])} + value;
-  _slot.Set(POSITION_LOW[axis], static_cast<std::uint16_t>(sum));
-  _slot.Set(POSITION_HIGH[axis], static_cast<std::uint8_t>(_slot.Get(POSITION_HIGH[axis]) + Low(SignWord(value)) + (sum >> 16)));
+  const std::uint32_t sum = std::uint32_t{_slot.*POSITION_LOW[axis]} + value;
+  _slot.*POSITION_LOW[axis] = static_cast<std::uint16_t>(sum);
+  _slot.*POSITION_HIGH[axis] = static_cast<std::uint8_t>(_slot.*POSITION_HIGH[axis] + Low(SignWord(value)) + (sum >> 16));
 }
 
 void ClearObjectSlot(GameState& _state, std::uint16_t _slot)
 {
   // MOV [SI],CH while CX counts down from 40h: CH is 0 throughout.
-  for (std::uint16_t index = 0; index < ObjectSlot::BYTES; ++index)
+  for (std::uint16_t index = 0; index < SpaceObject::BYTES; ++index)
   {
     _state.SetByte(Offset(_slot, index), 0);
   }
 }
 
-void InitPoliceViper(GameState& _state, ObjectSlot _slot)
+void InitPoliceViper(GameState& _state, SpaceObject& _slot)
 {
   InitFromRecord(_state, _slot, VIPER_TEMPLATE, TRADER_CLASS);
-  _slot.Set(SlotWord::Owner, POLICE_OWNER);
-  _slot.Set(SlotByte::Aggression, POLICE_AGGRESSION);
+  _slot.owner = POLICE_OWNER;
+  _slot.aggression = POLICE_AGGRESSION;
 }
 
-void InitAbandonedCobra(GameState& _state, ObjectSlot _slot)
+void InitAbandonedCobra(GameState& _state, SpaceObject& _slot)
 {
   InitFromRecord(_state, _slot, COBRA_TEMPLATE, ABANDONED_CLASS);
 }
 
-void InitShuttle(GameState& _state, ObjectSlot _slot)
+void InitShuttle(GameState& _state, SpaceObject& _slot)
 {
   InitFromRecord(_state, _slot, SHUTTLE_TEMPLATE, DRIFTER_CLASS);
 }
 
-void InitThargon(GameState& _state, ObjectSlot _slot)
+void InitThargon(GameState& _state, SpaceObject& _slot)
 {
   InitFromRecord(_state, _slot, THARGON_TEMPLATE, WOLF_CLASS);
 }
 
-void SpawnRandomDrifter(GameState& _state, ObjectSlot _slot)
+void SpawnRandomDrifter(GameState& _state, SpaceObject& _slot)
 {
   // ROR AX,1 / XOR AL,AH / AND AL,7.
   const std::uint16_t random = NextRandom(_state);
   const auto rotated = static_cast<std::uint16_t>((random >> 1) | (random << 15));
   const auto record = static_cast<std::uint8_t>((Low(rotated) ^ High(rotated)) & DRIFTER_CHOICE_MASK);
   SpawnFromRecord(_state, _slot, DS.spawnTemplates.At(ESCAPE_POD_TEMPLATE), record);
-  _slot.Set(SlotByte::Class, DRIFTER_CLASS);
-  _slot.Set(SlotByte::TurnRate, DRIFTER_TURN_RATE);
+  _slot.behaviorClass = DRIFTER_CLASS;
+  _slot.turnRate = DRIFTER_TURN_RATE;
   (void)ComputeVelocity(_state, _slot);
 }
 
-void SpawnRandomTrader(GameState& _state, ObjectSlot _slot)
+void SpawnRandomTrader(GameState& _state, SpaceObject& _slot)
 {
   // XOR AH,AH / MOV BL,2Bh / DIV BL: the quotient of a random byte picks the record.
   const auto record = static_cast<std::uint8_t>(Low(NextRandom(_state)) / TRADER_CHOICE_DIVISOR);
   SpawnFromRecord(_state, _slot, DS.spawnTemplates.At(COBRA_TEMPLATE), record);
-  _slot.Set(SlotByte::Class, TRADER_CLASS);
+  _slot.behaviorClass = TRADER_CLASS;
   (void)ComputeVelocity(_state, _slot);
   if (!IsViperType(_slot))
   {
@@ -230,14 +230,16 @@ void SpawnRandomTrader(GameState& _state, ObjectSlot _slot)
   // A Viper is police one time in two: AND AX,1 written as a word. Then MOV AL,legalStatus over the 0 of AH, written as a word,
   // which zeroes the bounty above the aggression.
   const auto police = static_cast<std::uint16_t>(NextRandom(_state) & POLICE_OWNER);
-  _slot.Set(SlotWord::Owner, police);
+  _slot.owner = police;
   if (police != 0)
   {
-    _slot.Set(SlotWord::Aggression, _state.Get(DS.legalStatus));
+    // Written as a word: the aggression, and a bounty of 0 above it.
+    _slot.aggression = std::uint8_t{_state.Data().commanderBlock.legalStatus};
+    _slot.bounty = 0;
   }
 }
 
-void SpawnMaskMissionShip(GameState& _state, ObjectSlot _slot, bool _maskShip)
+void SpawnMaskMissionShip(GameState& _state, SpaceObject& _slot, bool _maskShip)
 {
   // MOV AL,18h, or, by the sign of a random word, 12h or 13h; PUSH AX and POP AX keep it round the record's set-up.
   std::uint8_t type = TYPE_ASP;
@@ -247,46 +249,46 @@ void SpawnMaskMissionShip(GameState& _state, ObjectSlot _slot, bool _maskShip)
   }
   SpawnFromRecord(_state, _slot, DS.spawnTemplates.At(ASP_TEMPLATE), 0);
   // SHL AL,1 / INC AL: the type, active.
-  _slot.Set(SlotByte::Type, static_cast<std::uint8_t>((type << 1) | ObjectSlot::ACTIVE));
-  _slot.Set(SlotByte::Class, WOLF_CLASS);
-  _slot.Set(SlotByte::Aggression, static_cast<std::uint8_t>(Low(NextRandom(_state)) & MISSION_AGGRESSION_MASK));
-  _slot.Set(SlotByte::Energy, MISSION_ENERGY);
-  _slot.Set(SlotByte::Cargo, 0);
-  _slot.Set(SlotByte::Missiles, MISSION_MISSILES);
-  _slot.Set(SlotByte::Bounty, MISSION_BOUNTY);
+  _slot.type = static_cast<std::uint8_t>((type << 1) | SpaceObject::ACTIVE);
+  _slot.behaviorClass = WOLF_CLASS;
+  _slot.aggression = static_cast<std::uint8_t>(Low(NextRandom(_state)) & MISSION_AGGRESSION_MASK);
+  _slot.energy = MISSION_ENERGY;
+  _slot.cargo = 0;
+  _slot.missiles = MISSION_MISSILES;
+  _slot.bounty = MISSION_BOUNTY;
 }
 
-void SpawnInvasionThargoid(GameState& _state, ObjectSlot _slot)
+void SpawnInvasionThargoid(GameState& _state, SpaceObject& _slot)
 {
   SpawnFromRecord(_state, _slot, DS.spawnTemplates.At(THARGOID_TEMPLATE), 0);
-  _slot.Set(SlotByte::Class, WOLF_CLASS);
-  _slot.Set(SlotByte::Aggression, static_cast<std::uint8_t>(Low(NextRandom(_state)) & MISSION_AGGRESSION_MASK));
-  _slot.Set(SlotByte::Energy, INVADER_ENERGY);
-  _slot.Set(SlotByte::Cargo, 0);
-  _slot.Set(SlotByte::Missiles, MISSION_MISSILES);
-  _slot.Set(SlotByte::Thargons, INVADER_THARGONS);
+  _slot.behaviorClass = WOLF_CLASS;
+  _slot.aggression = static_cast<std::uint8_t>(Low(NextRandom(_state)) & MISSION_AGGRESSION_MASK);
+  _slot.energy = INVADER_ENERGY;
+  _slot.cargo = 0;
+  _slot.missiles = MISSION_MISSILES;
+  _slot.thargons = INVADER_THARGONS;
 }
 
 ReclaimedSlot ReclaimShipSlot(GameState& _state)
 {
   // SUB CL,3 / XOR CH,CH, then LOOP: a count of 0 runs 65,536 times.
   std::uint16_t slot = DS.firstShipSlot.offset;
-  const auto slots = static_cast<std::uint8_t>(_state.Get(DS.objectSlotCount) - FIRST_SHIP_SLOT);
+  const auto slots = static_cast<std::uint8_t>(_state.Data().objectSlotCount - FIRST_SHIP_SLOT);
   for (std::uint32_t count = LoopCount(slots); count != 0; --count)
   {
-    if ((ObjectSlot(_state, slot).Get(SlotByte::Flags) & FLAG_BLIP_DRAWN) == 0)
+    if ((_state.ObjectAt(slot).flags & FLAG_BLIP_DRAWN) == 0)
     {
       return ReclaimedSlot{slot, false, std::nullopt};
     }
-    slot = Offset(slot, ObjectSlot::BYTES);
+    slot = Offset(slot, SpaceObject::BYTES);
   }
   // Every one has a blip: one of slots 4-19 at random (AND AH,0Fh / XOR AL,AL / SHR AX,1 twice), removed first.
   const auto evicted =
-    static_cast<std::uint16_t>(DS.shipSlots.offset + FIRST_EVICTED_SLOT * ObjectSlot::BYTES + EvictedSlotBytes(NextRandom(_state)));
-  return ReclaimedSlot{evicted, true, RemoveObject(_state, ObjectSlot(_state, evicted))};
+    static_cast<std::uint16_t>(DS.shipSlots.offset + FIRST_EVICTED_SLOT * SpaceObject::BYTES + EvictedSlotBytes(NextRandom(_state)));
+  return ReclaimedSlot{evicted, true, RemoveObject(_state, _state.ObjectAt(evicted))};
 }
 
-NearTest IsObjectNear(GameState& _state, ObjectSlot _slot)
+NearTest IsObjectNear(GameState& _state, SpaceObject& _slot)
 {
   const PositionFit fit = PositionFitsWords(_slot);
   if (fit.fits)
@@ -296,59 +298,59 @@ NearTest IsObjectNear(GameState& _state, ObjectSlot _slot)
   return NearTest{false, EraseScannerBlip(_state, _slot), fit.lastHigh};
 }
 
-bool IsSunOrPlanet(const ObjectSlot& _slot)
+bool IsSunOrPlanet(const SpaceObject& _slot)
 {
   const std::uint8_t type = TypeOf(_slot);
   return type == TYPE_SUN || type == TYPE_PLANET;
 }
 
-bool IsPlanet(const ObjectSlot& _slot)
+bool IsPlanet(const SpaceObject& _slot)
 {
   return TypeOf(_slot) == TYPE_PLANET;
 }
 
-StationTest IsStation(const ObjectSlot& _slot)
+StationTest IsStation(const SpaceObject& _slot)
 {
   const std::uint8_t type = TypeOf(_slot);
   return StationTest{type == TYPE_DODO || type == TYPE_CORIOLIS, type == TYPE_DODO};
 }
 
-bool IsObjectNearKeepBlip(const ObjectSlot& _slot)
+bool IsObjectNearKeepBlip(const SpaceObject& _slot)
 {
   return PositionFitsWords(_slot).fits;
 }
 
-void InitCargoBarrel(GameState& _state, ObjectSlot _slot)
+void InitCargoBarrel(GameState& _state, SpaceObject& _slot)
 {
   InitFromRecord(_state, _slot, BARREL_TEMPLATE, BARREL_CLASS);
 }
 
-void SpawnRandomHunter(GameState& _state, ObjectSlot _slot)
+void SpawnRandomHunter(GameState& _state, SpaceObject& _slot)
 {
   // XOR AH,AH / MOV BL,25h / DIV BL: the quotient of a random byte picks the record.
   const auto record = static_cast<std::uint8_t>(Low(NextRandom(_state)) / HUNTER_CHOICE_DIVISOR);
   SpawnFromRecord(_state, _slot, DS.spawnTemplates.At(HUNTER_TEMPLATES), record);
-  _slot.Set(SlotByte::Class, HUNTER_CLASS);
-  _slot.Set(SlotByte::Aggression, static_cast<std::uint8_t>(Low(NextRandom(_state)) & HUNTER_AGGRESSION_MASK));
+  _slot.behaviorClass = HUNTER_CLASS;
+  _slot.aggression = static_cast<std::uint8_t>(Low(NextRandom(_state)) & HUNTER_AGGRESSION_MASK);
   (void)ComputeVelocity(_state, _slot);
 }
 
-void SpawnRandomWolf(GameState& _state, ObjectSlot _slot)
+void SpawnRandomWolf(GameState& _state, SpaceObject& _slot)
 {
   // MOV AL,5, or out of witch space XOR AH,AH / MOV BL,34h / DIV BL: the quotient of a random byte picks the record.
   std::uint8_t record = WITCH_SPACE_WOLF;
-  if (_state.Get(DS.witchspaceCountdown) == 0)
+  if (_state.Data().commanderBlock.witchspaceCountdown == 0)
   {
     record = static_cast<std::uint8_t>(Low(NextRandom(_state)) / WOLF_CHOICE_DIVISOR);
   }
   SpawnFromRecord(_state, _slot, DS.spawnTemplates.At(WOLF_TEMPLATES), record);
-  _slot.Set(SlotByte::Class, WOLF_CLASS);
+  _slot.behaviorClass = WOLF_CLASS;
   auto aggression = static_cast<std::uint8_t>(Low(NextRandom(_state)) & WOLF_AGGRESSION_MASK);
-  if (_state.Get(DS.spawnGovernment) == 0)
+  if (_state.Data().spawnGovernment == 0)
   {
     aggression = static_cast<std::uint8_t>(aggression + ANARCHY_AGGRESSION);
   }
-  _slot.Set(SlotByte::Aggression, aggression);
+  _slot.aggression = aggression;
   (void)ComputeVelocity(_state, _slot);
   if (!IsThargoidType(_slot))
   {
@@ -356,26 +358,26 @@ void SpawnRandomWolf(GameState& _state, ObjectSlot _slot)
   }
   // XOR AL,AH / SHR AL,1 three times / AND AL,3 / ADD AL,2: 2 to 5 Thargons.
   const std::uint16_t random = NextRandom(_state);
-  _slot.Set(SlotByte::Thargons, static_cast<std::uint8_t>((((Low(random) ^ High(random)) >> 3) & THARGON_COUNT_MASK) + FEWEST_THARGONS));
+  _slot.thargons = static_cast<std::uint8_t>((((Low(random) ^ High(random)) >> 3) & THARGON_COUNT_MASK) + FEWEST_THARGONS);
 }
 
-void InitObjectFromTemplate(GameState& _state, ObjectSlot _slot, std::uint16_t _table, std::uint8_t _index)
+void InitObjectFromTemplate(GameState& _state, SpaceObject& _slot, std::uint16_t _table, std::uint8_t _index)
 {
-  _slot.Set(SlotByte::State, 0);
-  _slot.Set(SlotByte::Flags, 0);
-  _slot.Set(SlotByte::Aggression, 0);
-  _slot.Set(SlotByte::Scanned, 1);
+  _slot.aiState = 0;
+  _slot.flags = 0;
+  _slot.aggression = 0;
+  _slot.scanned = 1;
   // BX += AL*2, then BX += AL*8.
   const std::uint16_t record = Offset(_table, static_cast<std::uint16_t>(_index * TEMPLATE_BYTES));
   // STC / RCL AL,1: the type, active.
-  _slot.Set(SlotByte::Type, static_cast<std::uint8_t>((_state.Byte(record) << 1) | ObjectSlot::ACTIVE));
+  _slot.type = static_cast<std::uint8_t>((_state.Byte(record) << 1) | SpaceObject::ACTIVE);
   for (std::size_t field = 0; field < TEMPLATE_FIELDS.size(); ++field)
   {
-    _slot.Set(TEMPLATE_FIELDS[field], _state.Byte(Offset(record, static_cast<std::uint16_t>(field + 1))));
+    _slot.*TEMPLATE_FIELDS[field] = _state.Byte(Offset(record, static_cast<std::uint16_t>(field + 1)));
   }
 }
 
-void PlaceAtSpawnPoint(GameState& _state, ObjectSlot _slot)
+void PlaceAtSpawnPoint(GameState& _state, SpaceObject& _slot)
 {
   // (scatter, 10000) by rotation pair 7, then (another scatter, what that left of 10000) by pair 6.
   const auto scatter = [&_state] { return static_cast<std::int16_t>(Scatter(NextRandom(_state))); };
@@ -387,48 +389,47 @@ void PlaceAtSpawnPoint(GameState& _state, ObjectSlot _slot)
   SetCoordinate(_slot, 2, second.second);
 }
 
-void FacePlayerWithRandomRoll(GameState& _state, ObjectSlot _slot)
+void FacePlayerWithRandomRoll(GameState& _state, SpaceObject& _slot)
 {
   FacePlayer(_state, _slot);
-  _slot.Set(SlotWord::Roll, NextRandom(_state));
+  _slot.roll = NextRandom(_state);
 }
 
-Vector GetObjectPosition(const ObjectSlot& _slot)
+Vector GetObjectPosition(const SpaceObject& _slot)
 {
-  return Vector{static_cast<std::int16_t>(_slot.Get(SlotWord::X)), static_cast<std::int16_t>(_slot.Get(SlotWord::Y)),
-                static_cast<std::int16_t>(_slot.Get(SlotWord::Z))};
+  return Vector{static_cast<std::int16_t>(_slot.x), static_cast<std::int16_t>(_slot.y), static_cast<std::int16_t>(_slot.z)};
 }
 
-Vector GetVectorToPlayer(const ObjectSlot& _slot)
+Vector GetVectorToPlayer(const SpaceObject& _slot)
 {
   const Vector position = GetObjectPosition(_slot);
   const auto negated = [](std::int16_t _value) { return static_cast<std::int16_t>(Negate(static_cast<std::uint16_t>(_value))); };
   return Vector{negated(position.x), negated(position.y), negated(position.z)};
 }
 
-Velocity ComputeVelocity(GameState& _state, ObjectSlot _slot)
+Velocity ComputeVelocity(GameState& _state, SpaceObject& _slot)
 {
-  const SinCos pitch = SetSinCos(_state, 7, _slot.Get(SlotWord::Pitch));
-  (void)SetSinCos(_state, 6, _slot.Get(SlotWord::Yaw));
+  const SinCos pitch = SetSinCos(_state, 7, _slot.pitch);
+  (void)SetSinCos(_state, 6, _slot.yaw);
   // (0, speed) by pair 6, then (0, what that left) by pair 7: x, then y and z.
-  const auto speed = static_cast<std::int16_t>(SignExtend(_slot.Get(SlotByte::Speed))); // CBW
+  const auto speed = static_cast<std::int16_t>(SignExtend(_slot.speed)); // CBW
   const Pair first = RotateByStoredSinCos(_state, 6, Pair{0, speed});
-  _slot.Set(SlotByte::VelocityX, Low(static_cast<std::uint16_t>(first.first)));
+  _slot.velocityX = Low(static_cast<std::uint16_t>(first.first));
   const Pair second = RotateByStoredSinCos(_state, 7, Pair{0, first.second});
-  _slot.Set(SlotByte::VelocityY, Low(static_cast<std::uint16_t>(second.first)));
-  _slot.Set(SlotByte::VelocityZ, Low(static_cast<std::uint16_t>(second.second)));
+  _slot.velocityY = Low(static_cast<std::uint16_t>(second.first));
+  _slot.velocityZ = Low(static_cast<std::uint16_t>(second.second));
   return Velocity{Vector{first.first, second.first, second.second}, RotationLeftover(first.second, pitch.sine)};
 }
 
-MovedObject MoveObject(GameState& _state, ObjectSlot _slot)
+MovedObject MoveObject(GameState& _state, SpaceObject& _slot)
 {
   // MOV AL,[DI+19h+axis] / CBW / CWD, then ADD on the low word and ADC on the high byte: x, then y and z.
   for (std::size_t axis = 0; axis < VELOCITY.size(); ++axis)
   {
-    AddToCoordinate(_slot, static_cast<int>(axis), static_cast<std::int16_t>(SignExtend(_slot.Get(VELOCITY[axis]))));
+    AddToCoordinate(_slot, static_cast<int>(axis), static_cast<std::int16_t>(SignExtend(_slot.*VELOCITY[axis])));
   }
   // The last CWD leaves DX the z velocity's sign; then an erased blip leaves its last pixel there.
-  std::uint16_t dx = SignWord(SignExtend(_slot.Get(SlotByte::VelocityZ)));
+  std::uint16_t dx = SignWord(SignExtend(_slot.velocityZ));
   const NearTest near = IsObjectNear(_state, _slot);
   if (near.erasedBlip)
   {
@@ -446,30 +447,30 @@ MovedObject MoveObject(GameState& _state, ObjectSlot _slot)
   return MovedObject{near, removed, dx};
 }
 
-std::optional<DashboardPixel> RemoveObject(GameState& _state, ObjectSlot _slot)
+std::optional<DashboardPixel> RemoveObject(GameState& _state, SpaceObject& _slot)
 {
-  _slot.Set(SlotByte::Type, static_cast<std::uint8_t>(_slot.Get(SlotByte::Type) & ~ObjectSlot::ACTIVE));
+  _slot.type = static_cast<std::uint8_t>(_slot.type & ~SpaceObject::ACTIVE);
   return EraseScannerBlip(_state, _slot);
 }
 
-void FacePlayer(GameState& _state, ObjectSlot _slot)
+void FacePlayer(GameState& _state, SpaceObject& _slot)
 {
   const Angles heading = ConvertVectorToAngles(_state, GetVectorToPlayer(_slot));
-  _slot.Set(SlotWord::Pitch, heading.first);
-  _slot.Set(SlotWord::Yaw, heading.second);
+  _slot.pitch = heading.first;
+  _slot.yaw = heading.second;
 }
 
 SlotSearch FindFreeShipSlot(GameState& _state)
 {
   std::uint16_t slot = DS.firstShipSlot.offset;
-  const auto slots = static_cast<std::uint8_t>(_state.Get(DS.objectSlotCount) - FIRST_SHIP_SLOT);
+  const auto slots = static_cast<std::uint8_t>(_state.Data().objectSlotCount - FIRST_SHIP_SLOT);
   for (std::uint32_t count = LoopCount(slots); count != 0; --count)
   {
-    if ((ObjectSlot(_state, slot).Get(SlotByte::Type) & ObjectSlot::ACTIVE) == 0)
+    if ((_state.ObjectAt(slot).type & SpaceObject::ACTIVE) == 0)
     {
       return SlotSearch{true, slot};
     }
-    slot = Offset(slot, ObjectSlot::BYTES);
+    slot = Offset(slot, SpaceObject::BYTES);
   }
   return SlotSearch{false, slot};
 }
@@ -479,7 +480,7 @@ void ClearAllObjects(GameState& _state, bool _backward)
   // MOV CH,shipSlotCount / XOR CL,CL / SHR CX,1 three times: 32 words a slot, cleared by REP STOSW into ES = DS.
   const std::uint16_t step = StringStep(_backward, 2);
   std::uint16_t at = DS.shipSlots.offset;
-  for (auto words = static_cast<std::uint16_t>(_state.Get(DS.shipSlotCount) << 5); words != 0; --words)
+  for (auto words = static_cast<std::uint16_t>(_state.Data().shipSlotCount << 5); words != 0; --words)
   {
     _state.SetWord(at, 0);
     at = Offset(at, step);
@@ -488,15 +489,15 @@ void ClearAllObjects(GameState& _state, bool _backward)
 
 std::uint16_t FindDebrisSlot(GameState& _state)
 {
-  const std::uint8_t slots = _state.Get(DS.debrisSlotCount);
+  const std::uint8_t slots = _state.Data().debrisSlotCount;
   std::uint16_t slot = DS.debrisSlots.offset;
   for (std::uint32_t count = LoopCount(slots); count != 0; --count)
   {
-    if ((ObjectSlot(_state, slot).Get(SlotByte::Type) & ObjectSlot::ACTIVE) == 0)
+    if ((_state.ObjectAt(slot).type & SpaceObject::ACTIVE) == 0)
     {
       return slot;
     }
-    slot = Offset(slot, ObjectSlot::BYTES);
+    slot = Offset(slot, SpaceObject::BYTES);
   }
   // None is free: the oldest, the last of equals. The first slot always passes the test (an age of at least 0), so the
   // original's BX, its first candidate, never comes back.
@@ -505,13 +506,13 @@ std::uint16_t FindDebrisSlot(GameState& _state)
   slot = DS.debrisSlots.offset;
   for (std::uint32_t count = LoopCount(slots); count != 0; --count)
   {
-    const std::uint8_t slotAge = ObjectSlot(_state, slot).Get(SlotByte::Age);
+    const std::uint8_t slotAge = _state.ObjectAt(slot).age;
     if (slotAge >= age)
     {
       age = slotAge;
       oldest = slot;
     }
-    slot = Offset(slot, ObjectSlot::BYTES);
+    slot = Offset(slot, SpaceObject::BYTES);
   }
   return oldest;
 }
@@ -522,7 +523,7 @@ void CopyObject(GameState& _state, std::uint16_t _source, std::uint16_t _destina
   const std::uint16_t step = StringStep(_backward, 2);
   std::uint16_t source = _source;
   std::uint16_t destination = _destination;
-  for (std::uint16_t words = ObjectSlot::BYTES / 2; words != 0; --words)
+  for (std::uint16_t words = SpaceObject::BYTES / 2; words != 0; --words)
   {
     _state.SetWord(destination, _state.Word(source));
     source = Offset(source, step);
@@ -530,44 +531,44 @@ void CopyObject(GameState& _state, std::uint16_t _source, std::uint16_t _destina
   }
 }
 
-std::optional<MovedObject> UpdateDebrisAi(GameState& _state, ObjectSlot _slot)
+std::optional<MovedObject> UpdateDebrisAi(GameState& _state, SpaceObject& _slot)
 {
-  const auto lifetime = static_cast<std::uint8_t>(_slot.Get(SlotByte::Lifetime) - 1);
-  _slot.Set(SlotByte::Lifetime, lifetime);
+  const auto lifetime = static_cast<std::uint8_t>(_slot.lifetime - 1);
+  _slot.lifetime = lifetime;
   if (lifetime == 0)
   {
-    _slot.Set(SlotByte::Type, static_cast<std::uint8_t>(_slot.Get(SlotByte::Type) & ~ObjectSlot::ACTIVE));
+    _slot.type = static_cast<std::uint8_t>(_slot.type & ~SpaceObject::ACTIVE);
     return std::nullopt;
   }
-  _slot.Set(SlotByte::Age, static_cast<std::uint8_t>(_slot.Get(SlotByte::Age) + 1));
+  _slot.age = static_cast<std::uint8_t>(_slot.age + 1);
   // MOV AL,[DI+26h] / CBW / ADD [DI+0Eh],AX, then the same from +27h into the pitch.
-  _slot.Set(SlotWord::Roll, Offset(_slot.Get(SlotWord::Roll), SignExtend(_slot.Get(SlotByte::SpinRoll))));
-  _slot.Set(SlotWord::Pitch, Offset(_slot.Get(SlotWord::Pitch), SignExtend(_slot.Get(SlotByte::SpinPitch))));
+  _slot.roll = Offset(_slot.roll, SignExtend(_slot.spinRoll));
+  _slot.pitch = Offset(_slot.pitch, SignExtend(_slot.spinPitch));
   return MoveObject(_state, _slot);
 }
 
-bool IsDebrisType(const ObjectSlot& _slot)
+bool IsDebrisType(const SpaceObject& _slot)
 {
   const std::uint8_t type = TypeOf(_slot);
   return type == TYPE_PLATE || type == TYPE_BOULDER || type == TYPE_ASTEROID || type == TYPE_SPLINTER;
 }
 
-bool IsViperType(const ObjectSlot& _slot)
+bool IsViperType(const SpaceObject& _slot)
 {
   return TypeOf(_slot) == TYPE_VIPER;
 }
 
-bool IsPoliceViper(const ObjectSlot& _slot)
+bool IsPoliceViper(const SpaceObject& _slot)
 {
-  return IsViperType(_slot) && _slot.Get(SlotWord::Owner) == POLICE_OWNER;
+  return IsViperType(_slot) && _slot.owner == POLICE_OWNER;
 }
 
-bool IsThargoidType(const ObjectSlot& _slot)
+bool IsThargoidType(const SpaceObject& _slot)
 {
   return TypeOf(_slot) == TYPE_THARGOID;
 }
 
-bool IsThargonType(const ObjectSlot& _slot)
+bool IsThargonType(const SpaceObject& _slot)
 {
   return TypeOf(_slot) == TYPE_THARGON;
 }

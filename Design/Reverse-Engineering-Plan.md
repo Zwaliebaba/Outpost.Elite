@@ -159,8 +159,10 @@ The native platform comes first, and it changes nothing on purpose (D23). Video 
    *Done 2026-10-11 (ADR-023), in two changes: the devices moved into the `Platform`, then `Machine` and `MachineTests` deleted. Paced time's cycle model was kept rather than replaced, with both of its counts, so every state digest, picture and outcome still holds; the save format did not need to change.*
 3. **The natural layout,** in three changes, in the order an inventory of the code (measured at `a97fd78`) sets:
    - **member syntax on the 1987 layout.** Native code makes 2,166 `DS.` uses of 613 fields, in 19 files; a prototype script rewrites 69% of them to `state.x` unaided. The fields stay packed at their offsets, and each counts the bytes it changes, so paced time's idle test and every state digest are unchanged;
-   - **stored offsets become indices, enums or tables:** 28 fields the game changes (132 words) and 21 constant pointer tables (387 words), and what native code still reads from the code segment;
+   - **stored offsets become indices, enums or tables:** 28 fields the game changes (132 words) and 21 constant pointer tables (387 words), and what native code still reads from the code segment. A converted word changes value, so the state digests are re-based here, after a dump of every digest point shows that only converted fields differ;
    - **the natural layout itself:** `DataOverlay.h`, the packed `GameData` and their 1,501 asserts are deleted, with most of the code segment's image, and the state digests are re-based (D32).
+
+   *Change 1 done 2026-10-11 (ADR-024): 1,725 of 2,222 `DS.` uses are members; the fields count their own changes, so every digest and the turn-by-turn timing are unchanged.*
 
    The same gates apply.
 
@@ -266,3 +268,4 @@ Elite's procedural galaxy is thoroughly documented: the starting seeds, Lave's e
 | [ADR-021](ADR/ADR-021-the-games-files-native.md) | The game's files native, on a `Platform` the `Game` owns (D27 step 1) | Phase 5 — written |
 | [ADR-022](ADR/ADR-022-the-guard.md) | The guard: pictures and timing reported, the player's progress and the subsystem answers gating (D33) | Phase 5 — written |
 | [ADR-023](ADR/ADR-023-the-platform-swap.md) | The platform swap: every device native, and `Machine` deleted (D33) | Phase 5 — written |
+| [ADR-024](ADR/ADR-024-members-that-count-their-changes.md) | The game's state as members on the 1987 layout, with fields that count their own changes (D33, piece 3 change 1) | Phase 5 — written |

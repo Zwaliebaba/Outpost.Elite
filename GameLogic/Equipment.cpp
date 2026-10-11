@@ -171,12 +171,12 @@ void IncrementByte(GameState& _state, std::uint16_t _offset)
 }
 
 // ADD [_field],_amount, held at 250 (FAh) from 251 up: gems, gold and platinum.
-void AddPrecious(GameState& _state, DataField<std::uint8_t> _field, std::uint8_t _amount)
+void AddPrecious(Counted<std::uint8_t>& _field, std::uint8_t _amount)
 {
-  _state.Set(_field, static_cast<std::uint8_t>(_state.Get(_field) + _amount));
-  if (_state.Get(_field) > PRECIOUS_MOST)
+  _field = static_cast<std::uint8_t>(_field + _amount);
+  if (_field > PRECIOUS_MOST)
   {
-    _state.Set(_field, PRECIOUS_MOST);
+    _field = PRECIOUS_MOST;
   }
 }
 
@@ -197,12 +197,12 @@ void AddPrecious(GameState& _state, DataField<std::uint8_t> _field, std::uint8_t
 // price's attribute, and the menu's attribute put back.
 PrintedText PrintEquipmentSellColumn(GameState& _state, std::uint16_t _text)
 {
-  _state.Set(DS.textAttribute, SELL_PRICE_ATTRIBUTE);
+  _state.Data().textAttribute = SELL_PRICE_ATTRIBUTE;
   // (row-1)*80 bytes, as (row-1)*256/4 and that /4 again.
-  const auto quarter = static_cast<std::uint16_t>((static_cast<std::uint8_t>(_state.Get(DS.menuSelectedRow) - 1) << 8) >> 2);
+  const auto quarter = static_cast<std::uint16_t>((static_cast<std::uint8_t>(_state.Data().menuSelectedRow - 1) << 8) >> 2);
   const auto cell = static_cast<std::uint16_t>(_state.Get(DS.menuFirstRowAttr) + quarter + (quarter >> 2) + SELL_PRICE_COLUMN);
   const PrintedText printed = PrintTextModeString(_state, _text, cell);
-  _state.Set(DS.textAttribute, MENU_ATTRIBUTE);
+  _state.Data().textAttribute = MENU_ATTRIBUTE;
   return printed;
 }
 
@@ -222,8 +222,8 @@ PrintedText PrintEquipmentSellColumn(GameState& _state, std::uint16_t _text)
 // Returns the attribute, which the original pushes in AL.
 [[nodiscard]] std::uint8_t OpenEquipMessage(GameState& _state)
 {
-  const std::uint8_t saved = _state.Get(DS.textAttribute);
-  _state.Set(DS.textAttribute, MENU_ATTRIBUTE);
+  const std::uint8_t saved = _state.Data().textAttribute;
+  _state.Data().textAttribute = MENU_ATTRIBUTE;
   return saved;
 }
 
@@ -232,7 +232,7 @@ PrintedText PrintEquipmentSellColumn(GameState& _state, std::uint16_t _text)
 void ShowEquipMessage(GameState& _state, std::uint16_t _text, std::uint8_t _saved)
 {
   PrintTextModeString(_state, _text, MESSAGE_OFFSET);
-  _state.Set(DS.textAttribute, _saved);
+  _state.Data().textAttribute = _saved;
 }
 
 // The jump back to 6214 that ends each of B's and S's paths, with the message it shows.
@@ -273,7 +273,7 @@ void ShowEquipMessage(GameState& _state, std::uint16_t _text, std::uint8_t _save
   const auto bx = static_cast<std::uint16_t>(static_cast<std::uint8_t>(_row - 1));
   if (bx != 0)
   {
-    if (_state.Get(DS.missileCount) == MISSILE_LIMIT)
+    if (_state.Data().commanderBlock.missileCount == MISSILE_LIMIT)
     {
       return ToEquipMessage(_hardware, FOUR_MISSILES_ONLY_TEXT);
     }
@@ -281,15 +281,15 @@ void ShowEquipMessage(GameState& _state, std::uint16_t _text, std::uint8_t _save
     {
       return ReportNotEnoughCredits(_hardware);
     }
-    _state.Set(DS.missileCount, static_cast<std::uint8_t>(_state.Get(DS.missileCount) + 1));
+    _state.Data().commanderBlock.missileCount = static_cast<std::uint8_t>(_state.Data().commanderBlock.missileCount + 1);
     ShowEquipmentSellPrice(_state);
     return ToEquipMessage(_hardware, MISSILE_PURCHASED_TEXT);
   }
-  if (_state.Get(DS.missionNumber) == NO_FUEL_MISSION)
+  if (_state.Data().commanderBlock.missionNumber == NO_FUEL_MISSION)
   {
     return ToEquipMessage(_hardware, NO_FUEL_AVAILABLE_TEXT);
   }
-  if (_state.Get(DS.fuel) >= FUEL_NEARLY_FULL)
+  if (_state.Data().commanderBlock.fuel >= FUEL_NEARLY_FULL)
   {
     return ToEquipMessage(_hardware, FUEL_FULL_TEXT);
   }
@@ -297,7 +297,7 @@ void ShowEquipMessage(GameState& _state, std::uint16_t _text, std::uint8_t _save
   {
     return ReportNotEnoughCredits(_hardware);
   }
-  _state.Set(DS.fuel, FUEL_FULL);
+  _state.Data().commanderBlock.fuel = FUEL_FULL;
   return ToEquipMessage(_hardware, FUEL_PURCHASED_TEXT);
 }
 
@@ -305,7 +305,7 @@ void ShowEquipMessage(GameState& _state, std::uint16_t _text, std::uint8_t _save
 // the jumps back the original takes on the way.
 [[nodiscard]] std::uint16_t BuyEquipment(GameState& _state, Hardware& _hardware)
 {
-  const std::uint8_t row = _state.Get(DS.menuSelectedRow);
+  const std::uint8_t row = _state.Data().menuSelectedRow;
   if (row < FIRST_FITTED_ROW)
   {
     return BuyFuelOrMissile(_state, _hardware, row);
@@ -327,11 +327,11 @@ void ShowEquipMessage(GameState& _state, std::uint16_t _text, std::uint8_t _save
     _hardware.LoopTurn(EQUIP_LASER_CHECKS, {});
   }
   // A laser: a free mount, and a mining laser only with fuel scoops.
-  if (_state.Get(DS.laserMountsFitted) == ALL_MOUNTS)
+  if (_state.Data().commanderBlock.laserMountsFitted == ALL_MOUNTS)
   {
     return FOUR_LASERS_TEXT;
   }
-  if (_state.Get(DS.menuSelectedRow) == MINING_LASER_ROW && _state.Get(DS.fuelScoopsFitted) != 1)
+  if (_state.Data().menuSelectedRow == MINING_LASER_ROW && _state.Data().commanderBlock.fuelScoopsFitted != 1)
   {
     return SCOOP_NEEDED_TEXT;
   }
@@ -345,18 +345,18 @@ void ShowEquipMessage(GameState& _state, std::uint16_t _text, std::uint8_t _save
   {
     return ToEquipMessage(_hardware, FUEL_SALE_ILLEGAL_TEXT);
   }
-  if (_state.Get(DS.missileCount) == 0)
+  if (_state.Data().commanderBlock.missileCount == 0)
   {
     _hardware.LoopTurn(EQUIP_SOLD_MESSAGE, {});
     return ToEquipMessage(_hardware, NO_MISSILE_TO_SELL_TEXT);
   }
-  const auto left = static_cast<std::uint8_t>(_state.Get(DS.missileCount) - 1);
-  _state.Set(DS.missileCount, left);
+  const auto left = static_cast<std::uint8_t>(_state.Data().commanderBlock.missileCount - 1);
+  _state.Data().commanderBlock.missileCount = left;
   if (left == 0)
   {
     ClearEquipmentSellPrice(_state);
   }
-  AddCredits(_state, _state.Get(DS.data8245));
+  AddCredits(_state, _state.Data().screenPrices.data8245);
   return ToEquipMessage(_hardware, MISSILE_SOLD_TEXT);
 }
 
@@ -364,12 +364,12 @@ void ShowEquipMessage(GameState& _state, std::uint16_t _text, std::uint8_t _save
 // ShowEquipMessage, after the jumps back the original takes on the way.
 [[nodiscard]] std::uint16_t SellEquipment(GameState& _state, Hardware& _hardware)
 {
-  const std::uint8_t row = _state.Get(DS.menuSelectedRow);
+  const std::uint8_t row = _state.Data().menuSelectedRow;
   if (row < FIRST_FITTED_ROW)
   {
     return SellFuelOrMissile(_state, _hardware, row);
   }
-  if (row == CARGO_BAY_ROW && _state.Get(DS.cargoUsedTonnes) >= CARGO_BAY_SALE_TONNES)
+  if (row == CARGO_BAY_ROW && _state.Data().commanderBlock.cargoHold.cargoUsedTonnes >= CARGO_BAY_SALE_TONNES)
   {
     return ToEquipMessage(_hardware, TOO_MUCH_CARGO_TEXT);
   }
@@ -378,7 +378,7 @@ void ShowEquipMessage(GameState& _state, std::uint16_t _text, std::uint8_t _save
   {
     return ToEquipMessage(_hardware, NO_ITEM_TO_SELL_TEXT);
   }
-  if (_state.Get(DS.menuSelectedRow) == FUEL_SCOOPS_ROW && _state.Get(DS.miningLaserCount) != 0)
+  if (_state.Data().menuSelectedRow == FUEL_SCOOPS_ROW && _state.Data().commanderBlock.miningLaserCount != 0)
   {
     return ToEquipMessage(_hardware, SELL_MINING_LASER_TEXT);
   }
@@ -388,7 +388,7 @@ void ShowEquipMessage(GameState& _state, std::uint16_t _text, std::uint8_t _save
   {
     ClearEquipmentSellPrice(_state);
   }
-  AddCredits(_state, _state.Word(Offset(PriceSlot(_state.Get(DS.menuSelectedRow)), 2)));
+  AddCredits(_state, _state.Word(Offset(PriceSlot(_state.Data().menuSelectedRow), 2)));
   if (SelectLaserType(_state))
   {
     ChooseMountToRemoveLaser(_state, _hardware);
@@ -402,14 +402,14 @@ std::uint16_t MoveMountBoxLeft(GameState& _state, std::uint16_t _box)
 {
   PaintLaserMountBox(_state, _box);
   auto box = static_cast<std::uint16_t>(_box - MOUNT_BOX_STEP);
-  const auto mount = static_cast<std::uint8_t>(_state.Get(DS.selectedLaserMount) - 1);
-  _state.Set(DS.selectedLaserMount, mount);
+  const auto mount = static_cast<std::uint8_t>(_state.Data().selectedLaserMount - 1);
+  _state.Data().selectedLaserMount = mount;
   if ((mount & 0x80) != 0)
   {
-    _state.Set(DS.selectedLaserMount, LAST_MOUNT);
+    _state.Data().selectedLaserMount = LAST_MOUNT;
     box = LAST_MOUNT_BOX;
   }
-  _state.Set(DS.textAttribute, MOUNT_HIGHLIGHT_ATTRIBUTE);
+  _state.Data().textAttribute = MOUNT_HIGHLIGHT_ATTRIBUTE;
   PaintLaserMountBox(_state, box);
   return box;
 }
@@ -420,14 +420,14 @@ std::uint16_t MoveMountBoxRight(GameState& _state, std::uint16_t _box)
 {
   PaintLaserMountBox(_state, _box);
   auto box = static_cast<std::uint16_t>(_box + MOUNT_BOX_STEP);
-  const auto mount = static_cast<std::uint8_t>(_state.Get(DS.selectedLaserMount) + 1);
-  _state.Set(DS.selectedLaserMount, mount);
+  const auto mount = static_cast<std::uint8_t>(_state.Data().selectedLaserMount + 1);
+  _state.Data().selectedLaserMount = mount;
   if (mount == MOUNT_COUNT)
   {
-    _state.Set(DS.selectedLaserMount, 0);
+    _state.Data().selectedLaserMount = 0;
     box = FIRST_MOUNT_BOX;
   }
-  _state.Set(DS.textAttribute, MOUNT_HIGHLIGHT_ATTRIBUTE);
+  _state.Data().textAttribute = MOUNT_HIGHLIGHT_ATTRIBUTE;
   PaintLaserMountBox(_state, box);
   return box;
 }
@@ -441,7 +441,7 @@ PrintedText PrintMountMessage(GameState& _state, Hardware& _hardware, std::uint1
   {
     _hardware.LoopTurn(_jumpedTo, {});
   }
-  _state.Set(DS.textAttribute, MENU_ATTRIBUTE);
+  _state.Data().textAttribute = MENU_ATTRIBUTE;
   return PrintTextModeString(_state, _text, MESSAGE_OFFSET);
 }
 
@@ -449,7 +449,7 @@ PrintedText PrintMountMessage(GameState& _state, Hardware& _hardware, std::uint1
 // carry, is set.
 [[nodiscard]] bool IsMountFitted(const GameState& _state)
 {
-  return ((_state.Get(DS.laserMountsFitted) >> _state.Get(DS.selectedLaserMount)) & 1) != 0;
+  return ((_state.Data().commanderBlock.laserMountsFitted >> _state.Data().selectedLaserMount) & 1) != 0;
 }
 
 // 642A: Space in ChooseMountToFitLaser. A free mount gets the bought laser: its bit of laserMountsFitted set, and its two bits
@@ -462,12 +462,13 @@ bool FitLaserOnMount(GameState& _state, Hardware& _hardware)
     PrintMountMessage(_state, _hardware, MOUNT_OCCUPIED_TEXT, 0);
     return false;
   }
-  const std::uint8_t mount = _state.Get(DS.selectedLaserMount);
-  _state.Set(DS.laserMountsFitted, static_cast<std::uint8_t>(_state.Get(DS.laserMountsFitted) | (1u << mount)));
+  const std::uint8_t mount = _state.Data().selectedLaserMount;
+  _state.Data().commanderBlock.laserMountsFitted =
+    static_cast<std::uint8_t>(_state.Data().commanderBlock.laserMountsFitted | (1u << mount));
   // 3 and the type, shifted up together as AX to the mount's two bits.
-  const auto bits = static_cast<std::uint16_t>(Join(_state.Get(DS.selectedLaserType), MOUNT_TYPE_BITS) << (mount * 2u));
-  _state.Set(DS.laserMountTypes, static_cast<std::uint8_t>(_state.Get(DS.laserMountTypes) & ~Low(bits)));
-  _state.Set(DS.laserMountTypes, static_cast<std::uint8_t>(_state.Get(DS.laserMountTypes) | High(bits)));
+  const auto bits = static_cast<std::uint16_t>(Join(_state.Data().selectedLaserType, MOUNT_TYPE_BITS) << (mount * 2u));
+  _state.Data().commanderBlock.laserMountTypes = static_cast<std::uint8_t>(_state.Data().commanderBlock.laserMountTypes & ~Low(bits));
+  _state.Data().commanderBlock.laserMountTypes = static_cast<std::uint8_t>(_state.Data().commanderBlock.laserMountTypes | High(bits));
   RedrawEquipHelpText(_state);
   return true;
 }
@@ -482,13 +483,14 @@ bool RemoveLaserFromMount(GameState& _state, Hardware& _hardware)
     PrintMountMessage(_state, _hardware, NO_LASER_ON_MOUNT_TEXT, 0);
     return false;
   }
-  const std::uint8_t mount = _state.Get(DS.selectedLaserMount);
-  if (((_state.Get(DS.laserMountTypes) >> (mount * 2u)) & MOUNT_TYPE_BITS) != _state.Get(DS.selectedLaserType))
+  const std::uint8_t mount = _state.Data().selectedLaserMount;
+  if (((_state.Data().commanderBlock.laserMountTypes >> (mount * 2u)) & MOUNT_TYPE_BITS) != _state.Data().selectedLaserType)
   {
     PrintMountMessage(_state, _hardware, WRONG_LASER_TYPE_TEXT, REMOVE_MOUNT_MESSAGE);
     return false;
   }
-  _state.Set(DS.laserMountsFitted, static_cast<std::uint8_t>(_state.Get(DS.laserMountsFitted) & ~(1u << mount)));
+  _state.Data().commanderBlock.laserMountsFitted =
+    static_cast<std::uint8_t>(_state.Data().commanderBlock.laserMountsFitted & ~(1u << mount));
   RedrawEquipHelpText(_state);
   return true;
 }
@@ -518,7 +520,7 @@ void RunMountChooser(GameState& _state, Hardware& _hardware, const MountChooser&
     loop.al = roll;
     if (roll != 0)
     {
-      _state.Set(DS.textAttribute, HELP_ATTRIBUTE);
+      _state.Data().textAttribute = HELP_ATTRIBUTE;
       loop.row = (roll & 0x80) != 0 ? MoveMountBoxLeft(_state, loop.row) : MoveMountBoxRight(_state, loop.row);
       loop.al = MOUNT_HIGHLIGHT_ATTRIBUTE; // the second PaintLaserMountBox's AL
     }
@@ -544,7 +546,7 @@ void RunMountChooser(GameState& _state, Hardware& _hardware, const MountChooser&
         _hardware.LoopTurn(_chooser.steer, {loop.row, loop.al});
         break;
       }
-      _state.Set(DS.textAttribute, HELP_ATTRIBUTE);
+      _state.Data().textAttribute = HELP_ATTRIBUTE;
       if (code == SCAN_LEFT || code == SCAN_RIGHT)
       {
         _hardware.LoopTurn(code == SCAN_LEFT ? _chooser.left : _chooser.right, {loop.row});
@@ -562,18 +564,18 @@ void RunMountChooser(GameState& _state, Hardware& _hardware, const MountChooser&
 
 void LaunchEscapePod(GameState& _state)
 {
-  _state.Set(DS.hyperspaceCountdown, 0);
-  _state.Set(DS.escapePodFrames, ESCAPE_POD_FRAMES);
+  _state.Data().hyperspaceCountdown = 0;
+  _state.Data().escapePodFrames = ESCAPE_POD_FRAMES;
   const SlotSearch free = FindFreeShipSlot(_state);
   const std::uint16_t slot = free.found ? free.slot : ReclaimShipSlot(_state).slot;
   ClearObjectSlot(_state, slot);
-  InitAbandonedCobra(_state, ObjectSlot(_state, slot));
-  _state.Set(DS.playerPitchAngle, static_cast<std::uint16_t>(_state.Get(DS.playerPitchAngle) + HALF_TURN));
-  _state.Set(DS.viewAngle, HALF_TURN);
-  _state.Set(DS.viewLocked, 1);
-  _state.Set(DS.playerSpeed, ESCAPE_POD_SPEED);
-  _state.Set(DS.velocityDirty, 1);
-  _state.Set(DS.escapePodFitted, 0);
+  InitAbandonedCobra(_state, _state.ObjectAt(slot));
+  _state.Data().playerPitchAngle = static_cast<std::uint16_t>(_state.Data().playerPitchAngle + HALF_TURN);
+  _state.Data().viewAngle = HALF_TURN;
+  _state.Data().viewLocked = 1;
+  _state.Data().playerSpeed = ESCAPE_POD_SPEED;
+  _state.Data().velocityDirty = 1;
+  _state.Data().commanderBlock.escapePodFitted = 0;
   UpdatePlayerVelocity(_state);
   for (std::uint16_t move = 0; move < ESCAPE_POD_MOVES; ++move)
   {
@@ -586,19 +588,19 @@ void LaunchEscapePod(GameState& _state)
   }
 }
 
-Scoop TryScoopObject(GameState& _state, ObjectSlot _slot, const Vector& _view)
+Scoop TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
 {
-  std::uint8_t space = _state.Get(DS.largeCargoBayFitted) == 1 ? LARGE_CARGO_BAY_TONNES : CARGO_BAY_TONNES;
-  space = static_cast<std::uint8_t>(space - _state.Get(DS.cargoUsedTonnes));
-  _state.Set(DS.freeCargoTonnes, space);
+  std::uint8_t space = _state.Data().commanderBlock.largeCargoBayFitted == 1 ? LARGE_CARGO_BAY_TONNES : CARGO_BAY_TONNES;
+  space = static_cast<std::uint8_t>(space - _state.Data().commanderBlock.cargoHold.cargoUsedTonnes);
+  _state.Data().freeCargoTonnes = space;
   if (!TestScoopBox(_view))
   {
     return Scoop{false, {}};
   }
 
-  const auto type = static_cast<std::uint8_t>((_slot.Get(SlotByte::Type) >> 1) & TYPE_MASK);
-  const std::uint8_t flags = _slot.Get(SlotByte::Flags);
-  const bool full = _state.Get(DS.freeCargoTonnes) == 0;
+  const auto type = static_cast<std::uint8_t>((_slot.type >> 1) & TYPE_MASK);
+  const std::uint8_t flags = _slot.flags;
+  const bool full = _state.Data().freeCargoTonnes == 0;
   Scoop scoop{true, {}};
   std::uint16_t message = DS.scoopRetrievalInactiveText.offset;
   if (type == TYPE_CARGO_BARREL)
@@ -606,7 +608,7 @@ Scoop TryScoopObject(GameState& _state, ObjectSlot _slot, const Vector& _view)
     if ((flags & FLAG_MASKING_DEVICE) != 0)
     {
       scoop.removedBlip = RemoveObject(_state, _slot);
-      _state.Set(DS.maskingDeviceRecovered, 1);
+      _state.Data().commanderBlock.maskingDeviceRecovered = 1;
       message = DS.maskingDeviceText.offset;
     }
     else if (full)
@@ -626,7 +628,8 @@ Scoop TryScoopObject(GameState& _state, ObjectSlot _slot, const Vector& _view)
         product = PRODUCT_FURS;
       }
       IncrementByte(_state, DS.cargoHold.At(product));
-      _state.Set(DS.cargoUsedTonnes, static_cast<std::uint8_t>(_state.Get(DS.cargoUsedTonnes) + 1));
+      _state.Data().commanderBlock.cargoHold.cargoUsedTonnes =
+        static_cast<std::uint8_t>(_state.Data().commanderBlock.cargoHold.cargoUsedTonnes + 1);
       const auto name = static_cast<std::uint16_t>(product * PRODUCT_NAME_BYTES + DS.productNames.offset);
       for (std::uint16_t letter = 0; letter < SCOOPED_NAME_BYTES; ++letter)
       {
@@ -640,13 +643,14 @@ Scoop TryScoopObject(GameState& _state, ObjectSlot _slot, const Vector& _view)
     // Gems, gold and platinum always; minerals or alloys too if there is room. Gold gets the gems' AL, as the original adds it.
     scoop.removedBlip = RemoveObject(_state, _slot);
     const std::uint8_t gems = Low(NextRandom(_state)) & 7;
-    AddPrecious(_state, DS.cargoGemStonesGrams, gems);
-    AddPrecious(_state, DS.cargoGoldKg, gems);
-    AddPrecious(_state, DS.cargoPlatinumKg, static_cast<std::uint8_t>((High(NextRandom(_state)) & 3) + 1));
-    if (_state.Get(DS.freeCargoTonnes) != 0)
+    AddPrecious(_state.Data().commanderBlock.cargoHold.cargoGemStonesGrams, gems);
+    AddPrecious(_state.Data().commanderBlock.cargoHold.cargoGoldKg, gems);
+    AddPrecious(_state.Data().commanderBlock.cargoHold.cargoPlatinumKg, static_cast<std::uint8_t>((High(NextRandom(_state)) & 3) + 1));
+    if (_state.Data().freeCargoTonnes != 0)
     {
       IncrementByte(_state, Low(NextRandom(_state)) >= MINERALS_FROM ? DS.cargoMineralsTonnes.offset : DS.cargoAlloysTonnes.offset);
-      _state.Set(DS.cargoUsedTonnes, static_cast<std::uint8_t>(_state.Get(DS.cargoUsedTonnes) + 1));
+      _state.Data().commanderBlock.cargoHold.cargoUsedTonnes =
+        static_cast<std::uint8_t>(_state.Data().commanderBlock.cargoHold.cargoUsedTonnes + 1);
     }
     message = DS.preciousMetalsText.offset;
   }
@@ -659,18 +663,20 @@ Scoop TryScoopObject(GameState& _state, ObjectSlot _slot, const Vector& _view)
     else
     {
       scoop.removedBlip = RemoveObject(_state, _slot);
-      const DataField<std::uint8_t> held = type == TYPE_SPLINTER     ? DS.cargoAlloysTonnes
-                                           : type == TYPE_ESCAPE_POD ? DS.cargoSlavesTonnes
-                                                                     : DS.cargoAlienItemsTonnes;
-      IncrementByte(_state, held.offset);
-      _state.Set(DS.cargoUsedTonnes, static_cast<std::uint8_t>(_state.Get(DS.cargoUsedTonnes) + 1));
+      GameData::CommanderBlock::CargoHold& hold = _state.Data().commanderBlock.cargoHold;
+      Counted<std::uint8_t>& held = type == TYPE_SPLINTER     ? hold.cargoAlloysTonnes
+                                    : type == TYPE_ESCAPE_POD ? hold.cargoSlavesTonnes
+                                                              : hold.cargoAlienItemsTonnes;
+      held = static_cast<std::uint8_t>(held + 1);
+      _state.Data().commanderBlock.cargoHold.cargoUsedTonnes =
+        static_cast<std::uint8_t>(_state.Data().commanderBlock.cargoHold.cargoUsedTonnes + 1);
       message = type == TYPE_SPLINTER     ? DS.metalAlloysText.offset
                 : type == TYPE_ESCAPE_POD ? DS.escapePodRetrievedText.offset
                                           : DS.alienItemsText.offset;
     }
   }
   _state.Set(DS.messagePointer, message);
-  _state.Set(DS.messageFrames, SCOOP_MESSAGE_FRAMES);
+  _state.Data().messageFrames = SCOOP_MESSAGE_FRAMES;
   return scoop;
 }
 
@@ -685,37 +691,37 @@ ScreenKey ShowEquipShipScreen(GameState& _state, Hardware& _hardware, bool _back
   std::uint16_t item = DS.equipmentList.offset;
   std::uint16_t left = _state.Byte(item);
   item = Offset(item, 1);
-  const auto techLimit = static_cast<std::uint8_t>(_state.Get(DS.currentTechLevel) + 2);
-  _state.Set(DS.menuRowCount, 0);
+  const auto techLimit = static_cast<std::uint8_t>(_state.Data().commanderBlock.currentTechLevel + 2);
+  _state.Data().menuRowCount = 0;
   std::uint16_t cell = FIRST_ITEM_OFFSET;
   while (_state.Byte(item) < techLimit)
   {
-    const auto row = static_cast<std::uint8_t>(_state.Get(DS.menuRowCount) + 1);
-    _state.Set(DS.menuRowCount, row);
+    const auto row = static_cast<std::uint8_t>(_state.Data().menuRowCount + 1);
+    _state.Data().menuRowCount = row;
     // The price: the government's and the economy's factors, each by IMUL, and the base price.
     std::uint16_t factor = Offset(PrintTextModeString(_state, Offset(item, 1), cell).end, 1);
-    const std::uint16_t government = SignedProduct(_state.Byte(factor), _state.Get(DS.currentGovernment));
+    const std::uint16_t government = SignedProduct(_state.Byte(factor), _state.Data().commanderBlock.currentGovernment);
     factor = Offset(factor, 1);
-    const std::uint16_t economy = SignedProduct(_state.Byte(factor), _state.Get(DS.currentEconomy));
+    const std::uint16_t economy = SignedProduct(_state.Byte(factor), _state.Data().commanderBlock.currentEconomy);
     factor = Offset(factor, 1);
     const auto price = static_cast<std::uint16_t>(economy + government + _state.Word(factor));
     _state.SetWord(PriceSlot(row), price);
     _state.SetWord(Offset(PriceSlot(row), 2), 0);
     // A resale price only for an item fitted, and never for fuel.
     const bool resold = row != FUEL_ROW && _state.Byte(static_cast<std::uint16_t>(row + FITTED_BEFORE_FUEL)) != 0;
-    _state.Set(DS.resalePriceInput, resold ? price : std::uint16_t{0});
+    _state.Data().resalePriceInput = resold ? price : std::uint16_t{0};
     FormatTenths(_state, price);
     PrintTextModeString(_state, DS.priceText.offset, Offset(cell, PRICE_COLUMN));
     const std::uint16_t resale = ComputeResalePrice(_state);
     std::uint16_t resaleText = NO_RESALE_TEXT;
     if (resale != 0)
     {
-      _state.SetWord(Offset(PriceSlot(_state.Get(DS.menuRowCount)), 2), resale);
+      _state.SetWord(Offset(PriceSlot(_state.Data().menuRowCount), 2), resale);
       FormatDecimal5(_state, resale, DS.priceText.offset);
       BlankLeadingZeros(_state, DS.priceText.offset, RESALE_DIGITS_BLANKED);
       // Tenths: the last digit moved right one for the point.
-      _state.Set(DS.data8041, _state.Get(DS.data8040));
-      _state.Set(DS.data8040, '.');
+      _state.Data().priceText.data8041 = std::uint8_t{_state.Data().priceText.data8040};
+      _state.Data().priceText.data8040 = '.';
       resaleText = DS.priceText.offset;
     }
     PrintTextModeString(_state, resaleText, Offset(cell, RESALE_COLUMN));
@@ -732,9 +738,9 @@ ScreenKey ShowEquipShipScreen(GameState& _state, Hardware& _hardware, bool _back
 
 bool SelectLaserType(GameState& _state)
 {
-  const std::uint8_t row = _state.Get(DS.menuSelectedRow);
+  const std::uint8_t row = _state.Data().menuSelectedRow;
   std::uint8_t type = 0;
-  _state.Set(DS.selectedLaserType, type);
+  _state.Data().selectedLaserType = type;
   for (;;)
   {
     const bool laser = row == LASER_ROWS[type];
@@ -743,7 +749,7 @@ bool SelectLaserType(GameState& _state)
       return laser;
     }
     ++type;
-    _state.Set(DS.selectedLaserType, type);
+    _state.Data().selectedLaserType = type;
   }
 }
 
@@ -752,7 +758,7 @@ ScreenKey RunEquipShipMenu(GameState& _state, Hardware& _hardware, std::uint16_t
   _state.Set(DS.menuFirstRowAttr, _firstRow);
   // StartMenu's last ToggleMenuRowHighlight leaves AL the attribute it toggled the row to, which it left in textAttribute.
   MenuLoop loop{StartMenu(_state).row, 0};
-  loop.al = _state.Get(DS.textAttribute);
+  loop.al = _state.Data().textAttribute;
   for (;;)
   {
     // 612F: the steering; then the keys, each turn to the steering carrying the cursor and AL, each to a cursor's move the
@@ -783,7 +789,7 @@ ScreenKey RunEquipShipMenu(GameState& _state, Hardware& _hardware, std::uint16_t
       {
         _hardware.LoopTurn(code == SCAN_UP ? EQUIP_CURSOR_UP : EQUIP_CURSOR_DOWN, {loop.row});
         loop.row = (code == SCAN_UP ? MoveMenuCursorUp(_state, loop.row) : MoveMenuCursorDown(_state, loop.row)).row;
-        loop.al = _state.Get(DS.textAttribute);
+        loop.al = _state.Data().textAttribute;
         continue;
       }
       // The screen's own F4 does nothing here.
@@ -799,11 +805,11 @@ ScreenKey RunEquipShipMenu(GameState& _state, Hardware& _hardware, std::uint16_t
 
 PrintedText DrawLaserMountMenu(GameState& _state)
 {
-  _state.Set(DS.textAttribute, HELP_ATTRIBUTE);
+  _state.Data().textAttribute = HELP_ATTRIBUTE;
   PrintCountedTextLines(_state, MOUNT_HEADER_TEXT, MOUNT_HEADER_OFFSET);
   // Each mount's laser, or Free, one after the other: its bit of laserMountsFitted, its two bits of laserMountTypes.
-  const std::uint8_t types = _state.Get(DS.laserMountTypes);
-  const std::uint8_t fitted = _state.Get(DS.laserMountsFitted);
+  const std::uint8_t types = _state.Data().commanderBlock.laserMountTypes;
+  const std::uint8_t fitted = _state.Data().commanderBlock.laserMountsFitted;
   PrintedText printed{FREE_MOUNT_TEXT, MOUNT_NAMES_OFFSET};
   for (std::uint16_t mount = 0; mount < MOUNT_COUNT; ++mount)
   {
@@ -814,9 +820,9 @@ PrintedText DrawLaserMountMenu(GameState& _state)
     }
     printed = PrintTextModeString(_state, name, printed.nextCell);
   }
-  _state.Set(DS.textAttribute, MOUNT_HIGHLIGHT_ATTRIBUTE);
+  _state.Data().textAttribute = MOUNT_HIGHLIGHT_ATTRIBUTE;
   PaintLaserMountBox(_state, FIRST_MOUNT_BOX);
-  _state.Set(DS.selectedLaserMount, 0);
+  _state.Data().selectedLaserMount = 0;
   return printed;
 }
 
@@ -830,7 +836,7 @@ void ChooseMountToFitLaser(GameState& _state, Hardware& _hardware)
 void ChooseMountToRemoveLaser(GameState& _state, Hardware& _hardware)
 {
   DrawLaserMountMenu(_state);
-  _state.Set(DS.textAttribute, HELP_ATTRIBUTE);
+  _state.Data().textAttribute = HELP_ATTRIBUTE;
   PrintTextModeString(_state, SELL_LASER_TEXT, SELL_LASER_OFFSET);
   // SI, pushed and popped round the print, on FORE's box; AL the print's NUL.
   RunMountChooser(_state, _hardware, REMOVE_CHOOSER, MenuLoop{FIRST_MOUNT_BOX, 0});
@@ -838,15 +844,15 @@ void ChooseMountToRemoveLaser(GameState& _state, Hardware& _hardware)
 
 PrintedLines RedrawEquipHelpText(GameState& _state)
 {
-  _state.Set(DS.textAttribute, HELP_ATTRIBUTE);
+  _state.Data().textAttribute = HELP_ATTRIBUTE;
   const PrintedLines printed = PrintCountedTextLines(_state, DS.equipHelpText.offset, HELP_TEXT_OFFSET);
-  _state.Set(DS.textAttribute, MENU_ATTRIBUTE);
+  _state.Data().textAttribute = MENU_ATTRIBUTE;
   return printed;
 }
 
 void PaintLaserMountBox(GameState& _state, std::uint16_t _box)
 {
-  const std::uint8_t attribute = _state.Get(DS.textAttribute);
+  const std::uint8_t attribute = _state.Data().textAttribute;
   std::uint16_t cell = _box;
   for (std::uint8_t row = 0; row < MOUNT_BOX_ROWS; ++row)
   {
@@ -861,14 +867,14 @@ void PaintLaserMountBox(GameState& _state, std::uint16_t _box)
 
 bool PayForEquipmentItem(GameState& _state, std::uint16_t _bx)
 {
-  const std::uint8_t row = _state.Get(DS.menuSelectedRow);
+  const std::uint8_t row = _state.Data().menuSelectedRow;
   std::uint16_t tenths = 0;
   if (row == FUEL_ROW)
   {
     // What fills the tank: (255-fuel) * the price's low byte / 36, at least 1, by a DIV that can overflow into the game's trap,
     // which saves BX with the row in BL.
-    const auto missing = static_cast<std::uint8_t>(~_state.Get(DS.fuel));
-    const auto product = static_cast<std::uint16_t>(missing * Low(_state.Get(DS.data823F)));
+    const auto missing = static_cast<std::uint8_t>(~_state.Data().commanderBlock.fuel);
+    const auto product = static_cast<std::uint16_t>(missing * Low(_state.Data().screenPrices.data823F));
     std::uint8_t units = DivideByte(_state, product, FUEL_UNITS_PER_TENTH, WithLow(_bx, row)).quotient;
     if (units == 0)
     {
@@ -892,8 +898,8 @@ PrintedText ShowEquipmentSellPrice(GameState& _state)
 {
   // The price's slot in screenPrices, and the resale price after it. The original keeps the slot in BX on the stack
   // round ComputeResalePrice.
-  const std::uint16_t slot = PriceSlot(_state.Get(DS.menuSelectedRow));
-  _state.Set(DS.resalePriceInput, _state.Word(slot));
+  const std::uint16_t slot = PriceSlot(_state.Data().menuSelectedRow);
+  _state.Data().resalePriceInput = _state.Word(slot);
   const std::uint16_t resale = ComputeResalePrice(_state);
   _state.SetWord(Offset(slot, 2), resale);
   FormatTenths(_state, resale);
@@ -906,7 +912,7 @@ MenuCursor StartMenu(GameState& _state)
   const PrintedText credits = PrintCreditsOnMessageLine(_state);
   SwapTextAttributeNibbles(_state);
   const std::uint16_t row = _state.Get(DS.menuFirstRowAttr);
-  _state.Set(DS.menuSelectedRow, 1);
+  _state.Data().menuSelectedRow = 1;
   ToggleMenuRowHighlight(_state, GameState::VIDEO_SEGMENT, row);
   return MenuCursor{row, credits};
 }
@@ -916,14 +922,14 @@ MenuCursor MoveMenuCursorUp(GameState& _state, std::uint16_t _row)
   const PrintedText credits = PrintCreditsOnMessageLine(_state);
   ToggleMenuRowHighlight(_state, GameState::VIDEO_SEGMENT, _row);
   std::uint16_t row = _row;
-  const auto selected = static_cast<std::uint8_t>(_state.Get(DS.menuSelectedRow) - 1);
-  _state.Set(DS.menuSelectedRow, selected);
+  const auto selected = static_cast<std::uint8_t>(_state.Data().menuSelectedRow - 1);
+  _state.Data().menuSelectedRow = selected;
   if (selected == 0)
   {
     // To the last row: count*80 bytes on, as count*256/4 and that /4 again.
     row = _state.Get(DS.menuFirstRowAttr);
-    const std::uint8_t count = _state.Get(DS.menuRowCount);
-    _state.Set(DS.menuSelectedRow, count);
+    const std::uint8_t count = _state.Data().menuRowCount;
+    _state.Data().menuSelectedRow = count;
     const std::uint16_t quarter = MenuRowsQuarter(count);
     row = Offset(Offset(row, quarter), static_cast<std::uint16_t>(quarter >> 2));
   }
@@ -937,12 +943,12 @@ MenuCursor MoveMenuCursorDown(GameState& _state, std::uint16_t _row)
   const PrintedText credits = PrintCreditsOnMessageLine(_state);
   ToggleMenuRowHighlight(_state, GameState::VIDEO_SEGMENT, _row);
   std::uint16_t row = _row;
-  const auto selected = static_cast<std::uint8_t>(_state.Get(DS.menuSelectedRow) + 1);
-  _state.Set(DS.menuSelectedRow, selected);
-  if (_state.Get(DS.menuRowCount) < selected)
+  const auto selected = static_cast<std::uint8_t>(_state.Data().menuSelectedRow + 1);
+  _state.Data().menuSelectedRow = selected;
+  if (_state.Data().menuRowCount < selected)
   {
     row = static_cast<std::uint16_t>(_state.Get(DS.menuFirstRowAttr) - ROW_BYTES);
-    _state.Set(DS.menuSelectedRow, 1);
+    _state.Data().menuSelectedRow = 1;
   }
   row = static_cast<std::uint16_t>(row + ROW_BYTES);
   ToggleMenuRowHighlight(_state, GameState::VIDEO_SEGMENT, row);
@@ -964,7 +970,7 @@ MenuLoop SteerMenuCursor(GameState& _state, Hardware& _hardware, MenuLoop _loop)
     return MenuLoop{_loop.row, steering.roll};
   }
   const MenuCursor cursor = (pitch & 0x80) != 0 ? MoveMenuCursorUp(_state, _loop.row) : MoveMenuCursorDown(_state, _loop.row);
-  return MenuLoop{cursor.row, _state.Get(DS.textAttribute)};
+  return MenuLoop{cursor.row, _state.Data().textAttribute};
 }
 
 KeyPress PollMenuKey(GameState& _state, Hardware& _hardware, std::uint16_t _tickLoop)

@@ -235,7 +235,7 @@ std::uint8_t CopyBytes(GameState& _state, std::uint16_t _from, std::uint16_t _to
 [[nodiscard]] bool AnyChartItemOverlaps(const GameState& _state, ChartSpan _x, ChartSpan _rows)
 {
   std::uint16_t item = DS.chartItems.offset;
-  std::uint16_t itemsLeft = _state.Get(DS.chartItemCount);
+  std::uint16_t itemsLeft = _state.Data().chartItemCount;
   do
   {
     if (ChartItemOverlaps(_state, item, _x, _rows))
@@ -305,10 +305,10 @@ bool DrawCross(GameState& _state, std::uint16_t _x, std::uint16_t _row, std::uin
 // cross filled, as DrawCross.
 bool DrawChartCursor(GameState& _state)
 {
-  _state.Set(DS.drawColor, 1);
-  const bool filled = DrawCross(_state, _state.Get(DS.chartCursorX), _state.Get(DS.chartCursorY), CURSOR_ARM);
-  _state.Set(DS.drawColor, 0);
-  PlotPixel(_state, _state.Get(DS.chartCursorX), _state.Get(DS.chartCursorY));
+  _state.Data().drawColor = 1;
+  const bool filled = DrawCross(_state, _state.Data().commanderBlock.chartCursorX, _state.Data().commanderBlock.chartCursorY, CURSOR_ARM);
+  _state.Data().drawColor = 0;
+  PlotPixel(_state, _state.Data().commanderBlock.chartCursorX, _state.Data().commanderBlock.chartCursorY);
   return filled;
 }
 
@@ -319,7 +319,7 @@ ChartPoint MoveChartCursor(GameState& _state, Hardware& _hardware, std::uint8_t 
 {
   const Steering steering = ReadSteering(_state, _hardware, _trigger);
   const std::uint8_t across = steering.roll;
-  const unsigned x = unsigned{across} + unsigned{_state.Get(DS.chartCursorX)};
+  const unsigned x = unsigned{across} + unsigned{_state.Data().commanderBlock.chartCursorX};
   ChartPoint cursor{};
   if ((across & 0x80) == 0)
   {
@@ -330,9 +330,9 @@ ChartPoint MoveChartCursor(GameState& _state, Hardware& _hardware, std::uint8_t 
     // Adding a negative byte carries unless it goes below 0.
     cursor.x = x > 0xFF ? static_cast<std::uint8_t>(x) : std::uint8_t{0};
   }
-  _state.Set(DS.chartCursorX, cursor.x);
+  _state.Data().commanderBlock.chartCursorX = cursor.x;
   const std::uint8_t down = Negate(steering.pitch);
-  const unsigned y = unsigned{down} + unsigned{_state.Get(DS.chartCursorY)};
+  const unsigned y = unsigned{down} + unsigned{_state.Data().commanderBlock.chartCursorY};
   if ((down & 0x80) == 0)
   {
     const auto row = static_cast<std::uint8_t>(y);
@@ -342,7 +342,7 @@ ChartPoint MoveChartCursor(GameState& _state, Hardware& _hardware, std::uint8_t 
   {
     cursor.row = y > 0xFF ? static_cast<std::uint8_t>(y) : std::uint8_t{0};
   }
-  _state.Set(DS.chartCursorY, cursor.row);
+  _state.Data().commanderBlock.chartCursorY = cursor.row;
   return cursor;
 }
 
@@ -352,17 +352,18 @@ ChartPoint MoveChartCursor(GameState& _state, Hardware& _hardware, std::uint8_t 
 void DrawGalacticChart(GameState& _state, Hardware& _hardware, bool _backward)
 {
   LoadGalaxySeeds(_state);
-  const auto fuelRadius = static_cast<std::uint16_t>((_state.Get(DS.fuel) >> 3) + 3);
-  _state.Set(DS.drawColor, 2);
-  DrawDisc(_state, fuelRadius, _state.Get(DS.currentSystemX), _state.Get(DS.currentSystemChartY), _backward);
-  _state.Set(DS.drawColor, 0);
-  (void)DrawCross(_state, _state.Get(DS.currentSystemX), _state.Get(DS.currentSystemChartY), CURRENT_SYSTEM_ARM);
+  const auto fuelRadius = static_cast<std::uint16_t>((_state.Data().commanderBlock.fuel >> 3) + 3);
+  _state.Data().drawColor = 2;
+  DrawDisc(_state, fuelRadius, _state.Data().commanderBlock.currentSystemX, _state.Data().commanderBlock.currentSystemChartY, _backward);
+  _state.Data().drawColor = 0;
+  (void)DrawCross(_state, _state.Data().commanderBlock.currentSystemX, _state.Data().commanderBlock.currentSystemChartY,
+                  CURRENT_SYSTEM_ARM);
   (void)DrawChartCursor(_state);
-  _state.Set(DS.drawColor, CHART_DISC_COLOR);
+  _state.Data().drawColor = CHART_DISC_COLOR;
   // XOR AL,AL, then PUSH AX / POP AX round each dot.
   for (std::uint8_t systems = 0;;)
   {
-    PlotPixel(_state, _state.Get(DS.systemX), static_cast<std::uint8_t>(_state.Get(DS.systemY) >> 1));
+    PlotPixel(_state, _state.Data().systemSeed1Bytes.systemX, static_cast<std::uint8_t>(_state.Data().systemSeed0Bytes.systemY >> 1));
     TwistSystemSeeds(_state);
     TwistSystemSeeds(_state);
     TwistSystemSeeds(_state);
@@ -381,14 +382,14 @@ void DrawGalacticChart(GameState& _state, Hardware& _hardware, bool _backward)
 // horizontal line clears it before the chart's discs.
 void DrawShortRangeChart(GameState& _state, Hardware& /*_hardware*/, bool _backward)
 {
-  const auto fuelRadius = static_cast<std::uint16_t>(_state.Get(DS.fuel) >> 1);
-  _state.Set(DS.drawColor, 2);
+  const auto fuelRadius = static_cast<std::uint16_t>(_state.Data().commanderBlock.fuel >> 1);
+  _state.Data().drawColor = 2;
   DrawDisc(_state, fuelRadius, SHORT_RANGE_CENTER_X, SHORT_RANGE_CENTER_ROW, _backward);
-  _state.Set(DS.drawColor, 0);
+  _state.Data().drawColor = 0;
   // The current system's cross, from (50h, 51h) to (50h, 2Fh) and from (61h, 40h) to (3Fh, 40h).
   const bool downFilled = DrawLine(_state, 0x50, 0x51, 0x50, 0x2F);
   const bool acrossFilled = DrawLine(_state, 0x61, 0x40, 0x3F, 0x40);
-  _state.Set(DS.drawColor, CHART_DISC_COLOR);
+  _state.Data().drawColor = CHART_DISC_COLOR;
   (void)DrawChartItems(_state, _backward && !downFilled && !acrossFilled);
   (void)DrawChartCursor(_state);
 }
@@ -402,23 +403,23 @@ struct ChartKeys
   std::uint16_t ignored; // the jump to it that the key tests reach (CS:0E0A, CS:1030)
   std::uint8_t ownKey;   // the chart's own F key, which leaves it open
   void (*recenter)(GameState&);
-  bool recenterThroughAl; // the recentring goes through AL, and leaves the cursor's row there
-  DataField<std::uint8_t> keptCursorX;
-  DataField<std::uint8_t> keptCursorY;
+  bool recenterThroughAl;                                       // the recentring goes through AL, and leaves the cursor's row there
+  Counted<std::uint8_t> GameData::CommanderBlock::*keptCursorX; // where the cursor is kept while the chart is closed
+  Counted<std::uint8_t> GameData::CommanderBlock::*keptCursorY;
 };
 
 // The galactic chart's cursor back on the current system (CS:0E19).
 void RecenterGalacticCursor(GameState& _state)
 {
-  _state.Set(DS.chartCursorX, _state.Get(DS.currentSystemX));
-  _state.Set(DS.chartCursorY, _state.Get(DS.currentSystemChartY));
+  _state.Data().commanderBlock.chartCursorX = std::uint8_t{_state.Data().commanderBlock.currentSystemX};
+  _state.Data().commanderBlock.chartCursorY = std::uint8_t{_state.Data().commanderBlock.currentSystemChartY};
 }
 
 // The short-range chart's cursor back on its centre (CS:103F).
 void RecenterShortRangeCursor(GameState& _state)
 {
-  _state.Set(DS.chartCursorX, static_cast<std::uint8_t>(SHORT_RANGE_CENTER_X));
-  _state.Set(DS.chartCursorY, static_cast<std::uint8_t>(SHORT_RANGE_CENTER_ROW));
+  _state.Data().commanderBlock.chartCursorX = static_cast<std::uint8_t>(SHORT_RANGE_CENTER_X);
+  _state.Data().commanderBlock.chartCursorY = static_cast<std::uint8_t>(SHORT_RANGE_CENTER_ROW);
 }
 
 constexpr ChartKeys GALACTIC_CHART_KEYS{.drawFrame = &DrawGalacticChart,
@@ -428,8 +429,8 @@ constexpr ChartKeys GALACTIC_CHART_KEYS{.drawFrame = &DrawGalacticChart,
                                         .ownKey = SCAN_F5,
                                         .recenter = &RecenterGalacticCursor,
                                         .recenterThroughAl = true,
-                                        .keptCursorX = DS.galacticCursorX,
-                                        .keptCursorY = DS.galacticCursorY};
+                                        .keptCursorX = &GameData::CommanderBlock::galacticCursorX,
+                                        .keptCursorY = &GameData::CommanderBlock::galacticCursorY};
 constexpr ChartKeys SHORT_RANGE_CHART_KEYS{.drawFrame = &DrawShortRangeChart,
                                            .pacing = SHORT_RANGE_CHART_PACING,
                                            .frame = SHORT_RANGE_CHART_FRAME,
@@ -437,8 +438,8 @@ constexpr ChartKeys SHORT_RANGE_CHART_KEYS{.drawFrame = &DrawShortRangeChart,
                                            .ownKey = SCAN_F6,
                                            .recenter = &RecenterShortRangeCursor,
                                            .recenterThroughAl = false,
-                                           .keptCursorX = DS.shortRangeCursorX,
-                                           .keptCursorY = DS.shortRangeCursorY};
+                                           .keptCursorX = &GameData::CommanderBlock::shortRangeCursorX,
+                                           .keptCursorY = &GameData::CommanderBlock::shortRangeCursorY};
 
 // A chart's key (CS:0DEF, CS:1015), with AL _al, the cursor's x as the frame leaves it: D shows the distance to the system
 // nearest the cursor, F finds one by name, keypad 5 or fire recentres the cursor, and Esc or an F key other than the chart's
@@ -476,7 +477,7 @@ std::optional<ScreenKey> ReadChartKey(GameState& _state, Hardware& _hardware, co
     _chart.recenter(_state);
     if (_chart.recenterThroughAl)
     {
-      al = _state.Get(DS.chartCursorY);
+      al = _state.Data().commanderBlock.chartCursorY;
     }
   }
   const bool closes = scanCode == SCAN_ESCAPE || (scanCode >= SCAN_F1 && scanCode <= SCAN_F10 && scanCode != _chart.ownKey);
@@ -488,11 +489,12 @@ std::optional<ScreenKey> ReadChartKey(GameState& _state, Hardware& _hardware, co
   }
   // PUSH AX / POP AX round the selection keep the key.
   std::uint16_t countLeft = PRESENT_CHART_FRAME_BP;
-  if (_state.Get(DS.hyperspaceCountdown) == 0)
+  if (_state.Data().hyperspaceCountdown == 0)
   {
     countLeft = SelectSystemAtCursor(_state, PRESENT_CHART_FRAME_BP);
-    _state.Set(_chart.keptCursorX, _state.Get(DS.chartCursorX));
-    _state.Set(_chart.keptCursorY, _state.Get(DS.chartCursorY));
+    GameData::CommanderBlock& commander = _state.Data().commanderBlock;
+    commander.*_chart.keptCursorX = std::uint8_t{commander.chartCursorX};
+    commander.*_chart.keptCursorY = std::uint8_t{commander.chartCursorY};
   }
   return ScreenKey{scanCode, al, countLeft};
 }
@@ -519,7 +521,7 @@ ScreenKey RunChartFrames(GameState& _state, Hardware& _hardware, const ChartKeys
 // two text lines under it cleared, at _segment, the screen as DrawChartFrame leaves ES.
 void DrawChartTitle(GameState& _state, std::uint16_t _title, std::uint16_t _segment)
 {
-  _state.Set(DS.textPaperPattern, 0);
+  _state.Data().textPaperPattern = 0;
   (void)DrawScreenString(_state, _title, INK_1, _segment, CHART_TITLE);
   (void)ClearChartTextLines(_state, INK_1, _segment);
 }
@@ -541,7 +543,7 @@ void AddShortRangeSystem(GameState& _state, Hardware& _hardware, std::int16_t _x
   const std::uint8_t centerRow = Low(GalaxyToChart(Word(_row), SHORT_RANGE_CENTER_ROW));
   std::uint16_t item = _state.Get(DS.chartItemEnd);
   _state.SetWord(Offset(item, CHART_ITEM_TEXT), Join(centerRow, centerX));
-  const auto radius = static_cast<std::uint16_t>(((_state.Get(DS.systemY) & 1) << 1) + 4);
+  const auto radius = static_cast<std::uint16_t>(((_state.Data().systemSeed0Bytes.systemY & 1) << 1) + 4);
   _state.SetWord(Offset(item, CHART_ITEM_RADIUS), radius);
   // Its box: half the radius either side, as add al,dl / xchg / sub al,dl / neg al make it.
   const auto half = static_cast<std::uint8_t>(radius >> 1);
@@ -551,7 +553,7 @@ void AddShortRangeSystem(GameState& _state, Hardware& _hardware, std::int16_t _x
     item = Offset(item, 2);
   }
   _state.Set(DS.chartItemEnd, Offset(item, CHART_ITEM_BYTES - 4));
-  _state.Set(DS.chartItemCount, static_cast<std::uint8_t>(_state.Get(DS.chartItemCount) + 1));
+  _state.Data().chartItemCount = static_cast<std::uint8_t>(_state.Data().chartItemCount + 1);
   const std::uint8_t length = GenerateSystemName(_state);
 
   // The label: from seven pixels right of the disc's centre, six a letter, and from two rows above it to three below.
@@ -666,8 +668,9 @@ std::uint16_t SearchNearestSystem(GameState& _state, std::uint16_t _countIfNone)
   for (std::uint16_t count = GALAXY_SYSTEMS; count != 0; --count)
   {
     // dx^2 + (dy/2)^2 to the cursor, each square a byte multiply; a sum that carries is passed over.
-    const std::uint16_t across = Square(Low(Magnitude(static_cast<std::uint16_t>(_state.Get(DS.systemX) - cursor.x))));
-    const std::uint16_t down = Square(Low(Magnitude(static_cast<std::uint16_t>((_state.Get(DS.systemY) >> 1) - cursor.row))));
+    const std::uint16_t across = Square(Low(Magnitude(static_cast<std::uint16_t>(_state.Data().systemSeed1Bytes.systemX - cursor.x))));
+    const std::uint16_t down =
+      Square(Low(Magnitude(static_cast<std::uint16_t>((_state.Data().systemSeed0Bytes.systemY >> 1) - cursor.row))));
     const std::uint32_t distance = std::uint32_t{across} + down;
     if (distance <= 0xFFFF && distance < nearest && IsSystemOnChart(_state))
     {
@@ -677,7 +680,7 @@ std::uint16_t SearchNearestSystem(GameState& _state, std::uint16_t _countIfNone)
     AdvanceToNextSystem(_state);
   }
   const auto index = static_cast<std::uint8_t>(GALAXY_SYSTEMS - nearestCount);
-  _state.Set(DS.selectedSystemIndex, index);
+  _state.Data().commanderBlock.selectedSystemIndex = index;
   LoadSystemSeeds(_state, index);
   MoveCursorToSystem(_state);
   return nearestCount;
@@ -690,7 +693,7 @@ std::uint16_t SelectNearestSystem(GameState& _state, std::uint16_t _countIfNone)
 {
   const std::uint16_t countLeft = SearchNearestSystem(_state, _countIfNone);
   ComputeDistanceToSystem(_state);
-  FormatDecimal5(_state, _state.Get(DS.selectedDistanceTenthsLy), DS.distanceDigits.offset);
+  FormatDecimal5(_state, _state.Data().commanderBlock.selectedDistanceTenthsLy, DS.distanceDigits.offset);
   BlankLeadingZeros(_state, DS.distanceDigits.offset, DISTANCE_ZEROS_BLANKED);
   return countLeft;
 }
@@ -699,28 +702,28 @@ std::uint16_t SelectNearestSystem(GameState& _state, std::uint16_t _countIfNone)
 
 ScreenKey ShowGalacticChart(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _segment)
 {
-  _state.Set(DS.sunFringeMask, 0);
-  LoadSystemSeeds(_state, _state.Get(DS.currentSystemIndex));
-  _state.Set(DS.currentSystemX, _state.Get(DS.systemX));
-  _state.Set(DS.currentSystemChartY, static_cast<std::uint8_t>(_state.Get(DS.systemY) >> 1));
+  _state.Data().sunFringeMask = 0;
+  LoadSystemSeeds(_state, _state.Data().commanderBlock.currentSystemIndex);
+  _state.Data().commanderBlock.currentSystemX = std::uint8_t{_state.Data().systemSeed1Bytes.systemX};
+  _state.Data().commanderBlock.currentSystemChartY = static_cast<std::uint8_t>(_state.Data().systemSeed0Bytes.systemY >> 1);
   const std::uint16_t segment = ChartSegment(DrawChartFrame(_state, _hardware, _backward), _segment);
-  _state.Set(DS.galacticChartNumber, static_cast<std::uint8_t>(_state.Get(DS.galaxyNumber) + '1'));
+  _state.Data().galacticChartNumber = static_cast<std::uint8_t>(_state.Data().commanderBlock.galaxyNumber + '1');
   DrawChartTitle(_state, DS.galacticChartTitle.offset, segment);
-  _state.Set(DS.chartCursorX, _state.Get(DS.galacticCursorX));
-  _state.Set(DS.chartCursorY, _state.Get(DS.galacticCursorY));
-  _state.Set(DS.chartIsShortRange, 0);
+  _state.Data().commanderBlock.chartCursorX = std::uint8_t{_state.Data().commanderBlock.galacticCursorX};
+  _state.Data().commanderBlock.chartCursorY = std::uint8_t{_state.Data().commanderBlock.galacticCursorY};
+  _state.Data().commanderBlock.chartIsShortRange = 0;
   return RunChartFrames(_state, _hardware, GALACTIC_CHART_KEYS, _backward);
 }
 
 ScreenKey ShowShortRangeChart(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _segment)
 {
-  _state.Set(DS.sunFringeMask, 0);
+  _state.Data().sunFringeMask = 0;
   const std::uint16_t segment = ChartSegment(DrawChartFrame(_state, _hardware, _backward), _segment);
   DrawChartTitle(_state, DS.shortRangeChartTitle.offset, segment);
-  _state.Set(DS.chartCursorX, _state.Get(DS.shortRangeCursorX));
-  _state.Set(DS.chartCursorY, _state.Get(DS.shortRangeCursorY));
-  _state.Set(DS.chartIsShortRange, 1);
-  _state.Set(DS.chartItemCount, 0);
+  _state.Data().commanderBlock.chartCursorX = std::uint8_t{_state.Data().commanderBlock.shortRangeCursorX};
+  _state.Data().commanderBlock.chartCursorY = std::uint8_t{_state.Data().commanderBlock.shortRangeCursorY};
+  _state.Data().commanderBlock.chartIsShortRange = 1;
+  _state.Data().chartItemCount = 0;
   _state.Set(DS.chartItemEnd, DS.chartItems.offset);
   _state.Set(DS.chartLabelCursor, DS.pendingChartLabels.offset);
   LoadGalaxySeeds(_state);
@@ -753,22 +756,22 @@ ScreenKey ShowShortRangeChart(GameState& _state, Hardware& _hardware, bool _back
 
 SystemSeeds ReadSystemSeeds(const GameState& _state)
 {
-  return SystemSeeds{_state.Get(DS.systemSeed0), _state.Get(DS.systemSeed1), _state.Get(DS.systemSeed2)};
+  return SystemSeeds{_state.Data().systemSeed0, _state.Data().systemSeed1, _state.Data().systemSeed2};
 }
 
 ShortRangeOffset GetShortRangeOffset(const GameState& _state)
 {
-  if (_state.Get(DS.chartIsShortRange) == 0)
+  if (_state.Data().commanderBlock.chartIsShortRange == 0)
   {
     return ShortRangeOffset{.onChart = true, .x = std::nullopt, .row = std::nullopt};
   }
   const SystemSeeds seeds = ReadSystemSeeds(_state);
-  const auto x = static_cast<std::int16_t>(seeds.X() - _state.Get(DS.currentSystemX));
+  const auto x = static_cast<std::int16_t>(seeds.X() - _state.Data().commanderBlock.currentSystemX);
   if (Magnitude(Word(x)) >= SHORT_RANGE_HALF_WIDTH)
   {
     return ShortRangeOffset{.onChart = false, .x = x, .row = std::nullopt};
   }
-  const auto row = static_cast<std::int16_t>(seeds.Row() - _state.Get(DS.currentSystemChartY));
+  const auto row = static_cast<std::int16_t>(seeds.Row() - _state.Data().commanderBlock.currentSystemChartY);
   return ShortRangeOffset{.onChart = Magnitude(Word(row)) < SHORT_RANGE_HALF_HEIGHT, .x = x, .row = row};
 }
 
@@ -782,47 +785,48 @@ void TwistSystemSeeds(GameState& _state)
 {
   const SystemSeeds seeds = ReadSystemSeeds(_state);
   // In the order the original's two XCHGs and its ADD write them.
-  _state.Set(DS.systemSeed1, seeds.seed2);
-  _state.Set(DS.systemSeed0, seeds.seed1);
-  _state.Set(DS.systemSeed2, static_cast<std::uint16_t>(seeds.seed0 + seeds.seed1 + seeds.seed2));
+  _state.Data().systemSeed1 = seeds.seed2;
+  _state.Data().systemSeed0 = seeds.seed1;
+  _state.Data().systemSeed2 = static_cast<std::uint16_t>(seeds.seed0 + seeds.seed1 + seeds.seed2);
 }
 
 void LoadGalaxySeeds(GameState& _state)
 {
   // The table offset is figured in BL, so it wraps at a byte.
-  const auto entry = static_cast<std::uint8_t>(_state.Get(DS.galaxyNumber) * GALAXY_SEED_BYTES);
+  const auto entry = static_cast<std::uint8_t>(_state.Data().commanderBlock.galaxyNumber * GALAXY_SEED_BYTES);
   const std::uint16_t seeds = Offset(DS.galaxySeeds.offset, entry);
-  _state.Set(DS.systemSeed0, _state.Word(seeds));
-  _state.Set(DS.systemSeed1, _state.Word(Offset(seeds, 2)));
-  _state.Set(DS.systemSeed2, _state.Word(Offset(seeds, 4)));
+  _state.Data().systemSeed0 = _state.Word(seeds);
+  _state.Data().systemSeed1 = _state.Word(Offset(seeds, 2));
+  _state.Data().systemSeed2 = _state.Word(Offset(seeds, 4));
 }
 
 ChartPoint GetCursorGalaxyPosition(const GameState& _state)
 {
-  const ChartPoint cursor{_state.Get(DS.chartCursorX), _state.Get(DS.chartCursorY)};
-  if (_state.Get(DS.chartIsShortRange) != 1)
+  const ChartPoint cursor{_state.Data().commanderBlock.chartCursorX, _state.Data().commanderBlock.chartCursorY};
+  if (_state.Data().commanderBlock.chartIsShortRange != 1)
   {
     return cursor;
   }
-  const std::uint16_t x = ChartToGalaxy(static_cast<std::uint16_t>(cursor.x - SHORT_RANGE_CENTER_X), _state.Get(DS.currentSystemX));
+  const std::uint16_t x =
+    ChartToGalaxy(static_cast<std::uint16_t>(cursor.x - SHORT_RANGE_CENTER_X), _state.Data().commanderBlock.currentSystemX);
   const std::uint16_t row =
-    ChartToGalaxy(static_cast<std::uint16_t>(cursor.row - SHORT_RANGE_CENTER_ROW), _state.Get(DS.currentSystemChartY));
+    ChartToGalaxy(static_cast<std::uint16_t>(cursor.row - SHORT_RANGE_CENTER_ROW), _state.Data().commanderBlock.currentSystemChartY);
   return ChartPoint{Low(x), Low(row)};
 }
 
 void MoveCursorToSystem(GameState& _state)
 {
   const SystemSeeds seeds = ReadSystemSeeds(_state);
-  if (_state.Get(DS.chartIsShortRange) != 1)
+  if (_state.Data().commanderBlock.chartIsShortRange != 1)
   {
-    _state.Set(DS.chartCursorX, seeds.X());
-    _state.Set(DS.chartCursorY, seeds.Row());
+    _state.Data().commanderBlock.chartCursorX = seeds.X();
+    _state.Data().commanderBlock.chartCursorY = seeds.Row();
     return;
   }
-  const auto across = static_cast<std::uint16_t>(seeds.X() - _state.Get(DS.currentSystemX));
-  _state.Set(DS.chartCursorX, Low(GalaxyToChart(across, SHORT_RANGE_CENTER_X)));
-  const auto down = static_cast<std::uint16_t>(seeds.Row() - _state.Get(DS.currentSystemChartY));
-  _state.Set(DS.chartCursorY, Low(GalaxyToChart(down, SHORT_RANGE_CENTER_ROW)));
+  const auto across = static_cast<std::uint16_t>(seeds.X() - _state.Data().commanderBlock.currentSystemX);
+  _state.Data().commanderBlock.chartCursorX = Low(GalaxyToChart(across, SHORT_RANGE_CENTER_X));
+  const auto down = static_cast<std::uint16_t>(seeds.Row() - _state.Data().commanderBlock.currentSystemChartY);
+  _state.Data().commanderBlock.chartCursorY = Low(GalaxyToChart(down, SHORT_RANGE_CENTER_ROW));
 }
 
 std::uint16_t SelectSystemAtCursor(GameState& _state, std::uint16_t _countIfNone)
@@ -834,49 +838,49 @@ std::uint16_t SelectSystemAtCursor(GameState& _state, std::uint16_t _countIfNone
 
 void DescribeSystem(GameState& _state)
 {
-  const std::uint8_t seed1 = Low(_state.Get(DS.systemSeed1));
-  const std::uint8_t seed2 = Low(_state.Get(DS.systemSeed2));
-  const std::uint8_t seed2High = _state.Get(DS.systemSeed2High);
-  const std::uint8_t x = _state.Get(DS.systemX);
-  const std::uint8_t y = _state.Get(DS.systemY);
+  const std::uint8_t seed1 = Low(_state.Data().systemSeed1);
+  const std::uint8_t seed2 = Low(_state.Data().systemSeed2);
+  const std::uint8_t seed2High = _state.Data().systemSeed2Bytes.systemSeed2High;
+  const std::uint8_t x = _state.Data().systemSeed1Bytes.systemX;
+  const std::uint8_t y = _state.Data().systemSeed0Bytes.systemY;
 
   const auto government = static_cast<std::uint8_t>((seed1 >> 3) & 7);
-  _state.Set(DS.selectedGovernment, government);
+  _state.Data().commanderBlock.selectedGovernment = government;
   // Governments 0 and 1 set bit 1 of the economy before it is inverted.
   const auto economy = static_cast<std::uint8_t>((((government >> 1) == 0 ? 2 : 0) | (y & 7)) ^ 7);
-  _state.Set(DS.selectedEconomy, economy);
+  _state.Data().commanderBlock.selectedEconomy = economy;
   const auto techLevel = static_cast<std::uint8_t>(((economy + 3) & x) + (seed2 & 1));
-  _state.Set(DS.selectedTechLevel, techLevel);
+  _state.Data().commanderBlock.selectedTechLevel = techLevel;
   const auto population =
     static_cast<std::uint8_t>((Low(static_cast<std::uint16_t>(techLevel * economy)) >> 1) + 0x14 + ((seed1 >> 3) & 7));
-  _state.Set(DS.selectedPopulationTenthsBillion, population);
+  _state.Data().commanderBlock.selectedPopulationTenthsBillion = population;
 
   if ((seed2 & 0x80) == 0)
   {
-    _state.Set(DS.selectedSpeciesAdjective1, 0xFF);
+    _state.Data().commanderBlock.selectedSpeciesAdjective1 = 0xFF;
   }
   else
   {
     const auto mixed = static_cast<std::uint8_t>((x ^ y) & 7);
-    _state.Set(DS.selectedSpeciesAdjective1, static_cast<std::uint8_t>((seed2High >> 2) & 7));
-    _state.Set(DS.selectedSpeciesAdjective2, static_cast<std::uint8_t>(seed2High >> 5));
-    _state.Set(DS.selectedSpeciesAdjective3, mixed);
-    _state.Set(DS.selectedSpeciesType, static_cast<std::uint8_t>(((seed2High & 3) + mixed) & 7));
+    _state.Data().commanderBlock.selectedSpeciesAdjective1 = static_cast<std::uint8_t>((seed2High >> 2) & 7);
+    _state.Data().commanderBlock.selectedSpeciesAdjective2 = static_cast<std::uint8_t>(seed2High >> 5);
+    _state.Data().commanderBlock.selectedSpeciesAdjective3 = mixed;
+    _state.Data().commanderBlock.selectedSpeciesType = static_cast<std::uint8_t>(((seed2High & 3) + mixed) & 7);
   }
 
   // (government+8)^2 in AL, times the population, times 4.
   const std::uint8_t squared = Low(Square(static_cast<std::uint8_t>(government + 8)));
-  _state.Set(DS.selectedProductivityMillionCredits, static_cast<std::uint16_t>((squared * population) << 2));
+  _state.Data().commanderBlock.selectedProductivityMillionCredits = static_cast<std::uint16_t>((squared * population) << 2);
 
   const std::uint16_t rows = MakeWord(y, y);
   const auto rotated = static_cast<std::uint16_t>((rows << 2) | (rows >> 14));
-  const std::uint16_t seed2Word = _state.Get(DS.systemSeed2);
+  const std::uint16_t seed2Word = _state.Data().systemSeed2;
   const auto swapped = static_cast<std::uint16_t>(((seed2Word >> 8) | (seed2Word << 8)) & 0x3FF);
-  _state.Set(DS.selectedRadiusKm, static_cast<std::uint16_t>(((rotated ^ swapped) & 0xFFF) + 0x10E1));
+  _state.Data().commanderBlock.selectedRadiusKm = static_cast<std::uint16_t>(((rotated ^ swapped) & 0xFFF) + 0x10E1);
 
-  const auto descriptionSeed0 = static_cast<std::uint16_t>(_state.Get(DS.systemSeed0) ^ _state.Get(DS.systemSeed1));
-  _state.Set(DS.descriptionSeed0, descriptionSeed0);
-  _state.Set(DS.descriptionSeed1, static_cast<std::uint16_t>(descriptionSeed0 ^ _state.Get(DS.systemSeed2)));
+  const auto descriptionSeed0 = static_cast<std::uint16_t>(_state.Data().systemSeed0 ^ _state.Data().systemSeed1);
+  _state.Data().commanderBlock.descriptionSeed0 = descriptionSeed0;
+  _state.Data().commanderBlock.descriptionSeed1 = static_cast<std::uint16_t>(descriptionSeed0 ^ _state.Data().systemSeed2);
   GenerateSystemName(_state);
 }
 
@@ -889,8 +893,9 @@ std::uint16_t ComputeDistanceToSystem(GameState& _state)
 {
   const SystemSeeds seeds = ReadSystemSeeds(_state);
   // Each difference made positive, and its low byte squared by a byte multiply.
-  const std::uint16_t across = Square(Low(Magnitude(static_cast<std::uint16_t>(seeds.X() - _state.Get(DS.currentSystemX)))));
-  const std::uint16_t down = Square(Low(Magnitude(static_cast<std::uint16_t>(seeds.Row() - _state.Get(DS.currentSystemChartY)))));
+  const std::uint16_t across = Square(Low(Magnitude(static_cast<std::uint16_t>(seeds.X() - _state.Data().commanderBlock.currentSystemX))));
+  const std::uint16_t down =
+    Square(Low(Magnitude(static_cast<std::uint16_t>(seeds.Row() - _state.Data().commanderBlock.currentSystemChartY))));
   // The square root of their 17-bit sum, counting the odd numbers it takes away.
   std::int32_t remaining = std::int32_t{across} + down;
   std::uint16_t odd = 0xFFFF;
@@ -902,7 +907,7 @@ std::uint16_t ComputeDistanceToSystem(GameState& _state)
     remaining -= odd;
   } while (remaining >= 0);
   const auto distanceTenthsLy = static_cast<std::uint16_t>(root << 2);
-  _state.Set(DS.selectedDistanceTenthsLy, distanceTenthsLy);
+  _state.Data().commanderBlock.selectedDistanceTenthsLy = distanceTenthsLy;
   return distanceTenthsLy;
 }
 
@@ -911,13 +916,14 @@ void ShowNearestSystemDistance(GameState& _state, std::uint16_t _countIfNone, st
   (void)SelectNearestSystem(_state, _countIfNone);
   // The distance's four digits into distanceText, either side of its point.
   constexpr std::array<std::uint16_t, 4> PLACES = {DISTANCE_TEXT_HUNDREDS, DISTANCE_TEXT_TENS, DISTANCE_TEXT_UNITS, DISTANCE_TEXT_TENTHS};
-  constexpr std::array<DataField<std::uint8_t>, 4> DIGITS = {DS.distanceHundredsDigit, DS.distanceTensDigit, DS.distanceUnitsDigit,
-                                                             DS.distanceTenthsDigit};
+  constexpr std::array<Counted<std::uint8_t> GameData::DistanceDigits::*, 4> DIGITS = {
+    &GameData::DistanceDigits::distanceHundredsDigit, &GameData::DistanceDigits::distanceTensDigit,
+    &GameData::DistanceDigits::distanceUnitsDigit, &GameData::DistanceDigits::distanceTenthsDigit};
   for (std::size_t digit = 0; digit < DIGITS.size(); ++digit)
   {
-    _state.SetByte(Offset(DS.distanceText.offset, PLACES[digit]), _state.Get(DIGITS[digit]));
+    _state.SetByte(Offset(DS.distanceText.offset, PLACES[digit]), _state.Data().distanceDigits.*DIGITS[digit]);
   }
-  _state.Set(DS.textPaperPattern, 0);
+  _state.Data().textPaperPattern = 0;
   DrawScreenString(_state, DS.distanceText.offset, INK_3, _segment, CHART_TEXT_LINE_2);
   GenerateSystemName(_state);
   DrawScreenString(_state, DS.selectedSystemName.offset, INK_2, _segment, CHART_TEXT_LINE_1);
@@ -944,15 +950,15 @@ void AdvanceToNextSystem(GameState& _state)
 
 std::uint8_t GenerateSystemName(GameState& _state)
 {
-  _state.Set(DS.data75CA, 0x2020);
-  _state.Set(DS.data75C8, 0x2020);
+  _state.Data().commanderBlock.selectedSystemName.data75CA = 0x2020;
+  _state.Data().commanderBlock.selectedSystemName.data75C8 = 0x2020;
   // The fourth pair only when bit 6 of systemSeed0 was set.
-  const bool fourPairs = (_state.Get(DS.systemSeed0) & SYSTEM_NAME_FOURTH_PAIR) != 0;
+  const bool fourPairs = (_state.Data().systemSeed0 & SYSTEM_NAME_FOURTH_PAIR) != 0;
   std::uint16_t name = DS.selectedSystemName.offset;
   std::uint8_t length = 0;
   for (std::uint16_t pair = 0; pair < SYSTEM_NAME_PAIRS; ++pair)
   {
-    const std::uint8_t pick = _state.Get(DS.systemSeed2High);
+    const std::uint8_t pick = _state.Data().systemSeed2Bytes.systemSeed2High;
     TwistSystemSeeds(_state);
     const std::uint16_t digram = _state.Word(Offset(DS.systemNameDigrams.offset, static_cast<std::uint16_t>((pick & 0x1F) << 1)));
     if (pair + 1 == SYSTEM_NAME_PAIRS && !fourPairs)
@@ -972,7 +978,7 @@ std::uint8_t GenerateSystemName(GameState& _state)
       ++length;
     }
   }
-  _state.Set(DS.selectedSystemNameLength, length);
+  _state.Data().commanderBlock.selectedSystemNameLength = length;
   return length;
 }
 
@@ -990,7 +996,7 @@ void FindSystemByName(GameState& _state, Hardware& _hardware, std::uint16_t _seg
   {
     // Nothing typed: on into ShowNearestSystemDistance, by a jump back to its entry, with ES as ReadTextLine leaves it.
     _hardware.LoopTurn(SHOW_NEAREST_SYSTEM_DISTANCE, {});
-    const bool textLayout = _state.Get(DS.screenLayout) == TEXT_LAYOUT;
+    const bool textLayout = _state.Data().screenLayout == TEXT_LAYOUT;
     ShowNearestSystemDistance(_state, _countIfNone, textLayout ? GameState::VIDEO_SEGMENT : _segment);
     return;
   }
@@ -1048,12 +1054,12 @@ void FindSystemByName(GameState& _state, Hardware& _hardware, std::uint16_t _seg
 bool DrawChartItems(GameState& _state, bool _backward)
 {
   // MOV CL,[chartItemCount] / AND CX,0FFh: CH stays 0, the high byte of a disc's centre row.
-  const std::uint8_t items = _state.Get(DS.chartItemCount);
+  const std::uint8_t items = _state.Data().chartItemCount;
   if (items == 0)
   {
     return false;
   }
-  _state.Set(DS.drawColor, CHART_DISC_COLOR);
+  _state.Data().drawColor = CHART_DISC_COLOR;
   bool discDrawn = false;
   std::uint16_t item = DS.chartItems.offset;
   // PUSH CX / PUSH DI round each item keep the count and the item: the LOOP's count is a local.
@@ -1080,12 +1086,12 @@ bool DrawChartItems(GameState& _state, bool _backward)
 
 void PlaceChartLabels(GameState& _state)
 {
-  const std::uint8_t labels = _state.Get(DS.chartItemCount);
+  const std::uint8_t labels = _state.Data().chartItemCount;
   if (labels == 0)
   {
     return;
   }
-  _state.Set(DS.labelsLeftToPlace, labels);
+  _state.Data().labelsLeftToPlace = labels;
   _state.Set(DS.chartLabelCursor, DS.pendingChartLabels.offset);
   do
   {
@@ -1094,7 +1100,7 @@ void PlaceChartLabels(GameState& _state)
     const ChartSpan x = SpanOf(_state.Word(label));
     ChartSpan rows = SpanOf(_state.Word(Offset(label, 2)));
     _state.Set(DS.chartLabelCursor, Offset(label, 4));
-    _state.Set(DS.labelNudgeCount, 0);
+    _state.Data().labelNudgeCount = 0;
     while (AnyChartItemOverlaps(_state, x, rows))
     {
       const LabelNudge nudge = NudgeChartLabel(_state, rows);
@@ -1105,8 +1111,8 @@ void PlaceChartLabels(GameState& _state)
       }
     }
     AddChartLabel(_state, x, rows);
-    _state.Set(DS.labelsLeftToPlace, static_cast<std::uint8_t>(_state.Get(DS.labelsLeftToPlace) - 1));
-  } while (_state.Get(DS.labelsLeftToPlace) != 0);
+    _state.Data().labelsLeftToPlace = static_cast<std::uint8_t>(_state.Data().labelsLeftToPlace - 1);
+  } while (_state.Data().labelsLeftToPlace != 0);
 }
 
 void AddChartLabel(GameState& _state, ChartSpan _x, ChartSpan _rows)
@@ -1118,7 +1124,7 @@ void AddChartLabel(GameState& _state, ChartSpan _x, ChartSpan _rows)
   _state.SetWord(Offset(item, CHART_ITEM_TEXT), name);
   _state.SetByte(Offset(item, CHART_ITEM_IS_LABEL), 1);
   _state.Set(DS.chartItemEnd, Offset(item, CHART_ITEM_BYTES));
-  _state.Set(DS.chartItemCount, static_cast<std::uint8_t>(_state.Get(DS.chartItemCount) + 1));
+  _state.Data().chartItemCount = static_cast<std::uint8_t>(_state.Data().chartItemCount + 1);
   // Past the name's NUL; the scan starts at its second byte.
   std::uint16_t past = name;
   do
@@ -1133,8 +1139,8 @@ LabelNudge NudgeChartLabel(GameState& _state, ChartSpan _rows)
   ChartSpan rows = _rows;
   for (;;)
   {
-    const auto step = static_cast<std::uint8_t>(_state.Get(DS.labelNudgeCount) + 1);
-    _state.Set(DS.labelNudgeCount, step);
+    const auto step = static_cast<std::uint8_t>(_state.Data().labelNudgeCount + 1);
+    _state.Data().labelNudgeCount = step;
     if (step >= LABEL_TRIES)
     {
       return LabelNudge{.moved = false, .rows = rows};
@@ -1184,33 +1190,35 @@ ScreenKey ShowSystemDataScreen(GameState& _state, Hardware& _hardware, bool _bac
   printed = PrintTextModeString(_state, FormatSelectedSystemDistance(_state), printed.nextCell);
   PrintTextModeString(_state, LIGHT_YEARS_LABEL, printed.nextCell);
   printed = PrintTextModeString(_state, ECONOMY_LABEL, ECONOMY_ROW);
-  PrintNamed(_state, DS.economyNames.offset, static_cast<std::uint16_t>(_state.Get(DS.selectedEconomy) << 1), printed.nextCell);
+  PrintNamed(_state, DS.economyNames.offset, static_cast<std::uint16_t>(_state.Data().commanderBlock.selectedEconomy << 1),
+             printed.nextCell);
   printed = PrintTextModeString(_state, GOVERNMENT_LABEL, GOVERNMENT_ROW);
-  PrintNamed(_state, DS.governmentNames.offset, static_cast<std::uint16_t>(_state.Get(DS.selectedGovernment) << 1), printed.nextCell);
+  PrintNamed(_state, DS.governmentNames.offset, static_cast<std::uint16_t>(_state.Data().commanderBlock.selectedGovernment << 1),
+             printed.nextCell);
   printed = PrintTextModeString(_state, TECH_LEVEL_LABEL, TECH_LEVEL_ROW);
 
   // The tech level, one to sixteen, in the two characters at data7D48, a column left when it is one digit.
-  auto level = static_cast<std::uint8_t>(_state.Get(DS.selectedTechLevel) + 1);
+  auto level = static_cast<std::uint8_t>(_state.Data().commanderBlock.selectedTechLevel + 1);
   auto cell = static_cast<std::uint16_t>(printed.nextCell - 2);
-  _state.Set(DS.data7D48, SPACE);
+  _state.Data().data7D48 = SPACE;
   if (level >= TECH_LEVEL_TENS)
   {
     level = static_cast<std::uint8_t>(level - TECH_LEVEL_TENS);
-    _state.Set(DS.data7D48, '1');
+    _state.Data().data7D48 = '1';
     cell = Offset(cell, 2);
   }
-  _state.Set(DS.data7D49, static_cast<std::uint8_t>(level + '0'));
+  _state.Data().data7D49 = static_cast<std::uint8_t>(level + '0');
   PrintTextModeString(_state, DS.data7D48.offset, cell);
 
   // The population in tenths of a billion, its last two digits about a point.
-  FormatDecimal5(_state, _state.Get(DS.selectedPopulationTenthsBillion), POPULATION_DIGITS);
+  FormatDecimal5(_state, _state.Data().commanderBlock.selectedPopulationTenthsBillion, POPULATION_DIGITS);
   printed = PrintTextModeString(_state, POPULATION_LABEL, POPULATION_ROW);
   _state.SetByte(POPULATION_SHOWN, _state.Byte(Offset(POPULATION_SHOWN, 1)));
   _state.SetByte(Offset(POPULATION_SHOWN, 1), DECIMAL_POINT);
   PrintTextModeString(_state, POPULATION_SHOWN, printed.nextCell);
 
   printed = PrintTextModeString(_state, SPECIES_OPEN, SPECIES_ROW);
-  const std::uint8_t size = _state.Get(DS.selectedSpeciesAdjective1);
+  const std::uint8_t size = _state.Data().commanderBlock.selectedSpeciesAdjective1;
   if (size == NO_SPECIES)
   {
     PrintTextModeString(_state, HUMAN_COLONIALS, printed.nextCell);
@@ -1219,25 +1227,26 @@ ScreenKey ShowSystemDataScreen(GameState& _state, Hardware& _hardware, bool _bac
   {
     // SHL AL,1 on each byte, then XOR AH,AH.
     printed = PrintNamed(_state, DS.speciesSizeNames.offset, static_cast<std::uint8_t>(size << 1), printed.nextCell);
-    printed = PrintNamed(_state, DS.speciesColorNames.offset, static_cast<std::uint8_t>(_state.Get(DS.selectedSpeciesAdjective2) << 1),
-                         printed.nextCell);
-    printed = PrintNamed(_state, DS.speciesTraitNames.offset, static_cast<std::uint8_t>(_state.Get(DS.selectedSpeciesAdjective3) << 1),
-                         printed.nextCell);
-    PrintNamed(_state, DS.speciesTypeNames.offset, static_cast<std::uint8_t>(_state.Get(DS.selectedSpeciesType) << 1), printed.nextCell);
+    printed = PrintNamed(_state, DS.speciesColorNames.offset,
+                         static_cast<std::uint8_t>(_state.Data().commanderBlock.selectedSpeciesAdjective2 << 1), printed.nextCell);
+    printed = PrintNamed(_state, DS.speciesTraitNames.offset,
+                         static_cast<std::uint8_t>(_state.Data().commanderBlock.selectedSpeciesAdjective3 << 1), printed.nextCell);
+    PrintNamed(_state, DS.speciesTypeNames.offset, static_cast<std::uint8_t>(_state.Data().commanderBlock.selectedSpeciesType << 1),
+               printed.nextCell);
   }
 
   // The productivity, its leading zero blanked a column left; the radius, its leading digit blanked.
-  FormatDecimal5(_state, _state.Get(DS.selectedProductivityMillionCredits), DS.data7EA3.offset);
+  FormatDecimal5(_state, _state.Data().commanderBlock.selectedProductivityMillionCredits, DS.data7EA3.offset);
   printed = PrintTextModeString(_state, PRODUCTIVITY_LABEL, PRODUCTIVITY_ROW);
   cell = printed.nextCell;
-  if (_state.Get(DS.data7EA3) == '0')
+  if (_state.Data().data7EA3 == '0')
   {
-    _state.Set(DS.data7EA3, SPACE);
+    _state.Data().data7EA3 = SPACE;
     cell = static_cast<std::uint16_t>(cell - 2);
   }
   PrintTextModeString(_state, DS.data7EA3.offset, cell);
-  FormatDecimal5(_state, _state.Get(DS.selectedRadiusKm), DS.data7EBB.offset);
-  _state.Set(DS.data7EBB, SPACE);
+  FormatDecimal5(_state, _state.Data().commanderBlock.selectedRadiusKm, DS.data7EBB.offset);
+  _state.Data().data7EBB = SPACE;
   PrintTextModeString(_state, RADIUS_LABEL, RADIUS_ROW);
   ShowSystemDescription(_state, _backward);
   // ShowSystemDescription's last print leaves AL 0.
@@ -1246,7 +1255,7 @@ ScreenKey ShowSystemDataScreen(GameState& _state, Hardware& _hardware, bool _bac
 
 std::uint8_t TerminateSelectedSystemName(GameState& _state)
 {
-  const std::uint8_t length = _state.Get(DS.selectedSystemNameLength);
+  const std::uint8_t length = _state.Data().commanderBlock.selectedSystemNameLength;
   _state.SetByte(Offset(DS.selectedSystemName.offset, length), 0);
   return length;
 }
@@ -1337,7 +1346,7 @@ ExpandedText ExpandDescriptionText(GameState& _state, std::uint16_t _text, std::
     }
     // Capitalizing reaches only 0x60-0x78: y and z stay lower case.
     std::uint8_t character = code;
-    if (_state.Get(DS.descriptionCapitalize) == 1 && previous == SPACE && code >= 0x60 && code < 0x79)
+    if (_state.Data().descriptionCapitalize == 1 && previous == SPACE && code >= 0x60 && code < 0x79)
     {
       character = static_cast<std::uint8_t>(code & UPPER_CASE_MASK);
     }
@@ -1368,11 +1377,11 @@ std::uint16_t InsertSystemAdjective(GameState& _state, std::uint16_t _output)
 std::uint16_t InsertRandomName(GameState& _state, std::uint16_t _output)
 {
   CopyBytes(_state, DS.selectedSystemName.offset, SAVED_SYSTEM_NAME, SYSTEM_NAME_BYTES);
-  const std::uint16_t seed0 = _state.Get(DS.descriptionSeed0);
-  _state.Set(DS.systemSeed0, seed0);
-  const std::uint16_t seed1 = _state.Get(DS.descriptionSeed1);
-  _state.Set(DS.systemSeed1, seed1);
-  _state.Set(DS.systemSeed2, static_cast<std::uint16_t>(seed1 ^ _state.Get(DS.descriptionSeed0)));
+  const std::uint16_t seed0 = _state.Data().commanderBlock.descriptionSeed0;
+  _state.Data().systemSeed0 = seed0;
+  const std::uint16_t seed1 = _state.Data().commanderBlock.descriptionSeed1;
+  _state.Data().systemSeed1 = seed1;
+  _state.Data().systemSeed2 = static_cast<std::uint16_t>(seed1 ^ _state.Data().commanderBlock.descriptionSeed0);
   GenerateSystemName(_state);
   CopySelectedNameLower(_state);
   CopyBytes(_state, SAVED_SYSTEM_NAME, DS.selectedSystemName.offset, SYSTEM_NAME_BYTES);
@@ -1386,21 +1395,21 @@ std::uint16_t BackspaceDescription(std::uint16_t _output)
 
 void StartCapitalizing(GameState& _state)
 {
-  _state.Set(DS.descriptionCapitalize, 1);
+  _state.Data().descriptionCapitalize = 1;
 }
 
 void StopCapitalizing(GameState& _state)
 {
-  _state.Set(DS.descriptionCapitalize, 0);
+  _state.Data().descriptionCapitalize = 0;
 }
 
 std::uint16_t NextDescriptionRandom(GameState& _state)
 {
-  const std::uint16_t a = _state.Get(DS.descriptionSeed0);
-  const std::uint16_t b = _state.Get(DS.descriptionSeed1);
+  const std::uint16_t a = _state.Data().commanderBlock.descriptionSeed0;
+  const std::uint16_t b = _state.Data().commanderBlock.descriptionSeed1;
   const auto sum = static_cast<std::uint16_t>(a + b);
-  _state.Set(DS.descriptionSeed0, b);
-  _state.Set(DS.descriptionSeed1, sum);
+  _state.Data().commanderBlock.descriptionSeed0 = b;
+  _state.Data().commanderBlock.descriptionSeed1 = sum;
   return sum;
 }
 

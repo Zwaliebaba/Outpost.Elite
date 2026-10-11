@@ -43,10 +43,10 @@ void SteerTheChartWithTheStick(TwinRig& _rig)
   _rig.Both(
     [](Elite::Platform&, Elite::GameState& _state)
     {
-      _state.SetByte(DS.inputDevice.offset, 1);
-      _state.SetByte(DS.joystickIsAmstrad.offset, 0);
-      _state.SetWord(DS.joystickCenterX.offset, 81);
-      _state.SetWord(DS.joystickCenterY.offset, 81);
+      _state.Data().inputDevice = 1;
+      _state.Data().joystickIsAmstrad = 0;
+      _state.Data().joystickCenterX = 81;
+      _state.Data().joystickCenterY = 81;
     });
   const auto attach = [&](std::uint32_t _xOhms, std::uint32_t _yOhms)
   {
@@ -159,8 +159,8 @@ public:
     rig.Both(
       [](Elite::Platform&, Elite::GameState& _state)
       {
-        _state.SetByte(DS.missionNumber.offset, 2);
-        _state.SetByte(DS.missionStage.offset, 0);
+        _state.Data().commanderBlock.missionNumber = 2;
+        _state.Data().commanderBlock.missionStage = 0;
       });
     rig.Play("key F8; wait 0.5\nkey F9; wait 1\ndigest briefing\nkey space; wait 1\ndigest status");
   }

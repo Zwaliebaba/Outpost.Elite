@@ -135,7 +135,7 @@ void RestoreDivideAndKeyboardInterrupts(GameState& _state, Hardware& _hardware)
 
 void CheckCheatArgument(GameState& _state, const Hardware& _hardware)
 {
-  _state.Set(DS.cheatEnabled, 0);
+  _state.Data().cheatEnabled = 0;
   // The command tail DOS gave the program, which the original reads from its PSP: its length, then the text, which
   // cheatArgumentKey holds XORed with AAh.
   const std::string_view tail = _hardware.CommandTail();
@@ -151,16 +151,16 @@ void CheckCheatArgument(GameState& _state, const Hardware& _hardware)
       return;
     }
   }
-  _state.Set(DS.cheatEnabled, 1);
+  _state.Data().cheatEnabled = 1;
 }
 
 void CopyProtection(GameState& _state, Hardware& _hardware)
 {
-  if (_state.Get(DS.protectionShown) != 0)
+  if (_state.Data().protectionShown != 0)
   {
     return;
   }
-  _state.Set(DS.protectionShown, 1);
+  _state.Data().protectionShown = 1;
   _hardware.SetVideoMode(VIDEO_MODE_TEXT_40);
   const std::uint16_t descriptor = _state.Get(DS.protectionDescriptor);
   _hardware.PrintDosString(_state.DataSegment(), _state.Word(descriptor));
@@ -179,7 +179,7 @@ void CopyProtection(GameState& _state, Hardware& _hardware)
   }
   const auto index = static_cast<std::uint8_t>(Low(NextRandom(_state)) & QUESTION_MASK);
   const auto question = static_cast<std::uint8_t>(index + 1);
-  _state.Set(DS.protectionQuestion, question);
+  _state.Data().protectionQuestion = question;
 
   // The question's three words (page, line, word), each XORed with its number in both bytes and 6161h, into the prompt.
   const auto words = static_cast<std::uint16_t>(_state.Word(Offset(descriptor, 8)) + static_cast<std::uint8_t>(index * 3) * 2);
@@ -210,41 +210,41 @@ void CopyProtection(GameState& _state, Hardware& _hardware)
     }
   }
   WaitForTimerTick(_state, _hardware);
-  _state.Set(DS.protectionAnswerCorrect, 1);
-  _state.Set(DS.protectionQuestion, NO_QUESTION);
+  _state.Data().protectionAnswerCorrect = 1;
+  _state.Data().protectionQuestion = NO_QUESTION;
 }
 
 void StartNewGame(GameState& _state, bool _backward)
 {
   // REP MOVSB from DS to ES = DS.
   const std::uint16_t data = _state.DataSegment();
-  MoveBytes(_state, data, DS.startupCommander.offset, data, DS.commanderBlock.offset, _state.Get(DS.commanderFileBytes), _backward);
-  _state.Set(DS.witchspaceCountdown, 0);
-  _state.Set(DS.playerEnergy, NEW_GAME_ENERGY);
-  _state.Set(DS.foreShield, FULL_SHIELD);
-  _state.Set(DS.aftShield, FULL_SHIELD);
-  _state.Set(DS.cabinTemperature, NEW_GAME_CABIN_TEMPERATURE);
-  _state.Set(DS.altitude, NEW_GAME_ALTITUDE);
-  _state.Set(DS.playerDead, 0);
-  _state.Set(DS.missionJumpCount, 0);
-  _state.Set(DS.data7629, 0);
-  _state.Set(DS.missionNumber, 0);
-  _state.Set(DS.warningFrames, 0);
-  _state.Set(DS.incomingMissileAlert, 0);
-  _state.Set(DS.missionStage, 0);
-  _state.Set(DS.fuelLeakDelayFrames, 0);
-  _state.Set(DS.fuelLeakFrames, 0);
-  _state.Set(DS.supernovaFrames, 0);
-  _state.Set(DS.supernovaHeat, 0);
-  _state.Set(DS.maskShipDestroyed, 0);
-  _state.Set(DS.thargoidInvasionActive, 0);
-  _state.Set(DS.maskMissionShipsLeft, 0);
-  _state.Set(DS.invadedStationDestroyed, 0);
-  _state.Set(DS.forceMisjump, 0);
-  _state.Set(DS.messageFrames, 0);
-  _state.Set(DS.missileState, 0);
-  _state.Set(DS.fledMaskShip, 0);
-  _state.Set(DS.maskSystemJumps, 0);
+  MoveBytes(_state, data, DS.startupCommander.offset, data, DS.commanderBlock.offset, _state.Data().commanderFileBytes, _backward);
+  _state.Data().commanderBlock.witchspaceCountdown = 0;
+  _state.Data().playerEnergy = NEW_GAME_ENERGY;
+  _state.Data().foreShield = FULL_SHIELD;
+  _state.Data().aftShield = FULL_SHIELD;
+  _state.Data().cabinTemperature = NEW_GAME_CABIN_TEMPERATURE;
+  _state.Data().altitude = NEW_GAME_ALTITUDE;
+  _state.Data().playerDead = 0;
+  _state.Data().commanderBlock.missionJumpCount = 0;
+  _state.Data().commanderBlock.data7629 = 0;
+  _state.Data().commanderBlock.missionNumber = 0;
+  _state.Data().warningFrames = 0;
+  _state.Data().incomingMissileAlert = 0;
+  _state.Data().commanderBlock.missionStage = 0;
+  _state.Data().commanderBlock.fuelLeakDelayFrames = 0;
+  _state.Data().commanderBlock.fuelLeakFrames = 0;
+  _state.Data().commanderBlock.supernovaFrames = 0;
+  _state.Data().commanderBlock.supernovaHeat = 0;
+  _state.Data().commanderBlock.maskShipDestroyed = 0;
+  _state.Data().commanderBlock.thargoidInvasionActive = 0;
+  _state.Data().commanderBlock.maskMissionShipsLeft = 0;
+  _state.Data().commanderBlock.invadedStationDestroyed = 0;
+  _state.Data().forceMisjump = 0;
+  _state.Data().messageFrames = 0;
+  _state.Data().missileState = 0;
+  _state.Data().commanderBlock.fledMaskShip = 0;
+  _state.Data().commanderBlock.maskSystemJumps = 0;
 }
 
 void Start(GameState& _state, Hardware& _hardware, std::uint16_t _psp, std::uint16_t _countIfNone, bool _backward)
@@ -275,7 +275,7 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _psp, std::uint
   }
   if (bytesLeft != 0)
   {
-    _state.Set(DS.amstradPresent, 0);
+    _state.Data().amstradPresent = 0;
   }
 
   // From here on the direction flag is as the CLD left it, and as GameLoop leaves it; BP as DOS left it, and as GameLoop leaves it.
@@ -298,7 +298,7 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _psp, std::uint
     // HandleDiskRequest (CS:0065): GameLoop comes back only for diskOperation, 0 to leave.
     RestoreDivideAndKeyboardInterrupts(_state, _hardware);
     const BiosClock clock = RestoreTimerInterrupt(_state, _hardware);
-    const std::uint8_t request = _state.Get(DS.diskOperation);
+    const std::uint8_t request = _state.Data().diskOperation;
     if (request == 0)
     {
       WipeProgram(_state, _hardware, backward);
@@ -307,7 +307,7 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _psp, std::uint
     }
     // The request, with the game's own critical-error handler on int 24h, and the handler that was there put back after it.
     // A listing searches with the attributes RestoreTimerInterrupt leaves in CX.
-    _state.Set(DS.diskError, 0);
+    _state.Data().diskError = 0;
     const FarAddress criticalError = _hardware.InterruptVector(CRITICAL_ERROR_VECTOR);
     _hardware.SetInterruptVector(CRITICAL_ERROR_VECTOR, FarAddress{_state.CodeSegment(), CRITICAL_ERROR_INTERRUPT});
     PerformDiskRequest(_state, _hardware, request, ClockLessADayHigh(clock));
@@ -338,7 +338,7 @@ GameLoopExit GameLoop(GameState& _state, Hardware& _hardware, std::uint16_t _cou
   bool backward = _backward;
   for (;;)
   {
-    _state.Set(DS.inFlight, 0);
+    _state.Data().inFlight = 0;
     const DockedExit docked = RunTitleAndDocked(_state, _hardware, countIfNone, backward);
     if (docked.leaves)
     {
@@ -346,14 +346,14 @@ GameLoopExit GameLoop(GameState& _state, Hardware& _hardware, std::uint16_t _cou
       // into Start.
       return GameLoopExit{docked.countLeft, docked.backward};
     }
-    _state.Set(DS.inFlight, 1);
+    _state.Data().inFlight = 1;
     const FlightExit flight = RunFlight(_state, _hardware, docked.backward);
     countIfNone = flight.countLeft;
     backward = flight.backward;
     // After a death the title runs again.
-    if (_state.Get(DS.playerDead) == 1)
+    if (_state.Data().playerDead == 1)
     {
-      _state.Set(DS.titleShown, 0);
+      _state.Data().titleShown = 0;
     }
     // JMP GameLoop: the next turn reads BP, in RunTitleAndDocked, before it writes it.
     _hardware.LoopTurn(GAME_LOOP, {countIfNone});
@@ -369,7 +369,7 @@ void ShowCredits(GameState& _state, Hardware& _hardware, bool _backward)
   std::uint16_t place = CREDITS_FIRST_LINE;
   for (std::uint16_t linesLeft = CREDITS_LINES;;)
   {
-    _state.Set(DS.textPaperPattern, 0);
+    _state.Data().textPaperPattern = 0;
     text = Offset(DrawViewString(_state, text, WHITE_MASK, place).end, 1);
     place = Offset(place, CREDITS_LINE_STEP);
     if (--linesLeft == 0)

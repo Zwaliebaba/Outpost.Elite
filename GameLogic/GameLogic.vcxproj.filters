@@ -96,6 +96,9 @@
     <ClInclude Include="Combat.h">
       <Filter>Combat</Filter>
     </ClInclude>
+    <ClInclude Include="Counted.h">
+      <Filter>State</Filter>
+    </ClInclude>
     <ClInclude Include="DataField.h">
       <Filter>Native</Filter>
     </ClInclude>
@@ -174,7 +177,7 @@
     <ClInclude Include="NativeRoutines.h">
       <Filter>Native</Filter>
     </ClInclude>
-    <ClInclude Include="ObjectSlot.h">
+    <ClInclude Include="SpaceObject.h">
       <Filter>State</Filter>
     </ClInclude>
     <ClInclude Include="Outcome.h">

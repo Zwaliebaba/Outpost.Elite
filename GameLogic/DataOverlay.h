@@ -13,7 +13,9 @@ namespace Elite
 {
 
 /// The reference's data segment by name (plan §3, ADR-010): one field for every data, table and text
-/// row of the symbol table, at its offset. Native code reads and writes through Guest with these.
+/// row of the symbol table, at its offset. Native code reads and writes GameData's members (D33); it
+/// names a field here for its offset: an address it stores, a table of addresses, or bytes it reaches
+/// by offset.
 struct DataOverlay
 {
   /// the space view, rows 1-126 of a 256x128 2bpp buffer at DS:0000-1FFF (64 bytes a row); the drawing routines also write rows 0 and...

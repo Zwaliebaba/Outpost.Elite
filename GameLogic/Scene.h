@@ -4,7 +4,7 @@
 #include "GameState.h"
 #include "Hardware.h"
 #include "Maths.h"
-#include "ObjectSlot.h"
+#include "SpaceObject.h"
 #include "Ships.h"
 #include "Video.h"
 
@@ -118,15 +118,15 @@ FacesEnd DrawVisibleFaces(GameState& _state, std::uint16_t _list, std::uint16_t 
 /// CheckShipInRange (CS:3BEA): IsObjectNear, then |x|, |y| and |z| of _slot's position below maxAxisDistance and the high words
 /// of their squares, summed, below maxDistanceSquaredHigh after the second and the third. In range, _slot's size (+3Eh) is that
 /// sum shifted right 6 and its in-range bit (byte 0 bit 6) is set; out of range, EraseScannerBlip.
-ShipRangeCheck CheckShipInRange(GameState& _state, ObjectSlot _slot);
+ShipRangeCheck CheckShipInRange(GameState& _state, SpaceObject& _slot);
 
 /// TransformSunOrPlanet (CS:3C52): _slot's position scaled down by its GetPositionScaleShift, which becomes its disc scale
 /// (+0Ah) and depth (+3Dh), turned to the view (TransformToViewWithBlip) and stored at +10h/+12h/+14h, and byte 0 bit 7 set.
-void TransformSunOrPlanet(GameState& _state, ObjectSlot _slot);
+void TransformSunOrPlanet(GameState& _state, SpaceObject& _slot);
 
 /// TransformShip (CS:3C7E): _slot's position, the low words, turned to the view (TransformToViewWithBlip); offered to the hold
 /// (TryScoopObject) while fuel scoops are fitted and the game is not over; _slot's depth (+3Dh) cleared; then ClassifyViewPosition.
-void TransformShip(GameState& _state, ObjectSlot _slot);
+void TransformShip(GameState& _state, SpaceObject& _slot);
 
 /// RunBlueprintHandler (CS:3CDD): boxHalfWidth from the blueprint at _blueprint, the handler it names run (BuildBoxCornerVertices
 /// or BuildDodoVertices), then what the handler returns into at RenderBlueprintBody (CS:3CF2): the vertex program, the projection
@@ -136,12 +136,12 @@ bool RunBlueprintHandler(GameState& _state, std::uint16_t _blueprint, bool _back
 /// ClassifyStationPosition (CS:3C72): ClassifyViewPosition on _slot's compass position, +20h/+22h/+24h: visible, with byte 0 bit 7
 /// set, when z is at least nearClipZ and twice |x| and twice |y| are at most z; the position stored at +10h/+12h/+14h and as
 /// drawCenter once z passes.
-ViewTest ClassifyStationPosition(GameState& _state, ObjectSlot _slot);
+ViewTest ClassifyStationPosition(GameState& _state, SpaceObject& _slot);
 
 /// TransformToViewWithBlip (CS:3ED7): _position turned to the camera's frame (RotatePitchYawRoll), the high byte of its z into
 /// _slot's +3Ch, _slot's scanner blip moved there (UpdateScannerBlip), then the frame turned to the view (TransformToView's tail).
 /// Returns the position in the view.
-Vector TransformToViewWithBlip(GameState& _state, ObjectSlot _slot, Vector _position);
+Vector TransformToViewWithBlip(GameState& _state, SpaceObject& _slot, Vector _position);
 
 /// TransformToView (CS:3EE3): _position turned to the camera's frame (RotatePitchYawRoll), then, off the front view, (x, z) turned
 /// by -viewAngle through rotationSinCos[8], which it sets.
@@ -156,11 +156,11 @@ bool TransformAndDrawObjects(GameState& _state, Hardware& _hardware, bool _backw
 /// DrawSunOrPlanet (CS:3F4F): the planet in _slot sized (SizePlanet), with its altitude, or the sun, with the cabin temperature, its
 /// fringe, fuel scooping, death by heat and a supernova's heat; then, in front of the view, its disc. _backward is the direction
 /// flag, which the disc and a supernova's energy bomb go by.
-void DrawSunOrPlanet(GameState& _state, Hardware& _hardware, ObjectSlot _slot, bool _backward);
+void DrawSunOrPlanet(GameState& _state, Hardware& _hardware, SpaceObject& _slot, bool _backward);
 
 /// DrawDistantStation (CS:45C6): the station in _slot as a disc in colour 3 at its compass position, +20h/+22h/+24h, projected
 /// (ProjectToScreen): radius 7 rows when its depth byte +25h is below 14h, smaller further off, and none from 21h to A5h.
-void DrawDistantStation(GameState& _state, ObjectSlot _slot, bool _backward);
+void DrawDistantStation(GameState& _state, SpaceObject& _slot, bool _backward);
 
 /// LoadPlayerAngles (CS:8A16): the player's pitch, yaw and roll into rotation pairs 0-2. Returns the roll's sine and cosine.
 SinCos LoadPlayerAngles(GameState& _state);

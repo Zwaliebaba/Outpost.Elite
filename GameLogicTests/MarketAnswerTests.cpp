@@ -38,9 +38,9 @@ constexpr std::array<std::array<std::uint16_t, 3>, 3> EDGE_RANDOM_STATES = {
 // commodity's price and resale price, as screenPrices holds them, in tenths of a credit.
 [[nodiscard]] std::string Prices(Elite::GameState& _state, std::uint8_t _economy, std::uint8_t _government, std::uint8_t _techLevel)
 {
-  _state.Set(DS.currentEconomy, _economy);
-  _state.Set(DS.currentGovernment, _government);
-  _state.Set(DS.currentTechLevel, _techLevel);
+  _state.Data().commanderBlock.currentEconomy = _economy;
+  _state.Data().commanderBlock.currentGovernment = _government;
+  _state.Data().commanderBlock.currentTechLevel = _techLevel;
   Elite::ComputeMarketPrices(_state);
   std::string line = std::format("prices {} {} {}", _economy, _government, _techLevel);
   for (std::size_t commodity = 0; commodity < COMMODITIES; ++commodity)
@@ -55,9 +55,9 @@ constexpr std::array<std::array<std::uint16_t, 3>, 3> EDGE_RANDOM_STATES = {
 // StartMarketRandom, then RollQuantityOnSale for each commodity in turn, '-' for none.
 [[nodiscard]] std::string Quantities(Elite::GameState& _state, const std::array<std::uint16_t, 3>& _random)
 {
-  _state.Set(DS.randomState0, _random[0]);
-  _state.Set(DS.randomState1, _random[1]);
-  _state.Set(DS.randomState2, _random[2]);
+  _state.Data().commanderBlock.randomState0 = _random[0];
+  _state.Data().commanderBlock.randomState1 = _random[1];
+  _state.Data().commanderBlock.randomState2 = _random[2];
   Elite::StartMarketRandom(_state);
   std::string line = std::format("quantities {:04x} {:04x} {:04x}", _random[0], _random[1], _random[2]);
   for (std::size_t commodity = 0; commodity < COMMODITIES; ++commodity)
@@ -93,15 +93,17 @@ public:
       }
     }
 
-    std::array<std::uint16_t, 3> random = {state.Get(DS.randomState0), state.Get(DS.randomState1), state.Get(DS.randomState2)};
+    std::array<std::uint16_t, 3> random = {state.Data().commanderBlock.randomState0, state.Data().commanderBlock.randomState1,
+                                           state.Data().commanderBlock.randomState2};
     for (std::size_t walked = 0; walked < WALKED_RANDOM_STATES; ++walked)
     {
       answers.push_back(Quantities(state, random));
-      state.Set(DS.randomState0, random[0]);
-      state.Set(DS.randomState1, random[1]);
-      state.Set(DS.randomState2, random[2]);
+      state.Data().commanderBlock.randomState0 = random[0];
+      state.Data().commanderBlock.randomState1 = random[1];
+      state.Data().commanderBlock.randomState2 = random[2];
       (void)Elite::NextRandom(state);
-      random = {state.Get(DS.randomState0), state.Get(DS.randomState1), state.Get(DS.randomState2)};
+      random = {state.Data().commanderBlock.randomState0, state.Data().commanderBlock.randomState1,
+                state.Data().commanderBlock.randomState2};
     }
     for (const std::array<std::uint16_t, 3>& edge : EDGE_RANDOM_STATES)
     {

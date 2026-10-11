@@ -4,7 +4,7 @@
 #include "DataOverlay.h"
 #include "GameState.h"
 #include "Maths.h"
-#include "ObjectSlot.h"
+#include "SpaceObject.h"
 #include "Ships.h"
 #include "TwinRig.h"
 
@@ -71,7 +71,7 @@ std::uint16_t SpawnAhead(TwinRig& _rig, Spawner _spawner, std::uint8_t _record, 
   for (int draws = 0;; ++draws)
   {
     // NextRandom's next result is the sum of the first two words of the state.
-    const auto next = static_cast<std::uint16_t>(state.Get(DS.randomState0) + state.Get(DS.randomState1));
+    const auto next = static_cast<std::uint16_t>(state.Data().commanderBlock.randomState0 + state.Data().commanderBlock.randomState1);
     if (PickedRecord(_spawner, next) == _record)
       break;
     Assert::IsTrue(draws < MOST_DRAWS, L"the spawner's record comes up");
@@ -79,7 +79,7 @@ std::uint16_t SpawnAhead(TwinRig& _rig, Spawner _spawner, std::uint8_t _record, 
   }
   const Elite::SlotSearch free = Elite::FindFreeShipSlot(state);
   Assert::IsTrue(free.found, L"a free ship slot");
-  Elite::ObjectSlot ship(state, free.slot);
+  Elite::SpaceObject& ship = state.ObjectAt(free.slot);
   switch (_spawner)
   {
   case Spawner::Drifter:
@@ -95,11 +95,12 @@ std::uint16_t SpawnAhead(TwinRig& _rig, Spawner _spawner, std::uint8_t _record, 
     Elite::SpawnRandomWolf(state, ship);
     break;
   }
-  ship.Set(Elite::SlotWord::X, 0);
-  ship.Set(Elite::SlotWord::Y, 0);
-  ship.Set(Elite::SlotWord::Z, _ahead);
-  ship.Set(Elite::SlotWord::XYHigh, 0);
-  ship.Set(Elite::SlotByte::ZHigh, 0);
+  ship.x = 0;
+  ship.y = 0;
+  ship.z = _ahead;
+  ship.xHigh = 0;
+  ship.yHigh = 0;
+  ship.zHigh = 0;
   (void)Elite::FacePlayer(state, ship);
   (void)Elite::ComputeVelocity(state, ship);
   placed = free.slot;
@@ -110,7 +111,7 @@ std::uint16_t SpawnAhead(TwinRig& _rig, Spawner _spawner, std::uint8_t _record, 
 void RemoveShip(TwinRig& _rig, std::uint16_t _slot)
 {
   Elite::GameState& state = _rig.State();
-  (void)Elite::RemoveObject(state, Elite::ObjectSlot(state, _slot));
+  (void)Elite::RemoveObject(state, state.ObjectAt(_slot));
 }
 
 // A missile launched at the player by the ship at _launcher in the twin, as TryLaunchMissileAtPlayer launches one
@@ -119,7 +120,7 @@ std::uint16_t LaunchMissileAtPlayer(TwinRig& _rig, std::uint16_t _launcher)
 {
   std::uint16_t launched = 0;
   Elite::GameState& state = _rig.State();
-  const std::optional<std::uint16_t> slot = Elite::LaunchShipFromObject(state, Elite::ObjectSlot(state, _launcher), MISSILE_LAUNCH, false);
+  const std::optional<std::uint16_t> slot = Elite::LaunchShipFromObject(state, state.ObjectAt(_launcher), MISSILE_LAUNCH, false);
   Assert::IsTrue(slot.has_value(), L"a free slot for the missile");
   launched = slot.value_or(0);
   return launched;

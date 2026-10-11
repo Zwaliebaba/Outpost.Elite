@@ -169,13 +169,13 @@ WordQuotient DivideSignedWord(GameState& _state, std::uint32_t _dividend, std::u
 
 std::uint16_t NextRandom(GameState& _state)
 {
-  const std::uint16_t a = _state.Get(DS.randomState0);
-  const std::uint16_t b = _state.Get(DS.randomState1);
-  const std::uint16_t c = _state.Get(DS.randomState2);
+  const std::uint16_t a = _state.Data().commanderBlock.randomState0;
+  const std::uint16_t b = _state.Data().commanderBlock.randomState1;
+  const std::uint16_t c = _state.Data().commanderBlock.randomState2;
   const auto sum = static_cast<std::uint16_t>(a + b);
-  _state.Set(DS.randomState1, c);
-  _state.Set(DS.randomState0, b);
-  _state.Set(DS.randomState2, static_cast<std::uint16_t>(c + sum));
+  _state.Data().commanderBlock.randomState1 = c;
+  _state.Data().commanderBlock.randomState0 = b;
+  _state.Data().commanderBlock.randomState2 = static_cast<std::uint16_t>(c + sum);
   return sum;
 }
 
@@ -183,7 +183,7 @@ SinCos SinCosOf(const GameState& _state, std::uint16_t _angle)
 {
   const auto index = static_cast<std::uint16_t>(_angle & ANGLE_MASK);
   const auto cosineIndex = static_cast<std::uint16_t>((index + COSINE_OFFSET_BYTES / 2) & (SINE_WORDS - 1));
-  return SinCos{Signed(_state.Word(DS.sineTable.At(index))), Signed(_state.Word(DS.sineTable.At(cosineIndex)))};
+  return SinCos{Signed(_state.Data().sineTable[index]), Signed(_state.Data().sineTable[cosineIndex])};
 }
 
 SinCos SetSinCos(GameState& _state, std::size_t _pair, std::uint16_t _angle)
@@ -318,17 +318,17 @@ bool VectorWithinBox(Vector _vector, std::uint16_t _halfSize)
   return Magnitude(Word(_vector.x)) < _halfSize && Magnitude(Word(_vector.y)) < _halfSize && Magnitude(Word(_vector.z)) < _halfSize;
 }
 
-bool ObjectWithinBox(const ObjectSlot& _slot, std::uint16_t _halfSize)
+bool ObjectWithinBox(const SpaceObject& _slot, std::uint16_t _halfSize)
 {
-  return VectorWithinBox(Vector{Signed(_slot.Get(SlotWord::X)), Signed(_slot.Get(SlotWord::Y)), Signed(_slot.Get(SlotWord::Z))}, _halfSize);
+  return VectorWithinBox(Vector{Signed(_slot.x), Signed(_slot.y), Signed(_slot.z)}, _halfSize);
 }
 
 Vector RotatePitchYawRoll(GameState& _state, Vector _vector)
 {
   const Pair yz = RotateByStoredSinCos(_state, 0, Pair{_vector.y, _vector.z});
-  _state.Set(DS.rotateScratch, Word(yz.first));
+  _state.Data().rotateScratch = Word(yz.first);
   const Pair xz = RotateByStoredSinCos(_state, 1, Pair{_vector.x, yz.second});
-  _state.Set(DS.rotateScratch, Word(xz.second));
+  _state.Data().rotateScratch = Word(xz.second);
   const Pair xy = RotateByStoredSinCos(_state, 2, Pair{xz.first, yz.first});
   return Vector{xy.first, xy.second, xz.second};
 }
@@ -344,18 +344,18 @@ Vector RotateRollYawPitch(const GameState& _state, Vector _vector)
 Vector RotateBySinCos7210(GameState& _state, Vector _vector)
 {
   const Pair yz = RotateByStoredSinCos(_state, 7, Pair{_vector.y, _vector.z});
-  _state.Set(DS.rotateScratch, Word(yz.second));
+  _state.Data().rotateScratch = Word(yz.second);
   const Pair xy = RotateByStoredSinCos(_state, 2, Pair{_vector.x, yz.first});
-  _state.Set(DS.rotateScratch, Word(xy.second));
+  _state.Data().rotateScratch = Word(xy.second);
   const Pair xz = RotateByStoredSinCos(_state, 1, Pair{xy.first, yz.second});
-  _state.Set(DS.rotateScratch, Word(xz.first));
+  _state.Data().rotateScratch = Word(xz.first);
   const Pair rotatedYz = RotateByStoredSinCos(_state, 0, Pair{xy.second, xz.second});
   return Vector{xz.first, rotatedYz.first, rotatedYz.second};
 }
 
-std::uint16_t ScaleByInverseDistance(GameState& _state, const ObjectSlot& _slot, std::uint32_t _value)
+std::uint16_t ScaleByInverseDistance(GameState& _state, const SpaceObject& _slot, std::uint32_t _value)
 {
-  const std::uint32_t sum = Square(_slot.Get(SlotWord::ViewX)) + Square(_slot.Get(SlotWord::ViewY)) + Square(_slot.Get(SlotWord::ViewZ));
+  const std::uint32_t sum = Square(_slot.viewX) + Square(_slot.viewY) + Square(_slot.viewZ);
   // One more than the root of the high word, counted in the divisor's high byte: a count of 256 wraps to 0.
   auto remaining = static_cast<std::uint16_t>(sum >> 16);
   std::uint16_t odd = 0xFFFF;
@@ -370,7 +370,7 @@ std::uint16_t ScaleByInverseDistance(GameState& _state, const ObjectSlot& _slot,
   } while (!borrow);
   const auto divisor = static_cast<std::uint16_t>(count << 8);
   // The value shifted arithmetically right by the disc scale, then divided through the trap.
-  const std::uint8_t shift = _slot.Get(SlotByte::DiscScale);
+  const std::uint8_t shift = Low(_slot.pitch); // the disc's scale shift
   auto shifted = static_cast<std::int32_t>(_value);
   shifted >>= shift < 31 ? shift : 31;
   const auto dividend = static_cast<std::uint32_t>(shifted);
@@ -399,7 +399,7 @@ std::uint32_t ShiftRight24(std::uint32_t _value, std::uint8_t _count)
   return static_cast<std::uint32_t>(value) & MASK_24_BITS;
 }
 
-PositionScale GetPositionScaleShift(const ObjectSlot& _slot)
+PositionScale GetPositionScaleShift(const SpaceObject& _slot)
 {
   const std::uint32_t x = Magnitude24(_slot.PositionX());
   const std::uint32_t y = Magnitude24(_slot.PositionY());
@@ -420,14 +420,14 @@ PositionScale GetPositionScaleShift(const ObjectSlot& _slot)
   return PositionScale{shift, static_cast<std::uint16_t>(largest)};
 }
 
-Vector ScalePositionDown(const ObjectSlot& _slot, std::uint8_t _shift)
+Vector ScalePositionDown(const SpaceObject& _slot, std::uint8_t _shift)
 {
   const auto lowWord = [_shift](std::uint32_t _coordinate)
   { return Signed(static_cast<std::uint16_t>(ShiftRight24(_coordinate, _shift))); };
   return Vector{lowWord(_slot.PositionX()), lowWord(_slot.PositionY()), lowWord(_slot.PositionZ())};
 }
 
-Angles ComputeAnglesToObject(GameState& _state, const ObjectSlot& _slot)
+Angles ComputeAnglesToObject(GameState& _state, const SpaceObject& _slot)
 {
   const Vector scaled = ScalePositionDown(_slot, GetPositionScaleShift(_slot).shift);
   const std::uint16_t first = ArcTangent2(_state, scaled.y, scaled.z);

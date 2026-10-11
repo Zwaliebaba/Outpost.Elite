@@ -3,7 +3,7 @@
 #include "DataOverlay.h"
 #include "GameState.h"
 #include "Maths.h"
-#include "ObjectSlot.h"
+#include "SpaceObject.h"
 #include "Ships.h"
 #include "TwinRig.h"
 
@@ -76,11 +76,11 @@ struct ShipCount
 {
   ShipCount count{0, 0};
   Elite::GameState& state = _rig.State();
-  const Elite::ObjectSlot station(state, DS.stationSlot.offset);
-  for (std::uint16_t index = FIRST_SHIP_SLOT; index < state.Get(DS.objectSlotCount); ++index)
+  const Elite::SpaceObject& station = state.ObjectAt(DS.stationSlot.offset);
+  for (std::uint16_t index = FIRST_SHIP_SLOT; index < state.Data().objectSlotCount; ++index)
   {
-    const Elite::ObjectSlot ship(state, static_cast<std::uint16_t>(DS.shipSlots.offset + index * Elite::SLOT_BYTES));
-    const std::uint8_t type = ship.Get(Elite::SlotByte::Type);
+    const Elite::SpaceObject& ship = state.ObjectAt(static_cast<std::uint16_t>(DS.shipSlots.offset + index * Elite::SLOT_BYTES));
+    const std::uint8_t type = ship.type;
     if ((type & Elite::SLOT_ACTIVE) == 0 || ((type >> 1) & Elite::TYPE_MASK) != _type)
       continue;
     ++count.all;

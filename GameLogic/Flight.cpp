@@ -14,7 +14,7 @@
 #include "Input.h"
 #include "Market.h"
 #include "Maths.h"
-#include "ObjectSlot.h"
+#include "SpaceObject.h"
 #include "Scene.h"
 #include "Ships.h"
 #include "Sound.h"
@@ -277,7 +277,7 @@ constexpr std::int16_t DEATH_DEBRIS_SPEED = 0x28;
 void SetMessage(GameState& _state, std::uint16_t _text, std::uint16_t _frames)
 {
   _state.Set(DS.messagePointer, _text);
-  _state.Set(DS.messageFrames, _frames);
+  _state.Data().messageFrames = _frames;
 }
 
 // ---- Stardust -------------------------------------------------------------------------------------
@@ -325,7 +325,7 @@ bool DrawDust(GameState& _state, std::uint16_t _particle, DustPosition _position
   const DustScreenPosition screen = DustToScreen(_position);
   const std::uint8_t x = Low(Word(screen.x));
   const std::uint8_t row = Low(Word(screen.row));
-  if (_state.Get(DS.jumpDriveEngaged) == 0)
+  if (_state.Data().jumpDriveEngaged == 0)
   {
     PlotPixel(_state, x, row);
     return false;
@@ -351,7 +351,7 @@ bool DrawDust(GameState& _state, std::uint16_t _particle, DustPosition _position
 DustPosition MoveDust(GameState& _state, std::uint16_t _particle, DustPosition _position, bool _rear)
 {
   DustPosition position = _position;
-  if (_state.Get(DS.playerSpeed) != 0)
+  if (_state.Data().playerSpeed != 0)
   {
     // ADD AX,BP / ADD BX,DX, or SUB for the rear view.
     const DustStep step = ScaleDustStep(_state, position);
@@ -393,7 +393,7 @@ bool UpdateFrontOrRearStardust(GameState& _state, bool _rear, std::uint16_t _bx)
 {
   std::uint16_t bx = _bx;
   // MOV DX,rollRate / ApplyReverseControlsToDx / AND DH,DH / XOR DL,DL / NEG DX for the front view / SAR DX,1.
-  const std::uint16_t pitchRate = _state.Get(DS.rollRate);
+  const std::uint16_t pitchRate = _state.Data().rollRate;
   const std::uint8_t pitch = ApplyReverseControls(_state, Steering{Low(pitchRate), High(pitchRate)}).pitch;
   if (pitch != 0)
   {
@@ -402,7 +402,7 @@ bool UpdateFrontOrRearStardust(GameState& _state, bool _rear, std::uint16_t _bx)
     bx = LastDustY(_state);
   }
   // MOV AX,rollRate / ApplyReverseControls / CBW / NEG AX for the front view / SHL AX,1: the roll.
-  const std::uint16_t rollRate = _state.Get(DS.rollRate);
+  const std::uint16_t rollRate = _state.Data().rollRate;
   const std::uint16_t roll = SignExtend(ApplyReverseControls(_state, Steering{Low(rollRate), High(rollRate)}).roll);
   if (const auto angle = static_cast<std::uint16_t>((_rear ? roll : Negate(roll)) << 1); angle != 0)
   {
@@ -449,7 +449,7 @@ bool UpdateSideStardust(GameState& _state, bool _left)
 {
   // MOV DX,rollRate / ApplyReverseControlsToDx / MOV DH,DL: the reversed roll byte, as DX = roll:00, negated for the right view
   // and halved, shifts the dust vertically.
-  const std::uint16_t rollRate = _state.Get(DS.rollRate);
+  const std::uint16_t rollRate = _state.Data().rollRate;
   const std::uint8_t roll = ApplyReverseControls(_state, Steering{Low(rollRate), High(rollRate)}).roll;
   if (roll != 0)
   {
@@ -457,14 +457,14 @@ bool UpdateSideStardust(GameState& _state, bool _left)
     ShiftStardustVertically(_state, Signed(Sar(_left ? step : Negate(step), 1)));
   }
   // The speed, negated for the left view, as DX = its low byte:00, shifted right three times, moves it sideways.
-  if (const std::uint16_t speed = _state.Get(DS.playerSpeed); speed != 0)
+  if (const std::uint16_t speed = _state.Data().playerSpeed; speed != 0)
   {
     const std::uint16_t step = Join(Low(_left ? Negate(speed) : speed), 0);
     ShiftStardustSideways(_state, Signed(Sar(step, 3)));
   }
   // MOV AX,rollRate / ApplyReverseControls / MOV AL,AH / CBW / SHL AX,1: the reversed pitch byte, doubled and negated for the
   // left view, rolls it.
-  const std::uint16_t pitchRate = _state.Get(DS.rollRate);
+  const std::uint16_t pitchRate = _state.Data().rollRate;
   const auto angle =
     static_cast<std::uint16_t>(SignExtend(ApplyReverseControls(_state, Steering{Low(pitchRate), High(pitchRate)}).pitch) << 1);
   if (angle != 0)
@@ -535,46 +535,46 @@ void DrawBar(GameState& _state, const std::array<std::uint16_t, Lines>& _lines, 
 
 // MOV AL,[_value] / CMP AL,[_shown] / JE / (MOV [_shown],AL) / MOV DI,_line / CALL DrawThreeLineBar, with CH = 0 as the earlier
 // draws leave it (UpdateDashboard).
-void RedrawThreeLineBar(GameState& _state, DataField<std::uint8_t> _value, DataField<std::uint8_t> _shown, std::uint16_t _line,
+void RedrawThreeLineBar(GameState& _state, const Counted<std::uint8_t>& _value, Counted<std::uint8_t>& _shown, std::uint16_t _line,
                         bool _remember)
 {
-  const std::uint8_t value = _state.Get(_value);
-  if (value == _state.Get(_shown))
+  const std::uint8_t value = _value;
+  if (value == _shown)
   {
     return;
   }
   if (_remember)
   {
-    _state.Set(_shown, value);
+    _shown = value;
   }
   DrawThreeLineBar(_state, _line, value, 0);
 }
 
 // SUB byte,_value / JAE / MOV byte,0 on _field: the difference written, and 0 over it on a borrow.
-void SubtractFloored(GameState& _state, DataField<std::uint8_t> _field, std::uint8_t _value)
+void SubtractFloored(Counted<std::uint8_t>& _field, std::uint8_t _value)
 {
-  const std::uint8_t before = _state.Get(_field);
-  _state.Set(_field, static_cast<std::uint8_t>(before - _value));
+  const std::uint8_t before = _field;
+  _field = static_cast<std::uint8_t>(before - _value);
   if (before < _value)
   {
-    _state.Set(_field, 0);
+    _field = 0;
   }
 }
 
 // cmp [_shown], al; mov [_shown], al; je, with AL = _glyph: whether the glyph changed.
-[[nodiscard]] bool ExchangeShown(GameState& _state, DataField<std::uint8_t> _shown, std::uint8_t _glyph)
+[[nodiscard]] bool ExchangeShown(Counted<std::uint8_t>& _shown, std::uint8_t _glyph)
 {
-  const bool changed = _state.Get(_shown) != _glyph;
-  _state.Set(_shown, _glyph);
+  const bool changed = _shown != _glyph;
+  _shown = _glyph;
   return changed;
 }
 
 // ---- Collisions -----------------------------------------------------------------------------------
 
 // The station's x and y, with z 0, within _halfSize: inside the docking slot.
-[[nodiscard]] bool InsideDockingSlot(const ObjectSlot& _station, std::uint16_t _halfSize)
+[[nodiscard]] bool InsideDockingSlot(const SpaceObject& _station, std::uint16_t _halfSize)
 {
-  return VectorWithinBox(Vector{Signed(_station.Get(SlotWord::X)), Signed(_station.Get(SlotWord::Y)), 0}, _halfSize);
+  return VectorWithinBox(Vector{Signed(_station.x), Signed(_station.y), 0}, _halfSize);
 }
 
 // 0x2BD9-0x2C8D: _slot, an active one, against the player. Outside its type's collisionRanges box, a station's collided bit
@@ -584,11 +584,12 @@ void SubtractFloored(GameState& _state, DataField<std::uint8_t> _field, std::uin
 // costs 1500 and is removed. Each hit is credited (CreditKill), unlocks a missile on it (CheckMissileTargetDestroyed), takes
 // the damage (TakeDamage) and starts the impact sound, whose STI the hit's every path ends with, as KillPlayer's does when it
 // kills.
-void CheckCollision(GameState& _state, Hardware& _hardware, ObjectSlot _slot)
+void CheckCollision(GameState& _state, Hardware& _hardware, SpaceObject& _slot)
 {
   // MOV BL,[DI] / AND BX,3Eh: the type, doubled, indexes the box's half sizes.
-  const std::uint16_t range = _state.Word(Plus(DS.collisionRanges.offset, _slot.Get(SlotByte::Type) & 0x3E));
-  const auto clearCollided = [&_slot] { _slot.Set(SlotByte::Collided, static_cast<std::uint8_t>(_slot.Get(SlotByte::Collided) & 0xFE)); };
+  const std::uint16_t range = _state.Word(Plus(DS.collisionRanges.offset, _slot.type & 0x3E));
+  // The station's collided bit is bit 0 of its yaw's low byte.
+  const auto clearCollided = [&_slot] { _slot.yaw = WithLow(_slot.yaw, static_cast<std::uint8_t>(Low(_slot.yaw) & 0xFE)); };
   if (!ObjectWithinBox(_slot, range))
   {
     if (IsStation(_slot).station)
@@ -602,20 +603,20 @@ void CheckCollision(GameState& _state, Hardware& _hardware, ObjectSlot _slot)
   {
     damage = 0x1C2;
   }
-  else if ((_slot.Get(SlotByte::Collided) & 1) == 0)
+  else if ((Low(_slot.yaw) & 1) == 0)
   {
-    _slot.Set(SlotByte::Collided, static_cast<std::uint8_t>(_slot.Get(SlotByte::Collided) | 1));
-    if ((_slot.Get(SlotByte::Type) & 0x80) != 0)
+    _slot.yaw = WithLow(_slot.yaw, static_cast<std::uint8_t>(Low(_slot.yaw) | 1));
+    if ((_slot.type & 0x80) != 0)
     {
       if (CheckDockingAlignment(_state, _slot, 0x64))
       {
         // Aligned: docked, if inside the slot and the station is not the Thargoids'.
-        if (_state.Get(DS.thargoidInvasionActive) != 1 && InsideDockingSlot(_slot, 0x5A) && (_slot.Get(SlotByte::Flags) & 1) == 0)
+        if (_state.Data().commanderBlock.thargoidInvasionActive != 1 && InsideDockingSlot(_slot, 0x5A) && (_slot.flags & 1) == 0)
         {
-          _state.Set(DS.playerDocked, 1);
-          _state.Set(DS.dockingComputerOn, 0);
-          _state.Set(DS.rollRate, 0);
-          _state.Set(DS.viewLocked, 0);
+          _state.Data().playerDocked = 1;
+          _state.Data().dockingComputerOn = 0;
+          _state.Data().rollRate = 0;
+          _state.Data().viewLocked = 0;
           return;
         }
       }
@@ -633,7 +634,7 @@ void CheckCollision(GameState& _state, Hardware& _hardware, ObjectSlot _slot)
   }
   // PUSH AX / POP AX keep the damage round the kill's credit.
   (void)CreditKill(_state, _slot);
-  (void)CheckMissileTargetDestroyed(_state, _slot.Offset());
+  (void)CheckMissileTargetDestroyed(_state, _state.OffsetOf(_slot));
   if (damage == 0x5DC || !IsStation(_slot).station)
   {
     (void)RemoveObject(_state, _slot);
@@ -651,8 +652,8 @@ void CheckCollision(GameState& _state, Hardware& _hardware, ObjectSlot _slot)
 // SetWarning (0x36E7): posts warning _warning, its text warningTexts[_warning], for 20 frames.
 void SetWarning(GameState& _state, std::uint8_t _warning)
 {
-  _state.Set(DS.warningFrames, 0x14);
-  _state.Set(DS.warningIndex, _warning);
+  _state.Data().warningFrames = 0x14;
+  _state.Data().warningIndex = _warning;
   _state.Set(DS.warningMessage, _state.Word(DS.warningTexts.At(_warning)));
 }
 
@@ -664,16 +665,16 @@ void SetWarning(GameState& _state, std::uint8_t _warning)
   {
   case 0:
   {
-    const bool alert = _state.Get(DS.incomingMissileAlert) == 1;
-    _state.Set(DS.incomingMissileAlert, 0);
+    const bool alert = _state.Data().incomingMissileAlert == 1;
+    _state.Data().incomingMissileAlert = 0;
     return alert;
   }
   case 1:
-    return _state.Get(DS.altitude) < 0x32;
+    return _state.Data().altitude < 0x32;
   case 2:
-    return _state.Get(DS.cabinTemperature) >= 0xE1;
+    return _state.Data().cabinTemperature >= 0xE1;
   default:
-    return _state.Get(DS.playerEnergy) < 0x100;
+    return _state.Data().playerEnergy < 0x100;
   }
 }
 
@@ -749,7 +750,7 @@ constexpr std::uint16_t DRAW_BUFFER_BYTES = 0x2000;
   }
   if (_lock.planet)
   {
-    di = Plus(DS.shipSlots.offset, ObjectSlot::BYTES);
+    di = Plus(DS.shipSlots.offset, SpaceObject::BYTES);
   }
   if (_lock.ships)
   {
@@ -787,13 +788,13 @@ void ShowPauseOptions(GameState& _state, Hardware& _hardware)
   std::uint16_t options = PAUSE_OPTIONS;
   for (;;)
   {
-    _state.Set(DS.textPaperPattern, 0);
+    _state.Data().textPaperPattern = 0;
     std::uint16_t ink = ALL_COLORS;
     if (_state.Byte(option) == 1)
     {
       // xchg [textPaperPattern], bx
-      ink = _state.Get(DS.textPaperPattern);
-      _state.Set(DS.textPaperPattern, ALL_COLORS);
+      ink = _state.Data().textPaperPattern;
+      _state.Data().textPaperPattern = ALL_COLORS;
     }
     (void)DrawViewChar(_state, _state.Byte(Plus(option, 1)), ink, position);
     option = Plus(option, 2);
@@ -836,7 +837,7 @@ enum class PauseExit : std::uint8_t
 void DrawPauseMenu(GameState& _state, Hardware& _hardware, bool _backward)
 {
   ClearDrawBuffer(_state, _backward);
-  _state.Set(DS.textPaperPattern, 0);
+  _state.Data().textPaperPattern = 0;
   std::uint16_t text = DS.pauseMenuText.offset;
   for (std::uint16_t lines = PAUSE_MENU_LINES;;)
   {
@@ -856,19 +857,19 @@ void DrawPauseMenu(GameState& _state, Hardware& _hardware, bool _backward)
 void SetFrameTime(GameState& _state, std::uint8_t _key)
 {
   const auto choice = static_cast<std::uint8_t>(_key - SCAN_F1);
-  _state.Set(DS.minimumFrameMs, _state.Byte(Plus(DS.frameTimeChoices.offset, choice)));
+  _state.Data().minimumFrameMs = _state.Byte(Plus(DS.frameTimeChoices.offset, choice));
   const auto digit = static_cast<std::uint8_t>(choice + DIGIT_ONE);
   if (digit == DIGIT_NINE + 1)
   {
     _state.SetByte(DS.frameRateKeyLabel.offset, DIGIT_ONE);
-    _state.Set(DS.dataAC00, DIGIT_ZERO);
-    _state.Set(DS.dataAC01, CLOSING_BRACKET);
+    _state.Data().frameRateKeyLabel.dataAC00 = DIGIT_ZERO;
+    _state.Data().frameRateKeyLabel.dataAC01 = CLOSING_BRACKET;
   }
   else
   {
     _state.SetByte(DS.frameRateKeyLabel.offset, digit);
-    _state.Set(DS.dataAC00, CLOSING_BRACKET);
-    _state.Set(DS.dataAC01, SPACE);
+    _state.Data().frameRateKeyLabel.dataAC00 = CLOSING_BRACKET;
+    _state.Data().frameRateKeyLabel.dataAC01 = SPACE;
   }
 }
 
@@ -890,9 +891,9 @@ PauseExit RunPauseOptions(GameState& _state, Hardware& _hardware, bool _backward
         StartBeep(_state);
         ResetKeyboard(_state, _hardware);
         ClearDrawBuffer(_state, _backward);
-        _state.Set(DS.gamePaused, 0);
-        _state.Set(DS.textPaperPattern, 0);
-        _state.Set(DS.keyDownSpace, 0);
+        _state.Data().gamePaused = 0;
+        _state.Data().textPaperPattern = 0;
+        _state.Data().keyDown.keyDownSpace = 0;
         return PauseExit::Resume;
       }
       if (TogglePauseOption(_state, key))
@@ -907,9 +908,9 @@ PauseExit RunPauseOptions(GameState& _state, Hardware& _hardware, bool _backward
         ClearDrawBuffer(_state, _backward);
         StopSoundEffects(_state);
         _hardware.EnableInterrupts();
-        _state.Set(DS.gamePaused, 0);
-        _state.Set(DS.textPaperPattern, 0);
-        _state.Set(DS.titleShown, 0);
+        _state.Data().gamePaused = 0;
+        _state.Data().textPaperPattern = 0;
+        _state.Data().titleShown = 0;
         return PauseExit::Abort;
       }
       if (key < SCAN_F1 || key >= SCAN_PAST_F10)
@@ -930,12 +931,12 @@ PauseExit RunPauseOptions(GameState& _state, Hardware& _hardware, bool _backward
 std::optional<ScreenChange> LeaveFlightScreens(GameState& _state, Hardware& _hardware, bool _backward)
 {
   std::optional<ScreenChange> change;
-  if (_state.Get(DS.flightScreenShown) != 0)
+  if (_state.Data().flightScreenShown != 0)
   {
     change = RestoreFlightScreen(_state, _hardware, _backward);
     ResetKeyboard(_state, _hardware);
   }
-  _state.Set(DS.inFlight, 1);
+  _state.Data().inFlight = 1;
   return change;
 }
 
@@ -943,7 +944,7 @@ std::optional<ScreenChange> LeaveFlightScreens(GameState& _state, Hardware& _har
 // Returns whether EraseCompassAndBlips erased anything.
 bool EraseForFlightScreen(GameState& _state)
 {
-  _state.Set(DS.flightScreenShown, 1);
+  _state.Data().flightScreenShown = 1;
   return EraseCompassAndBlips(_state);
 }
 
@@ -964,10 +965,10 @@ FlightScreens DispatchFlightScreens(GameState& _state, Hardware& _hardware, std:
   // ES, the video segment once it erases anything.
   const auto erase = [&_state, &countLeft, &segment]
   {
-    const ObjectSlot station(_state, DS.stationSlot.offset);
-    if ((station.Get(SlotByte::Flags) & FLAG_BLIP_DRAWN) != 0)
+    const SpaceObject& station = _state.ObjectAt(DS.stationSlot.offset);
+    if ((station.flags & FLAG_BLIP_DRAWN) != 0)
     {
-      countLeft = SignExtend(station.Get(SlotByte::BlipZ));
+      countLeft = SignExtend(station.blipZ);
     }
     if (EraseForFlightScreen(_state))
     {
@@ -1004,7 +1005,7 @@ FlightScreens DispatchFlightScreens(GameState& _state, Hardware& _hardware, std:
       screens.view = key;
       return leave();
     }
-    if (_state.Get(DS.witchspaceCountdown) == 0)
+    if (_state.Data().commanderBlock.witchspaceCountdown == 0)
     {
       erase();
       if (key == SCAN_F5)
@@ -1034,7 +1035,7 @@ FlightScreens DispatchFlightScreens(GameState& _state, Hardware& _hardware, std:
       // market need the navigation computer, which witch space jams.
       if (key == SCAN_F6)
       {
-        if (_state.Get(DS.witchspaceCountdown) == 1)
+        if (_state.Data().commanderBlock.witchspaceCountdown == 1)
         {
           erase();
           shown(ShowShortRangeChart(_state, _hardware, screens.backward, segment), true);
@@ -1044,7 +1045,7 @@ FlightScreens DispatchFlightScreens(GameState& _state, Hardware& _hardware, std:
       }
       if (key < SCAN_F9)
       {
-        if (_state.Get(DS.flightScreenShown) != 1)
+        if (_state.Data().flightScreenShown != 1)
         {
           StartBeep(_state);
         }
@@ -1059,9 +1060,9 @@ FlightScreens DispatchFlightScreens(GameState& _state, Hardware& _hardware, std:
     if (key == SCAN_F9)
     {
       ResetKeyboard(_state, _hardware);
-      _state.Set(DS.inFlight, 1);
+      _state.Data().inFlight = 1;
       const ScreenKey closed = ShowCommanderStatusScreen(_state, _hardware, screens.backward, countLeft);
-      _state.Set(DS.inFlight, 0);
+      _state.Data().inFlight = 0;
       shown(closed, false);
       continue;
     }
@@ -1091,11 +1092,11 @@ std::optional<std::uint16_t> ChangeView(GameState& _state, std::uint8_t _key)
   }
   constexpr std::array<std::uint16_t, 4> VIEWS = {0, REAR_VIEW, LEFT_VIEW, RIGHT_VIEW};
   const std::uint16_t view = VIEWS[static_cast<std::size_t>(_key - SCAN_F1)];
-  if (_state.Get(DS.viewAngle) == view)
+  if (_state.Data().viewAngle == view)
   {
     return std::nullopt;
   }
-  _state.Set(DS.viewAngle, view);
+  _state.Data().viewAngle = view;
   StartBeep(_state);
   return ResetStardust(_state);
 }
@@ -1112,25 +1113,26 @@ void PostHyperspaceRefusal(GameState& _state, Hardware& _hardware, std::uint16_t
 // ProcessFlightKeys. _backward is the direction flag ResetHyperspaceRings' copy runs by.
 [[nodiscard]] bool PressHyperspace(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  if (_state.Get(DS.dockingComputerOn) == 1 || _state.Get(DS.hyperspaceCountdown) != 0)
+  if (_state.Data().dockingComputerOn == 1 || _state.Data().hyperspaceCountdown != 0)
   {
     // JE or JNE back to the JMP past the key's handling: a backward jump into shared code, not a loop, so its turn carries
     // nothing.
     _hardware.LoopTurn(PAST_HYPERSPACE_KEY, {});
     return false;
   }
-  if (((_state.Get(DS.invadedStationDestroyed) ^ 1) & _state.Get(DS.thargoidInvasionActive) & _state.Get(DS.jumpedSinceBriefing)) != 0)
+  if (((_state.Data().commanderBlock.invadedStationDestroyed ^ 1) & _state.Data().commanderBlock.thargoidInvasionActive &
+       _state.Data().commanderBlock.jumpedSinceBriefing) != 0)
   {
     SetMessage(_state, DS.hyperspaceJammedMessage.offset, 0x19);
     return false;
   }
-  if (_state.Get(DS.galacticDriveReadyFrames) != 0)
+  if (_state.Data().galacticDriveReadyFrames != 0)
   {
-    _state.Set(DS.galacticJumpPending, 1);
+    _state.Data().galacticJumpPending = 1;
   }
   else
   {
-    const std::uint16_t distance = _state.Get(DS.selectedDistanceTenthsLy);
+    const std::uint16_t distance = _state.Data().commanderBlock.selectedDistanceTenthsLy;
     if (distance == 0)
     {
       SetMessage(_state, DS.noSystemSelectedMessage.offset, 0x19);
@@ -1145,23 +1147,23 @@ void PostHyperspaceRefusal(GameState& _state, Hardware& _hardware, std::uint16_t
     // low byte; then MOV AX,distance / MUL BH / MOV BH,0Ah / DIV BH: the cost, its low byte times 24h over 10, at least 1. BX
     // holds BH and the distance's low byte at each divide.
     const std::uint8_t tenths = Low(distance);
-    const ByteQuotient reach =
-      DivideByte(_state, static_cast<std::uint16_t>(_state.Get(DS.fuel) * FUEL_FACTOR), FUEL_DIVISOR, Join(FUEL_DIVISOR, tenths));
+    const ByteQuotient reach = DivideByte(_state, static_cast<std::uint16_t>(_state.Data().commanderBlock.fuel * FUEL_FACTOR), FUEL_DIVISOR,
+                                          Join(FUEL_DIVISOR, tenths));
     if (reach.quotient < tenths)
     {
       PostHyperspaceRefusal(_state, _hardware, DS.notEnoughFuelMessage.offset);
       return false;
     }
-    const auto product = static_cast<std::uint16_t>(Low(_state.Get(DS.selectedDistanceTenthsLy)) * FUEL_DIVISOR);
+    const auto product = static_cast<std::uint16_t>(Low(_state.Data().commanderBlock.selectedDistanceTenthsLy) * FUEL_DIVISOR);
     const ByteQuotient cost = DivideByte(_state, product, FUEL_FACTOR, Join(FUEL_FACTOR, tenths));
-    _state.Set(DS.hyperspaceFuelCost, cost.quotient == 0 ? std::uint8_t{1} : cost.quotient);
+    _state.Data().hyperspaceFuelCost = cost.quotient == 0 ? std::uint8_t{1} : cost.quotient;
   }
-  _state.Set(DS.hyperspaceCountdown, 0x0A);
-  _state.Set(DS.hyperspaceCountdownFrames, 0x0A);
+  _state.Data().hyperspaceCountdown = 0x0A;
+  _state.Data().hyperspaceCountdownFrames = 0x0A;
   ShowHyperspaceCountdown(_state);
   ResetHyperspaceRings(_state, _backward);
-  _state.Set(DS.missileState, 0);
-  _state.Set(DS.shipIdRequested, 0);
+  _state.Data().missileState = 0;
+  _state.Data().shipIdRequested = 0;
   LatchHyperspaceTarget(_state);
   return true;
 }
@@ -1172,54 +1174,54 @@ void PostHyperspaceRefusal(GameState& _state, Hardware& _hardware, std::uint16_t
 void HandleMissileKeys(GameState& _state, std::uint16_t _di, bool _backward)
 {
   std::uint16_t source = _di;
-  if (_state.Get(DS.keyDownT) == 1 && _state.Get(DS.missileCount) != 0 && _state.Get(DS.missileState) == 0 &&
-      _state.Get(DS.hyperspaceCountdown) == 0 && _state.Get(DS.shipIdRequested) != 1)
+  if (_state.Data().keyDown.keyDownT == 1 && _state.Data().commanderBlock.missileCount != 0 && _state.Data().missileState == 0 &&
+      _state.Data().hyperspaceCountdown == 0 && _state.Data().shipIdRequested != 1)
   {
-    _state.Set(DS.missileState, 1);
-    _state.Set(DS.shipIdRequested, 0);
+    _state.Data().missileState = 1;
+    _state.Data().shipIdRequested = 0;
     StartBeep(_state);
     SetMessage(_state, DS.missilePrimedMessage.offset, 0x0F);
   }
-  if (_state.Get(DS.missileState) == 1)
+  if (_state.Data().missileState == 1)
   {
     const CrosshairTarget target = FindShipInCrosshairs(_state);
     source = target.di;
-    if (target.slot && (ObjectSlot(_state, *target.slot).Get(SlotByte::Flags) & FLAG_MASKED) == 0)
+    if (target.slot && (_state.ObjectAt(*target.slot).flags & FLAG_MASKED) == 0)
     {
       _state.Set(DS.missileTarget, *target.slot);
-      _state.Set(DS.missileState, 2);
+      _state.Data().missileState = 2;
       StartBeep(_state);
       SetMessage(_state, DS.missileLockedMessage.offset, 0x14);
     }
   }
-  if (_state.Get(DS.missileState) == 2)
+  if (_state.Data().missileState == 2)
   {
-    if ((ObjectSlot(_state, _state.Get(DS.missileTarget)).Get(SlotByte::Type) & ObjectSlot::ACTIVE) == 0)
+    if ((_state.ObjectAt(_state.Get(DS.missileTarget)).type & SpaceObject::ACTIVE) == 0)
     {
-      _state.Set(DS.missileState, 0);
+      _state.Data().missileState = 0;
       StartLowBeep(_state);
       SetMessage(_state, DS.missileTargetDestroyedMessage.offset, 0x14);
     }
   }
-  if (_state.Get(DS.keyDownU) == 1 && _state.Get(DS.missileState) != 0)
+  if (_state.Data().keyDown.keyDownU == 1 && _state.Data().missileState != 0)
   {
-    _state.Set(DS.missileState, 0);
-    _state.Set(DS.shipIdRequested, 0);
+    _state.Data().missileState = 0;
+    _state.Data().shipIdRequested = 0;
     StartLowBeep(_state);
     SetMessage(_state, DS.missileUnarmedMessage.offset, 0x0F);
   }
-  if (_state.Get(DS.keyDownM) == 1 && _state.Get(DS.missileState) == 2 && _state.Get(DS.missileJammed) != 1)
+  if (_state.Data().keyDown.keyDownM == 1 && _state.Data().missileState == 2 && _state.Data().missileJammed != 1)
   {
     if (NextRandom(_state) < MISSILE_JAM_ODDS)
     {
-      _state.Set(DS.missileJammed, 1);
+      _state.Data().missileJammed = 1;
       SetMessage(_state, DS.missileJammedMessage.offset, 0x19);
       return;
     }
-    _state.Set(DS.missileState, 0);
-    _state.Set(DS.shipIdRequested, 0);
+    _state.Data().missileState = 0;
+    _state.Data().shipIdRequested = 0;
     SetMessage(_state, DS.missileLaunchedMessage.offset, 0x14);
-    _state.Set(DS.missileCount, static_cast<std::uint8_t>(_state.Get(DS.missileCount) - 1));
+    _state.Data().commanderBlock.missileCount = static_cast<std::uint8_t>(_state.Data().commanderBlock.missileCount - 1);
     LaunchPlayerMissile(_state, source, _backward);
   }
 }
@@ -1232,44 +1234,44 @@ void HandleFireButton(GameState& _state, Hardware& _hardware)
     return;
   }
   const std::optional<std::uint8_t> laser = GetViewLaser(_state);
-  if (!laser || _state.Get(DS.laserTemperature) >= LASER_TOO_HOT)
+  if (!laser || _state.Data().laserTemperature >= LASER_TOO_HOT)
   {
     return;
   }
   // ADD [laserTemperature],5, and FFh written over it on a carry, which a temperature below F0h never makes.
-  const std::uint8_t temperature = _state.Get(DS.laserTemperature);
-  _state.Set(DS.laserTemperature, static_cast<std::uint8_t>(temperature + LASER_HEAT_PER_SHOT));
+  const std::uint8_t temperature = _state.Data().laserTemperature;
+  _state.Data().laserTemperature = static_cast<std::uint8_t>(temperature + LASER_HEAT_PER_SHOT);
   if (temperature + LASER_HEAT_PER_SHOT > 0xFF)
   {
-    _state.Set(DS.laserTemperature, 0xFF);
+    _state.Data().laserTemperature = 0xFF;
   }
   if (*laser == PULSE_LASER)
   {
-    _state.Set(DS.laserAlternateFrame, static_cast<std::uint8_t>(_state.Get(DS.laserAlternateFrame) ^ 1));
-    if (_state.Get(DS.laserAlternateFrame) != 0)
+    _state.Data().laserAlternateFrame = static_cast<std::uint8_t>(_state.Data().laserAlternateFrame ^ 1);
+    if (_state.Data().laserAlternateFrame != 0)
     {
       return;
     }
   }
-  _state.Set(DS.firingLaserType, *laser);
-  _state.Set(DS.laserFiring, 1);
+  _state.Data().firingLaserType = *laser;
+  _state.Data().laserFiring = 1;
 }
 
 // 0x82F7-0x8363: I identifies the ship in the sights, and locks a missile on it if there is one.
 void HandleIdentifyKey(GameState& _state)
 {
-  if (_state.Get(DS.shipIdRequested) != 1)
+  if (_state.Data().shipIdRequested != 1)
   {
-    if (_state.Get(DS.keyDownI) != 1 || _state.Get(DS.missileState) != 0 || _state.Get(DS.hyperspaceCountdown) != 0)
+    if (_state.Data().keyDown.keyDownI != 1 || _state.Data().missileState != 0 || _state.Data().hyperspaceCountdown != 0)
     {
       return;
     }
     StartBeep(_state);
-    if (_state.Get(DS.missileCount) != 0)
+    if (_state.Data().commanderBlock.missileCount != 0)
     {
-      _state.Set(DS.missileState, 1);
+      _state.Data().missileState = 1;
     }
-    _state.Set(DS.shipIdRequested, 1);
+    _state.Data().shipIdRequested = 1;
     SetMessage(_state, DS.idIndicatorMessage.offset, 0x19);
   }
   const CrosshairTarget target = FindShipInCrosshairs(_state);
@@ -1277,20 +1279,20 @@ void HandleIdentifyKey(GameState& _state)
   {
     return;
   }
-  const ObjectSlot ship(_state, *target.slot);
+  const SpaceObject& ship = _state.ObjectAt(*target.slot);
   if (IsStation(ship).station)
   {
     return;
   }
-  _state.Set(DS.missileState, 0);
-  _state.Set(DS.shipIdRequested, 0);
+  _state.Data().missileState = 0;
+  _state.Data().shipIdRequested = 0;
   // PUSH DI / POP DI keep the ship round ShowShipIdentity and StartBeep.
-  ShowShipIdentity(_state, static_cast<std::uint8_t>((ship.Get(SlotByte::Type) >> 1) & TYPE_MASK), ship.Get(SlotByte::Class), ship);
+  ShowShipIdentity(_state, static_cast<std::uint8_t>((ship.type >> 1) & TYPE_MASK), ship.behaviorClass, ship);
   StartBeep(_state);
-  if (_state.Get(DS.missileCount) != 0)
+  if (_state.Data().commanderBlock.missileCount != 0)
   {
-    _state.Set(DS.missileTarget, ship.Offset());
-    _state.Set(DS.missileState, 2);
+    _state.Set(DS.missileTarget, _state.OffsetOf(ship));
+    _state.Data().missileState = 2;
   }
 }
 
@@ -1298,17 +1300,17 @@ void HandleIdentifyKey(GameState& _state)
 // written over it on a borrow.
 void HandleAntiEcmKey(GameState& _state)
 {
-  _state.Set(DS.antiEcmActive, 0);
-  if (_state.Get(DS.keyDownL) != 1 || _state.Get(DS.antiEcmEmulatorFitted) != 1)
+  _state.Data().antiEcmActive = 0;
+  if (_state.Data().keyDown.keyDownL != 1 || _state.Data().commanderBlock.antiEcmEmulatorFitted != 1)
   {
     return;
   }
-  _state.Set(DS.antiEcmActive, 1);
-  const std::uint16_t energy = _state.Get(DS.playerEnergy);
-  _state.Set(DS.playerEnergy, static_cast<std::uint16_t>(energy - 1));
+  _state.Data().antiEcmActive = 1;
+  const std::uint16_t energy = _state.Data().playerEnergy;
+  _state.Data().playerEnergy = static_cast<std::uint16_t>(energy - 1);
   if (energy == 0)
   {
-    _state.Set(DS.playerEnergy, 0);
+    _state.Data().playerEnergy = 0;
   }
 }
 
@@ -1320,28 +1322,28 @@ constexpr std::int16_t AXIS_LENGTH = 0x2710;
 void ApplyPitch(GameState& _state, std::int8_t _pitch)
 {
   (void)SetSinCos(_state, 7, Negate(static_cast<std::uint16_t>(Word(_pitch) << 1)));
-  (void)SetSinCos(_state, 2, Negate(_state.Get(DS.playerRollAngle)));
-  (void)SetSinCos(_state, 1, Negate(_state.Get(DS.playerYawAngle)));
-  (void)SetSinCos(_state, 0, Negate(_state.Get(DS.playerPitchAngle)));
+  (void)SetSinCos(_state, 2, Negate(_state.Data().playerRollAngle));
+  (void)SetSinCos(_state, 1, Negate(_state.Data().playerYawAngle));
+  (void)SetSinCos(_state, 0, Negate(_state.Data().playerPitchAngle));
 
   // The forward axis, turned: the pitch from its y and z, then the yaw from its x and the z turned by the pitch.
   const Vector forward = RotateBySinCos7210(_state, Vector{0, 0, AXIS_LENGTH});
   const std::uint16_t pitch = ArcTangent2(_state, forward.y, forward.z);
-  _state.Set(DS.pitchAngleScratch, Negate(pitch));
+  _state.Data().pitchAngleScratch = Negate(pitch);
   (void)SetSinCos(_state, 6, pitch);
   const Pair pitched = RotateByStoredSinCos(_state, 6, Pair{forward.y, forward.z});
-  _state.Set(DS.yawAngleScratch, Negate(ArcTangent2(_state, forward.x, pitched.second)));
+  _state.Data().yawAngleScratch = Negate(ArcTangent2(_state, forward.x, pitched.second));
 
   // The up axis, turned back by the pitch and the yaw: the roll from what is left.
-  (void)SetSinCos(_state, 6, Negate(Plus(_state.Get(DS.pitchAngleScratch), 0x400)));
+  (void)SetSinCos(_state, 6, Negate(Plus(_state.Data().pitchAngleScratch, 0x400)));
   const Vector up = RotateBySinCos7210(_state, Vector{0, -AXIS_LENGTH, 0});
   const Pair upPitched = RotateByStoredSinCos(_state, 6, Pair{up.y, up.z});
-  (void)SetSinCos(_state, 7, Plus(_state.Get(DS.yawAngleScratch), 0x400));
+  (void)SetSinCos(_state, 7, Plus(_state.Data().yawAngleScratch, 0x400));
   const Pair upYawed = RotateByStoredSinCos(_state, 7, Pair{up.x, upPitched.second});
-  _state.Set(DS.playerRollAngle, ArcTangent2(_state, upYawed.first, upPitched.first));
-  _state.Set(DS.playerYawAngle, Negate(_state.Get(DS.yawAngleScratch)));
-  _state.Set(DS.playerPitchAngle, Negate(_state.Get(DS.pitchAngleScratch)));
-  _state.Set(DS.velocityDirty, 1);
+  _state.Data().playerRollAngle = ArcTangent2(_state, upYawed.first, upPitched.first);
+  _state.Data().playerYawAngle = Negate(_state.Data().yawAngleScratch);
+  _state.Data().playerPitchAngle = Negate(_state.Data().pitchAngleScratch);
+  _state.Data().velocityDirty = 1;
 }
 
 // 0x2A57-0x2B53: the sun in slot 0, the planet in slot 1 and the station in slot 2, each byte written as the original
@@ -1349,99 +1351,103 @@ void ApplyPitch(GameState& _state, std::int8_t _pitch)
 void PlaceSunPlanetAndStation(GameState& _state)
 {
   // The sun, at random far behind: the top 16 bits of x and y within 200h of 0, of z C00h to 801h behind.
-  ObjectSlot sun(_state, DS.shipSlots.offset);
-  sun.Set(SlotByte::Type, SUN_TYPE);
+  SpaceObject& sun = _state.ObjectAt(DS.shipSlots.offset);
+  sun.type = SUN_TYPE;
   const auto randomTop = [&_state](std::uint16_t _less) { return static_cast<std::uint16_t>((NextRandom(_state) & 0x3FF) - _less); };
   std::uint16_t top = randomTop(0x200);
-  sun.Set(SlotByte::XMiddle, Low(top));
-  sun.Set(SlotByte::XHigh, High(top));
+  sun.x = WithHigh(sun.x, Low(top));
+  sun.xHigh = High(top);
   top = randomTop(0x200);
-  sun.Set(SlotByte::YMiddle, Low(top));
-  sun.Set(SlotByte::YHigh, High(top));
+  sun.y = WithHigh(sun.y, Low(top));
+  sun.yHigh = High(top);
   top = randomTop(0xC00);
-  sun.Set(SlotByte::ZHigh, High(top));
-  sun.Set(SlotByte::ZMiddle, Low(top));
+  sun.zHigh = High(top);
+  sun.z = WithHigh(sun.z, Low(top));
   // Colour 1 or 2 from bit 8 of the system's first seed, written as a word.
-  sun.Set(SlotWord::Color, static_cast<std::uint16_t>((High(_state.Get(DS.systemSeed0)) & 1) + 1));
-  sun.Set(SlotByte::Class, 0);
-  sun.Set(SlotByte::Flags, SUN_OR_PLANET_FLAGS);
-  sun.Set(SlotByte::Detail, 0xFF);
+  const auto sunColor = static_cast<std::uint16_t>((High(_state.Data().systemSeed0) & 1) + 1);
+  sun.pitch = WithHigh(sun.pitch, Low(sunColor));
+  sun.yaw = WithLow(sun.yaw, High(sunColor));
+  sun.behaviorClass = 0;
+  sun.flags = SUN_OR_PLANET_FLAGS;
+  sun.detail = 0xFF;
 
   // The planet, straight ahead at z = 6E00h, its colour from bit 0 of the seed.
-  ObjectSlot planet(_state, Plus(sun.Offset(), ObjectSlot::BYTES));
-  planet.Set(SlotByte::Type, PLANET_TYPE);
-  planet.Set(SlotWord::X, 0);
-  planet.Set(SlotByte::XHigh, 0);
-  planet.Set(SlotWord::Y, 0);
-  planet.Set(SlotByte::YHigh, 0);
-  planet.Set(SlotByte::ZMiddle, PLANET_Z_TOP);
-  planet.Set(SlotByte::ZHigh, 0);
-  planet.Set(SlotByte::ZLow, 0);
-  planet.Set(SlotWord::Color, static_cast<std::uint16_t>((Low(_state.Get(DS.systemSeed0)) & 1) + 1));
-  planet.Set(SlotByte::Class, 0);
-  planet.Set(SlotByte::Flags, SUN_OR_PLANET_FLAGS);
-  planet.Set(SlotByte::Detail, 0xFF);
+  SpaceObject& planet = _state.ObjectAt(Plus(_state.OffsetOf(sun), SpaceObject::BYTES));
+  planet.type = PLANET_TYPE;
+  planet.x = 0;
+  planet.xHigh = 0;
+  planet.y = 0;
+  planet.yHigh = 0;
+  planet.z = WithHigh(planet.z, PLANET_Z_TOP);
+  planet.zHigh = 0;
+  planet.z = WithLow(planet.z, 0);
+  const auto planetColor = static_cast<std::uint16_t>((Low(_state.Data().systemSeed0) & 1) + 1);
+  planet.pitch = WithHigh(planet.pitch, Low(planetColor));
+  planet.yaw = WithLow(planet.yaw, High(planetColor));
+  planet.behaviorClass = 0;
+  planet.flags = SUN_OR_PLANET_FLAGS;
+  planet.detail = 0xFF;
 
   // The station, just behind at z = -300: a Dodo (type 0) at tech level 9 and up, else a Coriolis (type 1), with
   // 10-17 in its Thargons byte. While the Thargoids invade it has no missiles, Thargons or aggression, and is not
   // hostile.
-  ObjectSlot station(_state, Plus(planet.Offset(), ObjectSlot::BYTES));
-  const std::uint8_t stationType = _state.Get(DS.currentTechLevel) >= 9 ? 0 : 1;
-  station.Set(SlotByte::Type, static_cast<std::uint8_t>((stationType << 1) | ObjectSlot::ACTIVE));
-  station.Set(SlotWord::Yaw, STATION_YAW);
-  station.Set(SlotWord::Roll, 0);
-  station.Set(SlotWord::Pitch, 0);
-  station.Set(SlotWord::X, 0);
-  station.Set(SlotByte::XHigh, 0);
-  station.Set(SlotWord::Y, 0);
-  station.Set(SlotByte::YHigh, 0);
-  station.Set(SlotWord::Z, STATION_Z);
-  station.Set(SlotByte::ZHigh, Low(SignWord(STATION_Z)));
-  station.Set(SlotByte::Flags, STATION_FLAGS);
-  station.Set(SlotByte::Class, 1);
-  station.Set(SlotByte::Thargons, static_cast<std::uint8_t>((High(NextRandom(_state)) & 7) + 0x0A));
-  station.Set(SlotByte::Detail, 0xFF);
-  station.Set(SlotByte::Energy, STATION_ENERGY);
-  station.Set(SlotByte::Bounty, 0);
-  if (_state.Get(DS.thargoidInvasionActive) == 1)
+  SpaceObject& station = _state.ObjectAt(Plus(_state.OffsetOf(planet), SpaceObject::BYTES));
+  const std::uint8_t stationType = _state.Data().commanderBlock.currentTechLevel >= 9 ? 0 : 1;
+  station.type = static_cast<std::uint8_t>((stationType << 1) | SpaceObject::ACTIVE);
+  station.yaw = STATION_YAW;
+  station.roll = 0;
+  station.pitch = 0;
+  station.x = 0;
+  station.xHigh = 0;
+  station.y = 0;
+  station.yHigh = 0;
+  station.z = STATION_Z;
+  station.zHigh = Low(SignWord(STATION_Z));
+  station.flags = STATION_FLAGS;
+  station.behaviorClass = 1;
+  station.thargons = static_cast<std::uint8_t>((High(NextRandom(_state)) & 7) + 0x0A);
+  station.detail = 0xFF;
+  station.energy = STATION_ENERGY;
+  station.bounty = 0;
+  if (_state.Data().commanderBlock.thargoidInvasionActive == 1)
   {
-    station.Set(SlotByte::Missiles, 0);
-    station.Set(SlotByte::Aggression, 0);
-    station.Set(SlotByte::Energy, STATION_ENERGY);
-    station.Set(SlotByte::Thargons, 0);
-    station.Set(SlotByte::Fragments, 0x0A);
-    station.Set(SlotByte::Flags, static_cast<std::uint8_t>(station.Get(SlotByte::Flags) & 0xFE));
+    station.missiles = 0;
+    station.aggression = 0;
+    station.energy = STATION_ENERGY;
+    station.thargons = 0;
+    station.fragments = 0x0A;
+    station.flags = static_cast<std::uint8_t>(station.flags & 0xFE);
   }
-  _state.Set(DS.spawnGovernment, _state.Get(DS.currentGovernment));
+  _state.Data().spawnGovernment = std::uint8_t{_state.Data().commanderBlock.currentGovernment};
 }
 
 // sub word [si+_low], ax; sbb byte [si+_high], dl; sub word [si+_compass], ax, with DL:AX = _velocityHigh:_velocity:
 // a 24-bit coordinate of _slot and its compass word, less the velocity. Every slot has its compass words moved,
 // though only the station's are the compass's.
-void SubtractVelocity(ObjectSlot& _slot, SlotByte _high, SlotWord _low, SlotWord _compass, std::uint16_t _velocity,
+void SubtractVelocity(SpaceObject& _slot, ObjectByte _high, ObjectWord _low, ObjectWord _compass, std::uint16_t _velocity,
                       std::uint8_t _velocityHigh)
 {
-  const std::uint16_t before = _slot.Get(_low);
+  const std::uint16_t before = _slot.*_low;
   const int borrow = before < _velocity ? 1 : 0;
-  _slot.Set(_low, static_cast<std::uint16_t>(before - _velocity));
-  _slot.Set(_high, static_cast<std::uint8_t>(_slot.Get(_high) - _velocityHigh - borrow));
-  _slot.Set(_compass, static_cast<std::uint16_t>(_slot.Get(_compass) - _velocity));
+  _slot.*_low = static_cast<std::uint16_t>(before - _velocity);
+  _slot.*_high = static_cast<std::uint8_t>(_slot.*_high - _velocityHigh - borrow);
+  _slot.*_compass = static_cast<std::uint16_t>(_slot.*_compass - _velocity);
 }
 
 } // namespace
 
 bool UpdateStardust(GameState& _state, std::uint16_t _bx)
 {
-  if (_state.Get(DS.jumpDriveEngaged) != 0)
+  if (_state.Data().jumpDriveEngaged != 0)
   {
     SaveStardustPositions(_state);
   }
-  _state.Set(DS.drawColor, _state.Get(DS.stardustColor));
-  switch (_state.Get(DS.viewAngle))
+  _state.Data().drawColor = std::uint8_t{_state.Data().stardustColor};
+  switch (_state.Data().viewAngle)
   {
   case RIGHT_VIEW:
   case LEFT_VIEW:
-    return UpdateSideStardust(_state, _state.Get(DS.viewAngle) == LEFT_VIEW);
+    return UpdateSideStardust(_state, _state.Data().viewAngle == LEFT_VIEW);
   case REAR_VIEW:
     return UpdateFrontOrRearStardust(_state, true, _bx);
   default:
@@ -1452,13 +1458,13 @@ bool UpdateStardust(GameState& _state, std::uint16_t _bx)
 std::uint8_t ComputeStardustShift(GameState& _state, std::uint8_t _bh)
 {
   // MOV AX,34h / SUB AX,playerSpeed / MOV BL,0Ch / DIV BL: a speed above 34h divides into the game's trap, which saves BX.
-  const auto dividend = static_cast<std::uint16_t>(STARDUST_SHIFT_SPEED - _state.Get(DS.playerSpeed));
+  const auto dividend = static_cast<std::uint16_t>(STARDUST_SHIFT_SPEED - _state.Data().playerSpeed);
   auto shift = static_cast<std::uint8_t>(DivideByte(_state, dividend, STARDUST_SHIFT_STEP, Join(_bh, STARDUST_SHIFT_STEP)).quotient + 4);
-  if (_state.Get(DS.jumpDriveEngaged) != 0)
+  if (_state.Data().jumpDriveEngaged != 0)
   {
     shift = static_cast<std::uint8_t>(shift - 1);
   }
-  _state.Set(DS.stardustShift, shift);
+  _state.Data().stardustShift = shift;
   return shift;
 }
 
@@ -1587,7 +1593,7 @@ bool IsDustNearCenter(DustPosition _position)
 
 DustStep ScaleDustStep(const GameState& _state, DustPosition _position)
 {
-  const std::uint8_t shift = _state.Get(DS.stardustShift);
+  const std::uint8_t shift = _state.Data().stardustShift;
   return DustStep{Signed(Sar(Word(_position.x), shift)), Signed(Sar(Word(_position.y), shift)), shift};
 }
 
@@ -1625,9 +1631,9 @@ DustScreenPosition DustToScreen(DustPosition _position)
 std::uint16_t ResetStardust(GameState& _state)
 {
   // MOV AX,[messageFrames] / AND AL,AL / JNZ / XOR AH,AH / MOV [messageFrames],AX: the word cleared when its low byte is 0.
-  if (Low(_state.Get(DS.messageFrames)) == 0)
+  if (Low(_state.Data().messageFrames) == 0)
   {
-    _state.Set(DS.messageFrames, 0);
+    _state.Data().messageFrames = 0;
   }
   // Coordinates within 23h of the centre in the high byte, retried until one is.
   const auto randomCoordinate = [&_state]()
@@ -1667,7 +1673,7 @@ void SaveStardustPositions(GameState& _state)
 FlightScreens HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, std::uint16_t _segment,
                                        bool _backward)
 {
-  _state.Set(DS.inFlight, 0);
+  _state.Data().inFlight = 0;
   // F1-F10 in keyDown, BX the scan code and LOOP counting CX down from 10: each turn back to 0x0BBE carries both.
   std::uint16_t scan = SCAN_F1;
   for (std::uint16_t keys = FUNCTION_KEYS;;)
@@ -1676,7 +1682,7 @@ FlightScreens HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware, s
     {
       // MOV AH,BL, and PUSH AX / CALL ResetKeyboard / POP AX keep it.
       ResetKeyboard(_state, _hardware);
-      _state.Set(DS.flightScreenShown, 0);
+      _state.Data().flightScreenShown = 0;
       return DispatchFlightScreens(_state, _hardware, Low(scan), _countIfNone, _segment, _backward);
     }
     ++scan;
@@ -1686,7 +1692,7 @@ FlightScreens HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware, s
     }
     _hardware.LoopTurn(FUNCTION_KEY_LOOP, {keys, scan});
   }
-  _state.Set(DS.inFlight, 1);
+  _state.Data().inFlight = 1;
   return FlightScreens{0, std::nullopt, _backward};
 }
 
@@ -1718,17 +1724,17 @@ void UpdateDashboard(GameState& _state)
   // The S glyph inside the station's safe zone, and E for a frame when the ECM fires, each in every colour (BX = FFFFh) at
   // B800:1658 and B800:1656.
   const std::uint8_t safeZoneGlyph = InSafeZone(_state).inside ? SAFE_ZONE_GLYPH : SPACE;
-  if (ExchangeShown(_state, DS.safeZoneGlyphShown, safeZoneGlyph))
+  if (ExchangeShown(_state.Data().safeZoneGlyphShown, safeZoneGlyph))
   {
     (void)DrawScreenChar(_state, safeZoneGlyph, ALL_COLORS, GameState::VIDEO_SEGMENT, SAFE_ZONE_GLYPH_CELL);
   }
   std::uint8_t ecmGlyph = SPACE;
-  if (_state.Get(DS.ecmFired) == 1)
+  if (_state.Data().ecmFired == 1)
   {
-    _state.Set(DS.ecmFired, 0);
+    _state.Data().ecmFired = 0;
     ecmGlyph = ECM_GLYPH;
   }
-  if (ExchangeShown(_state, DS.ecmGlyphShown, ecmGlyph))
+  if (ExchangeShown(_state.Data().ecmGlyphShown, ecmGlyph))
   {
     (void)DrawScreenChar(_state, ecmGlyph, ALL_COLORS, GameState::VIDEO_SEGMENT, ECM_GLYPH_CELL);
   }
@@ -1738,35 +1744,35 @@ void UpdateDashboard(GameState& _state)
   (void)DrawMissileIcons(_state);
 
   // The pitch, then the roll, each indicator redrawn when it changed.
-  const std::uint8_t pitch = High(_state.Get(DS.rollRate));
-  if (pitch != _state.Get(DS.pitchRateShown))
+  const std::uint8_t pitch = High(_state.Data().rollRate);
+  if (pitch != _state.Data().pitchRateShown)
   {
-    _state.Set(DS.pitchRateShown, pitch);
+    _state.Data().pitchRateShown = pitch;
     DrawSignedIndicator(_state, PITCH_INDICATOR_LINE, static_cast<std::int8_t>(pitch));
   }
-  const std::uint8_t roll = Low(_state.Get(DS.rollRate));
-  if (roll != _state.Get(DS.rollRateShown))
+  const std::uint8_t roll = Low(_state.Data().rollRate);
+  if (roll != _state.Data().rollRateShown)
   {
-    _state.Set(DS.rollRateShown, roll);
+    _state.Data().rollRateShown = roll;
     DrawSignedIndicator(_state, ROLL_INDICATOR_LINE, static_cast<std::int8_t>(roll));
   }
 
   // From DrawEnergyBanks' last LOOP on, CX's high byte stays 0: every draw after it leaves CX = 0, or CL a count.
-  RedrawThreeLineBar(_state, DS.laserTemperature, DS.laserTemperatureShown, 0x3B8C, true);
-  RedrawThreeLineBar(_state, DS.altitude, DS.altitudeShown, 0x3CCC, true);
-  RedrawThreeLineBar(_state, DS.cabinTemperature, DS.cabinTemperatureShown, 0x3A4C, true);
-  RedrawThreeLineBar(_state, DS.fuel, DS.fuelShown, 0x390C, true);
+  RedrawThreeLineBar(_state, _state.Data().laserTemperature, _state.Data().laserTemperatureShown, 0x3B8C, true);
+  RedrawThreeLineBar(_state, _state.Data().altitude, _state.Data().altitudeShown, 0x3CCC, true);
+  RedrawThreeLineBar(_state, _state.Data().cabinTemperature, _state.Data().cabinTemperatureShown, 0x3A4C, true);
+  RedrawThreeLineBar(_state, _state.Data().commanderBlock.fuel, _state.Data().fuelShown, 0x390C, true);
   // The original never stores the shields' shown values, so a shield bar is drawn every frame.
-  RedrawThreeLineBar(_state, DS.foreShield, DS.foreShieldShown, 0x368C, false);
-  RedrawThreeLineBar(_state, DS.aftShield, DS.aftShieldShown, 0x37CC, false);
+  RedrawThreeLineBar(_state, _state.Data().foreShield, _state.Data().foreShieldShown, 0x368C, false);
+  RedrawThreeLineBar(_state, _state.Data().aftShield, _state.Data().aftShieldShown, 0x37CC, false);
 
   // The speed, unscaled: MOV AX,playerSpeed / CMP AL,speedShown / JNE, then JMP DrawFiveLineBarPixels.
-  const std::uint8_t speed = Low(_state.Get(DS.playerSpeed));
-  if (speed == _state.Get(DS.speedShown))
+  const std::uint8_t speed = Low(_state.Data().playerSpeed);
+  if (speed == _state.Data().speedShown)
   {
     return;
   }
-  _state.Set(DS.speedShown, speed);
+  _state.Data().speedShown = speed;
   DrawBar(_state, FIVE_LINES, SPEED_BAR_LINE, speed, 0);
 }
 
@@ -1814,12 +1820,12 @@ void DrawThreeLineBar(GameState& _state, std::uint16_t _line, std::uint8_t _valu
 
 bool DrawMissileIcons(GameState& _state)
 {
-  const std::uint8_t count = _state.Get(DS.missileCount);
-  if (count == _state.Get(DS.missileCountShown))
+  const std::uint8_t count = _state.Data().commanderBlock.missileCount;
+  if (count == _state.Data().missileCountShown)
   {
     return false;
   }
-  _state.Set(DS.missileCountShown, count);
+  _state.Data().missileCountShown = count;
   // A word a cell: the icons for the count's low two bits, then the background to the fourth cell, a byte count that
   // wraps past four missiles.
   std::uint16_t cell = MISSILE_ICONS_LINE;
@@ -1843,13 +1849,13 @@ bool DrawMissileIcons(GameState& _state)
 
 bool DrawMissileLockIndicator(GameState& _state)
 {
-  const std::uint8_t missileState = _state.Get(DS.missileState);
-  if (missileState == _state.Get(DS.missileLockShown))
+  const std::uint8_t missileState = _state.Data().missileState;
+  if (missileState == _state.Data().missileLockShown)
   {
     return false;
   }
-  _state.Set(DS.missileLockShown, missileState);
-  const std::uint8_t fill = _state.Byte(DS.colorFillBytes.At(missileState & 3u));
+  _state.Data().missileLockShown = missileState;
+  const std::uint8_t fill = _state.Data().colorFillBytes[missileState & 3u];
   const std::uint16_t fillWord = Join(fill, fill);
   // Three bytes on each of six lines: a word and a byte in the odd bank, then the same in the even.
   std::uint16_t line = MISSILE_LOCK_LINE;
@@ -1868,7 +1874,7 @@ void DrawEnergyBanks(GameState& _state)
 {
   // Each whole 100h of playerEnergy fills a bank from the top one down, by LOOP from CX = 4, the rest goes in the next, and the
   // banks below it are empty.
-  const std::uint16_t energy = _state.Get(DS.playerEnergy);
+  const std::uint16_t energy = _state.Data().playerEnergy;
   std::uint8_t wholeBanks = High(energy);
   std::uint16_t bank = DS.energyBankFill.At(ENERGY_BANKS - 1);
   std::uint16_t banks = ENERGY_BANKS;
@@ -1907,28 +1913,28 @@ void DrawEnergyBanks(GameState& _state)
 
 void UpdateEnergyAndLaserHeat(GameState& _state)
 {
-  if (_state.Get(DS.gameOverFrames) == 0 && _state.Get(DS.escapePodFrames) == 0)
+  if (_state.Data().gameOverFrames == 0 && _state.Data().escapePodFrames == 0)
   {
-    SubtractFloored(_state, DS.laserTemperature, LASER_COOLING);
-    if (_state.Get(DS.playerEnergy) == MOST_ENERGY)
+    SubtractFloored(_state.Data().laserTemperature, LASER_COOLING);
+    if (_state.Data().playerEnergy == MOST_ENERGY)
     {
-      AddSaturating(_state, DS.aftShield, 1);
-      AddSaturating(_state, DS.foreShield, 1);
+      AddSaturating(_state.Data().aftShield, 1);
+      AddSaturating(_state.Data().foreShield, 1);
     }
     else
     {
       // MOV AL,energyUnitFitted / SHL AL,1 / INC AL / CBW / ADD playerEnergy,AX, then CMP 400h / JB / MOV 3FFh: the sum written,
       // and 3FFh over it from 400h.
-      const auto recharge = SignExtend(static_cast<std::uint8_t>((_state.Get(DS.energyUnitFitted) << 1) + 1));
-      const std::uint16_t energy = Plus(_state.Get(DS.playerEnergy), recharge);
-      _state.Set(DS.playerEnergy, energy);
+      const auto recharge = SignExtend(static_cast<std::uint8_t>((_state.Data().commanderBlock.energyUnitFitted << 1) + 1));
+      const std::uint16_t energy = Plus(_state.Data().playerEnergy, recharge);
+      _state.Data().playerEnergy = energy;
       if (energy >= MOST_ENERGY + 1)
       {
-        _state.Set(DS.playerEnergy, MOST_ENERGY);
+        _state.Data().playerEnergy = MOST_ENERGY;
       }
     }
   }
-  if (_state.Get(DS.playerEnergy) >= ONE_BANK)
+  if (_state.Data().playerEnergy >= ONE_BANK)
   {
     return;
   }
@@ -1949,37 +1955,37 @@ void UpdateEnergyAndLaserHeat(GameState& _state)
 
 void DrawConditionLight(GameState& _state)
 {
-  std::uint8_t color = _state.Get(DS.conditionColor);
+  std::uint8_t color = _state.Data().conditionColor;
   if (color == 0)
   {
     // Flashing: black and red, on bit 9 of millisecondCounter.
-    color = static_cast<std::uint8_t>(High(_state.Get(DS.millisecondCounter)) & 2);
+    color = static_cast<std::uint8_t>(High(_state.Data().millisecondCounter) & 2);
   }
-  if (color == _state.Get(DS.conditionColorShown))
+  if (color == _state.Data().conditionColorShown)
   {
     return;
   }
-  _state.Set(DS.conditionColorShown, color);
-  const std::uint8_t fill = _state.Byte(DS.colorFillBytes.At(color));
+  _state.Data().conditionColorShown = color;
+  const std::uint8_t fill = _state.Data().colorFillBytes[color];
   const std::uint16_t mask = Join(fill, fill);
   // The bitmap's words, byte-swapped and masked by the colour: a line in the odd bank, then the even line below.
   std::uint16_t line = CONDITION_LIGHT_LINE;
   for (std::size_t pair = 0; pair < CONDITION_LIGHT_LINE_PAIRS; ++pair)
   {
-    _state.SetVideoWord(line, static_cast<std::uint16_t>(Swap(_state.Word(DS.conditionLightBitmap.At(pair * 2))) & mask));
+    _state.SetVideoWord(line, static_cast<std::uint16_t>(Swap(_state.Data().conditionLightBitmap[pair * 2]) & mask));
     line = Plus(line, EVEN_BANK);
-    _state.SetVideoWord(line, static_cast<std::uint16_t>(Swap(_state.Word(DS.conditionLightBitmap.At(pair * 2 + 1))) & mask));
+    _state.SetVideoWord(line, static_cast<std::uint16_t>(Swap(_state.Data().conditionLightBitmap[pair * 2 + 1]) & mask));
     line = Plus(line, NEXT_ODD_LINE);
   }
 }
 
 std::uint8_t UpdateConditionColor(GameState& _state)
 {
-  const std::uint16_t energy = _state.Get(DS.playerEnergy);
-  const std::uint8_t cabin = _state.Get(DS.cabinTemperature);
-  const std::uint8_t altitude = _state.Get(DS.altitude);
-  const std::uint8_t fore = _state.Get(DS.foreShield);
-  const std::uint8_t aft = _state.Get(DS.aftShield);
+  const std::uint16_t energy = _state.Data().playerEnergy;
+  const std::uint8_t cabin = _state.Data().cabinTemperature;
+  const std::uint8_t altitude = _state.Data().altitude;
+  const std::uint8_t fore = _state.Data().foreShield;
+  const std::uint8_t aft = _state.Data().aftShield;
   std::uint8_t color = 1;
   if (energy < 0x100 || cabin >= 0xE0 || altitude < 0x20)
   {
@@ -1993,39 +1999,39 @@ std::uint8_t UpdateConditionColor(GameState& _state)
   {
     color = 3;
   }
-  _state.Set(DS.conditionColor, color);
+  _state.Data().conditionColor = color;
   return color;
 }
 
 ScreenChange SetUpLocalSpace(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  LoadSystemSeeds(_state, _state.Get(DS.currentSystemIndex));
+  LoadSystemSeeds(_state, _state.Data().commanderBlock.currentSystemIndex);
   InvalidateDashboard(_state);
-  _state.Set(DS.objectSlotCount, 0x14);
-  _state.Set(DS.debrisSlotCount, 0x10);
-  _state.Set(DS.shipSlotCount, 0x24);
+  _state.Data().objectSlotCount = 0x14;
+  _state.Data().debrisSlotCount = 0x10;
+  _state.Data().shipSlotCount = 0x24;
   ClearAllObjects(_state, _backward);
   const ScreenChange change = ShowCockpitScreen(_state, _hardware, _backward);
   (void)ResetStardust(_state);
-  _state.Set(DS.hyperspaceCountdown, 0);
-  _state.Set(DS.dockingComputerOn, 0);
-  _state.Set(DS.dataA137, 0);
-  _state.Set(DS.viewAngle, 0);
-  _state.Set(DS.viewLocked, 0);
-  _state.Set(DS.escapePodFrames, 0);
-  _state.Set(DS.playerDocked, 0);
-  _state.Set(DS.playerVelocityX, 0);
-  _state.Set(DS.playerVelocityY, 0);
-  _state.Set(DS.playerVelocityZ, 0x14);
-  _state.Set(DS.playerSpeed, 0x14);
-  _state.Set(DS.altitude, 0xFF);
-  _state.Set(DS.missileJammed, 0);
-  _state.Set(DS.playerPitchAngle, 0);
-  _state.Set(DS.playerYawAngle, 0);
-  _state.Set(DS.playerRollAngle, 0);
-  if (_state.Get(DS.witchspaceCountdown) != 0)
+  _state.Data().hyperspaceCountdown = 0;
+  _state.Data().dockingComputerOn = 0;
+  _state.Data().dataA137 = 0;
+  _state.Data().viewAngle = 0;
+  _state.Data().viewLocked = 0;
+  _state.Data().escapePodFrames = 0;
+  _state.Data().playerDocked = 0;
+  _state.Data().playerVelocityX = 0;
+  _state.Data().playerVelocityY = 0;
+  _state.Data().playerVelocityZ = 0x14;
+  _state.Data().playerSpeed = 0x14;
+  _state.Data().altitude = 0xFF;
+  _state.Data().missileJammed = 0;
+  _state.Data().playerPitchAngle = 0;
+  _state.Data().playerYawAngle = 0;
+  _state.Data().playerRollAngle = 0;
+  if (_state.Data().commanderBlock.witchspaceCountdown != 0)
   {
-    _state.Set(DS.spawnGovernment, 0);
+    _state.Data().spawnGovernment = 0;
     return change;
   }
   PlaceSunPlanetAndStation(_state);
@@ -2036,10 +2042,10 @@ std::uint16_t CheckCollisions(GameState& _state, Hardware& _hardware)
 {
   // MOV CL,objectSlotCount / XOR CH,CH, PUSH CX and POP CX round each slot, then DEC CX / JE: a count of 0 runs 65,536 times.
   std::uint16_t slot = DS.shipSlots.offset;
-  for (std::uint32_t count = LoopCount(_state.Get(DS.objectSlotCount)); count != 0; --count)
+  for (std::uint32_t count = LoopCount(_state.Data().objectSlotCount); count != 0; --count)
   {
-    const ObjectSlot object(_state, slot);
-    if ((object.Get(SlotByte::Type) & ObjectSlot::ACTIVE) != 0)
+    SpaceObject& object = _state.ObjectAt(slot);
+    if ((object.type & SpaceObject::ACTIVE) != 0)
     {
       CheckCollision(_state, _hardware, object);
     }
@@ -2050,15 +2056,15 @@ std::uint16_t CheckCollisions(GameState& _state, Hardware& _hardware)
 
 SafeZone InSafeZone(const GameState& _state)
 {
-  return SafeZone{(_state.Get(DS.safeZoneFlags) & 1) != 0};
+  return SafeZone{(_state.Data().safeZoneFlags & 1) != 0};
 }
 
 void UpdateSafeZone(GameState& _state)
 {
-  const ObjectSlot station(_state, DS.stationSlot.offset);
-  if ((station.Get(SlotByte::Type) & ObjectSlot::ACTIVE) == 0 || !IsStation(station).station)
+  SpaceObject& station = _state.ObjectAt(DS.stationSlot.offset);
+  if ((station.type & SpaceObject::ACTIVE) == 0 || !IsStation(station).station)
   {
-    _state.Set(DS.safeZoneFlags, 0);
+    _state.Data().safeZoneFlags = 0;
     return;
   }
   // RCL AL,1: bit 0 the answer, over what AL held: IsObjectNear's last high byte, or the low byte of the station's distance.
@@ -2071,22 +2077,22 @@ void UpdateSafeZone(GameState& _state)
     held = Low(distance);
     inside = distance < SAFE_ZONE_RADIUS;
   }
-  _state.Set(DS.safeZoneFlags, static_cast<std::uint8_t>((held << 1) | (inside ? 1 : 0)));
+  _state.Data().safeZoneFlags = static_cast<std::uint8_t>((held << 1) | (inside ? 1 : 0));
 }
 
 Vector ComputeDeathDebrisVector(GameState& _state)
 {
-  (void)SetSinCos(_state, 8, Negate(_state.Get(DS.viewAngle)));
-  (void)SetSinCos(_state, 6, Negate(Plus(_state.Get(DS.playerPitchAngle), 0x400)));
-  (void)SetSinCos(_state, 7, Plus(_state.Get(DS.playerYawAngle), 0x400));
+  (void)SetSinCos(_state, 8, Negate(_state.Data().viewAngle));
+  (void)SetSinCos(_state, 6, Negate(Plus(_state.Data().playerPitchAngle, 0x400)));
+  (void)SetSinCos(_state, 7, Plus(_state.Data().playerYawAngle, 0x400));
   // (0, 40, 0), turned by the view and, off the front view, by the roll, which SetSinCos8 puts in the view's place.
   std::int16_t x = 0;
   std::int16_t y = DEATH_DEBRIS_SPEED;
   std::int16_t z = 0;
-  if (_state.Get(DS.viewAngle) != 0)
+  if (_state.Data().viewAngle != 0)
   {
     const Pair viewed = RotateByStoredSinCos(_state, 8, Pair{x, y});
-    (void)SetSinCos(_state, 8, Negate(_state.Get(DS.playerRollAngle)));
+    (void)SetSinCos(_state, 8, Negate(_state.Data().playerRollAngle));
     // PUSH AX, BX, CX round SetSinCos8, and POP BX, CX, AX: y and z change places.
     const Pair rolled = RotateByStoredSinCos(_state, 8, Pair{viewed.first, z});
     x = rolled.first;
@@ -2102,72 +2108,72 @@ Vector ComputeDeathDebrisVector(GameState& _state)
 
 void UpdateWarnings(GameState& _state)
 {
-  if (_state.Get(DS.gameOverFrames) != 0)
+  if (_state.Data().gameOverFrames != 0)
   {
     return;
   }
-  const std::uint8_t frames = _state.Get(DS.warningFrames);
+  const std::uint8_t frames = _state.Data().warningFrames;
   if (frames != 0)
   {
     // XOR AH,AH / MOV [messageFrames],AX: the frames left, as a word.
-    _state.Set(DS.messageFrames, frames);
+    _state.Data().messageFrames = frames;
     _state.Set(DS.messagePointer, _state.Get(DS.warningMessage));
-    _state.Set(DS.warningFrames, static_cast<std::uint8_t>(_state.Get(DS.warningFrames) - 1));
+    _state.Data().warningFrames = static_cast<std::uint8_t>(_state.Data().warningFrames - 1);
     return;
   }
   // The four checks from the one after the last warning (JMP [BX+warningChecks]).
-  RunWarningChecks(_state, static_cast<std::uint16_t>((_state.Get(DS.warningIndex) + 1) & 3), WARNING_CHECKS);
+  RunWarningChecks(_state, static_cast<std::uint16_t>((_state.Data().warningIndex + 1) & 3), WARNING_CHECKS);
 }
 
-void UpdateScannerBlip(GameState& _state, ObjectSlot _slot, Vector _camera)
+void UpdateScannerBlip(GameState& _state, SpaceObject& _slot, Vector _camera)
 {
-  if (_slot.Offset() >= DS.debrisSlots.offset || IsStation(_slot).station || IsSunOrPlanet(_slot))
+  if (_state.OffsetOf(_slot) >= DS.debrisSlots.offset || IsStation(_slot).station || IsSunOrPlanet(_slot))
   {
     return;
   }
-  _slot.Set(SlotByte::Scanned, 1);
+  _slot.scanned = 1;
   // The scanner's y and z are 1.25 times the camera's. The blip is the high bytes, each XCHGed with the old blip's.
   const auto scaled = [](std::int16_t _coordinate) { return High(Plus(Word(_coordinate), Signed(Sar(Word(_coordinate), 2)))); };
-  const std::uint8_t oldX = _slot.Get(SlotByte::BlipX);
-  _slot.Set(SlotByte::BlipX, High(Word(_camera.x)));
-  const std::uint8_t oldY = _slot.Get(SlotByte::BlipY);
-  _slot.Set(SlotByte::BlipY, scaled(_camera.y));
-  const std::uint8_t oldZ = _slot.Get(SlotByte::BlipZ);
-  _slot.Set(SlotByte::BlipZ, scaled(_camera.z));
-  if ((_slot.Get(SlotByte::Flags) & FLAG_BLIP_DRAWN) != 0)
+  const std::uint8_t oldX = _slot.blipX;
+  _slot.blipX = High(Word(_camera.x));
+  const std::uint8_t oldY = _slot.blipY;
+  _slot.blipY = scaled(_camera.y);
+  const std::uint8_t oldZ = _slot.blipZ;
+  _slot.blipZ = scaled(_camera.z);
+  if ((_slot.flags & FLAG_BLIP_DRAWN) != 0)
   {
     (void)XorScannerBlip(_state, oldX, oldY, oldZ);
   }
-  (void)XorScannerBlip(_state, _slot.Get(SlotByte::BlipX), _slot.Get(SlotByte::BlipY), _slot.Get(SlotByte::BlipZ));
-  _slot.Set(SlotByte::Flags, static_cast<std::uint8_t>(_slot.Get(SlotByte::Flags) | FLAG_BLIP_DRAWN));
+  (void)XorScannerBlip(_state, _slot.blipX, _slot.blipY, _slot.blipZ);
+  _slot.flags = static_cast<std::uint8_t>(_slot.flags | FLAG_BLIP_DRAWN);
 }
 
 bool UpdateCompass(GameState& _state)
 {
-  if (_state.Get(DS.titleShown) == 0)
+  if (_state.Data().titleShown == 0)
   {
     return false;
   }
   // The target: the station when the planet is near, else the planet. Its scale shift goes to its depth byte.
   std::uint16_t target = DS.planetSlot.offset;
-  _state.Set(DS.compassTargetIsStation, 0);
-  if (IsObjectNearKeepBlip(ObjectSlot(_state, target)))
+  _state.Data().compassTargetIsStation = 0;
+  if (IsObjectNearKeepBlip(_state.ObjectAt(target)))
   {
-    target = Plus(target, ObjectSlot::BYTES);
-    _state.Set(DS.compassTargetIsStation, 1);
+    target = Plus(target, SpaceObject::BYTES);
+    _state.Data().compassTargetIsStation = 1;
   }
-  ObjectSlot aim(_state, target);
+  SpaceObject& aim = _state.ObjectAt(target);
   const std::uint8_t shift = GetPositionScaleShift(aim).shift;
-  aim.Set(SlotByte::Depth, shift);
+  aim.depth = shift;
   const Vector position = ScalePositionDown(aim, shift);
   // PUSH AX / PUSH BX / PUSH CX round the station's scale shift, read back through MOV BP,SP: the position turned to the view
   // for the station's compass words, then, popped, turned to the camera's frame for the dot.
-  ObjectSlot station(_state, DS.stationSlot.offset);
-  station.Set(SlotByte::Depth, GetPositionScaleShift(station).shift);
+  SpaceObject& station = _state.ObjectAt(DS.stationSlot.offset);
+  station.depth = GetPositionScaleShift(station).shift;
   const Vector view = TransformToView(_state, position);
-  station.Set(SlotWord::CompassX, Word(view.x));
-  station.Set(SlotWord::CompassY, Word(view.y));
-  station.Set(SlotWord::CompassZ, Word(view.z));
+  station.compassX = Word(view.x);
+  station.compassY = Word(view.y);
+  station.compassZ = Word(view.z);
   const Vector camera = RotatePitchYawRoll(_state, position);
 
   // BP gathers z >= 0 in bit 15 and the signs of x and y in bits 0 and 1, each coordinate NEGed to its magnitude.
@@ -2208,17 +2214,19 @@ bool UpdateCompass(GameState& _state)
 
   // XCHG [DI+26h],DX and XCHG [DI+28h],AH: the new dot and whether it is in front go into the station's blip bytes, the old
   // ones come out, and the old dot is XORed out if it is drawn; then the new one in, from what the bytes hold.
-  const std::uint16_t oldDot = station.Get(SlotWord::CompassDot);
-  station.Set(SlotWord::CompassDot, Join(dotY, dotX));
-  const std::uint8_t wasInFront = station.Get(SlotByte::BlipZ);
-  station.Set(SlotByte::BlipZ, inFront ? COMPASS_IN_FRONT : std::uint8_t{0});
-  if ((station.Get(SlotByte::Flags) & FLAG_BLIP_DRAWN) != 0)
+  // The dot is blipX and blipY, exchanged as one word.
+  const std::uint16_t oldDot = Join(station.blipY, station.blipX);
+  station.blipX = dotX;
+  station.blipY = dotY;
+  const std::uint8_t wasInFront = station.blipZ;
+  station.blipZ = inFront ? COMPASS_IN_FRONT : std::uint8_t{0};
+  if ((station.flags & FLAG_BLIP_DRAWN) != 0)
   {
     XorCompassDot(_state, Low(oldDot), High(oldDot), wasInFront != 0);
   }
-  const std::uint8_t nowInFront = station.Get(SlotByte::BlipZ);
-  const std::uint16_t dot = station.Get(SlotWord::CompassDot);
-  station.Set(SlotByte::Flags, static_cast<std::uint8_t>(station.Get(SlotByte::Flags) | FLAG_BLIP_DRAWN));
+  const std::uint8_t nowInFront = station.blipZ;
+  const std::uint16_t dot = Join(station.blipY, station.blipX);
+  station.flags = static_cast<std::uint8_t>(station.flags | FLAG_BLIP_DRAWN);
   XorCompassDot(_state, Low(dot), High(dot), SignExtend(nowInFront) != 0);
   return true;
 }
@@ -2244,14 +2252,14 @@ std::uint16_t PixelPlace(DashboardPixel _pixel) noexcept
   return Join(_pixel.y, _pixel.x);
 }
 
-std::optional<DashboardPixel> EraseScannerBlip(GameState& _state, ObjectSlot _slot)
+std::optional<DashboardPixel> EraseScannerBlip(GameState& _state, SpaceObject& _slot)
 {
-  if (IsStation(_slot).station || (_slot.Get(SlotByte::Flags) & FLAG_BLIP_DRAWN) == 0)
+  if (IsStation(_slot).station || (_slot.flags & FLAG_BLIP_DRAWN) == 0)
   {
     return std::nullopt;
   }
-  const DashboardPixel last = XorScannerBlip(_state, _slot.Get(SlotByte::BlipX), _slot.Get(SlotByte::BlipY), _slot.Get(SlotByte::BlipZ));
-  _slot.Set(SlotByte::Flags, static_cast<std::uint8_t>(_slot.Get(SlotByte::Flags) & ~FLAG_BLIP_DRAWN));
+  const DashboardPixel last = XorScannerBlip(_state, _slot.blipX, _slot.blipY, _slot.blipZ);
+  _slot.flags = static_cast<std::uint8_t>(_slot.flags & ~FLAG_BLIP_DRAWN);
   return last;
 }
 
@@ -2293,7 +2301,7 @@ std::uint8_t XorDashboardPixel(GameState& _state, std::uint8_t _x, std::uint8_t 
   // The bank from y's parity, 80 bytes a pair of lines, 4 pixels a byte.
   const auto offset =
     static_cast<std::uint16_t>(((_y & 1) != 0 ? EVEN_BANK : 0) + (_y >> 1) * NEXT_LINE_PAIR + (_x >> 2) + DASHBOARD_ORIGIN);
-  const std::uint8_t mask = _state.Byte(DS.dashboardPixelMasks.At(_x & 3u));
+  const std::uint8_t mask = _state.Data().dashboardPixelMasks[_x & 3u];
   _state.SetVideoByte(offset, static_cast<std::uint8_t>(_state.VideoByte(offset) ^ mask));
   return mask;
 }
@@ -2301,23 +2309,23 @@ std::uint8_t XorDashboardPixel(GameState& _state, std::uint8_t _x, std::uint8_t 
 bool EraseCompassAndBlips(GameState& _state)
 {
   bool erased = false;
-  ObjectSlot station(_state, DS.stationSlot.offset);
-  if ((station.Get(SlotByte::Flags) & FLAG_BLIP_DRAWN) != 0)
+  SpaceObject& station = _state.ObjectAt(DS.stationSlot.offset);
+  if ((station.flags & FLAG_BLIP_DRAWN) != 0)
   {
     // The dot at BlipX and BlipY, solid while BlipZ is not 0 (CBW into BP), its flag cleared first.
-    const bool inFront = station.Get(SlotByte::BlipZ) != 0;
-    const std::uint8_t x = station.Get(SlotByte::BlipX);
-    const std::uint8_t y = station.Get(SlotByte::BlipY);
-    station.Set(SlotByte::Flags, static_cast<std::uint8_t>(station.Get(SlotByte::Flags) & ~FLAG_BLIP_DRAWN));
+    const bool inFront = station.blipZ != 0;
+    const std::uint8_t x = station.blipX;
+    const std::uint8_t y = station.blipY;
+    station.flags = static_cast<std::uint8_t>(station.flags & ~FLAG_BLIP_DRAWN);
     XorCompassDot(_state, x, y, inFront);
     erased = true;
   }
   // MOV CL,objectSlotCount / XOR CH,CH / SUB CL,3, and LOOP: 65,536 slots for a count of 3.
   std::uint16_t slot = DS.firstShipSlot.offset;
-  const auto slots = static_cast<std::uint8_t>(_state.Get(DS.objectSlotCount) - 3);
+  const auto slots = static_cast<std::uint8_t>(_state.Data().objectSlotCount - 3);
   for (std::uint32_t count = LoopCount(slots); count != 0; --count)
   {
-    erased = EraseScannerBlip(_state, ObjectSlot(_state, slot)).has_value() || erased;
+    erased = EraseScannerBlip(_state, _state.ObjectAt(slot)).has_value() || erased;
     slot = Plus(slot, SLOT_BYTES);
   }
   return erased;
@@ -2326,33 +2334,33 @@ bool EraseCompassAndBlips(GameState& _state)
 void UpdateFuelLeak(GameState& _state, Hardware& _hardware)
 {
   std::uint8_t border = 0;
-  if (_state.Get(DS.fuelLeakDelayFrames) != 0)
+  if (_state.Data().commanderBlock.fuelLeakDelayFrames != 0)
   {
-    _state.Set(DS.fuelLeakDelayFrames, static_cast<std::uint8_t>(_state.Get(DS.fuelLeakDelayFrames) - 1));
-    if (_state.Get(DS.fuelLeakDelayFrames) == 0)
+    _state.Data().commanderBlock.fuelLeakDelayFrames = static_cast<std::uint8_t>(_state.Data().commanderBlock.fuelLeakDelayFrames - 1);
+    if (_state.Data().commanderBlock.fuelLeakDelayFrames == 0)
     {
-      _state.Set(DS.fuelLeakFrames, FUEL_LEAK_FRAMES);
+      _state.Data().commanderBlock.fuelLeakFrames = FUEL_LEAK_FRAMES;
       return;
     }
-    border = _state.Get(DS.maskingBackgroundColor);
+    border = _state.Data().maskingBackgroundColor;
   }
-  else if (_state.Get(DS.fuelLeakFrames) != 0)
+  else if (_state.Data().commanderBlock.fuelLeakFrames != 0)
   {
-    _state.Set(DS.fuelLeakFrames, static_cast<std::uint8_t>(_state.Get(DS.fuelLeakFrames) - 1));
+    _state.Data().commanderBlock.fuelLeakFrames = static_cast<std::uint8_t>(_state.Data().commanderBlock.fuelLeakFrames - 1);
     // SUB [fuel],5, and 0 written over it on a borrow.
-    const std::uint8_t fuel = _state.Get(DS.fuel);
-    _state.Set(DS.fuel, static_cast<std::uint8_t>(fuel - FUEL_LEAK_STEP));
+    const std::uint8_t fuel = _state.Data().commanderBlock.fuel;
+    _state.Data().commanderBlock.fuel = static_cast<std::uint8_t>(fuel - FUEL_LEAK_STEP);
     if (fuel < FUEL_LEAK_STEP)
     {
-      _state.Set(DS.fuel, 0);
+      _state.Data().commanderBlock.fuel = 0;
     }
-    _state.Set(DS.messageFrames, SignExtend(_state.Get(DS.fuelLeakFrames)));
+    _state.Data().messageFrames = SignExtend(_state.Data().commanderBlock.fuelLeakFrames);
     _state.Set(DS.messagePointer, DS.fuelLeakText.offset);
     border = FUEL_LEAK_BORDER;
   }
   else
   {
-    border = _state.Get(DS.maskingBackgroundColor);
+    border = _state.Data().maskingBackgroundColor;
   }
   _hardware.SetColorSelect(static_cast<std::uint8_t>(border | BRIGHT_PALETTE));
 }
@@ -2396,7 +2404,7 @@ FlightExit RunFlight(GameState& _state, Hardware& _hardware, bool _backward)
     UpdatePlayerMotion(_state, _hardware);
     // DI past the slots, from which M's launch copies the missile unless a routine before it moves DI (ProcessFlightKeys).
     const std::uint16_t slotsEnd = CheckCollisions(_state, _hardware);
-    if (_state.Get(DS.playerDocked) == 1)
+    if (_state.Data().playerDocked == 1)
     {
       PlayStationTunnel(_state, _hardware, backward);
       ResetKeyboard(_state, _hardware);
@@ -2420,24 +2428,24 @@ FlightExit RunFlight(GameState& _state, Hardware& _hardware, bool _backward)
     {
       return FlightExit{FlightEnd::EscapePod, countLeft, backward};
     }
-    if (_state.Get(DS.playerDead) != 1 || _state.Get(DS.cheatEnabled) == 1)
+    if (_state.Data().playerDead != 1 || _state.Data().cheatEnabled == 1)
     {
       _hardware.LoopTurn(FLIGHT_FRAME_LOOP, {});
       continue;
     }
     // Dead: GAME OVER for 40 frames, then the title's ELITE on the message line, and back.
-    _state.Set(DS.hyperspaceCountdown, 0);
-    if (_state.Get(DS.gameOverFrames) == 0)
+    _state.Data().hyperspaceCountdown = 0;
+    if (_state.Data().gameOverFrames == 0)
     {
       SpawnPlayerWreckage(_state);
-      _state.Set(DS.gameOverFrames, GAME_OVER_FRAMES);
+      _state.Data().gameOverFrames = GAME_OVER_FRAMES;
       SetMessage(_state, DS.gameOverMessage.offset, GAME_OVER_FRAMES);
       StopContinuousNoise(_state);
       _hardware.LoopTurn(FLIGHT_FRAME_LOOP, {});
       continue;
     }
-    _state.Set(DS.gameOverFrames, static_cast<std::uint8_t>(_state.Get(DS.gameOverFrames) - 1));
-    if (_state.Get(DS.gameOverFrames) != 0)
+    _state.Data().gameOverFrames = static_cast<std::uint8_t>(_state.Data().gameOverFrames - 1);
+    if (_state.Data().gameOverFrames != 0)
     {
       _hardware.LoopTurn(FLIGHT_FRAME_LOOP, {});
       continue;
@@ -2445,7 +2453,7 @@ FlightExit RunFlight(GameState& _state, Hardware& _hardware, bool _backward)
     ResetKeyboard(_state, _hardware);
     // MOV AX,0B800h / MOV ES,AX for the message line and the title.
     ClearMessageLine(_state, GameState::VIDEO_SEGMENT, backward);
-    _state.Set(DS.textPaperPattern, 0);
+    _state.Data().textPaperPattern = 0;
     (void)DrawScreenString(_state, DS.eliteTitleText.offset, ALL_COLORS, GameState::VIDEO_SEGMENT, TITLE_TEXT_POSITION);
     return FlightExit{FlightEnd::GameOver, CLEARED_MESSAGE_LINE_BP, backward};
   }
@@ -2453,22 +2461,22 @@ FlightExit RunFlight(GameState& _state, Hardware& _hardware, bool _backward)
 
 bool TickEscapePod(GameState& _state)
 {
-  if (_state.Get(DS.escapePodFrames) == 0)
+  if (_state.Data().escapePodFrames == 0)
   {
     return false;
   }
-  _state.Set(DS.escapePodFrames, static_cast<std::uint8_t>(_state.Get(DS.escapePodFrames) - 1));
-  return _state.Get(DS.escapePodFrames) == 0;
+  _state.Data().escapePodFrames = static_cast<std::uint8_t>(_state.Data().escapePodFrames - 1);
+  return _state.Data().escapePodFrames == 0;
 }
 
 FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, std::uint16_t _di, std::uint16_t _countIfNone,
                                  std::uint16_t _segment, bool _backward)
 {
-  if (_state.Get(DS.gameOverFrames) != 0)
+  if (_state.Data().gameOverFrames != 0)
   {
     return FlightKeysExit{false, _backward};
   }
-  if (_state.Get(DS.escapePodFrames) != 0)
+  if (_state.Data().escapePodFrames != 0)
   {
     // JNE back to the RET above: a backward jump into shared code, not a loop, so its turn carries nothing.
     _hardware.LoopTurn(PROCESS_FLIGHT_KEYS_RETURN, {});
@@ -2479,46 +2487,46 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, std::ui
   // DI, from which M's launch copies the missile, as the routines before it leave it: InvalidateDashboard once the cockpit came
   // back, ResetStardust once the view changed, IsMassLocked once J asked it, and ClearDrawBuffer once the pause screen resumed.
   std::uint16_t di = screens.restored ? DASHBOARD_CACHE_END : _di;
-  if (screens.view != 0 && _state.Get(DS.viewLocked) != 1 && ChangeView(_state, screens.view))
+  if (screens.view != 0 && _state.Data().viewLocked != 1 && ChangeView(_state, screens.view))
   {
     di = STARDUST_END;
   }
-  if (_state.Get(DS.keyDownG) == 1 && _state.Get(DS.galacticHyperdriveFitted) == 1 && _state.Get(DS.galacticDriveReadyFrames) == 0 &&
-      _state.Get(DS.hyperspaceCountdown) == 0)
+  if (_state.Data().keyDown.keyDownG == 1 && _state.Data().commanderBlock.galacticHyperdriveFitted == 1 &&
+      _state.Data().galacticDriveReadyFrames == 0 && _state.Data().hyperspaceCountdown == 0)
   {
     StartBeep(_state);
     SetMessage(_state, DS.galacticDriveReadyMessage.offset, 0x28);
-    _state.Set(DS.galacticDriveReadyFrames, 0x28);
+    _state.Data().galacticDriveReadyFrames = 0x28;
   }
-  if (_state.Get(DS.keyDownH) == 1 && PressHyperspace(_state, _hardware, backward))
+  if (_state.Data().keyDown.keyDownH == 1 && PressHyperspace(_state, _hardware, backward))
   {
     return FlightKeysExit{false, backward};
   }
   // D, released, toggles the docking computer: not in mission 3 until the invaded station is destroyed.
-  if ((_state.Get(DS.missionNumber) != 3 || _state.Get(DS.invadedStationDestroyed) == 1) && _state.Get(DS.dockingKeyReleased) == 1 &&
-      _state.Get(DS.dockingComputerFitted) == 1)
+  if ((_state.Data().commanderBlock.missionNumber != 3 || _state.Data().commanderBlock.invadedStationDestroyed == 1) &&
+      _state.Data().dockingKeyReleased == 1 && _state.Data().commanderBlock.dockingComputerFitted == 1)
   {
-    if (_state.Get(DS.hyperspaceCountdown) != 0)
+    if (_state.Data().hyperspaceCountdown != 0)
     {
-      _state.Set(DS.dockingKeyReleased, 0);
+      _state.Data().dockingKeyReleased = 0;
     }
     else
     {
-      _state.Set(DS.jumpDriveEngaged, 0);
+      _state.Data().jumpDriveEngaged = 0;
       (void)ToggleDockingComputer(_state, _hardware);
     }
   }
-  if (_state.Get(DS.keyDownJ) == 1)
+  if (_state.Data().keyDown.keyDownJ == 1)
   {
     if (const JumpDriveRequest request = EngageJumpDrive(_state); request.lock)
     {
       di = DiAfterMassLock(*request.lock, di);
     }
   }
-  if (_state.Get(DS.keyDownEsc) == 1)
+  if (_state.Data().keyDown.keyDownEsc == 1)
   {
-    _state.Set(DS.gamePaused, 1);
-    if (_state.Get(DS.keyDownCtrl) == 1)
+    _state.Data().gamePaused = 1;
+    if (_state.Data().keyDown.keyDownCtrl == 1)
     {
       // Ctrl+Esc freezes the game until a key, without the menu.
       ResetKeyboard(_state, _hardware);
@@ -2534,29 +2542,29 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, std::ui
       }
       di = DrawBufferEnd(backward);
     }
-    _state.Set(DS.gamePaused, 0);
+    _state.Data().gamePaused = 0;
   }
   HandleMissileKeys(_state, di, backward);
   HandleFireButton(_state, _hardware);
-  if (_state.Get(DS.keyDownE) == 1 && _state.Get(DS.ecmFitted) == 1)
+  if (_state.Data().keyDown.keyDownE == 1 && _state.Data().commanderBlock.ecmFitted == 1)
   {
-    _state.Set(DS.ecmFired, 1);
+    _state.Data().ecmFired = 1;
     SetMessage(_state, DS.ecmActiveMessage.offset, 5);
     (void)RemoveAllMissiles(_state);
     DrainEnergy(_state, ECM_ENERGY);
   }
-  if (_state.Get(DS.keyDownB) == 1 && _state.Get(DS.energyBombFitted) == 1)
+  if (_state.Data().keyDown.keyDownB == 1 && _state.Data().commanderBlock.energyBombFitted == 1)
   {
-    _state.Set(DS.energyBombFitted, 0);
+    _state.Data().commanderBlock.energyBombFitted = 0;
     (void)DetonateEnergyBomb(_state, _hardware, backward);
   }
-  if (_state.Get(DS.keyDownC) == 1 && _state.Get(DS.escapePodFitted) == 1 && _state.Get(DS.escapePodFrames) == 0)
+  if (_state.Data().keyDown.keyDownC == 1 && _state.Data().commanderBlock.escapePodFitted == 1 && _state.Data().escapePodFrames == 0)
   {
     StartBeep(_state);
     LaunchEscapePod(_state);
   }
   HandleIdentifyKey(_state);
-  if (_state.Get(DS.keyDownN) == 1 && _state.Get(DS.maskingDeviceFitted) == 1)
+  if (_state.Data().keyDown.keyDownN == 1 && _state.Data().commanderBlock.maskingDeviceFitted == 1)
   {
     UseMaskingDevice(_state);
   }
@@ -2568,12 +2576,12 @@ void DrainEnergy(GameState& _state, std::int8_t _amount)
 {
   // CBW / SUB [playerEnergy],AX, and 0 written over it on a borrow.
   const std::uint16_t amount = Word(_amount);
-  const std::uint16_t energy = _state.Get(DS.playerEnergy);
-  _state.Set(DS.playerEnergy, static_cast<std::uint16_t>(energy - amount));
+  const std::uint16_t energy = _state.Data().playerEnergy;
+  _state.Data().playerEnergy = static_cast<std::uint16_t>(energy - amount);
   if (energy < amount)
   {
-    _state.Set(DS.playerEnergy, 0);
-    _state.Set(DS.playerDead, 1);
+    _state.Data().playerEnergy = 0;
+    _state.Data().playerDead = 1;
   }
 }
 
@@ -2582,73 +2590,73 @@ JumpDriveRequest EngageJumpDrive(GameState& _state)
   // MOV AX,message, then the shared tail at 8450 posts it for 5 frames.
   const auto post = [&_state](DataAt _message) { SetMessage(_state, _message.offset, JUMP_DRIVE_MESSAGE_FRAMES); };
   std::optional<MassLock> lock;
-  if (_state.Get(DS.dockingComputerOn) != 1)
+  if (_state.Data().dockingComputerOn != 1)
   {
-    if (_state.Get(DS.playerSpeed) != FULL_SPEED)
+    if (_state.Data().playerSpeed != FULL_SPEED)
     {
-      _state.Set(DS.jumpDriveEngaged, 0);
+      _state.Data().jumpDriveEngaged = 0;
       post(DS.jumpDriveVelocityLockedMessage);
       return JumpDriveRequest{lock};
     }
     lock = IsMassLocked(_state);
     if (!lock->locked)
     {
-      _state.Set(DS.jumpDriveEngaged, 1);
-      _state.Set(DS.velocityDirty, 1);
+      _state.Data().jumpDriveEngaged = 1;
+      _state.Data().velocityDirty = 1;
       post(DS.jumpDriveEngagedMessage);
       return JumpDriveRequest{lock};
     }
   }
-  _state.Set(DS.jumpDriveEngaged, 0);
+  _state.Data().jumpDriveEngaged = 0;
   post(DS.jumpDriveMassLockedMessage);
   return JumpDriveRequest{lock};
 }
 
 void UpdatePlayerMotion(GameState& _state, Hardware& _hardware)
 {
-  const std::uint8_t gameOver = _state.Get(DS.gameOverFrames);
+  const std::uint8_t gameOver = _state.Data().gameOverFrames;
   if (gameOver != 0 && gameOver != GAME_OVER_FRAMES)
   {
     return;
   }
-  if (_state.Get(DS.escapePodFrames) != 0)
+  if (_state.Data().escapePodFrames != 0)
   {
     MoveObjectsByVelocity(_state);
     return;
   }
   Steering steering{};
-  if (_state.Get(DS.dockingComputerOn) != 0)
+  if (_state.Data().dockingComputerOn != 0)
   {
     RunDockingComputer(_state);
-    const std::uint16_t steered = _state.Get(DS.dockingComputerSteering);
+    const std::uint16_t steered = _state.Data().dockingComputerSteering;
     steering = Steering{Low(steered), High(steered)};
   }
   else
   {
     // . and , change the speed's low byte by 4, within 4-48 unless it wraps, and the word is written back.
-    std::uint16_t speed = _state.Get(DS.playerSpeed);
-    if (_state.Get(DS.keyDownPeriod) == 1)
+    std::uint16_t speed = _state.Data().playerSpeed;
+    if (_state.Data().keyDown.keyDownPeriod == 1)
     {
       speed = WithLow(speed, static_cast<std::uint8_t>(Low(speed) + SPEED_KEY_STEP));
-      _state.Set(DS.velocityDirty, 1);
+      _state.Data().velocityDirty = 1;
       if (Low(speed) >= TOP_SPEED + 1)
       {
         speed = WithLow(speed, TOP_SPEED);
       }
     }
-    if (_state.Get(DS.keyDownComma) == 1)
+    if (_state.Data().keyDown.keyDownComma == 1)
     {
       speed = WithLow(speed, static_cast<std::uint8_t>(Low(speed) - SPEED_KEY_STEP));
-      _state.Set(DS.velocityDirty, 1);
+      _state.Data().velocityDirty = 1;
       if (Low(speed) < SPEED_KEY_STEP)
       {
         speed = WithLow(speed, SPEED_KEY_STEP);
       }
     }
-    _state.Set(DS.playerSpeed, speed);
+    _state.Data().playerSpeed = speed;
     // ReadSteering fires the stick with AL, the speed's low byte.
     const Steering read = ReadSteering(_state, _hardware, Low(speed));
-    _state.Set(DS.rollRate, Join(read.pitch, read.roll));
+    _state.Data().rollRate = Join(read.pitch, read.roll);
     steering = ApplyReverseControls(_state, read);
   }
 
@@ -2656,13 +2664,13 @@ void UpdatePlayerMotion(GameState& _state, Hardware& _hardware)
   if (const auto roll = static_cast<std::int8_t>(Negate(steering.roll)); roll != 0)
   {
     const std::int8_t held = roll <= -MOST_ROLL - 1 ? static_cast<std::int8_t>(-MOST_ROLL) : roll >= MOST_ROLL + 1 ? MOST_ROLL : roll;
-    _state.Set(DS.playerRollAngle, Plus(_state.Get(DS.playerRollAngle), SignExtend(static_cast<std::uint8_t>(held)) << 1));
+    _state.Data().playerRollAngle = Plus(_state.Data().playerRollAngle, SignExtend(static_cast<std::uint8_t>(held)) << 1);
   }
   if (steering.pitch != 0)
   {
     ApplyPitch(_state, static_cast<std::int8_t>(steering.pitch));
   }
-  if (_state.Get(DS.dockingComputerOn) == 1)
+  if (_state.Data().dockingComputerOn == 1)
   {
     return;
   }
@@ -2672,44 +2680,44 @@ void UpdatePlayerMotion(GameState& _state, Hardware& _hardware)
 
 void UpdatePlayerVelocity(GameState& _state)
 {
-  if (_state.Get(DS.velocityDirty) != 1)
+  if (_state.Data().velocityDirty != 1)
   {
     return;
   }
   // DEC: the 1 becomes 0.
-  _state.Set(DS.velocityDirty, 0);
-  (void)SetSinCos(_state, 6, Negate(Plus(_state.Get(DS.playerPitchAngle), 0x400)));
-  (void)SetSinCos(_state, 7, Plus(_state.Get(DS.playerYawAngle), 0x400));
-  std::uint16_t speed = _state.Get(DS.playerSpeed);
-  if (_state.Get(DS.jumpDriveEngaged) == 1)
+  _state.Data().velocityDirty = 0;
+  (void)SetSinCos(_state, 6, Negate(Plus(_state.Data().playerPitchAngle, 0x400)));
+  (void)SetSinCos(_state, 7, Plus(_state.Data().playerYawAngle, 0x400));
+  std::uint16_t speed = _state.Data().playerSpeed;
+  if (_state.Data().jumpDriveEngaged == 1)
   {
     // The jump drive: 32 times the speed, for this frame only.
-    _state.Set(DS.velocityDirty, 1);
-    _state.Set(DS.jumpDriveEngaged, 0);
+    _state.Data().velocityDirty = 1;
+    _state.Data().jumpDriveEngaged = 0;
     speed = static_cast<std::uint16_t>(speed << 5);
   }
   // (0, speed) turned by the yaw, then (0, what that leaves of the speed) by the pitch.
   const Pair yawed = RotateByStoredSinCos(_state, 7, Pair{0, Signed(speed)});
-  _state.Set(DS.playerVelocityX, Word(yawed.first));
+  _state.Data().playerVelocityX = Word(yawed.first);
   const Pair pitched = RotateByStoredSinCos(_state, 6, Pair{0, yawed.second});
-  _state.Set(DS.playerVelocityY, Word(pitched.first));
-  _state.Set(DS.playerVelocityZ, Word(pitched.second));
+  _state.Data().playerVelocityY = Word(pitched.first);
+  _state.Data().playerVelocityZ = Word(pitched.second);
 }
 
 void MoveObjectsByVelocity(GameState& _state)
 {
   // LOOP from CX = shipSlotCount: a count of 0 runs 65,536 times.
   std::uint16_t offset = DS.shipSlots.offset;
-  for (std::uint32_t slots = LoopCount(_state.Get(DS.shipSlotCount)); slots != 0; --slots)
+  for (std::uint32_t slots = LoopCount(_state.Data().shipSlotCount); slots != 0; --slots)
   {
-    ObjectSlot slot(_state, offset);
-    const std::uint16_t x = _state.Get(DS.playerVelocityX);
-    SubtractVelocity(slot, SlotByte::XHigh, SlotWord::X, SlotWord::CompassX, x, Low(SignWord(x)));
-    const std::uint16_t y = _state.Get(DS.playerVelocityY);
-    SubtractVelocity(slot, SlotByte::YHigh, SlotWord::Y, SlotWord::CompassY, y, Low(SignWord(y)));
-    const std::uint16_t z = _state.Get(DS.playerVelocityZ);
-    SubtractVelocity(slot, SlotByte::ZHigh, SlotWord::Z, SlotWord::CompassZ, z, Low(SignWord(z)));
-    offset = Plus(offset, ObjectSlot::BYTES);
+    SpaceObject& slot = _state.ObjectAt(offset);
+    const std::uint16_t x = _state.Data().playerVelocityX;
+    SubtractVelocity(slot, &SpaceObject::xHigh, &SpaceObject::x, &SpaceObject::compassX, x, Low(SignWord(x)));
+    const std::uint16_t y = _state.Data().playerVelocityY;
+    SubtractVelocity(slot, &SpaceObject::yHigh, &SpaceObject::y, &SpaceObject::compassY, y, Low(SignWord(y)));
+    const std::uint16_t z = _state.Data().playerVelocityZ;
+    SubtractVelocity(slot, &SpaceObject::zHigh, &SpaceObject::z, &SpaceObject::compassZ, z, Low(SignWord(z)));
+    offset = Plus(offset, SpaceObject::BYTES);
   }
 }
 

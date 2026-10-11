@@ -43,22 +43,22 @@ void Launch(TwinRig& _rig)
 void PlayJump(TwinRig& _rig, const Jump& _jump)
 {
   Elite::GameState& state = _rig.State();
-  state.Set(DS.hyperspaceTargetIndex, state.Get(DS.selectedSystemIndex));
-  for (std::uint16_t index = 0; index < state.Get(DS.systemRecordBytes); ++index)
+  state.Data().commanderBlock.hyperspaceTargetIndex = std::uint8_t{state.Data().commanderBlock.selectedSystemIndex};
+  for (std::uint16_t index = 0; index < state.Data().systemRecordBytes; ++index)
   {
     state.SetByte(static_cast<std::uint16_t>(DS.hyperspaceTargetRecord.offset + index),
                   state.Byte(static_cast<std::uint16_t>(DS.selectedSystemName.offset + index)));
   }
-  state.Set(DS.galacticJumpPending, _jump.galactic);
-  state.Set(DS.galaxyNumber, _jump.galaxy);
-  state.Set(DS.randomState0, _jump.zeroRandom ? std::uint16_t{0} : RANDOM_SEED[0]);
-  state.Set(DS.randomState1, _jump.zeroRandom ? std::uint16_t{0} : RANDOM_SEED[1]);
-  state.Set(DS.randomState2, _jump.zeroRandom ? std::uint16_t{0} : RANDOM_SEED[2]);
-  state.Set(DS.forceMisjump, _jump.forceMisjump);
-  state.Set(DS.missionNumber, _jump.mission);
-  state.Set(DS.missionStage, _jump.missionStage);
-  state.Set(DS.hyperspaceCountdown, 1);
-  state.Set(DS.hyperspaceCountdownFrames, 1);
+  state.Data().galacticJumpPending = _jump.galactic;
+  state.Data().commanderBlock.galaxyNumber = _jump.galaxy;
+  state.Data().commanderBlock.randomState0 = _jump.zeroRandom ? std::uint16_t{0} : RANDOM_SEED[0];
+  state.Data().commanderBlock.randomState1 = _jump.zeroRandom ? std::uint16_t{0} : RANDOM_SEED[1];
+  state.Data().commanderBlock.randomState2 = _jump.zeroRandom ? std::uint16_t{0} : RANDOM_SEED[2];
+  state.Data().forceMisjump = _jump.forceMisjump;
+  state.Data().commanderBlock.missionNumber = _jump.mission;
+  state.Data().commanderBlock.missionStage = _jump.missionStage;
+  state.Data().hyperspaceCountdown = 1;
+  state.Data().hyperspaceCountdownFrames = 1;
   _rig.Play("wait 3.5\ndigest arrived");
 }
 
@@ -75,7 +75,7 @@ public:
   {
     TwinRig rig("TwinJumps");
     Launch(rig);
-    rig.Both([](Elite::Platform&, Elite::GameState& _state) { _state.SetByte(DS.galacticDriveReadyFrames.offset, 3); });
+    rig.Both([](Elite::Platform&, Elite::GameState& _state) { _state.Data().galacticDriveReadyFrames = 3; });
     rig.Play("wait 0.5");
     PlayJump(rig, {1, 7, true, 0, 1, 0});
     PlayJump(rig, {1, 8, false, 0, 3, 1});

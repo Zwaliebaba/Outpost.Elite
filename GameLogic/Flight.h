@@ -4,7 +4,7 @@
 #include "GameState.h"
 #include "Hardware.h"
 #include "Maths.h"
-#include "ObjectSlot.h"
+#include "SpaceObject.h"
 #include "Video.h"
 
 #include <cstdint>
@@ -225,7 +225,7 @@ void UpdateWarnings(GameState& _state);
 /// UpdateScannerBlip (CS:40EC): unless _slot is debris, a station, the sun or the planet, its scanner blip moved to the
 /// camera-frame position _camera, y and z scaled by 1.25: the slot marked scanned, the old blip XORed out if one is drawn
 /// and the new one in.
-void UpdateScannerBlip(GameState& _state, ObjectSlot _slot, Vector _camera);
+void UpdateScannerBlip(GameState& _state, SpaceObject& _slot, Vector _camera);
 
 /// UpdateCompass (CS:418F): while titleShown, the compass dot moved to the station when the planet is near
 /// (IsObjectNearKeepBlip), else to the planet (compassTargetIsStation 1 or 0). The target's and the station's scale shifts go to
@@ -245,7 +245,7 @@ void XorCompassDot(GameState& _state, std::uint8_t _x, std::uint8_t _y, bool _in
 
 /// EraseScannerBlip (CS:42D6): unless _slot is a station's, its scanner blip XORed out when one is drawn, and the flag that
 /// says so cleared. Returns the blip's last pixel, when it erased one.
-std::optional<DashboardPixel> EraseScannerBlip(GameState& _state, ObjectSlot _slot);
+std::optional<DashboardPixel> EraseScannerBlip(GameState& _state, SpaceObject& _slot);
 
 /// EraseCompassAndBlips (CS:4594): the compass dot XORed out of video memory when stationSlot's blip flag says it is drawn, the
 /// flag cleared first, and then each ship slot's scanner blip, EraseScannerBlip. Returns whether it erased anything.

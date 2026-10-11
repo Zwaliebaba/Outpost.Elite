@@ -3,7 +3,7 @@
 
 #include "GameState.h"
 #include "Hardware.h"
-#include "ObjectSlot.h"
+#include "SpaceObject.h"
 
 #include <cstdint>
 
@@ -104,7 +104,7 @@ void ShowBountyMessage(GameState& _state, std::uint16_t _tenths);
 /// ShowShipIdentity (CS:364D): 'CLASS: <class> TYPE: <type>' for ship type _type and class _class on the message line for
 /// 30 frames; class 3 is Simple unless IsDebrisType says _slot is debris, a class 4 of type 5 is a Hermit, and type 1Ch
 /// the police.
-void ShowShipIdentity(GameState& _state, std::uint8_t _type, std::uint8_t _class, const ObjectSlot& _slot);
+void ShowShipIdentity(GameState& _state, std::uint8_t _type, std::uint8_t _class, const SpaceObject& _slot);
 
 /// PrintTextModeString (CS:60D2): the text at DS:_text to the text page at B800:_cell, in textAttribute.
 PrintedText PrintTextModeString(GameState& _state, std::uint16_t _text, std::uint16_t _cell);

@@ -3,7 +3,7 @@
 #include "DataOverlay.h"
 #include "GameState.h"
 #include "Maths.h"
-#include "ObjectSlot.h"
+#include "SpaceObject.h"
 #include "Ships.h"
 #include "TwinRig.h"
 
@@ -97,30 +97,33 @@ constexpr int MOST_DRAWS = 1000;
 // (here its template's bytes, InitObjectFromTemplate, at rest), its spin a random word, its velocity the asteroid's halved and
 // the spin's scatter of -15 to 16 halved again on each axis, at rest; minerals by a draw below 2000 in 65536, with the random
 // state drawn on by NextRandom until that draw comes; and a mined fragment's lifetime.
-void MakeMineralSplinter(Elite::GameState& _state, Elite::ObjectSlot _slot)
+void MakeMineralSplinter(Elite::GameState& _state, Elite::SpaceObject& _slot)
 {
   Elite::InitObjectFromTemplate(_state, _slot, DS.spawnTemplates.At(DRIFTER_TEMPLATES), ASTEROID_DRIFTER);
-  _slot.Set(Elite::SlotByte::State, 0);
+  _slot.aiState = 0;
   const std::uint16_t spin = Elite::NextRandom(_state);
-  _slot.Set(Elite::SlotWord::Spin, spin);
+  _slot.spinRoll = static_cast<std::uint8_t>(spin & 0xFF);
+  _slot.spinPitch = static_cast<std::uint8_t>(spin >> 8);
   const auto scatter = static_cast<std::uint16_t>(spin & FRAGMENT_SCATTER_MASK);
-  _slot.Set(Elite::SlotByte::VelocityX, HalveSigned(static_cast<std::uint8_t>((scatter & 0xFF) - FRAGMENT_SCATTER_CENTER)));
-  _slot.Set(Elite::SlotByte::VelocityY, HalveSigned(static_cast<std::uint8_t>((scatter >> 8) - FRAGMENT_SCATTER_CENTER)));
-  _slot.Set(Elite::SlotByte::VelocityZ, HalveSigned(static_cast<std::uint8_t>(((spin >> 3) & 0x1F) - FRAGMENT_SCATTER_CENTER)));
-  for (int draws = 0; static_cast<std::uint16_t>(_state.Get(DS.randomState0) + _state.Get(DS.randomState1)) >= MINERALS_ODDS; ++draws)
+  _slot.velocityX = HalveSigned(static_cast<std::uint8_t>((scatter & 0xFF) - FRAGMENT_SCATTER_CENTER));
+  _slot.velocityY = HalveSigned(static_cast<std::uint8_t>((scatter >> 8) - FRAGMENT_SCATTER_CENTER));
+  _slot.velocityZ = HalveSigned(static_cast<std::uint8_t>(((spin >> 3) & 0x1F) - FRAGMENT_SCATTER_CENTER));
+  for (int draws = 0;
+       static_cast<std::uint16_t>(_state.Data().commanderBlock.randomState0 + _state.Data().commanderBlock.randomState1) >= MINERALS_ODDS;
+       ++draws)
   {
     Assert::IsTrue(draws < MOST_DRAWS, L"a draw that gives minerals");
     (void)Elite::NextRandom(_state);
   }
   (void)Elite::NextRandom(_state);
-  _slot.Set(Elite::SlotByte::Flags, static_cast<std::uint8_t>(FLAG_RESTING | FLAG_PRECIOUS));
-  _slot.Set(Elite::SlotByte::Energy, 0);
-  _slot.Set(Elite::SlotWord::Cargo, 0);
-  _slot.Set(Elite::SlotByte::Age, 0);
-  _slot.Set(Elite::SlotByte::Class, DEBRIS_CLASS);
-  _slot.Set(Elite::SlotByte::Lifetime,
-            static_cast<std::uint8_t>((Elite::NextRandom(_state) & FRAGMENT_LIFETIME_MASK) + MINED_FRAGMENT_LIFETIME));
-  _slot.Set(Elite::SlotByte::Type, SPLINTER_ACTIVE);
+  _slot.flags = static_cast<std::uint8_t>(FLAG_RESTING | FLAG_PRECIOUS);
+  _slot.energy = 0;
+  _slot.cargo = 0;
+  _slot.fragments = 0;
+  _slot.age = 0;
+  _slot.behaviorClass = DEBRIS_CLASS;
+  _slot.lifetime = static_cast<std::uint8_t>((Elite::NextRandom(_state) & FRAGMENT_LIFETIME_MASK) + MINED_FRAGMENT_LIFETIME);
+  _slot.type = SPLINTER_ACTIVE;
 }
 
 // _what made below the nose of the twin's ship by the game's own routines, as the game makes it where it is made in play, in
@@ -146,35 +149,35 @@ void MakeBelowTheNose(TwinRig& _rig, Scoopable _what)
     slot = free.slot;
   }
   Elite::ClearObjectSlot(state, slot);
-  Elite::ObjectSlot object(state, slot);
+  Elite::SpaceObject& object = state.ObjectAt(slot);
   switch (_what)
   {
   case Scoopable::Barrel:
   case Scoopable::MaskingDeviceBarrel:
   {
     Elite::InitCargoBarrel(state, object);
-    object.Set(Elite::SlotByte::Flags,
-               static_cast<std::uint8_t>(FLAG_RESTING | (_what == Scoopable::MaskingDeviceBarrel ? FLAG_MASKING_DEVICE : 0)));
+    object.flags = static_cast<std::uint8_t>(FLAG_RESTING | (_what == Scoopable::MaskingDeviceBarrel ? FLAG_MASKING_DEVICE : 0));
     const std::uint16_t heading = Elite::NextRandom(state);
-    object.Set(Elite::SlotWord::Pitch, heading);
-    object.Set(Elite::SlotWord::Yaw, static_cast<std::uint16_t>((heading << 8) | (heading >> 8)));
+    object.pitch = heading;
+    object.yaw = static_cast<std::uint16_t>((heading << 8) | (heading >> 8));
     (void)Elite::ComputeVelocity(state, object);
     break;
   }
   case Scoopable::Thargon:
     Elite::InitThargon(state, object);
     (void)Elite::ComputeVelocity(state, object);
-    object.Set(Elite::SlotWord::Owner, static_cast<std::uint16_t>(slot + SLOT_BYTES));
+    object.owner = static_cast<std::uint16_t>(slot + SLOT_BYTES);
     break;
   case Scoopable::MineralSplinter:
     MakeMineralSplinter(state, object);
     break;
   }
-  object.Set(Elite::SlotWord::X, 0);
-  object.Set(Elite::SlotWord::Y, static_cast<std::uint16_t>(SCOOP_BELOW));
-  object.Set(Elite::SlotWord::Z, static_cast<std::uint16_t>(SCOOP_AHEAD));
-  object.Set(Elite::SlotWord::XYHigh, 0);
-  object.Set(Elite::SlotByte::ZHigh, 0);
+  object.x = 0;
+  object.y = static_cast<std::uint16_t>(SCOOP_BELOW);
+  object.z = static_cast<std::uint16_t>(SCOOP_AHEAD);
+  object.xHigh = 0;
+  object.yHigh = 0;
+  object.zHigh = 0;
 }
 
 } // namespace
