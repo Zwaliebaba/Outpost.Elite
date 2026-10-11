@@ -5,7 +5,6 @@
 
 #include <format>
 #include <fstream>
-#include <map>
 #include <stdexcept>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -205,57 +204,6 @@ public:
     Assert::AreEqual(std::string(PICTURE).c_str(), steps[1].expectedPicture.c_str());
     Assert::IsTrue(steps[3].expectedDigest.empty(), L"a digest with no value");
     Assert::AreEqual(std::string(PICTURE).c_str(), steps[3].expectedPicture.c_str(), false, L"may still have its picture");
-  }
-
-  // Recording a corpus's pictures and outcomes (RecordCheckpoints) writes them after their digest's line, ending as that line
-  // does, and replaces the picture and outcome lines there were; every other line, comments and blank lines included, is
-  // kept byte for byte.
-  TEST_METHOD(RecordingAPictureKeepsEveryOtherLine)
-  {
-    const std::string digest(64, 'a');
-    const std::string old(64, 'b');
-    const std::string picture(64, 'c');
-    const std::string text = "# a replay\r\nwait 3\r\ndigest boot " + digest + "\r\npicture boot " + old + "\r\noutcome boot kills=1" +
-                             "\r\n\nkey F1; wait 1  # launch\n" + "digest flight " + digest;
-    std::vector<Elite::Step> steps;
-    std::string error;
-    Assert::IsTrue(Elite::ParseSteps(text, steps, error), L"parses");
-    const Elite::Checkpoint checkpoint{digest, picture, "kills=2 fuel=70"};
-    const std::map<std::size_t, Elite::Checkpoint> checkpoints = {{3, checkpoint}, {8, checkpoint}};
-    std::string recorded;
-    Assert::IsTrue(Elite::RecordCheckpoints(text, checkpoints, recorded, error), L"records");
-    const std::string expected = "# a replay\r\nwait 3\r\ndigest boot " + digest + "\r\npicture boot " + picture +
-                                 "\r\noutcome boot kills=2 fuel=70\r\n\nkey F1; wait 1  # launch\ndigest flight " + digest +
-                                 "\npicture flight " + picture + "\noutcome flight kills=2 fuel=70\n";
-    Assert::AreEqual(expected.c_str(), recorded.c_str());
-    std::string again;
-    Assert::IsTrue(Elite::RecordCheckpoints(recorded, checkpoints, again, error), L"records again");
-    Assert::AreEqual(recorded.c_str(), again.c_str(), false, L"a second recording changes nothing");
-
-    Assert::IsFalse(Elite::RecordCheckpoints(text, {{2, checkpoint}}, recorded, error), L"line 2 is a wait");
-    Assert::IsTrue(error.find("line 2") != std::string::npos, L"names the line");
-    Assert::IsFalse(Elite::RecordCheckpoints("key F1; digest boot\n", {{1, checkpoint}}, recorded, error), L"not alone");
-    Assert::IsFalse(Elite::RecordCheckpoints(text, {{9, checkpoint}}, recorded, error), L"past the end");
-  }
-
-  // Re-basing a corpus's digests (RecordDigests) writes each over the one its line holds, and keeps every other byte, each
-  // line's end and a comment after the digest included.
-  TEST_METHOD(RecordingADigestKeepsEveryOtherByte)
-  {
-    const std::string old(64, 'a');
-    const std::string digest(64, 'b');
-    const std::string text = "# a replay\r\nwait 3\r\ndigest boot " + old + "\r\npicture boot " + old + "\r\n\nkey F1; wait 1\n" +
-                             "digest flight " + old + "  # launched\n" + "digest last " + old;
-    std::string recorded;
-    std::string error;
-    Assert::IsTrue(Elite::RecordDigests(text, {{3, digest}, {7, digest}, {8, digest}}, recorded, error), L"records");
-    const std::string expected = "# a replay\r\nwait 3\r\ndigest boot " + digest + "\r\npicture boot " + old +
-                                 "\r\n\nkey F1; wait 1\ndigest flight " + digest + "  # launched\ndigest last " + digest;
-    Assert::AreEqual(expected.c_str(), recorded.c_str());
-
-    Assert::IsFalse(Elite::RecordDigests(text, {{2, digest}}, recorded, error), L"line 2 is a wait");
-    Assert::IsTrue(error.find("line 2") != std::string::npos, L"names the line");
-    Assert::IsFalse(Elite::RecordDigests(text, {{9, digest}}, recorded, error), L"past the end");
   }
 
   // An end step (Replay.h) is the last that runs the machine, and the only one in which the program may end, as it must

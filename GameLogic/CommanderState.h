@@ -23,8 +23,7 @@ namespace Elite
 #pragma pack(push, 1)
 
 /// The commander (D38): commanderBlock, DS:756B-763A in 1987, kept whole at its 1987 layout, every member at its offset there. It is the
-/// .cdr file's format, 208 bytes, which SaveCommanderFile writes from it and LoadCommanderFile reads over it, and Replays/*.cdr are files
-/// of it (ADR-008 item 8). Several subsystems write it.
+/// .cdr file's format, 208 bytes, which SaveCommanderFile writes from it and LoadCommanderFile reads over it. Several subsystems write it.
 struct CommanderState
 {
   CommanderState() noexcept = default;

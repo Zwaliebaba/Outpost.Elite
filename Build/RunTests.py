@@ -13,8 +13,7 @@ takes every test the groups do not name, so a class added or renamed still runs.
 test fails, which is how a group left naming a renamed class is found. The groups are a balance of measured times, not a rule: moving a class
 between them changes how long CI takes, never what it runs. Each shard writes TestResults/<shard>.trx,
 and its counts are read back from it, with what its tests wrote to their log (Logger::WriteMessage),
-which is printed after the shard's output; under GitHub Actions a line that reports a difference is
-also a warning.
+which is printed after the shard's output.
 
 Exit status: 0 every shard passed, 1 a shard failed, 2 usage or environment error (no suite, a suite
 not built, no vstest).
@@ -22,7 +21,6 @@ not built, no vstest).
 
 import argparse
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -91,10 +89,6 @@ def counts(_name: str) -> dict[str, int] | None:
     if element.tag.endswith("Counters"):
       return {key: int(value) for key, value in element.attrib.items() if value.isdigit()}
   return None
-
-
-# A logged line that reports a difference: "...: the picture at ... differs: ...", or a summary that counts some.
-DIFFERENCE = re.compile(r" differs?: |\b[1-9][0-9]* differ\b")
 
 
 def messages(_name: str) -> list[str]:
@@ -178,8 +172,6 @@ def main() -> int:
             print(f"== shard {name}: what its tests logged ==")
             for line in logged:
               print(line)
-              if os.environ.get("GITHUB_ACTIONS") and DIFFERENCE.search(line):
-                print(f"::warning::{line}")
             sys.stdout.flush()
           if process.returncode != 0:
             failed.append(name)

@@ -11,7 +11,7 @@ the groups' structs (`GameData::flight`, `GameData::commander`, ...):
   a subsystem          what that one subsystem writes: FlightState, VideoState, ...
   a shared group       what several subsystems write: PlayerShipState, MessagesState, ...
   Commander            commanderBlock, kept whole at its 1987 layout, every member's offset asserted, as CommanderState: it is the
-                       .cdr file's format, and Replays/*.cdr are files of it
+                       .cdr file's format
   constant             what nothing writes: not in the state, but its readers' constexpr tables (Tools/GenerateTables.py),
                        which the reference's image no longer loads
   unused               what nothing reads, UnusedState, which change 3b removes
@@ -536,8 +536,7 @@ def generate_commander(_block: Member) -> str:
   ]
   out += wrap(f"The commander (D38): commanderBlock, DS:{_block.offset:04X}-{_block.end - 1:04X} in 1987, kept whole at its 1987 "
               f"layout, every member at its offset there. It is the .cdr file's format, {_block.size} bytes, which "
-              "SaveCommanderFile writes from it and LoadCommanderFile reads over it, and Replays/*.cdr are files of it (ADR-008 "
-              "item 8). Several subsystems write it.", "///")
+              "SaveCommanderFile writes from it and LoadCommanderFile reads over it. Several subsystems write it.", "///")
   out += ["struct CommanderState", "{"]
   emit_copy_rule("CommanderState", "  ", out)
   emit_members(_block.children, "  ", out)

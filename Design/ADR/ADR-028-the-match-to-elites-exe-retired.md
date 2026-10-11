@@ -1,6 +1,6 @@
 # ADR-028 — The tests no longer hold the port to ELITES.EXE (D57)
 
-**Status:** accepted 2026-10-11, with the change that implements it: 38 tests deleted, with the twins' answer files and the helpers only they used. It records the owner's ruling D57 ([Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner)) that matching `ELITES.EXE` is no longer needed. It amends ADR-008 item 8, ADR-016, ADR-020 and ADR-022.
+**Status:** accepted 2026-10-11, with the change that implements it: 38 tests deleted, with the twins' answer files and the helpers only they used. A second change the same day removed what nothing used after them, at the owner's request: the replay corpus, the tool that prepared its commanders, and the functions that recorded it. It records the owner's ruling D57 ([Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner)) that matching `ELITES.EXE` is no longer needed. It amends ADR-008 item 8, ADR-016, ADR-020 and ADR-022.
 
 ## Context
 
@@ -32,21 +32,35 @@ D26 had already said the corpus and the known answers retire once the game chang
 
 `Build/RunTests.py` has no groups now. The corpus had a shard of its own, and what is left runs as one shard.
 
+**Then what nothing used.** After the tests went, the owner asked what was left unused, and it went too:
+
+| Removed | Why nothing used it |
+|---|---|
+| `Replays/`: 26 replays and 18 prepared commanders | No test plays them. `ReplayRunner` would fail every one at its first digest, since their digests are 1987's. |
+| `Tools/PrepareCommanders.py` | It only wrote the commanders in `Replays/` |
+| `RecordCheckpoints` and `RecordDigests` (`Replay.h`), and their two tests | They recorded the corpus's pictures and outcomes and re-based its digests, which `CorpusTests` did. Only their own tests called them. |
+| `Build/RunTests.py`'s warning for a logged difference | Only the guard logged differences |
+
+**One change in a tool.** `ReplayRunner --steps` took the sources of `file` steps from `Replays/`, and now takes them from the working directory. A `--replay` run takes them from beside the replay, as before.
+
+**What was checked and kept.** No function in `GameLogic` was left without a caller by the deletion. Eight declarations the twins reached through headers are now used only inside their own `.cpp`, but they are used, so they stay. The functions that only tests call are the devices' test hooks, which were tests-only before.
+
 **What stays:**
-- **The other 104 tests:** the devices, the replay format, the outcomes, the platform and the rest.
+- **The other 102 tests:** the devices, the replay format, the outcomes, the platform and the rest.
 - **The subsystems' known answers** for the galaxies, the markets and the maths (D33), which still hold.
-- **`Replays/` and `ReplayRunner`.** A recorded session still plays headless, but no test plays the corpus.
+- **`ReplayRunner`**, for the sessions the shell records: they are recorded on the game as it is, and play headless.
 
 ## Measured 2026-10-11
 
 | Check | Result |
 |---|---|
-| The suite, Debug x64, `Build/RunTests.py` | 104 tests, all pass, in one shard of 7 s on a 20-thread machine. Before: 142 tests, 38 failing. |
-| Checkers | `CheckProjectFiles`, `CheckFormat`, `GenerateGameData --check` and `GenerateTables --check` are clean. |
+| The suite, Debug x64, `Build/RunTests.py` | 102 tests, all pass, in one shard of 8 s on a 20-thread machine. Before: 142 tests, 38 failing. |
+| Checkers | `CheckProjectFiles`, `CheckFormat`, `GenerateGameData --check`, `GenerateTables --check` and clang-tidy are clean. |
+| `ReplayRunner --steps` | Plays from the title to the dock, exit 0. |
 
 ## What this forecloses
 
 - **Proof that the port is the original.** Nothing checks the image against `ELITES.EXE`, or any state against 1987's. A change to what the game does is caught only by a remaining test's own asserts.
 - **The deleted scenarios' own checks.** Those asserts went with them, for example that a declined supernova mission pays 1,400 credits, and that a system data screen shows a two-digit tech level.
-- **Replays as a gate.** D35 kept the corpus so that CI played it on every run, and it no longer does. A session the shell records can still be played, but nothing checks that it reproduces.
+- **The replay corpus.** D35 kept it so that CI played it on every run. It is deleted, and git's history holds it. A session the shell records can still be played, but nothing checks that it reproduces.
 - **Phase 6's exit** (§5) asks that "every replay, outcome and answer holds". Of those, only the subsystems' answers are left to hold.

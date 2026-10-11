@@ -41,7 +41,7 @@ inline constexpr DosDateTime START_MOMENT = {1980, 1, 1, 0, 0, 0, 0};
 [[nodiscard]] std::optional<std::vector<std::uint8_t>> ReferenceLoadImage();
 
 /// The first of _name found walking up from the working directory, and then from the repository this
-/// file was compiled in; empty if there is none. How the tests and tools find Replays/ and the known answers.
+/// file was compiled in; empty if there is none. How the tests find the subsystems' known answers.
 [[nodiscard]] std::filesystem::path FindInRepository(const std::filesystem::path& _name);
 
 /// A whole file, or nothing if it cannot be read.
