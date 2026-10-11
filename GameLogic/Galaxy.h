@@ -103,11 +103,16 @@ void LoadGalaxySeeds(GameState& _state);
 void MoveCursorToSystem(GameState& _state);
 
 /// SelectSystemAtCursor (CS:1199): the system nearest the chart cursor selected (FindNearestSystem, with _countIfNone),
-/// its distance into distanceDigits, then from its seeds its government, economy, tech level, population, species,
-/// productivity and radius, the description's seeds, and its name. Returns what FindNearestSystem leaves in BP: the count its
-/// loop had left at the system, 100h less the index in the low byte and 0 in the high, or _countIfNone when no system is on
-/// the chart.
+/// its distance into distanceDigits, then DescribeSystem. Returns what FindNearestSystem leaves in BP: the count its loop had
+/// left at the system, 100h less the index in the low byte and 0 in the high, or _countIfNone when no system is on the chart.
 std::uint16_t SelectSystemAtCursor(GameState& _state, std::uint16_t _countIfNone);
+
+/// The rest of SelectSystemAtCursor, named so that the galaxies' known answers can call it (D33): from the seeds in
+/// systemSeed0-2, the system's government, economy, tech level, population, species, productivity and radius into the
+/// selected system's record, the description's seeds, and its name (GenerateSystemName, which leaves the seeds on the next
+/// system). The cursor cannot reach every system by itself: two systems of a galaxy can share a place on the chart, and the
+/// search selects the first.
+void DescribeSystem(GameState& _state);
 
 /// FindNearestSystem (CS:1292): the system nearest the chart cursor, by dx^2 + (dy/2)^2 in chart units, of those on the
 /// current chart: its index into selectedSystemIndex, its seeds into systemSeed0-2, and the cursor onto it. A distance whose

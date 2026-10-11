@@ -7,6 +7,9 @@
     <Filter Include="Hyperspace">
       <UniqueIdentifier>{2465F5AE-D8CE-5D39-BBAB-ECD299DDDF0D}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Maths">
+      <UniqueIdentifier>{DD981103-DBA9-5EDA-AED2-CD2ADC4C9DDC}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Market">
       <UniqueIdentifier>{0F1A4831-1711-5CF5-9821-5AC2A3EC686E}</UniqueIdentifier>
     </Filter>
@@ -86,6 +89,9 @@
     <ClCompile Include="FlightTests.cpp">
       <Filter>Flight</Filter>
     </ClCompile>
+    <ClCompile Include="GalaxyAnswerTests.cpp">
+      <Filter>Galaxy</Filter>
+    </ClCompile>
     <ClCompile Include="GalaxyTests.cpp">
       <Filter>Galaxy</Filter>
     </ClCompile>
@@ -95,8 +101,14 @@
     <ClCompile Include="InputTests.cpp">
       <Filter>Input</Filter>
     </ClCompile>
+    <ClCompile Include="MarketAnswerTests.cpp">
+      <Filter>Market</Filter>
+    </ClCompile>
     <ClCompile Include="MarketTests.cpp">
       <Filter>Market</Filter>
+    </ClCompile>
+    <ClCompile Include="MathsAnswerTests.cpp">
+      <Filter>Maths</Filter>
     </ClCompile>
     <ClCompile Include="OutcomeTests.cpp">
       <Filter>Replay</Filter>
@@ -127,6 +139,9 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <None Include="GalaxyAnswers.txt">
+      <Filter>Galaxy</Filter>
+    </None>
     <None Include="KnownAnswers.txt">
       <Filter>Rigs</Filter>
     </None>
@@ -135,6 +150,12 @@
     </None>
     <None Include="KnownPictures.txt">
       <Filter>Rigs</Filter>
+    </None>
+    <None Include="MarketAnswers.txt">
+      <Filter>Market</Filter>
+    </None>
+    <None Include="MathsAnswers.txt">
+      <Filter>Maths</Filter>
     </None>
   </ItemGroup>
 </Project>

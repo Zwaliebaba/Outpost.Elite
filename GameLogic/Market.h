@@ -7,6 +7,7 @@
 #include "Text.h"
 
 #include <cstdint>
+#include <optional>
 
 namespace Elite
 {
@@ -60,6 +61,16 @@ void ComputeMarketPrices(GameState& _state);
 
 /// NextMarketRandom (CS:6A85): NextRandom's step on marketRandomState, and the number it makes.
 std::uint16_t NextMarketRandom(GameState& _state);
+
+/// The start of ShowBuyCargoScreen, named so that the market's known answers can call it (D33): the market's random state,
+/// marketRandomState and the two words after it, taken from randomState0-2.
+void StartMarketRandom(GameState& _state);
+
+/// ShowBuyCargoScreen's roll of the quantity of a commodity on sale, the first time the screen shows after an arrival, named
+/// so that the market's known answers can call it (D33): the next market random number r (NextMarketRandom), and
+/// ((r & 1Fh) - 7) xor (r >> 8 & 3), or nothing, which the screen shows as none, when r & 1Fh is below 7. The economy plays
+/// no part in it.
+[[nodiscard]] std::optional<std::uint8_t> RollQuantityOnSale(GameState& _state);
 
 /// ParseQuantity (CS:6A99): the decimal number at DS:_text, spaces around it allowed.
 [[nodiscard]] Quantity ParseQuantity(const GameState& _state, std::uint16_t _text);

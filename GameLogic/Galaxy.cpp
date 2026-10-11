@@ -828,7 +828,12 @@ void MoveCursorToSystem(GameState& _state)
 std::uint16_t SelectSystemAtCursor(GameState& _state, std::uint16_t _countIfNone)
 {
   const std::uint16_t countLeft = SelectNearestSystem(_state, _countIfNone);
+  DescribeSystem(_state);
+  return countLeft;
+}
 
+void DescribeSystem(GameState& _state)
+{
   const std::uint8_t seed1 = Low(_state.Get(DS.systemSeed1));
   const std::uint8_t seed2 = Low(_state.Get(DS.systemSeed2));
   const std::uint8_t seed2High = _state.Get(DS.systemSeed2High);
@@ -873,7 +878,6 @@ std::uint16_t SelectSystemAtCursor(GameState& _state, std::uint16_t _countIfNone
   _state.Set(DS.descriptionSeed0, descriptionSeed0);
   _state.Set(DS.descriptionSeed1, static_cast<std::uint16_t>(descriptionSeed0 ^ _state.Get(DS.systemSeed2)));
   GenerateSystemName(_state);
-  return countLeft;
 }
 
 std::uint8_t FindNearestSystem(GameState& _state, std::uint16_t _countIfNone)

@@ -23,8 +23,8 @@ namespace GameLogicTests
 
 /// The environment variable that makes a run record the guard of D33 instead of checking it, when it is set and not empty:
 /// the corpus's picture and outcome lines and the twins' pictures and outcomes, each recorded only from a run that met every
-/// state digest. The guard is recorded by hand, in one process, never in CI, and a second recording reproduces every file
-/// byte for byte.
+/// state digest, and the subsystems' known answers (CheckSubsystemAnswers). The guard is recorded by hand, in one process,
+/// never in CI, and a second recording reproduces every file byte for byte.
 inline constexpr const char* RECORD_GUARD = "OUTPOST_ELITE_RECORD_GUARD";
 
 /// The value of the environment variable _name, or empty if it is not set.
@@ -160,6 +160,34 @@ private:
 
   std::vector<Answer> m_answers;
 };
+
+/// A subsystem's known answers (D33): _answers, what its value routines give for the inputs the test walks, a line each in
+/// the order they are listed, are checked against those _file holds, and there must be _count of them, the count its header
+/// states. A line that differs fails, naming it and both texts, and so does a count that differs. While the guard is
+/// recorded (RecordingGuard), _file is written with _answers instead, its header kept.
+inline void CheckSubsystemAnswers(std::string_view _file, const std::vector<std::string>& _answers, std::size_t _count)
+{
+  using Microsoft::VisualStudio::CppUnitTestFramework::Assert;
+  Assert::AreEqual(_count, _answers.size(),
+                   AnswerFile::Widen(std::string(_file) + ": the answers the test gives, as its header states").c_str());
+  if (RecordingGuard())
+  {
+    Assert::IsTrue(AnswerFile::Write(_file, _answers), AnswerFile::Widen(std::string(_file) + " cannot be written").c_str());
+    return;
+  }
+  const AnswerFile file(_file);
+  for (std::size_t index = 0; index < _answers.size() && index < file.Answers().size(); ++index)
+  {
+    const AnswerFile::Answer& recorded = file.Answers()[index];
+    if (recorded.text != _answers[index])
+    {
+      Assert::Fail(AnswerFile::Widen(std::format("{} line {}: the answer is '{}', and was recorded as '{}'", _file, recorded.line,
+                                                 _answers[index], recorded.text))
+                     .c_str());
+    }
+  }
+  Assert::AreEqual(_count, file.Answers().size(), AnswerFile::Widen(std::string(_file) + ": the answers recorded").c_str());
+}
 
 /// A file of answers by twin and ordinal, in KnownAnswers.txt's form: one to a line, the twin's name, the ordinal of the
 /// answer within the twin, counted from 1 over all its Play calls, and the value, separated by single spaces. Lines are
