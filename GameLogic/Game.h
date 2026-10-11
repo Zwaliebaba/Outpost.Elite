@@ -27,7 +27,8 @@ public:
   Game& operator=(const Game&) = delete;
 
   /// Loads the reference once, as DOS would with the PSP at _pspSegment: its generated image (D3) straight into the GameState,
-  /// its code segment at the PSP plus 10h, with its relocations and the D5 byte (ReferenceLoadImage). Then the platform starts
+  /// its code segment at the PSP plus 10h, with its relocations, the D5 byte and its stored addresses as what they mean
+  /// (ReferenceLoadImage). Then the platform starts
   /// the program as DOS does, and the native routines go where the original's entries are (InstallNativeRoutines). False on
   /// failure, and then nothing is loaded and nothing is started.
   [[nodiscard]] bool Load(std::uint16_t _pspSegment);

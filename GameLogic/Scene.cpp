@@ -195,13 +195,6 @@ void RotateVerticesToView(GameState& _state, std::uint16_t _first, std::uint16_t
   RotateVertices(_state, _first, _count, 0, VERTEX_Z, 8);
 }
 
-// The offset in the data segment of _part of a blueprint, a view of BLUEPRINT_DATA, which holds the blueprints' bytes where the
-// data segment has them: what the original holds in SI there.
-[[nodiscard]] std::uint16_t BlueprintOffset(const GameState& _state, std::span<const std::uint8_t> _part) noexcept
-{
-  return Offset(_state.OffsetOf(_state.Data().blueprints), static_cast<std::uint16_t>(_part.data() - BLUEPRINT_DATA.data()));
-}
-
 // RenderBlueprint (CS:3CF2-3D20), what RenderBlueprintBody does with _blueprint's body: the vertex program from _accumulator, the
 // projection, the edge lists and the faces. Each count is a byte loaded into CL and stored with all of CX, whose CH the LOOPs
 // before it leave 0, or the edge count's doubling. Returns the direction flag as DrawVisibleFaces leaves it.
@@ -218,11 +211,11 @@ void RotateVerticesToView(GameState& _state, std::uint16_t _first, std::uint16_t
   SetLow(count, static_cast<std::uint8_t>(_blueprint.fixedEdges.size() / 2));
   _state.Data().fixedEdgeCount = count;
   count = static_cast<std::uint16_t>(count << 1);
-  _state.Set(DS.fixedEdgeList, BlueprintOffset(_state, _blueprint.fixedEdges));
+  // The original keeps the edge lists' addresses in fixedEdgeList and faceEdgeList for its edge routines; native code hands
+  // them _blueprint, and nothing reads the two.
   SetLow(count, static_cast<std::uint8_t>(_blueprint.faceEdges.size() / 2));
   _state.Data().faceEdgeCount = count;
   count = static_cast<std::uint16_t>(count << 1);
-  _state.Set(DS.faceEdgeList, BlueprintOffset(_state, _blueprint.faceEdges));
   SetLow(count, _blueprint.faces);
   return DrawVisibleFaces(_state, _blueprint, count, _backward).backward;
 }
@@ -290,7 +283,7 @@ struct WindingProducts
                          product(difference(_triangle.first.y, _triangle.second.y), difference(_triangle.third.x, _triangle.second.x))};
 }
 
-// An edge item (CS:3AF3): _item, the edge's offset in _blueprint's face edges, which faceEdgeList points at; the edge's colour from
+// An edge item (CS:3AF3): _item, the edge's offset in _blueprint's face edges, which the original's faceEdgeList points at; the edge's colour from
 // its high byte's low bits, then DrawClippedLine from its second vertex to its first, unless either's x is 7FFFh, the trap's
 // saturation. PUSH SI / POP SI round the line keep the list. Returns what DrawClippedLine returns: whether DrawLine filled, and
 // cleared the direction flag.
@@ -775,7 +768,7 @@ struct SunDisc
     if (fuel > 0xFF)
     {
       _state.Data().commanderBlock.fuel = 0xFF;
-      _state.Set(DS.messagePointer, DS.fuelScoopsActiveText.offset);
+      _state.Data().messagePointer = Message::FuelScoopsActive;
       _state.Data().messageFrames = SCOOP_MESSAGE_FRAMES;
     }
   }

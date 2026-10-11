@@ -125,22 +125,22 @@ void GalacticJump(GameState& _state, std::uint16_t _countIfNone)
   SelectSystemAtCursor(_state, Negate(index));
 }
 
-// The arrival's message, and a fuel leak armed for missions 1 and 3 at their stages. Returns the message, which the
-// original leaves in SI.
-[[nodiscard]] std::uint16_t PostArrival(GameState& _state)
+// The arrival's message, and a fuel leak armed for missions 1 and 3 at their stages. Returns the message, whose text's
+// address the original leaves in SI.
+[[nodiscard]] Message PostArrival(GameState& _state)
 {
-  std::uint16_t message = DS.arrivalSystemText.offset;
+  Message message = Message::ArrivalSystem;
   if (_state.Data().galacticJumpPending != 0)
   {
-    message = _state.Data().commanderBlock.galaxyNumber == NINTH_GALAXY ? DS.ninthGalaxyText.offset : DS.arrivalGalaxyText.offset;
+    message = _state.Data().commanderBlock.galaxyNumber == NINTH_GALAXY ? Message::NinthGalaxy : Message::ArrivalGalaxy;
     _state.Data().commanderBlock.legalStatus = 0;
     _state.Data().commanderBlock.galacticHyperdriveFitted = 0;
   }
   if (_state.Data().commanderBlock.witchspaceCountdown == 1)
   {
-    message = DS.witchSpaceArrivalText.offset;
+    message = Message::WitchSpaceArrival;
   }
-  _state.Set(DS.messagePointer, message);
+  _state.Data().messagePointer = message;
   _state.Data().messageFrames = ARRIVAL_MESSAGE_FRAMES;
   _state.Data().galacticJumpPending = 0;
   if (_state.Data().commanderBlock.witchspaceCountdown == 1)
@@ -245,7 +245,7 @@ MassLock IsMassLocked(GameState& _state)
 void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward)
 {
   (void)EraseCompassAndBlips(_state);
-  _state.Set(DS.messagePointer, DS.hyperspaceEngagedText.offset);
+  _state.Data().messagePointer = Message::HyperspaceEngaged;
   _state.Data().messageFrames = ENGAGED_MESSAGE_FRAMES;
   if (_state.Data().galacticJumpPending == 1)
   {
@@ -492,9 +492,9 @@ void ShowHyperspaceCountdown(GameState& _state)
   // Two characters: "10", or a space and the digit.
   _state.Data().hyperspaceCountdownDigits =
     countdown == COUNTDOWN_TEN ? MakeWord('1', '0') : MakeWord(' ', static_cast<std::uint8_t>(countdown + '0'));
-  _state.Set(DS.messagePointer, DS.hyperspaceCountdownMessage.offset);
+  _state.Data().messagePointer = Message::HyperspaceCountdown;
   _state.Data().messageFrames = COUNTDOWN_MESSAGE_FRAMES;
-  _state.Set(DS.messageShown, 0);
+  _state.Data().messageShown = Message::None;
 }
 
 } // namespace Elite

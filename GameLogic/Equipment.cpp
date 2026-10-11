@@ -52,11 +52,12 @@ constexpr std::uint16_t HELP_TEXT_OFFSET = 0xF4;
 constexpr std::uint16_t MOUNT_HEADER_OFFSET = 0x144;
 constexpr std::uint16_t SELL_LASER_OFFSET = 0x174;
 constexpr std::uint16_t MOUNT_NAMES_OFFSET = 0x284;
-constexpr std::uint16_t FIRST_ITEM_OFFSET = 0x326;    // the first item's name
-constexpr std::uint16_t EQUIP_MENU_FIRST_ROW = 0x325; // and its row's first attribute byte
+constexpr std::uint16_t FIRST_ITEM_OFFSET = 0x326; // the first item's name
+constexpr std::uint16_t EQUIP_MENU_FIRST_ROW = 10; // on the text page
 constexpr std::uint16_t PRICE_COLUMN = 0x2A;
 constexpr std::uint16_t RESALE_COLUMN = 0x38;
 constexpr std::uint16_t SELL_PRICE_COLUMN = 0x39;
+constexpr std::uint16_t MENU_ROW_ATTRIBUTE = 5; // a menu row's first byte the highlight changes: its third character's attribute
 
 constexpr std::uint8_t SELL_PRICE_ATTRIBUTE = 0x79;
 constexpr std::uint8_t MENU_ATTRIBUTE = 0x1E;
@@ -201,7 +202,7 @@ PrintedText PrintEquipmentSellColumn(GameState& _state, std::uint16_t _text)
   _state.Data().textAttribute = SELL_PRICE_ATTRIBUTE;
   // (row-1)*80 bytes, as (row-1)*256/4 and that /4 again.
   const auto quarter = static_cast<std::uint16_t>((static_cast<std::uint8_t>(_state.Data().menuSelectedRow - 1) << 8) >> 2);
-  const auto cell = static_cast<std::uint16_t>(_state.Get(DS.menuFirstRowAttr) + quarter + (quarter >> 2) + SELL_PRICE_COLUMN);
+  const auto cell = static_cast<std::uint16_t>(MenuFirstRowCell(_state) + quarter + (quarter >> 2) + SELL_PRICE_COLUMN);
   const PrintedText printed = PrintTextModeString(_state, _text, cell);
   _state.Data().textAttribute = MENU_ATTRIBUTE;
   return printed;
@@ -603,18 +604,18 @@ Scoop TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
   const std::uint8_t flags = _slot.flags;
   const bool full = _state.Data().freeCargoTonnes == 0;
   Scoop scoop{true, {}};
-  std::uint16_t message = DS.scoopRetrievalInactiveText.offset;
+  Message message = Message::ScoopRetrievalInactive;
   if (type == TYPE_CARGO_BARREL)
   {
     if ((flags & FLAG_MASKING_DEVICE) != 0)
     {
       scoop.removedBlip = RemoveObject(_state, _slot);
       _state.Data().commanderBlock.maskingDeviceRecovered = 1;
-      message = DS.maskingDeviceText.offset;
+      message = Message::MaskingDevice;
     }
     else if (full)
     {
-      message = DS.cargoBayFullText.offset;
+      message = Message::CargoBayFull;
     }
     else
     {
@@ -636,7 +637,7 @@ Scoop TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
       {
         _state.SetByte(Offset(DS.scoopedCargoText.offset, letter), _state.Byte(Offset(name, letter)));
       }
-      message = DS.scoopedCargoText.offset;
+      message = Message::ScoopedCargo;
     }
   }
   else if (type == TYPE_SPLINTER && (flags & FLAG_PRECIOUS) != 0)
@@ -653,13 +654,13 @@ Scoop TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
       _state.Data().commanderBlock.cargoHold.cargoUsedTonnes =
         static_cast<std::uint8_t>(_state.Data().commanderBlock.cargoHold.cargoUsedTonnes + 1);
     }
-    message = DS.preciousMetalsText.offset;
+    message = Message::PreciousMetals;
   }
   else if (type == TYPE_SPLINTER || type == TYPE_ESCAPE_POD || type == TYPE_THARGON)
   {
     if (full)
     {
-      message = DS.cargoBayFullText.offset;
+      message = Message::CargoBayFull;
     }
     else
     {
@@ -671,12 +672,10 @@ Scoop TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
       held = static_cast<std::uint8_t>(held + 1);
       _state.Data().commanderBlock.cargoHold.cargoUsedTonnes =
         static_cast<std::uint8_t>(_state.Data().commanderBlock.cargoHold.cargoUsedTonnes + 1);
-      message = type == TYPE_SPLINTER     ? DS.metalAlloysText.offset
-                : type == TYPE_ESCAPE_POD ? DS.escapePodRetrievedText.offset
-                                          : DS.alienItemsText.offset;
+      message = type == TYPE_SPLINTER ? Message::MetalAlloys : type == TYPE_ESCAPE_POD ? Message::EscapePodRetrieved : Message::AlienItems;
     }
   }
-  _state.Set(DS.messagePointer, message);
+  _state.Data().messagePointer = message;
   _state.Data().messageFrames = SCOOP_MESSAGE_FRAMES;
   return scoop;
 }
@@ -756,7 +755,7 @@ bool SelectLaserType(GameState& _state)
 
 ScreenKey RunEquipShipMenu(GameState& _state, Hardware& _hardware, std::uint16_t _firstRow)
 {
-  _state.Set(DS.menuFirstRowAttr, _firstRow);
+  _state.Data().menuFirstRowAttr = _firstRow;
   // StartMenu's last ToggleMenuRowHighlight leaves AL the attribute it toggled the row to, which it left in textAttribute.
   MenuLoop loop{StartMenu(_state).row, 0};
   loop.al = _state.Data().textAttribute;
@@ -909,12 +908,17 @@ PrintedText ShowEquipmentSellPrice(GameState& _state)
   return PrintEquipmentSellColumn(_state, DS.priceText.offset);
 }
 
+std::uint16_t MenuFirstRowCell(const GameState& _state) noexcept
+{
+  return static_cast<std::uint16_t>(_state.Data().menuFirstRowAttr * ROW_BYTES + MENU_ROW_ATTRIBUTE);
+}
+
 MenuCursor StartMenu(GameState& _state)
 {
   SwapTextAttributeNibbles(_state);
   const PrintedText credits = PrintCreditsOnMessageLine(_state);
   SwapTextAttributeNibbles(_state);
-  const std::uint16_t row = _state.Get(DS.menuFirstRowAttr);
+  const std::uint16_t row = MenuFirstRowCell(_state);
   _state.Data().menuSelectedRow = 1;
   ToggleMenuRowHighlight(_state, GameState::VIDEO_SEGMENT, row);
   return MenuCursor{row, credits};
@@ -930,7 +934,7 @@ MenuCursor MoveMenuCursorUp(GameState& _state, std::uint16_t _row)
   if (selected == 0)
   {
     // To the last row: count*80 bytes on, as count*256/4 and that /4 again.
-    row = _state.Get(DS.menuFirstRowAttr);
+    row = MenuFirstRowCell(_state);
     const std::uint8_t count = _state.Data().menuRowCount;
     _state.Data().menuSelectedRow = count;
     const std::uint16_t quarter = MenuRowsQuarter(count);
@@ -950,7 +954,7 @@ MenuCursor MoveMenuCursorDown(GameState& _state, std::uint16_t _row)
   _state.Data().menuSelectedRow = selected;
   if (_state.Data().menuRowCount < selected)
   {
-    row = static_cast<std::uint16_t>(_state.Get(DS.menuFirstRowAttr) - ROW_BYTES);
+    row = static_cast<std::uint16_t>(MenuFirstRowCell(_state) - ROW_BYTES);
     _state.Data().menuSelectedRow = 1;
   }
   row = static_cast<std::uint16_t>(row + ROW_BYTES);

@@ -133,6 +133,7 @@ Platform::Platform(GameState& _state, FileStore& _files, const Desc& _desc)
   {
     m_vectors[VECTOR_MOUSE] = FarAddress{ROM_SEGMENT, MOUSE_DRIVER_OFFSET};
   }
+  m_powerOnVectors = m_vectors;
   // The BIOS's two hardware handlers are native, and run whenever the program has put the BIOS's vectors back and an
   // interrupt falls due (ADR-011 item 3).
   Hook(FarAddress{ROM_SEGMENT, TIMER_HANDLER_OFFSET}, "BiosTimerHandler", [this] { RunBiosTimerHandler(); });

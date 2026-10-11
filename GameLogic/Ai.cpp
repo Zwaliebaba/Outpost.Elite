@@ -131,6 +131,16 @@ Turn TurnToVector(GameState& _state, SpaceObject& _slot, Vector _vector)
   return TurnTowardAngles(_slot, ConvertVectorToAngles(_state, _vector));
 }
 
+// A government's row of spawnOddsByGovernment and of spawnLimitsByGovernment: four words and four bytes.
+constexpr std::uint16_t SPAWN_ODDS_ROW_BYTES = 8;
+constexpr std::uint16_t SPAWN_LIMIT_ROW_BYTES = 4;
+
+// The offset in spawnLimitsByGovernment of the row of the government spawnLimitOffset holds.
+[[nodiscard]] std::uint16_t SpawnLimitRow(const GameState& _state) noexcept
+{
+  return static_cast<std::uint16_t>(_state.Data().spawnLimitOffset * SPAWN_LIMIT_ROW_BYTES);
+}
+
 // What SpawnOddsMet draws: a random word, and the odds it is held against.
 struct SpawnOdds
 {
@@ -139,11 +149,13 @@ struct SpawnOdds
   std::uint16_t odds;
 };
 
-// NextRandom against the government's entry, at spawnOddsOffset, of the column of spawnOddsByGovernment at _column, scaled.
+// NextRandom against the entry of the government spawnOddsOffset holds, in the column of spawnOddsByGovernment at _column,
+// scaled.
 [[nodiscard]] SpawnOdds SpawnOddsMet(GameState& _state, std::uint16_t _column)
 {
   const std::uint16_t random = NextRandom(_state);
-  const std::uint16_t odds = ScaleSpawnOdds(_state, _state.Word(At(_column, _state.Get(DS.spawnOddsOffset))));
+  const auto row = static_cast<std::uint16_t>(_state.Data().spawnOddsOffset * SPAWN_ODDS_ROW_BYTES);
+  const std::uint16_t odds = ScaleSpawnOdds(_state, _state.Word(At(_column, row)));
   return SpawnOdds{random < odds, random, odds};
 }
 
@@ -154,11 +166,11 @@ struct SpawnLimit
   std::uint8_t limit; // what the original loads into AL
 };
 
-// The government's entry, at spawnLimitOffset, of the column of spawnLimitsByGovernment at _column, against the class count
-// _count: below while there is room.
+// The entry of the government spawnLimitOffset holds, in the column of spawnLimitsByGovernment at _column, against the class
+// count _count: below while there is room.
 [[nodiscard]] SpawnLimit BelowSpawnLimit(const GameState& _state, std::uint16_t _column, const Counted<std::uint8_t>& _count)
 {
-  const std::uint8_t limit = _state.Byte(At(_column, _state.Get(DS.spawnLimitOffset)));
+  const std::uint8_t limit = _state.Byte(At(_column, SpawnLimitRow(_state)));
   return SpawnLimit{_count < limit, limit};
 }
 
@@ -168,18 +180,19 @@ struct SpawnLimit
   return FindFreeShipSlot(_state);
 }
 
-// SpawnByGovernment (4A86): spawnOddsOffset and spawnLimitOffset from the government, then a drifter, a trader, a hunter and a
+// SpawnByGovernment (4A86): spawnOddsOffset and spawnLimitOffset the government, where the original holds the offsets of its
+// rows, then a drifter, a trader, a hunter and a
 // wolf, each while its class is below the government's limit and a random word is below its odds, in a free slot; outside
 // anarchies a wolf needs a random word below 1C2h too. In witch space only a wolf, at no odds. A spawner that finds no free
 // slot ends it.
 void SpawnByGovernment(GameState& _state)
 {
-  _state.Set(DS.spawnOddsOffset, static_cast<std::uint16_t>(_state.Data().commanderBlock.currentGovernment << 3));
-  _state.Set(DS.spawnLimitOffset, static_cast<std::uint16_t>(_state.Data().spawnGovernment << 2));
+  _state.Data().spawnOddsOffset = std::uint16_t{_state.Data().commanderBlock.currentGovernment};
+  _state.Data().spawnLimitOffset = std::uint16_t{_state.Data().spawnGovernment};
   if (_state.Data().commanderBlock.witchspaceCountdown == 0)
   {
     // MOV AL,[BX+spawnLimitsByGovernment], INC AL with a mining laser fitted.
-    auto drifters = _state.Byte(At(DS.spawnLimitsByGovernment.offset, _state.Get(DS.spawnLimitOffset)));
+    auto drifters = _state.Byte(At(DS.spawnLimitsByGovernment.offset, SpawnLimitRow(_state)));
     if (_state.Data().commanderBlock.miningLaserCount == 1)
     {
       drifters = static_cast<std::uint8_t>(drifters + 1);
@@ -275,7 +288,7 @@ void SpawnMaskMissionShips(GameState& _state)
     {
       return;
     }
-    _state.Set(DS.maskShipSlot, free.slot);
+    _state.Data().maskShipSlot = GameState::SlotAt(free.slot);
     SpaceObject& maskShip = _state.ObjectAt(free.slot);
     SpawnMaskMissionShip(_state, maskShip, true);
     MarkMaskShip(maskShip);
@@ -286,7 +299,7 @@ void SpawnMaskMissionShips(GameState& _state)
       {
         return;
       }
-      PlaceEscortNear(_state, _state.ObjectAt(*slot), _state.Get(DS.maskShipSlot));
+      PlaceEscortNear(_state, _state.ObjectAt(*slot), GameState::SlotOffset(_state.Data().maskShipSlot));
     }
     return;
   }
@@ -380,14 +393,14 @@ std::optional<DashboardPixel> CheckMissilesAtStation(GameState& _state, const Sp
     {
       const SpaceObject& missile = _state.ObjectAt(slot);
       const std::uint8_t type = missile.type;
-      const std::uint16_t target = missile.target;
-      if ((type & SpaceObject::ACTIVE) != 0 && ((type >> 1) & TYPE_MASK) == TYPE_MISSILE && target != 0)
+      const SlotIndex target = missile.target;
+      if ((type & SpaceObject::ACTIVE) != 0 && ((type >> 1) & TYPE_MASK) == TYPE_MISSILE && target != SlotIndex::Player)
       {
-        if (target == _state.OffsetOf(_station))
+        if (target == _state.IndexOf(_station))
         {
           crime = STATION_MISSILE_CRIME;
         }
-        else if (IsPoliceViper(_state.ObjectAt(target)) && InSafeZone(_state).inside)
+        else if (IsPoliceViper(_state.Slot(target)) && InSafeZone(_state).inside)
         {
           crime = POLICE_MISSILE_CRIME;
         }
@@ -435,10 +448,10 @@ MovedObject WolfTurnAway(GameState& _state, SpaceObject& _slot, std::uint8_t _ra
   if (!rest && IsThargonType(_slot))
   {
     // A Thargon goes back to its run only while its mother is a Thargoid with a blip.
-    const std::uint16_t mother = _slot.owner;
-    if (mother != 0)
+    const SlotIndex mother = _slot.owner;
+    if (mother != SlotIndex::None)
     {
-      const SpaceObject& owner = _state.ObjectAt(mother);
+      const SpaceObject& owner = _state.Slot(mother);
       rest = ((owner.type >> 1) & TYPE_MASK) != TYPE_THARGOID || (owner.flags & FLAG_BLIP_DRAWN) == 0;
     }
   }
@@ -536,7 +549,7 @@ MovedObject HunterIdle(GameState& _state, SpaceObject& _slot)
     else if (hunters.count == 1 && hunters.last)
     {
       // MOV [DI+29h],BP: the mate CountOtherHuntersOnScanner found last, which a count of 1 always has.
-      _slot.target = *hunters.last;
+      _slot.target = GameState::SlotAt(*hunters.last);
       _slot.aiState = STATE_FORMATION;
     }
   }
@@ -952,7 +965,7 @@ MovedObject UpdateHunterAi(GameState& _state, SpaceObject& _slot, std::uint8_t _
   case STATE_FORMATION:
   {
     // In formation with its pack mate, until within 7D0h of it on every axis (GetVectorToObject).
-    const VectorToObject toMate = GetVectorToObject(_slot, _state.ObjectAt(_slot.target), FORMATION_BOX);
+    const VectorToObject toMate = GetVectorToObject(_slot, _state.Slot(_slot.target), FORMATION_BOX);
     if (toMate.within)
     {
       _slot.aiState = STATE_CLOSING;

@@ -103,6 +103,7 @@
     <ClInclude Include="Keyboard.h" />
     <ClInclude Include="Market.h" />
     <ClInclude Include="Maths.h" />
+    <ClInclude Include="Message.h" />
     <ClInclude Include="Mouse.h" />
     <ClInclude Include="NativeEntry.h" />
     <ClInclude Include="NativeRoutines.h" />

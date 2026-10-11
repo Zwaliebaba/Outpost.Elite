@@ -231,7 +231,7 @@ void PayBounty(GameState& _state, const SpaceObject& _slot, std::uint16_t _tenth
   {
     return;
   }
-  _state.Set(DS.messagePointer, DS.navCompRepairedMessage.offset);
+  _state.Data().messagePointer = Message::NavCompRepaired;
   _state.Data().messageFrames = REPAIR_MESSAGE_FRAMES;
 }
 
@@ -398,7 +398,7 @@ Explosion DropCargo(GameState& _state, const SpaceObject& _object, bool _backwar
 bool DestroyTarget(GameState& _state, Hardware& _hardware, SpaceObject& _target, bool _backward, std::uint16_t _bx)
 {
   const KillCredit credit = CreditKill(_state, _target);
-  (void)CheckMissileTargetDestroyed(_state, _state.OffsetOf(_target));
+  (void)CheckMissileTargetDestroyed(_state, _target);
   (void)ExplodeObject(_state, _hardware, _target, _backward, credit.paidTenths ? std::uint16_t{0} : _bx);
   const bool filled = DrawLaserBeams(_state);
   _state.Data().miningLaserOnAsteroid = 0;
@@ -657,7 +657,7 @@ void TryFireLaserAtPlayer(GameState& _state, SpaceObject& _slot, std::uint16_t _
   {
     return;
   }
-  _state.Set(DS.playerHitBy, _state.OffsetOf(_slot));
+  _state.Data().playerHitBy = _state.IndexOf(_slot);
   _state.Data().playerHitPending = HIT_GRAZED;
   const std::uint8_t depth = _slot.cameraZHigh;
   _state.Data().playerHitByDepth = depth;
@@ -762,13 +762,13 @@ bool ResolveLaserFire(GameState& _state, Hardware& _hardware, bool _backward)
   return filled;
 }
 
-bool CheckMissileTargetDestroyed(GameState& _state, std::uint16_t _slot)
+bool CheckMissileTargetDestroyed(GameState& _state, const SpaceObject& _slot)
 {
-  if (_state.Data().missileState != MISSILE_LOCKED || _slot != _state.Get(DS.missileTarget))
+  if (_state.Data().missileState != MISSILE_LOCKED || _state.IndexOf(_slot) != _state.Data().missileTarget)
   {
     return false;
   }
-  _state.Set(DS.messagePointer, DS.missileTargetDestroyedMessage.offset);
+  _state.Data().messagePointer = Message::MissileTargetDestroyed;
   _state.Data().messageFrames = MISSILE_MESSAGE_FRAMES;
   _state.Data().missileState = 0;
   return true;
@@ -822,7 +822,7 @@ bool ApplyEnemyLaserHit(GameState& _state, Hardware& _hardware)
   StartPlayerHitSound(_state);
   _hardware.EnableInterrupts();
   bool filled = false;
-  const SpaceObject& attacker = _state.ObjectAt(_state.Get(DS.playerHitBy));
+  const SpaceObject& attacker = _state.Slot(_state.Data().playerHitBy);
   if ((attacker.type & SLOT_DRAWN) != 0)
   {
     // A beam from the attacker on screen, ProjectToScreen's x moved to DX and its row left in BX, to a random point on an edge of
@@ -1076,9 +1076,9 @@ void LaunchPlayerMissile(GameState& _state, std::uint16_t _source, bool _backwar
   SetCoordinate(missile, 1, static_cast<std::uint16_t>(position.y));
   SetCoordinate(missile, 2, static_cast<std::uint16_t>(position.z));
   // Locked on missileTarget, and aimed at where it is.
-  const std::uint16_t target = _state.Get(DS.missileTarget);
+  const SlotIndex target = _state.Data().missileTarget;
   missile.target = target;
-  const Angles heading = ConvertVectorToAngles(_state, GetObjectPosition(_state.ObjectAt(target)));
+  const Angles heading = ConvertVectorToAngles(_state, GetObjectPosition(_state.Slot(target)));
   missile.pitch = heading.first;
   missile.yaw = heading.second;
   (void)ComputeVelocity(_state, missile);
@@ -1108,7 +1108,7 @@ std::optional<std::uint16_t> LaunchShipFromObject(GameState& _state, const Space
     (void)MoveObject(_state, ship);
     (void)MoveObject(_state, ship);
     (void)MoveObject(_state, ship);
-    ship.target = 0; // at the player
+    ship.target = SlotIndex::Player;
   }
   else
   {
@@ -1116,7 +1116,7 @@ std::optional<std::uint16_t> LaunchShipFromObject(GameState& _state, const Space
     (void)ComputeVelocity(_state, ship);
     (void)MoveObject(_state, ship);
     (void)MoveObject(_state, ship);
-    ship.owner = _state.OffsetOf(_launcher);
+    ship.owner = _state.IndexOf(_launcher);
   }
   return free.slot;
 }
@@ -1126,9 +1126,9 @@ MissileFlight UpdateMissileAi(GameState& _state, Hardware& _hardware, SpaceObjec
 {
   _state.Data().incomingMissileAlert = 0;
   _missile.roll = Offset(_missile.roll, MISSILE_SPIN);
-  const std::uint16_t target = _missile.target;
+  const SlotIndex target = _missile.target;
   Vector toTarget{};
-  if (target == 0)
+  if (target == SlotIndex::Player)
   {
     // At the player.
     toTarget = GetVectorToPlayer(_missile);
@@ -1136,7 +1136,7 @@ MissileFlight UpdateMissileAi(GameState& _state, Hardware& _hardware, SpaceObjec
   }
   else
   {
-    const SpaceObject& aimed = _state.ObjectAt(target);
+    const SpaceObject& aimed = _state.Slot(target);
     if ((aimed.type & SLOT_ACTIVE) == 0)
     {
       // JMP ExplodeObject: its target is gone.
@@ -1153,11 +1153,12 @@ MissileFlight UpdateMissileAi(GameState& _state, Hardware& _hardware, SpaceObjec
     (void)ComputeVelocity(_state, _missile);
     return MissileFlight{_state.OffsetOf(_missile), MoveObject(_state, _missile).dx};
   }
-  // It explodes, with BX the vector's y; then MOV SI,[DI+29h] from where that leaves DI.
+  // It explodes, with BX the vector's y; then MOV SI,[DI+29h] from where that leaves DI: the target of the record there, which
+  // the original holds as the slot's offset (DI for a struck ship or station).
   const Explosion exploded = ExplodeObject(_state, _hardware, _missile, _backward, static_cast<std::uint16_t>(toTarget.y));
   const std::uint16_t dx = exploded.dx.value_or(MISSILE_HIT_BOX);
-  const std::uint16_t hit = _state.Word(At(exploded.slot, SLOT_TARGET));
-  if (hit == 0)
+  const SlotIndex struckSlot = _state.ObjectAt(exploded.slot).target;
+  if (struckSlot == SlotIndex::Player)
   {
     // The player, with TakeDamage's STI when it kills.
     if (TakeDamage(_state, MISSILE_DAMAGE))
@@ -1166,7 +1167,8 @@ MissileFlight UpdateMissileAi(GameState& _state, Hardware& _hardware, SpaceObjec
     }
     return MissileFlight{exploded.slot, dx};
   }
-  SpaceObject& struck = _state.ObjectAt(hit);
+  SpaceObject& struck = _state.Slot(struckSlot);
+  const std::uint16_t hit = GameState::SlotOffset(struckSlot);
   if (!IsStation(struck).station)
   {
     // MOV DI,SI: a ship, credited, and exploded unless indestructible, with BX 0 once CreditKill paid.

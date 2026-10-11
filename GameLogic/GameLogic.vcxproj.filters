@@ -168,6 +168,9 @@
     <ClInclude Include="Maths.h">
       <Filter>Maths</Filter>
     </ClInclude>
+    <ClInclude Include="Message.h">
+      <Filter>Text</Filter>
+    </ClInclude>
     <ClInclude Include="Mouse.h">
       <Filter>Platform</Filter>
     </ClInclude>

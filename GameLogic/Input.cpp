@@ -63,6 +63,7 @@ constexpr std::uint8_t ESC_CODE = 0x01;
 constexpr std::uint8_t W_CODE = 0x11;
 constexpr std::uint8_t D_CODE = 0x20;
 constexpr std::uint8_t KEY_BUFFER_CODES = 0x10;
+constexpr std::uint16_t KEY_BUFFER_WRAP = 0x0F; // keyBuffer is a ring of 16: an index past its last is its first
 constexpr std::size_t KEY_DOWN_WORDS = 0x40;
 
 constexpr std::uint8_t KEYBOARD_DEVICE = 0;
@@ -315,10 +316,9 @@ KeyPress GetKey(GameState& _state, Hardware& _hardware)
   const std::uint8_t count = _state.Data().keyBufferCount;
   if (count != 0)
   {
-    const std::uint16_t read = _state.Get(DS.keyBufferRead);
-    const std::uint8_t code = _state.Byte(read);
-    const auto next = static_cast<std::uint16_t>(read + 1);
-    _state.Set(DS.keyBufferRead, (next & 0x0F) == 0 ? DS.keyBuffer.offset : next);
+    const std::uint16_t read = _state.Data().keyBufferRead;
+    const std::uint8_t code = _state.Data().keyBuffer[read];
+    _state.Data().keyBufferRead = static_cast<std::uint16_t>((read + 1) & KEY_BUFFER_WRAP);
     _state.Data().keyBufferCount = static_cast<std::uint8_t>(count - 1);
     key = KeyPress{true, static_cast<std::uint8_t>(code & ~SHIFT_BIT), (code & SHIFT_BIT) != 0, false};
   }
@@ -335,8 +335,8 @@ void ResetKeyboard(GameState& _state, Hardware& _hardware)
     _state.SetWord(DS.keyDown.At(word * 2), 0);
   }
   _state.Data().keyBufferCount = 0;
-  _state.Set(DS.keyBufferWrite, DS.keyBuffer.offset);
-  _state.Set(DS.keyBufferRead, DS.keyBuffer.offset);
+  _state.Data().keyBufferWrite = 0;
+  _state.Data().keyBufferRead = 0;
   _state.Data().rollRate = 0;
   _hardware.EnableInterrupts();
 }
@@ -376,10 +376,9 @@ void ReadScanCode(GameState& _state, Hardware& _hardware)
       const std::uint8_t count = _state.Data().keyBufferCount;
       if (count != KEY_BUFFER_CODES)
       {
-        const std::uint16_t write = _state.Get(DS.keyBufferWrite);
-        _state.SetByte(write, code);
-        const auto next = static_cast<std::uint16_t>(write + 1);
-        _state.Set(DS.keyBufferWrite, (next & 0x0F) == 0 ? DS.keyBuffer.offset : next);
+        const std::uint16_t write = _state.Data().keyBufferWrite;
+        _state.Data().keyBuffer[write] = code;
+        _state.Data().keyBufferWrite = static_cast<std::uint16_t>((write + 1) & KEY_BUFFER_WRAP);
         _state.Data().keyBufferCount = static_cast<std::uint8_t>(count + 1);
       }
     }

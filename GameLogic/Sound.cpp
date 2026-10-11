@@ -55,7 +55,7 @@ void StartMusic(GameState& _state, Hardware& _hardware)
   _hardware.SetSystemControl(static_cast<std::uint8_t>(_state.Data().speakerPortImage | SPEAKER_GATE_AND_DATA));
   _state.Data().noteTicksLeft = 0;
   _state.Data().noteGapTicks = 0;
-  _state.Set(DS.musicPointer, DS.titleTune.offset);
+  _state.Data().musicPointer = 0;
   _state.Data().musicPlaying = 1;
 }
 

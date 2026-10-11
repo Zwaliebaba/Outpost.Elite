@@ -25,8 +25,23 @@ inline constexpr std::size_t COUNTED_BLOCK_ALIGNMENT = 0x20000;
   return *reinterpret_cast<std::uint64_t*>(_byte - intoBlock);
 }
 
+/// Whether T is what a Counted holds: a byte, a word, or an enumeration whose values are one, as the game's stored indexes and
+/// messages are where the original stored an address (D33, piece 3).
+template <typename T> [[nodiscard]] consteval bool IsCountedValue() noexcept
+{
+  if constexpr (std::is_enum_v<T>)
+  {
+    return std::is_same_v<std::underlying_type_t<T>, std::uint8_t> || std::is_same_v<std::underlying_type_t<T>, std::uint16_t>;
+  }
+  else
+  {
+    return std::is_same_v<T, std::uint8_t> || std::is_same_v<T, std::uint16_t>;
+  }
+}
+
 /// A byte or a word of the game's memory, as a member of GameData (D19): its bytes at the reference's layout, little-endian as
-/// the 8088 keeps them, with an alignment of 1 so that it sits anywhere in the packed struct and can be passed by reference.
+/// the 8088 keeps them, with an alignment of 1 so that it sits anywhere in the packed struct and can be passed by reference. A
+/// field that holds an index or a message in place of the original's address holds it as an enumeration of a byte or a word.
 ///
 /// It reads as a value (`_state.Data().commanderBlock.fuel`) and is written by assignment, and a write counts in its own
 /// GameState's change count (ChangeCountAt) exactly when it changes the stored value. A write of the value already there counts
@@ -42,7 +57,7 @@ inline constexpr std::size_t COUNTED_BLOCK_ALIGNMENT = 0x20000;
 /// by-value parameter and a return by value do not compile. Read a value as `T x = member`.
 template <typename T> class Counted
 {
-  static_assert(std::is_same_v<T, std::uint8_t> || std::is_same_v<T, std::uint16_t>, "a byte or a word of the 8088's memory");
+  static_assert(IsCountedValue<T>(), "a byte or a word of the 8088's memory");
   static_assert(std::endian::native == std::endian::little, "the reference's words are little-endian, and are copied as they are");
 
 public:

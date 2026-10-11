@@ -41,6 +41,11 @@ void GameState::RefuseAddress()
   throw std::out_of_range("GameState: an address outside the game's code segment, data segment and video memory");
 }
 
+void GameState::RefuseSlot()
+{
+  throw std::out_of_range("a slot number past shipSlots' last");
+}
+
 void GameState::RefuseObject()
 {
   throw std::out_of_range("GameState: an object record past the data segment's end");

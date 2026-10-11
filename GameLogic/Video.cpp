@@ -1412,7 +1412,7 @@ ScreenChange MakeGraphicsScreen(GameState& _state, Hardware& _hardware, std::uin
 
 void SaveScreenshot(GameState& _state, Hardware& _hardware)
 {
-  RestoreDivideAndKeyboardInterrupts(_state, _hardware);
+  RestoreDivideAndKeyboardInterrupts(_hardware);
   (void)RestoreTimerInterrupt(_state, _hardware);
   _state.Data().diskError = 0;
   // The game's own critical-error handler on int 24h round the write, and the handler that was there put back after it.

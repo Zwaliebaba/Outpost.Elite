@@ -31,8 +31,7 @@ inline constexpr std::uint16_t STACK_FIRST_OFFSET = 0xAD60;
 inline constexpr std::uint16_t STACK_END_OFFSET = 0xB160;
 
 // Where DOSBox-X puts the PSP (measured from its trace), which the host copied so the two boot traces
-// compared register for register (ADR-003). Replays use it too: one load address for everything, and the
-// game keeps the segment in its data (pspSegment), so it is part of the digest.
+// compared register for register (ADR-003). Replays use it too: one load address for everything.
 inline constexpr std::uint16_t PSP_SEGMENT = 0x0813;
 
 // A PSP's size in paragraphs: DOS loads the image at the paragraph after it.
@@ -45,8 +44,9 @@ inline constexpr DosDateTime START_MOMENT = {1980, 1, 1, 0, 0, 0, 0};
 inline constexpr std::uint16_t GET_KEY_OFFSET = 0x7616;
 
 /// The reference's load image as DOS's EXEC leaves it with the image at _loadSegment, from its generated image
-/// (ReferenceImage.h): the relocations applied for that segment, and the D5 byte written. Nothing if the D5 byte
-/// did not hold 00, as the file's does.
+/// (ReferenceImage.h): the relocations applied for that segment, the D5 byte written, and the words the image holds as
+/// addresses where the game's state holds a message or an index loaded as what they mean (D33, piece 3). Nothing if the D5
+/// byte did not hold 00, as the file's does, or one of those words did not hold its address.
 [[nodiscard]] std::optional<std::vector<std::uint8_t>> ReferenceLoadImage(std::uint16_t _loadSegment);
 
 /// The first of _name found walking up from the working directory, and then from the repository this

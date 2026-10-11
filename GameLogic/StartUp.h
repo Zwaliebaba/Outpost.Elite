@@ -19,7 +19,7 @@ namespace Elite
 
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState and the devices (ADR-014) ──
 
-/// Start (CS:0000), the program's entry from DOS, _psp its program segment prefix: pspSegment, the DOS version (DOS 1 is told it
+/// Start (CS:0000), the program's entry from DOS, _psp its program segment prefix: the DOS version (DOS 1 is told it
 /// is not enough), the start-up commander kept (SaveStartupCommander, by _backward, the direction flag DOS left), the Amstrad's ROM
 /// looked for; then from RestartPlay the DOS clock read twice, the timer, the protection, int 0 and int 9, the cheat argument and
 /// GameLoop, which comes back only for a disk request (HandleDiskRequest): the interrupts put back, and the request made with the
@@ -42,13 +42,15 @@ struct GameLoopExit
 /// leaves for it the next time round. Waits as a rule (ADR-015).
 GameLoopExit GameLoop(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward);
 
-/// InstallDivideAndKeyboardInterrupts (CS:0105): the BIOS's int 0 and int 9 saved in the data segment and, with interrupts
-/// off, the game's handlers installed in their place, int 8's segment rewritten; then interrupts on, and ResetKeyboard.
+/// InstallDivideAndKeyboardInterrupts (CS:0105): with interrupts off, the game's int 0 and int 9 handlers installed in the
+/// BIOS's place, int 8's segment rewritten; then interrupts on, and ResetKeyboard. The original first keeps the BIOS's two
+/// in the data segment, which native code does not need (RestoreDivideAndKeyboardInterrupts).
 void InstallDivideAndKeyboardInterrupts(GameState& _state, Hardware& _hardware);
 
-/// RestoreDivideAndKeyboardInterrupts (CS:0148): with interrupts off, the BIOS's int 9 and int 0 handlers put back from what
-/// InstallDivideAndKeyboardInterrupts saved; then interrupts on.
-void RestoreDivideAndKeyboardInterrupts(GameState& _state, Hardware& _hardware);
+/// RestoreDivideAndKeyboardInterrupts (CS:0148): with interrupts off, the BIOS's int 9 and int 0 handlers put back
+/// (Hardware::BiosInterruptVector), where the original puts back what InstallDivideAndKeyboardInterrupts kept; then interrupts
+/// on.
+void RestoreDivideAndKeyboardInterrupts(Hardware& _hardware);
 
 /// CopyProtection (CS:04A3): nothing while protectionShown is set, as the D5 byte makes it; otherwise, once, a question from
 /// the manual: the BIOS's 40-column text, the title, a question picked by how long NextRandom runs before a vertical retrace,

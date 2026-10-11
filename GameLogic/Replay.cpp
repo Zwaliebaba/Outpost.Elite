@@ -387,6 +387,46 @@ bool RecordCheckpoints(std::string_view _text, const std::map<std::size_t, Check
   return true;
 }
 
+bool RecordDigests(std::string_view _text, const std::map<std::size_t, std::string>& _digests, std::string& _recorded, std::string& _error)
+{
+  std::string recorded;
+  std::size_t written = 0;
+  std::size_t line = 0;
+  while (!_text.empty())
+  {
+    ++line;
+    const std::size_t newline = _text.find('\n');
+    const std::string_view whole = _text.substr(0, newline == std::string_view::npos ? _text.size() : newline + 1);
+    _text.remove_prefix(whole.size());
+    const auto digest = _digests.find(line);
+    if (digest == _digests.end())
+    {
+      recorded += whole;
+      continue;
+    }
+    const std::string_view content = Trim(whole.substr(0, std::min(whole.find('#'), whole.size())));
+    const std::vector<std::string_view> words = Words(content);
+    if (words.size() != 3 || words.front() != "digest" || content.find(';') != std::string_view::npos)
+    {
+      _error = std::format("line {}: the digest to record there is not a digest step alone on its line with its digest", line);
+      return false;
+    }
+    // The digest's place in the line, which the new one takes.
+    const auto at = static_cast<std::size_t>(words[2].data() - whole.data());
+    recorded += whole.substr(0, at);
+    recorded += digest->second;
+    recorded += whole.substr(at + words[2].size());
+    ++written;
+  }
+  if (written != _digests.size())
+  {
+    _error = std::format("a digest step to record is past the replay's {} lines", line);
+    return false;
+  }
+  _recorded = std::move(recorded);
+  return true;
+}
+
 Checkpoint TakeCheckpoint(const GameState& _state, const Cga& _video)
 {
   return Checkpoint{GameStateDigest(_state, _video), PictureDigest(_state, _video), OutcomeText(_state)};

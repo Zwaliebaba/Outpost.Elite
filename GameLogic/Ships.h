@@ -38,7 +38,6 @@ inline constexpr std::uint16_t SLOT_FLAGS = 0x1E;     ///< bit 0 hostile, 1 blip
 inline constexpr std::uint16_t SLOT_THARGONS = 0x1F;  ///< Thargons a Thargoid has left to launch
 inline constexpr std::uint16_t SLOT_SPIN_ROLL = 0x26; ///< a fragment's spin, added to the roll and the pitch each frame
 inline constexpr std::uint16_t SLOT_SPIN_PITCH = 0x27;
-inline constexpr std::uint16_t SLOT_TARGET = 0x29; ///< word: a missile's target, a hunter's pack mate
 inline constexpr std::uint16_t SLOT_ENERGY = 0x2B;
 inline constexpr std::uint16_t SLOT_CARGO = 0x2C;
 inline constexpr std::uint16_t SLOT_FRAGMENTS = 0x2D;
@@ -52,7 +51,6 @@ inline constexpr std::uint16_t SLOT_SCANNED = 0x34;
 inline constexpr std::uint16_t SLOT_JINK_FRAMES = 0x35; ///< frames to the next evasive jink
 inline constexpr std::uint16_t SLOT_JINK_PITCH = 0x36;  ///< words: the jink added to the wanted heading
 inline constexpr std::uint16_t SLOT_JINK_YAW = 0x38;
-inline constexpr std::uint16_t SLOT_OWNER = 0x3A;       ///< word: a Thargon's mother; 1 for a police Viper
 inline constexpr std::uint16_t SLOT_VIEW_Z_HIGH = 0x3C; ///< the high byte of the camera-frame z: bit 7 set behind
 inline constexpr std::uint16_t SLOT_DETAIL = 0x3F;      ///< the level-of-detail threshold, from the template
 

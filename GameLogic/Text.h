@@ -3,6 +3,7 @@
 
 #include "GameState.h"
 #include "Hardware.h"
+#include "Message.h"
 #include "SpaceObject.h"
 
 #include <cstdint>
@@ -96,6 +97,10 @@ DrawnSmallText DrawSmallViewString(GameState& _state, std::uint16_t _text, std::
 /// FormatCredits (CS:3543): creditsTenths into creditBalanceText, as ten digits with up to eight leading zeros
 /// blanked and a decimal point before the last.
 void FormatCredits(GameState& _state);
+
+/// _message's text, up to its NUL: a constant one's from MESSAGE_TEXTS, and the five the program writes into from the data
+/// segment, as they are now. Message::None has none.
+[[nodiscard]] std::string_view MessageText(const GameState& _state, Message _message) noexcept;
 
 /// UpdateMessageLine (CS:35A3): the message line's work for a frame: UpdateWarnings; then while the message drawn has frames
 /// left, one fewer; else, once they run out, the view's name as the message, and the message shown, the line cleared a row at a

@@ -22,7 +22,7 @@ namespace
 // Int 33h, the mouse driver's vector.
 constexpr std::uint8_t MOUSE_VECTOR = 0x33;
 
-// The last byte of keyBuffer: the write address wraps after it.
+// keyBuffer is a ring of 16 codes: the write index wraps after its last.
 constexpr std::uint16_t KEY_BUFFER_WRAP_MASK = 0x000F;
 
 // Alt and PrtSc held for a moment: GetKey saves a screenshot while both are down. PrtSc also types '*' at a prompt.
@@ -35,11 +35,10 @@ constexpr std::string_view QUICK_SCREENSHOT_KEYS = "down Alt_L; down KP_Multiply
 // the Amstrad joystick's 77h-7Ch.
 void QueueScanCode(Elite::GameState& _state, std::uint8_t _code)
 {
-  const std::uint16_t write = _state.Word(Elite::DS.keyBufferWrite.offset);
-  _state.SetByte(write, _code);
-  const auto next = static_cast<std::uint16_t>(write + 1);
-  _state.SetWord(Elite::DS.keyBufferWrite.offset, (next & KEY_BUFFER_WRAP_MASK) == 0 ? Elite::DS.keyBuffer.offset : next);
-  _state.SetByte(Elite::DS.keyBufferCount.offset, static_cast<std::uint8_t>(_state.Byte(Elite::DS.keyBufferCount.offset) + 1));
+  const std::uint16_t write = _state.Data().keyBufferWrite;
+  _state.Data().keyBuffer[write] = _code;
+  _state.Data().keyBufferWrite = static_cast<std::uint16_t>((write + 1) & KEY_BUFFER_WRAP_MASK);
+  _state.Data().keyBufferCount = static_cast<std::uint8_t>(_state.Data().keyBufferCount + 1);
 }
 
 // A file in DOS's directory: its name, and the SHA-256 of its bytes in lowercase hex, or DIRECTORY for a directory.

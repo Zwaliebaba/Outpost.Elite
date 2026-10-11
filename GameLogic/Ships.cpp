@@ -56,7 +56,6 @@ constexpr std::uint8_t THARGON_COUNT_MASK = 3;
 constexpr std::uint8_t FEWEST_THARGONS = 2;
 
 constexpr std::uint8_t DRIFTER_TURN_RATE = 0x1E;
-constexpr std::uint16_t POLICE_OWNER = 1; // +3Ah of a police Viper
 constexpr std::uint8_t POLICE_AGGRESSION = 0x64;
 
 // The mask mission's ships: the Asp (the mask ship) or, by the sign of a random word, one of two others, all from the Asp's record.
@@ -185,7 +184,7 @@ void ClearObjectSlot(GameState& _state, std::uint16_t _slot)
 void InitPoliceViper(GameState& _state, SpaceObject& _slot)
 {
   InitFromRecord(_state, _slot, VIPER_TEMPLATE, TRADER_CLASS);
-  _slot.owner = POLICE_OWNER;
+  _slot.owner = SlotIndex::Police;
   _slot.aggression = POLICE_AGGRESSION;
 }
 
@@ -229,9 +228,9 @@ void SpawnRandomTrader(GameState& _state, SpaceObject& _slot)
   }
   // A Viper is police one time in two: AND AX,1 written as a word. Then MOV AL,legalStatus over the 0 of AH, written as a word,
   // which zeroes the bounty above the aggression.
-  const auto police = static_cast<std::uint16_t>(NextRandom(_state) & POLICE_OWNER);
-  _slot.owner = police;
-  if (police != 0)
+  const bool police = (NextRandom(_state) & 1) != 0;
+  _slot.owner = police ? SlotIndex::Police : SlotIndex::None;
+  if (police)
   {
     // Written as a word: the aggression, and a bounty of 0 above it.
     _slot.aggression = std::uint8_t{_state.Data().commanderBlock.legalStatus};
@@ -560,7 +559,7 @@ bool IsViperType(const SpaceObject& _slot)
 
 bool IsPoliceViper(const SpaceObject& _slot)
 {
-  return IsViperType(_slot) && _slot.owner == POLICE_OWNER;
+  return IsViperType(_slot) && _slot.owner == SlotIndex::Police;
 }
 
 bool IsThargoidType(const SpaceObject& _slot)

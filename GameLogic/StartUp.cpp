@@ -107,13 +107,8 @@ void ExitToDos(GameState& _state, Hardware& _hardware)
 
 void InstallDivideAndKeyboardInterrupts(GameState& _state, Hardware& _hardware)
 {
-  // The BIOS's int 0 and int 9 kept in the data segment, offset then segment.
-  const FarAddress divide = _hardware.InterruptVector(DIVIDE_VECTOR);
-  const FarAddress keyboard = _hardware.InterruptVector(KEYBOARD_VECTOR);
-  _state.SetWord(DS.savedDivideVector.offset, divide.offset);
-  _state.Set(DS.data226D, divide.segment);
-  _state.SetWord(DS.savedKeyboardVector.offset, keyboard.offset);
-  _state.Set(DS.data2271, keyboard.segment);
+  // The original keeps the BIOS's int 0 and int 9 in savedDivideVector and savedKeyboardVector to put back; native code puts
+  // back the BIOS's own (RestoreDivideAndKeyboardInterrupts).
   // With interrupts off, the game's own handlers installed, and int 8's segment written again.
   _hardware.DisableInterrupts();
   const std::uint16_t code = _state.CodeSegment();
@@ -124,12 +119,12 @@ void InstallDivideAndKeyboardInterrupts(GameState& _state, Hardware& _hardware)
   ResetKeyboard(_state, _hardware);
 }
 
-void RestoreDivideAndKeyboardInterrupts(GameState& _state, Hardware& _hardware)
+void RestoreDivideAndKeyboardInterrupts(Hardware& _hardware)
 {
-  // With interrupts off, the BIOS's int 9 and int 0 put back from what InstallDivideAndKeyboardInterrupts kept.
+  // With interrupts off, the BIOS's int 9 and int 0 put back.
   _hardware.DisableInterrupts();
-  _hardware.SetInterruptVector(KEYBOARD_VECTOR, FarAddress{_state.Get(DS.data2271), _state.Word(DS.savedKeyboardVector.offset)});
-  _hardware.SetInterruptVector(DIVIDE_VECTOR, FarAddress{_state.Get(DS.data226D), _state.Word(DS.savedDivideVector.offset)});
+  _hardware.SetInterruptVector(KEYBOARD_VECTOR, _hardware.BiosInterruptVector(KEYBOARD_VECTOR));
+  _hardware.SetInterruptVector(DIVIDE_VECTOR, _hardware.BiosInterruptVector(DIVIDE_VECTOR));
   _hardware.EnableInterrupts();
 }
 
@@ -249,7 +244,7 @@ void StartNewGame(GameState& _state, bool _backward)
 
 void Start(GameState& _state, Hardware& _hardware, std::uint16_t _psp, std::uint16_t _countIfNone, bool _backward)
 {
-  _state.Set(DS.pspSegment, _psp);
+  // The original keeps _psp in pspSegment to read its command tail from; the platform gives the tail (CheckCheatArgument).
   // MOV AX,DS / MOV AH,30h: AL goes in as the PSP's low byte.
   if (_hardware.ReadDosVersion(Low(_psp)).major == 0)
   {
@@ -296,7 +291,7 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _psp, std::uint
     backward = loopExit.backward;
 
     // HandleDiskRequest (CS:0065): GameLoop comes back only for diskOperation, 0 to leave.
-    RestoreDivideAndKeyboardInterrupts(_state, _hardware);
+    RestoreDivideAndKeyboardInterrupts(_hardware);
     const BiosClock clock = RestoreTimerInterrupt(_state, _hardware);
     const std::uint8_t request = _state.Data().diskOperation;
     if (request == 0)

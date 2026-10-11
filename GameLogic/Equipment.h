@@ -54,8 +54,8 @@ void LaunchEscapePod(GameState& _state);
 ScreenKey ShowEquipShipScreen(GameState& _state, Hardware& _hardware, bool _backward);
 
 /// RunEquipShipMenu (CS:6111), with OpenEquipMessage, ShowEquipMessage, ReportNotEnoughCredits and the buying and selling it
-/// runs into as one unit (ADR-012 item 14): the equipment menu from the row whose first attribute byte is at B800:_firstRow,
-/// the cursor moved by the steering and the arrow keys, and B and S to buy and sell, each with its message. Returns Esc or the
+/// runs into as one unit (ADR-012 item 14): the equipment menu from row _firstRow of the text page (menuFirstRowAttr), the
+/// cursor moved by the steering and the arrow keys, and B and S to buy and sell, each with its message. Returns Esc or the
 /// F-key, other than F4, that ends it. Waits for keys as a rule (ADR-015).
 ScreenKey RunEquipShipMenu(GameState& _state, Hardware& _hardware, std::uint16_t _firstRow);
 
@@ -93,6 +93,10 @@ struct MenuCursor
   std::uint16_t row;   ///< the selected row's first attribute byte on the text page
   PrintedText credits; ///< where PrintCreditsOnMessageLine stopped on the way
 };
+
+/// The offset on the text page of the menu's first row's highlighted attribute, from the row menuFirstRowAttr holds, where
+/// the original holds that offset.
+[[nodiscard]] std::uint16_t MenuFirstRowCell(const GameState& _state) noexcept;
 
 /// The menus' start: the credits on the message line, then row 1 selected and highlighted from menuFirstRowAttr.
 MenuCursor StartMenu(GameState& _state);

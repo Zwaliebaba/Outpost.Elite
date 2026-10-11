@@ -17,8 +17,7 @@ namespace
 
 using Elite::DS;
 
-// An object slot: 64 bytes, the type in bits 1-5 of the first with the active bit; the flags a splinter and a barrel carry.
-constexpr std::uint16_t SLOT_BYTES = 0x40;
+// An object slot's type, in bits 1-5 of its first byte with the active bit; the flags a splinter and a barrel carry.
 constexpr std::uint8_t TYPE_SPLINTER = 0x0B;
 constexpr std::uint8_t FLAG_PRECIOUS = 0x10;
 constexpr std::uint8_t FLAG_MASKING_DEVICE = 0x40;
@@ -53,11 +52,11 @@ void SetCredits(TwinRig& _rig, std::uint32_t _tenths)
   return value;
 }
 
-// The message line's text, as the twin has it.
-[[nodiscard]] std::uint16_t TwinMessage(TwinRig& _rig)
+// The message line's message, as the twin has it.
+[[nodiscard]] Elite::Message TwinMessage(TwinRig& _rig)
 {
-  std::uint16_t message = 0;
-  _rig.Both([&message](Elite::Platform&, Elite::GameState& _state) { message = _state.Word(DS.messagePointer.offset); });
+  Elite::Message message = Elite::Message::None;
+  _rig.Both([&message](Elite::Platform&, Elite::GameState& _state) { message = _state.Data().messagePointer; });
   return message;
 }
 
@@ -166,7 +165,7 @@ void MakeBelowTheNose(TwinRig& _rig, Scoopable _what)
   case Scoopable::Thargon:
     Elite::InitThargon(state, object);
     (void)Elite::ComputeVelocity(state, object);
-    object.owner = static_cast<std::uint16_t>(slot + SLOT_BYTES);
+    object.owner = Elite::SlotAfter(Elite::GameState::SlotAt(slot));
     break;
   case Scoopable::MineralSplinter:
     MakeMineralSplinter(state, object);
@@ -268,18 +267,18 @@ public:
     MakeBelowTheNose(rig, Scoopable::MaskingDeviceBarrel);
     rig.Play("wait 0.2\ndigest masking-device");
     Assert::AreEqual(std::uint8_t{1}, TwinByte(rig, DS.maskingDeviceRecovered), L"the masking device recovered");
-    Assert::AreEqual(DS.maskingDeviceText.offset, TwinMessage(rig), L"Masking Device!");
+    Assert::IsTrue(TwinMessage(rig) == Elite::Message::MaskingDevice, L"Masking Device!");
     MakeBelowTheNose(rig, Scoopable::Thargon);
     rig.Play("wait 0.2\ndigest alien-items");
     Assert::AreEqual(std::uint8_t{1}, TwinByte(rig, DS.cargoAlienItemsTonnes), L"a tonne of alien items");
     MakeBelowTheNose(rig, Scoopable::MineralSplinter);
     rig.Play("wait 0.2\ndigest minerals");
-    Assert::AreEqual(DS.preciousMetalsText.offset, TwinMessage(rig), L"precious metals");
+    Assert::IsTrue(TwinMessage(rig) == Elite::Message::PreciousMetals, L"precious metals");
     Assert::AreEqual(std::uint8_t{1}, TwinByte(rig, DS.cargoMineralsTonnes), L"a tonne of minerals");
     Assert::AreEqual(std::uint8_t{20}, TwinByte(rig, DS.cargoUsedTonnes), L"the hold full");
     MakeBelowTheNose(rig, Scoopable::Barrel);
     rig.Play("wait 0.2\ndigest hold-full");
-    Assert::AreEqual(DS.cargoBayFullText.offset, TwinMessage(rig), L"Cargo Bay Full");
+    Assert::IsTrue(TwinMessage(rig) == Elite::Message::CargoBayFull, L"Cargo Bay Full");
   }
 };
 

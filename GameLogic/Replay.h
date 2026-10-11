@@ -98,6 +98,14 @@ struct Step
 [[nodiscard]] bool RecordCheckpoints(std::string_view _text, const std::map<std::size_t, Checkpoint>& _checkpoints, std::string& _recorded,
                                      std::string& _error);
 
+/// _text, a replay, with the state digest of each digest step in _digests, by the line the step is on, written over the one
+/// that line holds; every other byte is kept. This is how the corpus's digests are re-based when a change moves them
+/// (D33, piece 3), only from runs whose data segment differs from the one before the change in nothing but the fields it
+/// converted (GameLogicTests/StateDumps.h). Returns false, with _error naming the line, if a line in _digests is not a digest
+/// step alone on its line with the digest it expects, or is past the replay's end.
+[[nodiscard]] bool RecordDigests(std::string_view _text, const std::map<std::size_t, std::string>& _digests, std::string& _recorded,
+                                 std::string& _error);
+
 /// How _step must leave the run for its replay to go on (ReplayPlayer::Play): StopReason::Terminated for an end
 /// step, whose program must end within it, and StopReason::Reached for every other step, during which the program
 /// must not stop. So only a replay's end step may end the program, and an end step that does not end it fails.

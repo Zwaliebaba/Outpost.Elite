@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""Generate GameLogic/ReferenceTables.h from GameLogic/ReferenceImage.cpp and Design/Symbols.tsv (D33, piece 3).
+r"""Generate GameLogic/ReferenceTables.h and GameLogic/Message.h from GameLogic/ReferenceImage.cpp and Design/Symbols.tsv (D33).
 
 The reference keeps tables of addresses in its data segment: tables of pointers to texts, lists of pointers to phrases, the
 blueprints by ship type, and the docked frame's corners as cells of video memory. Native code reads them as what they mean,
@@ -14,13 +14,19 @@ ELITES.EXE, and follows each table's pointers there.
   blueprintTable       BLUEPRINT_DATA, the blueprints' bytes as the image holds them, and BLUEPRINTS, each type's
                        blueprint as its shape and the parts of its body, which are views of those bytes
   frameCorners         FRAME_CORNERS, each corner's row and column on the 40-column text page and its character
+  messagePointer       Message (Message.h), the texts the message line shows, which the original stores the addresses of,
+                       and MESSAGE_TEXTS, each one's text
+  warningTexts         WARNING_MESSAGES, the four warnings' messages
+
+A text the program writes into is a buffer, which native code reads from the data segment where it is written: its entry in
+a table is empty, and says what writes it.
 
 A text is written as a string literal: printable ASCII as it is, any other byte as a three-digit octal escape, and the
 literal broken after an escape that a digit follows, so that no compiler reads the digit as part of it. Bytes are written
 eight to a row, each row ending in its address in a comment, which keeps clang-format's layout cheap and stable
 (Tools/GenerateReference.py measured why).
 
-The header is generated, never edited: run this again. With --check it writes nothing and fails if the header in the tree
+The headers are generated, never edited: run this again. With --check it writes nothing and fails if a header in the tree
 is not what it would write. Standard library only.
 
     python Tools/GenerateTables.py [--check]
@@ -37,6 +43,7 @@ ROOT = Path(__file__).resolve().parent.parent
 IMAGE = ROOT / "GameLogic" / "ReferenceImage.cpp"
 SYMBOLS = ROOT / "Design" / "Symbols.tsv"
 HEADER = ROOT / "GameLogic" / "ReferenceTables.h"
+MESSAGE_HEADER = ROOT / "GameLogic" / "Message.h"
 
 INDENT = "  "
 ROW_BYTES = 8
@@ -64,6 +71,28 @@ TEXT_TABLES = [
 # entry, and what writes it.
 BUFFER_ENTRIES = {
   ("equipmentNames", 0): "a buffer: the status screen writes the missiles' count at its '?' (data84F5)",
+}
+# The texts the message line shows, each a row of the symbol table: what native code posts in messagePointer. The four
+# warnings, warningTexts' entries, join them, named for the checks warningChecks lists in the same order.
+MESSAGES = [
+  "alienItemsText", "arrivalGalaxyText", "arrivalSystemText", "autoDockMessage", "bountyText", "cargoBayFullText",
+  "dockingComputerOffMessage", "dockingComputerOnMessage", "dockingDeniedMessage", "ecmActiveMessage", "equipmentLossMessage",
+  "escapePodRetrievedText", "frontViewText", "fuelLeakText", "fuelScoopsActiveText", "galacticDriveReadyMessage",
+  "gameOverMessage", "gamePausedMessage", "hyperspaceCountdownMessage", "hyperspaceEngagedText", "hyperspaceJammedMessage",
+  "idIndicatorMessage", "jumpDriveEngagedMessage", "jumpDriveMassLockedMessage", "jumpDriveVelocityLockedMessage",
+  "leavingStationMessage", "leftViewText", "maskingDeviceText", "metalAlloysText", "missileJammedMessage",
+  "missileLaunchedMessage", "missileLockedMessage", "missilePrimedMessage", "missileTargetDestroyedMessage",
+  "missileUnarmedMessage", "navCompErrorMessage", "navCompRepairedMessage", "ninthGalaxyText", "noSystemSelectedMessage",
+  "notEnoughFuelMessage", "outOfRangeMessage", "preciousMetalsText", "rearViewText", "rightViewText",
+  "scoopRetrievalInactiveText", "scoopedCargoText", "shipIdentityText", "stationOutOfRangeMessage", "witchSpaceArrivalText",
+]
+# The messages the program writes into, which MessageText reads from the data segment: what writes each.
+MESSAGE_BUFFERS = {
+  "arrivalGalaxyText": "the arrival writes its digit",
+  "bountyText": "ShowBountyMessage writes it",
+  "hyperspaceCountdownMessage": "the countdown writes digits after it",
+  "scoopedCargoText": "TryScoopObject writes it",
+  "shipIdentityText": "ShowShipIdentity writes it",
 }
 PHRASE_LIST_ENTRIES = 5
 PHRASE_CODE = 0x80  # the first byte ExpandDescriptionText expands as a phrase
@@ -199,7 +228,7 @@ def text_tables(_image: Image, _symbols: dict[str, Symbol]) -> list[str]:
       f"/// {name} (DS:{symbol.offset:04X}): each pointer's text, up to its NUL.",
       f"inline constexpr std::array<std::string_view, {len(entries)}> {constant} = {{",
     ]
-    out += aligned([(f"{INDENT}{text_view(_image.text(entry))},",
+    out += aligned([(f"{INDENT}{text_view(b'' if (name, index) in BUFFER_ENTRIES else _image.text(entry))},",
                      f"// DS:{entry:04X}" + (f", {BUFFER_ENTRIES[(name, index)]}" if (name, index) in BUFFER_ENTRIES else ""))
                     for index, entry in enumerate(entries)])
     out += ["};", ""]
@@ -386,12 +415,94 @@ def frame_corners(_image: Image, _symbols: dict[str, Symbol]) -> list[str]:
   return out
 
 
-def generate(_image: Image, _symbols: dict[str, Symbol]) -> str:
+@dataclass
+class Message:
+  enumerator: str
+  name: str  # the text's row, or the warning check's routine
+  offset: int
+  buffer: str | None
+
+
+def messages(_symbols: dict[str, Symbol], _image: Image) -> list[Message]:
+  """The texts the message line shows, in the order of their addresses, each named for its row less a last Text or Message."""
+  found = []
+  for name in MESSAGES:
+    symbol = _symbols[name]
+    if symbol.segment != "DS" or symbol.kind != "text":
+      fail(f"{name} is not a text of the data segment")
+    stem = re.sub(r"(Text|Message)$", "", name)
+    found.append(Message(stem[0].upper() + stem[1:], name, symbol.offset, MESSAGE_BUFFERS.get(name)))
+  checks = _symbols["warningChecks"]
+  texts = _symbols["warningTexts"]
+  routines = {symbol.offset: symbol.name for symbol in _symbols.values() if symbol.segment == "CS"}
+  for index in range(texts.size):
+    routine = routines[_image.word(checks.offset + 2 * index)]
+    found.append(Message(routine.removeprefix("Check"), f"warningTexts[{index}]", _image.word(texts.offset + 2 * index), None))
+  if len({message.enumerator for message in found}) != len(found):
+    fail("two messages share a name")
+  if set(MESSAGE_BUFFERS) - set(MESSAGES):
+    fail("a message buffer is not a message")
+  return sorted(found, key=lambda _message: _message.offset)
+
+
+def generate_message(_messages: list[Message]) -> str:
+  out = [
+    "// GameLogic/Message.h",
+    "// Generated by Tools/GenerateTables.py from GameLogic/ReferenceImage.cpp and Design/Symbols.tsv. Do not edit: run the",
+    "// tool again (D33).",
+    "#pragma once",
+    "",
+    "#include <cstdint>",
+    "",
+    "namespace Elite",
+    "{",
+    "",
+    "/// A text the message line shows: what messagePointer, messageShown and warningMessage hold, where the original holds the",
+    "/// text's address (D33, piece 3). Each is named for the text's row in the symbol table, or for its warning's check, in the",
+    "/// order of their addresses. MessageText gives a message's text; MESSAGE_TEXTS holds the constant ones.",
+    "enum class Message : std::uint16_t",
+    "{",
+    *aligned([(f"{INDENT}None,", "///< 0, as messageShown is when no message is shown")] +
+             [(f"{INDENT}{message.enumerator},", f"///< {message.name}, DS:{message.offset:04X}") for message in _messages]),
+    "};",
+    "",
+    "} // namespace Elite",
+    "",
+  ]
+  return "\r\n".join(out)
+
+
+def message_texts(_image: Image, _messages: list[Message]) -> list[str]:
+  out = [
+    "/// Each Message's text, up to its NUL, by its value. A buffer's is empty: the program writes it, and MessageText reads it",
+    "/// from the data segment.",
+    f"inline constexpr std::array<std::string_view, {len(_messages) + 1}> MESSAGE_TEXTS = {{",
+  ]
+  rows = [(f"{INDENT}std::string_view{{}},", "// None")]
+  for message in _messages:
+    text = b"" if message.buffer else _image.text(message.offset)
+    rows.append((f"{INDENT}{text_view(text)},", f"// {message.enumerator}" + (f", a buffer: {message.buffer}" if message.buffer else "")))
+  out += aligned(rows)
+  out += ["};", ""]
+  warnings = sorted((message for message in _messages if message.name.startswith("warningTexts[")), key=lambda _m: _m.name)
+  out += [
+    "/// warningTexts: each warning's message, by the warning's number, the order of warningChecks' checks (SetWarning).",
+    f"inline constexpr std::array<Message, {len(warnings)}> WARNING_MESSAGES = {{",
+    *aligned([(f"{INDENT}Message::{message.enumerator},", f"// {message.name}") for message in warnings]),
+    "};",
+    "",
+  ]
+  return out
+
+
+def generate(_image: Image, _symbols: dict[str, Symbol], _messages: list[Message]) -> str:
   out = [
     "// GameLogic/ReferenceTables.h",
     "// Generated by Tools/GenerateTables.py from GameLogic/ReferenceImage.cpp and Design/Symbols.tsv. Do not edit: run the",
     "// tool again (D33).",
     "#pragma once",
+    "",
+    '#include "Message.h"',
     "",
     "#include <array>",
     "#include <cstddef>",
@@ -441,6 +552,7 @@ def generate(_image: Image, _symbols: dict[str, Symbol]) -> str:
   out += phrase_tables(_image, _symbols)
   out += blueprint_tables(_image, _symbols)
   out += frame_corners(_image, _symbols)
+  out += message_texts(_image, _messages)
   out += ["} // namespace Elite", ""]
   return "\r\n".join(out)
 
@@ -450,16 +562,21 @@ def main() -> int:
   parser.add_argument("--check", action="store_true", help="fail if the header in the tree is out of date")
   arguments = parser.parse_args()
   image = Image(read_image())
-  text = generate(image, read_symbols())
+  symbols = read_symbols()
+  found = messages(symbols, image)
+  outputs = {HEADER: generate(image, symbols, found), MESSAGE_HEADER: generate_message(found)}
   if arguments.check:
-    current = HEADER.read_bytes().decode("utf-8") if HEADER.exists() else ""
-    if current != text:
-      print(f"GenerateTables: {HEADER.relative_to(ROOT)} is out of date; run python Tools/GenerateTables.py")
+    stale = [path for path, text in outputs.items() if (path.read_bytes().decode("utf-8") if path.exists() else "") != text]
+    for path in stale:
+      print(f"GenerateTables: {path.relative_to(ROOT)} is out of date; run python Tools/GenerateTables.py")
+    if stale:
       return 1
-    print(f"GenerateTables: up to date ({len(TEXT_TABLES)} text tables, the phrases, the blueprints and the frame's corners)")
+    print(f"GenerateTables: up to date ({len(TEXT_TABLES)} text tables, the phrases, the blueprints, the frame's corners and "
+          f"{len(found)} messages)")
     return 0
-  HEADER.write_bytes(text.encode("utf-8"))
-  print(f"GenerateTables: wrote {HEADER.relative_to(ROOT)}")
+  for path, text in outputs.items():
+    path.write_bytes(text.encode("utf-8"))
+    print(f"GenerateTables: wrote {path.relative_to(ROOT)}")
   return 0
 
 

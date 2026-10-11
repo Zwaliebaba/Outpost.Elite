@@ -42,7 +42,7 @@ constexpr std::uint16_t MESSAGE_OFFSET = 0x78;
 constexpr std::uint16_t QUANTITY_INPUT_OFFSET = 0x8C;
 constexpr std::uint16_t PRICES_HEADER_OFFSET = 0x144;
 constexpr std::uint16_t FIRST_PRODUCT_OFFSET = 0x1E4;
-constexpr std::uint16_t CARGO_MENU_FIRST_ROW = 0x1E5;
+constexpr std::uint16_t CARGO_MENU_FIRST_ROW = 6; // on the text page
 constexpr std::uint16_t BUY_PRICE_COLUMN = 4;
 constexpr std::uint16_t SELL_PRICE_COLUMN = 2;
 constexpr std::uint16_t QUANTITY_COLUMN = 0x31;
@@ -75,7 +75,7 @@ constexpr std::uint16_t PRODUCT_NAME_BYTES = 0x11;
 // A price factor of 1.0, in 256ths.
 constexpr std::uint16_t UNIT_FACTOR = 0x100;
 // The price factor tables are by commodity, 16 bytes to a row.
-constexpr std::uint16_t PRICE_FACTOR_ROW_BYTES = 0x10;
+constexpr std::uint16_t PRICE_FACTOR_ROW_WORDS = 8; // a product's row of economyPriceFactors and governmentPriceFactors
 constexpr std::uint16_t TRADE_RECORD_BYTES = 3;
 constexpr std::uint8_t MARKET_TECH_LEVEL_MOST = 9;
 // The quantity on sale from a market random number r: ((r & 1Fh) - 7) xor (r >> 8 & 3).
@@ -378,9 +378,11 @@ std::uint16_t ComputeResalePrice(const GameState& _state)
 
 void ComputeMarketPrices(GameState& _state)
 {
-  _state.Set(DS.data8C10, static_cast<std::uint16_t>(_state.Data().commanderBlock.currentEconomy * 2 + DS.economyPriceFactors.offset));
-  _state.Set(DS.data8C12,
-             static_cast<std::uint16_t>(_state.Data().commanderBlock.currentGovernment * 2 + DS.governmentPriceFactors.offset));
+  // data8C10 and data8C12 walk the economy's and the government's column of the price factors, a row of eight words to a
+  // product, and data8C14 productTradeRecords: each holds the index of the word or the record it is on, where the original
+  // holds its address.
+  _state.Data().data8C10 = std::uint16_t{_state.Data().commanderBlock.currentEconomy};
+  _state.Data().data8C12 = std::uint16_t{_state.Data().commanderBlock.currentGovernment};
   // The species branch at 0x69EE (data75BC, data75BF) loads AL only for the tech level to replace it.
   std::uint8_t techLevel = _state.Data().commanderBlock.currentTechLevel;
   if (techLevel > MARKET_TECH_LEVEL_MOST)
@@ -388,28 +390,29 @@ void ComputeMarketPrices(GameState& _state)
     techLevel = MARKET_TECH_LEVEL_MOST;
   }
   _state.Data().marketTechLevel = techLevel;
-  _state.Set(DS.data8C14, DS.productTradeRecords.offset);
+  _state.Data().data8C14 = 0;
   std::uint16_t prices = DS.screenPrices.offset;
   std::uint16_t basePrice = DS.productBasePrices.offset;
   for (std::uint16_t commodity = 0; commodity < COMMODITY_COUNT; ++commodity)
   {
-    const std::uint16_t economyFactor = _state.Get(DS.data8C10);
-    std::uint16_t price = ScaledProduct(UNIT_FACTOR, _state.Word(economyFactor));
-    _state.Set(DS.data8C10, Offset(economyFactor, PRICE_FACTOR_ROW_BYTES));
-    const std::uint16_t governmentFactor = _state.Get(DS.data8C12);
-    price = ScaledProduct(price, _state.Word(governmentFactor));
-    _state.Set(DS.data8C12, Offset(governmentFactor, PRICE_FACTOR_ROW_BYTES));
+    const std::uint16_t economyFactor = _state.Data().data8C10;
+    std::uint16_t price = ScaledProduct(UNIT_FACTOR, _state.Data().economyPriceFactors[economyFactor]);
+    _state.Data().data8C10 = static_cast<std::uint16_t>(economyFactor + PRICE_FACTOR_ROW_WORDS);
+    const std::uint16_t governmentFactor = _state.Data().data8C12;
+    price = ScaledProduct(price, _state.Data().governmentPriceFactors[governmentFactor]);
+    _state.Data().data8C12 = static_cast<std::uint16_t>(governmentFactor + PRICE_FACTOR_ROW_WORDS);
     price = ScaledProduct(price, UNIT_FACTOR);
     price = ScaledProduct(price, _state.Word(basePrice));
     basePrice = Offset(basePrice, 2);
 
     // 256 + the price adjustment + the tech-level factor times marketTechLevel, both signed bytes.
-    const std::uint16_t record = _state.Get(DS.data8C14);
+    const std::uint16_t recordIndex = _state.Data().data8C14;
+    const auto record = static_cast<std::uint16_t>(_state.OffsetOf(_state.Data().productTradeRecords) + recordIndex * TRADE_RECORD_BYTES);
     const auto techFactor = static_cast<std::int8_t>(_state.Byte(Offset(record, 1)));
     const auto techTerm = static_cast<std::uint16_t>(techFactor * static_cast<std::int8_t>(_state.Data().marketTechLevel));
     const auto adjustment = static_cast<std::int8_t>(_state.Byte(record));
     const auto factor = static_cast<std::uint16_t>(static_cast<std::uint16_t>(adjustment) + UNIT_FACTOR + techTerm);
-    _state.Set(DS.data8C14, Offset(record, TRADE_RECORD_BYTES));
+    _state.Data().data8C14 = static_cast<std::uint16_t>(recordIndex + 1);
     price = ScaledProduct(price, factor);
 
     _state.SetWord(prices, price);
@@ -505,7 +508,7 @@ PrintedText PrintCargoQuantity(GameState& _state, std::uint16_t _quantity)
   _state.Data().textAttribute = QUANTITY_ATTRIBUTE;
   // (row-1)*80 bytes, as (row-1)*256/4 and that /4 again.
   const auto quarter = static_cast<std::uint16_t>((static_cast<std::uint8_t>(_state.Data().menuSelectedRow - 1) << 8) >> 2);
-  const auto cell = static_cast<std::uint16_t>(_state.Get(DS.menuFirstRowAttr) + QUANTITY_COLUMN + quarter + (quarter >> 2));
+  const auto cell = static_cast<std::uint16_t>(MenuFirstRowCell(_state) + QUANTITY_COLUMN + quarter + (quarter >> 2));
   const PrintedText printed = PrintTextModeString(_state, text, cell);
   _state.Data().textAttribute = attribute;
   return printed;
@@ -513,7 +516,7 @@ PrintedText PrintCargoQuantity(GameState& _state, std::uint16_t _quantity)
 
 ScreenKey RunCargoTradeMenu(GameState& _state, Hardware& _hardware)
 {
-  _state.Set(DS.menuFirstRowAttr, CARGO_MENU_FIRST_ROW);
+  _state.Data().menuFirstRowAttr = CARGO_MENU_FIRST_ROW;
   _state.Data().menuRowCount = static_cast<std::uint8_t>(COMMODITY_COUNT);
   // StartMenu's last ToggleMenuRowHighlight leaves AL the attribute it toggled the row to, which it left in textAttribute.
   MenuLoop loop{StartMenu(_state).row, 0};

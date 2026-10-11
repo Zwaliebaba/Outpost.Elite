@@ -6,6 +6,7 @@
 #include "DataOverlay.h"
 #include "Flight.h"
 #include "Input.h"
+#include "ReferenceTables.h"
 #include "Ships.h"
 #include "Timer.h"
 
@@ -170,21 +171,21 @@ void RestartInputBlink(GameState& _state, Hardware& _hardware, const TypedLine& 
   RedrawTypedLine(_state, _hardware, _line, _length);
 }
 
-// MessageLine's second half (0x35B9): the message at messagePointer, unless it is already shown, on the message line,
+// MessageLine's second half (0x35B9): the message in messagePointer, unless it is already shown, on the message line,
 // cleared first a row at a time forwards or, _backwards, down. The original keeps SI round ClearMessageLine on the stack.
 // Returns whether it drew the message.
 bool ShowMessage(GameState& _state, bool _backwards)
 {
   _state.Data().messageFramesBytes.messageDrawn = MESSAGE_DRAWN;
-  const std::uint16_t message = _state.Get(DS.messagePointer);
-  const bool shown = message == _state.Get(DS.messageShown);
-  _state.Set(DS.messageShown, message);
+  const Message message = _state.Data().messagePointer;
+  const bool shown = message == _state.Data().messageShown;
+  _state.Data().messageShown = message;
   if (shown)
   {
     return false;
   }
   ClearMessageLine(_state, GameState::VIDEO_SEGMENT, _backwards);
-  (void)DrawScreenString(_state, message, MESSAGE_INK, GameState::VIDEO_SEGMENT, MESSAGE_LINE_OFFSET);
+  (void)DrawScreenString(_state, MessageText(_state, message), MESSAGE_INK, GameState::VIDEO_SEGMENT, MESSAGE_LINE_OFFSET);
   return true;
 }
 
@@ -387,6 +388,27 @@ void FormatCredits(GameState& _state)
   _state.SetByte(tenths, '.');
 }
 
+std::string_view MessageText(const GameState& _state, Message _message) noexcept
+{
+  switch (_message)
+  {
+  case Message::Bounty:
+    return _state.TextAt(_state.Data().bountyText);
+  case Message::ShipIdentity:
+    return _state.TextAt(_state.Data().shipIdentityText);
+  case Message::ScoopedCargo:
+    return _state.TextAt(_state.Data().scoopedCargoText);
+  case Message::ArrivalGalaxy:
+    return _state.TextAt(_state.Data().arrivalGalaxyText);
+  case Message::HyperspaceCountdown:
+    return _state.TextAt(_state.Data().hyperspaceCountdownMessage);
+  default:
+    break;
+  }
+  const auto index = static_cast<std::size_t>(_message);
+  return index < MESSAGE_TEXTS.size() ? MESSAGE_TEXTS[index] : std::string_view{};
+}
+
 bool UpdateMessageLine(GameState& _state, bool _backwards)
 {
   UpdateWarnings(_state);
@@ -400,10 +422,10 @@ bool UpdateMessageLine(GameState& _state, bool _backwards)
       return false;
     }
     const std::uint16_t view = _state.Data().viewAngle;
-    _state.Set(DS.messagePointer, view == 0           ? DS.frontViewText.offset
-                                  : view == VIEW_REAR ? DS.rearViewText.offset
-                                  : view == VIEW_LEFT ? DS.leftViewText.offset
-                                                      : DS.rightViewText.offset);
+    _state.Data().messagePointer = view == 0           ? Message::FrontView
+                                   : view == VIEW_REAR ? Message::RearView
+                                   : view == VIEW_LEFT ? Message::LeftView
+                                                       : Message::RightView;
   }
   return ShowMessage(_state, _backwards);
 }
@@ -429,7 +451,7 @@ void ShowBountyMessage(GameState& _state, std::uint16_t _tenths)
   // The tenths digit moves right, and the point takes its place, as one word.
   const std::uint16_t tenths = Offset(digits, 4);
   _state.SetWord(tenths, Join(_state.Byte(tenths), '.'));
-  _state.Set(DS.messagePointer, DS.bountyText.offset);
+  _state.Data().messagePointer = Message::Bounty;
   _state.Data().messageFrames = BOUNTY_FRAMES;
 }
 
@@ -452,7 +474,7 @@ void ShowShipIdentity(GameState& _state, std::uint8_t _type, std::uint8_t _class
   // The class's name, then the type's, a byte at a time.
   CopyNameInto(_state, DS.shipClassNames.At(shipClass), Offset(DS.shipIdentityText.offset, CLASS_TEXT_OFFSET), CLASS_NAME_BYTES);
   CopyNameInto(_state, DS.shipTypeNames.At(_type), Offset(DS.shipIdentityText.offset, TYPE_TEXT_OFFSET), TYPE_NAME_BYTES);
-  _state.Set(DS.messagePointer, DS.shipIdentityText.offset);
+  _state.Data().messagePointer = Message::ShipIdentity;
   _state.Data().messageFrames = IDENTITY_FRAMES;
 }
 

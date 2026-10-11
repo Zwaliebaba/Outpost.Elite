@@ -69,6 +69,9 @@
     <ClInclude Include="ReferenceRig.h">
       <Filter>Rigs</Filter>
     </ClInclude>
+    <ClInclude Include="StateDumps.h">
+      <Filter>Rigs</Filter>
+    </ClInclude>
     <ClInclude Include="TwinRig.h">
       <Filter>Rigs</Filter>
     </ClInclude>

@@ -71,7 +71,8 @@ constexpr std::uint8_t SHORT_RANGE_DIVISOR = 7;
 constexpr std::uint16_t GALAXY_SYSTEMS = 0x100;
 constexpr std::uint8_t GALAXY_SEED_BYTES = 6;
 // A chart item, a disc or a label: its x range and its rows, each a byte for the first and one for the last,
-// then a label's text or a disc's centre, and a disc's radius or a label's mark in the last byte.
+// then a label's text, as the index in pendingChartLabels of its first letter, or a disc's centre, and a disc's radius or a
+// label's mark in the last byte, which says which of the two the item is. The original holds the text's address there.
 constexpr std::uint8_t CHART_ITEM_BYTES = 8;
 constexpr std::uint16_t CHART_ITEM_X = 0;
 constexpr std::uint16_t CHART_ITEM_ROWS = 2;
@@ -230,6 +231,26 @@ std::uint8_t CopyBytes(GameState& _state, std::uint16_t _from, std::uint16_t _to
     _state.SetByte(static_cast<std::uint16_t>(_to + done), moved);
   }
   return moved;
+}
+
+// The offset in the data segment of chartItems' item _index, the item chartItemEnd numbers: what the original holds there,
+// and in DI.
+[[nodiscard]] std::uint16_t ChartItemAt(const GameState& _state, std::uint16_t _index) noexcept
+{
+  return Offset(_state.OffsetOf(_state.Data().chartItems), static_cast<std::uint16_t>(_index * CHART_ITEM_BYTES));
+}
+
+// The offset in the data segment of the byte _index of pendingChartLabels, where chartLabelCursor and a label's item number
+// it: what the original holds there, and in SI or DI.
+[[nodiscard]] std::uint16_t ChartLabelAt(const GameState& _state, std::uint16_t _index) noexcept
+{
+  return Offset(_state.OffsetOf(_state.Data().pendingChartLabels), _index);
+}
+
+// The index in pendingChartLabels of the byte at DS:_offset, as ChartLabelAt gives it.
+[[nodiscard]] std::uint16_t ChartLabelIndex(const GameState& _state, std::uint16_t _offset) noexcept
+{
+  return static_cast<std::uint16_t>(_offset - _state.OffsetOf(_state.Data().pendingChartLabels));
 }
 
 // One pass of PlaceChartLabels over chartItems (CS:152B): whether an item overlaps the label with x range _x and
@@ -528,7 +549,8 @@ void AddShortRangeSystem(GameState& _state, Hardware& _hardware, std::int16_t _x
 {
   const std::uint8_t centerX = Low(GalaxyToChart(Word(_x), SHORT_RANGE_CENTER_X));
   const std::uint8_t centerRow = Low(GalaxyToChart(Word(_row), SHORT_RANGE_CENTER_ROW));
-  std::uint16_t item = _state.Get(DS.chartItemEnd);
+  const std::uint16_t itemIndex = _state.Data().chartItemEnd;
+  std::uint16_t item = ChartItemAt(_state, itemIndex);
   _state.SetWord(Offset(item, CHART_ITEM_TEXT), Join(centerRow, centerX));
   const auto radius = static_cast<std::uint16_t>(((_state.Data().systemSeed0Bytes.systemY & 1) << 1) + 4);
   _state.SetWord(Offset(item, CHART_ITEM_RADIUS), radius);
@@ -539,14 +561,14 @@ void AddShortRangeSystem(GameState& _state, Hardware& _hardware, std::int16_t _x
     _state.SetWord(item, Join(static_cast<std::uint8_t>(half + center), static_cast<std::uint8_t>(center - half)));
     item = Offset(item, 2);
   }
-  _state.Set(DS.chartItemEnd, Offset(item, CHART_ITEM_BYTES - 4));
+  _state.Data().chartItemEnd = static_cast<std::uint16_t>(itemIndex + 1);
   _state.Data().chartItemCount = static_cast<std::uint8_t>(_state.Data().chartItemCount + 1);
   const std::uint8_t length = GenerateSystemName(_state);
 
   // The label: from seven pixels right of the disc's centre, six a letter, and from two rows above it to three below.
   const auto left = static_cast<std::uint8_t>(centerX + LABEL_OFFSET_X);
   const ChartSpan x{left, static_cast<std::uint8_t>(left + Low(static_cast<std::uint16_t>(SMALL_LETTER_PIXELS * length)))};
-  const std::uint16_t label = _state.Get(DS.chartLabelCursor);
+  const std::uint16_t label = ChartLabelAt(_state, _state.Data().chartLabelCursor);
   _state.SetWord(label, Word(x));
   ChartSpan rows{static_cast<std::uint8_t>(centerRow - LABEL_ABOVE), centerRow};
   if ((rows.first & 0x80) != 0)
@@ -585,7 +607,7 @@ void AddShortRangeSystem(GameState& _state, Hardware& _hardware, std::int16_t _x
   }
   _state.SetByte(to, 0);
   to = Offset(to, 1);
-  _state.Set(DS.chartLabelCursor, to);
+  _state.Data().chartLabelCursor = ChartLabelIndex(_state, to);
 }
 
 // What REPE CMPSB finds.
@@ -705,8 +727,8 @@ ScreenKey ShowShortRangeChart(GameState& _state, Hardware& _hardware, bool _back
   _state.Data().commanderBlock.chartCursorY = std::uint8_t{_state.Data().commanderBlock.shortRangeCursorY};
   _state.Data().commanderBlock.chartIsShortRange = 1;
   _state.Data().chartItemCount = 0;
-  _state.Set(DS.chartItemEnd, DS.chartItems.offset);
-  _state.Set(DS.chartLabelCursor, DS.pendingChartLabels.offset);
+  _state.Data().chartItemEnd = 0;
+  _state.Data().chartLabelCursor = 0;
   LoadGalaxySeeds(_state);
   // Each of the 256 systems that is on the chart becomes an item. XOR AL,AL, then PUSH AX round the system and POP AX at its end,
   // where a system off the chart jumps back to (CS:0F50) with the count on the stack; the jump back to the next system carries it
@@ -1050,7 +1072,7 @@ bool DrawChartItems(GameState& _state, bool _backward)
     if (High(mark) != 0)
     {
       // A label, its text at its top-left corner: the x range's first byte in DL and the rows' first in DH.
-      (void)DrawSmallViewString(_state, _state.Word(Offset(item, CHART_ITEM_TEXT)), INK_3,
+      (void)DrawSmallViewString(_state, ChartLabelAt(_state, _state.Word(Offset(item, CHART_ITEM_TEXT))), INK_3,
                                 MakeWord(_state.Byte(Offset(item, CHART_ITEM_X)), _state.Byte(Offset(item, CHART_ITEM_ROWS))));
     }
     else
@@ -1073,14 +1095,15 @@ void PlaceChartLabels(GameState& _state)
     return;
   }
   _state.Data().labelsLeftToPlace = labels;
-  _state.Set(DS.chartLabelCursor, DS.pendingChartLabels.offset);
+  _state.Data().chartLabelCursor = 0;
   do
   {
     // The label's x range and rows, then its name.
-    const std::uint16_t label = _state.Get(DS.chartLabelCursor);
+    const std::uint16_t cursor = _state.Data().chartLabelCursor;
+    const std::uint16_t label = ChartLabelAt(_state, cursor);
     const ChartSpan x = SpanOf(_state.Word(label));
     ChartSpan rows = SpanOf(_state.Word(Offset(label, 2)));
-    _state.Set(DS.chartLabelCursor, Offset(label, 4));
+    _state.Data().chartLabelCursor = static_cast<std::uint16_t>(cursor + 4);
     _state.Data().labelNudgeCount = 0;
     while (AnyChartItemOverlaps(_state, x, rows))
     {
@@ -1098,21 +1121,22 @@ void PlaceChartLabels(GameState& _state)
 
 void AddChartLabel(GameState& _state, ChartSpan _x, ChartSpan _rows)
 {
-  const std::uint16_t item = _state.Get(DS.chartItemEnd);
+  const std::uint16_t itemIndex = _state.Data().chartItemEnd;
+  const std::uint16_t item = ChartItemAt(_state, itemIndex);
   _state.SetWord(Offset(item, CHART_ITEM_X), Word(_x));
   _state.SetWord(Offset(item, CHART_ITEM_ROWS), Word(_rows));
-  const std::uint16_t name = _state.Get(DS.chartLabelCursor);
+  const std::uint16_t name = _state.Data().chartLabelCursor;
   _state.SetWord(Offset(item, CHART_ITEM_TEXT), name);
   _state.SetByte(Offset(item, CHART_ITEM_IS_LABEL), 1);
-  _state.Set(DS.chartItemEnd, Offset(item, CHART_ITEM_BYTES));
+  _state.Data().chartItemEnd = static_cast<std::uint16_t>(itemIndex + 1);
   _state.Data().chartItemCount = static_cast<std::uint8_t>(_state.Data().chartItemCount + 1);
   // Past the name's NUL; the scan starts at its second byte.
-  std::uint16_t past = name;
+  std::uint16_t past = ChartLabelAt(_state, name);
   do
   {
     past = Offset(past, 1);
   } while (_state.Byte(past) != 0);
-  _state.Set(DS.chartLabelCursor, Offset(past, 1));
+  _state.Data().chartLabelCursor = ChartLabelIndex(_state, Offset(past, 1));
 }
 
 LabelNudge NudgeChartLabel(GameState& _state, ChartSpan _rows)

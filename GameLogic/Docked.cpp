@@ -225,8 +225,15 @@ FormattedQuantity FormatQuantity(GameState& _state, std::uint16_t _quantity, std
   return FormattedQuantity{units, BlankLeadingZeros(_state, _text, static_cast<std::uint8_t>(QUANTITY_DIGITS_BLANKED))};
 }
 
+// The offset in the data segment of product _product's entry in cargoHold, the units held and the units on sale: what the
+// original holds in cargoRowPointer, where native code holds the product.
+[[nodiscard]] std::uint16_t CargoEntry(const GameState& _state, std::uint16_t _product) noexcept
+{
+  return Offset(_state.OffsetOf(_state.Data().commanderBlock.cargoHold), static_cast<std::uint16_t>(_product * 2));
+}
+
 // What both trade screens start with: the frame from the descriptor at DS:_frame and its title, the two lines of help from
-// DS:_help, the header in its attribute, the rows' attribute, and the prices; cargoRowPointer on the first product held.
+// DS:_help, the header in its attribute, the rows' attribute, and the prices; cargoRowPointer on the first product, 0.
 // _backward is the direction flag, which DrawDockedFrame goes by.
 void DrawTradeScreenHeader(GameState& _state, Hardware& _hardware, std::uint16_t _frame, std::uint16_t _help, bool _backward)
 {
@@ -237,7 +244,7 @@ void DrawTradeScreenHeader(GameState& _state, Hardware& _hardware, std::uint16_t
   PrintTextModeString(_state, TRADE_HEADER_TEXT, LINE_5);
   _state.Data().textAttribute = ROW_ATTRIBUTE;
   ComputeMarketPrices(_state);
-  _state.Set(DS.cargoRowPointer, DS.cargoHold.offset);
+  _state.Data().cargoRowPointer = 0;
 }
 
 // A trade screen's row: what the original holds in CX, SI, DI and BX, and pushes at the start of each row: the rows left, the
@@ -559,10 +566,10 @@ ScreenKey ShowSellCargoScreen(GameState& _state, Hardware& _hardware, bool _back
   for (;;)
   {
     const PrintedText price = PrintNameAndPrice(_state, row, SELL_PRICE);
-    // The units held, from cargoRowPointer, which moves on to the next product's.
-    const std::uint16_t entry = _state.Get(DS.cargoRowPointer);
-    const std::uint8_t held = _state.Byte(entry);
-    _state.Set(DS.cargoRowPointer, Offset(entry, 2));
+    // The units held, from the cargoHold entry of the product cargoRowPointer numbers, which moves on to the next.
+    const std::uint16_t product = _state.Data().cargoRowPointer;
+    const std::uint8_t held = _state.Byte(CargoEntry(_state, product));
+    _state.Data().cargoRowPointer = static_cast<std::uint16_t>(product + 1);
     if (held != 0)
     {
       FormatQuantity(_state, held, DS.quantityText.offset);
@@ -600,28 +607,28 @@ ScreenKey ShowBuyCargoScreen(GameState& _state, Hardware& _hardware, bool _backw
     }
     else
     {
-      const std::uint8_t drawn = _state.Byte(Offset(_state.Get(DS.cargoRowPointer), 1));
+      const std::uint8_t drawn = _state.Byte(Offset(CargoEntry(_state, _state.Data().cargoRowPointer), 1));
       if (drawn != 0)
       {
         onSale = drawn;
       }
     }
-    // The quantity into the market's byte of the product's cargoHold entry, and cargoRowPointer on to the next product's.
+    // The quantity into the market's byte of the product's cargoHold entry, and cargoRowPointer on to the next product.
     if (onSale)
     {
       FormatQuantity(_state, *onSale, DS.quantityText.offset);
       const PrintedText quantity = PrintTextModeString(_state, DS.quantityText.offset, Offset(price.nextCell, 2));
-      const std::uint16_t entry = _state.Get(DS.cargoRowPointer);
-      _state.SetByte(Offset(entry, 1), *onSale);
-      _state.Set(DS.cargoRowPointer, Offset(entry, 2));
+      const std::uint16_t product = _state.Data().cargoRowPointer;
+      _state.SetByte(Offset(CargoEntry(_state, product), 1), *onSale);
+      _state.Data().cargoRowPointer = static_cast<std::uint16_t>(product + 1);
       PrintUnit(_state, row, quantity.nextCell);
     }
     else
     {
       PrintTextModeString(_state, NO_QUANTITY_TEXT, price.nextCell);
-      const std::uint16_t entry = _state.Get(DS.cargoRowPointer);
-      _state.SetByte(Offset(entry, 1), 0);
-      _state.Set(DS.cargoRowPointer, Offset(entry, 2));
+      const std::uint16_t product = _state.Data().cargoRowPointer;
+      _state.SetByte(Offset(CargoEntry(_state, product), 1), 0);
+      _state.Data().cargoRowPointer = static_cast<std::uint16_t>(product + 1);
       // The jump back into the row's end, with CX the count and BX the next prices.
       _hardware.LoopTurn(BUY_CARGO_ROW_END, {row.left, Offset(row.prices, TRADE_PRICES_BYTES)});
     }

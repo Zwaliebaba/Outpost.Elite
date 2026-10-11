@@ -14,6 +14,7 @@
 #include "Input.h"
 #include "Market.h"
 #include "Maths.h"
+#include "ReferenceTables.h"
 #include "SpaceObject.h"
 #include "Scene.h"
 #include "Ships.h"
@@ -272,11 +273,11 @@ constexpr std::int16_t DEATH_DEBRIS_SPEED = 0x28;
   return static_cast<std::int8_t>(High(Word(_value)));
 }
 
-// mov [messagePointer], ax; mov [messageFrames], _frames, after mov ax, _text: the message at DS:_text, posted for
-// _frames frames. Its callers load AX with _text themselves.
-void SetMessage(GameState& _state, std::uint16_t _text, std::uint16_t _frames)
+// mov [messagePointer], ax; mov [messageFrames], _frames, after mov ax, text: _message posted for _frames frames. Its callers
+// load AX with its text's address themselves.
+void SetMessage(GameState& _state, Message _message, std::uint16_t _frames)
 {
-  _state.Set(DS.messagePointer, _text);
+  _state.Data().messagePointer = _message;
   _state.Data().messageFrames = _frames;
 }
 
@@ -634,7 +635,7 @@ void CheckCollision(GameState& _state, Hardware& _hardware, SpaceObject& _slot)
   }
   // PUSH AX / POP AX keep the damage round the kill's credit.
   (void)CreditKill(_state, _slot);
-  (void)CheckMissileTargetDestroyed(_state, _state.OffsetOf(_slot));
+  (void)CheckMissileTargetDestroyed(_state, _slot);
   if (damage == 0x5DC || !IsStation(_slot).station)
   {
     (void)RemoveObject(_state, _slot);
@@ -649,12 +650,12 @@ void CheckCollision(GameState& _state, Hardware& _hardware, SpaceObject& _slot)
 
 // ---- The warnings ---------------------------------------------------------------------------------
 
-// SetWarning (0x36E7): posts warning _warning, its text warningTexts[_warning], for 20 frames.
+// SetWarning (0x36E7): posts warning _warning, its message WARNING_MESSAGES[_warning] (warningTexts), for 20 frames.
 void SetWarning(GameState& _state, std::uint8_t _warning)
 {
   _state.Data().warningFrames = 0x14;
   _state.Data().warningIndex = _warning;
-  _state.Set(DS.warningMessage, _state.Word(DS.warningTexts.At(_warning)));
+  _state.Data().warningMessage = WARNING_MESSAGES[_warning];
 }
 
 // CheckMissileWarning, CheckAltitudeWarning, CheckTemperatureWarning and CheckEnergyWarning (0x36FD,
@@ -1050,7 +1051,7 @@ FlightScreens DispatchFlightScreens(GameState& _state, Hardware& _hardware, std:
           StartBeep(_state);
         }
         // MOV AX,navCompErrorMessage, posted, then XOR AH,AH: no view.
-        SetMessage(_state, DS.navCompErrorMessage.offset, 0x19);
+        SetMessage(_state, Message::NavCompError, 0x19);
         return leave();
       }
       erase();
@@ -1101,12 +1102,12 @@ std::optional<std::uint16_t> ChangeView(GameState& _state, std::uint8_t _key)
   return ResetStardust(_state);
 }
 
-// mov ax, _text; jmp back to 0x80A3, the tail that posts it for 25 frames: a backward jump into shared code, not a loop, so
-// its turn carries nothing.
-void PostHyperspaceRefusal(GameState& _state, Hardware& _hardware, std::uint16_t _text)
+// mov ax, text; jmp back to 0x80A3, the tail that posts _message for 25 frames: a backward jump into shared code, not a loop,
+// so its turn carries nothing.
+void PostHyperspaceRefusal(GameState& _state, Hardware& _hardware, Message _message)
 {
   _hardware.LoopTurn(HYPERSPACE_REFUSAL_TAIL, {});
-  SetMessage(_state, _text, 0x19);
+  SetMessage(_state, _message, 0x19);
 }
 
 // 0x8068-0x80FF: H, unless the docking computer is on or a countdown runs. True when the countdown started, which ends
@@ -1123,7 +1124,7 @@ void PostHyperspaceRefusal(GameState& _state, Hardware& _hardware, std::uint16_t
   if (((_state.Data().commanderBlock.invadedStationDestroyed ^ 1) & _state.Data().commanderBlock.thargoidInvasionActive &
        _state.Data().commanderBlock.jumpedSinceBriefing) != 0)
   {
-    SetMessage(_state, DS.hyperspaceJammedMessage.offset, 0x19);
+    SetMessage(_state, Message::HyperspaceJammed, 0x19);
     return false;
   }
   if (_state.Data().galacticDriveReadyFrames != 0)
@@ -1135,12 +1136,12 @@ void PostHyperspaceRefusal(GameState& _state, Hardware& _hardware, std::uint16_t
     const std::uint16_t distance = _state.Data().commanderBlock.selectedDistanceTenthsLy;
     if (distance == 0)
     {
-      SetMessage(_state, DS.noSystemSelectedMessage.offset, 0x19);
+      SetMessage(_state, Message::NoSystemSelected, 0x19);
       return false;
     }
     if (distance >= OUT_OF_RANGE_TENTHS)
     {
-      PostHyperspaceRefusal(_state, _hardware, DS.outOfRangeMessage.offset);
+      PostHyperspaceRefusal(_state, _hardware, Message::OutOfRange);
       return false;
     }
     // MOV BL,AL / MOV BH,0Ah / MOV AL,fuel / MUL BH / MOV BH,24h / DIV BH: the fuel times 10, over 24h, against the distance's
@@ -1151,7 +1152,7 @@ void PostHyperspaceRefusal(GameState& _state, Hardware& _hardware, std::uint16_t
                                           Join(FUEL_DIVISOR, tenths));
     if (reach.quotient < tenths)
     {
-      PostHyperspaceRefusal(_state, _hardware, DS.notEnoughFuelMessage.offset);
+      PostHyperspaceRefusal(_state, _hardware, Message::NotEnoughFuel);
       return false;
     }
     const auto product = static_cast<std::uint16_t>(Low(_state.Data().commanderBlock.selectedDistanceTenthsLy) * FUEL_DIVISOR);
@@ -1180,7 +1181,7 @@ void HandleMissileKeys(GameState& _state, std::uint16_t _di, bool _backward)
     _state.Data().missileState = 1;
     _state.Data().shipIdRequested = 0;
     StartBeep(_state);
-    SetMessage(_state, DS.missilePrimedMessage.offset, 0x0F);
+    SetMessage(_state, Message::MissilePrimed, 0x0F);
   }
   if (_state.Data().missileState == 1)
   {
@@ -1188,19 +1189,19 @@ void HandleMissileKeys(GameState& _state, std::uint16_t _di, bool _backward)
     source = target.di;
     if (target.slot && (_state.ObjectAt(*target.slot).flags & FLAG_MASKED) == 0)
     {
-      _state.Set(DS.missileTarget, *target.slot);
+      _state.Data().missileTarget = GameState::SlotAt(*target.slot);
       _state.Data().missileState = 2;
       StartBeep(_state);
-      SetMessage(_state, DS.missileLockedMessage.offset, 0x14);
+      SetMessage(_state, Message::MissileLocked, 0x14);
     }
   }
   if (_state.Data().missileState == 2)
   {
-    if ((_state.ObjectAt(_state.Get(DS.missileTarget)).type & SpaceObject::ACTIVE) == 0)
+    if ((_state.Slot(_state.Data().missileTarget).type & SpaceObject::ACTIVE) == 0)
     {
       _state.Data().missileState = 0;
       StartLowBeep(_state);
-      SetMessage(_state, DS.missileTargetDestroyedMessage.offset, 0x14);
+      SetMessage(_state, Message::MissileTargetDestroyed, 0x14);
     }
   }
   if (_state.Data().keyDown.keyDownU == 1 && _state.Data().missileState != 0)
@@ -1208,19 +1209,19 @@ void HandleMissileKeys(GameState& _state, std::uint16_t _di, bool _backward)
     _state.Data().missileState = 0;
     _state.Data().shipIdRequested = 0;
     StartLowBeep(_state);
-    SetMessage(_state, DS.missileUnarmedMessage.offset, 0x0F);
+    SetMessage(_state, Message::MissileUnarmed, 0x0F);
   }
   if (_state.Data().keyDown.keyDownM == 1 && _state.Data().missileState == 2 && _state.Data().missileJammed != 1)
   {
     if (NextRandom(_state) < MISSILE_JAM_ODDS)
     {
       _state.Data().missileJammed = 1;
-      SetMessage(_state, DS.missileJammedMessage.offset, 0x19);
+      SetMessage(_state, Message::MissileJammed, 0x19);
       return;
     }
     _state.Data().missileState = 0;
     _state.Data().shipIdRequested = 0;
-    SetMessage(_state, DS.missileLaunchedMessage.offset, 0x14);
+    SetMessage(_state, Message::MissileLaunched, 0x14);
     _state.Data().commanderBlock.missileCount = static_cast<std::uint8_t>(_state.Data().commanderBlock.missileCount - 1);
     LaunchPlayerMissile(_state, source, _backward);
   }
@@ -1272,7 +1273,7 @@ void HandleIdentifyKey(GameState& _state)
       _state.Data().missileState = 1;
     }
     _state.Data().shipIdRequested = 1;
-    SetMessage(_state, DS.idIndicatorMessage.offset, 0x19);
+    SetMessage(_state, Message::IdIndicator, 0x19);
   }
   const CrosshairTarget target = FindShipInCrosshairs(_state);
   if (!target.slot)
@@ -1291,7 +1292,7 @@ void HandleIdentifyKey(GameState& _state)
   StartBeep(_state);
   if (_state.Data().commanderBlock.missileCount != 0)
   {
-    _state.Set(DS.missileTarget, _state.OffsetOf(ship));
+    _state.Data().missileTarget = _state.IndexOf(ship);
     _state.Data().missileState = 2;
   }
 }
@@ -1701,7 +1702,7 @@ ScreenChange RestoreFlightScreen(GameState& _state, Hardware& _hardware, bool _b
   const ScreenChange change = ShowCockpitScreen(_state, _hardware, _backward);
   InvalidateDashboard(_state);
   StartBeep(_state);
-  _state.Set(DS.messageShown, 0);
+  _state.Data().messageShown = Message::None;
   return change;
 }
 
@@ -1950,7 +1951,7 @@ void UpdateEnergyAndLaserHeat(GameState& _state)
     return;
   }
   _state.SetByte(equipment, static_cast<std::uint8_t>(_state.Byte(equipment) - 1));
-  SetMessage(_state, DS.equipmentLossMessage.offset, EQUIPMENT_LOSS_FRAMES);
+  SetMessage(_state, Message::EquipmentLoss, EQUIPMENT_LOSS_FRAMES);
 }
 
 void DrawConditionLight(GameState& _state)
@@ -2117,7 +2118,7 @@ void UpdateWarnings(GameState& _state)
   {
     // XOR AH,AH / MOV [messageFrames],AX: the frames left, as a word.
     _state.Data().messageFrames = frames;
-    _state.Set(DS.messagePointer, _state.Get(DS.warningMessage));
+    _state.Data().messagePointer = Message{_state.Data().warningMessage};
     _state.Data().warningFrames = static_cast<std::uint8_t>(_state.Data().warningFrames - 1);
     return;
   }
@@ -2355,7 +2356,7 @@ void UpdateFuelLeak(GameState& _state, Hardware& _hardware)
       _state.Data().commanderBlock.fuel = 0;
     }
     _state.Data().messageFrames = SignExtend(_state.Data().commanderBlock.fuelLeakFrames);
-    _state.Set(DS.messagePointer, DS.fuelLeakText.offset);
+    _state.Data().messagePointer = Message::FuelLeak;
     border = FUEL_LEAK_BORDER;
   }
   else
@@ -2439,7 +2440,7 @@ FlightExit RunFlight(GameState& _state, Hardware& _hardware, bool _backward)
     {
       SpawnPlayerWreckage(_state);
       _state.Data().gameOverFrames = GAME_OVER_FRAMES;
-      SetMessage(_state, DS.gameOverMessage.offset, GAME_OVER_FRAMES);
+      SetMessage(_state, Message::GameOver, GAME_OVER_FRAMES);
       StopContinuousNoise(_state);
       _hardware.LoopTurn(FLIGHT_FRAME_LOOP, {});
       continue;
@@ -2495,7 +2496,7 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, std::ui
       _state.Data().galacticDriveReadyFrames == 0 && _state.Data().hyperspaceCountdown == 0)
   {
     StartBeep(_state);
-    SetMessage(_state, DS.galacticDriveReadyMessage.offset, 0x28);
+    SetMessage(_state, Message::GalacticDriveReady, 0x28);
     _state.Data().galacticDriveReadyFrames = 0x28;
   }
   if (_state.Data().keyDown.keyDownH == 1 && PressHyperspace(_state, _hardware, backward))
@@ -2534,7 +2535,7 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, std::ui
     }
     else
     {
-      SetMessage(_state, DS.gamePausedMessage.offset, 1);
+      SetMessage(_state, Message::GamePaused, 1);
       (void)UpdateMessageLine(_state, backward);
       if (RunPauseScreen(_state, _hardware, backward))
       {
@@ -2549,7 +2550,7 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, std::ui
   if (_state.Data().keyDown.keyDownE == 1 && _state.Data().commanderBlock.ecmFitted == 1)
   {
     _state.Data().ecmFired = 1;
-    SetMessage(_state, DS.ecmActiveMessage.offset, 5);
+    SetMessage(_state, Message::EcmActive, 5);
     (void)RemoveAllMissiles(_state);
     DrainEnergy(_state, ECM_ENERGY);
   }
@@ -2588,14 +2589,14 @@ void DrainEnergy(GameState& _state, std::int8_t _amount)
 JumpDriveRequest EngageJumpDrive(GameState& _state)
 {
   // MOV AX,message, then the shared tail at 8450 posts it for 5 frames.
-  const auto post = [&_state](DataAt _message) { SetMessage(_state, _message.offset, JUMP_DRIVE_MESSAGE_FRAMES); };
+  const auto post = [&_state](Message _message) { SetMessage(_state, _message, JUMP_DRIVE_MESSAGE_FRAMES); };
   std::optional<MassLock> lock;
   if (_state.Data().dockingComputerOn != 1)
   {
     if (_state.Data().playerSpeed != FULL_SPEED)
     {
       _state.Data().jumpDriveEngaged = 0;
-      post(DS.jumpDriveVelocityLockedMessage);
+      post(Message::JumpDriveVelocityLocked);
       return JumpDriveRequest{lock};
     }
     lock = IsMassLocked(_state);
@@ -2603,12 +2604,12 @@ JumpDriveRequest EngageJumpDrive(GameState& _state)
     {
       _state.Data().jumpDriveEngaged = 1;
       _state.Data().velocityDirty = 1;
-      post(DS.jumpDriveEngagedMessage);
+      post(Message::JumpDriveEngaged);
       return JumpDriveRequest{lock};
     }
   }
   _state.Data().jumpDriveEngaged = 0;
-  post(DS.jumpDriveMassLockedMessage);
+  post(Message::JumpDriveMassLocked);
   return JumpDriveRequest{lock};
 }
 

@@ -88,6 +88,36 @@ public:
     return static_cast<std::uint16_t>(reinterpret_cast<const std::uint8_t*>(&_object) - DataBytes().data());
   }
 
+  /// The slot of shipSlots numbered _slot (SpaceObject.h). A number past the last slot throws std::out_of_range.
+  [[nodiscard]] SpaceObject& Slot(SlotIndex _slot)
+  {
+    return ObjectAt(SlotOffset(CheckedSlot(_slot)));
+  }
+
+  [[nodiscard]] const SpaceObject& Slot(SlotIndex _slot) const
+  {
+    return ObjectAt(SlotOffset(CheckedSlot(_slot)));
+  }
+
+  /// _object's number, a slot of shipSlots.
+  [[nodiscard]] SlotIndex IndexOf(const SpaceObject& _object) const noexcept
+  {
+    return SlotAt(OffsetOf(_object));
+  }
+
+  /// The offset in the data segment of the slot numbered _slot, past the last one too: what the original holds in SI or DI
+  /// for it, and where a loop that waits carries it in its turns (ADR-015).
+  [[nodiscard]] static constexpr std::uint16_t SlotOffset(SlotIndex _slot) noexcept
+  {
+    return static_cast<std::uint16_t>(SHIP_SLOTS_OFFSET + Number(_slot) * sizeof(SpaceObject));
+  }
+
+  /// The number of the slot at DS:_offset, an offset of shipSlots' records, or the end of their last.
+  [[nodiscard]] static constexpr SlotIndex SlotAt(std::uint16_t _offset) noexcept
+  {
+    return static_cast<SlotIndex>((_offset - SHIP_SLOTS_OFFSET) / sizeof(SpaceObject));
+  }
+
   /// The offset in the data segment of _member, a member of Data() at any depth: what the original holds in a register for
   /// it, where a loop that waits carries it in its turns (ADR-015).
   template <typename Member> [[nodiscard]] std::uint16_t OffsetOf(const Member& _member) const noexcept
@@ -263,6 +293,7 @@ private:
   friend class Game;
 
   static constexpr std::uint32_t ADDRESS_MASK = 0xFFFFF;
+  static constexpr std::uint16_t SHIP_SLOTS_OFFSET = GAME_DATA_OFFSET(shipSlots);
   static constexpr std::uint32_t VIDEO_LINEAR = std::uint32_t{VIDEO_SEGMENT} << 4;
 
   /// Takes the reference's load image, the code segment and then the data segment's image, as DOS would have put it at
@@ -295,6 +326,19 @@ private:
 
   /// Throws the std::out_of_range of an object record past the data segment's end.
   [[noreturn]] static void RefuseObject();
+
+  /// _slot, when it is one of shipSlots' 36; otherwise throws std::out_of_range.
+  [[nodiscard]] static SlotIndex CheckedSlot(SlotIndex _slot)
+  {
+    if (Number(_slot) >= Number(SlotIndex::End))
+    {
+      RefuseSlot();
+    }
+    return _slot;
+  }
+
+  /// Throws the std::out_of_range of a slot number past the last slot.
+  [[noreturn]] static void RefuseSlot();
 
   /// The data segment and its change count, in storage aligned to COUNTED_BLOCK_ALIGNMENT, so that a member of GameData finds
   /// the count by rounding its own address down (ChangeCountAt).

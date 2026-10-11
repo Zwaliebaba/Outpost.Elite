@@ -4,6 +4,7 @@
 #include "GuardReport.h"
 #include "ReferenceRig.h"
 #include "Replay.h"
+#include "StateDumps.h"
 
 #include <algorithm>
 #include <format>
@@ -45,10 +46,13 @@ using Checkpoints = std::map<std::filesystem::path, std::map<std::size_t, Elite:
 // Every Replays/*.replay, played on the native routines (ReferenceRig). Every digest it names must come out as
 // recorded, and each is kept in _checkpoints. Unless _recording, each digest's picture and outcomes are checked against
 // the ones recorded on the lines after it (_report): a picture or a timing outcome that differs fails nothing, and an
-// outcome of the player's progress that differs, or a picture or outcomes not recorded, fails.
+// outcome of the player's progress that differs, or a picture or outcomes not recorded, fails. While the data segment is
+// dumped or the digests re-based (StateDumps), each digest point's data segment is dumped or held to the dump before the
+// change instead of its digest to the one recorded, and a re-base fails on any picture or outcome that differs.
 // _check then looks at the machine after each replay.
 template <typename Check> void PlayEveryReplay(bool _recording, GuardReport& _report, Checkpoints& _checkpoints, Check _check)
 {
+  const StateDumps& dumps = StateDumps::Run();
   const std::filesystem::path directory = Elite::FindInRepository("Replays");
   Assert::IsFalse(directory.empty(), L"Replays/ at the repository root");
   std::vector<std::filesystem::path> replays;
@@ -90,7 +94,8 @@ template <typename Check> void PlayEveryReplay(bool _recording, GuardReport& _re
         continue;
       if (step.expectedDigest.empty())
         Assert::Fail((where + L": a corpus digest must say what it expects").c_str());
-      if (checkpoint.digest != step.expectedDigest)
+      dumps.Point(rig.State(), "replays", path.stem().string(), step.line);
+      if (dumps.Mode() == DigestMode::Check && checkpoint.digest != step.expectedDigest)
         Assert::Fail((where + L": digest " + Widen(step.name) + L" is " + Widen(checkpoint.digest)).c_str());
       ++checked;
       _checkpoints[path][step.line] = checkpoint;
@@ -105,6 +110,9 @@ template <typename Check> void PlayEveryReplay(bool _recording, GuardReport& _re
         Assert::Fail((point + L": no outcomes are recorded, and its outcomes are " + Widen(checkpoint.outcomes)).c_str());
       if (const std::wstring failure = _report.Outcomes(point, step.expectedOutcomes, checkpoint.outcomes); !failure.empty())
         Assert::Fail(failure.c_str());
+      if (dumps.Mode() == DigestMode::Rebase &&
+          (checkpoint.picture != step.expectedPicture || checkpoint.outcomes != step.expectedOutcomes))
+        Assert::Fail((point + L": the picture or the outcomes differ, and a re-base needs every one as recorded").c_str());
     }
     Assert::IsTrue(checked > 0, (name + L": checks no digest").c_str());
     _check(name, rig.Host());
@@ -128,6 +136,26 @@ void RecordEveryCheckpoint(const Checkpoints& _checkpoints)
   }
 }
 
+// Writes every replay of _checkpoints again with each digest step's state digest from its checkpoint (RecordDigests),
+// keeping every other byte. Called only once every digest point of every replay has met the re-base's gate (StateDumps).
+void RebaseEveryDigest(const Checkpoints& _checkpoints)
+{
+  for (const auto& [path, checkpoints] : _checkpoints)
+  {
+    std::map<std::size_t, std::string> digests;
+    for (const auto& [line, checkpoint] : checkpoints)
+      digests[line] = checkpoint.digest;
+    std::string recorded;
+    std::string error;
+    if (!Elite::RecordDigests(ReadText(path), digests, recorded, error))
+      Assert::Fail((path.filename().wstring() + L": " + Widen(error)).c_str());
+    std::ofstream file(path, std::ios::binary | std::ios::trunc);
+    file << recorded;
+    file.close();
+    Assert::IsFalse(file.fail(), (path.filename().wstring() + L" cannot be written").c_str());
+  }
+}
+
 } // namespace
 
 TEST_CLASS(CorpusTests)
@@ -142,6 +170,7 @@ public:
   // timing of flight, reports: the log names each that differs, with both values, and ends with how many were checked and
   // how many differ. An outcome of the player's progress gates. While the guard is recorded (RecordingGuard), the pictures
   // and outcomes are written into the replays instead, and only once every digest of the corpus has met its recorded value.
+  // While the digests are re-based (StateDumps), they are written into the replays once every point has met the gate.
   TEST_METHOD(NativeCodeKeepsEveryDigest)
   {
     const bool recording = RecordingGuard();
@@ -159,6 +188,8 @@ public:
       RecordEveryCheckpoint(checkpoints);
     else
       report.LogSummary();
+    if (StateDumps::Run().Mode() == DigestMode::Rebase)
+      RebaseEveryDigest(checkpoints);
   }
 };
 

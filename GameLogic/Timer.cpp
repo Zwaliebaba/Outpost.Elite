@@ -152,19 +152,20 @@ void TickMusic(GameState& _state, Hardware& _hardware)
     return;
   }
 
-  std::uint16_t pointer = _state.Get(DS.musicPointer);
-  const std::uint16_t entry = _state.Word(pointer);
-  const std::uint8_t note = Low(entry);
-  const std::uint8_t beats = High(entry);
+  // musicPointer is the index of the tune's next entry, two bytes each, where the original holds its address. The tune's last
+  // entry restarts it.
+  const std::uint16_t next = _state.Data().musicPointer;
+  const std::size_t entry = std::size_t{next} * 2;
+  const std::uint8_t note = _state.Data().titleTune[entry];
+  const std::uint8_t beats = _state.Data().titleTune[entry + 1];
   const auto ticks = static_cast<std::uint16_t>(NOTE_TICKS_PER_BEAT * beats);
   if (note == TUNE_RESTART)
   {
-    _state.Set(DS.musicPointer, DS.titleTune.offset);
+    _state.Data().musicPointer = 0;
   }
   else
   {
-    pointer = static_cast<std::uint16_t>(pointer + 2);
-    _state.Set(DS.musicPointer, pointer);
+    _state.Data().musicPointer = static_cast<std::uint16_t>(next + 1);
     if (note != TUNE_REST)
     {
       std::uint8_t pitch = note;

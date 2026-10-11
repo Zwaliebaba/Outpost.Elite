@@ -199,14 +199,16 @@ void SaveCommanderFile(GameState& _state, Hardware& _hardware)
 void ListCommanderFiles(GameState& _state, Hardware& _hardware, std::uint16_t _attributes)
 {
   _state.Data().commanderFileCount = 0;
-  _state.Set(DS.commanderFileListNext, DS.commanderFileList.offset);
+  _state.Data().commanderFileListNext = 0;
   DosAnswer found = _hardware.FindFirstFile(_state.DataSegment(), DS.commanderFilePattern.offset, _attributes);
   while (!found.failed)
   {
     if (_state.Data().diskTransferArea[FOUND_ATTRIBUTE] == 0)
     {
       std::uint16_t from = DS.diskTransferArea.At(FOUND_NAME);
-      std::uint16_t to = _state.Get(DS.commanderFileListNext);
+      // commanderFileListNext is the index in commanderFileList of the next name's first byte.
+      const std::uint16_t list = _state.OffsetOf(_state.Data().commanderFileList);
+      std::uint16_t to = Offset(list, _state.Data().commanderFileListNext);
       for (std::uint8_t character = _state.Byte(from); character != '.'; character = _state.Byte(from))
       {
         from = Offset(from, 1);
@@ -214,7 +216,7 @@ void ListCommanderFiles(GameState& _state, Hardware& _hardware, std::uint16_t _a
         to = Offset(to, 1);
       }
       _state.SetByte(to, 0);
-      _state.Set(DS.commanderFileListNext, Offset(to, 1));
+      _state.Data().commanderFileListNext = static_cast<std::uint16_t>(Offset(to, 1) - list);
       const auto count = static_cast<std::uint8_t>(_state.Data().commanderFileCount + 1);
       _state.Data().commanderFileCount = count;
       if (count == MOST_COMMANDER_FILES)

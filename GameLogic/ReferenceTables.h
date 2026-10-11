@@ -3,6 +3,8 @@
 // tool again (D33).
 #pragma once
 
+#include "Message.h"
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -156,7 +158,7 @@ inline constexpr std::array<std::string_view, 9> RATING_NAMES = {
 
 /// equipmentNames (DS:84D2): each pointer's text, up to its NUL.
 inline constexpr std::array<std::string_view, 13> EQUIPMENT_NAMES = {
-  std::string_view{"Missile (?)"},         // DS:84EC, a buffer: the status screen writes the missiles' count at its '?' (data84F5)
+  std::string_view{},                      // DS:84EC, a buffer: the status screen writes the missiles' count at its '?' (data84F5)
   std::string_view{"Cargo Bay Extension"}, // DS:84F8
   std::string_view{"ECM System"},          // DS:850C
   std::string_view{"Pulse Laser"},         // DS:8517
@@ -1653,5 +1655,72 @@ inline constexpr std::array<FrameCorner, 6> FRAME_CORNERS = {{
   {24, 0, 0xC8},  // cell 0780h
   {24, 39, 0xBC}, // cell 07CEh
 }};
+
+/// Each Message's text, up to its NUL, by its value. A buffer's is empty: the program writes it, and MessageText reads it
+/// from the data segment.
+inline constexpr std::array<std::string_view, 54> MESSAGE_TEXTS = {
+  std::string_view{},                                    // None
+  std::string_view{"Nav-Comp Error...  WITCH SPACE!"},   // NavCompError
+  std::string_view{"Equipment Loss due to Low Energy"},  // EquipmentLoss
+  std::string_view{"Leaving Space Station"},             // LeavingStation
+  std::string_view{"Auto-Dock Sequence Initiated"},      // AutoDock
+  std::string_view{"Front View"},                        // FrontView
+  std::string_view{"Rear View"},                         // RearView
+  std::string_view{"Left View"},                         // LeftView
+  std::string_view{"Right View"},                        // RightView
+  std::string_view{},                                    // Bounty, a buffer: ShowBountyMessage writes it
+  std::string_view{},                                    // ShipIdentity, a buffer: ShowShipIdentity writes it
+  std::string_view{"INCOMING MISSILE!"},                 // MissileWarning
+  std::string_view{"ALTITUDE LOW!"},                     // AltitudeWarning
+  std::string_view{"TEMPERATURE HIGH!"},                 // TemperatureWarning
+  std::string_view{"ENERGY LOW!"},                       // EnergyWarning
+  std::string_view{"SCOOP RETRIEVAL INACTIVE"},          // ScoopRetrievalInactive
+  std::string_view{},                                    // ScoopedCargo, a buffer: TryScoopObject writes it
+  std::string_view{"FUEL SCOOPS ACTIVE"},                // FuelScoopsActive
+  std::string_view{"CARGO BAY FULL   SCOOPS INACTIVE"},  // CargoBayFull
+  std::string_view{"Escape Pod Retrieved...Slaves!"},    // EscapePodRetrieved
+  std::string_view{"Precious Gems and Metals"},          // PreciousMetals
+  std::string_view{"Metal Alloys"},                      // MetalAlloys
+  std::string_view{"Alien Items"},                       // AlienItems
+  std::string_view{"Masking Device!"},                   // MaskingDevice
+  std::string_view{"Hyperspaced into System!"},          // ArrivalSystem
+  std::string_view{"Hyperspace Motors Engaged"},         // HyperspaceEngaged
+  std::string_view{},                                    // ArrivalGalaxy, a buffer: the arrival writes its digit
+  std::string_view{"Welcome to the 9th Galaxy!"},        // NinthGalaxy
+  std::string_view{"Hyperspaced into WITCH SPACE!"},     // WitchSpaceArrival
+  std::string_view{"FUEL LEAK!"},                        // FuelLeak
+  std::string_view{"ID Indicator Activated"},            // IdIndicator
+  std::string_view{"Galactic Drive Motor Ready"},        // GalacticDriveReady
+  std::string_view{},                                    // HyperspaceCountdown, a buffer: the countdown writes digits after it
+  std::string_view{"System Outside Hyperspace Range!"},  // OutOfRange
+  std::string_view{"Hyperspace System not Selected!"},   // NoSystemSelected
+  std::string_view{"Not Enough Fuel to Hyperspace"},     // NotEnoughFuel
+  std::string_view{"Nav-Comp now repaired!"},            // NavCompRepaired
+  std::string_view{"Hyperspace Drive is Being Jammed!"}, // HyperspaceJammed
+  std::string_view{"E.C.M. Active Now"},                 // EcmActive
+  std::string_view{"Docking Computer Disengaged"},       // DockingComputerOff
+  std::string_view{"Docking Computer Locked On"},        // DockingComputerOn
+  std::string_view{"Station not in Lock-on Range"},      // StationOutOfRange
+  std::string_view{"Jump Drive Engaged"},                // JumpDriveEngaged
+  std::string_view{"Jump Drive is Mass-Locked"},         // JumpDriveMassLocked
+  std::string_view{"Jump Drive is Velocity-Locked"},     // JumpDriveVelocityLocked
+  std::string_view{"Game Paused"},                       // GamePaused
+  std::string_view{"Missile Launched"},                  // MissileLaunched
+  std::string_view{"Missile Locked-on Target!"},         // MissileLocked
+  std::string_view{"Missile Primed"},                    // MissilePrimed
+  std::string_view{"Missile Unarmed"},                   // MissileUnarmed
+  std::string_view{"GAME OVER!"},                        // GameOver
+  std::string_view{"Missile Jammed... Can't Launch!"},   // MissileJammed
+  std::string_view{"Missile Target Destroyed"},          // MissileTargetDestroyed
+  std::string_view{"Docking Permission Denied!"},        // DockingDenied
+};
+
+/// warningTexts: each warning's message, by the warning's number, the order of warningChecks' checks (SetWarning).
+inline constexpr std::array<Message, 4> WARNING_MESSAGES = {
+  Message::MissileWarning,     // warningTexts[0]
+  Message::AltitudeWarning,    // warningTexts[1]
+  Message::TemperatureWarning, // warningTexts[2]
+  Message::EnergyWarning,      // warningTexts[3]
+};
 
 } // namespace Elite

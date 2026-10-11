@@ -176,7 +176,7 @@ bool ResolveLaserFire(GameState& _state, Hardware& _hardware, bool _backward);
 
 /// CheckMissileTargetDestroyed (CS:8B8B): when a missile is locked on the slot at _slot, its message and the missile unlocked.
 /// Returns whether it was.
-bool CheckMissileTargetDestroyed(GameState& _state, std::uint16_t _slot);
+bool CheckMissileTargetDestroyed(GameState& _state, const SpaceObject& _slot);
 
 /// CreditKill (CS:8BC6): the kill of _slot paid for, or held against the player's legal status. A bounty of 0 pays nothing;
 /// any other counts a kill in killCount, the INC written and then FEh over FFh; FFh pays 500 for a Thargoid and otherwise is a

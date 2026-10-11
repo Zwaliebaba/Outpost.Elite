@@ -155,12 +155,12 @@ void WaitTimerTicks(GameState& _state, Hardware& _hardware, std::uint16_t _ticks
   }
 }
 
-// _text posted for 25 frames. Returns its offset, which the original leaves in AX (mov ax, _text).
-[[nodiscard]] std::uint16_t PostDockingMessage(GameState& _state, DataAt _text)
+// _message posted for 25 frames. Returns it, which the original leaves in AX as its text's address (mov ax, text).
+[[nodiscard]] Message PostDockingMessage(GameState& _state, Message _message)
 {
-  _state.Set(DS.messagePointer, _text.offset);
+  _state.Data().messagePointer = _message;
   _state.Data().messageFrames = DOCKING_MESSAGE_FRAMES;
-  return _text.offset;
+  return _message;
 }
 
 // The station's position, z moved out to the approach point when _approach: what the original loads into AX, BX
@@ -495,8 +495,7 @@ void MaskOutsideTunnel(GameState& _state, std::uint16_t _rectangle, bool _backwa
 void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
 {
   // MOV AX,leavingStationMessage, or autoDockMessage when docked, for one frame.
-  const std::uint16_t message = _state.Data().playerDocked != 0 ? DS.autoDockMessage.offset : DS.leavingStationMessage.offset;
-  _state.Set(DS.messagePointer, message);
+  _state.Data().messagePointer = _state.Data().playerDocked != 0 ? Message::AutoDock : Message::LeavingStation;
   _state.Data().messageFrames = 1;
   (void)UpdateMessageLine(_state, _backward);
   UpdateDashboard(_state);
@@ -574,7 +573,7 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
   }
 }
 
-std::uint16_t ToggleDockingComputer(GameState& _state, Hardware& _hardware)
+Message ToggleDockingComputer(GameState& _state, Hardware& _hardware)
 {
   _state.Data().dockingKeyReleased = 0;
   if (_state.Data().dockingComputerOn == 1)
@@ -588,26 +587,26 @@ std::uint16_t ToggleDockingComputer(GameState& _state, Hardware& _hardware)
       _state.Data().velocityDirty = 1;
     }
     StartLowBeep(_state);
-    return PostDockingMessage(_state, DS.dockingComputerOffMessage);
+    return PostDockingMessage(_state, Message::DockingComputerOff);
   }
   if (!InSafeZone(_state).inside)
   {
     _state.Data().dataA137 = 0;
     StartLowBeep(_state);
-    return PostDockingMessage(_state, DS.stationOutOfRangeMessage);
+    return PostDockingMessage(_state, Message::StationOutOfRange);
   }
   if ((_state.ObjectAt(DS.stationSlot.offset).flags & STATION_SHOT) != 0)
   {
     _state.Data().dataA137 = 0;
     StartLowBeep(_state);
-    return PostDockingMessage(_state, DS.dockingDeniedMessage);
+    return PostDockingMessage(_state, Message::DockingDenied);
   }
   _state.Data().dockingComputerSteering = 0;
   _state.Data().dockingComputerState = SLOW_TO_STOP;
   _state.Data().dockingComputerOn = 1;
   StartMusic(_state, _hardware);
   StartBeep(_state);
-  return PostDockingMessage(_state, DS.dockingComputerOnMessage);
+  return PostDockingMessage(_state, Message::DockingComputerOn);
 }
 
 void RunDockingComputer(GameState& _state)

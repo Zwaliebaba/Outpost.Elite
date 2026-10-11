@@ -47,7 +47,7 @@ void MaskOutsideTunnel(GameState& _state, std::uint16_t _rectangle, bool _backwa
 /// the view unlocked, a stopped ship given speed 4, the low beep), or on (state 0, the music and the beep) when inside the
 /// station's safe zone and the station has not been shot; refused with the low beep otherwise. Returns the message it posts for
 /// 25 frames.
-std::uint16_t ToggleDockingComputer(GameState& _state, Hardware& _hardware);
+Message ToggleDockingComputer(GameState& _state, Hardware& _hardware);
 
 /// CancelDockingComputer (CS:8BAA): the docking computer off, if it is on: dataA137 cleared, the view unlocked and all sound
 /// stopped (StopAllSound).

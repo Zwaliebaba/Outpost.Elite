@@ -334,6 +334,11 @@ void Hardware::SetInterruptVector(std::uint8_t _vector, FarAddress _handler)
   m_platform.SetInterruptVector(_vector, _handler);
 }
 
+FarAddress Hardware::BiosInterruptVector(std::uint8_t _vector) const noexcept
+{
+  return m_platform.PowerOnInterruptVector(_vector);
+}
+
 std::uint8_t Hardware::RomByte(std::uint16_t _segment, std::uint16_t _offset)
 {
   return m_platform.RomByte(FarAddress{_segment, _offset});

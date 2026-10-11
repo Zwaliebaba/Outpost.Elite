@@ -2,8 +2,10 @@
 
 #include "Reference.h"
 
+#include "GameData.h"
 #include "ReferenceImage.h"
 
+#include <array>
 #include <fstream>
 #include <iterator>
 #include <source_location>
@@ -11,6 +13,29 @@
 
 namespace Elite
 {
+
+namespace
+{
+
+/// A word the image holds as an address where the game's state holds what it means (D33, piece 3): at offset in the data
+/// segment, the address the image holds, and what the load puts there in its place.
+struct LoadedWord
+{
+  std::uint16_t offset;
+  std::uint16_t image;
+  std::uint16_t loaded;
+};
+
+/// The image's stored addresses that are not 0: the message line's message, Front View, and keyBuffer's ring, at its start.
+/// The rest are 0, which each field reads as its own 0, or are written before they are read.
+constexpr std::array<LoadedWord, 3> LOADED_WORDS = {
+  LoadedWord{static_cast<std::uint16_t>(GAME_DATA_OFFSET(messagePointer)), static_cast<std::uint16_t>(GAME_DATA_OFFSET(frontViewText)),
+             static_cast<std::uint16_t>(Message::FrontView)},
+  LoadedWord{static_cast<std::uint16_t>(GAME_DATA_OFFSET(keyBufferWrite)), static_cast<std::uint16_t>(GAME_DATA_OFFSET(keyBuffer)), 0},
+  LoadedWord{static_cast<std::uint16_t>(GAME_DATA_OFFSET(keyBufferRead)), static_cast<std::uint16_t>(GAME_DATA_OFFSET(keyBuffer)), 0},
+};
+
+} // namespace
 
 std::optional<std::vector<std::uint8_t>> ReferenceLoadImage(std::uint16_t _loadSegment)
 {
@@ -32,6 +57,17 @@ std::optional<std::vector<std::uint8_t>> ReferenceLoadImage(std::uint16_t _loadS
     return std::nullopt;
   }
   image[d5] = 0x01;
+  // The stored addresses, each loaded as what it means, and each holding the address the file's does.
+  for (const LoadedWord& word : LOADED_WORDS)
+  {
+    const std::size_t at = std::size_t{DATA_SEGMENT_PARAGRAPH} * PARAGRAPH_BYTES + word.offset;
+    if ((image[at] | (image[at + 1] << 8)) != word.image)
+    {
+      return std::nullopt;
+    }
+    image[at] = static_cast<std::uint8_t>(word.loaded & 0xFF);
+    image[at + 1] = static_cast<std::uint8_t>(word.loaded >> 8);
+  }
   return image;
 }
 

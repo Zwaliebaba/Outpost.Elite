@@ -334,6 +334,13 @@ public:
   /// Interrupt _vector's entry set to _handler, each byte that changes counted.
   void SetInterruptVector(std::uint8_t _vector, FarAddress _handler) noexcept;
 
+  /// Interrupt _vector's entry as the BIOS and DOS set it at power-on, whatever it holds now: the handler a program that
+  /// installs its own puts back when it is done.
+  [[nodiscard]] FarAddress PowerOnInterruptVector(std::uint8_t _vector) const noexcept
+  {
+    return m_powerOnVectors[_vector];
+  }
+
   /// The byte of the BIOS's ROM, F000:0000-FFFF, at _address: the IRET at F000:FD00 + n that each vector the BIOS does not
   /// serve names, the mouse driver's entry at F000:E060 (a NOP and an IRET), the model byte FFh at F000:FFFE, and zero
   /// everywhere else, FC00:0016 included, where an Amstrad's ROM has its name (D12). The BIOS's handlers are native, so their
@@ -400,6 +407,7 @@ private:
   DosFiles m_files;
 
   std::array<FarAddress, 256> m_vectors{};
+  std::array<FarAddress, 256> m_powerOnVectors{};
   std::uint64_t m_vectorChanges = 0;
   std::uint64_t m_portWrites = 0;
   std::uint16_t m_flags;
