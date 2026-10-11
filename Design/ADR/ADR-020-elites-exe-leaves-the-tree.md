@@ -1,6 +1,6 @@
 # ADR-020 — ELITES.EXE leaves the tree (D28)
 
-**Status:** accepted 2026-10-10, with the change that implements it. It records the owner's ruling D28 ([Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner)), and amends ADR-002 item 2 and ADR-019 item 3.
+**Status:** accepted 2026-10-10, with the change that implements it. It records the owner's ruling D28 ([Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner)), and amends ADR-002 item 2 and ADR-019 item 3. **Amended 2026-10-11 (D35, D36):** of the scripts that read the file by hand, `ScanReference.py` and `ReferenceScreens.py` are deleted, `GenerateReference.py` goes with piece 3's change 2, and `MapReference.py` stays as a research tool.
 
 ## Context
 
