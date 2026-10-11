@@ -138,11 +138,13 @@ std::uint16_t StoreWords(GameState& _state, std::uint16_t _segment, std::uint16_
   return at;
 }
 
-// A loop of byte moves ShowShipIdentity makes (MOV AH,[BX] or MOV AL,[BX], INC BX, the byte to [DI], INC DI, LOOP): a name
-// of shipClassNames or shipTypeNames, all its bytes, into _to.
+// A loop of byte moves ShowShipIdentity makes (MOV AH,[BX] or MOV AL,[BX], INC BX, the byte to [DI], INC DI, LOOP): the
+// first _to.size() bytes of a name of shipTypeNames, as many as the loop's count, into _to. The name holds one more byte
+// than the field it is copied into, which the loop never moves.
 template <std::size_t Bytes> void CopyNameInto(const Counted<std::uint8_t> (&_name)[Bytes], std::span<Counted<std::uint8_t>> _to)
 {
-  for (std::size_t moved = 0; moved < Bytes; ++moved)
+  static_assert(Bytes > 0);
+  for (std::size_t moved = 0; moved < _to.size() && moved < Bytes; ++moved)
   {
     _to[moved] = std::uint8_t{_name[moved]};
   }
