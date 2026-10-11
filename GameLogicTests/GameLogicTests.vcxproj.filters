@@ -46,6 +46,9 @@
     <Filter Include="SaveLoad">
       <UniqueIdentifier>{C58A71FB-9CFD-5D0E-ACF3-B65DE4C3B974}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Platform">
+      <UniqueIdentifier>{AC6C6F81-CE5D-5D84-8439-B62E5CD60598}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h">
@@ -67,6 +70,9 @@
     </ClCompile>
     <ClCompile Include="DockedTests.cpp">
       <Filter>Docked</Filter>
+    </ClCompile>
+    <ClCompile Include="DosFilesTests.cpp">
+      <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="EquipmentTests.cpp">
       <Filter>Equipment</Filter>
