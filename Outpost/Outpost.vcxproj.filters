@@ -27,4 +27,9 @@
       <Filter>Build</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <Manifest Include="Outpost.manifest">
+      <Filter>Application</Filter>
+    </Manifest>
+  </ItemGroup>
 </Project>

@@ -94,6 +94,9 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <Manifest Include="Outpost.manifest" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\Engine\Engine.vcxproj">
       <Project>{508B8537-8F4C-5A84-B7CC-B165F9C8B082}</Project>
     </ProjectReference>

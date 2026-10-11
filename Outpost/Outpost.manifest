@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<!--
+  Merged by the linker into the manifest it embeds in Outpost.exe (a Manifest item in Outpost.vcxproj).
+
+  PerMonitorV2 (ADR-009 item 2): Windows reports the window, the client area and the screen in physical
+  pixels and never stretches the picture, so the whole-number scale the Presenter picks is the one seen.
+  MSBuild's EnableDpiAwareness offers per-monitor version 1 at most, which is why this file exists.
+-->
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
+    </windowsSettings>
+  </application>
+</assembly>
