@@ -8,7 +8,7 @@
 #include <string_view>
 #include <vector>
 
-namespace ReferenceRunner
+namespace ReplayRunner
 {
 
 namespace
@@ -122,4 +122,4 @@ bool WritePalettePng(const std::filesystem::path& _path, std::uint32_t _widthPix
   return static_cast<bool>(out);
 }
 
-} // namespace ReferenceRunner
+} // namespace ReplayRunner
