@@ -18,10 +18,10 @@ namespace Elite
 {
 
 // ADR-001 and ADR-007: the reference binary, byte for byte, and the one byte the host changes in memory
-// (D5), the protection's "already shown" flag at DS:25E4. Nothing reads the file at runtime (D3): the image
-// is generated from it (ReferenceImage.h), and Tools/GenerateReference.py and ReferenceImageTests check it.
+// (D5), the protection's "already shown" flag at DS:25E4. Nothing reads the file at runtime (D3), and since D28 it
+// is not in the tree (ADR-020): the image is generated from a local copy (ReferenceImage.h), Tools/GenerateReference.py
+// refuses any other file by this hash, and ReferenceImageTests holds the image to the hash measured from it.
 inline constexpr std::string_view REFERENCE_SHA256 = "18b5076a54733dea2d45b1e3b280fd1377067b6cb1b27166d3873aa7e7744363";
-inline constexpr std::string_view REFERENCE_FILE_NAME = "ELITES.EXE";
 inline constexpr std::uint16_t D5_OFFSET = 0x25E4;
 
 // The image's layout: one code segment at paragraph 0 of the image, 0x8F40 bytes, and the data segment
@@ -58,7 +58,7 @@ inline constexpr std::uint16_t GET_KEY_OFFSET = 0x7616;
 }
 
 /// The first of _name found walking up from the working directory, and then from the repository this
-/// file was compiled in; empty if there is none. How the tests and tools find ELITES.EXE and Replays/.
+/// file was compiled in; empty if there is none. How the tests and tools find Replays/ and the known answers.
 [[nodiscard]] std::filesystem::path FindInRepository(const std::filesystem::path& _name);
 
 /// A whole file, or nothing if it cannot be read.

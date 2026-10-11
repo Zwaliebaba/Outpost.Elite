@@ -15,7 +15,6 @@
 #include <iterator>
 #include <map>
 #include <optional>
-#include <source_location>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -251,34 +250,5 @@ private:
   Machine::PcServices m_services;
   Machine::Registers m_regs{};
 };
-
-/// ELITES.EXE, found by walking up from the working directory to the repository root, or else beside the source
-/// tree this file was compiled from (the parent of MachineTests/). Empty if neither has it.
-inline std::vector<std::uint8_t> ReadReferenceBinary()
-{
-  std::vector<std::filesystem::path> candidates;
-  std::error_code error;
-  for (std::filesystem::path directory = std::filesystem::current_path(error); !error && !directory.empty();
-       directory = directory.parent_path())
-  {
-    candidates.push_back(directory / "ELITES.EXE");
-    if (directory == directory.parent_path())
-    {
-      break;
-    }
-  }
-  const std::filesystem::path source = std::source_location::current().file_name();
-  candidates.push_back(source.parent_path().parent_path() / "ELITES.EXE");
-  for (const std::filesystem::path& candidate : candidates)
-  {
-    std::error_code found;
-    if (std::filesystem::is_regular_file(candidate, found))
-    {
-      std::ifstream stream(candidate, std::ios::binary);
-      return std::vector<std::uint8_t>(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
-    }
-  }
-  return {};
-}
 
 } // namespace MachineTests

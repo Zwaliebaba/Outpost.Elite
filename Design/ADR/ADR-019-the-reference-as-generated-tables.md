@@ -65,9 +65,9 @@
   - `MachineTests`' four loader tests on the reference, because `Machine` cannot use `GameLogic`'s tables;
   - `Tools/MapReference.py`, `ReferenceScreens.py` and `ScanReference.py`.
 
-  So `ELITES.EXE` stays at the root (ADR-002 item 2), as the tables' source and the test's reference.
+  So `ELITES.EXE` stays at the root (ADR-002 item 2), as the tables' source and the test's reference. *Amended by D28 ([ADR-020](ADR-020-elites-exe-leaves-the-tree.md)): the file left the tree. The generator reads a local copy, the loader tests use synthetic files, and CI no longer runs `--check`.*
 
-**4. The tables are checked against the file.** `ReferenceImageTests.TheGeneratedImageLoadsAsTheReferenceDoes`:
+**4. The tables are checked against the file.** *Since D28 the test holds the image to the SHA-256 measured from the file instead (ADR-020 item 2), as `TheGeneratedImageIsTheReferences`.* `ReferenceImageTests.TheGeneratedImageLoadsAsTheReferenceDoes`:
 - reads `ELITES.EXE` and asserts its SHA-256;
 - loads the file into one `Pc` and the tables into another, with the same descriptions;
 - compares all 1 MiB, the change count, every field of `LoadedProgram` and the registers.

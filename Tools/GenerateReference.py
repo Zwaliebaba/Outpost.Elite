@@ -319,7 +319,8 @@ def main() -> int:
   code_bytes = int(reference_constant(reference, "CODE_SEGMENT_BYTES"), 0)
   data_paragraph = int(reference_constant(reference, "DATA_SEGMENT_PARAGRAPH"), 0)
   if not EXECUTABLE.is_file():
-    fail(f"{EXECUTABLE.relative_to(ROOT)} is not there; it is the reference these files are generated from")
+    fail(f"{EXECUTABLE.relative_to(ROOT)} is not there; it is the reference these files are generated from. It is not in "
+         "the tree (D28, ADR-020): put a local copy at the root, which .gitignore keeps out of git")
   file = EXECUTABLE.read_bytes()
   digest = hashlib.sha256(file).hexdigest()
   if digest != expected:

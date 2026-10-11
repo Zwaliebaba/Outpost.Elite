@@ -162,13 +162,6 @@ jobs:
         shell: pwsh
         run: python Tools\GenerateOverlay.py --check
 
-      # GameLogic/ReferenceImage.h and GameLogic/ReferenceImage.cpp are ELITES.EXE's load image, generated from it and
-      # Design/Symbols.tsv and never edited (D3): the hosts load them, and nothing reads ELITES.EXE at runtime. A symbol
-      # renamed or moved without regenerating them fails here, and so does an ELITES.EXE that is not ADR-007's.
-      - name: Check the reference image
-        shell: pwsh
-        run: python Tools\GenerateReference.py --check
-
       # /warnaserror covers MSBuild's own warnings; /WX for the compiler is set in the projects.
       - name: Build
         if: steps.solution.outputs.path != ''

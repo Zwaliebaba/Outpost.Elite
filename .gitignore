@@ -16,6 +16,10 @@
 # Mono auto generated files
 mono_crash.*
 
+# The reference binary is not in the tree (D28, ADR-020). Keep a local copy at the root for the
+# tools that read it (Tools/GenerateReference.py and the mapping tools); it is never committed.
+/ELITES.EXE
+
 # Shader headers are written by the shader compiler on every build (AGENTS.md §2):
 # <Lib>/Shader/*.hlsl in, <Lib>/CompiledShader/*.h out. Build output; the .vcxproj regenerates it.
 CompiledShader/
