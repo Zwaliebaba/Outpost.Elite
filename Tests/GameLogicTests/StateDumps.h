@@ -1,4 +1,4 @@
-// GameLogicTests/StateDumps.h
+// Tests/GameLogicTests/StateDumps.h
 #pragma once
 
 #include "AnswerFile.h"

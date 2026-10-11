@@ -16,7 +16,7 @@ namespace
 {
 
 /// The maths' known answers, from the repository's root. The file's header documents its format and states the count.
-constexpr std::string_view MATHS_ANSWERS_FILE = "GameLogicTests/MathsAnswers.txt";
+constexpr std::string_view MATHS_ANSWERS_FILE = "Tests/GameLogicTests/MathsAnswers.txt";
 
 // Pairs of inputs, as aggregates: a std::pair's converting constructor would narrow each literal inside <utility>.
 struct UnsignedDivide

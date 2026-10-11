@@ -1,6 +1,6 @@
-# GameLogicTests/KnownAnswers.txt
+# Tests/GameLogicTests/KnownAnswers.txt
 #
-# The twins' known answers (D20, ADR-008 item 8, ADR-016). A twin (GameLogicTests/TwinRig.h) plays a scenario no replay
+# The twins' known answers (D20, ADR-008 item 8, ADR-016). A twin (Tests/GameLogicTests/TwinRig.h) plays a scenario no replay
 # reaches on the native code, and takes the game-state digest at every digest step and at the end of every Play. Each of
 # those digests was recorded here from the interpreted original, playing the same scenario, before D7 deleted the
 # interpreter. With the replay corpus, they are what the native code is held to.

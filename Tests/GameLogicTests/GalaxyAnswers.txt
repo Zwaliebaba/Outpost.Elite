@@ -1,4 +1,4 @@
-# GameLogicTests/GalaxyAnswers.txt
+# Tests/GameLogicTests/GalaxyAnswers.txt
 #
 # The galaxies' known answers (D33): every system of all eight galaxies, 2,048 answers, as the game's own routines
 # describe it. They were recorded from the native code while every state digest of the corpus and every twin answer still

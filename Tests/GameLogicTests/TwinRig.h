@@ -1,4 +1,4 @@
-// GameLogicTests/TwinRig.h
+// Tests/GameLogicTests/TwinRig.h
 #pragma once
 
 #include "AnswerFile.h"
@@ -31,15 +31,15 @@ struct TwinOptions
 };
 
 /// The twins' known answers, from the repository's root. The file's header documents its format.
-inline constexpr std::string_view KNOWN_ANSWERS_FILE = "GameLogicTests/KnownAnswers.txt";
+inline constexpr std::string_view KNOWN_ANSWERS_FILE = "Tests/GameLogicTests/KnownAnswers.txt";
 
 /// The twins' pictures (D33), from the repository's root: beside each known answer, the picture digest of the same state,
 /// under the same twin and ordinal. The file's header documents its format.
-inline constexpr std::string_view KNOWN_PICTURES_FILE = "GameLogicTests/KnownPictures.txt";
+inline constexpr std::string_view KNOWN_PICTURES_FILE = "Tests/GameLogicTests/KnownPictures.txt";
 
 /// The twins' outcomes (D33), from the repository's root: beside each known answer, the outcomes of the same state
 /// (Elite::OutcomeText), under the same twin and ordinal. The file's header documents its format.
-inline constexpr std::string_view KNOWN_OUTCOMES_FILE = "GameLogicTests/KnownOutcomes.txt";
+inline constexpr std::string_view KNOWN_OUTCOMES_FILE = "Tests/GameLogicTests/KnownOutcomes.txt";
 
 /// The twins' known answers (D20, ADR-008 item 8), as KNOWN_ANSWERS_FILE holds them: every digest a twin gives, at each
 /// digest step and at the end of each Play, recorded from the interpreted original before D7 deleted it, under the twin's

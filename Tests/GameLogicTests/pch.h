@@ -1,4 +1,4 @@
-// GameLogicTests/pch.h
+// Tests/GameLogicTests/pch.h
 #pragma once
 
 #include "CppUnitTest.h"
