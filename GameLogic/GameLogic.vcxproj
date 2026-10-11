@@ -80,8 +80,6 @@
     <ClInclude Include="CgaFont.h" />
     <ClInclude Include="Combat.h" />
     <ClInclude Include="Counted.h" />
-    <ClInclude Include="DataField.h" />
-    <ClInclude Include="DataOverlay.h" />
     <ClInclude Include="DirectoryFileStore.h" />
     <ClInclude Include="Docked.h" />
     <ClInclude Include="DockedTables.h" />

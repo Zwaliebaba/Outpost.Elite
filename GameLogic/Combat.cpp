@@ -4,7 +4,6 @@
 
 #include "Ai.h"
 #include "Arithmetic.h"
-#include "DataOverlay.h"
 #include "Docking.h"
 #include "Market.h"
 #include "Maths.h"

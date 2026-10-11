@@ -5,7 +5,6 @@
 #include "Ai.h"
 #include "Arithmetic.h"
 #include "Combat.h"
-#include "DataOverlay.h"
 #include "Docked.h"
 #include "Docking.h"
 #include "Equipment.h"

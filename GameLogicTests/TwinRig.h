@@ -2,6 +2,7 @@
 #pragma once
 
 #include "AnswerFile.h"
+#include "GameState.h"
 #include "StateDumps.h"
 #include "GuardReport.h"
 #include "ReferenceRig.h"
@@ -9,11 +10,13 @@
 #include "StateDigest.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <format>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 namespace GameLogicTests
@@ -79,6 +82,33 @@ private:
 
   TwinAnswers m_answers;
 };
+
+/// A byte of the game's data that a twin's set-up names by member pointer: a member of GameData (`&Elite::GameData::playerDead`),
+/// of the commander's block it nests (`&Elite::GameData::CommanderBlock::fuel`), or of that block's cargo hold
+/// (`&Elite::GameData::CommanderBlock::CargoHold::cargoUsedTonnes`). GameData nests each of those structs once, so the pointer's
+/// class says where the byte is (DataByteIn).
+template <typename Struct> using DataByte = Elite::Counted<std::uint8_t> Struct::*;
+
+/// The byte _member names in _state's data (DataByte).
+template <typename Struct>
+[[nodiscard]] Elite::Counted<std::uint8_t>& DataByteIn(Elite::GameState& _state, DataByte<Struct> _member) noexcept
+{
+  Elite::GameData& data = _state.Data();
+  if constexpr (std::is_same_v<Struct, Elite::GameData>)
+  {
+    return data.*_member;
+  }
+  else if constexpr (std::is_same_v<Struct, Elite::GameData::CommanderBlock>)
+  {
+    return data.commanderBlock.*_member;
+  }
+  else
+  {
+    static_assert(std::is_same_v<Struct, Elite::GameData::CommanderBlock::CargoHold>,
+                  "a member of GameData, of its commander's block or of the block's cargo hold");
+    return data.commanderBlock.cargoHold.*_member;
+  }
+}
 
 /// A twin (ADR-016): the reference booted to its title screen, or started at power-on, on the native platform
 /// (ReferenceRig), and then a scenario no replay reaches, played step by step. A test sets up its state through Both, from

@@ -4,7 +4,6 @@
 #include "Market.h"
 
 #include "Arithmetic.h"
-#include "DataOverlay.h"
 #include "Equipment.h"
 #include "MarketTables.h"
 #include "Text.h"

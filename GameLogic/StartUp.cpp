@@ -3,7 +3,6 @@
 #include "StartUp.h"
 
 #include "Arithmetic.h"
-#include "DataOverlay.h"
 #include "Docked.h"
 #include "Flight.h"
 #include "Input.h"

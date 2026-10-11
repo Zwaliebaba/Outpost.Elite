@@ -1,6 +1,5 @@
 #include "pch.h"
 
-#include "DataOverlay.h"
 #include "GameState.h"
 #include "Maths.h"
 #include "SpaceObject.h"
@@ -15,22 +14,17 @@ namespace GameLogicTests
 namespace
 {
 
-using Elite::DS;
+using Commander = Elite::GameData::CommanderBlock;
 
 // An object slot's type, in bits 1-5 of its first byte with the active bit; the flags a splinter and a barrel carry.
 constexpr std::uint8_t TYPE_SPLINTER = 0x0B;
 constexpr std::uint8_t FLAG_PRECIOUS = 0x10;
 constexpr std::uint8_t FLAG_MASKING_DEVICE = 0x40;
 
-// The data segment byte at _offset, set to _value on the twin.
-void SetByte(TwinRig& _rig, std::uint16_t _offset, std::uint8_t _value)
+// The byte _member names, set to _value on the twin.
+template <typename Struct> void SetByte(TwinRig& _rig, DataByte<Struct> _member, std::uint8_t _value)
 {
-  _rig.Both([_offset, _value](Elite::Platform&, Elite::GameState& _state) { _state.SetByte(_offset, _value); });
-}
-
-void SetByte(TwinRig& _rig, Elite::DataField<std::uint8_t> _field, std::uint8_t _value)
-{
-  SetByte(_rig, _field.offset, _value);
+  _rig.Both([_member, _value](Elite::Platform&, Elite::GameState& _state) { DataByteIn(_state, _member) = _value; });
 }
 
 // The cash, in tenths of credits, on the twin.
@@ -39,16 +33,17 @@ void SetCredits(TwinRig& _rig, std::uint32_t _tenths)
   _rig.Both(
     [_tenths](Elite::Platform&, Elite::GameState& _state)
     {
-      _state.SetWord(DS.creditsTenths.offset, static_cast<std::uint16_t>(_tenths));
-      _state.SetWord(DS.data75F5.offset, static_cast<std::uint16_t>(_tenths >> 16));
+      Commander::CreditsTenths& credits = _state.Data().commanderBlock.creditsTenths;
+      _state.SetWordOf(credits, static_cast<std::uint16_t>(_tenths));
+      credits.data75F5 = static_cast<std::uint16_t>(_tenths >> 16);
     });
 }
 
-// The byte _field as the twin holds it.
-[[nodiscard]] std::uint8_t TwinByte(TwinRig& _rig, Elite::DataField<std::uint8_t> _field)
+// The byte _member names, as the twin holds it.
+template <typename Struct> [[nodiscard]] std::uint8_t TwinByte(TwinRig& _rig, DataByte<Struct> _member)
 {
   std::uint8_t value = 0;
-  _rig.Both([&value, _field](Elite::Platform&, Elite::GameState& _state) { value = _state.Byte(_field.offset); });
+  _rig.Both([&value, _member](Elite::Platform&, Elite::GameState& _state) { value = DataByteIn(_state, _member); });
   return value;
 }
 
@@ -192,40 +187,40 @@ public:
     TwinRig rig("TwinEquipmentMenu");
     rig.Play("key space; wait 4");
     SetCredits(rig, 1000000);
-    SetByte(rig, DS.currentTechLevel, 9); // all 14 items
-    SetByte(rig, DS.fuel, 100);
-    SetByte(rig, DS.missionNumber, 1);
+    SetByte(rig, &Commander::currentTechLevel, 9); // all 14 items
+    SetByte(rig, &Commander::fuel, 100);
+    SetByte(rig, &Commander::missionNumber, 1);
     rig.Play("key F4; wait 1\nkey b; wait 0.2"); // no fuel in the first mission
-    SetByte(rig, DS.missionNumber, 0);
+    SetByte(rig, &Commander::missionNumber, 0);
     // Fuel bought, then full, and never sold; a fourth missile, and not a fifth.
     rig.Play("key b; wait 0.2\nkey b; wait 0.2\nkey s; wait 0.2\nkey Down; wait 0.2\nkey b; wait 0.2\nkey b; wait 0.2");
-    SetByte(rig, DS.missileCount, 1);
+    SetByte(rig, &Commander::missileCount, 1);
     rig.Play("key s; wait 0.2\nkey s; wait 0.2\nkey Down; wait 0.2"); // the last missile sold, then none
-    SetByte(rig, DS.cargoUsedTonnes, 25);
+    SetByte(rig, &Commander::CargoHold::cargoUsedTonnes, 25);
     rig.Play("key s; wait 0.2"); // too much cargo to sell the bay extension
-    SetByte(rig, DS.cargoUsedTonnes, 0);
+    SetByte(rig, &Commander::CargoHold::cargoUsedTonnes, 0);
     // None to sell, bought, already fitted, sold.
     rig.Play("key s; wait 0.2\nkey b; wait 0.2\nkey b; wait 0.2\nkey s; wait 0.2\ndigest items\nkey Down; wait 0.2\nkey Down; wait 0.2");
-    SetByte(rig, DS.laserMountsFitted, 0x0F);
+    SetByte(rig, &Commander::laserMountsFitted, 0x0F);
     rig.Play("key b; wait 0.2\nkey Down; wait 0.2\nkey b; wait 0.2"); // four lasers aboard: a pulse laser, and a beam laser
-    SetByte(rig, DS.laserMountsFitted, 0x01);
+    SetByte(rig, &Commander::laserMountsFitted, 0x01);
     rig.Play("key Down; wait 0.2\nkey b; wait 0.2"); // fuel scoops
-    SetByte(rig, DS.miningLaserCount, 1);
+    SetByte(rig, &Commander::miningLaserCount, 1);
     rig.Play("key s; wait 0.2"); // not while a mining laser needs them
-    SetByte(rig, DS.miningLaserCount, 0);
-    SetByte(rig, DS.fuelScoopsFitted, 0);
+    SetByte(rig, &Commander::miningLaserCount, 0);
+    SetByte(rig, &Commander::fuelScoopsFitted, 0);
     rig.Play("key Down; wait 0.2\nkey Down; wait 0.2\nkey Down; wait 0.2\nkey Down; wait 0.2\nkey Down; wait 0.2\n"
              "key Down; wait 0.2\nkey b; wait 0.2\ndigest lasers"); // a mining laser needs fuel scoops
     SetCredits(rig, 10);
     // Too little cash for the hyperdrive, round the bottom to a missile, and up to fuel.
     rig.Play("key Up; wait 0.2\nkey b; wait 0.2\nkey Down; wait 0.2\nkey Down; wait 0.2\nkey Down; wait 0.2\n"
              "key Down; wait 0.2\nkey b; wait 0.2\nkey Up; wait 0.2");
-    SetByte(rig, DS.fuel, 100);
+    SetByte(rig, &Commander::fuel, 100);
     // Too little for fuel, round the top, and the keys the menu ignores.
     rig.Play("key b; wait 0.2\nkey Up; wait 0.2\nkey F4; wait 0.2\nkey x; wait 0.2\nkey Home; wait 0.2");
-    SetByte(rig, DS.keyboardPitchRate, 5);
+    SetByte(rig, &Elite::GameData::keyboardPitchRate, 5);
     rig.Play("wait 0.3");
-    SetByte(rig, DS.keyboardPitchRate, 0xFB);
+    SetByte(rig, &Elite::GameData::keyboardPitchRate, 0xFB);
     rig.Play("wait 0.3\ndigest cursor\nkey F9; wait 0.5\ndigest left");
   }
 
@@ -238,14 +233,14 @@ public:
     SetCredits(rig, 1000000);
     rig.Play("key F4; wait 1\nkey Down; wait 0.2\nkey Down; wait 0.2\nkey Down; wait 0.2\nkey Down; wait 0.2\nkey Down; wait 0.2\n"
              "key b; wait 0.3\nkey space; wait 0.2\nkey Left; wait 0.2\nkey Right; wait 0.2\nkey Right; wait 0.2\nkey x; wait 0.2");
-    SetByte(rig, DS.keyboardRollRate, 5);
+    SetByte(rig, &Elite::GameData::keyboardRollRate, 5);
     rig.Play("wait 0.3");
-    SetByte(rig, DS.keyboardRollRate, 0xFB);
+    SetByte(rig, &Elite::GameData::keyboardRollRate, 0xFB);
     rig.Play("wait 0.3\nkey space; wait 0.3\ndigest fitted\nkey s; wait 0.3\nkey space; wait 0.2\nkey Left; wait 0.2\n"
              "key space; wait 0.2\nkey Right; wait 0.2\nkey Right; wait 0.2\nkey x; wait 0.2");
-    SetByte(rig, DS.keyboardRollRate, 5);
+    SetByte(rig, &Elite::GameData::keyboardRollRate, 5);
     rig.Play("wait 0.3");
-    SetByte(rig, DS.keyboardRollRate, 0xFB);
+    SetByte(rig, &Elite::GameData::keyboardRollRate, 0xFB);
     rig.Play("wait 0.3\nkey space; wait 0.3\ndigest removed");
   }
 
@@ -258,24 +253,24 @@ public:
   {
     TwinRig rig("TwinScoop");
     rig.Play("key space; wait 4");
-    SetByte(rig, DS.fuelScoopsFitted, 1);
+    SetByte(rig, &Commander::fuelScoopsFitted, 1);
     // All 11 tonnes of food Lave sells, and 7 of textiles, the next row.
     rig.Play("key F3; wait 0.5\nkey b; wait 0.2; key 1; key 1; key Return; wait 0.3\nkey Down; wait 0.15\n"
              "key b; wait 0.2; key 7; key Return; wait 0.3\ndigest cargo");
-    Assert::AreEqual(std::uint8_t{18}, TwinByte(rig, DS.cargoUsedTonnes), L"18 tonnes aboard");
+    Assert::AreEqual(std::uint8_t{18}, TwinByte(rig, &Commander::CargoHold::cargoUsedTonnes), L"18 tonnes aboard");
     rig.Play("key F1; wait 1.5\ndigest launched");
     MakeBelowTheNose(rig, Scoopable::MaskingDeviceBarrel);
     rig.Play("wait 0.2\ndigest masking-device");
-    Assert::AreEqual(std::uint8_t{1}, TwinByte(rig, DS.maskingDeviceRecovered), L"the masking device recovered");
+    Assert::AreEqual(std::uint8_t{1}, TwinByte(rig, &Commander::maskingDeviceRecovered), L"the masking device recovered");
     Assert::IsTrue(TwinMessage(rig) == Elite::Message::MaskingDevice, L"Masking Device!");
     MakeBelowTheNose(rig, Scoopable::Thargon);
     rig.Play("wait 0.2\ndigest alien-items");
-    Assert::AreEqual(std::uint8_t{1}, TwinByte(rig, DS.cargoAlienItemsTonnes), L"a tonne of alien items");
+    Assert::AreEqual(std::uint8_t{1}, TwinByte(rig, &Commander::CargoHold::cargoAlienItemsTonnes), L"a tonne of alien items");
     MakeBelowTheNose(rig, Scoopable::MineralSplinter);
     rig.Play("wait 0.2\ndigest minerals");
     Assert::IsTrue(TwinMessage(rig) == Elite::Message::PreciousMetals, L"precious metals");
-    Assert::AreEqual(std::uint8_t{1}, TwinByte(rig, DS.cargoMineralsTonnes), L"a tonne of minerals");
-    Assert::AreEqual(std::uint8_t{20}, TwinByte(rig, DS.cargoUsedTonnes), L"the hold full");
+    Assert::AreEqual(std::uint8_t{1}, TwinByte(rig, &Commander::CargoHold::cargoMineralsTonnes), L"a tonne of minerals");
+    Assert::AreEqual(std::uint8_t{20}, TwinByte(rig, &Commander::CargoHold::cargoUsedTonnes), L"the hold full");
     MakeBelowTheNose(rig, Scoopable::Barrel);
     rig.Play("wait 0.2\ndigest hold-full");
     Assert::IsTrue(TwinMessage(rig) == Elite::Message::CargoBayFull, L"Cargo Bay Full");

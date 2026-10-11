@@ -3,7 +3,6 @@
 #include "Text.h"
 
 #include "Arithmetic.h"
-#include "DataOverlay.h"
 #include "Flight.h"
 #include "Input.h"
 #include "Ships.h"

@@ -1,8 +1,8 @@
 #include "pch.h"
 
-#include "DataOverlay.h"
 #include "DirectoryFileStore.h"
 #include "DosFiles.h"
+#include "GameData.h"
 #include "Platform.h"
 #include "ReferenceRig.h"
 
@@ -23,13 +23,13 @@ namespace
 {
 
 // The game's own places in the data segment: where it points the transfer area, keeps a file's name and a commander's bytes.
-constexpr std::uint16_t AREA = Elite::DS.diskTransferArea.offset;
-constexpr std::uint16_t NAME = Elite::DS.commanderFileName.offset;
-constexpr std::uint16_t BLOCK = Elite::DS.commanderBlock.offset;
+constexpr auto AREA = static_cast<std::uint16_t>(GAME_DATA_OFFSET(diskTransferArea));
+constexpr auto NAME = static_cast<std::uint16_t>(GAME_DATA_OFFSET(commanderFileName));
+constexpr auto BLOCK = static_cast<std::uint16_t>(GAME_DATA_OFFSET(commanderBlock));
 constexpr std::uint16_t BLOCK_BYTES = 208;
 // A second transfer area, for a search that is not the game's, and a place for a name of 130 bytes with no NUL in reach.
-constexpr std::uint16_t OTHER_AREA = Elite::DS.commanderFileList.offset;
-constexpr std::uint16_t LONG_NAME = Elite::DS.commanderBlock.offset;
+constexpr auto OTHER_AREA = static_cast<std::uint16_t>(GAME_DATA_OFFSET(commanderFileList));
+constexpr auto LONG_NAME = static_cast<std::uint16_t>(GAME_DATA_OFFSET(commanderBlock));
 constexpr std::size_t LONG_NAME_BYTES = 130;
 
 // The transfer area, in DOS's layout.

@@ -99,12 +99,6 @@
     <ClInclude Include="Counted.h">
       <Filter>State</Filter>
     </ClInclude>
-    <ClInclude Include="DataField.h">
-      <Filter>Native</Filter>
-    </ClInclude>
-    <ClInclude Include="DataOverlay.h">
-      <Filter>Native</Filter>
-    </ClInclude>
     <ClInclude Include="DirectoryFileStore.h">
       <Filter>Platform</Filter>
     </ClInclude>

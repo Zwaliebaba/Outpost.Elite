@@ -1,6 +1,5 @@
 #include "pch.h"
 
-#include "DataOverlay.h"
 #include "TwinRig.h"
 
 #include <initializer_list>
@@ -13,8 +12,6 @@ namespace GameLogicTests
 
 namespace
 {
-
-using Elite::DS;
 
 // A key's release: its code with bit 7 set.
 constexpr std::uint8_t BREAK = 0x80;
@@ -61,7 +58,7 @@ void SteerTheChartWithTheStick(TwinRig& _rig)
   const auto cursor = [&]()
   {
     std::uint16_t position = 0;
-    _rig.Both([&](Elite::Platform&, Elite::GameState& _state) { position = _state.Word(DS.chartCursorX.offset); });
+    _rig.Both([&](Elite::Platform&, Elite::GameState& _state) { position = _state.WordOf(_state.Data().commanderBlock.chartCursorX); });
     return position;
   };
   attach(50'000, 50'000);
@@ -123,15 +120,15 @@ void SendTwinCodes(TwinRig& _rig, std::initializer_list<std::uint8_t> _codes)
 [[nodiscard]] std::pair<std::int8_t, std::int8_t> FlightRates(TwinRig& _rig)
 {
   std::uint16_t rates = 0;
-  _rig.Both([&rates](Elite::Platform&, Elite::GameState& _state) { rates = _state.Word(DS.rollRate.offset); });
+  _rig.Both([&rates](Elite::Platform&, Elite::GameState& _state) { rates = _state.Data().rollRate; });
   return {static_cast<std::int8_t>(rates & 0xFF), static_cast<std::int8_t>(rates >> 8)};
 }
 
-// The byte _field as the twin holds it.
-[[nodiscard]] std::uint8_t TwinByte(TwinRig& _rig, Elite::DataField<std::uint8_t> _field)
+// The byte _member names, as the twin holds it.
+template <typename Struct> [[nodiscard]] std::uint8_t TwinByte(TwinRig& _rig, DataByte<Struct> _member)
 {
   std::uint8_t value = 0;
-  _rig.Both([&value, _field](Elite::Platform&, Elite::GameState& _state) { value = _state.Byte(_field.offset); });
+  _rig.Both([&value, _member](Elite::Platform&, Elite::GameState& _state) { value = DataByteIn(_state, _member); });
   return value;
 }
 
@@ -172,7 +169,7 @@ public:
   {
     TwinRig rig("TwinMouseFlight", {.mousePresent = true});
     rig.Play("key space; wait 4\nkey Escape; wait 0.3\nkey m; wait 0.3\ndigest mouse");
-    Assert::AreEqual(MOUSE_DEVICE, TwinByte(rig, DS.inputDevice), L"the mouse selected");
+    Assert::AreEqual(MOUSE_DEVICE, TwinByte(rig, &Elite::GameData::inputDevice), L"the mouse selected");
     rig.Play("key F1; wait 1\ndigest launched");
     MoveTwinMouse(rig, 0x100, 0x100);
     rig.Play("wait 0.5\ndigest right-and-down");
@@ -182,7 +179,7 @@ public:
     const std::pair<std::int8_t, std::int8_t> leftAndUp = FlightRates(rig);
     MoveTwinMouse(rig, 0, 0, Elite::Mouse::BUTTON_LEFT);
     rig.Play("wait 0.5\ndigest firing");
-    Assert::IsTrue(TwinByte(rig, DS.laserTemperature) != 0, L"the laser fired");
+    Assert::IsTrue(TwinByte(rig, &Elite::GameData::laserTemperature) != 0, L"the laser fired");
     MoveTwinMouse(rig, 0, 0);
     rig.Play("wait 0.1");
     Assert::IsTrue(rightAndDown.first > 0 && leftAndUp.first < 0, L"the mouse rolled the ship either way");
@@ -197,7 +194,7 @@ public:
     TwinRig rig("TwinStickFlight");
     SetTwinStick(rig, CENTERED_OHMS, CENTERED_OHMS);
     rig.Play("key space; wait 4\nkey Escape; wait 0.3\nkey j; wait 0.3\nkey i; wait 0.3\nkey space; wait 0.3\ndigest stick");
-    Assert::AreEqual(JOYSTICK_DEVICE, TwinByte(rig, DS.inputDevice), L"the stick selected");
+    Assert::AreEqual(JOYSTICK_DEVICE, TwinByte(rig, &Elite::GameData::inputDevice), L"the stick selected");
     rig.Play("key F1; wait 1\ndigest launched");
     SetTwinStick(rig, LOW_OHMS, LOW_OHMS);
     rig.Play("wait 0.5\ndigest left-and-up");
@@ -209,7 +206,7 @@ public:
     rig.Play("wait 0.5\ndigest left-and-down");
     SetTwinStick(rig, CENTERED_OHMS, CENTERED_OHMS, true);
     rig.Play("wait 0.5\ndigest firing");
-    Assert::IsTrue(TwinByte(rig, DS.laserTemperature) != 0, L"the laser fired");
+    Assert::IsTrue(TwinByte(rig, &Elite::GameData::laserTemperature) != 0, L"the laser fired");
     SetTwinStick(rig, CENTERED_OHMS, CENTERED_OHMS);
     rig.Play("wait 0.1");
     Assert::IsTrue(leftAndUp.first < 0 && rightAndDown.first > 0, L"the stick rolled the ship either way");
@@ -225,8 +222,8 @@ public:
     rig.Play("key space; wait 4\nkey Escape; wait 0.3\nkey j; wait 0.3\nkey a; wait 0.3");
     SendTwinCodes(rig, {AMSTRAD_UP, AMSTRAD_UP | BREAK});
     rig.Play("wait 0.1\nkey space; wait 0.3\ndigest amstrad");
-    Assert::AreEqual(JOYSTICK_DEVICE, TwinByte(rig, DS.inputDevice), L"the Amstrad's stick selected");
-    Assert::AreEqual(std::uint8_t{1}, TwinByte(rig, DS.joystickIsAmstrad), L"the Amstrad's");
+    Assert::AreEqual(JOYSTICK_DEVICE, TwinByte(rig, &Elite::GameData::inputDevice), L"the Amstrad's stick selected");
+    Assert::AreEqual(std::uint8_t{1}, TwinByte(rig, &Elite::GameData::joystickIsAmstrad), L"the Amstrad's");
     rig.Play("key F1; wait 1\ndigest launched");
     SendTwinCodes(rig, {AMSTRAD_RIGHT, AMSTRAD_DOWN});
     rig.Play("wait 0.5\ndigest right-and-down");
@@ -236,7 +233,7 @@ public:
     const std::pair<std::int8_t, std::int8_t> leftAndUp = FlightRates(rig);
     SendTwinCodes(rig, {AMSTRAD_LEFT | BREAK, AMSTRAD_UP | BREAK, AMSTRAD_FIRE});
     rig.Play("wait 0.5\ndigest firing");
-    Assert::IsTrue(TwinByte(rig, DS.laserTemperature) != 0, L"the laser fired");
+    Assert::IsTrue(TwinByte(rig, &Elite::GameData::laserTemperature) != 0, L"the laser fired");
     SendTwinCodes(rig, {AMSTRAD_FIRE | BREAK});
     rig.Play("wait 0.1");
     Assert::IsTrue(rightAndDown.first > 0 && leftAndUp.first < 0, L"the stick rolled the ship either way");

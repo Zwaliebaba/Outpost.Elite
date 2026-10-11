@@ -1,6 +1,5 @@
 #include "pch.h"
 
-#include "DataOverlay.h"
 #include "SpaceObject.h"
 #include "Outcome.h"
 #include "ReferenceRig.h"
@@ -15,7 +14,8 @@ namespace GameLogicTests
 namespace
 {
 
-using Elite::DS;
+// A product's cargoHold entry: the units held, then the units on sale.
+constexpr std::size_t HOLD_ENTRY_BYTES = 2;
 
 // The value OutcomeValue gives for _name, which must be one of OUTCOMES.
 [[nodiscard]] std::string Value(const Elite::GameState& _state, std::string_view _name)
@@ -59,13 +59,15 @@ public:
   {
     ReferenceRig rig("OutcomeFields");
     Elite::GameState& state = rig.State();
-    state.SetWord(DS.creditsTenths.offset, 0x2345);
+    state.SetWordOf(state.Data().commanderBlock.creditsTenths, 0x2345);
     state.Data().commanderBlock.creditsTenths.data75F5 = 0x0001;
     Assert::AreEqual("74565", Value(state, "creditsTenths").c_str(), false, L"10000h + 2345h tenths");
 
+    const std::span<Elite::Counted<std::uint8_t>> hold =
+      state.BytesFrom(state.Data().commanderBlock.cargoHold, sizeof(Elite::GameData::CommanderBlock::CargoHold));
     for (std::size_t commodity = 0; commodity < 17; ++commodity)
-      state.SetByte(DS.cargoHold.At(commodity), static_cast<std::uint8_t>(commodity));
-    state.SetByte(static_cast<std::uint16_t>(DS.cargoHold.At(2) + 1), 99); // on sale, not held
+      hold[commodity * HOLD_ENTRY_BYTES] = static_cast<std::uint8_t>(commodity);
+    hold[2 * HOLD_ENTRY_BYTES + 1] = 99; // on sale, not held
     Assert::AreEqual("0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16", Value(state, "cargo").c_str());
 
     constexpr std::string_view TITLE = "ARCH ANG=";
@@ -75,8 +77,8 @@ public:
 
     state.Data().shipSlotCount = 3;
     for (std::uint16_t slot = 0; slot < 4; ++slot)
-      state.SetByte(static_cast<std::uint16_t>(DS.shipSlots.offset + slot * Elite::SpaceObject::BYTES), Elite::SpaceObject::ACTIVE);
-    state.SetByte(static_cast<std::uint16_t>(DS.shipSlots.offset + Elite::SpaceObject::BYTES), 0x0A); // type 5, not active
+      state.Slot(static_cast<Elite::SlotIndex>(slot)).type = Elite::SpaceObject::ACTIVE;
+    state.Slot(static_cast<Elite::SlotIndex>(1)).type = 0x0A; // type 5, not active
     Assert::AreEqual("2", Value(state, "shipSlotsInUse").c_str(), false, L"slots 0 and 2: slot 1 is not active, slot 3 not walked");
 
     state.Data().playerEnergy = 0x3FF;

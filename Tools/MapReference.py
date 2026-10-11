@@ -16,7 +16,7 @@ Row format (tab-separated, header line first, `#` lines are comments):
   kind      routine | entry | isr | label | code | table | data | text
             (an entry is a second way into a routine and starts its own block; a label names a place
             inside one and does not; code is code no walk reaches yet)
-  name      routines PascalCase (they become functions); data camelCase (fields of the overlay)
+  name      routines PascalCase (they become functions); data camelCase (members of GameData)
   size      bytes, optional; for a table, the entry count
   contract  registers and flags in and out, for routines; element type, for tables
   subsystem one of the plan's §5 subsystem names

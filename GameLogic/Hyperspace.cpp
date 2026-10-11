@@ -3,7 +3,6 @@
 #include "Hyperspace.h"
 
 #include "Arithmetic.h"
-#include "DataOverlay.h"
 #include "Flight.h"
 #include "Galaxy.h"
 #include "Maths.h"

@@ -27,8 +27,8 @@ struct OutcomeName
   OutcomeKind kind;
 };
 
-/// Every outcome, in the order an outcome line holds them (Replay.h): the commander's state by the names DataOverlay.h gives
-/// it, then the flight's. They are what a player could notice, not every byte; the state digest checks every byte.
+/// Every outcome, in the order an outcome line holds them (Replay.h): the commander's state by the names GameData gives it,
+/// then the flight's. They are what a player could notice, not every byte; the state digest checks every byte.
 ///
 /// Progress, which gates: where the commander is (galaxy, system, witch space, docked, in flight, dead), what they have
 /// (credits, the hold, the refugees, equipment, missiles, lasers and their mounts), their standing (legal status, kills, the

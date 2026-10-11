@@ -3,7 +3,6 @@
 #include "Input.h"
 
 #include "Arithmetic.h"
-#include "DataOverlay.h"
 #include "Maths.h"
 #include "Video.h"
 

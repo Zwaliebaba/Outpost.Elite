@@ -3,7 +3,6 @@
 
 #include "Cga.h"
 #include "Counted.h"
-#include "DataField.h"
 #include "GameData.h"
 #include "Reference.h"
 #include "SpaceObject.h"
@@ -20,9 +19,9 @@ namespace Elite
 
 class Game;
 
-/// The game's memory (ADR-012, D19): the reference's data segment as its struct (GameData), by member (Data()), by name
-/// (DataOverlay.h) or by offset; and the CGA's video memory. It owns both, and it has no registers: a routine that takes a
-/// GameState takes its inputs as parameters and gives its results back.
+/// The game's memory (ADR-012, D19): the reference's data segment as its struct (GameData), by member (Data()) or by offset;
+/// and the CGA's video memory. It owns both, and it has no registers: a routine that takes a GameState takes its inputs as
+/// parameters and gives its results back.
 ///
 /// The host makes one for the whole run, inside a Game, which loads the reference's data segment into it (Game::Load) at the
 /// segment DOS would have put it at, so that the original's far addresses, segment and offset, still name its bytes: the data
@@ -202,26 +201,6 @@ public:
   template <typename Member> [[nodiscard]] std::string_view TextAt(const Member& _member, std::uint16_t _into) const noexcept
   {
     return TextFrom(static_cast<std::uint16_t>(OffsetOf(_member) + _into));
-  }
-
-  [[nodiscard]] std::uint8_t Get(DataField<std::uint8_t> _field) const noexcept
-  {
-    return Byte(_field.offset);
-  }
-
-  [[nodiscard]] std::uint16_t Get(DataField<std::uint16_t> _field) const noexcept
-  {
-    return Word(_field.offset);
-  }
-
-  void Set(DataField<std::uint8_t> _field, std::uint8_t _value) noexcept
-  {
-    SetByte(_field.offset, _value);
-  }
-
-  void Set(DataField<std::uint16_t> _field, std::uint16_t _value) noexcept
-  {
-    SetWord(_field.offset, _value);
   }
 
   /// The byte at DS:_offset, where DS is the reference's data segment.

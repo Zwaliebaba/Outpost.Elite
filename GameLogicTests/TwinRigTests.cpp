@@ -1,6 +1,5 @@
 #include "pch.h"
 
-#include "DataOverlay.h"
 #include "TwinRig.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -24,7 +23,7 @@ public:
   TEST_METHOD(TwinTakesASetUp)
   {
     TwinRig rig("TwinSetUp");
-    rig.Both([](Elite::Platform&, Elite::GameState& _state) { _state.SetByte(Elite::DS.fuel.offset, 0x20); });
+    rig.Both([](Elite::Platform&, Elite::GameState& _state) { _state.Data().commanderBlock.fuel = 0x20; });
     rig.Play("key space; wait 4\ndigest docked");
   }
 };

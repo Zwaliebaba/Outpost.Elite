@@ -1,6 +1,5 @@
 #include "pch.h"
 
-#include "DataOverlay.h"
 #include "ReferenceImage.h"
 #include "ReferenceRig.h"
 #include "StateDigest.h"
@@ -12,6 +11,16 @@ using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
 namespace GameLogicTests
 {
+
+namespace
+{
+
+// fuel's 1987 offset in the data segment (Design/Symbols.tsv). The far accessors and the accessors by offset address the game's
+// memory as the original does, by segment and offset, so the test reaches the member there on purpose: at that offset of
+// GameState::DataBytes() are the member's bytes.
+constexpr std::uint16_t FUEL_OFFSET = 0x75E2;
+
+} // namespace
 
 TEST_CLASS(StateDigestTests)
 {
@@ -75,9 +84,8 @@ public:
     Assert::AreEqual(changes + 1, state.ChangeCount(), L"a write that changes a byte is counted");
     state.Data().commanderBlock.fuel = static_cast<std::uint8_t>(fuel ^ 0xFF);
     Assert::AreEqual(changes + 1, state.ChangeCount(), L"a write of the byte already there is not");
-    Assert::AreEqual(std::uint32_t{fuel ^ 0xFFu}, std::uint32_t{state.FarByte(state.DataSegment(), Elite::DS.fuel.offset)},
-                     L"a far read finds it");
-    (void)state.Word(Elite::DS.fuel.offset);
+    Assert::AreEqual(std::uint32_t{fuel ^ 0xFFu}, std::uint32_t{state.FarByte(state.DataSegment(), FUEL_OFFSET)}, L"a far read finds it");
+    (void)state.Word(FUEL_OFFSET);
     (void)state.VideoByte(0);
     Assert::AreEqual(changes + 1, state.ChangeCount(), L"a read counts nothing");
 

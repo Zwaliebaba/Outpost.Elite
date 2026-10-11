@@ -3,7 +3,6 @@
 #include "Docked.h"
 
 #include "Arithmetic.h"
-#include "DataOverlay.h"
 #include "DockedTables.h"
 #include "Equipment.h"
 #include "Galaxy.h"

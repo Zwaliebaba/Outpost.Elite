@@ -4,7 +4,6 @@
 
 #include "Arithmetic.h"
 #include "Combat.h"
-#include "DataOverlay.h"
 #include "Maths.h"
 #include "Ships.h"
 
