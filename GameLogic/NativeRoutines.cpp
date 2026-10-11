@@ -20,10 +20,11 @@ constexpr std::array<EntryList, 3> SUBSYSTEMS = {&InputEntries, &StartUpEntries,
 
 } // namespace
 
-void InstallNativeRoutines(Machine::Pc& _pc, GameState& _state)
+void InstallNativeRoutines(Machine::Pc& _pc, GameState& _state, Platform& _platform)
 {
   const std::uint16_t code = _state.CodeSegment();
   GameState* const state = &_state;
+  Platform* const platform = &_platform;
   for (const EntryList entries : SUBSYSTEMS)
   {
     for (const NativeEntry& entry : entries())
@@ -32,9 +33,9 @@ void InstallNativeRoutines(Machine::Pc& _pc, GameState& _state)
       const EntryReturn exit = entry.exit;
       _pc.Hook(
         code, entry.offset, std::string(entry.name),
-        [body, exit, state](Machine::Pc& _host)
+        [body, exit, state, platform](Machine::Pc& _host)
         {
-          Guest guest(_host, *state);
+          Guest guest(_host, *state, *platform);
           body(guest);
           switch (exit)
           {
