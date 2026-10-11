@@ -8,6 +8,7 @@
 #include "Flight.h"
 #include "Market.h"
 #include "Maths.h"
+#include "ReferenceTables.h"
 #include "Ships.h"
 #include "Text.h"
 #include "Timer.h"
@@ -206,10 +207,10 @@ PrintedText PrintEquipmentSellColumn(GameState& _state, std::uint16_t _text)
   return printed;
 }
 
-// The place of the laser type name's pointer for mount _mount, from its two bits of laserMountTypes _types.
-[[nodiscard]] std::uint16_t MountLaserName(std::uint8_t _types, std::uint16_t _mount) noexcept
+// The name of the laser type on mount _mount, from its two bits of laserMountTypes _types.
+[[nodiscard]] std::string_view MountLaserName(std::uint8_t _types, std::uint16_t _mount) noexcept
 {
-  return DS.laserTypeNames.At(static_cast<std::uint8_t>(_types >> (_mount * 2)) & MOUNT_TYPE_BITS);
+  return LASER_TYPE_NAMES[static_cast<std::uint8_t>(_types >> (_mount * 2)) & MOUNT_TYPE_BITS];
 }
 
 // A quarter of _rows rows of the text page, in bytes, as the menus measure it: _rows*256, shifted right twice.
@@ -813,12 +814,14 @@ PrintedText DrawLaserMountMenu(GameState& _state)
   PrintedText printed{FREE_MOUNT_TEXT, MOUNT_NAMES_OFFSET};
   for (std::uint16_t mount = 0; mount < MOUNT_COUNT; ++mount)
   {
-    std::uint16_t name = FREE_MOUNT_TEXT;
     if (((fitted >> mount) & 1) != 0)
     {
-      name = _state.Word(MountLaserName(types, mount));
+      printed.nextCell = PrintTextModeString(_state, MountLaserName(types, mount), printed.nextCell);
     }
-    printed = PrintTextModeString(_state, name, printed.nextCell);
+    else
+    {
+      printed = PrintTextModeString(_state, FREE_MOUNT_TEXT, printed.nextCell);
+    }
   }
   _state.Data().textAttribute = MOUNT_HIGHLIGHT_ATTRIBUTE;
   PaintLaserMountBox(_state, FIRST_MOUNT_BOX);

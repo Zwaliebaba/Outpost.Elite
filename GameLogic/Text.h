@@ -6,6 +6,7 @@
 #include "SpaceObject.h"
 
 #include <cstdint>
+#include <string_view>
 
 namespace Elite
 {
@@ -62,12 +63,19 @@ std::uint16_t DrawViewChar(GameState& _state, std::uint8_t _character, std::uint
 /// DrawViewString (CS:31EC): DrawViewChar for each character of the text at DS:_text, from DS:_at.
 PrintedText DrawViewString(GameState& _state, std::uint16_t _text, std::uint16_t _ink, std::uint16_t _at);
 
+/// DrawViewString (CS:31EC): DrawViewChar for each character of _text, from DS:_at. Returns the place after the last.
+std::uint16_t DrawViewString(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _at);
+
 /// DrawScreenChar (CS:31F9): the 8x8 glyph of _character, in _ink on textPaperPattern, at _segment:_cell, an even line
 /// of the CGA's memory. Returns the place of the next character, two bytes on.
 std::uint16_t DrawScreenChar(GameState& _state, std::uint8_t _character, std::uint16_t _ink, std::uint16_t _segment, std::uint16_t _cell);
 
 /// DrawScreenString (CS:32D8): DrawScreenChar for each character of the text at DS:_text, from _segment:_cell.
 PrintedText DrawScreenString(GameState& _state, std::uint16_t _text, std::uint16_t _ink, std::uint16_t _segment, std::uint16_t _cell);
+
+/// DrawScreenString (CS:32D8): DrawScreenChar for each character of _text, from _segment:_cell. Returns the place after the
+/// last.
+std::uint16_t DrawScreenString(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _segment, std::uint16_t _cell);
 
 /// FormatDecimal5 (CS:3407): _value as five ASCII digits at DS:_digits. Returns what is left of it below the last
 /// divisor: its units.
@@ -108,6 +116,9 @@ void ShowShipIdentity(GameState& _state, std::uint8_t _type, std::uint8_t _class
 
 /// PrintTextModeString (CS:60D2): the text at DS:_text to the text page at B800:_cell, in textAttribute.
 PrintedText PrintTextModeString(GameState& _state, std::uint16_t _text, std::uint16_t _cell);
+
+/// PrintTextModeString (CS:60D2): _text to the text page at B800:_cell, in textAttribute. Returns the cell after its last.
+std::uint16_t PrintTextModeString(GameState& _state, std::string_view _text, std::uint16_t _cell);
 
 /// ToggleMenuRowHighlight (CS:6328): SwapTextAttributeNibbles, and the attribute that makes into the 36 attribute bytes
 /// of a menu row at _segment:_row. Returns that attribute.

@@ -224,6 +224,17 @@ PrintedText DrawViewString(GameState& _state, std::uint16_t _text, std::uint16_t
   }
 }
 
+std::uint16_t DrawViewString(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _at)
+{
+  // Each character is read as it is reached, as the original reads it from memory.
+  std::uint16_t at = _at;
+  for (const char character : _text)
+  {
+    at = DrawViewChar(_state, static_cast<std::uint8_t>(character), _ink, at);
+  }
+  return at;
+}
+
 std::uint16_t DrawScreenChar(GameState& _state, std::uint8_t _character, std::uint16_t _ink, std::uint16_t _segment, std::uint16_t _cell)
 {
   std::uint16_t address = _cell;
@@ -256,6 +267,16 @@ PrintedText DrawScreenString(GameState& _state, std::uint16_t _text, std::uint16
     drawn.end = Offset(drawn.end, 1);
     drawn.nextCell = DrawScreenChar(_state, character, _ink, _segment, drawn.nextCell);
   }
+}
+
+std::uint16_t DrawScreenString(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _segment, std::uint16_t _cell)
+{
+  std::uint16_t cell = _cell;
+  for (const char character : _text)
+  {
+    cell = DrawScreenChar(_state, static_cast<std::uint8_t>(character), _ink, _segment, cell);
+  }
+  return cell;
 }
 
 std::uint16_t FormatDecimal5(GameState& _state, std::uint16_t _value, std::uint16_t _digits)
@@ -450,6 +471,18 @@ PrintedText PrintTextModeString(GameState& _state, std::uint16_t _text, std::uin
     _state.SetVideoWord(printed.nextCell, Join(attribute, character));
     printed.nextCell = static_cast<std::uint16_t>(printed.nextCell + 2);
   }
+}
+
+std::uint16_t PrintTextModeString(GameState& _state, std::string_view _text, std::uint16_t _cell)
+{
+  const std::uint8_t attribute = _state.Data().textAttribute;
+  std::uint16_t cell = _cell;
+  for (const char character : _text)
+  {
+    _state.SetVideoWord(cell, Join(attribute, static_cast<std::uint8_t>(character)));
+    cell = static_cast<std::uint16_t>(cell + 2);
+  }
+  return cell;
 }
 
 std::uint8_t ToggleMenuRowHighlight(GameState& _state, std::uint16_t _segment, std::uint16_t _row)

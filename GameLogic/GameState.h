@@ -8,10 +8,12 @@
 #include "Reference.h"
 #include "SpaceObject.h"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <string_view>
 
 namespace Elite
 {
@@ -84,6 +86,28 @@ public:
   [[nodiscard]] std::uint16_t OffsetOf(const SpaceObject& _object) const noexcept
   {
     return static_cast<std::uint16_t>(reinterpret_cast<const std::uint8_t*>(&_object) - DataBytes().data());
+  }
+
+  /// The offset in the data segment of _member, a member of Data() at any depth: what the original holds in a register for
+  /// it, where a loop that waits carries it in its turns (ADR-015).
+  template <typename Member> [[nodiscard]] std::uint16_t OffsetOf(const Member& _member) const noexcept
+  {
+    return static_cast<std::uint16_t>(reinterpret_cast<const std::uint8_t*>(&_member) - DataBytes().data());
+  }
+
+  /// The text that starts at _member, a member of Data(), up to its NUL: as the original reads a text, wherever in the data
+  /// segment its NUL is, past the member's end too. The view is of the data segment's bytes, as they are when it is taken.
+  template <typename Member> [[nodiscard]] std::string_view TextAt(const Member& _member) const noexcept
+  {
+    return TextFrom(OffsetOf(_member));
+  }
+
+  /// The text after _text's NUL, up to its own: the next of the texts that follow one another in the data segment, as the
+  /// original steps past a NUL to the next. _text is a view TextAt or TextAfter gave.
+  [[nodiscard]] std::string_view TextAfter(std::string_view _text) const noexcept
+  {
+    const auto* const end = reinterpret_cast<const std::uint8_t*>(_text.data() + _text.size());
+    return TextFrom(static_cast<std::uint16_t>(end - DataBytes().data() + 1));
   }
 
   [[nodiscard]] std::uint8_t Get(DataField<std::uint8_t> _field) const noexcept
@@ -249,6 +273,14 @@ private:
   [[nodiscard]] std::span<std::uint8_t, sizeof(GameData)> DataStorage() noexcept
   {
     return std::span<std::uint8_t, sizeof(GameData)>(reinterpret_cast<std::uint8_t*>(&m_block->data), sizeof(GameData));
+  }
+
+  /// The text at DS:_offset, up to its NUL or the data segment's end.
+  [[nodiscard]] std::string_view TextFrom(std::uint16_t _offset) const noexcept
+  {
+    const std::span<const std::uint8_t> rest = DataBytes().subspan(_offset);
+    const auto nul = std::ranges::find(rest, std::uint8_t{0});
+    return std::string_view(reinterpret_cast<const char*>(rest.data()), static_cast<std::size_t>(nul - rest.begin()));
   }
 
   /// _offset, when a record there ends inside the data segment; otherwise throws std::out_of_range.

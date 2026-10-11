@@ -8,6 +8,7 @@
 #include "Galaxy.h"
 #include "Input.h"
 #include "Market.h"
+#include "ReferenceTables.h"
 #include "SaveLoad.h"
 #include "Scene.h"
 #include "Ships.h"
@@ -44,8 +45,6 @@ constexpr std::uint16_t FRAME_SIDES = 0x050;      // line 1, column 0
 constexpr std::uint16_t FRAME_SIDE_ROWS = 0x17;
 constexpr std::uint16_t FRAME_RIGHT_SIDE = 0x4E; // column 39
 constexpr std::uint16_t TEXT_ROW_BYTES = 0x50;
-constexpr std::uint16_t FRAME_CORNERS = 6;
-constexpr std::uint16_t FRAME_CORNER_BYTES = 3; // the cell's offset, then the character
 
 // Where the original jumps back (Hardware::LoopTurn, ADR-015).
 constexpr std::uint16_t DOCKED_KEY_DISPATCH = 0x0B40;
@@ -487,10 +486,10 @@ std::uint16_t DrawDockedFrame(GameState& _state, Hardware& _hardware, std::uint1
     DrawFrameRow(_state, GameState::VIDEO_SEGMENT, row, Join(frame, FRAME_ROW_CHARACTER), _backward);
   }
   DrawFrameSides(_state, GameState::VIDEO_SEGMENT, FRAME_SIDES, FRAME_SIDE_ROWS, frame);
-  for (std::uint16_t corner = 0; corner < FRAME_CORNERS; ++corner)
+  for (const FrameCorner& corner : FRAME_CORNERS)
   {
-    const auto place = static_cast<std::uint16_t>(DS.frameCorners.offset + corner * FRAME_CORNER_BYTES);
-    _state.SetVideoWord(_state.Word(place), Join(frame, _state.Byte(Offset(place, 2))));
+    const auto cell = static_cast<std::uint16_t>(corner.row * TEXT_ROW_BYTES + corner.column * 2);
+    _state.SetVideoWord(cell, Join(frame, corner.character));
   }
   return Offset(_descriptor, 2);
 }
@@ -667,7 +666,7 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
   printed = PrintTextModeString(_state, LEGAL_STATUS_LABEL_TEXT, LINE_7);
   const std::uint8_t legal = _state.Data().commanderBlock.legalStatus;
   const std::uint16_t standing = legal < LEGAL_STATUS_OFFENDER ? 0 : legal < LEGAL_STATUS_FUGITIVE ? 1 : 2;
-  PrintTextModeString(_state, _state.Word(DS.legalStatusNames.At(standing)), printed.nextCell);
+  PrintTextModeString(_state, LEGAL_STATUS_NAMES[standing], printed.nextCell);
   printed = PrintTextModeString(_state, RATING_LABEL_TEXT, LINE_8);
   // The rating: the first threshold above the kill count, each turn of the search carrying the threshold's place and the rating.
   const std::uint8_t kills = _state.Data().commanderBlock.killCount;
@@ -683,7 +682,8 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
     }
     _hardware.LoopTurn(STATUS_RATING, {threshold, rating});
   }
-  PrintTextModeString(_state, _state.Word(DS.ratingNames.At(rating)), printed.nextCell);
+  // The last threshold is above any kill count (killCount stops at FEh), so the rating is one of the nine.
+  PrintTextModeString(_state, RATING_NAMES[rating], printed.nextCell);
   _state.Data().textAttribute = EQUIPMENT_HEADING_ATTRIBUTE;
   PrintTextModeString(_state, EQUIPMENT_HEADING_TEXT, LINE_9);
   _state.Data().textAttribute = STATUS_ATTRIBUTE;
@@ -692,53 +692,57 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
   _state.Data().data84F5 = al;
 
   // One row for each item fitted, and after a laser the mounts it is fitted to. Each turn carries the count, the row's place,
-  // the item's count and its name's pointer.
+  // the item's count and its name's pointer: where the original holds them, the pointer the place of the item's entry in
+  // equipmentNames.
   std::uint16_t row = LINE_10;
   std::uint16_t fitted = DS.missileCount.offset;
-  std::uint16_t name = DS.equipmentNames.offset;
+  std::size_t item = 0;
   _state.Data().menuSelectedRow = FIRST_EQUIPMENT_MENU_ROW;
   for (std::uint16_t left = EQUIPMENT_ROWS;;)
   {
     if (_state.Byte(fitted) != 0)
     {
-      printed = PrintTextModeString(_state, _state.Word(name), row);
+      // The missiles' name is the buffer their count was written into above; the rest are constant.
+      const std::string_view name = item == 0 ? _state.TextAt(_state.Data().gap84EC) : EQUIPMENT_NAMES[item];
+      const std::uint16_t named = PrintTextModeString(_state, name, row);
       al = 0;
       if (SelectLaserType(_state))
       {
-        printed = PrintTextModeString(_state, MOUNTS_OPEN_TEXT, printed.nextCell);
+        std::uint16_t cell = PrintTextModeString(_state, MOUNTS_OPEN_TEXT, named).nextCell;
         // Each mount with this type of laser, from laserMountsFitted in DL and laserMountTypes in DH, which each turn carries
-        // with the mount name's pointer, the count and where the next name prints.
+        // with the mount name's pointer, the place of its entry in laserMountNames, the count and where the next name prints.
         std::uint8_t mounts = _state.Data().commanderBlock.laserMountsFitted;
         std::uint8_t types = _state.Data().commanderBlock.laserMountTypes;
-        std::uint16_t mountName = DS.laserMountNames.offset;
+        std::size_t mountName = 0;
         for (std::uint16_t mount = LASER_MOUNTS;;)
         {
           const bool on = (mounts & 1) != 0;
           mounts = static_cast<std::uint8_t>(mounts >> 1);
           if (on && (types & LASER_MOUNT_TYPE_MASK) == _state.Data().selectedLaserType)
           {
-            printed = PrintTextModeString(_state, _state.Word(mountName), printed.nextCell);
+            cell = PrintTextModeString(_state, LASER_MOUNT_NAMES[mountName], cell);
           }
-          mountName = Offset(mountName, 2);
+          ++mountName;
           types = static_cast<std::uint8_t>(types >> 2);
           if (--mount == 0)
           {
             break;
           }
-          _hardware.LoopTurn(STATUS_LASER_MOUNT, {Join(types, mounts), mountName, mount, printed.nextCell});
+          _hardware.LoopTurn(STATUS_LASER_MOUNT,
+                             {Join(types, mounts), _state.OffsetOf(_state.Data().laserMountNames[mountName]), mount, cell});
         }
-        PrintTextModeString(_state, MOUNTS_CLOSE_TEXT, static_cast<std::uint16_t>(printed.nextCell - 2));
+        PrintTextModeString(_state, MOUNTS_CLOSE_TEXT, static_cast<std::uint16_t>(cell - 2));
       }
       row = Offset(row, TEXT_ROW_BYTES);
     }
     fitted = Offset(fitted, 1);
-    name = Offset(name, 2);
+    ++item;
     _state.Data().menuSelectedRow = static_cast<std::uint8_t>(_state.Data().menuSelectedRow + 1);
     if (--left == 0)
     {
       break;
     }
-    _hardware.LoopTurn(STATUS_EQUIPMENT_ROW, {left, row, fitted, name});
+    _hardware.LoopTurn(STATUS_EQUIPMENT_ROW, {left, row, fitted, _state.OffsetOf(_state.Data().equipmentNames[item])});
   }
   return WaitForScreenExitKey(_state, _hardware, SCAN_F9, al, _countIfNone);
 }

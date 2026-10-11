@@ -150,6 +150,12 @@ jobs:
         shell: pwsh
         run: python Tools\GenerateOverlay.py --check
 
+      # GameLogic/ReferenceTables.h is generated from the checked-in image, GameLogic/ReferenceImage.cpp,
+      # and Design/Symbols.tsv (D33): the reference's tables of addresses as what they point at.
+      - name: Check the reference's tables
+        shell: pwsh
+        run: python Tools\GenerateTables.py --check
+
       # /warnaserror covers MSBuild's own warnings; /WX for the compiler is set in the projects.
       - name: Build
         shell: pwsh

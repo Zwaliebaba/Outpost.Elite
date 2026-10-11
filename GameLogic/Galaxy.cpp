@@ -6,6 +6,7 @@
 #include "Arithmetic.h"
 #include "DataOverlay.h"
 #include "Input.h"
+#include "ReferenceTables.h"
 #include "Video.h"
 
 #include <initializer_list>
@@ -48,13 +49,13 @@ constexpr std::uint8_t SCAN_F7 = 0x41;
 constexpr std::uint8_t SCAN_F10 = 0x44;
 constexpr std::uint8_t SCAN_KEYPAD_5 = 0x4C;
 
-// The control codes' handlers as textControlCodes holds them.
-constexpr std::uint16_t INSERT_SYSTEM_NAME = 0x707A;
-constexpr std::uint16_t INSERT_SYSTEM_ADJECTIVE = 0x708D;
-constexpr std::uint16_t INSERT_RANDOM_NAME = 0x70C1;
-constexpr std::uint16_t BACKSPACE_DESCRIPTION = 0x7107;
-constexpr std::uint16_t START_CAPITALIZING = 0x7109;
-constexpr std::uint16_t STOP_CAPITALIZING = 0x710F;
+// A description's control codes, in the order textControlCodes (DS:9763) lists their handlers.
+constexpr std::uint8_t INSERT_SYSTEM_NAME = 1;
+constexpr std::uint8_t INSERT_SYSTEM_ADJECTIVE = 2;
+constexpr std::uint8_t INSERT_RANDOM_NAME = 3;
+constexpr std::uint8_t BACKSPACE_DESCRIPTION = 4;
+constexpr std::uint8_t START_CAPITALIZING = 5;
+constexpr std::uint8_t STOP_CAPITALIZING = 6;
 
 constexpr std::uint8_t SPACE = 0x20;
 constexpr std::uint8_t TEXT_LAYOUT = 2; // screenLayout of the docked text screens
@@ -152,6 +153,7 @@ constexpr std::uint16_t DESCRIPTION_SCREEN_OFFSET = 0x5F4;
 constexpr std::uint16_t DESCRIPTION_LINE_CHARACTERS = 0x24;
 constexpr std::uint16_t TEXT_ROW_BYTES = 0x50;
 constexpr std::uint8_t DESCRIPTION_PHRASE_CODE = 0x80;
+constexpr std::uint8_t SEVEN_NAMES = 7; // the bits DescribeSystem gives the economy, the government and each of the species' bytes
 constexpr std::uint8_t DESCRIPTION_PHRASE_DIVISOR = 0x34;
 
 [[nodiscard]] constexpr std::uint16_t MakeWord(std::uint8_t _low, std::uint8_t _high) noexcept
@@ -247,48 +249,33 @@ std::uint8_t CopyBytes(GameState& _state, std::uint16_t _from, std::uint16_t _to
   return false;
 }
 
-// A control code's handler, as textControlCodes holds it, and its value routine.
-struct TextControlHandler
+// jmp [bx] through textControlCodes to control code _code's handler, with SI and the return to ResumeTextExpansion pushed; the
+// handler returns there, which pops SI. The stack keeps no more than SI and the way back, so the handler's value routine runs on
+// the output at DS:_output. Codes 7-31 jump into descriptionPhraseLists, whose words the original would run as code; the
+// routine runs nothing for them. No text in the game holds such a code (Tools/GenerateTables.py checks the phrases), and no
+// description reaches textControlCodes to write over it: the longest is 144 bytes of descriptionBuffer's 256. Returns the place
+// past what the handler wrote.
+std::uint16_t RunTextControlCode(GameState& _state, std::uint8_t _code, std::uint16_t _output)
 {
-  std::uint16_t offset;
-  std::uint16_t (*run)(GameState&, std::uint16_t); // with the output's place, returning the place past what it wrote
-};
-
-constexpr std::array<TextControlHandler, 6> TEXT_CONTROL_HANDLERS = {{
-  {INSERT_SYSTEM_NAME, &InsertSystemName},
-  {INSERT_SYSTEM_ADJECTIVE, &InsertSystemAdjective},
-  {INSERT_RANDOM_NAME, &InsertRandomName},
-  {BACKSPACE_DESCRIPTION, [](GameState&, std::uint16_t _output) { return BackspaceDescription(_output); }},
-  {START_CAPITALIZING,
-   [](GameState& _state, std::uint16_t _output)
-   {
-     StartCapitalizing(_state);
-     return _output;
-   }},
-  {STOP_CAPITALIZING,
-   [](GameState& _state, std::uint16_t _output)
-   {
-     StopCapitalizing(_state);
-     return _output;
-   }},
-}};
-
-// jmp [bx] to the control code handler at CS:_handler, with SI and the return to ResumeTextExpansion pushed; the
-// handler returns there, which pops SI. The stack keeps no more than SI and the way back, so the handler's value
-// routine runs on the output at DS:_output. Codes 7-31 jump into descriptionPhraseLists, whose words the original
-// would run as code, and so would a code whose handler a description had written over; the routine runs nothing for
-// them. No text in the game holds such a code, and no description reaches textControlCodes: the longest is 144 bytes
-// of descriptionBuffer's 256. Returns the place past what the handler wrote.
-std::uint16_t RunTextControlCode(GameState& _state, std::uint16_t _handler, std::uint16_t _output)
-{
-  for (const TextControlHandler& handler : TEXT_CONTROL_HANDLERS)
+  switch (_code)
   {
-    if (handler.offset == _handler)
-    {
-      return handler.run(_state, _output);
-    }
+  case INSERT_SYSTEM_NAME:
+    return InsertSystemName(_state, _output);
+  case INSERT_SYSTEM_ADJECTIVE:
+    return InsertSystemAdjective(_state, _output);
+  case INSERT_RANDOM_NAME:
+    return InsertRandomName(_state, _output);
+  case BACKSPACE_DESCRIPTION:
+    return BackspaceDescription(_output);
+  case START_CAPITALIZING:
+    StartCapitalizing(_state);
+    return _output;
+  case STOP_CAPITALIZING:
+    StopCapitalizing(_state);
+    return _output;
+  default:
+    return _output;
   }
-  return _output;
 }
 
 // A chart's cross (CS:0D33, CS:0D61, CS:0FAD): _arm either way of (_x, _row), across and then down, each a clipped line. The
@@ -647,12 +634,6 @@ NotOnMapMessage ShowNotOnMap(GameState& _state, std::uint16_t _segment)
   message.name = DrawScreenString(_state, DS.findInputEcho.offset, INK_2, _segment, message.prefix.nextCell);
   message.suffix = DrawScreenString(_state, DS.findErrorSuffix.offset, INK_3, _segment, message.name.nextCell);
   return message;
-}
-
-// PrintTextModeString, at B800:_cell, of the text whose pointer is _bytes into the table at DS:_table.
-PrintedText PrintNamed(GameState& _state, std::uint16_t _table, std::uint16_t _bytes, std::uint16_t _cell)
-{
-  return PrintTextModeString(_state, _state.Word(Offset(_table, _bytes)), _cell);
 }
 
 // FindNearestSystem's search (CS:1292): what it leaves in BP, the count its loop had left at the nearest system on the current
@@ -1190,11 +1171,9 @@ ScreenKey ShowSystemDataScreen(GameState& _state, Hardware& _hardware, bool _bac
   printed = PrintTextModeString(_state, FormatSelectedSystemDistance(_state), printed.nextCell);
   PrintTextModeString(_state, LIGHT_YEARS_LABEL, printed.nextCell);
   printed = PrintTextModeString(_state, ECONOMY_LABEL, ECONOMY_ROW);
-  PrintNamed(_state, DS.economyNames.offset, static_cast<std::uint16_t>(_state.Data().commanderBlock.selectedEconomy << 1),
-             printed.nextCell);
+  PrintTextModeString(_state, ECONOMY_NAMES[_state.Data().commanderBlock.selectedEconomy & SEVEN_NAMES], printed.nextCell);
   printed = PrintTextModeString(_state, GOVERNMENT_LABEL, GOVERNMENT_ROW);
-  PrintNamed(_state, DS.governmentNames.offset, static_cast<std::uint16_t>(_state.Data().commanderBlock.selectedGovernment << 1),
-             printed.nextCell);
+  PrintTextModeString(_state, GOVERNMENT_NAMES[_state.Data().commanderBlock.selectedGovernment & SEVEN_NAMES], printed.nextCell);
   printed = PrintTextModeString(_state, TECH_LEVEL_LABEL, TECH_LEVEL_ROW);
 
   // The tech level, one to sixteen, in the two characters at data7D48, a column left when it is one digit.
@@ -1225,14 +1204,12 @@ ScreenKey ShowSystemDataScreen(GameState& _state, Hardware& _hardware, bool _bac
   }
   else
   {
-    // SHL AL,1 on each byte, then XOR AH,AH.
-    printed = PrintNamed(_state, DS.speciesSizeNames.offset, static_cast<std::uint8_t>(size << 1), printed.nextCell);
-    printed = PrintNamed(_state, DS.speciesColorNames.offset,
-                         static_cast<std::uint8_t>(_state.Data().commanderBlock.selectedSpeciesAdjective2 << 1), printed.nextCell);
-    printed = PrintNamed(_state, DS.speciesTraitNames.offset,
-                         static_cast<std::uint8_t>(_state.Data().commanderBlock.selectedSpeciesAdjective3 << 1), printed.nextCell);
-    PrintNamed(_state, DS.speciesTypeNames.offset, static_cast<std::uint8_t>(_state.Data().commanderBlock.selectedSpeciesType << 1),
-               printed.nextCell);
+    // Each of the species' four bytes indexes its table (SHL AL,1 / XOR AH,AH). DescribeSystem gives each three bits.
+    const GameData::CommanderBlock& commander = _state.Data().commanderBlock;
+    cell = PrintTextModeString(_state, SPECIES_SIZE_NAMES[size & SEVEN_NAMES], printed.nextCell);
+    cell = PrintTextModeString(_state, SPECIES_COLOR_NAMES[commander.selectedSpeciesAdjective2 & SEVEN_NAMES], cell);
+    cell = PrintTextModeString(_state, SPECIES_TRAIT_NAMES[commander.selectedSpeciesAdjective3 & SEVEN_NAMES], cell);
+    PrintTextModeString(_state, SPECIES_TYPE_NAMES[commander.selectedSpeciesType & SEVEN_NAMES], cell);
   }
 
   // The productivity, its leading zero blanked a column left; the radius, its leading digit blanked.
@@ -1288,8 +1265,9 @@ void ShowSystemDescription(GameState& _state, bool _backward)
     _state.SetWord(word, 0);
     word = Offset(word, WordStep(_backward));
   }
-  const ExpandedText expanded = ExpandDescriptionText(_state, DS.descriptionTemplate.offset, DS.descriptionBuffer.offset);
-  _state.SetByte(expanded.next, 0);
+  const std::uint16_t expanded =
+    ExpandDescriptionText(_state, _state.TextAt(_state.Data().descriptionTemplate), DS.descriptionBuffer.offset);
+  _state.SetByte(expanded, 0);
 
   // Word-wrapped at the last space within 36 characters, a text row at a time.
   std::uint16_t line = DS.descriptionBuffer.offset;
@@ -1312,33 +1290,26 @@ void ShowSystemDescription(GameState& _state, bool _backward)
   }
 }
 
-ExpandedText ExpandDescriptionText(GameState& _state, std::uint16_t _text, std::uint16_t _output)
+std::uint16_t ExpandDescriptionText(GameState& _state, std::string_view _text, std::uint16_t _output)
 {
-  ExpandedText expanded{_text, _output};
-  for (;;)
+  std::uint16_t next = _output;
+  for (const char letter : _text)
   {
-    const std::uint8_t code = _state.Byte(expanded.end);
-    expanded.end = Offset(expanded.end, 1);
-    if (code == 0)
-    {
-      return expanded;
-    }
+    const auto code = static_cast<std::uint8_t>(letter);
     if (code < SPACE)
     {
-      const std::uint16_t handler = _state.Word(DS.textControlCodes.At(static_cast<std::uint8_t>(code - 1)));
-      expanded.next = RunTextControlCode(_state, handler, expanded.next);
+      next = RunTextControlCode(_state, code, next);
       continue;
     }
     if (code >= DESCRIPTION_PHRASE_CODE)
     {
       // One of the five phrases in the code's list, by the next random number's low byte / 52.
-      const std::uint16_t list = _state.Word(DS.descriptionPhraseLists.At(static_cast<std::uint8_t>(code - DESCRIPTION_PHRASE_CODE)));
+      const std::array<std::uint8_t, 5>& list = DESCRIPTION_PHRASE_LISTS[static_cast<std::uint8_t>(code - DESCRIPTION_PHRASE_CODE)];
       const auto pick = static_cast<std::uint8_t>(Low(NextDescriptionRandom(_state)) / DESCRIPTION_PHRASE_DIVISOR);
-      const std::uint16_t phrase = _state.Word(Offset(list, static_cast<std::uint16_t>(pick << 1)));
-      expanded.next = ExpandDescriptionText(_state, phrase, expanded.next).next;
+      next = ExpandDescriptionText(_state, DESCRIPTION_PHRASES[list[pick]], next);
       continue;
     }
-    const std::uint16_t output = expanded.next;
+    const std::uint16_t output = next;
     const std::uint8_t previous = _state.Byte(static_cast<std::uint16_t>(output - 1));
     if (code == SPACE && previous == SPACE)
     {
@@ -1351,15 +1322,16 @@ ExpandedText ExpandDescriptionText(GameState& _state, std::uint16_t _text, std::
       character = static_cast<std::uint8_t>(code & UPPER_CASE_MASK);
     }
     _state.SetByte(output, character);
-    expanded.next = Offset(output, 1);
+    next = Offset(output, 1);
   }
+  return next;
 }
 
 std::uint16_t InsertSystemName(GameState& _state, std::uint16_t _output)
 {
   // MOV AX,20h / MOV [DI],AX: the space and the NUL after the name again, as a word.
   _state.SetWord(CopySelectedNameLower(_state), SPACE);
-  return ExpandDescriptionText(_state, DS.descriptionNameBuffer.offset, _output).next;
+  return ExpandDescriptionText(_state, _state.TextAt(_state.Data().descriptionNameBuffer), _output);
 }
 
 std::uint16_t InsertSystemAdjective(GameState& _state, std::uint16_t _output)
@@ -1371,7 +1343,7 @@ std::uint16_t InsertSystemAdjective(GameState& _state, std::uint16_t _output)
     --suffix;
   }
   CopyBytes(_state, DS.adjectiveSuffix.offset, suffix, ADJECTIVE_SUFFIX_BYTES);
-  return ExpandDescriptionText(_state, DS.descriptionNameBuffer.offset, _output).next;
+  return ExpandDescriptionText(_state, _state.TextAt(_state.Data().descriptionNameBuffer), _output);
 }
 
 std::uint16_t InsertRandomName(GameState& _state, std::uint16_t _output)
@@ -1385,7 +1357,7 @@ std::uint16_t InsertRandomName(GameState& _state, std::uint16_t _output)
   GenerateSystemName(_state);
   CopySelectedNameLower(_state);
   CopyBytes(_state, SAVED_SYSTEM_NAME, DS.selectedSystemName.offset, SYSTEM_NAME_BYTES);
-  return ExpandDescriptionText(_state, DS.descriptionNameBuffer.offset, _output).next;
+  return ExpandDescriptionText(_state, _state.TextAt(_state.Data().descriptionNameBuffer), _output);
 }
 
 std::uint16_t BackspaceDescription(std::uint16_t _output)

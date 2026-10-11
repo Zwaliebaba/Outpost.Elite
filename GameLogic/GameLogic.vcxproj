@@ -112,6 +112,7 @@
     <ClInclude Include="Platform.h" />
     <ClInclude Include="Reference.h" />
     <ClInclude Include="ReferenceImage.h" />
+    <ClInclude Include="ReferenceTables.h" />
     <ClInclude Include="Replay.h" />
     <ClInclude Include="SaveLoad.h" />
     <ClInclude Include="Scene.h" />

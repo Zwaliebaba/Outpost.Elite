@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <string_view>
 
 namespace Elite
 {
@@ -73,13 +74,6 @@ struct LabelNudge
 {
   bool moved;     ///< it moved them; otherwise it is out of tries
   ChartSpan rows; ///< the rows, as it leaves them either way
-};
-
-/// Where ExpandDescriptionText stops.
-struct ExpandedText
-{
-  std::uint16_t end;  ///< past the coded text's NUL
-  std::uint16_t next; ///< past the last character it wrote
 };
 
 /// GetShortRangeOffset (CS:1076): whether the system in systemSeeds is on the current chart, and on the
@@ -197,11 +191,11 @@ std::uint16_t FormatSelectedSystemDistance(GameState& _state);
 /// page from row 19, word-wrapped at the last space within 36 characters.
 void ShowSystemDescription(GameState& _state, bool _backward);
 
-/// ExpandDescriptionText (CS:700F): the coded text at DS:_text expanded into DS:_output, recursively: a byte of
-/// 1-31 runs the control code's handler from textControlCodes, one of 80h up a phrase from descriptionPhraseLists
+/// ExpandDescriptionText (CS:700F): the coded text _text expanded into DS:_output, recursively: a byte of 1-6 runs the
+/// control code's handler, as textControlCodes lists them, one of 80h up a phrase from its list (DESCRIPTION_PHRASE_LISTS)
 /// picked by NextDescriptionRandom, and any other is copied, but a space after a space, and a letter after a space
-/// upper-cased while descriptionCapitalize is 1.
-ExpandedText ExpandDescriptionText(GameState& _state, std::uint16_t _text, std::uint16_t _output);
+/// upper-cased while descriptionCapitalize is 1. Returns the place past the last character written.
+std::uint16_t ExpandDescriptionText(GameState& _state, std::string_view _text, std::uint16_t _output);
 
 /// InsertSystemName (CS:707A): control code 1, the selected system's name, as CopySelectedNameLower leaves it,
 /// expanded into DS:_output. Returns the place past the last character written.

@@ -6,6 +6,7 @@
 #include "DataOverlay.h"
 #include "Docked.h"
 #include "Input.h"
+#include "ReferenceTables.h"
 #include "Text.h"
 
 namespace Elite
@@ -291,10 +292,10 @@ DiscMenuExit LeaveGameLoopForDisk(GameState& _state, std::uint8_t _operation)
   return DiscMenuExit{true, 0, 0};
 }
 
-// Where ShowControlDevice reads the input device's name from, in inputDeviceNames.
-[[nodiscard]] std::uint16_t InputDeviceName(const GameState& _state)
+// The input device's name, which ShowControlDevice reads from inputDeviceNames: the disc menu sets inputDevice to 0, 1 or 2.
+[[nodiscard]] std::string_view InputDeviceName(const GameState& _state)
 {
-  return static_cast<std::uint16_t>((_state.Data().inputDevice << 1) + DS.inputDeviceNames.offset);
+  return INPUT_DEVICE_NAMES[_state.Data().inputDevice];
 }
 
 // ShowControlDevice (CS:6705): "DEVICE:" and the input device's name, and the help rows blanked. Returns where the second
@@ -302,7 +303,7 @@ DiscMenuExit LeaveGameLoopForDisk(GameState& _state, std::uint8_t _operation)
 PrintedText ShowControlDevice(GameState& _state)
 {
   const PrintedText label = PrintAt(_state, DEVICE_TEXT, STATUS_POSITION);
-  PrintAt(_state, _state.Word(InputDeviceName(_state)), label.nextCell);
+  PrintTextModeString(_state, InputDeviceName(_state), label.nextCell);
   return BlankHelpRows(_state);
 }
 
@@ -476,13 +477,13 @@ DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _sh
 std::uint8_t ShowDiskResult(GameState& _state, Hardware& _hardware)
 {
   PrintAt(_state, BLANK_STATUS_TEXT, STATUS_POSITION);
-  // BL = diskOperation - 1, BH = 0, doubled: the operation's name in diskOperationNames.
-  const auto name =
-    static_cast<std::uint16_t>((static_cast<std::uint8_t>(_state.Data().diskOperation - 1) << 1) + DS.diskOperationNames.offset);
-  const PrintedText result = PrintAt(_state, _state.Word(name), STATUS_POSITION);
+  // BL = diskOperation - 1, BH = 0, doubled: the operation's name in diskOperationNames. Only operations 1-4 come back to the
+  // disc menu: 0 leaves the game.
+  const std::uint16_t result =
+    PrintTextModeString(_state, DISK_OPERATION_NAMES[static_cast<std::uint8_t>(_state.Data().diskOperation - 1)], STATUS_POSITION);
   if (_state.Data().diskOperation == CATALOGUE_COMMANDERS)
   {
-    PrintAt(_state, CATALOGUE_OK_TEXT, result.nextCell);
+    PrintAt(_state, CATALOGUE_OK_TEXT, result);
     PrintCommanderCatalogue(_state);
     return 0;
   }
@@ -498,7 +499,7 @@ std::uint8_t ShowDiskResult(GameState& _state, Hardware& _hardware)
     _hardware.LoopTurn(FIND_NAME_EXTENSION, {letter});
   }
   _state.SetByte(letter, 0);
-  PrintAt(_state, DS.commanderFileName.offset, result.nextCell);
+  PrintAt(_state, DS.commanderFileName.offset, result);
   if (_state.Data().diskOperation != LOAD_COMMANDER)
   {
     return 0;

@@ -198,6 +198,9 @@
     <ClInclude Include="ReferenceImage.h">
       <Filter>Reference</Filter>
     </ClInclude>
+    <ClInclude Include="ReferenceTables.h">
+      <Filter>Reference</Filter>
+    </ClInclude>
     <ClInclude Include="Replay.h">
       <Filter>Replay</Filter>
     </ClInclude>

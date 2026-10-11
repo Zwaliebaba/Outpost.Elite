@@ -7,6 +7,7 @@
 #include "DataOverlay.h"
 #include "Equipment.h"
 #include "Maths.h"
+#include "ReferenceTables.h"
 #include "Video.h"
 
 #include <initializer_list>
@@ -21,12 +22,6 @@ namespace
 // The ship slots DetonateEnergyBomb's LOOP looks at begin at firstShipSlot, after the sun, the planet and the station: its count is
 // objectSlotCount less these.
 constexpr std::uint8_t BOMB_FIRST_SLOT = 3;
-
-// The blueprint handlers, as a blueprint's first word names them, and the bytes before the rest of a blueprint: that word and the
-// half-width byte.
-constexpr std::uint16_t BUILD_BOX_CORNER_VERTICES = 0x377A;
-constexpr std::uint16_t BUILD_DODO_VERTICES = 0x38BF;
-constexpr std::uint16_t BLUEPRINT_HANDLER_BYTES = 3;
 
 // The instruction after each divide, where DivideOverflowInterrupt looks for its opcode. ProjectVertices'
 // divides take a memory operand, so the handler reads their ModRM byte 74h and saturates only AL.
@@ -200,36 +195,36 @@ void RotateVerticesToView(GameState& _state, std::uint16_t _first, std::uint16_t
   RotateVertices(_state, _first, _count, 0, VERTEX_Z, 8);
 }
 
-// RenderBlueprint (CS:3CF2-3D20), what RenderBlueprintBody does with the blueprint body at _body: the vertex program from
-// _accumulator, the projection, the edge lists and the faces. Each count is a byte loaded into CL and stored with all of CX,
-// whose CH the LOOPs before it leave 0, or the edge count's doubling. Returns the direction flag as DrawVisibleFaces leaves it.
-[[nodiscard]] bool RenderBlueprint(GameState& _state, std::uint16_t _body, Vector _accumulator, bool _backward)
+// The offset in the data segment of _part of a blueprint, a view of BLUEPRINT_DATA, which holds the blueprints' bytes where the
+// data segment has them: what the original holds in SI there.
+[[nodiscard]] std::uint16_t BlueprintOffset(const GameState& _state, std::span<const std::uint8_t> _part) noexcept
 {
-  const VertexProgramEnd program = RunVertexProgram(_state, _body, _accumulator);
-  std::uint16_t at = program.next;
+  return Offset(_state.OffsetOf(_state.Data().blueprints), static_cast<std::uint16_t>(_part.data() - BLUEPRINT_DATA.data()));
+}
+
+// RenderBlueprint (CS:3CF2-3D20), what RenderBlueprintBody does with _blueprint's body: the vertex program from _accumulator, the
+// projection, the edge lists and the faces. Each count is a byte loaded into CL and stored with all of CX, whose CH the LOOPs
+// before it leave 0, or the edge count's doubling. Returns the direction flag as DrawVisibleFaces leaves it.
+[[nodiscard]] bool RenderBlueprint(GameState& _state, const Blueprint& _blueprint, Vector _accumulator, bool _backward)
+{
+  const Vector accumulator = RunVertexProgram(_state, _blueprint.vertexProgram, _accumulator);
   std::uint16_t count = 0;
-  SetLow(count, _state.Byte(at));
+  SetLow(count, _blueprint.projectedVertices);
   _state.Data().projectedVertexCount = count;
-  at = Offset(at, 1);
   // ProjectVertices' divides save BX, the accumulator's y, which RunVertexProgram leaves there.
-  ProjectVertices(_state, High(static_cast<std::uint16_t>(program.accumulator.y)));
+  ProjectVertices(_state, High(static_cast<std::uint16_t>(accumulator.y)));
   count = 0;
   // Fixed edges, then face edges: a count byte, then two bytes for each.
-  SetLow(count, _state.Byte(at));
+  SetLow(count, static_cast<std::uint8_t>(_blueprint.fixedEdges.size() / 2));
   _state.Data().fixedEdgeCount = count;
   count = static_cast<std::uint16_t>(count << 1);
-  at = Offset(at, 1);
-  _state.Set(DS.fixedEdgeList, at);
-  at = Offset(at, count);
-  SetLow(count, _state.Byte(at));
+  _state.Set(DS.fixedEdgeList, BlueprintOffset(_state, _blueprint.fixedEdges));
+  SetLow(count, static_cast<std::uint8_t>(_blueprint.faceEdges.size() / 2));
   _state.Data().faceEdgeCount = count;
   count = static_cast<std::uint16_t>(count << 1);
-  at = Offset(at, 1);
-  _state.Set(DS.faceEdgeList, at);
-  at = Offset(at, count);
-  SetLow(count, _state.Byte(at));
-  at = Offset(at, 1);
-  return DrawVisibleFaces(_state, at, count, _backward).backward;
+  _state.Set(DS.faceEdgeList, BlueprintOffset(_state, _blueprint.faceEdges));
+  SetLow(count, _blueprint.faces);
+  return DrawVisibleFaces(_state, _blueprint, count, _backward).backward;
 }
 
 // CWD / MOV DL,AH / MOV AH,AL / XOR AL,AL: DX:AX = _magnitude * 256, what ProjectVertices and DrawSunOrPlanetDisc divide. DH is
@@ -260,12 +255,12 @@ void RotateVerticesToView(GameState& _state, std::uint16_t _first, std::uint16_t
 // The bytes LoadTriangle takes, one a vertex.
 constexpr std::uint16_t TRIANGLE_VERTEX_BYTES = 3;
 
-// The three vertex bytes at _indices, each shifted left by _shift, as a byte, into an offset in vertexBuffer, and the points
-// there. The second's x goes through faceTestScratch, written before its y is read, as the original keeps it there.
-[[nodiscard]] Triangle LoadTriangle(GameState& _state, std::uint16_t _indices, std::uint8_t _shift)
+// The three vertex bytes at _indices of a face list, each shifted left by _shift, as a byte, into an offset in vertexBuffer, and
+// the points there. The second's x goes through faceTestScratch, written before its y is read, as the original keeps it there.
+[[nodiscard]] Triangle LoadTriangle(GameState& _state, std::span<const std::uint8_t> _list, std::uint16_t _indices, std::uint8_t _shift)
 {
-  const auto vertex = [&_state, _indices, _shift](std::uint16_t _which)
-  { return Offset(DS.vertexBuffer.offset, static_cast<std::uint8_t>(_state.Byte(Offset(_indices, _which)) << _shift)); };
+  const auto vertex = [_list, _indices, _shift](std::uint16_t _which)
+  { return Offset(DS.vertexBuffer.offset, static_cast<std::uint8_t>(_list[Offset(_indices, _which)] << _shift)); };
   const auto coordinate = [&_state](std::uint16_t _vertex, std::uint16_t _bytes)
   { return static_cast<std::int16_t>(_state.Word(Offset(_vertex, _bytes))); };
   const std::uint16_t first = vertex(0);
@@ -295,12 +290,13 @@ struct WindingProducts
                          product(difference(_triangle.first.y, _triangle.second.y), difference(_triangle.third.x, _triangle.second.x))};
 }
 
-// An edge item (CS:3AF3): _item, the edge's offset in faceEdgeList; the edge's colour from its high byte's low bits, then
-// DrawClippedLine from its second vertex to its first, unless either's x is 7FFFh, the trap's saturation. PUSH SI / POP SI round
-// the line keep the list. Returns what DrawClippedLine returns: whether DrawLine filled, and cleared the direction flag.
-[[nodiscard]] bool DrawFaceEdge(GameState& _state, std::uint8_t _item)
+// An edge item (CS:3AF3): _item, the edge's offset in _blueprint's face edges, which faceEdgeList points at; the edge's colour from
+// its high byte's low bits, then DrawClippedLine from its second vertex to its first, unless either's x is 7FFFh, the trap's
+// saturation. PUSH SI / POP SI round the line keep the list. Returns what DrawClippedLine returns: whether DrawLine filled, and
+// cleared the direction flag.
+[[nodiscard]] bool DrawFaceEdge(GameState& _state, const Blueprint& _blueprint, std::uint8_t _item)
 {
-  const std::uint16_t edge = _state.Word(Offset(_state.Get(DS.faceEdgeList), _item));
+  const std::uint16_t edge = Join(_blueprint.faceEdges[_item + 1u], _blueprint.faceEdges[_item]);
   _state.Data().drawColor = static_cast<std::uint8_t>(High(edge) & EDGE_COLOR_BITS);
   const auto vertices = static_cast<std::uint16_t>(edge & EDGE_VERTEX_BITS);
   const std::uint16_t to = Offset(DS.vertexBuffer.offset, Low(vertices));
@@ -315,12 +311,13 @@ struct WindingProducts
 }
 
 // A triangle item (CS:3B30): _item, the offset of its pattern in faceFillPatterns, into triangleFillPattern, then the three
-// vertex bytes at _vertices: FillTriangle unless a corner's x is 7FFFh. PUSH SI / POP SI round it keep the list. Returns the
-// offset past the vertex bytes.
-[[nodiscard]] std::uint16_t DrawFaceTriangle(GameState& _state, std::uint8_t _item, std::uint16_t _vertices, bool _backward)
+// vertex bytes at _vertices of _list: FillTriangle unless a corner's x is 7FFFh. PUSH SI / POP SI round it keep the list. Returns
+// the offset past the vertex bytes.
+[[nodiscard]] std::uint16_t DrawFaceTriangle(GameState& _state, std::uint8_t _item, std::span<const std::uint8_t> _list,
+                                             std::uint16_t _vertices, bool _backward)
 {
   _state.Data().triangleFillPattern = _state.Word(Offset(DS.faceFillPatterns.offset, _item));
-  const Triangle triangle = LoadTriangle(_state, _vertices, 1);
+  const Triangle triangle = LoadTriangle(_state, _list, _vertices, 1);
   const auto offScreen = [](ScreenPoint _point) { return static_cast<std::uint16_t>(_point.x) == OFF_SCREEN; };
   if (!offScreen(triangle.first) && !offScreen(triangle.second) && !offScreen(triangle.third))
   {
@@ -329,22 +326,23 @@ struct WindingProducts
   return Offset(_vertices, TRIANGLE_VERTEX_BYTES);
 }
 
-// A facing face's items (CS:3AE8): a count byte into CL, CH 0, then the items, an edge's one byte counted off by LOOP and a
-// triangle's four by SUB CX,4 / JE, which ends only on 0. Returns the offset past them, and the direction flag as the edges'
-// DrawLine leave it.
-[[nodiscard]] FacesEnd DrawFaceItems(GameState& _state, std::uint16_t _items, bool _backward)
+// A facing face's items (CS:3AE8), at _items in _blueprint's face list: a count byte into CL, CH 0, then the items, an edge's one
+// byte counted off by LOOP and a triangle's four by SUB CX,4 / JE, which ends only on 0. Returns the offset in the list past them,
+// and the direction flag as the edges' DrawLine leave it.
+[[nodiscard]] FacesEnd DrawFaceItems(GameState& _state, const Blueprint& _blueprint, std::uint16_t _items, bool _backward)
 {
+  const std::span<const std::uint8_t> list = _blueprint.faceList;
   FacesEnd end{Offset(_items, 1), _backward};
-  std::uint16_t left = _state.Byte(_items);
+  std::uint16_t left = list[_items];
   for (;;)
   {
-    const std::uint8_t item = _state.Byte(end.next);
+    const std::uint8_t item = list[end.next];
     end.next = Offset(end.next, 1);
     // SHL BL,1 / JB, then SHR BL,1: bit 7 says a triangle, and the rest is the offset.
     const auto offset = static_cast<std::uint8_t>(item & ~FACE_TRIANGLE);
     if ((item & FACE_TRIANGLE) == 0)
     {
-      if (DrawFaceEdge(_state, offset))
+      if (DrawFaceEdge(_state, _blueprint, offset))
       {
         end.backward = false;
       }
@@ -355,7 +353,7 @@ struct WindingProducts
     }
     else
     {
-      end.next = DrawFaceTriangle(_state, offset, end.next, end.backward);
+      end.next = DrawFaceTriangle(_state, offset, list, end.next, end.backward);
       left = static_cast<std::uint16_t>(left - TRIANGLE_ITEM_BYTES);
       if (left == 0)
       {
@@ -588,8 +586,9 @@ void DrawObjectAsDot(GameState& _state, SpaceObject& _slot, bool _backward)
     DrawObjectAsDot(_state, _slot, _backward);
     return _backward;
   }
-  // MOV BL,[DI] / AND BX,3Eh: the type, doubled, indexes blueprintTable.
-  const std::uint16_t blueprint = _state.Word(Offset(static_cast<std::uint16_t>(_slot.type & SLOT_TYPE_BITS), DS.blueprintTable.offset));
+  // MOV BL,[DI] / AND BX,3Eh: the type, doubled, indexes blueprintTable. The sun and the planet, types 1Eh and 1Fh, past its
+  // 30 entries, were drawn above.
+  const Blueprint& blueprint = BLUEPRINTS[(_slot.type & SLOT_TYPE_BITS) >> 1];
   _state.Data().drawPitchAngle = std::uint16_t{_slot.pitch};
   _state.Data().drawYawAngle = std::uint16_t{_slot.yaw};
   _state.Data().drawRollAngle = std::uint16_t{_slot.roll};
@@ -887,9 +886,9 @@ Vector OffsetVertexByCenter(GameState& _state, std::uint16_t _vertex)
   return Vector{static_cast<std::int16_t>(center[0]), static_cast<std::int16_t>(center[1]), static_cast<std::int16_t>(center[2])};
 }
 
-std::uint16_t BuildBoxCornerVertices(GameState& _state, std::uint16_t _extents)
+void BuildBoxCornerVertices(GameState& _state, std::uint16_t _extents)
 {
-  const std::uint16_t extents = _state.Word(_extents);
+  const std::uint16_t extents = _extents;
   SetDrawAngles(_state);
   // q, the half-height, from the low byte; h, the half-length, from the high, negated; p is boxHalfWidth.
   const std::uint16_t height = Low(extents);
@@ -944,7 +943,6 @@ std::uint16_t BuildBoxCornerVertices(GameState& _state, std::uint16_t _extents)
   vertex = static_cast<std::uint16_t>(vertex - BOX_REFLECTION_STEP);
   reflection = Offset(reflection, BOX_REFLECTION_STEP);
   (void)ReflectVertexAboutCenter(_state, vertex, reflection);
-  return Offset(_extents, 2);
 }
 
 Vector BuildDodoVertices(GameState& _state)
@@ -1032,17 +1030,13 @@ DodoRadii ScaleDodoRadii(std::int8_t _value)
   return DodoRadii{static_cast<std::int16_t>(inner), static_cast<std::int16_t>(outer)};
 }
 
-VertexProgramEnd RunVertexProgram(GameState& _state, std::uint16_t _program, Vector _accumulator)
+Vector RunVertexProgram(GameState& _state, std::span<const std::uint8_t> _program, Vector _accumulator)
 {
   auto x = static_cast<std::uint16_t>(_accumulator.x);
   auto y = static_cast<std::uint16_t>(_accumulator.y);
   auto z = static_cast<std::uint16_t>(_accumulator.z);
-  const std::uint8_t ops = _state.Byte(_program);
-  std::uint16_t next = Offset(_program, 1);
-  for (std::uint16_t left = ops; left != 0; --left)
+  for (const std::uint8_t op : _program)
   {
-    const std::uint8_t op = _state.Byte(next);
-    next = Offset(next, 1);
     const std::uint16_t vertex = DS.vertexBuffer.At(op & VERTEX_INDEX_BITS);
     const std::uint16_t vertexX = _state.Word(vertex);
     const std::uint16_t vertexY = _state.Word(Offset(vertex, 2));
@@ -1075,7 +1069,7 @@ VertexProgramEnd RunVertexProgram(GameState& _state, std::uint16_t _program, Vec
       break;
     }
   }
-  return VertexProgramEnd{next, Vector{static_cast<std::int16_t>(x), static_cast<std::int16_t>(y), static_cast<std::int16_t>(z)}};
+  return Vector{static_cast<std::int16_t>(x), static_cast<std::int16_t>(y), static_cast<std::int16_t>(z)};
 }
 
 bool TriangleWindingSign(Triangle _triangle)
@@ -1086,9 +1080,9 @@ bool TriangleWindingSign(Triangle _triangle)
   return Negative(sign);
 }
 
-FacesEnd DrawVisibleFaces(GameState& _state, std::uint16_t _list, std::uint16_t _faces, bool _backward)
+FacesEnd DrawVisibleFaces(GameState& _state, const Blueprint& _blueprint, std::uint16_t _faces, bool _backward)
 {
-  FacesEnd end{_list, _backward};
+  FacesEnd end{0, _backward};
   if (_faces == 0)
   {
     return end;
@@ -1097,16 +1091,16 @@ FacesEnd DrawVisibleFaces(GameState& _state, std::uint16_t _list, std::uint16_t 
   std::uint16_t faces = _faces;
   do
   {
-    const Triangle facing = LoadTriangle(_state, end.next, 0);
+    const Triangle facing = LoadTriangle(_state, _blueprint.faceList, end.next, 0);
     end.next = Offset(end.next, TRIANGLE_VERTEX_BYTES);
     if (TriangleWindingSign(facing))
     {
-      end = DrawFaceItems(_state, end.next, end.backward);
+      end = DrawFaceItems(_state, _blueprint, end.next, end.backward);
     }
     else
     {
       // SkipHiddenFace (CS:3B8D): MOV CL,[SI] / STC / ADC SI,CX, CH 0: past the count byte and the items.
-      end.next = Offset(end.next, Offset(_state.Byte(end.next), 1));
+      end.next = Offset(end.next, Offset(_blueprint.faceList[end.next], 1));
     }
   } while (Loop(faces));
   return end;
@@ -1160,26 +1154,23 @@ void TransformShip(GameState& _state, SpaceObject& _slot)
   (void)ClassifyViewPosition(_state, _slot, view);
 }
 
-bool RunBlueprintHandler(GameState& _state, std::uint16_t _blueprint, bool _backward)
+bool RunBlueprintHandler(GameState& _state, const Blueprint& _blueprint, bool _backward)
 {
   // PUSH DI and the way back to RenderBlueprintBody (CS:3CF2), then the handler's word, BL into boxHalfWidth with BH 0, and JMP AX
   // to the handler with SI past them. The slot and the way back are the stack the handler returns through, which this unit
   // keeps itself.
-  const std::uint16_t handler = _state.Word(_blueprint);
-  _state.Data().boxHalfWidth = _state.Byte(Offset(_blueprint, 2));
-  std::uint16_t body = Offset(_blueprint, BLUEPRINT_HANDLER_BYTES);
-  // Every blueprint's handler is one of these two; the blueprints are never written.
-  if (handler == BUILD_BOX_CORNER_VERTICES)
+  _state.Data().boxHalfWidth = _blueprint.halfWidth;
+  if (_blueprint.shape == BlueprintShape::Box)
   {
-    body = BuildBoxCornerVertices(_state, body);
+    BuildBoxCornerVertices(_state, _blueprint.extents);
   }
-  else if (handler == BUILD_DODO_VERTICES)
+  else
   {
     (void)BuildDodoVertices(_state);
   }
   // Every blueprint's vertex program begins by loading a vertex into the accumulator, so what the handler leaves in BP, BX and
   // DX is never read.
-  return RenderBlueprint(_state, body, Vector{}, _backward);
+  return RenderBlueprint(_state, _blueprint, Vector{}, _backward);
 }
 
 bool TransformAndDrawObjects(GameState& _state, Hardware& _hardware, bool _backward)
