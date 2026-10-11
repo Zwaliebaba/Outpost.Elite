@@ -6,8 +6,8 @@
 #include "DataOverlay.h"
 #include "Flight.h"
 #include "Input.h"
-#include "ReferenceTables.h"
 #include "Ships.h"
+#include "TextTables.h"
 #include "Timer.h"
 
 #include <utility>

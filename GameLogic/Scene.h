@@ -4,7 +4,6 @@
 #include "GameState.h"
 #include "Hardware.h"
 #include "Maths.h"
-#include "ReferenceTables.h"
 #include "SpaceObject.h"
 #include "Ships.h"
 #include "Video.h"
@@ -24,6 +23,28 @@ namespace Elite
 //
 // A vertex is the offset in the data segment of its three words, x, y and z, as the original holds it in SI or DI. A string
 // instruction's direction is the direction flag the routine finds: _backward.
+
+/// The vertices a blueprint's program starts from, by the handler its first word names.
+enum class BlueprintShape : std::uint8_t
+{
+  Box, ///< BuildBoxCornerVertices (CS:377A): a box from its extents and half-width
+  Dodo ///< BuildDodoVertices (CS:38BF): the Dodo's two rings and its slot
+};
+
+/// A ship type's blueprint (RunBlueprintHandler, RenderBlueprint): what its handler builds, and the parts of its body, each
+/// as the original reads it, a byte at a time. Scene.cpp holds each type's (BLUEPRINTS, SceneTables.h).
+struct Blueprint
+{
+  BlueprintShape shape;
+  std::uint8_t halfWidth;                      ///< boxHalfWidth
+  std::uint16_t extents;                       ///< a box's: its half-height in the low byte, its half-length in the high
+  std::span<const std::uint8_t> vertexProgram; ///< RunVertexProgram's operations
+  std::uint8_t projectedVertices;              ///< the vertices ProjectVertices projects
+  std::span<const std::uint8_t> fixedEdges;    ///< two bytes an edge, drawn by no routine
+  std::span<const std::uint8_t> faceEdges;     ///< two bytes an edge: its points in the low bits, its colour in the high
+  std::uint8_t faces;                          ///< the faces DrawVisibleFaces walks
+  std::span<const std::uint8_t> faceList;      ///< each face: its three vertex bytes, a count, and its items
+};
 
 /// ScaleDodoRadii's two radii, in the ratio of a dodecahedron's two rings, about 1.62.
 struct DodoRadii

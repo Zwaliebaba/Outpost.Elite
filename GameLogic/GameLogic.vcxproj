@@ -84,12 +84,16 @@
     <ClInclude Include="DataOverlay.h" />
     <ClInclude Include="DirectoryFileStore.h" />
     <ClInclude Include="Docked.h" />
+    <ClInclude Include="DockedTables.h" />
     <ClInclude Include="Docking.h" />
     <ClInclude Include="DosFiles.h" />
     <ClInclude Include="Equipment.h" />
+    <ClInclude Include="EquipmentTables.h" />
     <ClInclude Include="FileStore.h" />
     <ClInclude Include="Flight.h" />
+    <ClInclude Include="FlightTables.h" />
     <ClInclude Include="Galaxy.h" />
+    <ClInclude Include="GalaxyTables.h" />
     <ClInclude Include="Game.h" />
     <ClInclude Include="GameData.h" />
     <ClInclude Include="GamePort.h" />
@@ -113,10 +117,11 @@
     <ClInclude Include="Platform.h" />
     <ClInclude Include="Reference.h" />
     <ClInclude Include="ReferenceImage.h" />
-    <ClInclude Include="ReferenceTables.h" />
     <ClInclude Include="Replay.h" />
     <ClInclude Include="SaveLoad.h" />
+    <ClInclude Include="SaveLoadTables.h" />
     <ClInclude Include="Scene.h" />
+    <ClInclude Include="SceneTables.h" />
     <ClInclude Include="ServiceFault.h" />
     <ClInclude Include="Sha256.h" />
     <ClInclude Include="Ships.h" />
@@ -126,6 +131,7 @@
     <ClInclude Include="StartUp.h" />
     <ClInclude Include="StateDigest.h" />
     <ClInclude Include="Text.h" />
+    <ClInclude Include="TextTables.h" />
     <ClInclude Include="Timer.h" />
     <ClInclude Include="Timing.h" />
     <ClInclude Include="Video.h" />

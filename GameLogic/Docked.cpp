@@ -4,11 +4,11 @@
 
 #include "Arithmetic.h"
 #include "DataOverlay.h"
+#include "DockedTables.h"
 #include "Equipment.h"
 #include "Galaxy.h"
 #include "Input.h"
 #include "Market.h"
-#include "ReferenceTables.h"
 #include "SaveLoad.h"
 #include "Scene.h"
 #include "Ships.h"

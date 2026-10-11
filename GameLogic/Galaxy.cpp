@@ -5,8 +5,8 @@
 
 #include "Arithmetic.h"
 #include "DataOverlay.h"
+#include "GalaxyTables.h"
 #include "Input.h"
-#include "ReferenceTables.h"
 #include "Video.h"
 
 #include <initializer_list>

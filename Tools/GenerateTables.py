@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-r"""Generate GameLogic/ReferenceTables.h and GameLogic/Message.h from GameLogic/ReferenceImage.cpp and Design/Symbols.tsv (D33).
+r"""Generate each subsystem's tables of the reference, GameLogic/<Subsystem>Tables.h, and GameLogic/Message.h from
+GameLogic/ReferenceImage.cpp and Design/Symbols.tsv (D33, D38).
 
 The reference keeps tables of addresses in its data segment: tables of pointers to texts, lists of pointers to phrases, the
 blueprints by ship type, and the docked frame's corners as cells of video memory. Native code reads them as what they mean,
@@ -21,13 +22,19 @@ ELITES.EXE, and follows each table's pointers there.
 A text the program writes into is a buffer, which native code reads from the data segment where it is written: its entry in
 a table is empty, and says what writes it.
 
+Each table goes in the header of the subsystem that reads it (D38): GalaxyTables.h for Galaxy.cpp, SceneTables.h for
+Scene.cpp, and so on, SUBSYSTEMS lists them. One .cpp reads each, so its tables are in an unnamed namespace there, and nothing
+else reaches them: the check fails if any other file includes the header. Message.h is the one header every file may read,
+since GameData's message words hold its enumeration. The types a table's entries have that other files name, Blueprint and
+BlueprintShape, are the subsystem's own header's (Scene.h).
+
 A text is written as a string literal: printable ASCII as it is, any other byte as a three-digit octal escape, and the
 literal broken after an escape that a digit follows, so that no compiler reads the digit as part of it. Bytes are written
 eight to a row, each row ending in its address in a comment, which keeps clang-format's layout cheap and stable
 (Tools/GenerateReference.py measured why).
 
 The headers are generated, never edited: run this again. With --check it writes nothing and fails if a header in the tree
-is not what it would write. Standard library only.
+is not what it would write, or is included by a file other than its subsystem's .cpp. Standard library only.
 
     python Tools/GenerateTables.py [--check]
 """
@@ -42,8 +49,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 IMAGE = ROOT / "GameLogic" / "ReferenceImage.cpp"
 SYMBOLS = ROOT / "Design" / "Symbols.tsv"
-HEADER = ROOT / "GameLogic" / "ReferenceTables.h"
-MESSAGE_HEADER = ROOT / "GameLogic" / "Message.h"
+GAME_LOGIC = ROOT / "GameLogic"
+MESSAGE_HEADER = GAME_LOGIC / "Message.h"
+# The projects whose files may include a generated header, which the check looks through.
+PROJECTS = ["GameLogic", "GameLogicTests", "ReferenceRunner", "Outpost"]
 
 INDENT = "  "
 ROW_BYTES = 8
@@ -51,21 +60,23 @@ COMMENT_COLUMN = len(INDENT) + ROW_BYTES * len("0x00, ")
 ROW_ADDRESS = re.compile(r"//\s*(CS|DS):([0-9A-F]{4})")
 BYTE = re.compile(r"0x([0-9A-F]{2})")
 
-# The tables of pointers to texts, each with the constant it becomes.
+# The subsystems that read generated tables, each the stem of its .cpp and of its header, <Subsystem>Tables.h.
+SUBSYSTEMS = ["Docked", "Equipment", "Flight", "Galaxy", "SaveLoad", "Scene", "Text"]
+# The tables of pointers to texts, each with the constant it becomes and the subsystem that reads it.
 TEXT_TABLES = [
-  ("economyNames", "ECONOMY_NAMES"),
-  ("governmentNames", "GOVERNMENT_NAMES"),
-  ("speciesSizeNames", "SPECIES_SIZE_NAMES"),
-  ("speciesColorNames", "SPECIES_COLOR_NAMES"),
-  ("speciesTraitNames", "SPECIES_TRAIT_NAMES"),
-  ("speciesTypeNames", "SPECIES_TYPE_NAMES"),
-  ("laserTypeNames", "LASER_TYPE_NAMES"),
-  ("laserMountNames", "LASER_MOUNT_NAMES"),
-  ("legalStatusNames", "LEGAL_STATUS_NAMES"),
-  ("ratingNames", "RATING_NAMES"),
-  ("equipmentNames", "EQUIPMENT_NAMES"),
-  ("inputDeviceNames", "INPUT_DEVICE_NAMES"),
-  ("diskOperationNames", "DISK_OPERATION_NAMES"),
+  ("economyNames", "ECONOMY_NAMES", "Galaxy"),
+  ("governmentNames", "GOVERNMENT_NAMES", "Galaxy"),
+  ("speciesSizeNames", "SPECIES_SIZE_NAMES", "Galaxy"),
+  ("speciesColorNames", "SPECIES_COLOR_NAMES", "Galaxy"),
+  ("speciesTraitNames", "SPECIES_TRAIT_NAMES", "Galaxy"),
+  ("speciesTypeNames", "SPECIES_TYPE_NAMES", "Galaxy"),
+  ("laserTypeNames", "LASER_TYPE_NAMES", "Equipment"),
+  ("laserMountNames", "LASER_MOUNT_NAMES", "Docked"),
+  ("legalStatusNames", "LEGAL_STATUS_NAMES", "Docked"),
+  ("ratingNames", "RATING_NAMES", "Docked"),
+  ("equipmentNames", "EQUIPMENT_NAMES", "Docked"),
+  ("inputDeviceNames", "INPUT_DEVICE_NAMES", "SaveLoad"),
+  ("diskOperationNames", "DISK_OPERATION_NAMES", "SaveLoad"),
 ]
 # The texts of these tables that the program writes, which native code reads from the data segment where it writes them: the
 # entry, and what writes it.
@@ -219,14 +230,16 @@ def byte_rows(_data: bytes, _segment: str, _start: int, _labels: dict[int, str])
   return rows
 
 
-def text_tables(_image: Image, _symbols: dict[str, Symbol]) -> list[str]:
+def text_tables(_image: Image, _symbols: dict[str, Symbol], _subsystem: str) -> list[str]:
   out = []
-  for name, constant in TEXT_TABLES:
+  for name, constant, subsystem in TEXT_TABLES:
+    if subsystem != _subsystem:
+      continue
     symbol = _symbols[name]
     entries = [_image.word(symbol.offset + 2 * index) for index in range(symbol.size)]
     out += [
       f"/// {name} (DS:{symbol.offset:04X}): each pointer's text, up to its NUL.",
-      f"inline constexpr std::array<std::string_view, {len(entries)}> {constant} = {{",
+      f"constexpr std::array<std::string_view, {len(entries)}> {constant} = {{",
     ]
     out += aligned([(f"{INDENT}{text_view(b'' if (name, index) in BUFFER_ENTRIES else _image.text(entry))},",
                      f"// DS:{entry:04X}" + (f", {BUFFER_ENTRIES[(name, index)]}" if (name, index) in BUFFER_ENTRIES else ""))
@@ -365,7 +378,7 @@ def blueprint_tables(_image: Image, _symbols: dict[str, Symbol]) -> list[str]:
 
   out = [
     f"/// blueprints (DS:{first:04X}-{end - 1:04X}): the 30 blueprints' bytes, back to back, as the image holds them.",
-    f"inline constexpr std::array<std::uint8_t, {len(data)}> BLUEPRINT_DATA = {{",
+    f"constexpr std::array<std::uint8_t, {len(data)}> BLUEPRINT_DATA = {{",
     *byte_rows(data, "DS", first, labels),
     "};",
     "",
@@ -376,7 +389,7 @@ def blueprint_tables(_image: Image, _symbols: dict[str, Symbol]) -> list[str]:
     "}",
     "",
     f"/// blueprintTable (DS:{table.offset:04X}): each ship type's blueprint, its parts views of BLUEPRINT_DATA.",
-    f"inline constexpr std::array<Blueprint, {len(blueprints)}> BLUEPRINTS = {{{{",
+    f"constexpr std::array<Blueprint, {len(blueprints)}> BLUEPRINTS = {{{{",
   ]
   for type_number, blueprint in enumerate(blueprints):
     out += [
@@ -400,7 +413,7 @@ def frame_corners(_image: Image, _symbols: dict[str, Symbol]) -> list[str]:
   out = [
     f"/// frameCorners (DS:{symbol.offset:04X}): the docked frame's corners and tees, each a cell of the 40-column text page,",
     "/// as its row and column, and the CP437 character there.",
-    f"inline constexpr std::array<FrameCorner, {symbol.size}> FRAME_CORNERS = {{{{",
+    f"constexpr std::array<FrameCorner, {symbol.size}> FRAME_CORNERS = {{{{",
   ]
   corners = []
   for index in range(symbol.size):
@@ -476,7 +489,7 @@ def message_texts(_image: Image, _messages: list[Message]) -> list[str]:
   out = [
     "/// Each Message's text, up to its NUL, by its value. A buffer's is empty: the program writes it, and MessageText reads it",
     "/// from the data segment.",
-    f"inline constexpr std::array<std::string_view, {len(_messages) + 1}> MESSAGE_TEXTS = {{",
+    f"constexpr std::array<std::string_view, {len(_messages) + 1}> MESSAGE_TEXTS = {{",
   ]
   rows = [(f"{INDENT}std::string_view{{}},", "// None")]
   for message in _messages:
@@ -484,77 +497,93 @@ def message_texts(_image: Image, _messages: list[Message]) -> list[str]:
     rows.append((f"{INDENT}{text_view(text)},", f"// {message.enumerator}" + (f", a buffer: {message.buffer}" if message.buffer else "")))
   out += aligned(rows)
   out += ["};", ""]
+  return out
+
+
+def warning_messages(_messages: list[Message]) -> list[str]:
   warnings = sorted((message for message in _messages if message.name.startswith("warningTexts[")), key=lambda _m: _m.name)
-  out += [
+  return [
     "/// warningTexts: each warning's message, by the warning's number, the order of warningChecks' checks (SetWarning).",
-    f"inline constexpr std::array<Message, {len(warnings)}> WARNING_MESSAGES = {{",
+    f"constexpr std::array<Message, {len(warnings)}> WARNING_MESSAGES = {{",
     *aligned([(f"{INDENT}Message::{message.enumerator},", f"// {message.name}") for message in warnings]),
     "};",
     "",
   ]
-  return out
 
 
-def generate(_image: Image, _symbols: dict[str, Symbol], _messages: list[Message]) -> str:
+def subsystem_tables(_image: Image, _symbols: dict[str, Symbol], _messages: list[Message], _subsystem: str) -> tuple[list[str], list[str]]:
+  """The headers a subsystem's tables need, and the tables."""
+  out = text_tables(_image, _symbols, _subsystem)
+  headers = ["<array>", "<string_view>"]
+  if _subsystem == "Galaxy":
+    out += phrase_tables(_image, _symbols)
+    headers = ["<array>", "<cstdint>", "<string_view>"]
+  elif _subsystem == "Docked":
+    out = [
+      "/// A corner or tee of a docked screen's frame (DrawDockedFrame): its cell on the 40-column text page and its character.",
+      "struct FrameCorner",
+      "{",
+      f"{INDENT}std::uint8_t row;",
+      f"{INDENT}std::uint8_t column;",
+      f"{INDENT}std::uint8_t character; ///< CP437",
+      "};",
+      "",
+      *out,
+      *frame_corners(_image, _symbols),
+    ]
+    headers = ["<array>", "<cstdint>", "<string_view>"]
+  elif _subsystem == "Scene":
+    out += blueprint_tables(_image, _symbols)
+    headers = ['"Scene.h"', "", "<array>", "<cstddef>", "<cstdint>", "<span>"]
+  elif _subsystem == "Text":
+    out += message_texts(_image, _messages)
+    headers = ['"Message.h"', "", "<array>", "<string_view>"]
+  elif _subsystem == "Flight":
+    out += warning_messages(_messages)
+    headers = ['"Message.h"', "", "<array>"]
+  return headers, out
+
+
+def generate_subsystem(_image: Image, _symbols: dict[str, Symbol], _messages: list[Message], _subsystem: str) -> str:
+  headers, tables = subsystem_tables(_image, _symbols, _messages, _subsystem)
   out = [
-    "// GameLogic/ReferenceTables.h",
+    f"// GameLogic/{_subsystem}Tables.h",
     "// Generated by Tools/GenerateTables.py from GameLogic/ReferenceImage.cpp and Design/Symbols.tsv. Do not edit: run the",
-    "// tool again (D33).",
+    "// tool again (D33, D38).",
     "#pragma once",
     "",
-    '#include "Message.h"',
-    "",
-    "#include <array>",
-    "#include <cstddef>",
-    "#include <cstdint>",
-    "#include <span>",
-    "#include <string_view>",
+    *[f"#include {header}" if header else "" for header in headers],
     "",
     "namespace Elite",
     "{",
     "",
-    "// The reference's tables of addresses, as what they mean (D33, piece 3): each entry what its address points at, read from",
-    "// the reference's image (ReferenceImage.cpp). Native code reads these; the tables' own words stay in the data segment, which",
-    "// nothing reads them from.",
-    "",
-    "/// The vertices a blueprint's program starts from, by the handler its first word names.",
-    "enum class BlueprintShape : std::uint8_t",
+    f"// {_subsystem}.cpp's tables of the reference's addresses, as what they mean (D33, piece 3): each entry what its address points",
+    "// at, read from the reference's image (ReferenceImage.cpp). The tables' own words stay in the data segment, which nothing",
+    f"// reads them from. {_subsystem}.cpp alone includes this, so they are in an unnamed namespace (D38).",
+    "namespace",
     "{",
-    f"{INDENT}Box, ///< BuildBoxCornerVertices (CS:{BOX_HANDLER:04X}): a box from its extents and half-width",
-    f"{INDENT}Dodo ///< BuildDodoVertices (CS:{DODO_HANDLER:04X}): the Dodo's two rings and its slot",
-    "};",
     "",
-    "/// A ship type's blueprint (RunBlueprintHandler, RenderBlueprint): what its handler builds, and the parts of its body, each",
-    "/// as the original reads it, a byte at a time.",
-    "struct Blueprint",
-    "{",
-    f"{INDENT}BlueprintShape shape;",
-    *aligned([(f"{INDENT}std::uint8_t halfWidth;", "///< boxHalfWidth"),
-              (f"{INDENT}std::uint16_t extents;", "///< a box's: its half-height in the low byte, its half-length in the high"),
-              (f"{INDENT}std::span<const std::uint8_t> vertexProgram;", "///< RunVertexProgram's operations"),
-              (f"{INDENT}std::uint8_t projectedVertices;", "///< the vertices ProjectVertices projects"),
-              (f"{INDENT}std::span<const std::uint8_t> fixedEdges;", "///< two bytes an edge, drawn by no routine"),
-              (f"{INDENT}std::span<const std::uint8_t> faceEdges;", "///< two bytes an edge: its points in the low bits, its colour in the high"),
-              (f"{INDENT}std::uint8_t faces;", "///< the faces DrawVisibleFaces walks"),
-              (f"{INDENT}std::span<const std::uint8_t> faceList;", "///< each face: its three vertex bytes, a count, and its items")]),
-    "};",
+    *tables,
+    "} // namespace",
     "",
-    "/// A corner or tee of a docked screen's frame (DrawDockedFrame): its cell on the 40-column text page and its character.",
-    "struct FrameCorner",
-    "{",
-    f"{INDENT}std::uint8_t row;",
-    f"{INDENT}std::uint8_t column;",
-    f"{INDENT}std::uint8_t character; ///< CP437",
-    "};",
+    "} // namespace Elite",
     "",
   ]
-  out += text_tables(_image, _symbols)
-  out += phrase_tables(_image, _symbols)
-  out += blueprint_tables(_image, _symbols)
-  out += frame_corners(_image, _symbols)
-  out += message_texts(_image, _messages)
-  out += ["} // namespace Elite", ""]
   return "\r\n".join(out)
+
+
+def foreign_includes() -> list[str]:
+  """Every include of a subsystem's generated header by a file other than its subsystem's .cpp."""
+  found = []
+  for project in PROJECTS:
+    for path in sorted((ROOT / project).glob("*.[ch]*")):
+      if path.suffix not in (".h", ".cpp"):
+        continue
+      text = path.read_text(encoding="utf-8", errors="replace")
+      for subsystem in SUBSYSTEMS:
+        if f'#include "{subsystem}Tables.h"' in text and path != GAME_LOGIC / f"{subsystem}.cpp":
+          found.append(f"{path.relative_to(ROOT)} includes {subsystem}Tables.h, which {subsystem}.cpp alone may read")
+  return found
 
 
 def main() -> int:
@@ -564,15 +593,19 @@ def main() -> int:
   image = Image(read_image())
   symbols = read_symbols()
   found = messages(symbols, image)
-  outputs = {HEADER: generate(image, symbols, found), MESSAGE_HEADER: generate_message(found)}
+  outputs = {GAME_LOGIC / f"{subsystem}Tables.h": generate_subsystem(image, symbols, found, subsystem) for subsystem in SUBSYSTEMS}
+  outputs[MESSAGE_HEADER] = generate_message(found)
   if arguments.check:
     stale = [path for path, text in outputs.items() if (path.read_bytes().decode("utf-8") if path.exists() else "") != text]
     for path in stale:
       print(f"GenerateTables: {path.relative_to(ROOT)} is out of date; run python Tools/GenerateTables.py")
-    if stale:
+    foreign = foreign_includes()
+    for line in foreign:
+      print(f"GenerateTables: {line}")
+    if stale or foreign:
       return 1
-    print(f"GenerateTables: up to date ({len(TEXT_TABLES)} text tables, the phrases, the blueprints, the frame's corners and "
-          f"{len(found)} messages)")
+    print(f"GenerateTables: up to date ({len(SUBSYSTEMS)} subsystems' tables: {len(TEXT_TABLES)} text tables, the phrases, the "
+          f"blueprints, the frame's corners and {len(found)} messages; each included by its own .cpp alone)")
     return 0
   for path, text in outputs.items():
     path.write_bytes(text.encode("utf-8"))
