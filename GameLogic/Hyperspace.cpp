@@ -334,15 +334,29 @@ void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_
 
 void ResetHyperspaceRings(GameState& _state, bool _backward)
 {
-  // REP MOVSW within the data segment, a word at a time, SI and DI from the tables' starts, forwards or, _backward, down.
-  const auto step = static_cast<std::uint16_t>(_backward ? 0xFFFE : 2);
+  // REP MOVSW within the data segment, a word at a time, SI and DI from the tables' starts: going up, hyperspaceRingStart's
+  // bytes into hyperspaceRings, each counted when it changes.
+  static_assert(sizeof(HyperspaceState::hyperspaceRings) == std::size_t{HYPERSPACE_RING_WORDS} * 2);
+  if (!_backward)
+  {
+    for (std::size_t ring = 0; ring < HYPERSPACE_RING_START.size(); ++ring)
+    {
+      for (std::size_t byte = 0; byte < HYPERSPACE_RING_START[ring].size(); ++byte)
+      {
+        _state.Data().hyperspace.hyperspaceRings[ring][byte] = HYPERSPACE_RING_START[ring][byte];
+      }
+    }
+    return;
+  }
+  // Going down from each start, past both tables' first words into what the original's data segment holds before them: still
+  // by the original's addresses, as change 3c of D38 takes the direction flag.
   std::uint16_t from = OriginalOffset("hyperspaceRingStart");
   std::uint16_t to = _state.OffsetOf(_state.Data().hyperspace.hyperspaceRings);
   for (std::uint16_t word = 0; word < HYPERSPACE_RING_WORDS; ++word)
   {
     _state.SetWord(to, _state.Word(from));
-    from = Offset(from, step);
-    to = Offset(to, step);
+    from = Offset(from, 0xFFFE);
+    to = Offset(to, 0xFFFE);
   }
 }
 

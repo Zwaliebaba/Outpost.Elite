@@ -8,6 +8,7 @@
 #include "Maths.h"
 #include "Ships.h"
 
+#include <span>
 #include <utility>
 
 namespace Elite
@@ -112,11 +113,6 @@ constexpr std::uint8_t STATE_ATTACK_RUN = 2; // a wolf's; a hunter's 2 is format
 constexpr std::uint8_t STATE_FORMATION = 2;
 constexpr std::uint8_t STATE_TURN_AWAY = 3;
 constexpr std::uint8_t STATE_CLOSING = 4;
-
-[[nodiscard]] std::uint16_t At(std::uint16_t _slot, int _field) noexcept
-{
-  return static_cast<std::uint16_t>(_slot + _field);
-}
 
 // WithinRange: whether _slot is within the box whose half size has its range byte for the high byte and _low, what DL holds
 // there, for the low.
@@ -672,17 +668,36 @@ std::uint16_t RunBehaviorHandler(GameState& _state, Hardware& _hardware, SpaceOb
   }
 }
 
+// behaviorClassCounts' eight bytes, a count for each behaviour class.
+[[nodiscard]] std::span<Counted<std::uint8_t>> ClassCounts(GameState& _state)
+{
+  return _state.BytesFrom(_state.Data().ai.behaviorClassCounts, sizeof(AiState::BehaviorClassCounts));
+}
+
 } // namespace
 
 void UpdateObjectsAndSpawn(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _dx)
 {
   // PUSH DS / POP ES / MOV DI,activeObjectCount / XOR AL,AL / MOV CX,9 / REP STOSB: activeObjectCount and the eight
-  // behaviorClassCounts cleared, backwards when the direction flag is set.
-  std::uint16_t count = _state.OffsetOf(_state.Data().ai.activeObjectCount);
-  for (std::uint16_t bytes = CLASS_COUNTS_CLEARED; bytes != 0; --bytes)
+  // behaviorClassCounts cleared, a byte at a time.
+  if (!_backward)
   {
-    _state.SetByte(count, 0);
-    count = _backward ? static_cast<std::uint16_t>(count - 1) : At(count, 1);
+    _state.Data().ai.activeObjectCount = 0;
+    for (Counted<std::uint8_t>& classCount : ClassCounts(_state))
+    {
+      classCount = 0;
+    }
+  }
+  else
+  {
+    // Backwards when the direction flag is set: from activeObjectCount down into what the original's data segment holds before
+    // it, still by the original's addresses, as change 3c of D38 takes the direction flag.
+    std::uint16_t count = _state.OffsetOf(_state.Data().ai.activeObjectCount);
+    for (std::uint16_t bytes = CLASS_COUNTS_CLEARED; bytes != 0; --bytes)
+    {
+      _state.SetByte(count, 0);
+      count = static_cast<std::uint16_t>(count - 1);
+    }
   }
   // Every slot of shipSlotCount, by LOOP: an active one counted, but for debris, and in its class's count, and its class's handler
   // run, CX and DI pushed round it. DX goes on from one handler to the next.
@@ -698,8 +713,9 @@ void UpdateObjectsAndSpawn(GameState& _state, Hardware& _hardware, bool _backwar
       {
         _state.Data().ai.activeObjectCount = static_cast<std::uint8_t>(_state.Data().ai.activeObjectCount + 1);
       }
-      // The class's count in behaviorClassCounts, by the class: INC BYTE PTR [BX+behaviorClassCounts].
-      Counted<std::uint8_t>& classCount = _state.BytesFrom(_state.Data().ai.behaviorClassCounts, std::size_t{behavior} + 1)[behavior];
+      // The class's count in behaviorClassCounts, by the class: INC BYTE PTR [BX+behaviorClassCounts]. A class is 0-7: every
+      // slot's is a template's, one of the eight, or copied from another slot's.
+      Counted<std::uint8_t>& classCount = ClassCounts(_state)[behavior];
       classCount = static_cast<std::uint8_t>(classCount + 1);
       dx = RunBehaviorHandler(_state, _hardware, object, behavior, _backward, dx);
     }

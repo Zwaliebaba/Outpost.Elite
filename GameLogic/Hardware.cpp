@@ -6,6 +6,7 @@
 #include <array>
 #include <span>
 #include <stdexcept>
+#include <string_view>
 
 namespace Elite
 {
@@ -20,6 +21,8 @@ constexpr std::uint8_t MOUSE_VECTOR = 0x33;
 constexpr std::uint16_t MOUSE_BUTTON_PRESSES = 0x0005;
 
 constexpr std::uint8_t CRTC_CURSOR_ADDRESS_HIGH = 0x0E;
+
+constexpr char DOS_STRING_TERMINATOR = '$'; // int 21h AH=09h's
 
 } // namespace
 
@@ -139,9 +142,18 @@ void Hardware::SetVideoMode(std::uint8_t _mode)
   }
 }
 
-void Hardware::PrintDosString(std::uint16_t _segment, std::uint16_t _offset)
+void Hardware::PrintDosString(std::string_view _text)
 {
-  m_platform.PrintDosString(_segment, _offset);
+  // Each character up to the '$' through the BIOS's teletype, as DOS writes them.
+  const std::size_t end = _text.find(DOS_STRING_TERMINATOR);
+  if (end == std::string_view::npos)
+  {
+    throw std::logic_error("Hardware::PrintDosString: a text with no '$', which DOS would print on past");
+  }
+  for (const char character : _text.substr(0, end))
+  {
+    m_platform.BiosServices().WriteTeletype(static_cast<std::uint8_t>(character));
+  }
 }
 
 std::uint8_t Hardware::CgaStatus()
@@ -196,39 +208,39 @@ BiosClock Hardware::ReadBiosClock()
 // DOS's file services, native (D27): the platform's DosFiles. A stamp is DOS's time at the platform's clock, as the emulated
 // DOS's was.
 
-void Hardware::SetDiskTransferArea(std::uint16_t _segment, std::uint16_t _offset)
+void Hardware::SetDiskTransferArea(std::span<Counted<std::uint8_t>> _area)
 {
-  m_platform.Files().SetTransferArea(_segment, _offset);
+  m_platform.Files().SetTransferArea(_area);
 }
 
-DosFileAttributes Hardware::ReadFileAttributes(std::uint16_t _segment, std::uint16_t _name)
+DosFileAttributes Hardware::ReadFileAttributes(std::string_view _name)
 {
-  return m_platform.Files().ReadAttributes(_segment, _name);
+  return m_platform.Files().ReadAttributes(_name);
 }
 
-DosAnswer Hardware::SetFileAttributes(std::uint16_t _segment, std::uint16_t _name, std::uint16_t _attributes)
+DosAnswer Hardware::SetFileAttributes(std::string_view _name, std::uint16_t _attributes)
 {
-  return m_platform.Files().SetAttributes(_segment, _name, _attributes);
+  return m_platform.Files().SetAttributes(_name, _attributes);
 }
 
-DosAnswer Hardware::CreateFile(std::uint16_t _segment, std::uint16_t _name, std::uint16_t _attributes)
+DosAnswer Hardware::CreateFile(std::string_view _name, std::uint16_t _attributes)
 {
-  return m_platform.Files().Create(_segment, _name, _attributes, m_platform.Clock());
+  return m_platform.Files().Create(_name, _attributes, m_platform.Clock());
 }
 
-DosAnswer Hardware::OpenFile(std::uint16_t _segment, std::uint16_t _name, std::uint8_t _access)
+DosAnswer Hardware::OpenFile(std::string_view _name, std::uint8_t _access)
 {
-  return m_platform.Files().Open(_segment, _name, _access);
+  return m_platform.Files().Open(_name, _access);
 }
 
-DosAnswer Hardware::ReadFile(std::uint16_t _handle, std::uint16_t _segment, std::uint16_t _buffer, std::uint16_t _bytes)
+DosAnswer Hardware::ReadFile(std::uint16_t _handle, std::span<Counted<std::uint8_t>> _buffer)
 {
-  return m_platform.Files().Read(_handle, _segment, _buffer, _bytes);
+  return m_platform.Files().Read(_handle, _buffer);
 }
 
-DosAnswer Hardware::WriteFile(std::uint16_t _handle, std::uint16_t _segment, std::uint16_t _buffer, std::uint16_t _bytes)
+DosAnswer Hardware::WriteFile(std::uint16_t _handle, std::span<const std::uint8_t> _buffer)
 {
-  return m_platform.Files().Write(_handle, _segment, _buffer, _bytes, m_platform.Clock());
+  return m_platform.Files().Write(_handle, _buffer, m_platform.Clock());
 }
 
 DosAnswer Hardware::CloseFile(std::uint16_t _handle)
@@ -236,14 +248,14 @@ DosAnswer Hardware::CloseFile(std::uint16_t _handle)
   return m_platform.Files().Close(_handle);
 }
 
-DosAnswer Hardware::DeleteFile(std::uint16_t _segment, std::uint16_t _name)
+DosAnswer Hardware::DeleteFile(std::string_view _name)
 {
-  return m_platform.Files().Delete(_segment, _name);
+  return m_platform.Files().Delete(_name);
 }
 
-DosAnswer Hardware::FindFirstFile(std::uint16_t _segment, std::uint16_t _pattern, std::uint16_t _attributes)
+DosAnswer Hardware::FindFirstFile(std::string_view _pattern, std::uint16_t _attributes)
 {
-  return m_platform.Files().FindFirst(_segment, _pattern, _attributes);
+  return m_platform.Files().FindFirst(_pattern, _attributes);
 }
 
 DosAnswer Hardware::FindNextFile()

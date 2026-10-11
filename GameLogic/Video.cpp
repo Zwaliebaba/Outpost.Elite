@@ -1323,7 +1323,7 @@ void SaveScreenshot(GameState& _state, Hardware& _hardware)
 
 void WriteScreenshotFile(GameState& _state, Hardware& _hardware)
 {
-  _hardware.SetDiskTransferArea(_state.DataSegment(), _state.OffsetOf(_state.Data().saveLoad.diskTransferArea));
+  _hardware.SetDiskTransferArea(_state.Data().saveLoad.diskTransferArea);
   // The two digits, the second counting fastest: '00', '01' ... '99', '00'.
   std::uint16_t digits = _state.Data().video.screenshotNumber;
   SetHigh(digits, static_cast<std::uint8_t>(High(digits) + 1));
@@ -1339,11 +1339,13 @@ void WriteScreenshotFile(GameState& _state, Hardware& _hardware)
   _state.Data().video.screenshotNumber = digits;
   _state.Data().video.screenshotTextFileName.screenshotTextFileDigits = digits;
   _state.Data().video.screenshotGraphicsFileName.screenshotGraphicsFileDigits = digits;
-  // eliteNN.lo for the text page, eliteNN.hi for the graphics screen: DS:DX the name.
-  const std::uint16_t name = (_state.Data().drawing.screenLayout & TEXT_LAYOUT_BIT) != 0
-                               ? _state.OffsetOf(_state.Data().video.screenshotTextFileName)
-                               : _state.OffsetOf(_state.Data().video.screenshotGraphicsFileName);
-  const DosAnswer created = _hardware.CreateFile(_state.DataSegment(), name, 0);
+  // eliteNN.lo for the text page, eliteNN.hi for the graphics screen: DS:DX the name, up to the NUL each ends with, which
+  // nothing writes.
+  const std::string_view name =
+    (_state.Data().drawing.screenLayout & TEXT_LAYOUT_BIT) != 0
+      ? TextIn(_state.BytesFrom(_state.Data().video.screenshotTextFileName, sizeof(VideoState::ScreenshotTextFileName)))
+      : TextIn(_state.BytesFrom(_state.Data().video.screenshotGraphicsFileName, sizeof(VideoState::ScreenshotGraphicsFileName)));
+  const DosAnswer created = _hardware.CreateFile(name, 0);
   if (created.failed)
   {
     _state.Data().disk.diskError = 1;
@@ -1352,7 +1354,7 @@ void WriteScreenshotFile(GameState& _state, Hardware& _hardware)
   _state.Data().disk.fileHandle = created.value;
   // From B800:0000: the text page, or both graphics banks and the gap between them.
   const std::uint16_t bytes = (_state.Data().drawing.screenLayout & TEXT_LAYOUT_BIT) != 0 ? TEXT_PAGE_BYTES : GRAPHICS_SCREEN_BYTES;
-  if (_hardware.WriteFile(_state.Data().disk.fileHandle, GameState::VIDEO_SEGMENT, 0, bytes).failed)
+  if (_hardware.WriteFile(_state.Data().disk.fileHandle, _state.VideoBytes().first(bytes)).failed)
   {
     _state.Data().disk.diskError = 1;
   }

@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <stdexcept>
 #include <string_view>
 #include <utility>
@@ -62,9 +63,6 @@ using Template = std::array<char, TEMPLATE_BYTES>;
 {
   return _character >= 'a' && _character <= 'z' ? static_cast<char>(_character - 'a' + 'A') : _character;
 }
-
-// The 20-bit addresses wrap at 1 MiB, as the 8088's do.
-constexpr std::uint32_t ADDRESS_MASK = 0xFFFFF;
 
 // A canonical name, "NAME.EXT", as the 11 blank-padded characters of a directory entry.
 [[nodiscard]] Template EntryName(std::string_view _name)
@@ -170,25 +168,27 @@ DosFiles::DosFiles(GameState& _state, FileStore& _files, const DosDateTime& _sta
 
 void DosFiles::StartProgram() noexcept
 {
-  m_transferSet = false;
-  m_transferSegment = 0;
-  m_transferOffset = 0;
+  m_transferArea = {};
   for (std::unique_ptr<OpenFile>& file : m_handles)
   {
     file.reset();
   }
 }
 
-void DosFiles::SetTransferArea(std::uint16_t _segment, std::uint16_t _offset) noexcept
+void DosFiles::SetTransferArea(std::span<Counted<std::uint8_t>> _area)
 {
-  m_transferSet = true;
-  m_transferSegment = _segment;
-  m_transferOffset = _offset;
+  if (_area.size() < TRANSFER_AREA_BYTES)
+  {
+    throw std::logic_error("DosFiles: a transfer area shorter than the 43 bytes a search fills");
+  }
+  const std::span<Counted<std::uint8_t>> area = _area.first(TRANSFER_AREA_BYTES);
+  RefuseOutsideState(area);
+  m_transferArea = area;
 }
 
-DosFileAttributes DosFiles::ReadAttributes(std::uint16_t _segment, std::uint16_t _name)
+DosFileAttributes DosFiles::ReadAttributes(std::string_view _name)
 {
-  const std::optional<std::string> name = NameAt(_segment, _name);
+  const std::optional<std::string> name = NameIn(_name);
   if (!name)
   {
     return DosFileAttributes{Fail(DosError::PathNotFound), 0};
@@ -202,9 +202,9 @@ DosFileAttributes DosFiles::ReadAttributes(std::uint16_t _segment, std::uint16_t
   return DosFileAttributes{Succeed(attribute), attribute};
 }
 
-DosAnswer DosFiles::SetAttributes(std::uint16_t _segment, std::uint16_t _name, std::uint16_t _attributes)
+DosAnswer DosFiles::SetAttributes(std::string_view _name, std::uint16_t _attributes)
 {
-  const std::optional<std::string> name = NameAt(_segment, _name);
+  const std::optional<std::string> name = NameIn(_name);
   if (!name)
   {
     return Fail(DosError::PathNotFound);
@@ -213,10 +213,10 @@ DosAnswer DosFiles::SetAttributes(std::uint16_t _segment, std::uint16_t _name, s
   return error != DosError::None ? Fail(error) : Succeed(0);
 }
 
-DosAnswer DosFiles::Create(std::uint16_t _segment, std::uint16_t _name, std::uint16_t _attributes, Cycles _clock)
+DosAnswer DosFiles::Create(std::string_view _name, std::uint16_t _attributes, Cycles _clock)
 {
   const int handle = FreeHandle();
-  const std::optional<std::string> name = NameAt(_segment, _name);
+  const std::optional<std::string> name = NameIn(_name);
   if (handle < 0)
   {
     return Fail(DosError::TooManyOpenFiles);
@@ -235,7 +235,7 @@ DosAnswer DosFiles::Create(std::uint16_t _segment, std::uint16_t _name, std::uin
   return Succeed(static_cast<std::uint16_t>(handle));
 }
 
-DosAnswer DosFiles::Open(std::uint16_t _segment, std::uint16_t _name, std::uint8_t _access)
+DosAnswer DosFiles::Open(std::string_view _name, std::uint8_t _access)
 {
   const auto mode = static_cast<std::uint8_t>(_access & ACCESS_MODE_BITS);
   if (mode > READ_WRITE_ACCESS)
@@ -243,7 +243,7 @@ DosAnswer DosFiles::Open(std::uint16_t _segment, std::uint16_t _name, std::uint8
     return Fail(DosError::InvalidAccessCode);
   }
   const int handle = FreeHandle();
-  const std::optional<std::string> name = NameAt(_segment, _name);
+  const std::optional<std::string> name = NameIn(_name);
   if (handle < 0)
   {
     return Fail(DosError::TooManyOpenFiles);
@@ -263,7 +263,7 @@ DosAnswer DosFiles::Open(std::uint16_t _segment, std::uint16_t _name, std::uint8
   return Succeed(static_cast<std::uint16_t>(handle));
 }
 
-DosAnswer DosFiles::Read(std::uint16_t _handle, std::uint16_t _segment, std::uint16_t _buffer, std::uint16_t _bytes)
+DosAnswer DosFiles::Read(std::uint16_t _handle, std::span<Counted<std::uint8_t>> _buffer)
 {
   RefuseStandardHandle(_handle, "a read");
   OpenFile* const file = HandleFile(_handle);
@@ -271,47 +271,44 @@ DosAnswer DosFiles::Read(std::uint16_t _handle, std::uint16_t _segment, std::uin
   {
     return Fail(DosError::InvalidHandle);
   }
-  // The buffer is the game's memory, both its ends, before the file moves: the GameState refuses an address outside it, so
-  // a read that would run past it is refused whole.
-  const std::uint32_t first = GameState::Linear(_segment, _buffer);
-  if (_bytes > 0)
+  // The buffer is the game's state, all of it, before the file moves: a read that could not land whole is refused whole.
+  if (_buffer.size() > MOST_BUFFER_BYTES)
   {
-    (void)m_state.LinearByte(first);
-    (void)m_state.LinearByte((first + _bytes - 1u) & ADDRESS_MASK);
+    throw std::out_of_range("DosFiles: a read into more bytes than CX counts");
   }
-  std::vector<std::uint8_t> buffer(_bytes);
+  RefuseOutsideState(_buffer);
+  std::vector<std::uint8_t> buffer(_buffer.size());
   std::uint32_t count = 0;
   const DosError error = file->Read(buffer, count);
   if (error != DosError::None)
   {
     return Fail(error);
   }
-  // As the emulated DOS laid them down: a byte at a time, from the linear address on, wrapping at 1 MiB.
+  // As the emulated DOS laid them down: a byte at a time, from the buffer's first, each counted when it changes.
   for (std::uint32_t index = 0; index < count; ++index)
   {
-    m_state.SetLinearByte((first + index) & ADDRESS_MASK, buffer[index]);
+    _buffer[index] = buffer[index];
   }
   return Succeed(static_cast<std::uint16_t>(count));
 }
 
-DosAnswer DosFiles::Write(std::uint16_t _handle, std::uint16_t _segment, std::uint16_t _buffer, std::uint16_t _bytes, Cycles _clock)
+DosAnswer DosFiles::Write(std::uint16_t _handle, std::span<const std::uint8_t> _buffer, Cycles _clock)
 {
   RefuseStandardHandle(_handle, "a write");
-  if (_bytes == 0)
+  if (_buffer.empty())
   {
     throw std::logic_error("DosFiles: a write of no bytes, which truncates in DOS and which DOS's emulation refused as a fault");
+  }
+  if (_buffer.size() > MOST_BUFFER_BYTES)
+  {
+    throw std::out_of_range("DosFiles: a write of more bytes than CX counts");
   }
   OpenFile* const file = HandleFile(_handle);
   if (file == nullptr)
   {
     return Fail(DosError::InvalidHandle);
   }
-  std::vector<std::uint8_t> buffer(_bytes);
-  const std::uint32_t first = GameState::Linear(_segment, _buffer);
-  for (std::uint32_t index = 0; index < buffer.size(); ++index)
-  {
-    buffer[index] = m_state.LinearByte((first + index) & ADDRESS_MASK);
-  }
+  const std::vector<std::uint8_t> buffer(_buffer.begin(), _buffer.end());
   std::uint32_t count = 0;
   const DosError error = file->Write(buffer, Stamp(Now(_clock)), count);
   if (error != DosError::None)
@@ -332,16 +329,16 @@ DosAnswer DosFiles::Close(std::uint16_t _handle)
   return Succeed(0);
 }
 
-DosAnswer DosFiles::Delete(std::uint16_t _segment, std::uint16_t _name)
+DosAnswer DosFiles::Delete(std::string_view _name)
 {
-  const std::optional<std::string> name = NameAt(_segment, _name);
+  const std::optional<std::string> name = NameIn(_name);
   const DosError error = name ? m_files.Delete(*name) : DosError::PathNotFound;
   return error != DosError::None ? Fail(error) : Succeed(0);
 }
 
-DosAnswer DosFiles::FindFirst(std::uint16_t _segment, std::uint16_t _pattern, std::uint16_t _attributes)
+DosAnswer DosFiles::FindFirst(std::string_view _pattern, std::uint16_t _attributes)
 {
-  const std::optional<std::string> pattern = NameAt(_segment, _pattern);
+  const std::optional<std::string> pattern = NameIn(_pattern);
   if (!pattern)
   {
     return Fail(DosError::PathNotFound);
@@ -360,18 +357,18 @@ DosAnswer DosFiles::FindFirst(std::uint16_t _segment, std::uint16_t _pattern, st
 DosAnswer DosFiles::FindNext()
 {
   RefuseNoTransferArea();
-  const auto at = [this](std::uint16_t _offset) { return static_cast<std::uint16_t>(m_transferOffset + _offset); };
-  if (m_state.FarByte(m_transferSegment, at(AREA_DRIVE)) != CURRENT_DRIVE)
+  const std::span<const Counted<std::uint8_t>> area = m_transferArea;
+  if (area[AREA_DRIVE] != CURRENT_DRIVE)
   {
     return Fail(DosError::NoMoreFiles);
   }
   Template search;
   for (std::size_t index = 0; index < TEMPLATE_BYTES; ++index)
   {
-    search[index] = static_cast<char>(m_state.FarByte(m_transferSegment, at(static_cast<std::uint16_t>(AREA_TEMPLATE + index))));
+    search[index] = static_cast<char>(area[AREA_TEMPLATE + index]);
   }
-  const std::uint8_t attribute = m_state.FarByte(m_transferSegment, at(AREA_SEARCH_ATTRIBUTE));
-  const std::uint16_t next = m_state.FarWord(m_transferSegment, at(AREA_NEXT_ENTRY));
+  const std::uint8_t attribute = area[AREA_SEARCH_ATTRIBUTE];
+  const std::uint16_t next = WordIn(area, AREA_NEXT_ENTRY);
   const DosError error = Find(search, attribute, next);
   return error != DosError::None ? Fail(error) : Succeed(0);
 }
@@ -428,18 +425,18 @@ DosError DosFiles::Find(const Template& _pattern, std::uint8_t _attribute, std::
   }
 
   // The search's state, in the order the emulated DOS wrote it, each byte once.
-  const auto at = [this](std::size_t _offset) { return static_cast<std::uint16_t>(m_transferOffset + _offset); };
-  m_state.SetFarByte(m_transferSegment, at(AREA_DRIVE), CURRENT_DRIVE);
+  const std::span<Counted<std::uint8_t>> area = m_transferArea;
+  area[AREA_DRIVE] = CURRENT_DRIVE;
   for (std::size_t offset = 0; offset < TEMPLATE_BYTES; ++offset)
   {
-    m_state.SetFarByte(m_transferSegment, at(AREA_TEMPLATE + offset), static_cast<std::uint8_t>(_pattern[offset]));
+    area[AREA_TEMPLATE + offset] = static_cast<std::uint8_t>(_pattern[offset]);
   }
-  m_state.SetFarByte(m_transferSegment, at(AREA_SEARCH_ATTRIBUTE), _attribute);
+  area[AREA_SEARCH_ATTRIBUTE] = _attribute;
   const std::size_t next = found ? index + 1 : std::max<std::size_t>(index, _index);
-  m_state.SetFarWord(m_transferSegment, at(AREA_NEXT_ENTRY), static_cast<std::uint16_t>(std::min<std::size_t>(next, 0xFFFF)));
+  SetWordIn(area, AREA_NEXT_ENTRY, static_cast<std::uint16_t>(std::min<std::size_t>(next, 0xFFFF)));
   for (std::size_t offset = AREA_NEXT_ENTRY + 2; offset < AREA_ATTRIBUTE; ++offset)
   {
-    m_state.SetFarByte(m_transferSegment, at(offset), 0);
+    area[offset] = 0;
   }
   if (!found)
   {
@@ -448,32 +445,27 @@ DosError DosFiles::Find(const Template& _pattern, std::uint8_t _attribute, std::
 
   // What was found.
   const FileEntry& entry = entries[index];
-  m_state.SetFarByte(m_transferSegment, at(AREA_ATTRIBUTE), entry.attribute);
-  m_state.SetFarWord(m_transferSegment, at(AREA_TIME), entry.stamp.time);
-  m_state.SetFarWord(m_transferSegment, at(AREA_DATE), entry.stamp.date);
-  m_state.SetFarWord(m_transferSegment, at(AREA_SIZE), static_cast<std::uint16_t>(entry.sizeBytes & 0xFFFF));
-  m_state.SetFarWord(m_transferSegment, at(AREA_SIZE + 2), static_cast<std::uint16_t>(entry.sizeBytes >> 16));
+  area[AREA_ATTRIBUTE] = entry.attribute;
+  SetWordIn(area, AREA_TIME, entry.stamp.time);
+  SetWordIn(area, AREA_DATE, entry.stamp.date);
+  SetWordIn(area, AREA_SIZE, static_cast<std::uint16_t>(entry.sizeBytes & 0xFFFF));
+  SetWordIn(area, AREA_SIZE + 2, static_cast<std::uint16_t>(entry.sizeBytes >> 16));
   for (std::size_t offset = 0; offset < AREA_NAME_BYTES; ++offset)
   {
     const char character = offset < entry.name.size() ? entry.name[offset] : '\0';
-    m_state.SetFarByte(m_transferSegment, at(AREA_NAME + offset), static_cast<std::uint8_t>(character));
+    area[AREA_NAME + offset] = static_cast<std::uint8_t>(character);
   }
   return DosError::None;
 }
 
-std::optional<std::string> DosFiles::NameAt(std::uint16_t _segment, std::uint16_t _name) const
+std::optional<std::string> DosFiles::NameIn(std::string_view _name)
 {
-  std::string name;
-  for (std::size_t index = 0; index < MAX_NAME_BYTES; ++index)
+  const std::string_view name = _name.substr(0, std::min(_name.find('\0'), MAX_NAME_BYTES));
+  if (name.size() == MAX_NAME_BYTES)
   {
-    const std::uint8_t character = m_state.FarByte(_segment, static_cast<std::uint16_t>(_name + index));
-    if (character == 0)
-    {
-      return name;
-    }
-    name.push_back(static_cast<char>(character));
+    return std::nullopt;
   }
-  return std::nullopt;
+  return std::string(name);
 }
 
 OpenFile* DosFiles::HandleFile(std::uint16_t _handle) const noexcept
@@ -487,10 +479,20 @@ OpenFile* DosFiles::HandleFile(std::uint16_t _handle) const noexcept
 
 void DosFiles::RefuseNoTransferArea() const
 {
-  if (!m_transferSet)
+  if (m_transferArea.empty())
   {
     throw std::logic_error(
       "DosFiles: a search before the program set a transfer area, whose default was PSP:0080, outside the game's memory");
+  }
+}
+
+void DosFiles::RefuseOutsideState(std::span<const Counted<std::uint8_t>> _bytes) const
+{
+  const std::span<const std::uint8_t> state = m_state.DataBytes();
+  const auto into = reinterpret_cast<std::uintptr_t>(_bytes.data()) - reinterpret_cast<std::uintptr_t>(state.data());
+  if (into > state.size() || _bytes.size() > state.size() - into)
+  {
+    throw std::out_of_range("DosFiles: a buffer that is not all in the game's state, where its writes would not count");
   }
 }
 

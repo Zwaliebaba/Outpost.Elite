@@ -13,6 +13,11 @@
 #include "Timer.h"
 #include "Video.h"
 
+#include <array>
+#include <span>
+#include <string_view>
+#include <utility>
+
 namespace Elite
 {
 
@@ -59,27 +64,26 @@ constexpr std::uint16_t CREDITS_LINE_STEP = 0x200;
 constexpr std::uint16_t WHITE_MASK = 0xFFFF;
 constexpr std::uint16_t CREDITS_TIMER_TICKS = 3000; // 3 s
 
-// REP MOVSB: _count bytes from _sourceSegment:_source to _destinationSegment:_destination, forwards or, with DF set
-// (_backward), backwards.
-void MoveBytes(GameState& _state, std::uint16_t _sourceSegment, std::uint16_t _source, std::uint16_t _destinationSegment,
-               std::uint16_t _destination, std::uint16_t _count, bool _backward)
+// A table of the reference's bytes as text, all of it: what DOS and the text routines read through.
+[[nodiscard]] std::string_view TextOf(std::span<const std::uint8_t> _bytes) noexcept
 {
-  const auto step = static_cast<std::uint16_t>(_backward ? 0xFFFF : 1);
-  std::uint16_t moved = 0;
-  for (std::uint16_t left = _count; left != 0; --left)
-  {
-    _state.SetFarByte(_destinationSegment, Offset(_destination, moved), _state.FarByte(_sourceSegment, Offset(_source, moved)));
-    moved = Offset(moved, step);
-  }
+  return std::string_view(reinterpret_cast<const char*>(_bytes.data()), _bytes.size());
 }
 
-// ExitToDos (CS:00AD): the BIOS's text mode and the farewell. The original then empties the BIOS's key buffer, which the ROM's
-// int 9 handler keeps empty. The RETF that follows, to PSP:0000 where Start pushed it, is Start's own return, and the program
-// ends there.
-void ExitToDos(GameState& _state, Hardware& _hardware)
+// creditsScreenText's line from its byte _at, up to its NUL.
+[[nodiscard]] std::string_view CreditsLine(std::size_t _at) noexcept
+{
+  const std::string_view credits = TextOf(CREDITS_SCREEN_TEXT);
+  return credits.substr(_at, credits.find('\0', _at) - _at);
+}
+
+// ExitToDos (CS:00AD): the BIOS's text mode and the farewell, exitMessage up to its '$'. The original then empties the BIOS's
+// key buffer, which the ROM's int 9 handler keeps empty. The RETF that follows, to PSP:0000 where Start pushed it, is Start's
+// own return, and the program ends there.
+void ExitToDos(Hardware& _hardware)
 {
   _hardware.SetVideoMode(VIDEO_MODE_TEXT_80);
-  _hardware.PrintDosString(_state.DataSegment(), OriginalOffset("exitMessage"));
+  _hardware.PrintDosString(TextOf(EXIT_MESSAGE));
 }
 
 } // namespace
@@ -130,10 +134,29 @@ void CheckCheatArgument(GameState& _state, const Hardware& _hardware)
 
 void StartNewGame(GameState& _state, bool _backward)
 {
-  // REP MOVSB from DS to ES = DS.
-  const std::uint16_t data = _state.DataSegment();
-  MoveBytes(_state, data, _state.OffsetOf(_state.Data().saveLoad.startupCommander), data, _state.OffsetOf(_state.Data().commander),
-            COMMANDER_FILE_BYTES, _backward);
+  // REP MOVSB from DS to ES = DS, a byte at a time: going up, startupCommander's bytes into commanderBlock's.
+  if (!_backward)
+  {
+    const std::span<Counted<std::uint8_t>> to = _state.BytesFrom(_state.Data().commander, COMMANDER_FILE_BYTES);
+    const std::span<const Counted<std::uint8_t>> from(std::as_const(_state).Data().saveLoad.startupCommander);
+    for (std::size_t index = 0; index < COMMANDER_FILE_BYTES; ++index)
+    {
+      to[index] = std::uint8_t{from[index]};
+    }
+  }
+  else
+  {
+    // Going down from each start, past both records' first bytes into what the original's data segment holds before them: still
+    // by the original's addresses, as change 3c of D38 takes the direction flag.
+    std::uint16_t from = _state.OffsetOf(_state.Data().saveLoad.startupCommander);
+    std::uint16_t to = _state.OffsetOf(_state.Data().commander);
+    for (std::uint16_t left = COMMANDER_FILE_BYTES; left != 0; --left)
+    {
+      _state.SetByte(to, _state.Byte(from));
+      from = Offset(from, 0xFFFF);
+      to = Offset(to, 0xFFFF);
+    }
+  }
   _state.Data().commander.witchspaceCountdown = 0;
   _state.Data().playerShip.playerEnergy = NEW_GAME_ENERGY;
   _state.Data().playerShip.foreShield = FULL_SHIELD;
@@ -205,7 +228,7 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, b
     if (request == 0)
     {
       WipeProgram(_hardware);
-      ExitToDos(_state, _hardware);
+      ExitToDos(_hardware);
       return;
     }
     // The request, with the game's own critical-error handler on int 24h, and the handler that was there put back after it.
@@ -258,10 +281,10 @@ void ShowCredits(GameState& _state, Hardware& _hardware, bool _backward)
 {
   ClearDrawBuffer(_state, _backward);
   // Each line from SI, one past the last line's NUL, at DI, a row of characters below the last line's start. The original pushes
-  // and pops the count and the place round the print; its LOOP's turns carry the count, the text and the place.
-  // The text from the reference's image at the original's address, which the turns carry: change 3b of D38 converts it to the
-  // table.
-  std::string_view text = _state.TextAtOffset(OriginalOffset("creditsScreenText"));
+  // and pops the count and the place round the print; its LOOP's turns carry the count, the text and the place, SI as the
+  // line's place in the table (D38).
+  std::size_t line = 0;
+  std::string_view text = CreditsLine(line);
   std::uint16_t place = CREDITS_FIRST_LINE;
   for (std::uint16_t linesLeft = CREDITS_LINES;;)
   {
@@ -272,10 +295,10 @@ void ShowCredits(GameState& _state, Hardware& _hardware, bool _backward)
     {
       break;
     }
-    // SI past the line's NUL; past the last line, where the state no longer holds the bytes after the text beside it (D38),
-    // nothing reads it.
-    text = _state.TextAfter(text);
-    _hardware.LoopTurn(CREDITS_LINE, {linesLeft, _state.OffsetOf(*text.data()), place});
+    // SI past the line's NUL; past the last line, the table's end, nothing reads it.
+    line += text.size() + 1;
+    text = CreditsLine(line);
+    _hardware.LoopTurn(CREDITS_LINE, {linesLeft, static_cast<std::uint16_t>(line), place});
   }
   FinishSpaceViewFrame(_state, _hardware);
   // WaitForTimerTick keeps every register; the LOOP's turns carry the ticks left.
@@ -288,6 +311,29 @@ void ShowCredits(GameState& _state, Hardware& _hardware, bool _backward)
     }
     _hardware.LoopTurn(CREDITS_WAIT, {ticksLeft});
   }
+}
+
+std::array<std::uint8_t, SpaceObject::BYTES> BytesAfterDrawBuffer(const GameState& _state)
+{
+  std::array<std::uint8_t, SpaceObject::BYTES> bytes{};
+  std::size_t at = 0;
+  const auto append = [&bytes, &at](std::uint8_t _byte) { bytes.at(at++) = _byte; };
+  append(_state.Data().unused.amstradPresent);
+  for (const std::uint8_t byte : AMSTRAD_SIGNATURE)
+  {
+    append(byte);
+  }
+  append(_state.Data().audio.speakerPortImage);
+  append(_state.Data().saveLoad.diskOperation);
+  for (const std::uint8_t byte : EXIT_MESSAGE)
+  {
+    append(byte);
+  }
+  for (std::size_t index = 0; at < bytes.size(); ++index)
+  {
+    append(_state.Data().unused.dosVersionMessage[index]);
+  }
+  return bytes;
 }
 
 // ── The entry of the program ──

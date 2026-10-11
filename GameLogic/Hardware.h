@@ -1,12 +1,14 @@
 // GameLogic/Hardware.h
 #pragma once
 
+#include "Counted.h"
 #include "Pacing.h"
 #include "Platform.h"
 #include "Timing.h"
 
 #include <cstdint>
 #include <initializer_list>
+#include <span>
 #include <string_view>
 
 namespace Elite
@@ -81,8 +83,9 @@ public:
   /// Int 10h AH=0, AL=_mode: the BIOS sets the CGA's mode. Throws std::logic_error for a mode above 6, which the game never sets.
   void SetVideoMode(std::uint8_t _mode);
 
-  /// Int 21h AH=9: DOS prints the text at _segment:_offset, up to its '$'.
-  void PrintDosString(std::uint16_t _segment, std::uint16_t _offset);
+  /// Int 21h AH=9: DOS prints _text, the text DS:DX names, up to its '$', a character at a time through the BIOS's teletype. A
+  /// text with no '$' throws std::logic_error, and nothing is printed.
+  void PrintDosString(std::string_view _text);
 
   /// IN AL,3DAh: the CGA's status, bit 3 set during the vertical retrace.
   [[nodiscard]] std::uint8_t CgaStatus();
@@ -114,40 +117,42 @@ public:
   /// Int 1Ah AH=0: the BIOS's clock, its rollover flag cleared.
   [[nodiscard]] BiosClock ReadBiosClock();
 
-  // DOS's file services, int 21h: native, on the platform's DosFiles, which answers as the emulated DOS did.
+  // DOS's file services, int 21h: native, on the platform's DosFiles, which answers as the emulated DOS did. Where the original
+  // hands DOS an address in DS:DX, a call takes the name there, up to its NUL, or the buffer there, a span of the member that
+  // holds it (D38).
 
-  /// Int 21h AH=1Ah: DOS's disk transfer area, where find-first and find-next leave what they find, at _segment:_offset.
-  void SetDiskTransferArea(std::uint16_t _segment, std::uint16_t _offset);
+  /// Int 21h AH=1Ah: DOS's disk transfer area, where find-first and find-next leave what they find: _area, of the game's state.
+  void SetDiskTransferArea(std::span<Counted<std::uint8_t>> _area);
 
-  /// Int 21h AX=4300h: the attributes of the file named at _segment:_name.
-  [[nodiscard]] DosFileAttributes ReadFileAttributes(std::uint16_t _segment, std::uint16_t _name);
+  /// Int 21h AX=4300h: the attributes of the file _name names.
+  [[nodiscard]] DosFileAttributes ReadFileAttributes(std::string_view _name);
 
-  /// Int 21h AX=4301h, CX=_attributes: the attributes of the file named at _segment:_name set.
-  DosAnswer SetFileAttributes(std::uint16_t _segment, std::uint16_t _name, std::uint16_t _attributes);
+  /// Int 21h AX=4301h, CX=_attributes: the attributes of the file _name names set.
+  DosAnswer SetFileAttributes(std::string_view _name, std::uint16_t _attributes);
 
-  /// Int 21h AH=3Ch, CX=_attributes: the file named at _segment:_name created, or emptied, and stamped with DOS's time at the
-  /// platform's clock; AX its handle.
-  [[nodiscard]] DosAnswer CreateFile(std::uint16_t _segment, std::uint16_t _name, std::uint16_t _attributes);
+  /// Int 21h AH=3Ch, CX=_attributes: the file _name names created, or emptied, and stamped with DOS's time at the platform's
+  /// clock; AX its handle.
+  [[nodiscard]] DosAnswer CreateFile(std::string_view _name, std::uint16_t _attributes);
 
-  /// Int 21h AH=3Dh, AL=_access: the file named at _segment:_name opened, 0 to read, 1 to write, 2 both; AX its handle.
-  [[nodiscard]] DosAnswer OpenFile(std::uint16_t _segment, std::uint16_t _name, std::uint8_t _access);
+  /// Int 21h AH=3Dh, AL=_access: the file _name names opened, 0 to read, 1 to write, 2 both; AX its handle.
+  [[nodiscard]] DosAnswer OpenFile(std::string_view _name, std::uint8_t _access);
 
-  /// Int 21h AH=3Fh: up to _bytes from the file _handle into _segment:_buffer; AX the count read.
-  [[nodiscard]] DosAnswer ReadFile(std::uint16_t _handle, std::uint16_t _segment, std::uint16_t _buffer, std::uint16_t _bytes);
+  /// Int 21h AH=3Fh: up to all of _buffer's bytes, of the game's state, from the file _handle into it; AX the count read.
+  [[nodiscard]] DosAnswer ReadFile(std::uint16_t _handle, std::span<Counted<std::uint8_t>> _buffer);
 
-  /// Int 21h AH=40h: _bytes from _segment:_buffer written to the file _handle, stamped with DOS's time at the platform's
-  /// clock; AX the count written.
-  [[nodiscard]] DosAnswer WriteFile(std::uint16_t _handle, std::uint16_t _segment, std::uint16_t _buffer, std::uint16_t _bytes);
+  /// Int 21h AH=40h: _buffer's bytes written to the file _handle, stamped with DOS's time at the platform's clock; AX the count
+  /// written.
+  [[nodiscard]] DosAnswer WriteFile(std::uint16_t _handle, std::span<const std::uint8_t> _buffer);
 
   /// Int 21h AH=3Eh: the file _handle closed.
   DosAnswer CloseFile(std::uint16_t _handle);
 
-  /// Int 21h AH=41h: the file named at _segment:_name deleted.
-  DosAnswer DeleteFile(std::uint16_t _segment, std::uint16_t _name);
+  /// Int 21h AH=41h: the file _name names deleted.
+  DosAnswer DeleteFile(std::string_view _name);
 
-  /// Int 21h AH=4Eh, CX=_attributes: the first file matching the pattern at _segment:_pattern, with no attribute beyond
-  /// _attributes' hidden, system and directory bits, into the disk transfer area.
-  [[nodiscard]] DosAnswer FindFirstFile(std::uint16_t _segment, std::uint16_t _pattern, std::uint16_t _attributes);
+  /// Int 21h AH=4Eh, CX=_attributes: the first file matching _pattern, with no attribute beyond _attributes' hidden, system
+  /// and directory bits, into the disk transfer area.
+  [[nodiscard]] DosAnswer FindFirstFile(std::string_view _pattern, std::uint16_t _attributes);
 
   /// Int 21h AH=4Fh: the next file of the search the disk transfer area holds, into it.
   [[nodiscard]] DosAnswer FindNextFile();
