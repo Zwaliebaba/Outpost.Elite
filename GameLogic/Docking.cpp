@@ -3,6 +3,7 @@
 #include "Docking.h"
 
 #include "Arithmetic.h"
+#include "DockingTables.h"
 #include "Flight.h"
 #include "Maths.h"
 #include "Scene.h"
@@ -11,6 +12,8 @@
 #include "Text.h"
 #include "Timer.h"
 #include "Video.h"
+
+#include <span>
 
 namespace Elite
 {
@@ -72,7 +75,8 @@ constexpr std::uint16_t TUNNEL_EDGES = 4;
 constexpr std::uint8_t VIEW_CENTER_X = 0x80;
 constexpr std::uint8_t VIEW_CENTER_ROW = 0x40;
 constexpr std::uint16_t VIEW_ROW_BYTES = 0x40;
-constexpr std::uint16_t VIEW_LAST_WORD = 0x1FFE; // of the buffer at DS:0000, rows 0-127
+constexpr std::uint16_t VIEW_BUFFER_BYTES = 0x2000; // the buffer at DS:0000, rows 0-127
+constexpr std::uint16_t VIEW_LAST_WORD = VIEW_BUFFER_BYTES - 2;
 
 constexpr std::uint16_t HALF_TURN = 0x400; // in 2048ths
 constexpr std::uint16_t ANGLE_MASK = 0x7FF;
@@ -86,22 +90,44 @@ constexpr std::uint8_t SHIP_TYPE_MASK = 0x1F; // of the slot's first byte, shift
   return static_cast<std::uint16_t>((row << 8) | x);
 }
 
-// REP STOSB or REP STOSW: _value, or its low byte, _count times from _segment:_offset, a byte or a word at a time
-// (_bytes), backwards when _backward. Returns the offset after the last, which the original leaves in DI.
-std::uint16_t Store(GameState& _state, std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _count, std::uint16_t _value,
-                    std::uint16_t _bytes, bool _backward)
+// The space view's buffer at DS:0000, 128 rows of 64 bytes: gap0000, its first row, then spaceViewBuffer, and gap1FC0, its
+// last, which the symbol table names apart (D38).
+[[nodiscard]] std::span<Counted<std::uint8_t>> ViewBuffer(GameState& _state)
 {
+  return _state.BytesFrom(_state.Data().drawing.gap0000, VIEW_BUFFER_BYTES);
+}
+
+// REP STOSB or REP STOSW into the space view's buffer from its byte _offset, ES = DS: _value, or its low byte, _count times, a
+// byte or a word at a time (_bytes), backwards when _backward. Returns the offset after the last, which the original leaves in DI.
+// Forwards, and backwards from the buffer's end, every store is in the buffer. Backwards from its start, they run down from
+// DS:0000 to the data segment's end, which only the original's addresses reach: there they still go by them, as change 3c of D38
+// takes the direction flag.
+std::uint16_t Store(GameState& _state, std::uint16_t _offset, std::uint16_t _count, std::uint16_t _value, std::uint16_t _bytes,
+                    bool _backward)
+{
+  const std::span<Counted<std::uint8_t>> buffer = ViewBuffer(_state);
   const auto step = static_cast<std::uint16_t>(_backward ? 0u - _bytes : _bytes);
   std::uint16_t at = _offset;
   for (std::uint16_t left = _count; left != 0; --left)
   {
-    if (_bytes == 2)
+    if (std::size_t{at} + _bytes <= buffer.size())
     {
-      _state.SetFarWord(_segment, at, _value);
+      if (_bytes == 2)
+      {
+        SetWordIn(buffer, at, _value);
+      }
+      else
+      {
+        buffer[at] = Low(_value);
+      }
+    }
+    else if (_bytes == 2)
+    {
+      _state.SetWord(at, _value);
     }
     else
     {
-      _state.SetFarByte(_segment, at, Low(_value));
+      _state.SetByte(at, Low(_value));
     }
     at = Offset(at, step);
   }
@@ -109,12 +135,11 @@ std::uint16_t Store(GameState& _state, std::uint16_t _segment, std::uint16_t _of
 }
 
 // Rectangle _rectangle of tunnelRectangles, its five points of two signed bytes, x and y. The original holds the rectangle's
-// address in SI, which the loops' turns carry; the one past the last is the bytes after them. Read from the reference's image
-// at the original's address, which change 3b of D38 converts to the table.
-[[nodiscard]] std::span<const Counted<std::uint8_t>> TunnelRectangle(const GameState& _state, std::size_t _rectangle)
+// address in SI, which the loops' turns carry as its number (D38). No loop reaches the one past the last: each turn carries a
+// rectangle the frame draws, and the last frames draw from 0-9 to the tenth.
+[[nodiscard]] std::span<const std::uint8_t> TunnelRectangle(std::size_t _rectangle)
 {
-  return _state.BytesAt(static_cast<std::uint16_t>(OriginalOffset("tunnelRectangles") + _rectangle * TUNNEL_RECTANGLE_BYTES),
-                        TUNNEL_RECTANGLE_BYTES);
+  return std::span<const std::uint8_t>(TUNNEL_RECTANGLES).subspan(_rectangle * TUNNEL_RECTANGLE_BYTES, TUNNEL_RECTANGLE_BYTES);
 }
 
 // Where DrawTunnelRectangles stopped.
@@ -125,7 +150,7 @@ struct TunnelDrawn
 };
 
 // _count of tunnelRectangles from _first, each by DrawTunnelRectangle in the tunnel's colour, and the LOOP back to CS:_loop
-// (2DA1, 2DEE), which carries the count and the next rectangle (ADR-015).
+// (2DA1, 2DEE), which carries the count and the next rectangle, by its number (ADR-015, D38).
 TunnelDrawn DrawTunnelRectangles(GameState& _state, Hardware& _hardware, std::size_t _first, std::uint16_t _count, std::uint16_t _loop)
 {
   TunnelDrawn drawn{_first, false};
@@ -139,7 +164,7 @@ TunnelDrawn DrawTunnelRectangles(GameState& _state, Hardware& _hardware, std::si
     {
       return drawn;
     }
-    _hardware.LoopTurn(_loop, {count, _state.OffsetOf(TunnelRectangle(_state, drawn.next)[0])});
+    _hardware.LoopTurn(_loop, {count, static_cast<std::uint16_t>(drawn.next)});
   }
 }
 
@@ -402,7 +427,7 @@ void RollWithSpin(GameState& _state, std::uint16_t _turn)
 
 bool DrawTunnelRectangle(GameState& _state, std::size_t _rectangle)
 {
-  const std::span<const Counted<std::uint8_t>> points = TunnelRectangle(_state, _rectangle);
+  const std::span<const std::uint8_t> points = TunnelRectangle(_rectangle);
   bool filled = false;
   std::size_t point = 0;
   for (std::uint16_t edge = 0; edge < TUNNEL_EDGES; ++edge)
@@ -452,28 +477,27 @@ void MaskOutsideTunnel(GameState& _state, std::size_t _rectangle, bool _backward
 {
   // The margins: x/4 bytes either side, and the rows above and below the rectangle, in the space-view buffer at DS:0000,
   // through ES = DS.
-  const std::uint16_t segment = _state.DataSegment();
-  const std::span<const Counted<std::uint8_t>> corner = TunnelRectangle(_state, _rectangle);
+  const std::span<const std::uint8_t> corner = TunnelRectangle(_rectangle);
   const auto sideBytes = static_cast<std::uint16_t>(static_cast<std::uint8_t>(corner[0] + VIEW_CENTER_X) >> 2);
   const std::uint8_t top = corner[1];
   const auto rows = static_cast<std::uint16_t>(static_cast<std::uint8_t>(Negate(top) << 1));
   const auto marginWords = static_cast<std::uint16_t>(static_cast<std::uint8_t>(top + VIEW_CENTER_ROW) << 5);
   // The rows above, then the sides of each row of the rectangle, forwards or, as the direction flag says, down; DEC BX
   // and JNE count the rows, 65,536 for 0.
-  std::uint16_t row = Store(_state, segment, 0, marginWords, 0, 2, _backwards);
+  std::uint16_t row = Store(_state, 0, marginWords, 0, 2, _backwards);
   std::uint16_t left = rows;
   do
   {
-    Store(_state, segment, row, sideBytes, 0, 1, _backwards);
+    Store(_state, row, sideBytes, 0, 1, _backwards);
     row = Offset(row, VIEW_ROW_BYTES);
   } while (--left != 0);
 
   // The same from the end of the buffer, backwards (STD).
-  row = Offset(Store(_state, segment, VIEW_LAST_WORD, marginWords, 0, 2, true), 1);
+  row = Offset(Store(_state, VIEW_LAST_WORD, marginWords, 0, 2, true), 1);
   left = rows;
   do
   {
-    Store(_state, segment, row, sideBytes, 0, 1, true);
+    Store(_state, row, sideBytes, 0, 1, true);
     row = static_cast<std::uint16_t>(row - VIEW_ROW_BYTES);
   } while (--left != 0);
 }
@@ -525,7 +549,7 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
   }
 
   // The last ten draw ten rectangles less one each frame, from one further along each time: CX and SI, pushed twice round the
-  // frame, which the turns carry.
+  // frame, which the turns carry, SI as the rectangle's number (D38).
   std::size_t first = 0;
   for (std::uint16_t frames = TUNNEL_FRAMES;;)
   {
@@ -555,7 +579,7 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
     {
       return;
     }
-    _hardware.LoopTurn(LAST_TUNNEL_FRAME, {frames, _state.OffsetOf(TunnelRectangle(_state, first)[0])});
+    _hardware.LoopTurn(LAST_TUNNEL_FRAME, {frames, static_cast<std::uint16_t>(first)});
   }
 }
 

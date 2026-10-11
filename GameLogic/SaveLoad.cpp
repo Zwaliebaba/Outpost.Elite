@@ -9,6 +9,9 @@
 #include "SharedTables.h"
 #include "Text.h"
 
+#include <array>
+#include <span>
+#include <string_view>
 #include <utility>
 
 namespace Elite
@@ -41,8 +44,9 @@ constexpr std::uint16_t COPY_LOADED_NAME = 0x683B;
 constexpr std::uint16_t NEXT_NAME_CHARACTER = 0x688C;
 constexpr std::uint16_t APPEND_EXTENSION = 0x68C4;
 
-// Its texts, NUL-terminated. Two of them run on into a second line, which the menu prints with INC SI.
-constexpr std::uint16_t COMMANDER_EXTENSION = 0x8697; // ".CDR"
+// ".CDR" and its NUL, which PromptCommanderFileName appends to a name: DS:8697 in 1987, a text no symbol starts and nothing
+// writes, whose bytes the reference's image holds there.
+constexpr std::array<std::uint8_t, 5> COMMANDER_EXTENSION = {'.', 'C', 'D', 'R', 0};
 
 // Where it prints on the 40-column text page, 80 bytes a row.
 constexpr std::uint16_t TITLE_POSITION = 0x0054;
@@ -89,7 +93,7 @@ constexpr std::uint8_t MOUSE_DEVICE = 2;
 
 constexpr std::uint8_t MOST_NAME_CHARACTERS = 8;
 constexpr std::uint8_t LOWER_CASE_BIT_CLEAR = 0xDF;
-constexpr std::uint16_t EXTENSION_BYTES = 5; // ".CDR" and its NUL
+constexpr auto EXTENSION_BYTES = static_cast<std::uint16_t>(COMMANDER_EXTENSION.size());
 constexpr std::uint16_t CATALOGUE_ROWS = 10;
 constexpr std::uint16_t CATALOGUE_COLUMN_BYTES = 0x12; // nine cells
 constexpr std::uint8_t TEXT_LAYOUT_BIT = 2;            // screenLayout: the text page shows
@@ -97,6 +101,27 @@ constexpr std::uint16_t GRAPHICS_ERROR_POSITION = 0x0C90;
 constexpr std::uint16_t TEXT_ERROR_POSITION = 0x0330;
 constexpr std::uint16_t DISK_ERROR_CHARACTERS = 10;
 constexpr std::uint16_t ERROR_INK = 0xFFFF; // colour 3
+
+// commanderFileName up to its NUL: the name the original hands DOS in DS:DX. Every writer leaves a NUL inside it: the image's
+// '12345678.CDR', ReadTextLine's eight characters at most and their NUL, the NUL after the ".CDR" appended to a name
+// (PromptCommanderFileName), and the NUL over its '.' (ShowDiskResult).
+[[nodiscard]] std::string_view CommanderFileName(const GameState& _state)
+{
+  return TextIn(_state.Data().saveLoad.commanderFileName);
+}
+
+// commanderBlock's commanderFileBytes, the .cdr file's: the buffer DS:DX names to the read that loads a commander.
+[[nodiscard]] std::span<Counted<std::uint8_t>> CommanderFile(GameState& _state)
+{
+  return _state.BytesFrom(_state.Data().commander, COMMANDER_FILE_BYTES);
+}
+
+// The same bytes as DOS writes them out: each Counted byte is its stored byte (Counted.h).
+[[nodiscard]] std::span<const std::uint8_t> CommanderFileBytes(const GameState& _state)
+{
+  const std::span<const Counted<std::uint8_t>> bytes = _state.BytesFrom(_state.Data().commander, COMMANDER_FILE_BYTES);
+  return std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size());
+}
 
 // The common failure (0x039D): DOS's _error, which is no failure when it only ran out of files.
 void Fail(GameState& _state, std::uint16_t _error)
@@ -118,9 +143,7 @@ void CloseAndFail(GameState& _state, Hardware& _hardware, std::uint16_t _error)
 // LoadCommanderFile (0x031A): only a file with no attributes, read whole into commanderBlock.
 void LoadCommanderFile(GameState& _state, Hardware& _hardware)
 {
-  const std::uint16_t data = _state.DataSegment();
-  const std::uint16_t name = _state.OffsetOf(_state.Data().saveLoad.commanderFileName);
-  const DosFileAttributes attributes = _hardware.ReadFileAttributes(data, name);
+  const DosFileAttributes attributes = _hardware.ReadFileAttributes(CommanderFileName(_state));
   if (attributes.answer.failed)
   {
     Fail(_state, attributes.answer.value);
@@ -131,15 +154,14 @@ void LoadCommanderFile(GameState& _state, Hardware& _hardware)
     _state.Data().disk.diskError = 1;
     return;
   }
-  const DosAnswer opened = _hardware.OpenFile(data, name, READ_ACCESS);
+  const DosAnswer opened = _hardware.OpenFile(CommanderFileName(_state), READ_ACCESS);
   if (opened.failed)
   {
     Fail(_state, opened.value);
     return;
   }
   _state.Data().disk.fileHandle = opened.value;
-  const DosAnswer read =
-    _hardware.ReadFile(_state.Data().disk.fileHandle, data, _state.OffsetOf(_state.Data().commander), COMMANDER_FILE_BYTES);
+  const DosAnswer read = _hardware.ReadFile(_state.Data().disk.fileHandle, CommanderFile(_state));
   if (read.failed)
   {
     CloseAndFail(_state, _hardware, read.value);
@@ -155,17 +177,14 @@ void LoadCommanderFile(GameState& _state, Hardware& _hardware)
 // SaveCommanderFile (0x0358): commanderBlock written to a new file, whose attributes are then cleared.
 void SaveCommanderFile(GameState& _state, Hardware& _hardware)
 {
-  const std::uint16_t data = _state.DataSegment();
-  const std::uint16_t name = _state.OffsetOf(_state.Data().saveLoad.commanderFileName);
-  const DosAnswer created = _hardware.CreateFile(data, name, NO_ATTRIBUTES);
+  const DosAnswer created = _hardware.CreateFile(CommanderFileName(_state), NO_ATTRIBUTES);
   if (created.failed)
   {
     Fail(_state, created.value);
     return;
   }
   _state.Data().disk.fileHandle = created.value;
-  const DosAnswer written =
-    _hardware.WriteFile(_state.Data().disk.fileHandle, data, _state.OffsetOf(_state.Data().commander), COMMANDER_FILE_BYTES);
+  const DosAnswer written = _hardware.WriteFile(_state.Data().disk.fileHandle, CommanderFileBytes(_state));
   if (written.failed)
   {
     CloseAndFail(_state, _hardware, written.value);
@@ -177,7 +196,7 @@ void SaveCommanderFile(GameState& _state, Hardware& _hardware)
     Fail(_state, closed.value);
     return;
   }
-  const DosAnswer cleared = _hardware.SetFileAttributes(data, name, NO_ATTRIBUTES);
+  const DosAnswer cleared = _hardware.SetFileAttributes(CommanderFileName(_state), NO_ATTRIBUTES);
   if (cleared.failed)
   {
     Fail(_state, cleared.value);
@@ -190,7 +209,9 @@ void ListCommanderFiles(GameState& _state, Hardware& _hardware, std::uint16_t _a
 {
   _state.Data().saveLoad.commanderFileCount = 0;
   _state.Data().saveLoad.commanderFileListNext = 0;
-  DosAnswer found = _hardware.FindFirstFile(_state.DataSegment(), OriginalOffset("commanderFilePattern"), _attributes);
+  // commanderFilePattern, "*.cdr" and its NUL.
+  const std::string_view pattern(reinterpret_cast<const char*>(COMMANDER_FILE_PATTERN.data()), COMMANDER_FILE_PATTERN.size());
+  DosAnswer found = _hardware.FindFirstFile(pattern, _attributes);
   while (!found.failed)
   {
     if (_state.Data().saveLoad.diskTransferArea[FOUND_ATTRIBUTE] == 0)
@@ -222,7 +243,7 @@ void ListCommanderFiles(GameState& _state, Hardware& _hardware, std::uint16_t _a
 // DeleteCommanderFile (0x03F2).
 void DeleteCommanderFile(GameState& _state, Hardware& _hardware)
 {
-  const DosAnswer deleted = _hardware.DeleteFile(_state.DataSegment(), _state.OffsetOf(_state.Data().saveLoad.commanderFileName));
+  const DosAnswer deleted = _hardware.DeleteFile(CommanderFileName(_state));
   if (deleted.failed)
   {
     Fail(_state, deleted.value);
@@ -517,7 +538,7 @@ std::uint8_t ShowDiskResult(GameState& _state, Hardware& _hardware)
 
 void PerformDiskRequest(GameState& _state, Hardware& _hardware, std::uint8_t _request, std::uint16_t _attributes)
 {
-  _hardware.SetDiskTransferArea(_state.DataSegment(), _state.OffsetOf(_state.Data().saveLoad.diskTransferArea));
+  _hardware.SetDiskTransferArea(_state.Data().saveLoad.diskTransferArea);
   // DEC AL until it reaches 0: 1 load, 2 save, 3 delete.
   switch (_request)
   {
@@ -538,15 +559,26 @@ void PerformDiskRequest(GameState& _state, Hardware& _hardware, std::uint8_t _re
 
 void SaveStartupCommander(GameState& _state, bool _backward)
 {
-  // REP MOVSB within the data segment, a byte at a time.
-  const auto step = static_cast<std::uint16_t>(_backward ? 0xFFFF : 1);
+  // REP MOVSB within the data segment, a byte at a time: going up, commanderBlock's bytes into startupCommander's.
+  if (!_backward)
+  {
+    const std::span<Counted<std::uint8_t>> to(_state.Data().saveLoad.startupCommander);
+    const std::span<const Counted<std::uint8_t>> from = std::as_const(_state).BytesFrom(_state.Data().commander, COMMANDER_FILE_BYTES);
+    for (std::size_t index = 0; index < COMMANDER_FILE_BYTES; ++index)
+    {
+      to[index] = std::uint8_t{from[index]};
+    }
+    return;
+  }
+  // Going down from each start, past both records' first bytes into what the original's data segment holds before them: still
+  // by the original's addresses, as change 3c of D38 takes the direction flag.
   std::uint16_t from = _state.OffsetOf(_state.Data().commander);
   std::uint16_t to = _state.OffsetOf(_state.Data().saveLoad.startupCommander);
   for (std::uint16_t left = COMMANDER_FILE_BYTES; left != 0; --left)
   {
     _state.SetByte(to, _state.Byte(from));
-    from = Offset(from, step);
-    to = Offset(to, step);
+    from = Offset(from, 0xFFFF);
+    to = Offset(to, 0xFFFF);
   }
 }
 
@@ -624,12 +656,11 @@ bool PromptCommanderFileName(GameState& _state, Hardware& _hardware)
     name[letter] = character;
     _hardware.LoopTurn(NEXT_NAME_CHARACTER, {_state.OffsetOf(name[letter])});
   }
-  // ".CDR" and its NUL after the name, the LOOP's turns carrying both places, SI and DI, and the count. The state does not hold
-  // the text, a gap nothing writes, so it is read from the reference's image (D38).
-  const std::span<const Counted<std::uint8_t>> extension = std::as_const(_state).BytesAt(COMMANDER_EXTENSION, EXTENSION_BYTES);
+  // ".CDR" and its NUL after the name, the LOOP's turns carrying both places, SI and DI, and the count. SI goes through the
+  // constant, whose place the turns carry as its index (D38).
   for (std::size_t from = 0, left = EXTENSION_BYTES;;)
   {
-    name[letter] = std::uint8_t{extension[from]};
+    name[letter] = COMMANDER_EXTENSION[from];
     ++from;
     ++letter;
     if (--left == 0)
@@ -637,7 +668,7 @@ bool PromptCommanderFileName(GameState& _state, Hardware& _hardware)
       return true;
     }
     _hardware.LoopTurn(APPEND_EXTENSION,
-                       {_state.OffsetOf(extension[from]), _state.OffsetOf(name[letter]), static_cast<std::uint16_t>(left)});
+                       {static_cast<std::uint16_t>(from), _state.OffsetOf(name[letter]), static_cast<std::uint16_t>(left)});
   }
 }
 
@@ -648,16 +679,19 @@ void PrintCommanderCatalogue(GameState& _state)
     PrintAt(_state, BLANK_LINE_TEXT, static_cast<std::uint16_t>(CATALOGUE_POSITION + row * TEXT_ROW_BYTES));
   }
   // Name n at row n mod 10, column n / 10, 9 cells apart: CBW and DIV DL by 10, which cannot overflow, as ListCommanderFiles
-  // lists at most 40.
-  std::string_view name = _state.TextAt(_state.Data().saveLoad.commanderFileList);
+  // lists at most 40. Each name follows the one before's NUL in commanderFileList, which holds the 40 names of eight characters
+  // at most and their NULs.
+  const std::span<const Counted<std::uint8_t>> list(_state.Data().saveLoad.commanderFileList);
+  std::size_t at = 0;
   const std::uint8_t count = _state.Data().saveLoad.commanderFileCount;
   for (std::uint8_t index = 0; index < count; ++index)
   {
     const auto column = static_cast<std::uint16_t>(index / CATALOGUE_ROWS);
     const auto row = static_cast<std::uint16_t>(index % CATALOGUE_ROWS);
     const auto cell = static_cast<std::uint16_t>(CATALOGUE_POSITION + column * CATALOGUE_COLUMN_BYTES + row * TEXT_ROW_BYTES);
+    const std::string_view name = TextIn(list.subspan(at));
     PrintAt(_state, name, cell);
-    name = _state.TextAfter(name);
+    at += name.size() + 1;
   }
 }
 

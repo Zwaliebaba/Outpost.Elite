@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "GameState.h"
+#include "Hyperspace.h"
 #include "TwinRig.h"
 
 #include <array>
@@ -35,19 +36,12 @@ void Launch(TwinRig& _rig)
   _rig.Play("key space; wait 4\nkey F1; wait 6");
 }
 
-// _jump set up on the twin, to the system selected as LatchHyperspaceTarget would latch it, and played
-// through the tunnel to the arrival.
+// _jump set up on the twin, to the system selected, latched as the target (LatchHyperspaceTarget), and played through the
+// tunnel to the arrival.
 void PlayJump(TwinRig& _rig, const Jump& _jump)
 {
   Elite::GameState& state = _rig.State();
-  state.Data().commander.hyperspaceTargetIndex = std::uint8_t{state.Data().commander.selectedSystemIndex};
-  const std::size_t bytes = state.Word(Elite::OriginalOffset("systemRecordBytes"));
-  const std::span<const Elite::Counted<std::uint8_t>> from = state.BytesFrom(state.Data().commander.selectedSystemName, bytes);
-  const std::span<Elite::Counted<std::uint8_t>> to = state.BytesFrom(state.Data().hyperspace.hyperspaceTargetRecord, bytes);
-  for (std::size_t index = 0; index < bytes; ++index)
-  {
-    to[index] = std::uint8_t{from[index]};
-  }
+  Elite::LatchHyperspaceTarget(state);
   state.Data().jump.galacticJumpPending = _jump.galactic;
   state.Data().commander.galaxyNumber = _jump.galaxy;
   state.Data().commander.randomState0 = _jump.zeroRandom ? std::uint16_t{0} : RANDOM_SEED[0];

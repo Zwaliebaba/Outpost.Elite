@@ -19,8 +19,13 @@
 #include "Scene.h"
 #include "Ships.h"
 #include "Sound.h"
+#include "StartUp.h"
 #include "Text.h"
 #include "Video.h"
+
+#include <algorithm>
+#include <array>
+#include <span>
 
 namespace Elite
 {
@@ -723,6 +728,61 @@ constexpr std::uint16_t DRAW_BUFFER_BYTES = 0x2000;
   return _backward ? Negate(DRAW_BUFFER_BYTES) : DRAW_BUFFER_BYTES;
 }
 
+// The 64 bytes after the dashboard's cache, DS:4238-4277 in 1987, where InvalidateDashboard leaves DI: equipmentLossMessage,
+// playerHitBy, playerHitPending, playerDocked and collisionRanges' first ten words (D38).
+[[nodiscard]] std::array<std::uint8_t, SpaceObject::BYTES> BytesAfterDashboardCache(const GameState& _state)
+{
+  std::array<std::uint8_t, SpaceObject::BYTES> bytes{};
+  std::size_t at = 0;
+  const auto append = [&bytes, &at](std::uint8_t _byte) { bytes.at(at++) = _byte; };
+  for (const Counted<std::uint8_t>& byte : _state.Data().unused.equipmentLossMessage)
+  {
+    append(byte);
+  }
+  for (const Counted<std::uint8_t>& byte : _state.BytesFrom(_state.Data().combat.playerHitBy, sizeof(CombatState::playerHitBy)))
+  {
+    append(byte);
+  }
+  append(_state.Data().combat.playerHitPending);
+  append(_state.Data().flight.playerDocked);
+  for (std::size_t range = 0; at < bytes.size(); ++range)
+  {
+    append(Low(COLLISION_RANGES[range]));
+    append(High(COLLISION_RANGES[range]));
+  }
+  return bytes;
+}
+
+// The 64 bytes after the stardust, where ResetStardust leaves DI: stardustPrevious's first (D38).
+[[nodiscard]] std::array<std::uint8_t, SpaceObject::BYTES> BytesAfterStardust(const GameState& _state)
+{
+  std::array<std::uint8_t, SpaceObject::BYTES> bytes{};
+  const std::span<const Counted<std::uint8_t>> previous = _state.BytesFrom(_state.Data().flight.stardustPrevious, bytes.size());
+  std::ranges::copy(previous, bytes.begin());
+  return bytes;
+}
+
+// What M's launch copies the missile from, where _di leaves DI (LaunchPlayerMissile): past the dashboard's cache, the stardust or
+// the drawing buffer filled going up, the bytes the original's data segment holds there, by name; anywhere else, a slot. Past the
+// buffer filled going down is cockpitImage's 2EA0h-2EDFh, which only a copy going down reaches, as the buffer's fill and the
+// launch go by the same direction flag: that copy still goes by the original's addresses (CopyObject).
+[[nodiscard]] MissileSource MissileSourceAt(const GameState& _state, std::uint16_t _di)
+{
+  if (_di == DashboardCacheEnd(_state))
+  {
+    return MissileSource{_di, BytesAfterDashboardCache(_state)};
+  }
+  if (_di == StardustEnd(_state))
+  {
+    return MissileSource{_di, BytesAfterStardust(_state)};
+  }
+  if (_di == DrawBufferEnd(false))
+  {
+    return MissileSource{_di, BytesAfterDrawBuffer(_state)};
+  }
+  return MissileSource{_di, std::nullopt};
+}
+
 [[nodiscard]] std::uint16_t DiAfterMassLock(const MassLock& _lock, std::uint16_t _di) noexcept
 {
   std::uint16_t di = _di;
@@ -1214,7 +1274,7 @@ void HandleMissileKeys(GameState& _state, std::uint16_t _di, bool _backward)
     _state.Data().flight.shipIdRequested = 0;
     SetMessage(_state, Message::MissileLaunched, 0x14);
     _state.Data().commander.missileCount = static_cast<std::uint8_t>(_state.Data().commander.missileCount - 1);
-    LaunchPlayerMissile(_state, source, _backward);
+    LaunchPlayerMissile(_state, MissileSourceAt(_state, source), _backward);
   }
 }
 
@@ -1364,8 +1424,8 @@ void PlaceSunPlanetAndStation(GameState& _state)
   sun.flags = SUN_OR_PLANET_FLAGS;
   sun.detail = 0xFF;
 
-  // The planet, straight ahead at z = 6E00h, its colour from bit 0 of the seed.
-  SpaceObject& planet = _state.ObjectAt(Plus(_state.OffsetOf(sun), SpaceObject::BYTES));
+  // The planet, straight ahead at z = 6E00h, its colour from bit 0 of the seed: in the slot after the sun's.
+  SpaceObject& planet = _state.Slot(SlotIndex::Planet);
   planet.type = PLANET_TYPE;
   planet.x = 0;
   planet.xHigh = 0;
@@ -1383,8 +1443,8 @@ void PlaceSunPlanetAndStation(GameState& _state)
 
   // The station, just behind at z = -300: a Dodo (type 0) at tech level 9 and up, else a Coriolis (type 1), with
   // 10-17 in its Thargons byte. While the Thargoids invade it has no missiles, Thargons or aggression, and is not
-  // hostile.
-  SpaceObject& station = _state.ObjectAt(Plus(_state.OffsetOf(planet), SpaceObject::BYTES));
+  // hostile. In the slot after the planet's.
+  SpaceObject& station = _state.Slot(SlotIndex::Station);
   const std::uint8_t stationType = _state.Data().commander.currentTechLevel >= 9 ? 0 : 1;
   station.type = static_cast<std::uint8_t>((stationType << 1) | SpaceObject::ACTIVE);
   station.yaw = STATION_YAW;

@@ -14,15 +14,18 @@
 #include "Text.h"
 #include "Video.h"
 
+#include <span>
+
 namespace Elite
 {
 
 namespace
 {
 
-// The laser sights: a 16x16 sprite at the centre of the space view's 64-byte rows, 128 bytes a laser type.
+// The laser sights: a 16x16 sprite at the centre of the space view's 64-byte rows, 128 bytes a laser type, from row 56, which is
+// row 55 of spaceViewBuffer: gap0000 is the view's first row (D38).
 constexpr std::uint16_t VIEW_ROW_BYTES = 64;
-constexpr std::uint16_t SIGHTS_OFFSET = 56 * VIEW_ROW_BYTES + 30;
+constexpr std::uint16_t SIGHTS_OFFSET = 55 * VIEW_ROW_BYTES + 30;
 constexpr std::uint16_t SIGHTS_ROWS = 16;
 constexpr std::uint16_t SIGHTS_ROW_BYTES = 8; // AND and OR masks for two words
 
@@ -117,11 +120,6 @@ constexpr std::uint16_t EDGE_ROW_MASK = 0x7F;
 constexpr std::uint16_t EDGE_RIGHT_X = 0xFF;
 constexpr std::uint8_t ENEMY_BEAM_COLOR = 3;
 constexpr std::uint8_t SHIELD_HIT = 0x0F;
-
-[[nodiscard]] std::uint16_t At(std::uint16_t _slot, int _field) noexcept
-{
-  return static_cast<std::uint16_t>(_slot + _field);
-}
 
 // The 24-bit position, by axis: the low words and the high bytes; and the velocity, signed bytes.
 constexpr std::array<ObjectWord, 3> POSITION_LOW = {&SpaceObject::x, &SpaceObject::y, &SpaceObject::z};
@@ -485,7 +483,8 @@ void DrawLaserSights(GameState& _state)
     return;
   }
   // MOV AH,AL / XOR AL,AL / SHR AX,1: 128 bytes a laser type.
-  std::uint16_t row = SIGHTS_OFFSET;
+  const std::span<Counted<std::uint8_t>> view(_state.Data().drawing.spaceViewBuffer);
+  std::size_t row = SIGHTS_OFFSET;
   const std::span<const std::uint8_t> sprites(LASER_SIGHTS);
   std::size_t sprite = std::size_t{*laser} << 7;
   for (std::uint16_t rows = SIGHTS_ROWS; rows != 0; --rows)
@@ -493,12 +492,12 @@ void DrawLaserSights(GameState& _state)
     // The buffer's words are big-endian pixels: XCHG AH,AL round the AND and the OR.
     for (int half = 0; half < 2; ++half)
     {
-      const std::uint16_t pixels = At(row, 2 * half);
+      const std::size_t pixels = row + 2 * static_cast<std::size_t>(half);
       const std::uint16_t andMask = WordIn(sprites, sprite + 2 * static_cast<std::size_t>(half));
       const std::uint16_t orMask = WordIn(sprites, sprite + 2 * static_cast<std::size_t>(half) + 4);
-      _state.SetWord(pixels, Swap(static_cast<std::uint16_t>((Swap(_state.Word(pixels)) & andMask) | orMask)));
+      SetWordIn(view, pixels, Swap(static_cast<std::uint16_t>((Swap(WordIn(view, pixels)) & andMask) | orMask)));
     }
-    row = At(row, VIEW_ROW_BYTES);
+    row += VIEW_ROW_BYTES;
     sprite += SIGHTS_ROW_BYTES;
   }
 }
@@ -1035,7 +1034,7 @@ std::optional<DashboardPixel> RemoveAllMissiles(GameState& _state)
   return lastErased;
 }
 
-void LaunchPlayerMissile(GameState& _state, std::uint16_t _source, bool _backward)
+void LaunchPlayerMissile(GameState& _state, const MissileSource& _source, bool _backward)
 {
   // A free slot, or one ReclaimShipSlot takes; one it evicts is left in DI too, so XCHG SI,DI copies that slot onto itself.
   // _source is wherever DI was: a slot, or past a buffer another routine filled, whose 64 bytes are copied all the same.
@@ -1055,7 +1054,29 @@ void LaunchPlayerMissile(GameState& _state, std::uint16_t _source, bool _backwar
     }
   }
   SpaceObject& missile = _state.Slot(slot);
-  CopyObject(_state, evicted ? _state.Slot(*evicted) : _state.ObjectAt(_source), missile, _backward);
+  if (evicted)
+  {
+    CopyObject(_state, _state.Slot(*evicted), missile, _backward);
+  }
+  else if (_backward)
+  {
+    // REP MOVSW down from DI, past the record there, by the original's addresses (CopyObject).
+    CopyObject(_state, _state.ObjectAt(_source.di), missile, true);
+  }
+  else if (_source.past)
+  {
+    // REP MOVSW up from DI past a buffer, a word at a time: the bytes there, by name.
+    const std::span<Counted<std::uint8_t>> to = _state.BytesFrom(missile, SpaceObject::BYTES);
+    const std::span<const std::uint8_t> from(*_source.past);
+    for (std::size_t word = 0; word < SpaceObject::BYTES; word += 2)
+    {
+      SetWordIn(to, word, WordIn(from, word));
+    }
+  }
+  else
+  {
+    CopyObject(_state, _state.Slot(GameState::SlotAt(_source.di)), missile, false);
+  }
   InitMissile(missile);
   // 100 along the player's nose: (0, 100, 0) turned by the player's angles, negated.
   (void)SetSinCos(_state, 0, Negate(_state.Data().playerShip.playerPitchAngle));
@@ -1144,10 +1165,11 @@ MissileFlight UpdateMissileAi(GameState& _state, Hardware& _hardware, SpaceObjec
     return MissileFlight{_state.OffsetOf(_missile), MoveObject(_state, _missile).dx};
   }
   // It explodes, with BX the vector's y; then MOV SI,[DI+29h] from where that leaves DI: the target of the record there, which
-  // the original holds as the slot's offset (DI for a struck ship or station).
+  // the original holds as the slot's offset (DI for a struck ship or station). ExplodeObject leaves DI on a slot: the missile's,
+  // or the one a barrel's search for a free slot stopped at.
   const Explosion exploded = ExplodeObject(_state, _hardware, _missile, _backward, static_cast<std::uint16_t>(toTarget.y));
   const std::uint16_t dx = exploded.dx.value_or(MISSILE_HIT_BOX);
-  const SlotIndex struckSlot = _state.ObjectAt(exploded.slot).target;
+  const SlotIndex struckSlot = _state.Slot(GameState::SlotAt(exploded.slot)).target;
   if (struckSlot == SlotIndex::Player)
   {
     // The player, with TakeDamage's STI when it kills.

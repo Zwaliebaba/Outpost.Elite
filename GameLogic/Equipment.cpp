@@ -12,7 +12,8 @@
 #include "Text.h"
 #include "Timer.h"
 
-#include <utility>
+#include <span>
+#include <string_view>
 
 namespace Elite
 {
@@ -142,6 +143,13 @@ constexpr std::uint8_t MINERALS_FROM = 0x28;
 [[nodiscard]] Counted<std::uint8_t>& Fitted(GameState& _state, std::uint8_t _row)
 {
   return _state.BytesFrom(_state.Data().commander.fuel, FITTED_ROWS)[std::size_t{_row} - 1];
+}
+
+// The text in _table, a table of the reference's bytes, from its byte _at up to its NUL.
+[[nodiscard]] std::string_view TextInTable(std::span<const std::uint8_t> _table, std::size_t _at) noexcept
+{
+  const std::string_view table(reinterpret_cast<const char*>(_table.data()), _table.size());
+  return table.substr(_at, table.find('\0', _at) - _at);
 }
 
 // IMUL r/m8: AL times _factor, both signed, into AX.
@@ -672,10 +680,10 @@ ScreenKey ShowEquipShipScreen(GameState& _state, Hardware& _hardware, bool _back
   PrintCountedTextLines(_state, EQUIP_HELP_TEXT, HELP_TEXT_OFFSET);
 
   // equipmentList: a count, then for each item its tech level, name, government and economy factors and base price. The list is
-  // sorted by tech level, so the first item beyond currentTechLevel+1 ends it. Each turn carries the count, the item's place and
-  // the row's place. Read from the reference's image at the original's address, which change 3b of D38 converts to the table.
-  const std::span<const Counted<std::uint8_t>> list =
-    std::as_const(_state).BytesAt(OriginalOffset("equipmentList"), OriginalBytes("equipmentList"));
+  // sorted by tech level, so the first item beyond currentTechLevel+1 ends it, or else the count does, after the last item and
+  // before the byte past the table. Each turn carries the count, the item's place, SI, as its byte in the table (D38), and the
+  // row's place.
+  const std::span<const std::uint8_t> list(EQUIPMENT_LIST);
   std::uint16_t left = list[0];
   std::size_t item = 1;
   const auto techLimit = static_cast<std::uint8_t>(_state.Data().commander.currentTechLevel + 2);
@@ -688,7 +696,7 @@ ScreenKey ShowEquipShipScreen(GameState& _state, Hardware& _hardware, bool _back
     const auto row = static_cast<std::uint8_t>(_state.Data().menus.menuRowCount + 1);
     _state.Data().menus.menuRowCount = row;
     // The price: the government's and the economy's factors, each by IMUL, and the base price.
-    const std::string_view name = _state.TextAt(list[item + 1]);
+    const std::string_view name = TextInTable(list, item + 1);
     PrintTextModeString(_state, name, cell);
     std::size_t factor = item + 1 + name.size() + 1;
     const std::uint16_t government = SignedProduct(list[factor], _state.Data().commander.currentGovernment);
@@ -722,7 +730,7 @@ ScreenKey ShowEquipShipScreen(GameState& _state, Hardware& _hardware, bool _back
     {
       break;
     }
-    _hardware.LoopTurn(EQUIPMENT_LIST_ROW, {left, _state.OffsetOf(list[item]), cell});
+    _hardware.LoopTurn(EQUIPMENT_LIST_ROW, {left, static_cast<std::uint16_t>(item), cell});
   }
   return RunEquipShipMenu(_state, _hardware, EQUIP_MENU_FIRST_ROW);
 }

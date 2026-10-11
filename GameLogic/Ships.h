@@ -197,14 +197,15 @@ void FacePlayer(GameState& _state, SpaceObject& _slot);
 ReclaimedSlot ReclaimShipSlot(GameState& _state);
 
 /// ClearAllObjects (CS:52B2): shipSlotCount slots from shipSlots zeroed, a word at a time as REP STOSW does, backwards when
-/// _backward (the direction flag) is set.
+/// _backward (the direction flag) is set, down from the first slot by the original's addresses.
 void ClearAllObjects(GameState& _state, bool _backward);
 
 /// FindDebrisSlot (CS:52EC): the first inactive debris slot, or, when every one is active, the oldest, the last of equals.
 [[nodiscard]] SlotIndex FindDebrisSlot(GameState& _state);
 
 /// CopyObject (CS:5320): _source's 64 bytes copied over _destination's a word at a time as REP MOVSW does, backwards when
-/// _backward (the direction flag) is set. The two are slots, or the source a record like one (LaunchPlayerMissile).
+/// _backward (the direction flag) is set, down from both first words by the original's addresses. The two are slots, or, copied
+/// backwards, the source a record like one at DI (LaunchPlayerMissile).
 void CopyObject(GameState& _state, const SpaceObject& _source, SpaceObject& _destination, bool _backward);
 
 /// UpdateDebrisAi (CS:5330): a fragment's frame: its lifetime counted down, and at 0 its active bit cleared; otherwise its age

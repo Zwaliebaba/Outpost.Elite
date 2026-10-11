@@ -7,6 +7,9 @@
 #include "Maths.h"
 #include "ShipsTables.h"
 
+#include <span>
+#include <utility>
+
 namespace Elite
 {
 
@@ -477,9 +480,23 @@ SlotSearch FindFreeShipSlot(GameState& _state)
 
 void ClearAllObjects(GameState& _state, bool _backward)
 {
-  // MOV CH,shipSlotCount / XOR CL,CL / SHR CX,1 three times: 32 words a slot, cleared by REP STOSW into ES = DS.
+  // MOV CH,shipSlotCount / XOR CL,CL / SHR CX,1 three times: 32 words a slot, cleared by REP STOSW into ES = DS. Going up, the
+  // first shipSlotCount slots, a word at a time, low byte first: shipSlotCount is only ever 3, 20h or 24h, so every store is in
+  // shipSlots' 36, and a count past them throws (GameState::Slot).
+  if (!_backward)
+  {
+    SlotIndex slot = SlotIndex::Sun;
+    for (std::uint8_t slots = _state.Data().world.shipSlotCount; slots != 0; --slots)
+    {
+      ClearObjectSlot(_state, _state.Slot(slot));
+      slot = SlotAfter(slot);
+    }
+    return;
+  }
+  // Backwards, REP STOSW starts from the first slot's first word and runs down from there, as the original's does: past
+  // shipSlots' start into what the original's data segment holds before it, still by the original's addresses, as change 3c of
+  // D38 takes the direction flag.
   const std::uint16_t step = StringStep(_backward, 2);
-  // Backwards, REP STOSW starts from the first slot's first word and runs down from there, as the original's does.
   std::uint16_t at = _state.OffsetOf(_state.Data().world.shipSlots);
   for (auto words = static_cast<std::uint16_t>(_state.Data().world.shipSlotCount << 5); words != 0; --words)
   {
@@ -520,8 +537,21 @@ SlotIndex FindDebrisSlot(GameState& _state)
 
 void CopyObject(GameState& _state, const SpaceObject& _source, SpaceObject& _destination, bool _backward)
 {
-  // REP MOVSW from DS:SI to ES:DI, ES = DS: 32 words, word by word as the 8088 does it, from the first or, backwards, from the
-  // first word and down past it, as the original's runs with the direction flag set.
+  // REP MOVSW from DS:SI to ES:DI, ES = DS: 32 words, word by word as the 8088 does it, each read whole and then written, from
+  // the first.
+  if (!_backward)
+  {
+    const std::span<const Counted<std::uint8_t>> source = std::as_const(_state).BytesFrom(_source, SpaceObject::BYTES);
+    const std::span<Counted<std::uint8_t>> destination = _state.BytesFrom(_destination, SpaceObject::BYTES);
+    for (std::size_t word = 0; word < SpaceObject::BYTES; word += 2)
+    {
+      SetWordIn(destination, word, WordIn(source, word));
+    }
+    return;
+  }
+  // Backwards, from the first word and down past it, as the original's runs with the direction flag set: into what the
+  // original's data segment holds before both records, still by the original's addresses, as change 3c of D38 takes the
+  // direction flag.
   const std::uint16_t step = StringStep(_backward, 2);
   std::uint16_t source = _state.OffsetOf(_source);
   std::uint16_t destination = _state.OffsetOf(_destination);

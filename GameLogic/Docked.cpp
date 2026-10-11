@@ -30,11 +30,12 @@ constexpr std::uint16_t CREDITS_ON_MESSAGE_LINE = 0x78; // B800:0078
 
 constexpr std::uint8_t FUEL_TENTHS_PER_UNIT = 10;
 constexpr std::uint8_t FUEL_UNITS_PER_TENTH = 0x24; // 255 is 7.0 light years
-// 'Fuel:         n.n Light Years' and the five digits FormatDecimal5 writes for it, of which the last two are shown: buffers in
-// rows the symbol table does not start them at (GameState::TextAtOffset).
-constexpr std::uint16_t FUEL_TEXT = 0x83E9;
+// 'Fuel:         n.n Light Years', from 16Ah into gap827F on through data83F7-data83F9 into gap83FA, and the five digits
+// FormatDecimal5 writes for it, from 0Dh into gap83FA on through data840A and data840B, of which the last two are shown: buffers
+// the symbol table starts no row for, reached from the members they start in, the bytes after them beside them (D38).
+constexpr std::size_t FUEL_TEXT_IN_GAP = 0x16A;
 constexpr std::size_t FUEL_TEXT_BYTES = 30;
-constexpr std::uint16_t FUEL_DIGITS = 0x8407;
+constexpr std::size_t FUEL_DIGITS_IN_GAP = 0x0D;
 constexpr std::size_t FUEL_DIGITS_BYTES = 5;
 
 constexpr std::uint8_t TEXT_LAYOUT = 2;
@@ -118,7 +119,7 @@ constexpr std::uint16_t LASER_MOUNTS = 4;
 constexpr std::uint8_t LASER_MOUNT_TYPE_MASK = 3;
 constexpr std::uint16_t INVENTORY_CASH_BACK = 0x10; // the cash eight cells nearer its label than the status screen's
 // The inventory's quantity, which FormatQuantity writes: a buffer past productNames' rows, which the symbol table sizes to take it.
-constexpr std::uint16_t INVENTORY_QUANTITY_TEXT = 0x8995;
+constexpr std::size_t INVENTORY_QUANTITY_IN_NAMES = std::size_t{INVENTORY_ROWS} * PRODUCT_NAME_BYTES;
 constexpr std::size_t QUANTITY_TEXT_BYTES = 6;       // five digits and a NUL
 constexpr std::uint16_t FUEL_LABEL_BYTES = 6;        // 'Fuel: ', where a NUL cuts the fuel text
 constexpr std::uint16_t FUEL_DIGITS_AFTER_LABEL = 8; // from that NUL past the padding to 'n.n Light Years'
@@ -139,9 +140,9 @@ constexpr std::uint8_t REWARD_DIGIT_FULL_HOLD = 0x30; // '1000 Credits' when all
 constexpr std::uint16_t REWARD_FULL_HOLD_TENTHS = 0x2710;
 constexpr std::uint8_t REWARD_DIGIT_OTHERWISE = 0x34; // '1400 Credits'
 constexpr std::uint16_t REWARD_OTHERWISE_TENTHS = 0x36B0;
-// 'Thank you for saving us.' and three lines more: a buffer, whose reward's digit is refugeeRewardDigit, in rows the symbol
-// table does not start it at (GameState::TextAtOffset).
-constexpr std::uint16_t SUPERNOVA_DEBRIEFING_TEXT = 0x9056;
+// 'Thank you for saving us.' and three lines more, after taskCompleteFrame's title: from 23h into it, on through
+// refugeeRewardDigit, the reward's digit, into gap907F, a text the symbol table starts no row for (D38).
+constexpr std::size_t SUPERNOVA_DEBRIEFING_IN_FRAME = 0x23;
 constexpr std::uint16_t SUPERNOVA_DEBRIEFING_LINES = 4;
 constexpr std::uint16_t INVASION_DEBRIEFING_LINES = 0x0E;
 
@@ -204,6 +205,12 @@ void FormatQuantity(std::uint16_t _quantity, std::span<Counted<std::uint8_t>> _t
 [[nodiscard]] std::span<Counted<std::uint8_t>> Hold(GameState& _state)
 {
   return _state.BytesFrom(_state.Data().commander.cargoHold, sizeof(CommanderState::CargoHold));
+}
+
+// The fuel's text, 'Fuel:         n.n Light Years' (FormatFuelLightYears).
+[[nodiscard]] std::span<Counted<std::uint8_t>> FuelText(GameState& _state)
+{
+  return _state.BytesFrom(_state.Data().docked.gap827F[FUEL_TEXT_IN_GAP], FUEL_TEXT_BYTES);
 }
 
 // The first byte of product _product's row of productNames: its name, a space and its unit.
@@ -464,7 +471,8 @@ void FormatFuelLightYears(GameState& _state)
 {
   // MUL AH by 10, then DIV BL by 36, which cannot overflow: at most 2550/36.
   const auto tenths = static_cast<std::uint16_t>(_state.Data().commander.fuel * FUEL_TENTHS_PER_UNIT);
-  FormatDecimal5(static_cast<std::uint8_t>(tenths / FUEL_UNITS_PER_TENTH), _state.BytesAt(FUEL_DIGITS, FUEL_DIGITS_BYTES));
+  FormatDecimal5(static_cast<std::uint8_t>(tenths / FUEL_UNITS_PER_TENTH),
+                 _state.BytesFrom(_state.Data().docked.gap83FA[FUEL_DIGITS_IN_GAP], FUEL_DIGITS_BYTES));
   // The units and the tenths, the last two of the five digits, into the text either side of its point.
   _state.Data().docked.data83F7 = std::uint8_t{_state.Data().docked.data840A};
   _state.Data().docked.data83F9 = std::uint8_t{_state.Data().docked.data840B};
@@ -666,7 +674,7 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
   printed = PrintTextModeString(_state, HYPERSYSTEM_LABEL_TEXT, LINE_4);
   PrintTextModeString(_state, inWitchSpace ? WITCH_SPACE_TEXT : _state.TextAt(_state.Data().commander.selectedSystemName), printed);
   FormatFuelLightYears(_state);
-  PrintTextModeString(_state, _state.TextAtOffset(FUEL_TEXT), LINE_5);
+  PrintTextModeString(_state, TextIn(FuelText(_state)), LINE_5);
   printed = PrintTextModeString(_state, CASH_LABEL_TEXT, LINE_6);
   PrintTextModeString(_state, SkipCashSpaces(_state, _hardware, STATUS_CASH_SPACE), printed);
   printed = PrintTextModeString(_state, LEGAL_STATUS_LABEL_TEXT, LINE_7);
@@ -674,13 +682,14 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
   const std::uint16_t standing = legal < LEGAL_STATUS_OFFENDER ? 0 : legal < LEGAL_STATUS_FUGITIVE ? 1 : 2;
   PrintTextModeString(_state, LEGAL_STATUS_NAMES[standing], printed);
   printed = PrintTextModeString(_state, RATING_LABEL_TEXT, LINE_8);
-  // The rating: the first threshold above the kill count, each turn of the search carrying the threshold's place and the rating.
-  // The last threshold is above any kill count (killCount stops at FEh), so the rating is one of the nine.
+  // The rating: the first threshold above the kill count, each turn of the search carrying the threshold's place, SI, as its
+  // index in the table (D38), and the rating. The last threshold is above any kill count (killCount stops at FEh), so the rating
+  // is one of the nine.
   const std::uint8_t kills = _state.Data().commander.killCount;
   std::uint16_t rating = 0;
   while (kills >= RATING_THRESHOLDS[rating])
   {
-    _hardware.LoopTurn(STATUS_RATING, {static_cast<std::uint16_t>(OriginalOffset("ratingThresholds") + rating), rating});
+    _hardware.LoopTurn(STATUS_RATING, {rating, rating});
     ++rating;
   }
   PrintTextModeString(_state, RATING_NAMES[rating], printed);
@@ -693,7 +702,7 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
 
   // One row for each item fitted, and after a laser the mounts it is fitted to. Each turn carries the count, the row's place,
   // the item's count and its name's pointer: where the original holds them, the pointer the place of the item's entry in
-  // equipmentNames.
+  // equipmentNames, as its index in the table (D38).
   std::uint16_t row = LINE_10;
   const std::span<const Counted<std::uint8_t>> fitted = _state.BytesFrom(_state.Data().commander.missileCount, EQUIPMENT_ROWS);
   std::size_t item = 0;
@@ -710,7 +719,8 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
       {
         std::uint16_t cell = PrintTextModeString(_state, MOUNTS_OPEN_TEXT, named);
         // Each mount with this type of laser, from laserMountsFitted in DL and laserMountTypes in DH, which each turn carries
-        // with the mount name's pointer, the place of its entry in laserMountNames, the count and where the next name prints.
+        // with the mount name's pointer, the place of its entry in laserMountNames as its index (D38), the count and where the
+        // next name prints.
         std::uint8_t mounts = _state.Data().commander.laserMountsFitted;
         std::uint8_t types = _state.Data().commander.laserMountTypes;
         std::size_t mountName = 0;
@@ -728,9 +738,7 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
           {
             break;
           }
-          _hardware.LoopTurn(
-            STATUS_LASER_MOUNT,
-            {Join(types, mounts), static_cast<std::uint16_t>(OriginalOffset("laserMountNames") + 2 * mountName), mount, cell});
+          _hardware.LoopTurn(STATUS_LASER_MOUNT, {Join(types, mounts), static_cast<std::uint16_t>(mountName), mount, cell});
         }
         PrintTextModeString(_state, MOUNTS_CLOSE_TEXT, static_cast<std::uint16_t>(cell - 2));
       }
@@ -742,8 +750,7 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
     {
       break;
     }
-    _hardware.LoopTurn(STATUS_EQUIPMENT_ROW,
-                       {left, row, _state.OffsetOf(fitted[item]), static_cast<std::uint16_t>(OriginalOffset("equipmentNames") + 2 * item)});
+    _hardware.LoopTurn(STATUS_EQUIPMENT_ROW, {left, row, _state.OffsetOf(fitted[item]), static_cast<std::uint16_t>(item)});
   }
   return WaitForScreenExitKey(_state, _hardware, SCAN_F9, al, _countIfNone);
 }
@@ -754,7 +761,7 @@ ScreenKey ShowInventoryScreen(GameState& _state, Hardware& _hardware, bool _back
   // The fuel text without the padding the status screen has: 'Fuel: ', cut by a NUL that becomes a space again, then
   // 'n.n Light Years'.
   FormatFuelLightYears(_state);
-  const std::span<Counted<std::uint8_t>> fuel = _state.BytesAt(FUEL_TEXT, FUEL_TEXT_BYTES);
+  const std::span<Counted<std::uint8_t>> fuel = FuelText(_state);
   fuel[FUEL_LABEL_BYTES] = NUL;
   const std::string_view label = TextIn(fuel);
   const std::uint16_t labelEnd = PrintTextModeString(_state, label, LINE_3);
@@ -766,7 +773,8 @@ ScreenKey ShowInventoryScreen(GameState& _state, Hardware& _hardware, bool _back
 
   // Every product held, and the refugees: name, quantity, unit, a row each. Each turn carries the count, the name, the amount's
   // place and the row's place, which an empty row does not move on.
-  const std::span<Counted<std::uint8_t>> quantityText = _state.BytesAt(INVENTORY_QUANTITY_TEXT, QUANTITY_TEXT_BYTES);
+  const std::span<Counted<std::uint8_t>> quantityText =
+    std::span<Counted<std::uint8_t>>(_state.Data().docked.productNames).subspan(INVENTORY_QUANTITY_IN_NAMES, QUANTITY_TEXT_BYTES);
   std::uint16_t row = LINE_6;
   std::uint16_t product = 0;
   const auto turn = [&_state, &_hardware, &row, &product](std::uint16_t _loop, std::uint16_t _left)
@@ -888,7 +896,8 @@ void ShowMissionDebriefing(GameState& _state, Hardware& _hardware, bool _backwar
     _state.Data().commander.cargoHold.refugeesTonnes = 0;
     _state.Data().commander.cargoHold.cargoUsedTonnes = 0;
     AddCredits(_state, fullHold ? REWARD_FULL_HOLD_TENTHS : REWARD_OTHERWISE_TENTHS);
-    PrintTextLines(_state, _state.TextAtOffset(SUPERNOVA_DEBRIEFING_TEXT), LINE_4, SUPERNOVA_DEBRIEFING_LINES);
+    PrintTextLines(_state, _state.TextAt(_state.Data().docked.taskCompleteFrame[SUPERNOVA_DEBRIEFING_IN_FRAME]), LINE_4,
+                   SUPERNOVA_DEBRIEFING_LINES);
     WaitForKeyPress(_state, _hardware);
     _state.Data().commander.missionNumber = 0;
     _state.Data().commander.missionStage = 0;
