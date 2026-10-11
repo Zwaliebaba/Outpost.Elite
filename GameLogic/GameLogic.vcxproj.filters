@@ -84,6 +84,15 @@
     <ClInclude Include="Arithmetic.h">
       <Filter>Native</Filter>
     </ClInclude>
+    <ClInclude Include="Bios.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
+    <ClInclude Include="Cga.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
+    <ClInclude Include="CgaFont.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
     <ClInclude Include="Combat.h">
       <Filter>Combat</Filter>
     </ClInclude>
@@ -92,6 +101,9 @@
     </ClInclude>
     <ClInclude Include="DataOverlay.h">
       <Filter>Native</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectoryFileStore.h">
+      <Filter>Platform</Filter>
     </ClInclude>
     <ClInclude Include="Docked.h">
       <Filter>Docked</Filter>
@@ -105,6 +117,9 @@
     <ClInclude Include="Equipment.h">
       <Filter>Equipment</Filter>
     </ClInclude>
+    <ClInclude Include="FileStore.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
     <ClInclude Include="Flight.h">
       <Filter>Flight</Filter>
     </ClInclude>
@@ -116,6 +131,9 @@
     </ClInclude>
     <ClInclude Include="GameData.h">
       <Filter>State</Filter>
+    </ClInclude>
+    <ClInclude Include="GamePort.h">
+      <Filter>Platform</Filter>
     </ClInclude>
     <ClInclude Include="GameState.h">
       <Filter>State</Filter>
@@ -132,11 +150,23 @@
     <ClInclude Include="Input.h">
       <Filter>Input</Filter>
     </ClInclude>
+    <ClInclude Include="InterruptController.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
+    <ClInclude Include="IntervalTimer.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
+    <ClInclude Include="Keyboard.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
     <ClInclude Include="Market.h">
       <Filter>Market</Filter>
     </ClInclude>
     <ClInclude Include="Maths.h">
       <Filter>Maths</Filter>
+    </ClInclude>
+    <ClInclude Include="Mouse.h">
+      <Filter>Platform</Filter>
     </ClInclude>
     <ClInclude Include="NativeEntry.h">
       <Filter>Native</Filter>
@@ -174,11 +204,20 @@
     <ClInclude Include="Scene.h">
       <Filter>Scene</Filter>
     </ClInclude>
+    <ClInclude Include="ServiceFault.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
+    <ClInclude Include="Sha256.h">
+      <Filter>Replay</Filter>
+    </ClInclude>
     <ClInclude Include="Ships.h">
       <Filter>Ships</Filter>
     </ClInclude>
     <ClInclude Include="Sound.h">
       <Filter>Sound</Filter>
+    </ClInclude>
+    <ClInclude Include="Speaker.h">
+      <Filter>Platform</Filter>
     </ClInclude>
     <ClInclude Include="StartUp.h">
       <Filter>StartUp</Filter>
@@ -192,6 +231,9 @@
     <ClInclude Include="Timer.h">
       <Filter>Timer</Filter>
     </ClInclude>
+    <ClInclude Include="Timing.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
     <ClInclude Include="Video.h">
       <Filter>Video</Filter>
     </ClInclude>
@@ -200,8 +242,20 @@
     <ClCompile Include="Ai.cpp">
       <Filter>Ai</Filter>
     </ClCompile>
+    <ClCompile Include="Bios.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="Cga.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="CgaFont.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
     <ClCompile Include="Combat.cpp">
       <Filter>Combat</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectoryFileStore.cpp">
+      <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="Docked.cpp">
       <Filter>Docked</Filter>
@@ -215,6 +269,9 @@
     <ClCompile Include="Equipment.cpp">
       <Filter>Equipment</Filter>
     </ClCompile>
+    <ClCompile Include="FileStore.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
     <ClCompile Include="Flight.cpp">
       <Filter>Flight</Filter>
     </ClCompile>
@@ -223,6 +280,12 @@
     </ClCompile>
     <ClCompile Include="Game.cpp">
       <Filter>Reference</Filter>
+    </ClCompile>
+    <ClCompile Include="GamePort.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="GameState.cpp">
+      <Filter>State</Filter>
     </ClCompile>
     <ClCompile Include="Hardware.cpp">
       <Filter>State</Filter>
@@ -233,11 +296,23 @@
     <ClCompile Include="Input.cpp">
       <Filter>Input</Filter>
     </ClCompile>
+    <ClCompile Include="InterruptController.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="IntervalTimer.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="Keyboard.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
     <ClCompile Include="Market.cpp">
       <Filter>Market</Filter>
     </ClCompile>
     <ClCompile Include="Maths.cpp">
       <Filter>Maths</Filter>
+    </ClCompile>
+    <ClCompile Include="Mouse.cpp">
+      <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="NativeRoutines.cpp">
       <Filter>Native</Filter>
@@ -266,11 +341,17 @@
     <ClCompile Include="Scene.cpp">
       <Filter>Scene</Filter>
     </ClCompile>
+    <ClCompile Include="Sha256.cpp">
+      <Filter>Replay</Filter>
+    </ClCompile>
     <ClCompile Include="Ships.cpp">
       <Filter>Ships</Filter>
     </ClCompile>
     <ClCompile Include="Sound.cpp">
       <Filter>Sound</Filter>
+    </ClCompile>
+    <ClCompile Include="Speaker.cpp">
+      <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="StartUp.cpp">
       <Filter>StartUp</Filter>

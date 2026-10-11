@@ -53,8 +53,7 @@ void DrawRandomNumbers(TwinRig& _rig, std::uint32_t _draws)
 [[nodiscard]] std::uint8_t TwinByte(TwinRig& _rig, Elite::DataField<std::uint8_t> _field)
 {
   std::uint8_t value = 0;
-  _rig.Both([&value, _field](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-            { value = _pc.Ram().Read8(Elite::DataSegment(_program), _field.offset); });
+  _rig.Both([&value, _field](Elite::Platform&, Elite::GameState& _state) { value = _state.Byte(_field.offset); });
   return value;
 }
 

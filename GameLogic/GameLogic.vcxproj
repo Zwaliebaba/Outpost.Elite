@@ -57,7 +57,6 @@
       <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(SolutionDir)Machine;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
@@ -76,24 +75,34 @@
   <ItemGroup>
     <ClInclude Include="Ai.h" />
     <ClInclude Include="Arithmetic.h" />
+    <ClInclude Include="Bios.h" />
+    <ClInclude Include="Cga.h" />
+    <ClInclude Include="CgaFont.h" />
     <ClInclude Include="Combat.h" />
     <ClInclude Include="DataField.h" />
     <ClInclude Include="DataOverlay.h" />
+    <ClInclude Include="DirectoryFileStore.h" />
     <ClInclude Include="Docked.h" />
     <ClInclude Include="Docking.h" />
     <ClInclude Include="DosFiles.h" />
     <ClInclude Include="Equipment.h" />
+    <ClInclude Include="FileStore.h" />
     <ClInclude Include="Flight.h" />
     <ClInclude Include="Galaxy.h" />
     <ClInclude Include="Game.h" />
     <ClInclude Include="GameData.h" />
+    <ClInclude Include="GamePort.h" />
     <ClInclude Include="GameState.h" />
     <ClInclude Include="Guest.h" />
     <ClInclude Include="Hardware.h" />
     <ClInclude Include="Hyperspace.h" />
     <ClInclude Include="Input.h" />
+    <ClInclude Include="InterruptController.h" />
+    <ClInclude Include="IntervalTimer.h" />
+    <ClInclude Include="Keyboard.h" />
     <ClInclude Include="Market.h" />
     <ClInclude Include="Maths.h" />
+    <ClInclude Include="Mouse.h" />
     <ClInclude Include="NativeEntry.h" />
     <ClInclude Include="NativeRoutines.h" />
     <ClInclude Include="ObjectSlot.h" />
@@ -106,29 +115,44 @@
     <ClInclude Include="Replay.h" />
     <ClInclude Include="SaveLoad.h" />
     <ClInclude Include="Scene.h" />
+    <ClInclude Include="ServiceFault.h" />
+    <ClInclude Include="Sha256.h" />
     <ClInclude Include="Ships.h" />
     <ClInclude Include="Sound.h" />
+    <ClInclude Include="Speaker.h" />
     <ClInclude Include="StartUp.h" />
     <ClInclude Include="StateDigest.h" />
     <ClInclude Include="Text.h" />
     <ClInclude Include="Timer.h" />
+    <ClInclude Include="Timing.h" />
     <ClInclude Include="Video.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Ai.cpp" />
+    <ClCompile Include="Bios.cpp" />
+    <ClCompile Include="Cga.cpp" />
+    <ClCompile Include="CgaFont.cpp" />
     <ClCompile Include="Combat.cpp" />
+    <ClCompile Include="DirectoryFileStore.cpp" />
     <ClCompile Include="Docked.cpp" />
     <ClCompile Include="Docking.cpp" />
     <ClCompile Include="DosFiles.cpp" />
     <ClCompile Include="Equipment.cpp" />
+    <ClCompile Include="FileStore.cpp" />
     <ClCompile Include="Flight.cpp" />
     <ClCompile Include="Galaxy.cpp" />
     <ClCompile Include="Game.cpp" />
+    <ClCompile Include="GamePort.cpp" />
+    <ClCompile Include="GameState.cpp" />
     <ClCompile Include="Hardware.cpp" />
     <ClCompile Include="Hyperspace.cpp" />
     <ClCompile Include="Input.cpp" />
+    <ClCompile Include="InterruptController.cpp" />
+    <ClCompile Include="IntervalTimer.cpp" />
+    <ClCompile Include="Keyboard.cpp" />
     <ClCompile Include="Market.cpp" />
     <ClCompile Include="Maths.cpp" />
+    <ClCompile Include="Mouse.cpp" />
     <ClCompile Include="NativeRoutines.cpp" />
     <ClCompile Include="Outcome.cpp" />
     <ClCompile Include="pch.cpp">
@@ -140,18 +164,15 @@
     <ClCompile Include="Replay.cpp" />
     <ClCompile Include="SaveLoad.cpp" />
     <ClCompile Include="Scene.cpp" />
+    <ClCompile Include="Sha256.cpp" />
     <ClCompile Include="Ships.cpp" />
     <ClCompile Include="Sound.cpp" />
+    <ClCompile Include="Speaker.cpp" />
     <ClCompile Include="StartUp.cpp" />
     <ClCompile Include="StateDigest.cpp" />
     <ClCompile Include="Text.cpp" />
     <ClCompile Include="Timer.cpp" />
     <ClCompile Include="Video.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\Machine\Machine.vcxproj">
-      <Project>{20D2E016-F4F9-5FE2-9C7D-A4DB0F992259}</Project>
-    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

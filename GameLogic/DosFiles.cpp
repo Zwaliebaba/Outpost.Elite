@@ -4,7 +4,6 @@
 
 #include "Arithmetic.h"
 #include "GameState.h"
-#include "Memory.h"
 
 #include <algorithm>
 #include <chrono>
@@ -17,9 +16,6 @@ namespace Elite
 
 namespace
 {
-
-using Machine::DosError;
-using Machine::FileStore;
 
 constexpr std::size_t MAX_NAME_BYTES = 128;
 constexpr std::uint8_t ACCESS_MODE_BITS = 0x07; // AL's bits 0-2; the sharing bits above them are ignored
@@ -67,17 +63,8 @@ using Template = std::array<char, TEMPLATE_BYTES>;
   return _character >= 'a' && _character <= 'z' ? static_cast<char>(_character - 'a' + 'A') : _character;
 }
 
-// The byte at linear address _linear, wrapping at 1 MiB, as segment and offset: what the emulated DOS's reads and writes by
-// linear address reach.
-[[nodiscard]] constexpr std::uint16_t LinearSegment(std::uint32_t _linear) noexcept
-{
-  return static_cast<std::uint16_t>((_linear & Machine::Memory::ADDRESS_MASK) >> 4);
-}
-
-[[nodiscard]] constexpr std::uint16_t LinearOffset(std::uint32_t _linear) noexcept
-{
-  return static_cast<std::uint16_t>(_linear & (Machine::Memory::PARAGRAPH_BYTES - 1));
-}
+// The 20-bit addresses wrap at 1 MiB, as the 8088's do.
+constexpr std::uint32_t ADDRESS_MASK = 0xFFFFF;
 
 // A canonical name, "NAME.EXT", as the 11 blank-padded characters of a directory entry.
 [[nodiscard]] Template EntryName(std::string_view _name)
@@ -174,18 +161,19 @@ void RefuseStandardHandle(std::uint16_t _handle, const char* _service)
 
 } // namespace
 
-DosFiles::DosFiles(GameState& _state, Machine::FileStore& _files, const Machine::Dos::DateTime& _startMoment) noexcept
+DosFiles::DosFiles(GameState& _state, FileStore& _files, const DosDateTime& _startMoment) noexcept
   : m_state(_state),
     m_files(_files),
     m_startMoment(_startMoment)
 {
 }
 
-void DosFiles::StartProgram(std::uint16_t _pspSegment) noexcept
+void DosFiles::StartProgram() noexcept
 {
-  m_transferSegment = _pspSegment;
-  m_transferOffset = DEFAULT_TRANSFER_AREA;
-  for (std::unique_ptr<Machine::OpenFile>& file : m_handles)
+  m_transferSet = false;
+  m_transferSegment = 0;
+  m_transferOffset = 0;
+  for (std::unique_ptr<OpenFile>& file : m_handles)
   {
     file.reset();
   }
@@ -193,6 +181,7 @@ void DosFiles::StartProgram(std::uint16_t _pspSegment) noexcept
 
 void DosFiles::SetTransferArea(std::uint16_t _segment, std::uint16_t _offset) noexcept
 {
+  m_transferSet = true;
   m_transferSegment = _segment;
   m_transferOffset = _offset;
 }
@@ -224,7 +213,7 @@ DosAnswer DosFiles::SetAttributes(std::uint16_t _segment, std::uint16_t _name, s
   return error != DosError::None ? Fail(error) : Succeed(0);
 }
 
-DosAnswer DosFiles::Create(std::uint16_t _segment, std::uint16_t _name, std::uint16_t _attributes, Machine::Cycles _clock)
+DosAnswer DosFiles::Create(std::uint16_t _segment, std::uint16_t _name, std::uint16_t _attributes, Cycles _clock)
 {
   const int handle = FreeHandle();
   const std::optional<std::string> name = NameAt(_segment, _name);
@@ -236,7 +225,7 @@ DosAnswer DosFiles::Create(std::uint16_t _segment, std::uint16_t _name, std::uin
   {
     return Fail(DosError::PathNotFound);
   }
-  std::unique_ptr<Machine::OpenFile> file;
+  std::unique_ptr<OpenFile> file;
   const DosError error = m_files.Create(*name, Low(_attributes), Stamp(Now(_clock)), file);
   if (error != DosError::None)
   {
@@ -263,9 +252,8 @@ DosAnswer DosFiles::Open(std::uint16_t _segment, std::uint16_t _name, std::uint8
   {
     return Fail(DosError::PathNotFound);
   }
-  const Machine::FileAccess access =
-    mode == READ_ACCESS ? Machine::FileAccess::Read : (mode == WRITE_ACCESS ? Machine::FileAccess::Write : Machine::FileAccess::ReadWrite);
-  std::unique_ptr<Machine::OpenFile> file;
+  const FileAccess access = mode == READ_ACCESS ? FileAccess::Read : (mode == WRITE_ACCESS ? FileAccess::Write : FileAccess::ReadWrite);
+  std::unique_ptr<OpenFile> file;
   const DosError error = m_files.Open(*name, access, file);
   if (error != DosError::None)
   {
@@ -278,10 +266,18 @@ DosAnswer DosFiles::Open(std::uint16_t _segment, std::uint16_t _name, std::uint8
 DosAnswer DosFiles::Read(std::uint16_t _handle, std::uint16_t _segment, std::uint16_t _buffer, std::uint16_t _bytes)
 {
   RefuseStandardHandle(_handle, "a read");
-  Machine::OpenFile* const file = HandleFile(_handle);
+  OpenFile* const file = HandleFile(_handle);
   if (file == nullptr)
   {
     return Fail(DosError::InvalidHandle);
+  }
+  // The buffer is the game's memory, both its ends, before the file moves: the GameState refuses an address outside it, so
+  // a read that would run past it is refused whole.
+  const std::uint32_t first = GameState::Linear(_segment, _buffer);
+  if (_bytes > 0)
+  {
+    (void)m_state.LinearByte(first);
+    (void)m_state.LinearByte((first + _bytes - 1u) & ADDRESS_MASK);
   }
   std::vector<std::uint8_t> buffer(_bytes);
   std::uint32_t count = 0;
@@ -290,33 +286,31 @@ DosAnswer DosFiles::Read(std::uint16_t _handle, std::uint16_t _segment, std::uin
   {
     return Fail(error);
   }
-  // As Memory::Load lays them down: a byte at a time, from the linear address on, wrapping at 1 MiB.
-  const std::uint32_t first = Machine::Memory::Linear(_segment, _buffer);
+  // As the emulated DOS laid them down: a byte at a time, from the linear address on, wrapping at 1 MiB.
   for (std::uint32_t index = 0; index < count; ++index)
   {
-    m_state.SetFarByte(LinearSegment(first + index), LinearOffset(first + index), buffer[index]);
+    m_state.SetLinearByte((first + index) & ADDRESS_MASK, buffer[index]);
   }
   return Succeed(static_cast<std::uint16_t>(count));
 }
 
-DosAnswer DosFiles::Write(std::uint16_t _handle, std::uint16_t _segment, std::uint16_t _buffer, std::uint16_t _bytes,
-                          Machine::Cycles _clock)
+DosAnswer DosFiles::Write(std::uint16_t _handle, std::uint16_t _segment, std::uint16_t _buffer, std::uint16_t _bytes, Cycles _clock)
 {
   RefuseStandardHandle(_handle, "a write");
   if (_bytes == 0)
   {
     throw std::logic_error("DosFiles: a write of no bytes, which truncates in DOS and which DOS's emulation refused as a fault");
   }
-  Machine::OpenFile* const file = HandleFile(_handle);
+  OpenFile* const file = HandleFile(_handle);
   if (file == nullptr)
   {
     return Fail(DosError::InvalidHandle);
   }
   std::vector<std::uint8_t> buffer(_bytes);
-  const std::uint32_t first = Machine::Memory::Linear(_segment, _buffer);
+  const std::uint32_t first = GameState::Linear(_segment, _buffer);
   for (std::uint32_t index = 0; index < buffer.size(); ++index)
   {
-    buffer[index] = m_state.FarByte(LinearSegment(first + index), LinearOffset(first + index));
+    buffer[index] = m_state.LinearByte((first + index) & ADDRESS_MASK);
   }
   std::uint32_t count = 0;
   const DosError error = file->Write(buffer, Stamp(Now(_clock)), count);
@@ -358,12 +352,14 @@ DosAnswer DosFiles::FindFirst(std::uint16_t _segment, std::uint16_t _pattern, st
   {
     return Fail(patternError);
   }
+  RefuseNoTransferArea();
   const DosError error = Find(search, Low(_attributes), 0);
   return error != DosError::None ? Fail(error) : Succeed(0);
 }
 
 DosAnswer DosFiles::FindNext()
 {
+  RefuseNoTransferArea();
   const auto at = [this](std::uint16_t _offset) { return static_cast<std::uint16_t>(m_transferOffset + _offset); };
   if (m_state.FarByte(m_transferSegment, at(AREA_DRIVE)) != CURRENT_DRIVE)
   {
@@ -380,9 +376,9 @@ DosAnswer DosFiles::FindNext()
   return error != DosError::None ? Fail(error) : Succeed(0);
 }
 
-Machine::Dos::DateTime DosFiles::Now(Machine::Cycles _clock) const
+DosDateTime DosFiles::Now(Cycles _clock) const
 {
-  const std::uint64_t elapsed = _clock * 100u * Machine::CPU_CLOCK_DIVISOR / Machine::CRYSTAL_HZ;
+  const std::uint64_t elapsed = _clock * 100u * CPU_CLOCK_DIVISOR / CRYSTAL_HZ;
   const std::uint64_t startOfDay =
     ((std::uint64_t{m_startMoment.hour} * 60u + m_startMoment.minute) * 60u + m_startMoment.second) * 100u + m_startMoment.hundredths;
   const std::uint64_t total = startOfDay + elapsed;
@@ -393,7 +389,7 @@ Machine::Dos::DateTime DosFiles::Now(Machine::Cycles _clock) const
   const auto days = static_cast<std::chrono::days::rep>(total / CENTISECONDS_PER_DAY);
   const std::chrono::year_month_day date{startDate + std::chrono::days{days}};
 
-  Machine::Dos::DateTime now;
+  DosDateTime now;
   now.year = static_cast<std::uint16_t>(static_cast<int>(date.year()));
   now.month = static_cast<std::uint8_t>(static_cast<unsigned>(date.month()));
   now.day = static_cast<std::uint8_t>(static_cast<unsigned>(date.day()));
@@ -406,24 +402,24 @@ Machine::Dos::DateTime DosFiles::Now(Machine::Cycles _clock) const
   return now;
 }
 
-Machine::FileStamp DosFiles::Stamp(const Machine::Dos::DateTime& _moment) noexcept
+FileStamp DosFiles::Stamp(const DosDateTime& _moment) noexcept
 {
   const int year = std::clamp(static_cast<int>(_moment.year), FIRST_STAMP_YEAR, LAST_STAMP_YEAR);
-  Machine::FileStamp stamp;
+  FileStamp stamp;
   stamp.date = static_cast<std::uint16_t>(((year - FIRST_STAMP_YEAR) << 9) | (_moment.month << 5) | _moment.day);
   stamp.time = static_cast<std::uint16_t>((_moment.hour << 11) | (_moment.minute << 5) | (_moment.second / 2));
   return stamp;
 }
 
-Machine::DosError DosFiles::Find(const Template& _pattern, std::uint8_t _attribute, std::uint16_t _index)
+DosError DosFiles::Find(const Template& _pattern, std::uint8_t _attribute, std::uint16_t _index)
 {
-  const std::vector<Machine::FileEntry> entries = m_files.List();
+  const std::vector<FileEntry> entries = m_files.List();
   std::size_t index = _index;
   bool found = false;
   // A search for the volume label alone finds nothing: the store has no label.
   for (; _attribute != FileStore::ATTRIBUTE_VOLUME && index < entries.size(); ++index)
   {
-    const Machine::FileEntry& entry = entries[index];
+    const FileEntry& entry = entries[index];
     if ((entry.attribute & SEARCH_RESTRICTED & ~_attribute) == 0 && Matches(_pattern, EntryName(entry.name)))
     {
       found = true;
@@ -451,7 +447,7 @@ Machine::DosError DosFiles::Find(const Template& _pattern, std::uint8_t _attribu
   }
 
   // What was found.
-  const Machine::FileEntry& entry = entries[index];
+  const FileEntry& entry = entries[index];
   m_state.SetFarByte(m_transferSegment, at(AREA_ATTRIBUTE), entry.attribute);
   m_state.SetFarWord(m_transferSegment, at(AREA_TIME), entry.stamp.time);
   m_state.SetFarWord(m_transferSegment, at(AREA_DATE), entry.stamp.date);
@@ -480,13 +476,22 @@ std::optional<std::string> DosFiles::NameAt(std::uint16_t _segment, std::uint16_
   return std::nullopt;
 }
 
-Machine::OpenFile* DosFiles::HandleFile(std::uint16_t _handle) const noexcept
+OpenFile* DosFiles::HandleFile(std::uint16_t _handle) const noexcept
 {
   if (_handle < FIRST_HANDLE || _handle >= HANDLE_COUNT)
   {
     return nullptr;
   }
   return m_handles[_handle].get();
+}
+
+void DosFiles::RefuseNoTransferArea() const
+{
+  if (!m_transferSet)
+  {
+    throw std::logic_error(
+      "DosFiles: a search before the program set a transfer area, whose default was PSP:0080, outside the game's memory");
+  }
 }
 
 int DosFiles::FreeHandle() const noexcept

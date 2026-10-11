@@ -24,10 +24,11 @@ std::wstring Widen(std::string_view _text)
   return std::wstring(_text.begin(), _text.end());
 }
 
-// CS:IP, as the listing writes an address.
-std::wstring Address(const Machine::Registers& _registers)
+// A far address, as the listing writes one.
+std::wstring Address(const std::optional<Elite::FarAddress>& _address)
 {
-  return Widen(std::format("{:04X}:{:04X}", _registers.cs, _registers.ip));
+  const Elite::FarAddress address = _address.value_or(Elite::FarAddress{});
+  return Widen(std::format("{:04X}:{:04X}", address.segment, address.offset));
 }
 
 std::string ReadText(const std::filesystem::path& _path)
@@ -73,17 +74,15 @@ template <typename Check> void PlayEveryReplay(bool _recording, GuardReport& _re
     for (const Elite::Step& step : steps)
     {
       Elite::Checkpoint checkpoint;
-      const Machine::StopReason reason = player.Play(step, checkpoint);
+      const Elite::StopReason reason = player.Play(step, checkpoint);
       const std::wstring where = name + L" line " + std::to_wstring(step.line);
-      if (reason == Machine::StopReason::Unported)
-        Assert::Fail((where + L": reached code no native routine stands in for, at " + Address(rig.Host().Processor().Regs())).c_str());
-      if (reason == Machine::StopReason::Overran)
+      if (reason == Elite::StopReason::Unported)
         Assert::Fail(
-          (where + L": native " + Widen(rig.Host().Native().Overran()) + L" waited, and is not hooked as a routine that waits").c_str());
+          (where + L": sent an interrupt to code no native routine stands in for, at " + Address(rig.Host().UnportedAt())).c_str());
       // Only an end step may end the program, and it must (Replay.h): a replay that leaves for DOS ends with one.
-      if (step.kind == Elite::StepKind::End && reason == Machine::StopReason::Reached)
+      if (step.kind == Elite::StepKind::End && reason == Elite::StopReason::Reached)
         Assert::Fail((where + L": the program has not ended by the end of its end step").c_str());
-      if (reason == Machine::StopReason::Terminated && reason != Elite::ExpectedStop(step))
+      if (reason == Elite::StopReason::Terminated && reason != Elite::ExpectedStop(step))
         Assert::Fail((where + L": the program ended, and only a replay's end step may end it").c_str());
       if (reason != Elite::ExpectedStop(step))
         Assert::Fail((where + L": the run stopped").c_str());
@@ -135,7 +134,7 @@ TEST_CLASS(CorpusTests)
 {
 public:
   // The replay corpus (ADR-008): every Replays/*.replay plays on the native routines in paced time, and every digest it
-  // names comes out as it was recorded from the original. It runs on a Dispatcher (ADR-011), which interprets nothing, so
+  // names comes out as it was recorded from the original. It runs on the native platform (D33), which has no processor, so
   // no instruction of the original runs. Since D7 deleted the interpreter, the corpus and the twins' known answers are what
   // the port is held to (ADR-003 item 5).
   //
@@ -149,10 +148,10 @@ public:
     GuardReport report(L"corpus");
     Checkpoints checkpoints;
     PlayEveryReplay(recording, report, checkpoints,
-                    [](const std::wstring& _name, Machine::Pc& _pc)
+                    [](const std::wstring& _name, Elite::Platform& _platform)
                     {
-                      std::uint64_t calls = 0;
-                      for (const auto& [linear, hook] : _pc.Native().Hooks())
+                      std::uint64_t calls = _platform.Entry().calls;
+                      for (const auto& [linear, hook] : _platform.Hooks())
                         calls += hook.calls;
                       Assert::IsTrue(calls > 0, (_name + L": no native routine ran").c_str());
                     });

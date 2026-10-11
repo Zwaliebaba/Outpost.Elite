@@ -30,22 +30,19 @@ public:
   TEST_METHOD(TheGeneratedImageIsTheReferences)
   {
     Assert::AreEqual(std::size_t{98'080}, Elite::REFERENCE_IMAGE.size(), L"the image's size");
-    Assert::AreEqual(REFERENCE_IMAGE_SHA256, Machine::Sha256::ToHex(Machine::Sha256::Of(Elite::REFERENCE_IMAGE)).c_str(), false,
+    Assert::AreEqual(REFERENCE_IMAGE_SHA256, Elite::Sha256::ToHex(Elite::Sha256::Of(Elite::REFERENCE_IMAGE)).c_str(), false,
                      L"the image is ELITES.EXE's, byte for byte");
 
-    const Machine::Executable executable = Elite::ReferenceExecutable();
-    Assert::AreEqual(0x0000u, std::uint32_t{executable.initialCs}, L"entry CS");
-    Assert::AreEqual(0x0000u, std::uint32_t{executable.initialIp}, L"entry IP");
-    Assert::AreEqual(0x13CAu, std::uint32_t{executable.initialSs}, L"stack SS");
-    Assert::AreEqual(0x03F8u, std::uint32_t{executable.initialSp}, L"stack SP");
-    Assert::AreEqual(0x001Cu, std::uint32_t{executable.minAllocationParagraphs}, L"minimum allocation");
-    Assert::AreEqual(0xFFFFu, std::uint32_t{executable.maxAllocationParagraphs}, L"maximum allocation");
-    Assert::IsTrue(executable.image.data() == Elite::REFERENCE_IMAGE.data() && executable.image.size() == Elite::REFERENCE_IMAGE.size(),
-                   L"the description's image is the generated one");
+    Assert::AreEqual(0x0000u, std::uint32_t{Elite::REFERENCE_INITIAL_CS}, L"entry CS");
+    Assert::AreEqual(0x0000u, std::uint32_t{Elite::REFERENCE_INITIAL_IP}, L"entry IP");
+    Assert::AreEqual(0x13CAu, std::uint32_t{Elite::REFERENCE_INITIAL_SS}, L"stack SS");
+    Assert::AreEqual(0x03F8u, std::uint32_t{Elite::REFERENCE_INITIAL_SP}, L"stack SP");
+    Assert::AreEqual(0x001Cu, std::uint32_t{Elite::REFERENCE_MIN_ALLOCATION_PARAGRAPHS}, L"minimum allocation");
+    Assert::AreEqual(0xFFFFu, std::uint32_t{Elite::REFERENCE_MAX_ALLOCATION_PARAGRAPHS}, L"maximum allocation");
 
     // Five load DS with the data segment 08F4h, one is the segment of the cockpit image (CS:7BE3, ShowCockpitScreen) and
     // one the 0000h in StartContinuousNoise's immediate (CS:7B5D), all in the code segment.
-    const std::array<Machine::Relocation, 7> relocations = {{
+    const std::array<Elite::Relocation, 7> relocations = {{
       {0x0007, 0x0000},
       {0x020A, 0x0000},
       {0x021E, 0x0000},
@@ -54,11 +51,11 @@ public:
       {0x7B5D, 0x0000},
       {0x7BE3, 0x0000},
     }};
-    Assert::AreEqual(relocations.size(), executable.relocations.size(), L"seven relocations");
+    Assert::AreEqual(relocations.size(), Elite::REFERENCE_RELOCATIONS.size(), L"seven relocations");
     for (std::size_t index = 0; index < relocations.size(); ++index)
     {
-      Assert::AreEqual(std::uint32_t{relocations[index].offset}, std::uint32_t{executable.relocations[index].offset}, L"offset");
-      Assert::AreEqual(std::uint32_t{relocations[index].segment}, std::uint32_t{executable.relocations[index].segment}, L"segment");
+      Assert::AreEqual(std::uint32_t{relocations[index].offset}, std::uint32_t{Elite::REFERENCE_RELOCATIONS[index].offset}, L"offset");
+      Assert::AreEqual(std::uint32_t{relocations[index].segment}, std::uint32_t{Elite::REFERENCE_RELOCATIONS[index].segment}, L"segment");
     }
   }
 };

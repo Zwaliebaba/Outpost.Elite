@@ -5,7 +5,6 @@
 #include "DosFiles.h"
 #include "Platform.h"
 #include "ReferenceRig.h"
-#include "Registers.h"
 
 #include <algorithm>
 #include <array>
@@ -23,8 +22,6 @@ namespace GameLogicTests
 namespace
 {
 
-constexpr std::uint8_t DOS_VECTOR = 0x21;
-
 // The game's own places in the data segment: where it points the transfer area, keeps a file's name and a commander's bytes.
 constexpr std::uint16_t AREA = Elite::DS.diskTransferArea.offset;
 constexpr std::uint16_t NAME = Elite::DS.commanderFileName.offset;
@@ -34,11 +31,6 @@ constexpr std::uint16_t BLOCK_BYTES = 208;
 constexpr std::uint16_t OTHER_AREA = Elite::DS.commanderFileList.offset;
 constexpr std::uint16_t LONG_NAME = Elite::DS.commanderBlock.offset;
 constexpr std::size_t LONG_NAME_BYTES = 130;
-
-// What a call is made with on the emulated DOS where the service does not read the register, so that what DOS leaves there
-// shows: AL, and CX.
-constexpr std::uint8_t UNREAD_AL = 0x5A;
-constexpr std::uint16_t UNREAD_CX = 0xC5C5;
 
 // The transfer area, in DOS's layout.
 constexpr std::uint16_t AREA_TEMPLATE = 0x01;
@@ -60,17 +52,17 @@ constexpr std::uint32_t INVALID_HANDLE = 0x06;
 constexpr std::uint32_t INVALID_ACCESS_CODE = 0x0C;
 constexpr std::uint32_t NO_MORE_FILES = 0x12;
 
-constexpr std::uint8_t READ_ONLY = Machine::FileStore::ATTRIBUTE_READ_ONLY;
-constexpr std::uint8_t HIDDEN = Machine::FileStore::ATTRIBUTE_HIDDEN;
-constexpr std::uint8_t SYSTEM = Machine::FileStore::ATTRIBUTE_SYSTEM;
-constexpr std::uint8_t ARCHIVE = Machine::FileStore::ATTRIBUTE_ARCHIVE;
+constexpr std::uint8_t READ_ONLY = Elite::FileStore::ATTRIBUTE_READ_ONLY;
+constexpr std::uint8_t HIDDEN = Elite::FileStore::ATTRIBUTE_HIDDEN;
+constexpr std::uint8_t SYSTEM = Elite::FileStore::ATTRIBUTE_SYSTEM;
+constexpr std::uint8_t ARCHIVE = Elite::FileStore::ATTRIBUTE_ARCHIVE;
 
 // A start moment with every field of a stamp set: 12:34:56 on 1 October 1987.
-constexpr Machine::Dos::DateTime START = {1987, 10, 1, 12, 34, 56, 0};
+constexpr Elite::DosDateTime START = {1987, 10, 1, 12, 34, 56, 0};
 constexpr std::uint32_t START_DATE = 0x0F41; // (1987 - 1980) << 9 | 10 << 5 | 1
 constexpr std::uint32_t START_TIME = 0x645C; // 12 << 11 | 34 << 5 | 56 / 2
 // Two seconds of the machine's clock, the 8088's 4.77 MHz, and the time a stamp then shows: 12:34:58.
-constexpr Machine::Cycles TWO_SECONDS = 9'545'454;
+constexpr Elite::Cycles TWO_SECONDS = 9'545'454;
 constexpr std::uint32_t TWO_SECONDS_LATER_TIME = 0x645D;
 
 [[nodiscard]] std::wstring Widen(std::string_view _text)
@@ -78,62 +70,34 @@ constexpr std::uint32_t TWO_SECONDS_LATER_TIME = 0x645D;
   return std::wstring(_text.begin(), _text.end());
 }
 
-// What a service answered: CF, AX and CX, and the bytes of memory it changed.
-struct Answer
-{
-  bool failed = false;
-  std::uint16_t ax = 0;
-  std::uint16_t cx = 0;
-  std::uint64_t changes = 0;
-};
-
-// How a service's AX is defined: always, or, on success, left as it went in by the emulated DOS and 0 natively.
-enum class Ax : std::uint8_t
-{
-  Defined,
-  LeftOnSuccess
-};
-
-/// The same calls on the emulated DOS, through int 21h on a Pc, and on the native one, DosFiles on the platform of a second
-/// Game: each with its own memory and its own store, both loaded alike from the reference. Every call is checked to answer
-/// alike, to change the same bytes of memory as many times as each other, and to leave all of both memories equal; and the
-/// stores hold the same files when CheckStores is asked. Each returns the native answer, for what a test states outright.
-class SideBySide
+/// DOS's file services natively (DosFiles), on the platform of a Game loaded from the reference, called as the game calls
+/// them, at its own places in the data segment. Each call's changes to the game's memory are counted (LastChanges), and AX is
+/// checked to be 0 where DOS left it as it went in; what a test expects of the answers, it states outright. Until D33 each call
+/// was also made on the emulated DOS it replaced (Machine::Dos), and checked to answer alike, to change the same bytes as many
+/// times and to leave all of memory and the store alike: what the test states outright is what both gave.
+class DosRig
 {
 public:
-  SideBySide(std::string_view _name, const Machine::Dos::DateTime& _start)
-    : m_emulated(std::string(_name) + "Emulated", _start),
-      m_native(std::string(_name) + "Native", _start),
-      m_name(_name)
+  DosRig(std::string_view _name, const Elite::DosDateTime& _start)
+    : m_rig(_name, _start)
   {
-    Assert::IsTrue(Elite::DataSegment(m_emulated.Program()) == Elite::DataSegment(m_native.Program()), L"one layout");
-    Assert::IsTrue(m_emulated.Program().pspSegment == m_native.Program().pspSegment, L"one PSP");
-    Assert::IsTrue(SameMemory(), L"the two machines start alike");
   }
 
   [[nodiscard]] std::uint16_t Data() const noexcept
   {
-    return Elite::DataSegment(m_native.Program());
+    return m_rig.State().DataSegment();
   }
 
-  [[nodiscard]] std::uint16_t Psp() const noexcept
-  {
-    return m_native.Program().pspSegment;
-  }
-
-  /// _bytes at _segment:_offset in both memories, and a NUL after them when _terminate.
+  /// _bytes at _segment:_offset, and a NUL after them when _terminate.
   void Put(std::uint16_t _segment, std::uint16_t _offset, std::string_view _bytes, bool _terminate = true)
   {
-    for (ReferenceRig* const rig : {&m_emulated, &m_native})
+    for (std::size_t index = 0; index < _bytes.size(); ++index)
     {
-      for (std::size_t index = 0; index < _bytes.size(); ++index)
-      {
-        rig->State().SetFarByte(_segment, static_cast<std::uint16_t>(_offset + index), static_cast<std::uint8_t>(_bytes[index]));
-      }
-      if (_terminate)
-      {
-        rig->State().SetFarByte(_segment, static_cast<std::uint16_t>(_offset + _bytes.size()), 0);
-      }
+      m_rig.State().SetFarByte(_segment, static_cast<std::uint16_t>(_offset + index), static_cast<std::uint8_t>(_bytes[index]));
+    }
+    if (_terminate)
+    {
+      m_rig.State().SetFarByte(_segment, static_cast<std::uint16_t>(_offset + _bytes.size()), 0);
     }
   }
 
@@ -144,212 +108,120 @@ public:
     return NAME;
   }
 
-  /// Both clocks moved on to _clock, from device event to device event, as a wait moves them.
-  void AdvanceClocks(Machine::Cycles _clock)
+  /// The clock moved on to _clock, from device event to device event, as a wait moves it.
+  void AdvanceClock(Elite::Cycles _clock)
   {
-    for (ReferenceRig* const rig : {&m_emulated, &m_native})
+    const std::uint64_t changes = Changes();
+    while (m_rig.Host().Clock() < _clock)
     {
-      while (rig->Host().Clock() < _clock)
-      {
-        rig->Host().Idle(_clock);
-      }
+      m_rig.Host().Idle(_clock);
     }
-    Assert::IsTrue(m_emulated.Host().Clock() == _clock && m_native.Host().Clock() == _clock, L"both clocks where they were sent");
-    Assert::IsTrue(SameMemory(), L"moving the clocks changes no memory");
+    Assert::IsTrue(m_rig.Host().Clock() == _clock, L"the clock where it was sent");
+    Assert::IsTrue(Changes() == changes, L"moving the clock changes no memory");
   }
 
-  /// A directory in both stores' directories, which a store does not show.
+  /// A directory in the store's directory, which the store does not show.
   void MakeDirectory(std::string_view _name)
   {
-    for (ReferenceRig* const rig : {&m_emulated, &m_native})
-    {
-      std::filesystem::create_directories(rig->Files() / _name);
-    }
+    std::filesystem::create_directories(m_rig.Files() / _name);
   }
 
   void SetArea(std::uint16_t _segment, std::uint16_t _offset)
   {
-    const std::uint64_t changes = NativeChanges();
-    m_native.NativePlatform().Files().SetTransferArea(_segment, _offset);
-    const Answer native{false, 0, 0, NativeChanges() - changes};
-    const Answer emulated = Emulated(
-      [&](Machine::Registers& _regs)
-      {
-        _regs.ax = Join(0x1A, UNREAD_AL);
-        _regs.ds = _segment;
-        _regs.dx = _offset;
-      });
-    Check(L"set the transfer area", emulated, native, false);
+    const std::uint64_t changes = Changes();
+    Files().SetTransferArea(_segment, _offset);
+    Done(changes);
+    Assert::AreEqual(std::uint64_t{0}, m_lastChanges, L"setting the transfer area changes no memory");
   }
 
   Elite::DosFileAttributes ReadAttributes(std::uint16_t _name)
   {
-    const std::uint64_t changes = NativeChanges();
-    const Elite::DosFileAttributes native = m_native.NativePlatform().Files().ReadAttributes(Data(), _name);
-    const Answer emulated = Emulated(
-      [&](Machine::Registers& _regs)
-      {
-        _regs.ax = 0x4300;
-        _regs.cx = UNREAD_CX;
-        _regs.ds = Data();
-        _regs.dx = _name;
-      });
-    Check(L"read attributes", emulated, Answer{native.answer.failed, native.answer.value, 0, NativeChanges() - changes}, false);
-    if (!native.answer.failed)
+    const std::uint64_t changes = Changes();
+    const Elite::DosFileAttributes answer = Files().ReadAttributes(Data(), _name);
+    Done(changes);
+    if (!answer.answer.failed)
     {
-      Assert::AreEqual(std::uint32_t{emulated.cx}, std::uint32_t{native.attributes}, L"read attributes: CX");
-      Assert::AreEqual(std::uint32_t{emulated.ax}, std::uint32_t{emulated.cx}, L"read attributes: AX = CX");
+      Assert::AreEqual(std::uint32_t{answer.answer.value}, std::uint32_t{answer.attributes}, L"read attributes: AX = CX");
     }
     else
     {
-      Assert::AreEqual(std::uint32_t{UNREAD_CX}, std::uint32_t{emulated.cx}, L"read attributes: DOS leaves CX on a failure");
-      Assert::AreEqual(0u, std::uint32_t{native.attributes}, L"read attributes: 0 natively on a failure");
+      Assert::AreEqual(0u, std::uint32_t{answer.attributes}, L"read attributes: CX 0 on a failure, where DOS left it");
     }
-    return native;
+    return answer;
   }
 
   Elite::DosAnswer SetAttributes(std::uint16_t _name, std::uint16_t _attributes)
   {
-    const std::uint64_t changes = NativeChanges();
-    const Elite::DosAnswer native = m_native.NativePlatform().Files().SetAttributes(Data(), _name, _attributes);
-    const Answer emulated = Emulated(
-      [&](Machine::Registers& _regs)
-      {
-        _regs.ax = 0x4301;
-        _regs.cx = _attributes;
-        _regs.ds = Data();
-        _regs.dx = _name;
-      });
-    Check(L"set attributes", emulated, Native(native, changes), true, Ax::LeftOnSuccess, 0x4301);
-    return native;
+    const std::uint64_t changes = Changes();
+    return LeftOnSuccess(Files().SetAttributes(Data(), _name, _attributes), changes, L"set attributes");
   }
 
   Elite::DosAnswer Create(std::uint16_t _name, std::uint16_t _attributes)
   {
-    const std::uint64_t changes = NativeChanges();
-    const Elite::DosAnswer native = m_native.NativePlatform().Files().Create(Data(), _name, _attributes, m_native.Host().Clock());
-    const Answer emulated = Emulated(
-      [&](Machine::Registers& _regs)
-      {
-        _regs.ax = Join(0x3C, UNREAD_AL);
-        _regs.cx = _attributes;
-        _regs.ds = Data();
-        _regs.dx = _name;
-      });
-    Check(L"create", emulated, Native(native, changes), true);
-    return native;
+    const std::uint64_t changes = Changes();
+    const Elite::DosAnswer answer = Files().Create(Data(), _name, _attributes, m_rig.Host().Clock());
+    Done(changes);
+    return answer;
   }
 
   Elite::DosAnswer Open(std::uint16_t _name, std::uint8_t _access)
   {
-    const std::uint64_t changes = NativeChanges();
-    const Elite::DosAnswer native = m_native.NativePlatform().Files().Open(Data(), _name, _access);
-    const Answer emulated = Emulated(
-      [&](Machine::Registers& _regs)
-      {
-        _regs.ax = Join(0x3D, _access);
-        _regs.cx = UNREAD_CX;
-        _regs.ds = Data();
-        _regs.dx = _name;
-      });
-    Check(L"open", emulated, Native(native, changes), true);
-    return native;
+    const std::uint64_t changes = Changes();
+    const Elite::DosAnswer answer = Files().Open(Data(), _name, _access);
+    Done(changes);
+    return answer;
   }
 
   Elite::DosAnswer Read(std::uint16_t _handle, std::uint16_t _segment, std::uint16_t _buffer, std::uint16_t _bytes)
   {
-    const std::uint64_t changes = NativeChanges();
-    const Elite::DosAnswer native = m_native.NativePlatform().Files().Read(_handle, _segment, _buffer, _bytes);
-    const Answer emulated = Emulated(
-      [&](Machine::Registers& _regs)
-      {
-        _regs.ax = Join(0x3F, UNREAD_AL);
-        _regs.bx = _handle;
-        _regs.cx = _bytes;
-        _regs.ds = _segment;
-        _regs.dx = _buffer;
-      });
-    Check(L"read", emulated, Native(native, changes), true);
-    return native;
+    const std::uint64_t changes = Changes();
+    const Elite::DosAnswer answer = Files().Read(_handle, _segment, _buffer, _bytes);
+    Done(changes);
+    return answer;
   }
 
   Elite::DosAnswer Write(std::uint16_t _handle, std::uint16_t _segment, std::uint16_t _buffer, std::uint16_t _bytes)
   {
-    const std::uint64_t changes = NativeChanges();
-    const Elite::DosAnswer native = m_native.NativePlatform().Files().Write(_handle, _segment, _buffer, _bytes, m_native.Host().Clock());
-    const Answer emulated = Emulated(
-      [&](Machine::Registers& _regs)
-      {
-        _regs.ax = Join(0x40, UNREAD_AL);
-        _regs.bx = _handle;
-        _regs.cx = _bytes;
-        _regs.ds = _segment;
-        _regs.dx = _buffer;
-      });
-    Check(L"write", emulated, Native(native, changes), true);
-    return native;
+    const std::uint64_t changes = Changes();
+    const Elite::DosAnswer answer = Files().Write(_handle, _segment, _buffer, _bytes, m_rig.Host().Clock());
+    Done(changes);
+    return answer;
   }
 
   Elite::DosAnswer Close(std::uint16_t _handle)
   {
-    const std::uint64_t changes = NativeChanges();
-    const Elite::DosAnswer native = m_native.NativePlatform().Files().Close(_handle);
-    const Answer emulated = Emulated(
-      [&](Machine::Registers& _regs)
-      {
-        _regs.ax = Join(0x3E, UNREAD_AL);
-        _regs.bx = _handle;
-      });
-    Check(L"close", emulated, Native(native, changes), true, Ax::LeftOnSuccess, Join(0x3E, UNREAD_AL));
-    return native;
+    const std::uint64_t changes = Changes();
+    return LeftOnSuccess(Files().Close(_handle), changes, L"close");
   }
 
   Elite::DosAnswer Delete(std::uint16_t _name)
   {
-    const std::uint64_t changes = NativeChanges();
-    const Elite::DosAnswer native = m_native.NativePlatform().Files().Delete(Data(), _name);
-    const Answer emulated = Emulated(
-      [&](Machine::Registers& _regs)
-      {
-        _regs.ax = Join(0x41, UNREAD_AL);
-        _regs.ds = Data();
-        _regs.dx = _name;
-      });
-    Check(L"delete", emulated, Native(native, changes), true, Ax::LeftOnSuccess, Join(0x41, UNREAD_AL));
-    return native;
+    const std::uint64_t changes = Changes();
+    return LeftOnSuccess(Files().Delete(Data(), _name), changes, L"delete");
   }
 
   Elite::DosAnswer FindFirst(std::uint16_t _pattern, std::uint16_t _attributes)
   {
-    const std::uint64_t changes = NativeChanges();
-    const Elite::DosAnswer native = m_native.NativePlatform().Files().FindFirst(Data(), _pattern, _attributes);
-    const Answer emulated = Emulated(
-      [&](Machine::Registers& _regs)
-      {
-        _regs.ax = Join(0x4E, UNREAD_AL);
-        _regs.cx = _attributes;
-        _regs.ds = Data();
-        _regs.dx = _pattern;
-      });
-    Check(L"find first", emulated, Native(native, changes), true);
-    return native;
+    const std::uint64_t changes = Changes();
+    const Elite::DosAnswer answer = Files().FindFirst(Data(), _pattern, _attributes);
+    Done(changes);
+    return answer;
   }
 
   Elite::DosAnswer FindNext()
   {
-    const std::uint64_t changes = NativeChanges();
-    const Elite::DosAnswer native = m_native.NativePlatform().Files().FindNext();
-    const Answer emulated = Emulated([&](Machine::Registers& _regs) { _regs.ax = Join(0x4F, UNREAD_AL); });
-    Check(L"find next", emulated, Native(native, changes), true);
-    return native;
+    const std::uint64_t changes = Changes();
+    const Elite::DosAnswer answer = Files().FindNext();
+    Done(changes);
+    return answer;
   }
 
-  /// AH=_function on the standard handle or with the byte count the emulated DOS refuses as a fault: it stops the run there
-  /// and changes nothing, and the native service throws std::logic_error and changes nothing.
+  /// AH=_function on the standard handle or with the byte count the emulated DOS refused as a fault, stopping the run there and
+  /// changing nothing: the native service throws std::logic_error and changes nothing.
   void Refused(std::uint8_t _function, std::uint16_t _handle, std::uint16_t _bytes)
   {
-    const std::uint64_t changes = NativeChanges();
-    Elite::DosFiles& files = m_native.NativePlatform().Files();
+    const std::uint64_t changes = Changes();
+    Elite::DosFiles& files = Files();
     Assert::ExpectException<std::logic_error>(
       [&]
       {
@@ -368,64 +240,27 @@ public:
         }
       },
       L"the native service refuses it");
-    Assert::IsTrue(NativeChanges() == changes, L"the native service changes nothing");
-
-    Machine::Pc& pc = m_emulated.Host();
-    const std::uint64_t before = pc.Ram().ChangeCount();
-    Machine::Registers regs = pc.Processor().Regs();
-    regs.ax = Join(_function, UNREAD_AL);
-    regs.bx = _handle;
-    regs.cx = _bytes;
-    regs.ds = Data();
-    regs.dx = BLOCK;
-    const Machine::Registers sent = regs;
-    Assert::IsTrue(pc.Services().ServiceInterrupt(regs, DOS_VECTOR), L"DOS takes the call");
-    const std::optional<Machine::ServiceFault>& fault = pc.Services().Fault();
-    Assert::IsTrue(fault.has_value() && fault->kind == Machine::FaultKind::UnsupportedRequest, L"the emulated DOS refuses it as a fault");
-    Assert::IsTrue(regs == sent && pc.Ram().ChangeCount() == before, L"the emulated DOS changes nothing");
-    pc.Services().ClearFault();
-    Assert::IsTrue(SameMemory(), L"after a refusal, the memories are alike");
+    Assert::IsTrue(Changes() == changes, L"the native service changes nothing");
   }
 
-  /// Both stores hold the same files: names, attributes, stamps, sizes and bytes.
-  void CheckStores()
+  /// The store's files.
+  [[nodiscard]] std::vector<Elite::FileEntry> StoredFiles()
   {
-    const std::vector<Machine::FileEntry> emulated = m_emulated.Store().List();
-    const std::vector<Machine::FileEntry> native = m_native.Store().List();
-    Assert::AreEqual(static_cast<std::uint32_t>(emulated.size()), static_cast<std::uint32_t>(native.size()), L"files in the stores");
-    for (std::size_t index = 0; index < native.size(); ++index)
-    {
-      const Machine::FileEntry& left = emulated[index];
-      const Machine::FileEntry& right = native[index];
-      const std::wstring what = Widen(right.name);
-      Assert::IsTrue(left.name == right.name, (L"a file's name: " + what).c_str());
-      Assert::AreEqual(std::uint32_t{left.attribute}, std::uint32_t{right.attribute}, (what + L": attribute").c_str());
-      Assert::AreEqual(std::uint32_t{left.stamp.date}, std::uint32_t{right.stamp.date}, (what + L": date").c_str());
-      Assert::AreEqual(std::uint32_t{left.stamp.time}, std::uint32_t{right.stamp.time}, (what + L": time").c_str());
-      Assert::AreEqual(left.sizeBytes, right.sizeBytes, (what + L": size").c_str());
-      Assert::IsTrue(Elite::ReadWholeFile(m_emulated.Files() / left.name) == Elite::ReadWholeFile(m_native.Files() / right.name),
-                     (what + L": bytes").c_str());
-    }
+    return m_rig.Store().List();
   }
 
-  /// The native store's files.
-  [[nodiscard]] std::vector<Machine::FileEntry> NativeFiles()
-  {
-    return m_native.Store().List();
-  }
-
-  /// The native memory's byte and word at _segment:_offset.
+  /// The game's memory's byte and word at _segment:_offset.
   [[nodiscard]] std::uint32_t Byte(std::uint16_t _segment, std::uint16_t _offset) const
   {
-    return m_native.State().FarByte(_segment, _offset);
+    return m_rig.State().FarByte(_segment, _offset);
   }
 
   [[nodiscard]] std::uint32_t Word(std::uint16_t _segment, std::uint16_t _offset) const
   {
-    return m_native.State().FarWord(_segment, _offset);
+    return m_rig.State().FarWord(_segment, _offset);
   }
 
-  /// The native memory's _bytes at _segment:_offset, as text.
+  /// The game's memory's _bytes at _segment:_offset, as text.
   [[nodiscard]] std::string Text(std::uint16_t _segment, std::uint16_t _offset, std::size_t _bytes) const
   {
     std::string text;
@@ -436,96 +271,46 @@ public:
     return text;
   }
 
-  /// The bytes the last native call changed.
+  /// The bytes the last call changed.
   [[nodiscard]] std::uint64_t LastChanges() const noexcept
   {
     return m_lastChanges;
   }
 
+  /// The bytes of the game's memory changed since power-on.
+  [[nodiscard]] std::uint64_t Changes() const noexcept
+  {
+    return m_rig.State().ChangeCount();
+  }
+
+  [[nodiscard]] Elite::DosFiles& Files() noexcept
+  {
+    return m_rig.Host().Files();
+  }
+
 private:
-  [[nodiscard]] static std::uint16_t Join(std::uint8_t _high, std::uint8_t _low) noexcept
+  void Done(std::uint64_t _changesBefore) noexcept
   {
-    return static_cast<std::uint16_t>((_high << 8) | _low);
+    m_lastChanges = Changes() - _changesBefore;
   }
 
-  [[nodiscard]] std::uint64_t NativeChanges() const noexcept
+  // A service that succeeds leaves AX as it went in on DOS, and 0 natively: no caller reads it.
+  Elite::DosAnswer LeftOnSuccess(const Elite::DosAnswer& _answer, std::uint64_t _changesBefore, const wchar_t* _call)
   {
-    return m_native.Host().Ram().ChangeCount();
-  }
-
-  [[nodiscard]] Answer Native(const Elite::DosAnswer& _answer, std::uint64_t _changesBefore) const noexcept
-  {
-    return Answer{_answer.failed, _answer.value, 0, NativeChanges() - _changesBefore};
-  }
-
-  // Int 21h on the emulated DOS as Hardware made it before D27: the processor's registers with what _set sets, the call as INT
-  // makes it (Pc::CallInterrupt), and the registers DOS left; then the processor's registers put back.
-  template <typename Set> Answer Emulated(Set _set)
-  {
-    Machine::Pc& pc = m_emulated.Host();
-    Machine::Registers& regs = pc.Processor().Regs();
-    const Machine::Registers kept = regs;
-    _set(regs);
-    const std::uint64_t changes = pc.Ram().ChangeCount();
-    pc.CallInterrupt(DOS_VECTOR);
-    const Answer answer{(regs.flags & Machine::FLAG_CARRY) != 0, regs.ax, regs.cx, pc.Ram().ChangeCount() - changes};
-    regs = kept;
-    Assert::IsFalse(pc.Services().Fault().has_value(), L"the emulated DOS took the call");
-    return answer;
-  }
-
-  // The two answers to one call agree as _ax says, and they changed the same bytes, leaving the memories alike.
-  void Check(const wchar_t* _call, const Answer& _emulated, const Answer& _native, bool _answers, Ax _ax = Ax::Defined,
-             std::uint16_t _axSent = 0)
-  {
-    const std::wstring call = Widen(m_name) + L", call " + std::to_wstring(++m_calls) + L" (" + _call + L")";
-    if (_answers)
+    Done(_changesBefore);
+    if (!_answer.failed)
     {
-      Assert::IsTrue(_emulated.failed == _native.failed, (call + L": CF").c_str());
-      if (_ax == Ax::Defined || _native.failed)
-      {
-        Assert::AreEqual(std::uint32_t{_emulated.ax}, std::uint32_t{_native.ax}, (call + L": AX").c_str());
-      }
-      else
-      {
-        Assert::AreEqual(std::uint32_t{_axSent}, std::uint32_t{_emulated.ax}, (call + L": DOS leaves AX as it went in").c_str());
-        Assert::AreEqual(0u, std::uint32_t{_native.ax}, (call + L": 0 natively").c_str());
-      }
+      Assert::AreEqual(0u, std::uint32_t{_answer.value}, (std::wstring(_call) + L": AX 0, where DOS left it as it went in").c_str());
     }
-    Assert::AreEqual(_emulated.changes, _native.changes, (call + L": the bytes of memory changed").c_str());
-    Assert::IsTrue(SameMemory(), (call + L": the memories are alike").c_str());
-    m_lastChanges = _native.changes;
+    return _answer;
   }
 
-  // Every byte of both machines' 1 MiB alike: Memory's own bytes, and the GameState's three regions, which Memory maps.
-  [[nodiscard]] bool SameMemory() const
-  {
-    const Elite::GameState& left = m_emulated.State();
-    const Elite::GameState& right = m_native.State();
-    if (!std::ranges::equal(m_emulated.Host().Ram().Bytes(), m_native.Host().Ram().Bytes()) ||
-        !std::ranges::equal(left.DataBytes(), right.DataBytes()) || !std::ranges::equal(left.VideoBytes(), right.VideoBytes()))
-    {
-      return false;
-    }
-    for (std::uint16_t offset = 0; offset < Elite::CODE_SEGMENT_BYTES; ++offset)
-    {
-      if (left.CodeByte(offset) != right.CodeByte(offset))
-      {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  ReferenceRig m_emulated;
-  ReferenceRig m_native;
-  std::string m_name;
-  std::size_t m_calls = 0;
+  ReferenceRig m_rig;
   std::uint64_t m_lastChanges = 0;
 };
 
-// A file made through both DOSes: created, _bytes written from the block, closed, and its attributes set.
-void MakeFile(SideBySide& _twin, std::string_view _name, std::uint16_t _bytes, std::uint8_t _attributes = 0)
+// A file made through DOS: created, _bytes written from the block, closed, and its attributes set.
+void MakeFile(DosRig& _twin, std::string_view _name, std::uint16_t _bytes, std::uint8_t _attributes = 0)
 {
   const Elite::DosAnswer created = _twin.Create(_twin.Name(_name), 0);
   Assert::IsFalse(created.failed, L"made: created");
@@ -535,13 +320,13 @@ void MakeFile(SideBySide& _twin, std::string_view _name, std::uint16_t _bytes, s
 }
 
 // A name of 130 'N's at LONG_NAME, with no NUL in DOS's 128 bytes.
-void Put130(SideBySide& _twin)
+void Put130(DosRig& _twin)
 {
   _twin.Put(_twin.Data(), LONG_NAME, std::string(LONG_NAME_BYTES, 'N'), false);
 }
 
 // The transfer area at DS:_area holds the search for _template with _attribute, at entry _next.
-void CheckSearch(const SideBySide& _twin, std::uint16_t _area, std::string_view _template, std::uint32_t _attribute, std::uint32_t _next)
+void CheckSearch(const DosRig& _twin, std::uint16_t _area, std::string_view _template, std::uint32_t _attribute, std::uint32_t _next)
 {
   const std::uint16_t data = _twin.Data();
   Assert::AreEqual(3u, _twin.Byte(data, _area), L"the drive, C:");
@@ -555,7 +340,7 @@ void CheckSearch(const SideBySide& _twin, std::uint16_t _area, std::string_view 
 }
 
 // The transfer area at DS:_area holds the file found: _attribute, _time, _date, _sizeBytes and _name, zero-padded to 13 bytes.
-void CheckFound(const SideBySide& _twin, std::uint16_t _area, std::uint32_t _attribute, std::uint32_t _time, std::uint32_t _date,
+void CheckFound(const DosRig& _twin, std::uint16_t _area, std::uint32_t _attribute, std::uint32_t _time, std::uint32_t _date,
                 std::uint32_t _sizeBytes, std::string_view _name)
 {
   const std::uint16_t data = _twin.Data();
@@ -571,16 +356,16 @@ void CheckFound(const SideBySide& _twin, std::uint16_t _area, std::uint32_t _att
 
 } // namespace
 
-// DOS's file services natively (DosFiles, D27) beside the emulated DOS they replace (Machine::Dos), call for call: the same
-// answers, the same bytes of memory changed, the same files. Each also states what it expects outright, so that it outlives
-// the emulated DOS.
+// DOS's file services natively (DosFiles, D27). Until D33 each ran beside the emulated DOS it replaced (Machine::Dos), call for
+// call, and gave the same answers, changed the same bytes of memory and left the same files; each states what both gave
+// outright, so that it outlived the emulated DOS.
 TEST_CLASS(DosFilesTests)
 {
 public:
   // SaveCommanderFile then LoadCommanderFile, call for call, at the game's own places.
   TEST_METHOD(CreateWriteCloseOpenReadClose)
   {
-    SideBySide twin("DosFilesSaveLoad", START);
+    DosRig twin("DosFilesSaveLoad", START);
     const std::uint16_t data = twin.Data();
     std::string commander;
     for (std::uint16_t index = 0; index < BLOCK_BYTES; ++index)
@@ -594,7 +379,7 @@ public:
     const Elite::DosAnswer empty = twin.Create(twin.Name("EMPTY.CDR"), 0);
     Assert::IsTrue(!empty.failed && empty.value == 5, L"handles start at 5");
     Assert::IsFalse(twin.Close(5).failed);
-    twin.AdvanceClocks(TWO_SECONDS);
+    twin.AdvanceClock(TWO_SECONDS);
     const Elite::DosAnswer created = twin.Create(twin.Name("JAMESON.CDR"), 0);
     Assert::IsTrue(!created.failed && created.value == 5, L"handle 5, free again");
     const Elite::DosAnswer written = twin.Write(5, data, BLOCK, BLOCK_BYTES);
@@ -605,7 +390,6 @@ public:
                    L"a new file has the archive bit, in CX and AX");
     Assert::IsFalse(twin.SetAttributes(NAME, 0).failed, L"which the game clears");
     Assert::AreEqual(0u, std::uint32_t{twin.ReadAttributes(NAME).attributes});
-    twin.CheckStores();
 
     // Loaded over the commander it was saved from, as the game loads one over another: a byte that is already what the file
     // holds is no change, so nothing changes, and every byte is written once.
@@ -627,7 +411,7 @@ public:
     Assert::AreEqual(std::uint64_t{0}, twin.LastChanges(), L"and nothing changed");
     Assert::IsFalse(twin.Close(5).failed);
 
-    const std::vector<Machine::FileEntry> files = twin.NativeFiles();
+    const std::vector<Elite::FileEntry> files = twin.StoredFiles();
     Assert::AreEqual(2u, static_cast<std::uint32_t>(files.size()));
     Assert::IsTrue(files[0].name == "EMPTY.CDR" && files[0].sizeBytes == 0 && files[0].attribute == ARCHIVE, L"EMPTY.CDR");
     Assert::AreEqual(START_DATE, std::uint32_t{files[0].stamp.date}, L"stamped on the start's date");
@@ -635,13 +419,12 @@ public:
     Assert::IsTrue(files[1].name == "JAMESON.CDR" && files[1].sizeBytes == BLOCK_BYTES && files[1].attribute == 0, L"JAMESON.CDR");
     Assert::AreEqual(START_DATE, std::uint32_t{files[1].stamp.date});
     Assert::AreEqual(TWO_SECONDS_LATER_TIME, std::uint32_t{files[1].stamp.time}, L"two seconds later");
-    twin.CheckStores();
   }
 
   // ListCommanderFiles' searches, and others: find-first and find-next over several files and attributes, to the end.
   TEST_METHOD(FindFirstAndNextToTheEnd)
   {
-    SideBySide twin("DosFilesFind", START);
+    DosRig twin("DosFilesFind", START);
     const std::uint16_t data = twin.Data();
     twin.Put(data, BLOCK, "0123456789", false);
     twin.SetArea(data, AREA);
@@ -652,7 +435,6 @@ public:
     MakeFile(twin, "ELITE01.HI", 5);
     MakeFile(twin, "READ.CDR", 6, READ_ONLY);
     twin.MakeDirectory("SUB.CDR");
-    twin.CheckStores();
     // In the store's order: A.CDR, B.CDR, C.CDR, ELITE01.HI, READ.CDR, ZED.CDR; no directory.
 
     // The game's pattern, with no hidden or system file wanted: A, READ and ZED, then no more, and no more again.
@@ -691,9 +473,9 @@ public:
     found = twin.FindFirst(twin.Name("*.XYZ"), 0);
     Assert::IsTrue(found.failed && found.value == NO_MORE_FILES, L"nothing matches: no more files");
     CheckSearch(twin, AREA, "????????XYZ", 0, 6);
-    found = twin.FindFirst(twin.Name("*.*"), Machine::FileStore::ATTRIBUTE_VOLUME);
+    found = twin.FindFirst(twin.Name("*.*"), Elite::FileStore::ATTRIBUTE_VOLUME);
     Assert::IsTrue(found.failed && found.value == NO_MORE_FILES, L"no volume label");
-    CheckSearch(twin, AREA, "???????????", Machine::FileStore::ATTRIBUTE_VOLUME, 0);
+    CheckSearch(twin, AREA, "???????????", Elite::FileStore::ATTRIBUTE_VOLUME, 0);
 
     // Patterns DOS refuses, which leave the transfer area alone.
     found = twin.FindFirst(twin.Name("..\\*.CDR"), 0);
@@ -710,26 +492,31 @@ public:
     twin.SetArea(data, OTHER_AREA);
     found = twin.FindNext();
     Assert::IsTrue(found.failed && found.value == NO_MORE_FILES, L"no search in the transfer area");
-    twin.CheckStores();
   }
 
-  // The transfer area before the program sets one: PSP:0080, over the command tail, outside the game's memory.
-  TEST_METHOD(FindFirstIntoThePspsTransferArea)
+  // The transfer area before the program sets one: DOS's was PSP:0080, over the command tail, outside the game's memory, and
+  // the PSP is not memory any more (D33). A search there is refused, as a fault, and changes nothing. The game always sets one
+  // first.
+  TEST_METHOD(FindBeforeATransferAreaIsRefused)
   {
-    SideBySide twin("DosFilesPspArea", START);
+    DosRig twin("DosFilesPspArea", START);
     twin.Put(twin.Data(), BLOCK, "x", false);
     MakeFile(twin, "ONLY.CDR", 1);
-    const Elite::DosAnswer found = twin.FindFirst(twin.Name("*.CDR"), 0);
-    Assert::IsFalse(found.failed);
-    Assert::AreEqual(3u, twin.Byte(twin.Psp(), Elite::DosFiles::DEFAULT_TRANSFER_AREA), L"the drive, at PSP:0080");
-    Assert::IsTrue(twin.Text(twin.Psp(), Elite::DosFiles::DEFAULT_TRANSFER_AREA + AREA_NAME, 9) == std::string("ONLY.CDR\0", 9),
-                   L"the name, at PSP:009E");
+    const std::uint64_t changes = twin.Changes();
+    twin.Name("*.CDR");
+    const std::uint64_t named = twin.Changes();
+    Assert::ExpectException<std::logic_error>([&twin] { (void)twin.Files().FindFirst(twin.Data(), NAME, 0); }, L"find first");
+    Assert::ExpectException<std::logic_error>([&twin] { (void)twin.Files().FindNext(); }, L"find next");
+    Assert::IsTrue(twin.Changes() == named && named >= changes, L"and nothing changed");
+    twin.SetArea(twin.Data(), AREA);
+    Assert::IsFalse(twin.FindFirst(NAME, 0).failed, L"found once there is a transfer area");
+    CheckFound(twin, AREA, 0, START_TIME, START_DATE, 1, "ONLY.CDR");
   }
 
   // DeleteCommanderFile, and the attributes that guard a file.
   TEST_METHOD(DeleteAndAttributes)
   {
-    SideBySide twin("DosFilesDelete", START);
+    DosRig twin("DosFilesDelete", START);
     twin.Put(twin.Data(), BLOCK, "abc", false);
     MakeFile(twin, "LOCKED.CDR", 3, READ_ONLY);
     Assert::AreEqual(std::uint32_t{READ_ONLY}, std::uint32_t{twin.ReadAttributes(twin.Name("LOCKED.CDR")).attributes});
@@ -742,12 +529,11 @@ public:
     Assert::IsFalse(twin.Close(5).failed);
     answer = twin.SetAttributes(NAME, 0x0100);
     Assert::IsTrue(answer.failed && answer.value == ACCESS_DENIED, L"attributes above FFh");
-    answer = twin.SetAttributes(NAME, Machine::FileStore::ATTRIBUTE_DIRECTORY);
+    answer = twin.SetAttributes(NAME, Elite::FileStore::ATTRIBUTE_DIRECTORY);
     Assert::IsTrue(answer.failed && answer.value == ACCESS_DENIED, L"the directory bit");
     Assert::IsFalse(twin.SetAttributes(NAME, 0).failed);
     Assert::IsFalse(twin.Delete(NAME).failed, L"deleted");
-    twin.CheckStores();
-    Assert::IsTrue(twin.NativeFiles().empty(), L"gone");
+    Assert::IsTrue(twin.StoredFiles().empty(), L"gone");
     answer = twin.Delete(NAME);
     Assert::IsTrue(answer.failed && answer.value == FILE_NOT_FOUND, L"deleted again: not found");
     const Elite::DosFileAttributes missing = twin.ReadAttributes(NAME);
@@ -760,7 +546,7 @@ public:
   // calls the emulated DOS refused as faults.
   TEST_METHOD(Errors)
   {
-    SideBySide twin("DosFilesErrors", START);
+    DosRig twin("DosFilesErrors", START);
     const std::uint16_t data = twin.Data();
     twin.Put(data, BLOCK, "abcdef", false);
     Elite::DosAnswer answer = twin.Open(twin.Name("MISSING.CDR"), 0);
@@ -816,46 +602,44 @@ public:
     Assert::IsFalse(answer.failed);
     twin.Refused(0x40, answer.value, 0);
     Assert::IsFalse(twin.Close(answer.value).failed);
-    twin.CheckStores();
   }
 
-  // A read and a write by linear address, as the emulated DOS made them: past the end of the data segment, on into the
-  // paragraphs after it rather than round to its start.
-  TEST_METHOD(ReadAndWritePastASegmentsEnd)
+  // A read and a write by linear address, as the emulated DOS made them: up to the end of the data segment, and, past it,
+  // refused, because the paragraphs after it are not the game's memory (D33). The game reads and writes inside its own.
+  TEST_METHOD(ReadAndWriteToASegmentsEnd)
   {
-    SideBySide twin("DosFilesLinear", START);
+    DosRig twin("DosFilesLinear", START);
     const std::uint16_t data = twin.Data();
     std::string bytes;
-    for (char character = 'A'; character < 'A' + 0x20; ++character)
+    for (char character = 'A'; character < 'A' + 0x10; ++character)
     {
       bytes.push_back(character);
     }
-    twin.Put(data, 0xFFF0, bytes.substr(0, 0x10), false);
-    twin.Put(static_cast<std::uint16_t>(data + 0x1000), 0x0000, bytes.substr(0x10), false);
+    twin.Put(data, 0xFFF0, bytes, false);
     const Elite::DosAnswer created = twin.Create(twin.Name("LINEAR.CDR"), 0);
-    const Elite::DosAnswer written = twin.Write(created.value, data, 0xFFF0, 0x20);
-    Assert::IsTrue(!written.failed && written.value == 0x20, L"written across the segment's end");
+    const Elite::DosAnswer written = twin.Write(created.value, data, 0xFFF0, 0x10);
+    Assert::IsTrue(!written.failed && written.value == 0x10, L"written to the segment's end");
+    Assert::ExpectException<std::out_of_range>([&] { (void)twin.Write(created.value, data, 0xFFF0, 0x20); }, L"and refused past it");
     Assert::IsFalse(twin.Close(created.value).failed);
-    Assert::IsTrue(twin.NativeFiles().front().sizeBytes == 0x20, L"all of it");
+    Assert::IsTrue(twin.StoredFiles().front().sizeBytes == 0x10, L"what was written, and nothing of the refused write");
 
     twin.Put(data, 0xFFF0, std::string(0x10, '\0'), false);
-    twin.Put(static_cast<std::uint16_t>(data + 0x1000), 0x0000, std::string(0x10, '\0'), false);
     Assert::IsFalse(twin.Open(NAME, 0).failed);
-    const Elite::DosAnswer read = twin.Read(5, data, 0xFFF0, 0x20);
-    Assert::IsTrue(!read.failed && read.value == 0x20, L"read across the segment's end");
-    Assert::IsTrue(twin.Text(data, 0xFFF0, 0x10) == bytes.substr(0, 0x10), L"the first half, at the segment's end");
-    Assert::IsTrue(twin.Text(static_cast<std::uint16_t>(data + 0x1000), 0, 0x10) == bytes.substr(0x10), L"the second, after it");
+    Assert::ExpectException<std::out_of_range>([&] { (void)twin.Read(5, data, 0xFFF0, 0x20); }, L"a read past it is refused");
+    Assert::IsTrue(twin.Text(data, 0xFFF0, 0x10) == std::string(0x10, '\0'), L"whole: nothing of it reaches memory");
+    const Elite::DosAnswer read = twin.Read(5, data, 0xFFF0, 0x10);
+    Assert::IsTrue(!read.failed && read.value == 0x10, L"read to the segment's end");
+    Assert::IsTrue(twin.Text(data, 0xFFF0, 0x10) == bytes, L"at the segment's end");
     Assert::IsFalse(twin.Close(5).failed);
-    twin.CheckStores();
   }
 
   // DOS's clock, which stamps a file: the start moment plus the machine's time, over midnight and the year's end.
   TEST_METHOD(TheClockStampsAsDosDid)
   {
     ScratchDirectory directory("DosFilesClock");
-    Machine::DirectoryFileStore store(directory.Path());
+    Elite::DirectoryFileStore store(directory.Path());
     Elite::GameState state;
-    Machine::Dos::DateTime start;
+    Elite::DosDateTime start;
     start.year = 1987;
     start.month = 12;
     start.day = 31;
@@ -864,28 +648,15 @@ public:
     start.second = 59;
     start.hundredths = 99;
     const Elite::DosFiles files(state, store, start);
-    const Machine::Dos::DateTime now = files.Now(95'456); // two hundredths
+    const Elite::DosDateTime now = files.Now(95'456); // two hundredths
     Assert::AreEqual(1988u, std::uint32_t{now.year});
     Assert::AreEqual(1u, std::uint32_t{now.month});
     Assert::AreEqual(1u, std::uint32_t{now.day});
     Assert::AreEqual(0u, std::uint32_t{now.hour} + now.minute + now.second);
     Assert::AreEqual(1u, std::uint32_t{now.hundredths});
-    const Machine::FileStamp stamp = Elite::DosFiles::Stamp(now);
+    const Elite::FileStamp stamp = Elite::DosFiles::Stamp(now);
     Assert::AreEqual(std::uint32_t{(8u << 9) | (1u << 5) | 1u}, std::uint32_t{stamp.date});
     Assert::AreEqual(0u, std::uint32_t{stamp.time});
-
-    // The emulated DOS's clock, at the same moment.
-    ReferenceRig rig("DosFilesClockEmulated", start);
-    while (rig.Host().Clock() < 95'456)
-    {
-      rig.Host().Idle(95'456);
-    }
-    const Machine::Dos::DateTime emulated = rig.Host().Services().DosKernel().Now();
-    Assert::IsTrue(emulated.year == now.year && emulated.month == now.month && emulated.day == now.day && emulated.hour == now.hour &&
-                     emulated.minute == now.minute && emulated.second == now.second && emulated.hundredths == now.hundredths,
-                   L"the emulated DOS's clock agrees");
-    const Machine::FileStamp emulatedStamp = Machine::Dos::Stamp(emulated);
-    Assert::IsTrue(emulatedStamp.date == stamp.date && emulatedStamp.time == stamp.time, L"and so do the stamps");
   }
 };
 

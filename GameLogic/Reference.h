@@ -1,18 +1,13 @@
 // GameLogic/Reference.h
 #pragma once
 
-#include "Dos.h"
-#include "ExeLoader.h"
+#include "DosFiles.h"
 
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <string_view>
 #include <vector>
-
-namespace Machine
-{
-class Pc;
-}
 
 namespace Elite
 {
@@ -35,27 +30,25 @@ inline constexpr std::uint16_t DATA_SEGMENT_PARAGRAPH = 0x08F4;
 inline constexpr std::uint16_t STACK_FIRST_OFFSET = 0xAD60;
 inline constexpr std::uint16_t STACK_END_OFFSET = 0xB160;
 
-// Where DOSBox-X puts the PSP (measured from its trace), which the host copies so the two boot traces
-// compare register for register (ADR-003). Replays use it too: one load address for everything.
+// Where DOSBox-X puts the PSP (measured from its trace), which the host copied so the two boot traces
+// compared register for register (ADR-003). Replays use it too: one load address for everything, and the
+// game keeps the segment in its data (pspSegment), so it is part of the digest.
 inline constexpr std::uint16_t PSP_SEGMENT = 0x0813;
+
+// A PSP's size in paragraphs: DOS loads the image at the paragraph after it.
+inline constexpr std::uint16_t PSP_PARAGRAPHS = 0x10;
 
 // The moment DOS's clock starts from: midnight on 1 January 1980, as on a PC/XT without a clock card, and
 // as Tools/ReferenceScreens.py sets DOSBox-X's.
-inline constexpr Machine::Dos::DateTime START_MOMENT = {1980, 1, 1, 0, 0, 0, 0};
+inline constexpr DosDateTime START_MOMENT = {1980, 1, 1, 0, 0, 0, 0};
 
 // GetKey: the end of ADR-003's boot trace.
 inline constexpr std::uint16_t GET_KEY_OFFSET = 0x7616;
 
-/// Loads the reference from its generated image (ReferenceImage.h) as DOS would (ExeLoader), with the PSP
-/// at _pspSegment, and writes the D5 byte. False if ExeLoader refused it or the D5 byte did not hold 00;
-/// then nothing is started.
-[[nodiscard]] bool LoadReference(Machine::Pc& _pc, std::uint16_t _pspSegment, Machine::LoadedProgram& _program);
-
-/// The paragraph of the loaded program's data segment.
-[[nodiscard]] constexpr std::uint16_t DataSegment(const Machine::LoadedProgram& _program) noexcept
-{
-  return static_cast<std::uint16_t>(_program.loadSegment + DATA_SEGMENT_PARAGRAPH);
-}
+/// The reference's load image as DOS's EXEC leaves it with the image at _loadSegment, from its generated image
+/// (ReferenceImage.h): the relocations applied for that segment, and the D5 byte written. Nothing if the D5 byte
+/// did not hold 00, as the file's does.
+[[nodiscard]] std::optional<std::vector<std::uint8_t>> ReferenceLoadImage(std::uint16_t _loadSegment);
 
 /// The first of _name found walking up from the working directory, and then from the repository this
 /// file was compiled in; empty if there is none. How the tests and tools find Replays/ and the known answers.

@@ -22,7 +22,6 @@ constexpr std::uint8_t MOUSE_VECTOR = 0x33;
 // The button int 33h AX=5 is asked about: BX=1, the right. The game reads only AX, the buttons held, and discards the
 // right button's presses.
 constexpr std::uint16_t MOUSE_RIGHT_BUTTON = 1;
-constexpr std::uint16_t MOUSE_VECTOR_OFFSET = MOUSE_VECTOR * 4; // in the interrupt table at 0000:0000
 constexpr std::uint8_t IRET_OPCODE = 0xCF;
 constexpr std::uint8_t MOST_MOUSE_STEP = 0x3F; // mickeys / 8, either way
 constexpr std::uint16_t MOUSE_STEP_LIMIT = 0x40;
@@ -43,19 +42,19 @@ constexpr std::uint16_t Y_COUNT_TURN = 0x779D;
 
 // The cycles the 8088 model (the interpreter, until D7) charged for ReadJoystickAxes's instructions: the game port times its one-shots by
 // them, and the stick is read by counting turns of the polling loops, so native code counts them where the original runs them.
-constexpr Machine::Cycles BEFORE_FIRING_CYCLES = 12;    // CLI 2, MOV BX,imm16 4, MOV CX,BX 2, MOV DX,imm16 4
-constexpr Machine::Cycles OUT_CYCLES = 8;               // OUT DX,AL
-constexpr Machine::Cycles IN_CYCLES = 8;                // IN AL,DX
-constexpr Machine::Cycles AND_CYCLES = 4;               // AND AL,imm8
-constexpr Machine::Cycles CMP_CYCLES = 4;               // CMP AL,imm8
-constexpr Machine::Cycles INC_CYCLES = 2;               // INC r16
-constexpr Machine::Cycles TAKEN_CYCLES = 16;            // a conditional short jump taken
-constexpr Machine::Cycles NOT_TAKEN_CYCLES = 4;         // and not taken
-constexpr Machine::Cycles TIME_OUT_CYCLES = 14;         // STC 2, RET 12
-constexpr Machine::Cycles BEFORE_LAST_READ_CYCLES = 14; // STI 2, SUB CX,imm16 4, SUB BX,imm16 4, MOV DX,imm16 4
-constexpr Machine::Cycles STORE_CYCLES = 10;            // MOV [joystickPortByte],AL
-constexpr Machine::Cycles LATCH_CYCLES = 16;            // MOV byte [fireLatch],1: 10, and 6 for the direct address
-constexpr Machine::Cycles RET_CYCLES = 12;              // RET: 8, and 4 for the word popped over the 8-bit bus
+constexpr Cycles BEFORE_FIRING_CYCLES = 12;    // CLI 2, MOV BX,imm16 4, MOV CX,BX 2, MOV DX,imm16 4
+constexpr Cycles OUT_CYCLES = 8;               // OUT DX,AL
+constexpr Cycles IN_CYCLES = 8;                // IN AL,DX
+constexpr Cycles AND_CYCLES = 4;               // AND AL,imm8
+constexpr Cycles CMP_CYCLES = 4;               // CMP AL,imm8
+constexpr Cycles INC_CYCLES = 2;               // INC r16
+constexpr Cycles TAKEN_CYCLES = 16;            // a conditional short jump taken
+constexpr Cycles NOT_TAKEN_CYCLES = 4;         // and not taken
+constexpr Cycles TIME_OUT_CYCLES = 14;         // STC 2, RET 12
+constexpr Cycles BEFORE_LAST_READ_CYCLES = 14; // STI 2, SUB CX,imm16 4, SUB BX,imm16 4, MOV DX,imm16 4
+constexpr Cycles STORE_CYCLES = 10;            // MOV [joystickPortByte],AL
+constexpr Cycles LATCH_CYCLES = 16;            // MOV byte [fireLatch],1: 10, and 6 for the direct address
+constexpr Cycles RET_CYCLES = 12;              // RET: 8, and 4 for the word popped over the 8-bit bus
 
 constexpr std::uint8_t OVERRUN_CODE = 0xFF;
 constexpr std::uint8_t BREAK_BIT = 0x80;
@@ -265,12 +264,12 @@ void KeyboardInterrupt(GameState& _state, Hardware& _hardware)
   ReadScanCode(_state, _hardware);
 }
 
-MouseDriver IsMouseDriverInstalled(const GameState& _state)
+MouseDriver IsMouseDriverInstalled(Hardware& _hardware)
 {
   // The int 33h vector: installed when it is set and does not point at an IRET.
-  const std::uint16_t offset = _state.FarWord(0, MOUSE_VECTOR_OFFSET);
-  const std::uint16_t segment = _state.FarWord(0, static_cast<std::uint16_t>(MOUSE_VECTOR_OFFSET + 2));
-  return MouseDriver{(offset | segment) != 0 && _state.FarByte(segment, offset) != IRET_OPCODE, segment};
+  const FarAddress vector = _hardware.InterruptVector(MOUSE_VECTOR);
+  const bool set = (vector.offset | vector.segment) != 0;
+  return MouseDriver{set && _hardware.HandlerOpcode(vector) != IRET_OPCODE, vector.segment};
 }
 
 KeyPress WaitForKeyPress(GameState& _state, Hardware& _hardware)
