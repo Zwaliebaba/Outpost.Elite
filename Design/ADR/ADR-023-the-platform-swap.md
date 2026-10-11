@@ -1,6 +1,6 @@
 # ADR-023 — The platform swap: every device native, and `Machine` deleted (D33)
 
-**Status:** accepted 2026-10-11, with the change that implements it: the PC's devices moved into `Elite::Platform`, then the `Machine` and `MachineTests` projects deleted. It is the second piece of D33's route ([Reverse-Engineering-Plan.md §5](../Reverse-Engineering-Plan.md#phase-5--beyond-the-original-outside-this-plan)), and finishes what ADR-021 began.
+**Status:** accepted 2026-10-11, with the change that implements it: the PC's devices moved into `Elite::Platform`, then the `Machine` and `MachineTests` projects deleted. It is the second piece of D33's route ([Reverse-Engineering-Plan.md §5](../Reverse-Engineering-Plan.md#phase-5--beyond-the-original-outside-this-plan)), and finishes what ADR-021 began. The owner played main at `7242663`, with it, and reported that it works perfectly (2026-10-11).
 
 ## Context
 
