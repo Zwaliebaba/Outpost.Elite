@@ -1,11 +1,11 @@
-// ReferenceRunner/PngWriter.h
+// ReplayRunner/PngWriter.h
 #pragma once
 
 #include <cstdint>
 #include <filesystem>
 #include <span>
 
-namespace ReferenceRunner
+namespace ReplayRunner
 {
 
 /// Writes a palette image as a PNG: 8 bits per pixel, colour type 3, one PLTE entry per palette
@@ -18,4 +18,4 @@ namespace ReferenceRunner
 [[nodiscard]] bool WritePalettePng(const std::filesystem::path& _path, std::uint32_t _widthPixels, std::uint32_t _heightPixels,
                                    std::span<const std::uint8_t> _pixels, std::span<const std::uint32_t> _paletteRgb);
 
-} // namespace ReferenceRunner
+} // namespace ReplayRunner

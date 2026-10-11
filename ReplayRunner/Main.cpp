@@ -24,7 +24,7 @@
 // Plays the reference headless on the native platform (Elite::Platform, D33): a replay (ADR-008), or steps given on the
 // command line:
 //
-//   ReferenceRunner [--out DIR] [--steps TEXT | --replay FILE]
+//   ReplayRunner [--out DIR] [--steps TEXT | --replay FILE]
 //
 // It loads the reference from its generated image (D3), so it reads no ELITES.EXE, applies the D5 byte in memory, puts
 // the native routines where the original's entries are (ADR-010), and follows the steps (Replay.h) in paced time: shots
@@ -50,7 +50,7 @@
 namespace
 {
 
-constexpr char USAGE[] = "usage: ReferenceRunner [--out DIR] [--steps TEXT | --replay FILE]\n";
+constexpr char USAGE[] = "usage: ReplayRunner [--out DIR] [--steps TEXT | --replay FILE]\n";
 
 struct Options
 {
@@ -102,7 +102,7 @@ bool WriteShot(const Elite::Platform& _platform, const std::filesystem::path& _p
   const auto colors = Elite::CgaPalette();
   for (std::size_t index = 0; index < palette.size(); ++index)
     palette[index] = (std::uint32_t{colors[index].red} << 16) | (std::uint32_t{colors[index].green} << 8) | colors[index].blue;
-  return ReferenceRunner::WritePalettePng(_path, Elite::FrameImage::WIDTH_PIXELS, Elite::FrameImage::HEIGHT_PIXELS, image->pixels, palette);
+  return ReplayRunner::WritePalettePng(_path, Elite::FrameImage::WIDTH_PIXELS, Elite::FrameImage::HEIGHT_PIXELS, image->pixels, palette);
 }
 
 std::string Describe(Elite::StopReason _reason, const Elite::Platform& _platform)
@@ -140,7 +140,7 @@ void CheckPicture(const Elite::Step& _step, const Elite::Checkpoint& _checkpoint
     if (_checked)
     {
       ++_tally.unrecorded;
-      std::fprintf(stderr, "ReferenceRunner: line %zu: digest %s has no recorded picture\n", _step.line, _step.name.c_str());
+      std::fprintf(stderr, "ReplayRunner: line %zu: digest %s has no recorded picture\n", _step.line, _step.name.c_str());
     }
     return;
   }
@@ -162,7 +162,7 @@ void CheckOutcomes(const Elite::Step& _step, const Elite::Checkpoint& _checkpoin
     if (_checked)
     {
       ++_tally.unrecorded;
-      std::fprintf(stderr, "ReferenceRunner: line %zu: digest %s has no recorded outcomes\n", _step.line, _step.name.c_str());
+      std::fprintf(stderr, "ReplayRunner: line %zu: digest %s has no recorded outcomes\n", _step.line, _step.name.c_str());
     }
     return;
   }
@@ -196,14 +196,14 @@ int Run(int _argc, char** _argv)
     const std::optional<std::string> text = ReadText(options.replay);
     if (!text)
     {
-      std::fprintf(stderr, "ReferenceRunner: cannot read %s\n", options.replay.string().c_str());
+      std::fprintf(stderr, "ReplayRunner: cannot read %s\n", options.replay.string().c_str());
       return 2;
     }
     replayText = *text;
   }
   if (!Elite::ParseSteps(options.replay.empty() ? std::string_view{options.steps} : std::string_view{replayText}, steps, error))
   {
-    std::fprintf(stderr, "ReferenceRunner: %s\n", error.c_str());
+    std::fprintf(stderr, "ReplayRunner: %s\n", error.c_str());
     return 2;
   }
 
@@ -211,7 +211,7 @@ int Run(int _argc, char** _argv)
   std::filesystem::create_directories(options.out / "files", created);
   if (created)
   {
-    std::fprintf(stderr, "ReferenceRunner: cannot create %s\n", (options.out / "files").string().c_str());
+    std::fprintf(stderr, "ReplayRunner: cannot create %s\n", (options.out / "files").string().c_str());
     return 2;
   }
   // A run starts with DOS's files in an empty directory (ADR-008 item 4). A file left by an earlier run would change what
@@ -219,7 +219,7 @@ int Run(int _argc, char** _argv)
   std::error_code listed;
   if (!std::filesystem::is_empty(options.out / "files", listed) || listed)
   {
-    std::fprintf(stderr, "ReferenceRunner: %s is not empty: empty it, or name another --out\n", (options.out / "files").string().c_str());
+    std::fprintf(stderr, "ReplayRunner: %s is not empty: empty it, or name another --out\n", (options.out / "files").string().c_str());
     return 2;
   }
   Elite::DirectoryFileStore files(options.out / "files");
@@ -229,7 +229,7 @@ int Run(int _argc, char** _argv)
   const auto game = std::make_unique<Elite::Game>(files, desc);
   if (!game->Load(Elite::PSP_SEGMENT))
   {
-    std::fputs("ReferenceRunner: the reference did not load\n", stderr);
+    std::fputs("ReplayRunner: the reference did not load\n", stderr);
     return 2;
   }
   Elite::Platform& platform = game->Host();
@@ -251,13 +251,13 @@ int Run(int _argc, char** _argv)
     if (step.kind == Elite::StepKind::Wait || step.kind == Elite::StepKind::End)
       reason = stop;
     if (!asExpected && stop == Elite::StopReason::Reached)
-      std::fprintf(stderr, "ReferenceRunner: line %zu: the program has not ended by the end of its end step\n", step.line);
+      std::fprintf(stderr, "ReplayRunner: line %zu: the program has not ended by the end of its end step\n", step.line);
     if (step.kind == Elite::StepKind::Shot)
     {
       const std::filesystem::path path = options.out / (step.name + ".png");
       if (!WriteShot(platform, path))
       {
-        std::fprintf(stderr, "ReferenceRunner: cannot write %s\n", path.string().c_str());
+        std::fprintf(stderr, "ReplayRunner: cannot write %s\n", path.string().c_str());
         return 2;
       }
       Print(std::format("shot\t{}\n", path.string()));
@@ -282,16 +282,16 @@ int Run(int _argc, char** _argv)
                     tally.timingDiffer));
   if (tally.picturesDiffer > 0 || tally.timingDiffer > 0)
     std::fprintf(stderr,
-                 "ReferenceRunner: %zu picture(s) and %zu timing outcome(s) differ from those recorded (reported, not failing the run)\n",
+                 "ReplayRunner: %zu picture(s) and %zu timing outcome(s) differ from those recorded (reported, not failing the run)\n",
                  tally.picturesDiffer, tally.timingDiffer);
   if (mismatches > 0)
   {
-    std::fprintf(stderr, "ReferenceRunner: %zu digest(s) did not match\n", mismatches);
+    std::fprintf(stderr, "ReplayRunner: %zu digest(s) did not match\n", mismatches);
     return 1;
   }
   if (tally.progressDiffer > 0)
   {
-    std::fprintf(stderr, "ReferenceRunner: %zu outcome(s) of the player's progress differ from those recorded\n", tally.progressDiffer);
+    std::fprintf(stderr, "ReplayRunner: %zu outcome(s) of the player's progress differ from those recorded\n", tally.progressDiffer);
     return 1;
   }
   return asExpected && tally.unrecorded == 0 ? 0 : 1;
@@ -307,11 +307,11 @@ int main(int _argc, char** _argv)
   }
   catch (const std::exception& exception)
   {
-    std::fprintf(stderr, "ReferenceRunner: %s\n", exception.what());
+    std::fprintf(stderr, "ReplayRunner: %s\n", exception.what());
   }
   catch (...)
   {
-    std::fputs("ReferenceRunner: unexpected exception\n", stderr);
+    std::fputs("ReplayRunner: unexpected exception\n", stderr);
   }
   return 2;
 }

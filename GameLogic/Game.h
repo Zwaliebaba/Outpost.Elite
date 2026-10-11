@@ -10,7 +10,7 @@ namespace Elite
 {
 
 /// The game as a host runs it (D19, D33): the GameState, which owns the game's memory, and the native platform, whose devices
-/// and services run the game over it. Every host and rig makes one: the shell, ReferenceRunner and the tests' ReferenceRig.
+/// and services run the game over it. Every host and rig makes one: the shell, ReplayRunner and the tests' ReferenceRig.
 ///
 /// The platform reads and writes the game's memory through the GameState, and the native routines it runs hold both, so the
 /// platform must not outlive the GameState. That holds by construction: the members are built in the order GameState,

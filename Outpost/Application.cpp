@@ -138,7 +138,7 @@ int Application::Run(HINSTANCE _instance)
   Elite::Platform* const platform = &game->Host();
 
   const std::string session = SessionName();
-  Elite::ReplayRecorder recorder(std::format("Recorded by Outpost, {}.\nPlay it with ReferenceRunner --replay; see ADR-008.", session));
+  Elite::ReplayRecorder recorder(std::format("Recorded by Outpost, {}.\nPlay it with ReplayRunner --replay; see ADR-008.", session));
   const Elite::Cycles start = platform->Clock();
   std::uint64_t elapsedMilliseconds = 0;
   std::uint64_t nextDigest = DIGEST_INTERVAL_MILLISECONDS;

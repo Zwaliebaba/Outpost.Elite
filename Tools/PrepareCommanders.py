@@ -21,7 +21,7 @@ Every file here starts from Replays/jameson.cdr, which the reference saved: the 
 after selecting Leesti on the galactic chart. It is the DIR/files/JAMESON.CDR that this writes, byte for byte
 (BASE_SHA256), from the repository root:
 
-  ReferenceRunner --out DIR --steps "wait 3; key space; wait 4; key F5; wait 1; key f; wait 0.5;
+  ReplayRunner --out DIR --steps "wait 3; key space; wait 4; key F5; wait 1; key f; wait 0.5;
     key l; key e; key e; key s; key t; key i; wait 0.3; key Return; wait 1; key F9; wait 1;
     key Escape; wait 1; key s; wait 1; key j; key a; key m; key e; key s; key o; key n;
     wait 0.5; key Return; wait 2"

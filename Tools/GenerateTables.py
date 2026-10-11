@@ -69,7 +69,7 @@ GAME_LOGIC = ROOT / "GameLogic"
 MESSAGE_HEADER = GAME_LOGIC / "Message.h"
 SHARED_HEADER = GAME_LOGIC / "SharedTables.h"
 # The projects whose files may include a generated header, which the check looks through.
-PROJECTS = ["GameLogic", "GameLogicTests", "ReferenceRunner", "Outpost"]
+PROJECTS = ["GameLogic", "GameLogicTests", "ReplayRunner", "Outpost"]
 
 INDENT = "  "
 ROW_BYTES = 8
