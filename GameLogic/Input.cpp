@@ -66,6 +66,12 @@ constexpr std::uint8_t KEY_BUFFER_CODES = 0x10;
 constexpr std::uint16_t KEY_BUFFER_WRAP = 0x0F; // keyBuffer is a ring of 16: an index past its last is its first
 constexpr std::size_t KEY_DOWN_WORDS = 0x40;
 
+// keyDown's 128 bytes, a byte a scan code: 1 while its key is held.
+[[nodiscard]] std::span<Counted<std::uint8_t>> KeyDown(GameState& _state)
+{
+  return _state.BytesFrom(_state.Data().keyDown, KEY_DOWN_WORDS * 2);
+}
+
 constexpr std::uint8_t KEYBOARD_DEVICE = 0;
 constexpr std::uint8_t JOYSTICK_DEVICE = 1;
 constexpr std::uint8_t MOUSE_DEVICE = 2;
@@ -332,7 +338,7 @@ void ResetKeyboard(GameState& _state, Hardware& _hardware)
   _hardware.DisableInterrupts();
   for (std::size_t word = 0; word < KEY_DOWN_WORDS; ++word)
   {
-    _state.SetWord(DS.keyDown.At(word * 2), 0);
+    SetWordIn(KeyDown(_state), word * 2, 0);
   }
   _state.Data().keyBufferCount = 0;
   _state.Data().keyBufferWrite = 0;
@@ -350,7 +356,7 @@ void ReadScanCode(GameState& _state, Hardware& _hardware)
     if ((scan & BREAK_BIT) != 0)
     {
       const auto code = static_cast<std::uint8_t>(scan & ~BREAK_BIT);
-      _state.SetByte(DS.keyDown.At(code), 0);
+      KeyDown(_state)[code] = 0;
       if (code == D_CODE && _state.Data().inFlight == 1)
       {
         _state.Data().dockingKeyReleased = 1;
@@ -367,7 +373,7 @@ void ReadScanCode(GameState& _state, Hardware& _hardware)
       {
         _state.Data().forceMisjump = 1;
       }
-      _state.SetByte(DS.keyDown.At(scan), 1);
+      KeyDown(_state)[scan] = 1;
       std::uint8_t code = scan;
       if (_state.Data().keyDown.keyDownLeftShift == 1 || _state.Data().keyDown.keyDownRightShift == 1)
       {

@@ -123,6 +123,7 @@ constexpr std::uint16_t SMALL_DISC_ROWS = 4;
 constexpr std::uint8_t CLIP_SPRITE_LEFT = 0x55;  // only the sprite's right byte is drawn
 constexpr std::uint8_t CLIP_SPRITE_RIGHT = 0xAA; // only its left byte is drawn
 constexpr std::uint16_t CIRCLE_CHORDS = 32;
+constexpr std::size_t CIRCLE_POINT_BYTES = 4;
 
 // XCHG AH,AL.
 [[nodiscard]] constexpr std::uint16_t SwapBytes(std::uint16_t _word) noexcept
@@ -161,10 +162,11 @@ constexpr std::uint16_t CIRCLE_CHORDS = 32;
   return static_cast<std::uint8_t>((_byte >> count) | (_byte << ((8u - count) & 7u)));
 }
 
-// MOV BX,colorFillBytes / ADD BL,[drawColor]: the ADD carries nothing into BH.
-[[nodiscard]] std::uint16_t ColorFillByteOffset(std::uint8_t _color) noexcept
+// MOV BX,colorFillBytes / ADD BL,[drawColor]: the ADD carries nothing into BH, so a colour past the page's end would wrap to its
+// start. The offset the original reads.
+[[nodiscard]] std::uint16_t ColorFillByteOffset(const GameState& _state, std::uint8_t _color) noexcept
 {
-  const std::uint16_t table = DS.colorFillBytes.offset;
+  const std::uint16_t table = _state.OffsetOf(_state.Data().colorFillBytes);
   return Join(High(table), static_cast<std::uint8_t>(Low(table) + _color));
 }
 
@@ -476,12 +478,11 @@ bool DrawHalvedRows(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromDo
 
 // ---- Discs ----
 
-// CS:18F2-1924: the half-width of a disc's row, the profile byte at DS:_profile scaled by discRadiusRows and
-// rounded, plus the fringe while sunFringeMask is set. The DX the fringe leaves is dead: DiscRowSpan's first
-// instruction loads DX.
-[[nodiscard]] std::uint16_t DiscHalfWidth(GameState& _state, std::uint16_t _profile)
+// CS:18F2-1924: the half-width of a disc's row, byte _profile of circleProfile scaled by discRadiusRows and rounded, plus the
+// fringe while sunFringeMask is set. The DX the fringe leaves is dead: DiscRowSpan's first instruction loads DX.
+[[nodiscard]] std::uint16_t DiscHalfWidth(GameState& _state, std::size_t _profile)
 {
-  auto profile = static_cast<std::uint8_t>(_state.Byte(_profile) + 1);
+  auto profile = static_cast<std::uint8_t>(_state.BytesFrom(_state.Data().circleProfile, _profile + 1)[_profile] + 1);
   if (profile == 0)
   {
     --profile; // INC AL that stops at FFh
@@ -538,8 +539,8 @@ struct DiscRowEdges
   return edges;
 }
 
-// CS:18EE: the row _upperRow (2*row, moving up) alone, from the profile byte at DS:_profile, while it is on the buffer.
-void DrawDiscUpperRow(GameState& _state, std::uint16_t _profile, std::uint16_t _upperRow, bool _backward)
+// CS:18EE: the row _upperRow (2*row, moving up) alone, from byte _profile of circleProfile, while it is on the buffer.
+void DrawDiscUpperRow(GameState& _state, std::size_t _profile, std::uint16_t _upperRow, bool _backward)
 {
   if (High(_upperRow) != 0)
   {
@@ -554,7 +555,7 @@ void DrawDiscUpperRow(GameState& _state, std::uint16_t _profile, std::uint16_t _
 
 // CS:187B: the rows _lowerRow (moving down) and _upperRow (moving up), as 2*row, one half-width for both; the upper while it
 // is on the buffer.
-void DrawDiscRowPair(GameState& _state, std::uint16_t _profile, std::uint16_t _lowerRow, std::uint16_t _upperRow, bool _backward)
+void DrawDiscRowPair(GameState& _state, std::size_t _profile, std::uint16_t _lowerRow, std::uint16_t _upperRow, bool _backward)
 {
   const DiscRowEdges edges = DiscRowSpan(_state, DiscHalfWidth(_state, _profile));
   if (!edges.visible)
@@ -572,12 +573,12 @@ void DrawDiscRowPair(GameState& _state, std::uint16_t _profile, std::uint16_t _l
 // time at the left and right edges and a row at a time at the top and bottom.
 struct SmallDiscPlace
 {
-  std::uint16_t x;      // the sprite's left x: the centre's less half the radius, 4 on when that is left of the buffer
-  std::uint16_t row;    // its top row likewise, 0 once clipped at the top
-  std::uint16_t sprite; // its first byte to draw in smallDiscSprites
-  std::uint8_t rows;    // the rows to draw, 4 less those off the top or the bottom
-  std::uint8_t clip;    // a bit pair a row: bit 0 when only the sprite's right byte is drawn, bit 1 when only its left
-  bool onBuffer;        // false when the sprite is wholly off the buffer, and nothing is drawn
+  std::uint16_t x;    // the sprite's left x: the centre's less half the radius, 4 on when that is left of the buffer
+  std::uint16_t row;  // its top row likewise, 0 once clipped at the top
+  std::size_t sprite; // its first byte to draw in smallDiscSprites
+  std::uint8_t rows;  // the rows to draw, 4 less those off the top or the bottom
+  std::uint8_t clip;  // a bit pair a row: bit 0 when only the sprite's right byte is drawn, bit 1 when only its left
+  bool onBuffer;      // false when the sprite is wholly off the buffer, and nothing is drawn
 };
 
 // CS:194B-19AA: where the sprite of a disc of radius _radius goes for the centre (_centerX, _centerRow).
@@ -589,7 +590,7 @@ struct SmallDiscPlace
   const auto half = static_cast<std::uint16_t>(radius >> 1);
   SmallDiscPlace place{static_cast<std::uint16_t>(static_cast<std::uint16_t>(_centerX) - half),
                        static_cast<std::uint16_t>(static_cast<std::uint16_t>(_centerRow) - half),
-                       Offset(DS.smallDiscSprites.offset, static_cast<std::uint8_t>((radius - 1) << 2)),
+                       std::size_t{static_cast<std::uint8_t>((radius - 1) << 2)},
                        SMALL_DISC_ROWS,
                        0,
                        false};
@@ -620,9 +621,10 @@ struct SmallDiscPlace
     {
       return place;
     }
-    // The rows above the buffer are skipped: AND clears CF, so CMC / ADC adds one more. XOR CL,CL starts at row 0.
+    // The rows above the buffer are skipped: AND clears CF, so CMC / ADC adds one more, to the sprite's low byte, which the 16
+    // bytes of smallDiscSprites never carry out of. XOR CL,CL starts at row 0.
     place.rows = Low(place.row);
-    place.sprite = WithLow(place.sprite, static_cast<std::uint8_t>(Low(place.sprite) + (~Low(place.row) & 3) + 1));
+    place.sprite += static_cast<std::size_t>((~Low(place.row) & 3) + 1);
     place.row = 0;
   }
   else
@@ -645,15 +647,16 @@ struct SmallDiscPlace
 void DrawSmallDisc(GameState& _state, const SmallDiscPlace& _place)
 {
   std::uint16_t at = static_cast<std::uint16_t>(Join(Low(_place.row), Low(_place.x)) >> 2);
-  std::uint16_t sprite = _place.sprite;
+  const std::span<const Counted<std::uint8_t>> sprite = _state.BytesFrom(_state.Data().smallDiscSprites, _place.sprite + _place.rows);
+  std::size_t row = _place.sprite;
   std::uint8_t clip = _place.clip;
   // The sprite's shift into its first byte, 2 bits a pixel.
   const auto shift = static_cast<std::uint8_t>((Low(_place.x) & 3) << 1);
   const std::uint8_t fill = _state.Data().discFillByte;
   for (std::uint8_t rows = _place.rows; rows != 0; --rows)
   {
-    const auto bits = static_cast<std::uint16_t>(Join(_state.Byte(sprite), 0) >> shift);
-    sprite = Offset(sprite, 1);
+    const auto bits = static_cast<std::uint16_t>(Join(sprite[row], 0) >> shift);
+    ++row;
     const bool rightOnly = (clip & 1) != 0;
     clip = RotateRight(clip, 1);
     if (rightOnly)
@@ -1430,7 +1433,7 @@ void SaveScreenshot(GameState& _state, Hardware& _hardware)
 
 void WriteScreenshotFile(GameState& _state, Hardware& _hardware)
 {
-  _hardware.SetDiskTransferArea(_state.DataSegment(), DS.diskTransferArea.offset);
+  _hardware.SetDiskTransferArea(_state.DataSegment(), _state.OffsetOf(_state.Data().diskTransferArea));
   // The two digits, the second counting fastest: '00', '01' ... '99', '00'.
   std::uint16_t digits = _state.Data().screenshotNumber;
   SetHigh(digits, static_cast<std::uint8_t>(High(digits) + 1));
@@ -1446,9 +1449,10 @@ void WriteScreenshotFile(GameState& _state, Hardware& _hardware)
   _state.Data().screenshotNumber = digits;
   _state.Data().screenshotTextFileName.screenshotTextFileDigits = digits;
   _state.Data().screenshotGraphicsFileName.screenshotGraphicsFileDigits = digits;
-  // eliteNN.lo for the text page, eliteNN.hi for the graphics screen.
-  const std::uint16_t name =
-    (_state.Data().screenLayout & TEXT_LAYOUT_BIT) != 0 ? DS.screenshotTextFileName.offset : DS.screenshotGraphicsFileName.offset;
+  // eliteNN.lo for the text page, eliteNN.hi for the graphics screen: DS:DX the name.
+  const std::uint16_t name = (_state.Data().screenLayout & TEXT_LAYOUT_BIT) != 0
+                               ? _state.OffsetOf(_state.Data().screenshotTextFileName)
+                               : _state.OffsetOf(_state.Data().screenshotGraphicsFileName);
   const DosAnswer created = _hardware.CreateFile(_state.DataSegment(), name, 0);
   if (created.failed)
   {
@@ -1494,8 +1498,8 @@ void PresentSpaceView(GameState& _state, Hardware& _hardware, bool _backward)
   }
   _state.Data().msSinceFrame = 0;
   WaitRetraceThenDelay(_hardware);
-  (void)CopyLinePairs(_state, _hardware, SPACE_VIEW_COPY_LOOP, DS.spaceViewBuffer.offset, SPACE_VIEW_SCREEN_OFFSET, SPACE_VIEW_LINE_PAIRS,
-                      _backward);
+  (void)CopyLinePairs(_state, _hardware, SPACE_VIEW_COPY_LOOP, _state.OffsetOf(_state.Data().spaceViewBuffer), SPACE_VIEW_SCREEN_OFFSET,
+                      SPACE_VIEW_LINE_PAIRS, _backward);
 }
 
 void CopyChartBufferToScreen(GameState& _state, Hardware& _hardware, std::uint8_t _bandsSkipped, bool _backward)
@@ -1521,7 +1525,7 @@ void PlotPixel(GameState& _state, std::uint8_t _x, std::uint8_t _row)
 {
   // The pixel's two bits in the colour's fill byte, kept from the byte at row * 64 + x / 4 by the AND, set by the OR.
   const std::uint8_t pixel = RotateRight(LEFT_PIXEL_MASK, static_cast<unsigned>((_x & 3) << 1));
-  const auto color = static_cast<std::uint8_t>(pixel & _state.Byte(ColorFillByteOffset(_state.Data().drawColor)));
+  const auto color = static_cast<std::uint8_t>(pixel & _state.Byte(ColorFillByteOffset(_state, _state.Data().drawColor)));
   Plot(_state, static_cast<std::uint16_t>(Join(_row, _x) >> 2), static_cast<std::uint8_t>(~pixel), color);
 }
 
@@ -1645,7 +1649,7 @@ bool DrawLine(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromRow, std
   }
   line.bh = line.al;
   line.di = static_cast<std::uint16_t>(Join(row, x) >> 2);
-  line.al = _state.Byte(ColorFillByteOffset(_state.Data().drawColor));
+  line.al = _state.Byte(ColorFillByteOffset(_state, _state.Data().drawColor));
   line.ah = line.al;
   // DL the pixel's color in place, DH the mask that keeps the rest of its byte.
   const auto shift = static_cast<std::uint8_t>((x & 3) << 1);
@@ -1704,7 +1708,7 @@ void DrawDisc(GameState& _state, std::uint16_t _radius, std::uint16_t _centerX, 
   // CX walks down from the centre row and BX up, both as 2*row; the centre row is drawn once. BP holds the fraction and SI the
   // profile byte.
   std::uint16_t fraction = 0;
-  std::uint16_t profile = DS.circleProfile.offset;
+  std::size_t profile = 0;
   auto lowerRow = static_cast<std::uint16_t>(_centerRow << 1);
   std::uint16_t upperRow = lowerRow;
   DrawDiscUpperRow(_state, profile, upperRow, _backward);
@@ -1712,7 +1716,7 @@ void DrawDisc(GameState& _state, std::uint16_t _radius, std::uint16_t _centerX, 
   {
     const std::uint32_t sum = std::uint32_t{fraction} + _state.Data().discProfileStepFraction;
     fraction = static_cast<std::uint16_t>(sum);
-    profile = static_cast<std::uint16_t>(profile + _state.Data().discProfileStepWhole + (sum >> 16));
+    profile += _state.Data().discProfileStepWhole + (sum >> 16);
     upperRow = static_cast<std::uint16_t>(upperRow - 2);
     lowerRow = static_cast<std::uint16_t>(lowerRow + 2);
     const auto rowsLeft = static_cast<std::uint8_t>(_state.Data().discRowsLeft - 1);
@@ -1769,64 +1773,68 @@ std::uint16_t FillSpan(GameState& _state, std::uint8_t _left, std::uint8_t _righ
 
 bool DrawCircle(GameState& _state, std::uint8_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow)
 {
+  // circlePoints: 32 points of four bytes, x and row words; each loop holds a point as the byte it starts at.
+  const std::span<Counted<std::uint8_t>> points =
+    _state.BytesFrom(_state.Data().circlePoints, std::size_t{CIRCLE_CHORDS} * CIRCLE_POINT_BYTES);
   // PUSH CX / PUSH DX keep the centre. The first octant, circleOctant's eight bytes scaled by the radius / 128 (MUL BL / SHL AX,1 /
   // MOV AL,AH), a byte of 0 staying 0, as four points of words.
-  std::uint16_t point = DS.circlePoints.offset;
-  for (std::uint16_t octantByte = 0; octantByte != 8; ++octantByte)
+  const std::span<const Counted<std::uint8_t>> octant = _state.BytesFrom(_state.Data().circleOctant, 8);
+  std::size_t point = 0;
+  for (std::size_t octantByte = 0; octantByte != 8; ++octantByte)
   {
-    const std::uint8_t unit = _state.Byte(Offset(DS.circleOctant.offset, octantByte));
+    const std::uint8_t unit = octant[octantByte];
     const std::uint8_t scaled = unit == 0 ? std::uint8_t{0} : High(static_cast<std::uint16_t>((unit * _radius) << 1));
-    _state.SetWord(point, scaled);
-    point = Offset(point, 2);
+    SetWordIn(points, point, scaled);
+    point += 2;
   }
   // The second octant mirrors the first across the diagonal, from its last point back.
-  std::uint16_t from = DS.circlePoints.offset;
-  std::uint16_t to = DS.circlePoints.At(7);
-  for (std::uint16_t points = 4; points != 0; --points)
+  std::size_t from = 0;
+  std::size_t to = 7 * CIRCLE_POINT_BYTES;
+  for (std::uint16_t left = 4; left != 0; --left)
   {
-    _state.SetWord(Offset(to, 2), _state.Word(from));
-    _state.SetWord(to, _state.Word(Offset(from, 2)));
-    from = Offset(from, 4);
-    to = static_cast<std::uint16_t>(to - 4);
+    SetWordIn(points, to + 2, WordIn(points, from));
+    SetWordIn(points, to, WordIn(points, from + 2));
+    from += CIRCLE_POINT_BYTES;
+    to -= CIRCLE_POINT_BYTES;
   }
   // The next quarter turns the first by 90 degrees, and the half after that by 180.
-  from = DS.circlePoints.offset;
-  to = DS.circlePoints.At(8);
-  for (std::uint16_t points = 8; points != 0; --points)
+  from = 0;
+  to = 8 * CIRCLE_POINT_BYTES;
+  for (std::uint16_t left = 8; left != 0; --left)
   {
-    _state.SetWord(Offset(to, 2), _state.Word(from));
-    _state.SetWord(to, Negate(_state.Word(Offset(from, 2))));
-    from = Offset(from, 4);
-    to = Offset(to, 4);
+    SetWordIn(points, to + 2, WordIn(points, from));
+    SetWordIn(points, to, Negate(WordIn(points, from + 2)));
+    from += CIRCLE_POINT_BYTES;
+    to += CIRCLE_POINT_BYTES;
   }
-  from = DS.circlePoints.offset;
-  to = DS.circlePoints.At(16);
-  for (std::uint16_t points = 16; points != 0; --points)
+  from = 0;
+  to = 16 * CIRCLE_POINT_BYTES;
+  for (std::uint16_t left = 16; left != 0; --left)
   {
-    _state.SetWord(to, Negate(_state.Word(from)));
-    _state.SetWord(Offset(to, 2), Negate(_state.Word(Offset(from, 2))));
-    from = Offset(from, 4);
-    to = Offset(to, 4);
+    SetWordIn(points, to, Negate(WordIn(points, from)));
+    SetWordIn(points, to + 2, Negate(WordIn(points, from + 2)));
+    from += CIRCLE_POINT_BYTES;
+    to += CIRCLE_POINT_BYTES;
   }
   // POP BX / POP AX: every point moved to the centre.
-  point = DS.circlePoints.offset;
-  for (std::uint16_t points = CIRCLE_CHORDS; points != 0; --points)
+  point = 0;
+  for (std::uint16_t left = CIRCLE_CHORDS; left != 0; --left)
   {
-    _state.SetWord(point, Offset(_state.Word(point), _centerX));
-    _state.SetWord(Offset(point, 2), Offset(_state.Word(Offset(point, 2)), _centerRow));
-    point = Offset(point, 4);
+    SetWordIn(points, point, Offset(WordIn(points, point), _centerX));
+    SetWordIn(points, point + 2, Offset(WordIn(points, point + 2), _centerRow));
+    point += CIRCLE_POINT_BYTES;
   }
   // The chord from the last point to the first, then each to the next, x and row each.
-  const std::uint16_t last = DS.circlePoints.At(CIRCLE_CHORDS - 1);
-  bool filled = DrawClippedLine(_state, _state.Word(last), _state.Word(Offset(last, 2)), _state.Word(DS.circlePoints.offset),
-                                _state.Data().circlePoints.data2EFE);
-  point = DS.circlePoints.offset;
+  const std::size_t last = (CIRCLE_CHORDS - 1) * CIRCLE_POINT_BYTES;
+  bool filled =
+    DrawClippedLine(_state, WordIn(points, last), WordIn(points, last + 2), WordIn(points, 0), _state.Data().circlePoints.data2EFE);
+  point = 0;
   for (std::uint16_t chords = CIRCLE_CHORDS - 1; chords != 0; --chords)
   {
-    const bool chordFilled = DrawClippedLine(_state, _state.Word(Offset(point, 4)), _state.Word(Offset(point, 6)), _state.Word(point),
-                                             _state.Word(Offset(point, 2)));
+    const bool chordFilled =
+      DrawClippedLine(_state, WordIn(points, point + 4), WordIn(points, point + 6), WordIn(points, point), WordIn(points, point + 2));
     filled = filled || chordFilled;
-    point = Offset(point, 4);
+    point += CIRCLE_POINT_BYTES;
   }
   return filled;
 }

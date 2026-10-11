@@ -70,18 +70,28 @@ void ShowMissionBriefing(GameState& _state, Hardware& _hardware, bool _backward)
 void ShowMissionDebriefing(GameState& _state, Hardware& _hardware, bool _backward);
 
 /// PrintCreditsOnMessageLine (CS:658F): creditBalanceText at B800:0078 in the swapped textAttribute, which is swapped
-/// back after.
-PrintedText PrintCreditsOnMessageLine(GameState& _state);
+/// back after. Returns the cell after its last character.
+std::uint16_t PrintCreditsOnMessageLine(GameState& _state);
 
 /// FormatFuelLightYears (CS:6923): fuel as "n.n" light years into the fuel text at DS:83E9.
 void FormatFuelLightYears(GameState& _state);
 
-/// DrawDockedFrame (CS:7C88): a docked screen's text page from the descriptor at DS:_descriptor, the screen's attribute,
-/// the frame's, then the title: the text mode set unless screenLayout says the text page shows, textAttribute the screen's
-/// attribute without its blink bit and the border its background, the page cleared, the frame's rows at lines 0, 2 and 24
-/// and its sides in the frame's attribute, and its six corners and tees from frameCorners. _backward is the direction flag,
-/// which the clear and the rows' REP STOSW go by. Returns where the title is.
-std::uint16_t DrawDockedFrame(GameState& _state, Hardware& _hardware, std::uint16_t _descriptor, bool _backward);
+/// DrawDockedFrame (CS:7C88), up to its title: a docked screen's text page from _attributes, the first two bytes of its
+/// descriptor, the screen's attribute and the frame's: the text mode set unless screenLayout says the text page shows,
+/// textAttribute the screen's attribute without its blink bit and the border its background, the page cleared, the frame's rows
+/// at lines 0, 2 and 24 and its sides in the frame's attribute, and its six corners and tees from frameCorners. _backward is the
+/// direction flag, which the clear and the rows' REP STOSW go by.
+void DrawDockedFrameAt(GameState& _state, Hardware& _hardware, std::span<const Counted<std::uint8_t>> _attributes, bool _backward);
+
+/// DrawDockedFrame (CS:7C88): DrawDockedFrameAt from _descriptor, a member of GameData that starts a frame's descriptor: the
+/// two attributes, then the title. The symbol table sizes a descriptor as it pleases, two bytes or the whole screen's text, so
+/// its bytes are reached from where it starts. Returns the title.
+template <typename Descriptor>
+std::string_view DrawDockedFrame(GameState& _state, Hardware& _hardware, const Descriptor& _descriptor, bool _backward)
+{
+  DrawDockedFrameAt(_state, _hardware, _state.BytesFrom(_descriptor, 2), _backward);
+  return _state.TextAt(_descriptor, 2);
+}
 
 /// DrawFrameSides (CS:7CE9): BAh in attribute _attribute at columns 0 and 39 of _rows rows of the text page at
 /// _segment from _cell, 65,536 for 0, as LOOP counts. Returns the cell a row below the last.

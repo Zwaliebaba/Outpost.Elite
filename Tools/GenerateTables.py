@@ -18,6 +18,8 @@ ELITES.EXE, and follows each table's pointers there.
   messagePointer       Message (Message.h), the texts the message line shows, which the original stores the addresses of,
                        and MESSAGE_TEXTS, each one's text
   warningTexts         WARNING_MESSAGES, the four warnings' messages
+  CONSTANT_TEXTS       the texts a subsystem prints that no row of the symbol table starts at, each named for what it says:
+                       std::string_view, or std::array<std::string_view, N> for N texts one after another
 
 A text the program writes into is a buffer, which native code reads from the data segment where it is written: its entry in
 a table is empty, and says what writes it.
@@ -61,7 +63,109 @@ ROW_ADDRESS = re.compile(r"//\s*(CS|DS):([0-9A-F]{4})")
 BYTE = re.compile(r"0x([0-9A-F]{2})")
 
 # The subsystems that read generated tables, each the stem of its .cpp and of its header, <Subsystem>Tables.h.
-SUBSYSTEMS = ["Docked", "Equipment", "Flight", "Galaxy", "SaveLoad", "Scene", "Text"]
+SUBSYSTEMS = ["Docked", "Equipment", "Flight", "Galaxy", "Market", "SaveLoad", "Scene", "Text"]
+# The constant texts each subsystem prints that start where no row of the symbol table does, which native code named by their
+# addresses: each its name, its first character's address, and how many texts follow one another from there, each after the
+# one before's NUL. One is a std::string_view; more are a std::array of them. COUNTED reads how many from the byte before the
+# first, as PrintCountedTextLines does. A text the game writes into is a buffer, which native code reads from the data segment,
+# and is never one of these; a text a row starts at is read from its member (GameState::TextAt).
+COUNTED = 0
+CONSTANT_TEXTS = {
+  "Docked": [
+    ("TRADE_HEADER_TEXT", 0x7BEC, 1),
+    ("MOUNTS_OPEN_TEXT", 0x8214, 1),
+    ("MOUNTS_CLOSE_TEXT", 0x8217, 1),
+    ("NO_QUANTITY_TEXT", 0x821B, 1),
+    ("SYSTEM_LABEL_TEXT", 0x83CB, 1),
+    ("HYPERSYSTEM_LABEL_TEXT", 0x83DA, 1),
+    ("CASH_LABEL_TEXT", 0x840C, 1),
+    ("LEGAL_STATUS_LABEL_TEXT", 0x841B, 1),
+    ("RATING_LABEL_TEXT", 0x8448, 1),
+    ("EQUIPMENT_HEADING_TEXT", 0x84C7, 1),
+    ("BUY_CARGO_HELP_LINES", 0x8C25, 2),
+    ("SELL_CARGO_HELP_LINES", 0x8C6B, 2),
+    ("WITCH_SPACE_TEXT", 0x8E30, 1),
+    ("SUPERNOVA_REFUSED_LINES", 0x8EB1, 8),
+    ("SUPERNOVA_ACCEPTED_LINES", 0x8F79, 8),
+    ("MASK_DESTROYED_LINES", 0x91A8, 7),
+    ("MASK_FLED_LINES", 0x925D, 4),
+    ("MASK_RECOVERED_LINES", 0x92B4, 8),
+  ],
+  "Equipment": [
+    ("MOUNT_HEADER_LINES", 0x811D, COUNTED),
+    ("SELL_LASER_TEXT", 0x81AE, 1),
+    ("FREE_MOUNT_TEXT", 0x81EA, 1),
+    ("NO_RESALE_TEXT", 0x821B, 1),
+    ("MISSILE_PURCHASED_TEXT", 0x828B, 1),
+    ("FOUR_MISSILES_ONLY_TEXT", 0x829F, 1),
+    ("FUEL_FULL_TEXT", 0x82B3, 1),
+    ("FUEL_PURCHASED_TEXT", 0x82C7, 1),
+    ("ALREADY_FITTED_TEXT", 0x82DB, 1),
+    ("ITEM_PURCHASED_TEXT", 0x82EF, 1),
+    ("NOT_ENOUGH_CREDITS_TEXT", 0x8303, 1),
+    ("NO_ITEM_TO_SELL_TEXT", 0x8317, 1),
+    ("ITEM_SOLD_TEXT", 0x832B, 1),
+    ("NO_MISSILE_TO_SELL_TEXT", 0x833F, 1),
+    ("MISSILE_SOLD_TEXT", 0x8353, 1),
+    ("FUEL_SALE_ILLEGAL_TEXT", 0x8367, 1),
+    ("TOO_MUCH_CARGO_TEXT", 0x837B, 1),
+    ("SCOOP_NEEDED_TEXT", 0x838F, 1),
+    ("SELL_MINING_LASER_TEXT", 0x83A3, 1),
+    ("NO_FUEL_AVAILABLE_TEXT", 0x83B7, 1),
+    ("FOUR_LASERS_TEXT", 0x8DDE, 1),
+    ("MOUNT_OCCUPIED_TEXT", 0x8DF2, 1),
+    ("NO_LASER_ON_MOUNT_TEXT", 0x8E06, 1),
+    ("WRONG_LASER_TYPE_TEXT", 0x8E1A, 1),
+  ],
+  "Galaxy": [
+    ("ECONOMY_LABEL_TEXT", 0x7C1C, 1),
+    ("GOVERNMENT_LABEL_TEXT", 0x7CCD, 1),
+    ("TECH_LEVEL_LABEL_TEXT", 0x7D39, 1),
+    ("DISTANCE_LABEL_TEXT", 0x7D4B, 1),
+    ("LIGHT_YEARS_TEXT", 0x7D61, 1),
+    ("POPULATION_LABEL_TEXT", 0x7D6E, 1),
+    ("SPECIES_OPEN_TEXT", 0x7D8B, 1),
+    ("HUMAN_COLONIALS_TEXT", 0x7D8D, 1),
+    ("PRODUCTIVITY_LABEL_TEXT", 0x7E94, 1),
+  ],
+  "SaveLoad": [
+    ("DEVICE_TEXT", 0x8667, 1),
+    ("FILE_NAME_PROMPT_TEXT", 0x8676, 1),
+    ("EXIT_QUESTION_TEXT", 0x869C, 1),
+    ("RETRY_TEXT", 0x86B0, 1),
+    ("BLANK_STATUS_TEXT", 0x86C4, 1),
+    ("CATALOGUE_OK_TEXT", 0x8708, 1),
+    ("NO_MOUSE_TEXT", 0x870B, 1),
+    ("MOUSE_HELP_LINES", 0x8720, 2),
+    ("NO_JOYSTICK_TEXT", 0x875F, 1),
+    ("JOYSTICK_HELP_LINES", 0x8774, 2),
+    ("JOYSTICK_TITLE_TEXT", 0x87BA, 1),
+    ("MOVE_JOYSTICK_TEXT", 0x87CF, 1),
+    ("CENTER_JOYSTICK_TEXT", 0x87F0, 1),
+    ("BLANK_LINE_TEXT", 0x8811, 1),
+    ("JOYSTICK_TYPE_TEXT", 0x8838, 1),
+    ("FILE_NAME_ERROR_TEXT", 0x884E, 1),
+  ],
+  "Market": [
+    ("PRICES_HEADER_TEXT", 0x7BCC, 1),
+    ("NO_QUANTITY_TEXT", 0x8222, 1),
+    ("NOTHING_TO_SELL_TEXT", 0x8CB2, 1),
+    ("SOLD_TEXT", 0x8CC6, 1),
+    ("QUANTITY_PROMPT_TEXT", 0x8CDA, 1),
+    ("NOTHING_SOLD_TEXT", 0x8CEE, 1),
+    ("QUANTITY_ERROR_TEXT", 0x8D02, 1),
+    ("NOT_ENOUGH_TO_SELL_TEXT", 0x8D16, 1),
+    ("NOTHING_TO_BUY_TEXT", 0x8D2A, 1),
+    ("BOUGHT_TEXT", 0x8D3E, 1),
+    ("CARGO_BAY_FULL_TEXT", 0x8D52, 1),
+    ("NOTHING_BOUGHT_TEXT", 0x8D66, 1),
+    ("FULL_TO_CAPACITY_TEXT", 0x8D7A, 1),
+    ("CANNOT_BUY_TEXT", 0x8D8E, 1),
+    ("NOT_ENOUGH_CREDITS_TEXT", 0x8DA2, 1),
+    ("CANNOT_CARRY_TEXT", 0x8DB6, 1),
+    ("NOT_ENOUGH_TO_BUY_TEXT", 0x8DCA, 1),
+  ],
+}
 # The tables of pointers to texts, each with the constant it becomes and the subsystem that reads it.
 TEXT_TABLES = [
   ("economyNames", "ECONOMY_NAMES", "Galaxy"),
@@ -511,9 +615,40 @@ def warning_messages(_messages: list[Message]) -> list[str]:
   ]
 
 
+def constant_texts(_image: Image, _symbols: dict[str, Symbol], _subsystem: str) -> list[str]:
+  out = []
+  starts = {symbol.offset for symbol in _symbols.values() if symbol.segment == "DS"}
+  for name, address, count in CONSTANT_TEXTS.get(_subsystem, []):
+    if address in starts:
+      fail(f"{name}: a row starts at DS:{address:04X}, whose member native code reads it from")
+    first = address
+    note = ""
+    if count == COUNTED:
+      count = _image.byte("DS", address)
+      first = address + 1
+      note = f", after its count byte, {count}"
+    texts = []
+    at = first
+    for _ in range(count):
+      text = _image.text(at)
+      texts.append((at, text))
+      at += len(text) + 1
+    if len(texts) == 1 and not note:
+      out += [f"/// DS:{address:04X}", f"constexpr std::string_view {name} = {literal(texts[0][1])};", ""]
+      continue
+    out += [
+      f"/// DS:{address:04X}{note}: {len(texts)} texts, each after the one before's NUL.",
+      f"constexpr std::array<std::string_view, {len(texts)}> {name} = {{",
+      *aligned([(f"{INDENT}{text_view(text)},", f"// DS:{at:04X}") for at, text in texts]),
+      "};",
+      "",
+    ]
+  return out
+
+
 def subsystem_tables(_image: Image, _symbols: dict[str, Symbol], _messages: list[Message], _subsystem: str) -> tuple[list[str], list[str]]:
   """The headers a subsystem's tables need, and the tables."""
-  out = text_tables(_image, _symbols, _subsystem)
+  out = text_tables(_image, _symbols, _subsystem) + constant_texts(_image, _symbols, _subsystem)
   headers = ["<array>", "<string_view>"]
   if _subsystem == "Galaxy":
     out += phrase_tables(_image, _symbols)
@@ -604,8 +739,9 @@ def main() -> int:
       print(f"GenerateTables: {line}")
     if stale or foreign:
       return 1
-    print(f"GenerateTables: up to date ({len(SUBSYSTEMS)} subsystems' tables: {len(TEXT_TABLES)} text tables, the phrases, the "
-          f"blueprints, the frame's corners and {len(found)} messages; each included by its own .cpp alone)")
+    texts = sum(len(entries) for entries in CONSTANT_TEXTS.values())
+    print(f"GenerateTables: up to date ({len(SUBSYSTEMS)} subsystems' tables: {len(TEXT_TABLES)} text tables, {texts} constant "
+          f"texts, the phrases, the blueprints, the frame's corners and {len(found)} messages; each included by its own .cpp alone)")
     return 0
   for path, text in outputs.items():
     path.write_bytes(text.encode("utf-8"))

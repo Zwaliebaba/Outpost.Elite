@@ -23,6 +23,83 @@ constexpr std::array<std::string_view, 4> LASER_TYPE_NAMES = {
   std::string_view{"Military "}, // DS:81E0
 };
 
+/// DS:811D, after its count byte, 4: 4 texts, each after the one before's NUL.
+constexpr std::array<std::string_view, 4> MOUNT_HEADER_LINES = {
+  std::string_view{"mount. Press <SPACE> to fix laser. "}, // DS:811E
+  std::string_view{"                                   "}, // DS:8142
+  std::string_view{"FORE     AFT      RIGHT    LEFT    "}, // DS:8166
+  std::string_view{"======== ======== ======== ========"}, // DS:818A
+};
+
+/// DS:81AE
+constexpr std::string_view SELL_LASER_TEXT = "sell laser.";
+
+/// DS:81EA
+constexpr std::string_view FREE_MOUNT_TEXT = "Free     ";
+
+/// DS:821B
+constexpr std::string_view NO_RESALE_TEXT = "     -";
+
+/// DS:828B
+constexpr std::string_view MISSILE_PURCHASED_TEXT = "MISSILE PURCHASED  ";
+
+/// DS:829F
+constexpr std::string_view FOUR_MISSILES_ONLY_TEXT = "4 MISSILES ONLY    ";
+
+/// DS:82B3
+constexpr std::string_view FUEL_FULL_TEXT = "FUEL FULL (7LY)    ";
+
+/// DS:82C7
+constexpr std::string_view FUEL_PURCHASED_TEXT = "FUEL PURCHASED     ";
+
+/// DS:82DB
+constexpr std::string_view ALREADY_FITTED_TEXT = "ALREADY FITTED!    ";
+
+/// DS:82EF
+constexpr std::string_view ITEM_PURCHASED_TEXT = "ITEM PURCHASED     ";
+
+/// DS:8303
+constexpr std::string_view NOT_ENOUGH_CREDITS_TEXT = "NOT ENOUGH CREDITS!";
+
+/// DS:8317
+constexpr std::string_view NO_ITEM_TO_SELL_TEXT = "NO ITEM TO SELL!   ";
+
+/// DS:832B
+constexpr std::string_view ITEM_SOLD_TEXT = "ITEM SOLD          ";
+
+/// DS:833F
+constexpr std::string_view NO_MISSILE_TO_SELL_TEXT = "NO MISSILE TO SELL!";
+
+/// DS:8353
+constexpr std::string_view MISSILE_SOLD_TEXT = "MISSILE SOLD       ";
+
+/// DS:8367
+constexpr std::string_view FUEL_SALE_ILLEGAL_TEXT = "FUEL SALE ILLEGAL! ";
+
+/// DS:837B
+constexpr std::string_view TOO_MUCH_CARGO_TEXT = "TOO MUCH CARGO!    ";
+
+/// DS:838F
+constexpr std::string_view SCOOP_NEEDED_TEXT = "SCOOP NEEDED FIRST!";
+
+/// DS:83A3
+constexpr std::string_view SELL_MINING_LASER_TEXT = "SELL MINING LASER! ";
+
+/// DS:83B7
+constexpr std::string_view NO_FUEL_AVAILABLE_TEXT = "NO FUEL AVAILABLE! ";
+
+/// DS:8DDE
+constexpr std::string_view FOUR_LASERS_TEXT = "Carrying 4 lasers! ";
+
+/// DS:8DF2
+constexpr std::string_view MOUNT_OCCUPIED_TEXT = "Mount occupied!    ";
+
+/// DS:8E06
+constexpr std::string_view NO_LASER_ON_MOUNT_TEXT = "No laser on mount! ";
+
+/// DS:8E1A
+constexpr std::string_view WRONG_LASER_TYPE_TEXT = "Wrong laser type!  ";
+
 } // namespace
 
 } // namespace Elite

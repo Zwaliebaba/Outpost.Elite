@@ -98,12 +98,13 @@ struct FacesEnd
 void ProjectVertices(GameState& _state, std::uint8_t _trapHigh);
 
 /// ReflectVertexAboutCenter (CS:3740): for x, y and z in turn, the vertex at _reflection = drawCenter - the vertex at _vertex,
-/// then the vertex at _vertex += drawCenter. Returns drawCenter, each coordinate as it read it.
-Vector ReflectVertexAboutCenter(GameState& _state, std::uint16_t _vertex, std::uint16_t _reflection);
+/// then the vertex at _vertex += drawCenter, each the byte of vertexBuffer it starts at. Returns drawCenter, each coordinate as it
+/// read it.
+Vector ReflectVertexAboutCenter(GameState& _state, std::size_t _vertex, std::size_t _reflection);
 
-/// OffsetVertexByCenter (CS:3768): the vertex at _vertex plus drawCenter, x, y and z in turn. Returns drawCenter, each
-/// coordinate as it read it.
-Vector OffsetVertexByCenter(GameState& _state, std::uint16_t _vertex);
+/// OffsetVertexByCenter (CS:3768): the vertex at byte _vertex of vertexBuffer plus drawCenter, x, y and z in turn. Returns
+/// drawCenter, each coordinate as it read it.
+Vector OffsetVertexByCenter(GameState& _state, std::size_t _vertex);
 
 /// BuildBoxCornerVertices (CS:377A): the blueprint handler of types 1-29, from the blueprint's two extent bytes _extents, the
 /// first low. The eight corners (+-boxHalfWidth, +-the first, +-the second) about drawCenter, rotated by the drawn angles, the

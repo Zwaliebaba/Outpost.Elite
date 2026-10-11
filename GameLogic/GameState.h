@@ -140,6 +140,69 @@ public:
     return TextFrom(static_cast<std::uint16_t>(end - DataBytes().data() + 1));
   }
 
+  /// The text at DS:_offset up to its NUL, for a text the game writes that the symbol table names no row for: a buffer inside
+  /// a row or a gap, which change 3 of D33's piece 3 names (D33). Every other text is a member's (TextAt) or a constant of the
+  /// subsystem's generated tables (Tools/GenerateTables.py).
+  [[nodiscard]] std::string_view TextAtOffset(std::uint16_t _offset) const noexcept
+  {
+    return TextFrom(_offset);
+  }
+
+  /// _count bytes of the data segment from _member's first, a member of Data() at any depth, as bytes that count their own
+  /// changes: a buffer a text routine writes into, past the member's end too where the symbol table sizes it short. A span
+  /// that would run past the data segment's end throws std::out_of_range.
+  template <typename Member> [[nodiscard]] std::span<Counted<std::uint8_t>> BytesFrom(Member& _member, std::size_t _count)
+  {
+    return BytesAt(OffsetOf(_member), _count);
+  }
+
+  /// BytesFrom, to read.
+  template <typename Member> [[nodiscard]] std::span<const Counted<std::uint8_t>> BytesFrom(const Member& _member, std::size_t _count) const
+  {
+    return BytesAt(OffsetOf(_member), _count);
+  }
+
+  /// _count bytes of the data segment from DS:_offset, as BytesFrom gives them, for a buffer the symbol table names no row for
+  /// (TextAtOffset).
+  [[nodiscard]] std::span<Counted<std::uint8_t>> BytesAt(std::uint16_t _offset, std::size_t _count)
+  {
+    if (_offset + _count > sizeof(GameData))
+    {
+      RefuseObject();
+    }
+    return std::span<Counted<std::uint8_t>>(reinterpret_cast<Counted<std::uint8_t>*>(&DataStorage()[_offset]), _count);
+  }
+
+  /// BytesAt, to read.
+  [[nodiscard]] std::span<const Counted<std::uint8_t>> BytesAt(std::uint16_t _offset, std::size_t _count) const
+  {
+    if (_offset + _count > sizeof(GameData))
+    {
+      RefuseObject();
+    }
+    return std::span<const Counted<std::uint8_t>>(reinterpret_cast<const Counted<std::uint8_t>*>(&DataBytes()[_offset]), _count);
+  }
+
+  /// The word at the start of _member, a member of Data() at any depth whose first word the symbol table does not name on its
+  /// own, such as creditsTenths's low word.
+  template <typename Member> [[nodiscard]] std::uint16_t WordOf(const Member& _member) const noexcept
+  {
+    return Word(OffsetOf(_member));
+  }
+
+  /// _value into the word at the start of _member, as WordOf reads it, each byte counted when it changes.
+  template <typename Member> void SetWordOf(Member& _member, std::uint16_t _value) noexcept
+  {
+    SetWord(OffsetOf(_member), _value);
+  }
+
+  /// The text _into bytes into _member, a member of Data(), up to its NUL, past the member's end too: a text that follows other
+  /// bytes in a record, such as a docked frame's title after its two attributes.
+  template <typename Member> [[nodiscard]] std::string_view TextAt(const Member& _member, std::uint16_t _into) const noexcept
+  {
+    return TextFrom(static_cast<std::uint16_t>(OffsetOf(_member) + _into));
+  }
+
   [[nodiscard]] std::uint8_t Get(DataField<std::uint8_t> _field) const noexcept
   {
     return Byte(_field.offset);
@@ -440,6 +503,28 @@ private:
   std::uint16_t m_codeSegment = 0;
   std::uint16_t m_dataSegment = 0;
 };
+
+/// The little-endian word at _bytes[_at] and _bytes[_at + 1].
+[[nodiscard]] inline std::uint16_t WordIn(std::span<const Counted<std::uint8_t>> _bytes, std::size_t _at) noexcept
+{
+  return static_cast<std::uint16_t>(_bytes[_at] | (_bytes[_at + 1] << 8));
+}
+
+/// _value into _bytes[_at] and _bytes[_at + 1], low byte first, each counted when it changes, as GameState::SetWord writes a
+/// word.
+inline void SetWordIn(std::span<Counted<std::uint8_t>> _bytes, std::size_t _at, std::uint16_t _value) noexcept
+{
+  _bytes[_at] = static_cast<std::uint8_t>(_value & 0xFF);
+  _bytes[_at + 1] = static_cast<std::uint8_t>(_value >> 8);
+}
+
+/// The text in _bytes up to its first NUL, or all of them when none is: a buffer's text as a text routine reads it.
+[[nodiscard]] inline std::string_view TextIn(std::span<const Counted<std::uint8_t>> _bytes) noexcept
+{
+  const auto* const first = reinterpret_cast<const char*>(_bytes.data());
+  const std::string_view all(first, _bytes.size());
+  return all.substr(0, all.find('\0'));
+}
 
 /// ADD byte,_value / JAE / MOV byte,0FFh on _field: the sum written, and FFh over it on a carry. Those are two writes, as the
 /// original's ADD and MOV are, each counted when it changes the byte (ADR-015).

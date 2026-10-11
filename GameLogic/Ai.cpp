@@ -149,13 +149,13 @@ struct SpawnOdds
   std::uint16_t odds;
 };
 
-// NextRandom against the entry of the government spawnOddsOffset holds, in the column of spawnOddsByGovernment at _column,
-// scaled.
-[[nodiscard]] SpawnOdds SpawnOddsMet(GameState& _state, std::uint16_t _column)
+// NextRandom against the entry of the government spawnOddsOffset holds, in _column, a column of spawnOddsByGovernment, which
+// starts at its first row's entry, scaled.
+template <typename Column> [[nodiscard]] SpawnOdds SpawnOddsMet(GameState& _state, const Column& _column)
 {
   const std::uint16_t random = NextRandom(_state);
-  const auto row = static_cast<std::uint16_t>(_state.Data().spawnOddsOffset * SPAWN_ODDS_ROW_BYTES);
-  const std::uint16_t odds = ScaleSpawnOdds(_state, _state.Word(At(_column, row)));
+  const auto row = static_cast<std::size_t>(_state.Data().spawnOddsOffset * SPAWN_ODDS_ROW_BYTES);
+  const std::uint16_t odds = ScaleSpawnOdds(_state, WordIn(_state.BytesFrom(_column, row + 2), row));
   return SpawnOdds{random < odds, random, odds};
 }
 
@@ -166,11 +166,13 @@ struct SpawnLimit
   std::uint8_t limit; // what the original loads into AL
 };
 
-// The entry of the government spawnLimitOffset holds, in the column of spawnLimitsByGovernment at _column, against the class
-// count _count: below while there is room.
-[[nodiscard]] SpawnLimit BelowSpawnLimit(const GameState& _state, std::uint16_t _column, const Counted<std::uint8_t>& _count)
+// The entry of the government spawnLimitOffset holds in _column, a column of spawnLimitsByGovernment, which starts at its first
+// row's entry, against the class count _count: below while there is room.
+template <typename Column>
+[[nodiscard]] SpawnLimit BelowSpawnLimit(GameState& _state, const Column& _column, const Counted<std::uint8_t>& _count)
 {
-  const std::uint8_t limit = _state.Byte(At(_column, SpawnLimitRow(_state)));
+  const std::size_t row = SpawnLimitRow(_state);
+  const std::uint8_t limit = _state.BytesFrom(_column, row + 1)[row];
   return SpawnLimit{_count < limit, limit};
 }
 
@@ -192,48 +194,51 @@ void SpawnByGovernment(GameState& _state)
   if (_state.Data().commanderBlock.witchspaceCountdown == 0)
   {
     // MOV AL,[BX+spawnLimitsByGovernment], INC AL with a mining laser fitted.
-    auto drifters = _state.Byte(At(DS.spawnLimitsByGovernment.offset, SpawnLimitRow(_state)));
+    const std::size_t row = SpawnLimitRow(_state);
+    auto drifters = std::uint8_t{_state.BytesFrom(_state.Data().spawnLimitsByGovernment, row + 1)[row]};
     if (_state.Data().commanderBlock.miningLaserCount == 1)
     {
       drifters = static_cast<std::uint8_t>(drifters + 1);
     }
-    if (_state.Data().behaviorClassCounts.drifterCount < drifters && SpawnOddsMet(_state, DS.spawnOddsByGovernment.offset).met)
+    if (_state.Data().behaviorClassCounts.drifterCount < drifters && SpawnOddsMet(_state, _state.Data().spawnOddsByGovernment).met)
     {
       const SlotSearch free = TakeFreeShipSlot(_state);
       if (!free.found)
       {
         return;
       }
-      SpawnRandomDrifter(_state, _state.ObjectAt(free.slot));
+      SpawnRandomDrifter(_state, _state.Slot(free.slot));
     }
-    if (BelowSpawnLimit(_state, DS.traderLimitColumn.offset, _state.Data().behaviorClassCounts.traderCount).below &&
-        SpawnOddsMet(_state, DS.traderOddsColumn.offset).met)
+    if (BelowSpawnLimit(_state, _state.Data().spawnLimitsByGovernment.traderLimitColumn, _state.Data().behaviorClassCounts.traderCount)
+          .below &&
+        SpawnOddsMet(_state, _state.Data().spawnOddsByGovernment.traderOddsColumn).met)
     {
       const SlotSearch free = TakeFreeShipSlot(_state);
       if (!free.found)
       {
         return;
       }
-      (void)SpawnRandomTrader(_state, _state.ObjectAt(free.slot));
+      (void)SpawnRandomTrader(_state, _state.Slot(free.slot));
     }
-    if (BelowSpawnLimit(_state, DS.hunterLimitColumn.offset, _state.Data().behaviorClassCounts.hunterCount).below &&
-        SpawnOddsMet(_state, DS.hunterOddsColumn.offset).met)
+    if (BelowSpawnLimit(_state, _state.Data().spawnLimitsByGovernment.hunterLimitColumn, _state.Data().behaviorClassCounts.hunterCount)
+          .below &&
+        SpawnOddsMet(_state, _state.Data().spawnOddsByGovernment.hunterOddsColumn).met)
     {
       const SlotSearch free = TakeFreeShipSlot(_state);
       if (!free.found)
       {
         return;
       }
-      SpawnRandomHunter(_state, _state.ObjectAt(free.slot));
+      SpawnRandomHunter(_state, _state.Slot(free.slot));
     }
   }
-  if (!BelowSpawnLimit(_state, DS.wolfLimitColumn.offset, _state.Data().behaviorClassCounts.wolfCount).below)
+  if (!BelowSpawnLimit(_state, _state.Data().spawnLimitsByGovernment.wolfLimitColumn, _state.Data().behaviorClassCounts.wolfCount).below)
   {
     return;
   }
   if (_state.Data().commanderBlock.witchspaceCountdown == 0)
   {
-    const SpawnOdds odds = SpawnOddsMet(_state, DS.wolfOddsColumn.offset);
+    const SpawnOdds odds = SpawnOddsMet(_state, _state.Data().spawnOddsByGovernment.wolfOddsColumn);
     if (!odds.met || (_state.Data().spawnGovernment != 0 && odds.random >= WOLF_ODDS_LIMIT))
     {
       return;
@@ -241,7 +246,7 @@ void SpawnByGovernment(GameState& _state)
   }
   if (const SlotSearch free = TakeFreeShipSlot(_state); free.found)
   {
-    SpawnRandomWolf(_state, _state.ObjectAt(free.slot));
+    SpawnRandomWolf(_state, _state.Slot(free.slot));
   }
 }
 
@@ -256,14 +261,14 @@ void MarkMaskShip(SpaceObject& _slot)
 
 // SpawnMaskMissionShip in a free slot, _maskShip saying whether it is the mask ship. Returns the slot, or nothing when none
 // is free.
-std::optional<std::uint16_t> SpawnMaskMissionShipInFreeSlot(GameState& _state, bool _maskShip)
+std::optional<SlotIndex> SpawnMaskMissionShipInFreeSlot(GameState& _state, bool _maskShip)
 {
   const SlotSearch free = TakeFreeShipSlot(_state);
   if (!free.found)
   {
     return std::nullopt;
   }
-  SpawnMaskMissionShip(_state, _state.ObjectAt(free.slot), _maskShip);
+  SpawnMaskMissionShip(_state, _state.Slot(free.slot), _maskShip);
   return free.slot;
 }
 
@@ -288,27 +293,27 @@ void SpawnMaskMissionShips(GameState& _state)
     {
       return;
     }
-    _state.Data().maskShipSlot = GameState::SlotAt(free.slot);
-    SpaceObject& maskShip = _state.ObjectAt(free.slot);
+    _state.Data().maskShipSlot = free.slot;
+    SpaceObject& maskShip = _state.Slot(free.slot);
     SpawnMaskMissionShip(_state, maskShip, true);
     MarkMaskShip(maskShip);
     for (int escort = 0; escort < 2; ++escort)
     {
-      const std::optional<std::uint16_t> slot = SpawnMaskMissionShipInFreeSlot(_state, false);
+      const std::optional<SlotIndex> slot = SpawnMaskMissionShipInFreeSlot(_state, false);
       if (!slot)
       {
         return;
       }
-      PlaceEscortNear(_state, _state.ObjectAt(*slot), GameState::SlotOffset(_state.Data().maskShipSlot));
+      PlaceEscortNear(_state, _state.Slot(*slot), _state.Slot(_state.Data().maskShipSlot));
     }
     return;
   }
-  const std::optional<std::uint16_t> slot = SpawnMaskMissionShipInFreeSlot(_state, false);
+  const std::optional<SlotIndex> slot = SpawnMaskMissionShipInFreeSlot(_state, false);
   if (!slot || IsMaskShipPresent(_state).found || _state.Data().commanderBlock.maskShipDestroyed == 1)
   {
     return;
   }
-  SpaceObject& ship = _state.ObjectAt(*slot);
+  SpaceObject& ship = _state.Slot(*slot);
   MarkMaskShip(ship);
   ship.type = ASP_ACTIVE;
 }
@@ -322,7 +327,7 @@ void SpawnInvasionWave(GameState& _state)
   }
   if (const SlotSearch free = TakeFreeShipSlot(_state); free.found)
   {
-    SpawnInvasionThargoid(_state, _state.ObjectAt(free.slot));
+    SpawnInvasionThargoid(_state, _state.Slot(free.slot));
   }
 }
 
@@ -353,8 +358,8 @@ OffenderLaunch LaunchAtOffender(GameState& _state, SpaceObject& _station, bool _
   {
     return launch;
   }
-  CopyObject(_state, _state.OffsetOf(_station), free.slot, _backward);
-  SpaceObject& ship = _state.ObjectAt(free.slot);
+  SpaceObject& ship = _state.Slot(free.slot);
+  CopyObject(_state, _station, ship, _backward);
   const std::uint16_t pick = NextRandom(_state);
   if (pick >= POLICE_FROM)
   {
@@ -388,10 +393,10 @@ std::optional<DashboardPixel> CheckMissilesAtStation(GameState& _state, const Sp
   {
     // MOV CL,objectSlotCount / XOR CH,CH, then LOOP: a count of 0 runs 65,536 times.
     std::optional<std::uint8_t> crime;
-    std::uint16_t slot = DS.shipSlots.offset;
+    SlotIndex slot = SlotIndex::Sun;
     for (std::uint32_t count = LoopCount(_state.Data().objectSlotCount); count != 0 && !crime; --count)
     {
-      const SpaceObject& missile = _state.ObjectAt(slot);
+      const SpaceObject& missile = _state.Slot(slot);
       const std::uint8_t type = missile.type;
       const SlotIndex target = missile.target;
       if ((type & SpaceObject::ACTIVE) != 0 && ((type >> 1) & TYPE_MASK) == TYPE_MISSILE && target != SlotIndex::Player)
@@ -405,7 +410,7 @@ std::optional<DashboardPixel> CheckMissilesAtStation(GameState& _state, const Sp
           crime = POLICE_MISSILE_CRIME;
         }
       }
-      slot = Offset(slot, SpaceObject::BYTES);
+      slot = SlotAfter(slot);
     }
     if (!crime)
     {
@@ -538,7 +543,7 @@ MovedObject HunterIdle(GameState& _state, SpaceObject& _slot)
   }
   else
   {
-    const HunterCount hunters = CountOtherHuntersOnScanner(_state, _state.OffsetOf(_slot));
+    const HunterCount hunters = CountOtherHuntersOnScanner(_state, _slot);
     if (hunters.count >= 2)
     {
       if (_state.Data().commanderBlock.legalStatus >= FUGITIVE || NextRandom(_state) < PACK_ATTACK_ODDS)
@@ -549,7 +554,7 @@ MovedObject HunterIdle(GameState& _state, SpaceObject& _slot)
     else if (hunters.count == 1 && hunters.last)
     {
       // MOV [DI+29h],BP: the mate CountOtherHuntersOnScanner found last, which a count of 1 always has.
-      _slot.target = GameState::SlotAt(*hunters.last);
+      _slot.target = *hunters.last;
       _slot.aiState = STATE_FORMATION;
     }
   }
@@ -673,7 +678,7 @@ void UpdateObjectsAndSpawn(GameState& _state, Hardware& _hardware, bool _backwar
 {
   // PUSH DS / POP ES / MOV DI,activeObjectCount / XOR AL,AL / MOV CX,9 / REP STOSB: activeObjectCount and the eight
   // behaviorClassCounts cleared, backwards when the direction flag is set.
-  std::uint16_t count = DS.activeObjectCount.offset;
+  std::uint16_t count = _state.OffsetOf(_state.Data().activeObjectCount);
   for (std::uint16_t bytes = CLASS_COUNTS_CLEARED; bytes != 0; --bytes)
   {
     _state.SetByte(count, 0);
@@ -682,10 +687,10 @@ void UpdateObjectsAndSpawn(GameState& _state, Hardware& _hardware, bool _backwar
   // Every slot of shipSlotCount, by LOOP: an active one counted, but for debris, and in its class's count, and its class's handler
   // run, CX and DI pushed round it. DX goes on from one handler to the next.
   std::uint16_t dx = _dx;
-  std::uint16_t slot = DS.shipSlots.offset;
+  SlotIndex slot = SlotIndex::Sun;
   for (std::uint32_t slots = LoopCount(_state.Data().shipSlotCount); slots != 0; --slots)
   {
-    SpaceObject& object = _state.ObjectAt(slot);
+    SpaceObject& object = _state.Slot(slot);
     if ((object.type & SLOT_ACTIVE) != 0)
     {
       const std::uint8_t behavior = object.behaviorClass;
@@ -693,11 +698,12 @@ void UpdateObjectsAndSpawn(GameState& _state, Hardware& _hardware, bool _backwar
       {
         _state.Data().activeObjectCount = static_cast<std::uint8_t>(_state.Data().activeObjectCount + 1);
       }
-      const std::uint16_t classCount = At(DS.behaviorClassCounts.offset, behavior);
-      _state.SetByte(classCount, static_cast<std::uint8_t>(_state.Byte(classCount) + 1));
+      // The class's count in behaviorClassCounts, by the class: INC BYTE PTR [BX+behaviorClassCounts].
+      Counted<std::uint8_t>& classCount = _state.BytesFrom(_state.Data().behaviorClassCounts, std::size_t{behavior} + 1)[behavior];
+      classCount = static_cast<std::uint8_t>(classCount + 1);
       dx = RunBehaviorHandler(_state, _hardware, object, behavior, _backward, dx);
     }
-    slot = At(slot, SLOT_BYTES);
+    slot = SlotAfter(slot);
   }
 
   _state.Data().maskingBackgroundColor = 0;
@@ -734,24 +740,26 @@ std::uint16_t ScaleSpawnOdds(const GameState& _state, std::uint16_t _odds)
 SlotSearch IsMaskShipPresent(GameState& _state)
 {
   // Every object slot, active or not, for the device's bit: LOOP from CX = objectSlotCount.
-  std::uint16_t slot = DS.shipSlots.offset;
+  SlotIndex slot = SlotIndex::Sun;
   for (std::uint32_t count = LoopCount(_state.Data().objectSlotCount); count != 0; --count)
   {
-    if ((_state.ObjectAt(slot).flags & FLAG_DEVICE) != 0)
+    if ((_state.Slot(slot).flags & FLAG_DEVICE) != 0)
     {
       return SlotSearch{true, slot};
     }
-    slot = Offset(slot, SpaceObject::BYTES);
+    slot = SlotAfter(slot);
   }
   return SlotSearch{false, slot};
 }
 
-void PlaceEscortNear(GameState& _state, SpaceObject& _escort, std::uint16_t _leader)
+void PlaceEscortNear(GameState& _state, SpaceObject& _escort, const SpaceObject& _leader)
 {
   // The leader's first 16 bytes, byte by byte: its type too.
-  for (std::uint16_t index = 0; index < ESCORT_BYTES_COPIED; ++index)
+  const std::span<Counted<std::uint8_t>> escort = _state.BytesFrom(_escort, ESCORT_BYTES_COPIED);
+  const std::span<Counted<std::uint8_t>> leader = _state.BytesFrom(_leader, ESCORT_BYTES_COPIED);
+  for (std::size_t index = 0; index < ESCORT_BYTES_COPIED; ++index)
   {
-    _state.SetByte(Offset(_state.OffsetOf(_escort), index), _state.Byte(Offset(_leader, index)));
+    escort[index] = std::uint8_t{leader[index]};
   }
   for (int axis = 0; axis < 3; ++axis)
   {
@@ -782,19 +790,19 @@ TurnStep ClampTurnStep(const SpaceObject& _slot, std::uint16_t _wanted, std::uin
   return TurnStep{static_cast<std::int16_t>((error & 0x8000) != 0 ? Negate(rate) : rate), magnitude};
 }
 
-HunterCount CountOtherHuntersOnScanner(GameState& _state, std::uint16_t _slot)
+HunterCount CountOtherHuntersOnScanner(GameState& _state, const SpaceObject& _slot)
 {
   HunterCount hunters{0, std::nullopt};
-  std::uint16_t slot = DS.shipSlots.offset;
+  SlotIndex slot = SlotIndex::Sun;
   for (std::uint32_t count = LoopCount(_state.Data().objectSlotCount); count != 0; --count)
   {
-    const SpaceObject& other = _state.ObjectAt(slot);
-    if (other.behaviorClass == HUNTER_CLASS && (other.flags & FLAG_BLIP_DRAWN) != 0 && slot != _slot)
+    const SpaceObject& other = _state.Slot(slot);
+    if (other.behaviorClass == HUNTER_CLASS && (other.flags & FLAG_BLIP_DRAWN) != 0 && &other != &_slot)
     {
       hunters.last = slot;
       hunters.count = static_cast<std::uint8_t>(hunters.count + 1);
     }
-    slot = Offset(slot, SpaceObject::BYTES);
+    slot = SlotAfter(slot);
   }
   return hunters;
 }

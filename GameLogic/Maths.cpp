@@ -189,9 +189,9 @@ SinCos SinCosOf(const GameState& _state, std::uint16_t _angle)
 SinCos SetSinCos(GameState& _state, std::size_t _pair, std::uint16_t _angle)
 {
   const SinCos pair = SinCosOf(_state, _angle);
-  const std::uint16_t at = DS.rotationSinCos.At(_pair);
-  _state.SetWord(at, Word(pair.sine));
-  _state.SetWord(static_cast<std::uint16_t>(at + 2), Word(pair.cosine));
+  Counted<std::uint8_t>(&stored)[4] = _state.Data().rotationSinCos[_pair];
+  SetWordIn(stored, 0, Word(pair.sine));
+  SetWordIn(stored, 2, Word(pair.cosine));
   return pair;
 }
 
@@ -208,8 +208,8 @@ Pair RotateBySinCos(Pair _point, SinCos _by)
 
 Pair RotateByStoredSinCos(const GameState& _state, std::size_t _pair, Pair _point)
 {
-  const std::uint16_t at = DS.rotationSinCos.At(_pair);
-  return RotateBySinCos(_point, SinCos{Signed(_state.Word(at)), Signed(_state.Word(static_cast<std::uint16_t>(at + 2)))});
+  const Counted<std::uint8_t>(&stored)[4] = _state.Data().rotationSinCos[_pair];
+  return RotateBySinCos(_point, SinCos{Signed(WordIn(stored, 0)), Signed(WordIn(stored, 2))});
 }
 
 std::uint16_t ArcTangent2(GameState& _state, std::int16_t _a, std::int16_t _b)
@@ -256,7 +256,7 @@ std::uint16_t RatioArcTangent(GameState& _state, std::uint16_t _numerator, std::
   for (std::uint16_t steps = TANGENT_SEARCH_STEPS; steps != 0; --steps)
   {
     middle = static_cast<std::uint16_t>(((low + high) >> 1) & 0xFFFE);
-    const std::uint16_t tangent = _state.Word(static_cast<std::uint16_t>(DS.tangentTable.offset + middle));
+    const std::uint16_t tangent = _state.Data().tangentTable[middle >> 1];
     if (tangent == ratio)
     {
       break;

@@ -177,6 +177,9 @@
     <ClInclude Include="Market.h">
       <Filter>Market</Filter>
     </ClInclude>
+    <ClInclude Include="MarketTables.h">
+      <Filter>Market</Filter>
+    </ClInclude>
     <ClInclude Include="Maths.h">
       <Filter>Maths</Filter>
     </ClInclude>

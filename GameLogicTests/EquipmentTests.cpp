@@ -98,7 +98,7 @@ constexpr int MOST_DRAWS = 1000;
 // state drawn on by NextRandom until that draw comes; and a mined fragment's lifetime.
 void MakeMineralSplinter(Elite::GameState& _state, Elite::SpaceObject& _slot)
 {
-  Elite::InitObjectFromTemplate(_state, _slot, DS.spawnTemplates.At(DRIFTER_TEMPLATES), ASTEROID_DRIFTER);
+  Elite::InitObjectFromTemplate(_state, _slot, DRIFTER_TEMPLATES, ASTEROID_DRIFTER);
   _slot.aiState = 0;
   const std::uint16_t spin = Elite::NextRandom(_state);
   _slot.spinRoll = static_cast<std::uint8_t>(spin & 0xFF);
@@ -136,7 +136,7 @@ void MakeMineralSplinter(Elite::GameState& _state, Elite::SpaceObject& _slot)
 void MakeBelowTheNose(TwinRig& _rig, Scoopable _what)
 {
   Elite::GameState& state = _rig.State();
-  std::uint16_t slot = 0;
+  Elite::SlotIndex slot = Elite::SlotIndex::Sun;
   if (_what == Scoopable::MineralSplinter)
   {
     slot = Elite::FindDebrisSlot(state);
@@ -147,8 +147,8 @@ void MakeBelowTheNose(TwinRig& _rig, Scoopable _what)
     Assert::IsTrue(free.found, L"a free ship slot");
     slot = free.slot;
   }
-  Elite::ClearObjectSlot(state, slot);
-  Elite::SpaceObject& object = state.ObjectAt(slot);
+  Elite::SpaceObject& object = state.Slot(slot);
+  Elite::ClearObjectSlot(state, object);
   switch (_what)
   {
   case Scoopable::Barrel:
@@ -165,7 +165,7 @@ void MakeBelowTheNose(TwinRig& _rig, Scoopable _what)
   case Scoopable::Thargon:
     Elite::InitThargon(state, object);
     (void)Elite::ComputeVelocity(state, object);
-    object.owner = Elite::SlotAfter(Elite::GameState::SlotAt(slot));
+    object.owner = Elite::SlotAfter(slot);
     break;
   case Scoopable::MineralSplinter:
     MakeMineralSplinter(state, object);

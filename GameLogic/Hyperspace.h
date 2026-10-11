@@ -19,7 +19,7 @@ namespace Elite
 /// Where IsMassLocked's look at the ship slots stopped.
 struct ShipScan
 {
-  std::uint16_t slot;      ///< the ship that locks the jump drive, or past the last slot looked at: what the original leaves in DI
+  SlotIndex slot;          ///< the ship that locks the jump drive, or past the last slot looked at: what the original leaves in DI
   std::uint16_t slotsLeft; ///< the count LOOP had there, CX
 };
 

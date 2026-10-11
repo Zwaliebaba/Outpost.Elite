@@ -6,7 +6,9 @@
 #include "Message.h"
 #include "SpaceObject.h"
 
+#include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string_view>
 
 namespace Elite
@@ -24,22 +26,8 @@ namespace Elite
 /// What BlankLeadingZeros leaves of a number's text.
 struct BlankedZeros
 {
-  std::uint16_t firstKept; ///< the first character it kept, or the one after the last it blanked
+  std::size_t firstKept;   ///< the index of the first character it kept, or of the one after the last it blanked
   std::uint16_t triesLeft; ///< how many more it could have blanked: 0 once it has blanked as many as it may
-};
-
-/// Where PrintTextModeString stops, and DrawViewString and DrawScreenString.
-struct PrintedText
-{
-  std::uint16_t end;      ///< the text's NUL
-  std::uint16_t nextCell; ///< the text page's cell after the last it wrote, or the place after the last character drawn
-};
-
-/// Where PrintTextLines and PrintCountedTextLines stop.
-struct PrintedLines
-{
-  std::uint16_t end;      ///< past the last line's NUL
-  std::uint16_t nextLine; ///< the text page's cell a row below the last line's first
 };
 
 /// Where DrawSmallViewChar draws a letter: the byte of the space-view buffer, and the shift, 0 or 4, of the
@@ -50,19 +38,9 @@ struct SmallViewPlace
   std::uint8_t shift;
 };
 
-/// Where DrawSmallViewString stops.
-struct DrawnSmallText
-{
-  std::uint16_t end;   ///< the text's NUL
-  SmallViewPlace next; ///< the place of the letter after the last drawn
-};
-
 /// DrawViewChar (CS:3130): the 8x8 glyph of _character, in _ink on textPaperPattern, at DS:_at in the space-view
 /// buffer. Returns the place of the next character, two bytes on.
 std::uint16_t DrawViewChar(GameState& _state, std::uint8_t _character, std::uint16_t _ink, std::uint16_t _at);
-
-/// DrawViewString (CS:31EC): DrawViewChar for each character of the text at DS:_text, from DS:_at.
-PrintedText DrawViewString(GameState& _state, std::uint16_t _text, std::uint16_t _ink, std::uint16_t _at);
 
 /// DrawViewString (CS:31EC): DrawViewChar for each character of _text, from DS:_at. Returns the place after the last.
 std::uint16_t DrawViewString(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _at);
@@ -71,28 +49,25 @@ std::uint16_t DrawViewString(GameState& _state, std::string_view _text, std::uin
 /// of the CGA's memory. Returns the place of the next character, two bytes on.
 std::uint16_t DrawScreenChar(GameState& _state, std::uint8_t _character, std::uint16_t _ink, std::uint16_t _segment, std::uint16_t _cell);
 
-/// DrawScreenString (CS:32D8): DrawScreenChar for each character of the text at DS:_text, from _segment:_cell.
-PrintedText DrawScreenString(GameState& _state, std::uint16_t _text, std::uint16_t _ink, std::uint16_t _segment, std::uint16_t _cell);
-
 /// DrawScreenString (CS:32D8): DrawScreenChar for each character of _text, from _segment:_cell. Returns the place after the
 /// last.
 std::uint16_t DrawScreenString(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _segment, std::uint16_t _cell);
 
-/// FormatDecimal5 (CS:3407): _value as five ASCII digits at DS:_digits. Returns what is left of it below the last
-/// divisor: its units.
-std::uint16_t FormatDecimal5(GameState& _state, std::uint16_t _value, std::uint16_t _digits);
+/// FormatDecimal5 (CS:3407): _value as five ASCII digits into the first five of _digits, a buffer of the data segment.
+/// Returns what is left of it below the last divisor: its units.
+std::uint16_t FormatDecimal5(GameState& _state, std::uint16_t _value, std::span<Counted<std::uint8_t>> _digits);
 
-/// BlankLeadingZeros (CS:3432): up to _most of the leading characters below '1' at DS:_text become spaces; a _most of
-/// 0 lets 65,536 go, as LOOP counts.
-BlankedZeros BlankLeadingZeros(GameState& _state, std::uint16_t _text, std::uint8_t _most);
+/// BlankLeadingZeros (CS:3432): up to _most of _text's leading characters below '1' become spaces. Every caller's _most is
+/// less than the digits it blanks, which always end in one kept; LOOP would let 65,536 go for 0.
+BlankedZeros BlankLeadingZeros(std::span<Counted<std::uint8_t>> _text, std::uint8_t _most);
 
 /// DrawSmallViewChar (CS:349A): the 5-row letter _letter ('A'-'Z') in _ink over the space-view buffer at _place, the
 /// buffer kept around the letter's shape. Returns the next letter's place, six pixels on.
 SmallViewPlace DrawSmallViewChar(GameState& _state, std::uint8_t _letter, std::uint16_t _ink, SmallViewPlace _place);
 
-/// DrawSmallViewString (CS:3527): DrawSmallViewChar for each letter of the text at DS:_text, from _position, which is
-/// (line+1)*256 + x: the buffer's byte _position/4, and the shift bit 1 of x makes.
-DrawnSmallText DrawSmallViewString(GameState& _state, std::uint16_t _text, std::uint16_t _ink, std::uint16_t _position);
+/// DrawSmallViewString (CS:3527): DrawSmallViewChar for each letter of _text, from _position, which is (line+1)*256 + x: the
+/// buffer's byte _position/4, and the shift bit 1 of x makes. Returns the place of the letter after the last drawn.
+SmallViewPlace DrawSmallViewString(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _position);
 
 /// FormatCredits (CS:3543): creditsTenths into creditBalanceText, as ten digits with up to eight leading zeros
 /// blanked and a decimal point before the last.
@@ -119,9 +94,6 @@ void ShowBountyMessage(GameState& _state, std::uint16_t _tenths);
 /// the police.
 void ShowShipIdentity(GameState& _state, std::uint8_t _type, std::uint8_t _class, const SpaceObject& _slot);
 
-/// PrintTextModeString (CS:60D2): the text at DS:_text to the text page at B800:_cell, in textAttribute.
-PrintedText PrintTextModeString(GameState& _state, std::uint16_t _text, std::uint16_t _cell);
-
 /// PrintTextModeString (CS:60D2): _text to the text page at B800:_cell, in textAttribute. Returns the cell after its last.
 std::uint16_t PrintTextModeString(GameState& _state, std::string_view _text, std::uint16_t _cell);
 
@@ -135,32 +107,44 @@ void ClearDockedMessageLine(GameState& _state, std::uint16_t _segment);
 /// SwapTextAttributeNibbles (CS:6580): textAttribute's nibbles exchanged, and the attribute that makes.
 std::uint8_t SwapTextAttributeNibbles(GameState& _state);
 
-/// PrintCountedTextLines (CS:65FA): PrintTextLines for the lines after the count byte at DS:_text.
-PrintedLines PrintCountedTextLines(GameState& _state, std::uint16_t _text, std::uint16_t _cell);
+/// PrintCountedTextLines (CS:65FA): PrintTextLines for the lines after a count byte, as many as it says: _lines, the
+/// generated lines of such a text (a subsystem's tables). Returns the cell a row below the last line's first.
+std::uint16_t PrintCountedTextLines(GameState& _state, std::span<const std::string_view> _lines, std::uint16_t _cell);
+
+/// PrintCountedTextLines (CS:65FA) for a text of the data segment: _count, its count byte, a member of GameData, and as many
+/// lines as it says after it, one after another (PrintTextLines). Returns the cell a row below the last line's first.
+std::uint16_t PrintCountedTextLines(GameState& _state, const Counted<std::uint8_t>& _count, std::uint16_t _cell);
 
 /// FormatTenths (CS:69B3): _tenths into priceText as "nnnn.n".
 void FormatTenths(GameState& _state, std::uint16_t _tenths);
 
-/// PrintTextLines (CS:6DDE): _lines lines from DS:_text, each by PrintTextModeString a row of the text page below the
-/// one before, from B800:_cell; 65,536 for 0, as LOOP counts.
-PrintedLines PrintTextLines(GameState& _state, std::uint16_t _text, std::uint16_t _cell, std::uint16_t _lines);
+/// PrintTextLines (CS:6DDE): each of _lines by PrintTextModeString a row of the text page below the one before, from
+/// B800:_cell. Returns the cell a row below the last line's first.
+std::uint16_t PrintTextLines(GameState& _state, std::span<const std::string_view> _lines, std::uint16_t _cell);
 
-/// ReadTextLine (CS:7694): a line typed into the buffer at DS:_buffer, at most _most characters, after ResetKeyboard and with
-/// textPaperPattern cleared; echoed by RedrawInputLine at _segment:_cell, with a cursor that blinks every 300 timer ticks.
-/// Enter ends it, Backspace deletes, a key with no character does nothing, and letters are lower case unless Shift is held.
-/// Returns its length; the buffer holds a NUL after it. Waits for keys as a rule (ADR-015).
-[[nodiscard]] std::uint16_t ReadTextLine(GameState& _state, Hardware& _hardware, std::uint16_t _buffer, std::uint8_t _most,
-                                         std::uint16_t _segment, std::uint16_t _cell);
+/// PrintTextLines (CS:6DDE) for _lines texts of the data segment that follow one another from _first (TextAt), each after
+/// the one before's NUL: a text the game writes into. _lines is not 0, which LOOP would count as 65,536.
+std::uint16_t PrintTextLines(GameState& _state, std::string_view _first, std::uint16_t _cell, std::uint16_t _lines);
+
+/// ReadTextLine (CS:7694): a line typed into _buffer, a buffer of the data segment of at least _most + 1 bytes, at most _most
+/// characters, after ResetKeyboard and with textPaperPattern cleared; echoed by RedrawInputLine at _segment:_cell, with a
+/// cursor that blinks every 300 timer ticks. Enter ends it, Backspace deletes, a key with no character does nothing, and
+/// letters are lower case unless Shift is held. Returns its length; the buffer holds a NUL after it. Waits for keys as a rule
+/// (ADR-015).
+[[nodiscard]] std::uint16_t ReadTextLine(GameState& _state, Hardware& _hardware, std::span<Counted<std::uint8_t>> _buffer,
+                                         std::uint8_t _most, std::uint16_t _segment, std::uint16_t _cell);
 
 /// ToggleInputCursor (CS:7727): the input cursor's character flips between blank and block.
 void ToggleInputCursor(GameState& _state);
 
-/// RedrawInputLine (CS:773A): a NUL after the _length characters typed at DS:_buffer, then they and inputCursorText after them,
-/// each by PrintStringForLayout from _segment:_cell in the ink FFFFh.
-void RedrawInputLine(GameState& _state, std::uint16_t _buffer, std::uint16_t _length, std::uint16_t _segment, std::uint16_t _cell);
+/// RedrawInputLine (CS:773A): a NUL after the _length characters typed into _buffer, then they and inputCursorText after
+/// them, each by PrintStringForLayout from _segment:_cell in the ink FFFFh.
+void RedrawInputLine(GameState& _state, std::span<Counted<std::uint8_t>> _buffer, std::uint16_t _length, std::uint16_t _segment,
+                     std::uint16_t _cell);
 
-/// PrintStringForLayout (CS:7750): the text at DS:_text by PrintTextModeString at B800:_cell in the text layout, and by
-/// DrawScreenString in _ink at _segment:_cell otherwise.
-PrintedText PrintStringForLayout(GameState& _state, std::uint16_t _text, std::uint16_t _ink, std::uint16_t _segment, std::uint16_t _cell);
+/// PrintStringForLayout (CS:7750): _text by PrintTextModeString at B800:_cell in the text layout, and by DrawScreenString in
+/// _ink at _segment:_cell otherwise. Returns the place after its last character.
+std::uint16_t PrintStringForLayout(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _segment,
+                                   std::uint16_t _cell);
 
 } // namespace Elite

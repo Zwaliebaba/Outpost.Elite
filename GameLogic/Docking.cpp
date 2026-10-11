@@ -113,16 +113,24 @@ std::uint16_t Store(GameState& _state, std::uint16_t _segment, std::uint16_t _of
   return at;
 }
 
+// Rectangle _rectangle of tunnelRectangles, its five points of two signed bytes, x and y. The original holds the rectangle's
+// address in SI; the one past the last is the bytes after them.
+[[nodiscard]] std::span<Counted<std::uint8_t>> TunnelRectangle(GameState& _state, std::size_t _rectangle)
+{
+  return _state.BytesFrom(_state.Data().tunnelRectangles, (_rectangle + 1) * TUNNEL_RECTANGLE_BYTES)
+    .subspan(_rectangle * TUNNEL_RECTANGLE_BYTES);
+}
+
 // Where DrawTunnelRectangles stopped.
 struct TunnelDrawn
 {
-  std::uint16_t next; // past the last rectangle drawn, where the original leaves SI
-  bool filled;        // a DrawLine filled bytes with REP STOSB
+  std::size_t next; // past the last rectangle drawn, where the original leaves SI
+  bool filled;      // a DrawLine filled bytes with REP STOSB
 };
 
 // _count of tunnelRectangles from _first, each by DrawTunnelRectangle in the tunnel's colour, and the LOOP back to CS:_loop
 // (2DA1, 2DEE), which carries the count and the next rectangle (ADR-015).
-TunnelDrawn DrawTunnelRectangles(GameState& _state, Hardware& _hardware, std::uint16_t _first, std::uint16_t _count, std::uint16_t _loop)
+TunnelDrawn DrawTunnelRectangles(GameState& _state, Hardware& _hardware, std::size_t _first, std::uint16_t _count, std::uint16_t _loop)
 {
   TunnelDrawn drawn{_first, false};
   std::uint16_t count = _count;
@@ -130,12 +138,12 @@ TunnelDrawn DrawTunnelRectangles(GameState& _state, Hardware& _hardware, std::ui
   {
     _state.Data().drawColor = TUNNEL_COLOR;
     drawn.filled = DrawTunnelRectangle(_state, drawn.next) || drawn.filled;
-    drawn.next = Offset(drawn.next, TUNNEL_RECTANGLE_BYTES);
+    ++drawn.next;
     if (--count == 0)
     {
       return drawn;
     }
-    _hardware.LoopTurn(_loop, {count, drawn.next});
+    _hardware.LoopTurn(_loop, {count, _state.OffsetOf(TunnelRectangle(_state, drawn.next)[0])});
   }
 }
 
@@ -167,7 +175,7 @@ void WaitTimerTicks(GameState& _state, Hardware& _hardware, std::uint16_t _ticks
 // and CX, with DI the station's slot.
 [[nodiscard]] Vector LoadStationPosition(GameState& _state, bool _approach)
 {
-  const SpaceObject& station = _state.ObjectAt(DS.stationSlot.offset);
+  const SpaceObject& station = _state.Slot(SlotIndex::Station);
   const std::uint16_t z = station.z;
   return Vector{static_cast<std::int16_t>(station.x), static_cast<std::int16_t>(station.y),
                 static_cast<std::int16_t>(_approach ? Offset(z, APPROACH_DISTANCE) : z)};
@@ -351,7 +359,7 @@ void FlyToApproachPoint(GameState& _state)
 // matched next.
 void CloseIn(GameState& _state)
 {
-  const std::uint16_t distance = Negate(_state.ObjectAt(DS.stationSlot.offset).z);
+  const std::uint16_t distance = Negate(_state.Slot(SlotIndex::Station).z);
   if (distance < STOP_CLOSING_DISTANCE)
   {
     _state.Data().dockingComputerState = MATCH_SPIN;
@@ -381,7 +389,7 @@ void CloseIn(GameState& _state)
 // The station's spin angle plus _turn, negated for a Dodo (IsStation's CF) (CS:8980, CS:89B9, CS:89EA).
 [[nodiscard]] std::uint16_t LoadStationSpin(GameState& _state, std::uint16_t _turn)
 {
-  const SpaceObject& station = _state.ObjectAt(DS.stationSlot.offset);
+  const SpaceObject& station = _state.Slot(SlotIndex::Station);
   const auto spin = Offset(station.roll, _turn);
   return IsStation(station).dodo ? Negate(spin) : spin;
 }
@@ -416,16 +424,17 @@ void RollWithSpin(GameState& _state, std::uint16_t _turn)
 
 } // namespace
 
-bool DrawTunnelRectangle(GameState& _state, std::uint16_t _points)
+bool DrawTunnelRectangle(GameState& _state, std::size_t _rectangle)
 {
+  const std::span<const Counted<std::uint8_t>> points = TunnelRectangle(_state, _rectangle);
   bool filled = false;
-  std::uint16_t point = _points;
+  std::size_t point = 0;
   for (std::uint16_t edge = 0; edge < TUNNEL_EDGES; ++edge)
   {
-    const std::uint16_t from = FromCenter(_state.Word(point));
-    const std::uint16_t to = FromCenter(_state.Word(Offset(point, 2)));
+    const std::uint16_t from = FromCenter(WordIn(points, point));
+    const std::uint16_t to = FromCenter(WordIn(points, point + 2));
     filled = DrawLine(_state, Low(from), High(from), Low(to), High(to)) || filled;
-    point = Offset(point, 2);
+    point += 2;
   }
   return filled;
 }
@@ -463,13 +472,14 @@ bool CheckDockingAlignment(const GameState& _state, const SpaceObject& _station,
   return AngleWithinTolerance(roll, static_cast<std::uint16_t>((spin + HALF_TURN) & ANGLE_MASK), _tolerance);
 }
 
-void MaskOutsideTunnel(GameState& _state, std::uint16_t _rectangle, bool _backwards)
+void MaskOutsideTunnel(GameState& _state, std::size_t _rectangle, bool _backwards)
 {
   // The margins: x/4 bytes either side, and the rows above and below the rectangle, in the space-view buffer at DS:0000,
   // through ES = DS.
   const std::uint16_t segment = _state.DataSegment();
-  const auto sideBytes = static_cast<std::uint16_t>(static_cast<std::uint8_t>(_state.Byte(_rectangle) + VIEW_CENTER_X) >> 2);
-  const std::uint8_t top = _state.Byte(Offset(_rectangle, 1));
+  const std::span<const Counted<std::uint8_t>> corner = TunnelRectangle(_state, _rectangle);
+  const auto sideBytes = static_cast<std::uint16_t>(static_cast<std::uint8_t>(corner[0] + VIEW_CENTER_X) >> 2);
+  const std::uint8_t top = corner[1];
   const auto rows = static_cast<std::uint16_t>(static_cast<std::uint8_t>(Negate(top) << 1));
   const auto marginWords = static_cast<std::uint16_t>(static_cast<std::uint8_t>(top + VIEW_CENTER_ROW) << 5);
   // The rows above, then the sides of each row of the rectangle, forwards or, as the direction flag says, down; DEC BX
@@ -515,14 +525,14 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
       {
         backward = false;
       }
-      MaskOutsideTunnel(_state, DS.tunnelRectangles.offset, backward);
+      MaskOutsideTunnel(_state, 0, backward);
       backward = false;
     }
     else
     {
       WaitTimerTicks(_state, _hardware, DOCKED_FIRST_TICKS, DOCKED_FIRST_WAIT);
     }
-    if (DrawTunnelRectangles(_state, _hardware, DS.tunnelRectangles.offset, frame, FIRST_RECTANGLES).filled)
+    if (DrawTunnelRectangles(_state, _hardware, 0, frame, FIRST_RECTANGLES).filled)
     {
       backward = false;
     }
@@ -540,7 +550,7 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
 
   // The last ten draw ten rectangles less one each frame, from one further along each time: CX and SI, pushed twice round the
   // frame, which the turns carry.
-  std::uint16_t first = DS.tunnelRectangles.offset;
+  std::size_t first = 0;
   for (std::uint16_t frames = TUNNEL_FRAMES;;)
   {
     if (_state.Data().playerDocked == 0)
@@ -564,12 +574,12 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
     }
     FinishSpaceViewFrame(_state, _hardware);
     backward = false;
-    first = Offset(first, TUNNEL_RECTANGLE_BYTES);
+    ++first;
     if (--frames == 0)
     {
       return;
     }
-    _hardware.LoopTurn(LAST_TUNNEL_FRAME, {frames, first});
+    _hardware.LoopTurn(LAST_TUNNEL_FRAME, {frames, _state.OffsetOf(TunnelRectangle(_state, first)[0])});
   }
 }
 
@@ -595,7 +605,7 @@ Message ToggleDockingComputer(GameState& _state, Hardware& _hardware)
     StartLowBeep(_state);
     return PostDockingMessage(_state, Message::StationOutOfRange);
   }
-  if ((_state.ObjectAt(DS.stationSlot.offset).flags & STATION_SHOT) != 0)
+  if ((_state.Slot(SlotIndex::Station).flags & STATION_SHOT) != 0)
   {
     _state.Data().dataA137 = 0;
     StartLowBeep(_state);

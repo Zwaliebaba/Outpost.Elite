@@ -172,19 +172,19 @@ void AddChartLabel(GameState& _state, ChartSpan _x, ChartSpan _rows);
 /// even one, skipping a move off the chart, until it is out of tries.
 [[nodiscard]] LabelNudge NudgeChartLabel(GameState& _state, ChartSpan _rows);
 
-/// ChartItemOverlaps (CS:15A9): whether the chart item at DS:_item overlaps x range _x and rows _rows.
-[[nodiscard]] bool ChartItemOverlaps(const GameState& _state, std::uint16_t _item, ChartSpan _x, ChartSpan _rows);
+/// ChartItemOverlaps (CS:15A9): whether item _item of chartItems overlaps x range _x and rows _rows.
+[[nodiscard]] bool ChartItemOverlaps(const GameState& _state, std::size_t _item, ChartSpan _x, ChartSpan _rows);
 
 /// ClearChartTextLines (CS:15BC): blankChartLine drawn in _ink at _segment over the two text lines under a chart.
-/// Returns where the second ends.
-PrintedText ClearChartTextLines(GameState& _state, std::uint16_t _ink, std::uint16_t _segment);
+/// Returns the place after the second's last character.
+std::uint16_t ClearChartTextLines(GameState& _state, std::uint16_t _ink, std::uint16_t _segment);
 
 /// TerminateSelectedSystemName (CS:60EB): a NUL after selectedSystemName. Returns the name's length.
 std::uint8_t TerminateSelectedSystemName(GameState& _state);
 
-/// FormatSelectedSystemDistance (CS:60F7): the distance digits with a decimal point, ending at DS:7D5F.
-/// Returns the offset of the first digit.
-std::uint16_t FormatSelectedSystemDistance(GameState& _state);
+/// FormatSelectedSystemDistance (CS:60F7): the distance digits with a decimal point, ending at DS:7D5F, a buffer the symbol
+/// table names no row for. Returns the text, from its first digit.
+std::string_view FormatSelectedSystemDistance(GameState& _state);
 
 /// ShowSystemDescription (CS:6FC0): descriptionBuffer zeroed a word at a time as REP STOSW does, backwards when _backward
 /// (the direction flag), the selected system's description expanded into it from descriptionTemplate, and printed on the text
@@ -223,7 +223,7 @@ void StopCapitalizing(GameState& _state);
 std::uint16_t NextDescriptionRandom(GameState& _state);
 
 /// CopySelectedNameLower (CS:7124): selectedSystemName, terminated, into descriptionNameBuffer, all but its first
-/// letter lower-cased, then a space and a NUL. Returns the offset of the space.
-std::uint16_t CopySelectedNameLower(GameState& _state);
+/// letter lower-cased, then a space and a NUL. Returns the index of the space in descriptionNameBuffer.
+std::size_t CopySelectedNameLower(GameState& _state);
 
 } // namespace Elite

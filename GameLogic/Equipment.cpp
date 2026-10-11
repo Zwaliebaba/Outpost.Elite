@@ -65,32 +65,8 @@ constexpr std::uint8_t HELP_ATTRIBUTE = 0x1F;
 constexpr std::uint8_t MOUNT_HIGHLIGHT_ATTRIBUTE = 0x70;
 
 // The equipment menu's messages, 19 characters each, and the mount menu's texts.
-constexpr std::uint16_t MOUNT_HEADER_TEXT = 0x811D;
-constexpr std::uint16_t SELL_LASER_TEXT = 0x81AE;
-constexpr std::uint16_t FREE_MOUNT_TEXT = 0x81EA;
-constexpr std::uint16_t NO_RESALE_TEXT = 0x821B;
-constexpr std::uint16_t MISSILE_PURCHASED_TEXT = 0x828B;
-constexpr std::uint16_t FOUR_MISSILES_ONLY_TEXT = 0x829F;
-constexpr std::uint16_t FUEL_FULL_TEXT = 0x82B3;
-constexpr std::uint16_t FUEL_PURCHASED_TEXT = 0x82C7;
-constexpr std::uint16_t ALREADY_FITTED_TEXT = 0x82DB;
-constexpr std::uint16_t ITEM_PURCHASED_TEXT = 0x82EF;
-constexpr std::uint16_t NOT_ENOUGH_CREDITS_TEXT = 0x8303;
-constexpr std::uint16_t NO_ITEM_TO_SELL_TEXT = 0x8317;
-constexpr std::uint16_t ITEM_SOLD_TEXT = 0x832B;
-constexpr std::uint16_t NO_MISSILE_TO_SELL_TEXT = 0x833F;
-constexpr std::uint16_t MISSILE_SOLD_TEXT = 0x8353;
-constexpr std::uint16_t FUEL_SALE_ILLEGAL_TEXT = 0x8367;
-constexpr std::uint16_t TOO_MUCH_CARGO_TEXT = 0x837B;
-constexpr std::uint16_t SCOOP_NEEDED_TEXT = 0x838F;
-constexpr std::uint16_t SELL_MINING_LASER_TEXT = 0x83A3;
-constexpr std::uint16_t NO_FUEL_AVAILABLE_TEXT = 0x83B7;
-constexpr std::uint16_t FOUR_LASERS_TEXT = 0x8DDE;
-constexpr std::uint16_t MOUNT_OCCUPIED_TEXT = 0x8DF2;
-constexpr std::uint16_t NO_LASER_ON_MOUNT_TEXT = 0x8E06;
-constexpr std::uint16_t WRONG_LASER_TYPE_TEXT = 0x8E1A;
 
-constexpr std::uint16_t SCREEN_PRICES = 0x823B;   // four bytes a row: the price, then the resale price, in tenths
+constexpr std::size_t PRICE_SLOT_BYTES = 4;       // screenPrices' four bytes a row: the price, then the resale price, in tenths
 constexpr std::uint8_t RESALE_DIGITS_BLANKED = 3; // and those the equipment screen blanks in a resale price
 
 // The equipment menu's rows, from 1. Row r's fitted count is the byte at FITTED_BEFORE_FUEL + r: fuel's is row 1.
@@ -99,7 +75,7 @@ constexpr std::uint8_t FIRST_FITTED_ROW = 3;
 constexpr std::uint8_t CARGO_BAY_ROW = 3;
 constexpr std::uint8_t FUEL_SCOOPS_ROW = 7;
 constexpr std::uint8_t MINING_LASER_ROW = 0x0D;
-constexpr std::uint16_t FITTED_BEFORE_FUEL = 0x75E1;
+constexpr std::size_t FITTED_ROWS = 0x0E; // fitted counts from fuel's, row 1's, up
 constexpr std::uint8_t FUEL_UNITS_PER_TENTH = 0x24;
 constexpr std::array<std::uint8_t, 4> LASER_ROWS = {0x05, 0x06, 0x0D, 0x0E}; // pulse, beam, mining, military
 
@@ -149,9 +125,22 @@ constexpr std::uint16_t SCOOPED_NAME_BYTES = 0x0D;
 constexpr std::uint8_t PRECIOUS_MOST = 0xFA;
 constexpr std::uint8_t MINERALS_FROM = 0x28;
 
-[[nodiscard]] std::uint16_t PriceSlot(std::uint8_t _row) noexcept
+// screenPrices: row r's price at 4r, and its resale price after it.
+[[nodiscard]] std::span<Counted<std::uint8_t>> ScreenPrices(GameState& _state)
 {
-  return static_cast<std::uint16_t>(SCREEN_PRICES + _row * 4);
+  return _state.BytesFrom(_state.Data().screenPrices, sizeof(GameData::ScreenPrices));
+}
+
+// The index in screenPrices of row _row's price.
+[[nodiscard]] std::size_t PriceSlot(std::uint8_t _row) noexcept
+{
+  return std::size_t{_row} * PRICE_SLOT_BYTES;
+}
+
+// Row _row's fitted count in the commander's block, from 1, fuel's.
+[[nodiscard]] Counted<std::uint8_t>& Fitted(GameState& _state, std::uint8_t _row)
+{
+  return _state.BytesFrom(_state.Data().commanderBlock.fuel, FITTED_ROWS)[std::size_t{_row} - 1];
 }
 
 // IMUL r/m8: AL times _factor, both signed, into AX.
@@ -166,10 +155,10 @@ constexpr std::uint8_t MINERALS_FROM = 0x28;
   return (_value & 0x8000) != 0 ? Negate(_value) : _value;
 }
 
-// INC BYTE PTR [_offset].
-void IncrementByte(GameState& _state, std::uint16_t _offset)
+// INC BYTE PTR [_byte].
+void IncrementByte(Counted<std::uint8_t>& _byte)
 {
-  _state.SetByte(_offset, static_cast<std::uint8_t>(_state.Byte(_offset) + 1));
+  _byte = static_cast<std::uint8_t>(_byte + 1);
 }
 
 // ADD [_field],_amount, held at 250 (FAh) from 251 up: gems, gold and platinum.
@@ -195,15 +184,15 @@ void AddPrecious(Counted<std::uint8_t>& _field, std::uint8_t _amount)
          Magnitude(static_cast<std::uint16_t>(_view.z)) < SCOOP_HALF_WIDTH;
 }
 
-// PrintEquipmentSellColumn (0x6949): the text at DS:_text in the resale column of menuSelectedRow's row, in the resale
-// price's attribute, and the menu's attribute put back.
-PrintedText PrintEquipmentSellColumn(GameState& _state, std::uint16_t _text)
+// PrintEquipmentSellColumn (0x6949): _text in the resale column of menuSelectedRow's row, in the resale price's attribute, and
+// the menu's attribute put back. Returns the cell after its last character.
+std::uint16_t PrintEquipmentSellColumn(GameState& _state, std::string_view _text)
 {
   _state.Data().textAttribute = SELL_PRICE_ATTRIBUTE;
   // (row-1)*80 bytes, as (row-1)*256/4 and that /4 again.
   const auto quarter = static_cast<std::uint16_t>((static_cast<std::uint8_t>(_state.Data().menuSelectedRow - 1) << 8) >> 2);
   const auto cell = static_cast<std::uint16_t>(MenuFirstRowCell(_state) + quarter + (quarter >> 2) + SELL_PRICE_COLUMN);
-  const PrintedText printed = PrintTextModeString(_state, _text, cell);
+  const std::uint16_t printed = PrintTextModeString(_state, _text, cell);
   _state.Data().textAttribute = MENU_ATTRIBUTE;
   return printed;
 }
@@ -229,37 +218,37 @@ PrintedText PrintEquipmentSellColumn(GameState& _state, std::uint16_t _text)
   return saved;
 }
 
-// 6214: the message at DS:_text on the message line, and textAttribute put back to _saved, which the original pops into AL
-// before its jump back to the steering.
-void ShowEquipMessage(GameState& _state, std::uint16_t _text, std::uint8_t _saved)
+// 6214: the message _text on the message line, and textAttribute put back to _saved, which the original pops into AL before its
+// jump back to the steering.
+void ShowEquipMessage(GameState& _state, std::string_view _text, std::uint8_t _saved)
 {
   PrintTextModeString(_state, _text, MESSAGE_OFFSET);
   _state.Data().textAttribute = _saved;
 }
 
 // The jump back to 6214 that ends each of B's and S's paths, with the message it shows.
-[[nodiscard]] std::uint16_t ToEquipMessage(Hardware& _hardware, std::uint16_t _text)
+[[nodiscard]] std::string_view ToEquipMessage(Hardware& _hardware, std::string_view _text)
 {
   _hardware.LoopTurn(EQUIP_MESSAGE, {});
   return _text;
 }
 
 // 6241, reached by a jump back: NOT ENOUGH CREDITS!, and the jump back to 6214.
-[[nodiscard]] std::uint16_t ReportNotEnoughCredits(Hardware& _hardware)
+[[nodiscard]] std::string_view ReportNotEnoughCredits(Hardware& _hardware)
 {
   _hardware.LoopTurn(EQUIP_NOT_ENOUGH_CREDITS, {});
   return ToEquipMessage(_hardware, NOT_ENOUGH_CREDITS_TEXT);
 }
 
-// 6228: an item or a laser paid for and counted at DS:_fitted, which the original holds in BX and pushes round the payment,
-// its resale price shown, and a laser's mount chosen. Returns the message.
-[[nodiscard]] std::uint16_t BuyFittedItem(GameState& _state, Hardware& _hardware, std::uint16_t _fitted)
+// 6228: an item or a laser paid for and counted in _fitted, whose address the original holds in BX and pushes round the
+// payment, its resale price shown, and a laser's mount chosen. Returns the message.
+[[nodiscard]] std::string_view BuyFittedItem(GameState& _state, Hardware& _hardware, Counted<std::uint8_t>& _fitted)
 {
-  if (!PayForEquipmentItem(_state, _fitted))
+  if (!PayForEquipmentItem(_state, _state.OffsetOf(_fitted)))
   {
     return ToEquipMessage(_hardware, NOT_ENOUGH_CREDITS_TEXT);
   }
-  IncrementByte(_state, _fitted);
+  IncrementByte(_fitted);
   ShowEquipmentSellPrice(_state);
   if (SelectLaserType(_state))
   {
@@ -270,7 +259,7 @@ void ShowEquipMessage(GameState& _state, std::uint16_t _text, std::uint8_t _save
 
 // 6246: B on fuel (a full tank, never in mission 1) or a missile (up to four), _row 1 or 2. The original holds the row less 1
 // in BX, which PayForEquipmentItem's divide trap saves with the row in BL. Returns the message.
-[[nodiscard]] std::uint16_t BuyFuelOrMissile(GameState& _state, Hardware& _hardware, std::uint8_t _row)
+[[nodiscard]] std::string_view BuyFuelOrMissile(GameState& _state, Hardware& _hardware, std::uint8_t _row)
 {
   const auto bx = static_cast<std::uint16_t>(static_cast<std::uint8_t>(_row - 1));
   if (bx != 0)
@@ -305,15 +294,15 @@ void ShowEquipMessage(GameState& _state, std::uint16_t _text, std::uint8_t _save
 
 // 61DA: B on the equipment menu, once OpenEquipMessage has saved the attribute. Returns the message for ShowEquipMessage, after
 // the jumps back the original takes on the way.
-[[nodiscard]] std::uint16_t BuyEquipment(GameState& _state, Hardware& _hardware)
+[[nodiscard]] std::string_view BuyEquipment(GameState& _state, Hardware& _hardware)
 {
   const std::uint8_t row = _state.Data().menuSelectedRow;
   if (row < FIRST_FITTED_ROW)
   {
     return BuyFuelOrMissile(_state, _hardware, row);
   }
-  const auto fitted = static_cast<std::uint16_t>(row + FITTED_BEFORE_FUEL);
-  if (_state.Byte(fitted) != 0)
+  Counted<std::uint8_t>& fitted = Fitted(_state, row);
+  if (fitted != 0)
   {
     if (!SelectLaserType(_state))
     {
@@ -341,7 +330,7 @@ void ShowEquipMessage(GameState& _state, std::uint16_t _text, std::uint8_t _save
 }
 
 // 62FD: S on fuel (never) or a missile, for the missile's resale price, _row 1 or 2. Returns the message.
-[[nodiscard]] std::uint16_t SellFuelOrMissile(GameState& _state, Hardware& _hardware, std::uint8_t _row)
+[[nodiscard]] std::string_view SellFuelOrMissile(GameState& _state, Hardware& _hardware, std::uint8_t _row)
 {
   if (_row == FUEL_ROW)
   {
@@ -364,7 +353,7 @@ void ShowEquipMessage(GameState& _state, std::uint16_t _text, std::uint8_t _save
 
 // 6295: S on the equipment menu, once OpenEquipMessage has saved the attribute, for the resale price. Returns the message for
 // ShowEquipMessage, after the jumps back the original takes on the way.
-[[nodiscard]] std::uint16_t SellEquipment(GameState& _state, Hardware& _hardware)
+[[nodiscard]] std::string_view SellEquipment(GameState& _state, Hardware& _hardware)
 {
   const std::uint8_t row = _state.Data().menuSelectedRow;
   if (row < FIRST_FITTED_ROW)
@@ -375,8 +364,8 @@ void ShowEquipMessage(GameState& _state, std::uint16_t _text, std::uint8_t _save
   {
     return ToEquipMessage(_hardware, TOO_MUCH_CARGO_TEXT);
   }
-  const auto fitted = static_cast<std::uint16_t>(row + FITTED_BEFORE_FUEL);
-  if (_state.Byte(fitted) == 0)
+  Counted<std::uint8_t>& fitted = Fitted(_state, row);
+  if (fitted == 0)
   {
     return ToEquipMessage(_hardware, NO_ITEM_TO_SELL_TEXT);
   }
@@ -384,13 +373,13 @@ void ShowEquipMessage(GameState& _state, std::uint16_t _text, std::uint8_t _save
   {
     return ToEquipMessage(_hardware, SELL_MINING_LASER_TEXT);
   }
-  const auto left = static_cast<std::uint8_t>(_state.Byte(fitted) - 1);
-  _state.SetByte(fitted, left);
+  const auto left = static_cast<std::uint8_t>(fitted - 1);
+  fitted = left;
   if (left == 0)
   {
     ClearEquipmentSellPrice(_state);
   }
-  AddCredits(_state, _state.Word(Offset(PriceSlot(_state.Data().menuSelectedRow), 2)));
+  AddCredits(_state, WordIn(ScreenPrices(_state), PriceSlot(_state.Data().menuSelectedRow) + 2));
   if (SelectLaserType(_state))
   {
     ChooseMountToRemoveLaser(_state, _hardware);
@@ -434,10 +423,10 @@ std::uint16_t MoveMountBoxRight(GameState& _state, std::uint16_t _box)
   return box;
 }
 
-// 6438 and 6505: the mount message at DS:_text on the message line, in the menu's attribute. _jumpedTo, when not 0, is
+// 6438 and 6505: the mount message _text on the message line, in the menu's attribute. _jumpedTo, when not 0, is
 // where the original jumps back to on the way: 6509, from 653D, the tail the two messages share (ADR-015). The PUSH SI /
 // POP SI round it keep the box, which the routine never touches.
-PrintedText PrintMountMessage(GameState& _state, Hardware& _hardware, std::uint16_t _text, std::uint16_t _jumpedTo)
+std::uint16_t PrintMountMessage(GameState& _state, Hardware& _hardware, std::string_view _text, std::uint16_t _jumpedTo)
 {
   if (_jumpedTo != 0)
   {
@@ -569,9 +558,9 @@ void LaunchEscapePod(GameState& _state)
   _state.Data().hyperspaceCountdown = 0;
   _state.Data().escapePodFrames = ESCAPE_POD_FRAMES;
   const SlotSearch free = FindFreeShipSlot(_state);
-  const std::uint16_t slot = free.found ? free.slot : ReclaimShipSlot(_state).slot;
-  ClearObjectSlot(_state, slot);
-  InitAbandonedCobra(_state, _state.ObjectAt(slot));
+  SpaceObject& pod = _state.Slot(free.found ? free.slot : ReclaimShipSlot(_state).slot);
+  ClearObjectSlot(_state, pod);
+  InitAbandonedCobra(_state, pod);
   _state.Data().playerPitchAngle = static_cast<std::uint16_t>(_state.Data().playerPitchAngle + HALF_TURN);
   _state.Data().viewAngle = HALF_TURN;
   _state.Data().viewLocked = 1;
@@ -584,9 +573,11 @@ void LaunchEscapePod(GameState& _state)
     MoveObjectsByVelocity(_state);
   }
   // MOV [DI],CH, which is 0 throughout: the 17 amounts held emptied.
+  const std::span<Counted<std::uint8_t>> hold =
+    _state.BytesFrom(_state.Data().commanderBlock.cargoHold, sizeof(GameData::CommanderBlock::CargoHold));
   for (std::uint16_t kind = 0; kind < CARGO_KINDS; ++kind)
   {
-    _state.SetByte(DS.cargoHold.At(kind), 0);
+    hold[std::size_t{kind} * 2] = 0;
   }
 }
 
@@ -629,13 +620,17 @@ Scoop TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
       {
         product = PRODUCT_FURS;
       }
-      IncrementByte(_state, DS.cargoHold.At(product));
+      IncrementByte(
+        _state.BytesFrom(_state.Data().commanderBlock.cargoHold, sizeof(GameData::CommanderBlock::CargoHold))[std::size_t{product} * 2]);
       _state.Data().commanderBlock.cargoHold.cargoUsedTonnes =
         static_cast<std::uint8_t>(_state.Data().commanderBlock.cargoHold.cargoUsedTonnes + 1);
-      const auto name = static_cast<std::uint16_t>(product * PRODUCT_NAME_BYTES + DS.productNames.offset);
-      for (std::uint16_t letter = 0; letter < SCOOPED_NAME_BYTES; ++letter)
+      // The product's name, its first 13 bytes, over the message's.
+      const std::span<const Counted<std::uint8_t>> name = std::span<const Counted<std::uint8_t>>(_state.Data().productNames)
+                                                            .subspan(std::size_t{product} * PRODUCT_NAME_BYTES, SCOOPED_NAME_BYTES);
+      const std::span<Counted<std::uint8_t>> scooped = _state.BytesFrom(_state.Data().scoopedCargoText, SCOOPED_NAME_BYTES);
+      for (std::size_t letter = 0; letter < SCOOPED_NAME_BYTES; ++letter)
       {
-        _state.SetByte(Offset(DS.scoopedCargoText.offset, letter), _state.Byte(Offset(name, letter)));
+        scooped[letter] = std::uint8_t{name[letter]};
       }
       message = Message::ScoopedCargo;
     }
@@ -650,7 +645,8 @@ Scoop TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
     AddPrecious(_state.Data().commanderBlock.cargoHold.cargoPlatinumKg, static_cast<std::uint8_t>((High(NextRandom(_state)) & 3) + 1));
     if (_state.Data().freeCargoTonnes != 0)
     {
-      IncrementByte(_state, Low(NextRandom(_state)) >= MINERALS_FROM ? DS.cargoMineralsTonnes.offset : DS.cargoAlloysTonnes.offset);
+      GameData::CommanderBlock::CargoHold& hold = _state.Data().commanderBlock.cargoHold;
+      IncrementByte(Low(NextRandom(_state)) >= MINERALS_FROM ? hold.cargoMineralsTonnes : hold.cargoAlloysTonnes);
       _state.Data().commanderBlock.cargoHold.cargoUsedTonnes =
         static_cast<std::uint8_t>(_state.Data().commanderBlock.cargoHold.cargoUsedTonnes + 1);
     }
@@ -682,56 +678,60 @@ Scoop TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
 
 ScreenKey ShowEquipShipScreen(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, DS.equipShipFrame.offset, _backward), TITLE_OFFSET);
-  PrintCountedTextLines(_state, DS.equipHelpText.offset, HELP_TEXT_OFFSET);
+  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, _state.Data().equipShipFrame, _backward), TITLE_OFFSET);
+  PrintCountedTextLines(_state, _state.Data().equipHelpText[0], HELP_TEXT_OFFSET);
 
   // equipmentList: a count, then for each item its tech level, name, government and economy factors and base price. The list is
-  // sorted by tech level, so the first item beyond currentTechLevel+1 ends it. Each turn carries the count, the item and the row's
-  // place.
-  std::uint16_t item = DS.equipmentList.offset;
-  std::uint16_t left = _state.Byte(item);
-  item = Offset(item, 1);
+  // sorted by tech level, so the first item beyond currentTechLevel+1 ends it. Each turn carries the count, the item's place and
+  // the row's place.
+  const std::span<const Counted<std::uint8_t>> list(_state.Data().equipmentList);
+  std::uint16_t left = list[0];
+  std::size_t item = 1;
   const auto techLimit = static_cast<std::uint8_t>(_state.Data().commanderBlock.currentTechLevel + 2);
   _state.Data().menuRowCount = 0;
   std::uint16_t cell = FIRST_ITEM_OFFSET;
-  while (_state.Byte(item) < techLimit)
+  const std::span<Counted<std::uint8_t>> prices = ScreenPrices(_state);
+  const std::span<Counted<std::uint8_t>> priceText = _state.BytesFrom(_state.Data().priceText, sizeof(GameData::PriceText));
+  while (list[item] < techLimit)
   {
     const auto row = static_cast<std::uint8_t>(_state.Data().menuRowCount + 1);
     _state.Data().menuRowCount = row;
     // The price: the government's and the economy's factors, each by IMUL, and the base price.
-    std::uint16_t factor = Offset(PrintTextModeString(_state, Offset(item, 1), cell).end, 1);
-    const std::uint16_t government = SignedProduct(_state.Byte(factor), _state.Data().commanderBlock.currentGovernment);
-    factor = Offset(factor, 1);
-    const std::uint16_t economy = SignedProduct(_state.Byte(factor), _state.Data().commanderBlock.currentEconomy);
-    factor = Offset(factor, 1);
-    const auto price = static_cast<std::uint16_t>(economy + government + _state.Word(factor));
-    _state.SetWord(PriceSlot(row), price);
-    _state.SetWord(Offset(PriceSlot(row), 2), 0);
+    const std::string_view name = _state.TextAt(list[item + 1]);
+    PrintTextModeString(_state, name, cell);
+    std::size_t factor = item + 1 + name.size() + 1;
+    const std::uint16_t government = SignedProduct(list[factor], _state.Data().commanderBlock.currentGovernment);
+    ++factor;
+    const std::uint16_t economy = SignedProduct(list[factor], _state.Data().commanderBlock.currentEconomy);
+    ++factor;
+    const auto price = static_cast<std::uint16_t>(economy + government + WordIn(list, factor));
+    SetWordIn(prices, PriceSlot(row), price);
+    SetWordIn(prices, PriceSlot(row) + 2, 0);
     // A resale price only for an item fitted, and never for fuel.
-    const bool resold = row != FUEL_ROW && _state.Byte(static_cast<std::uint16_t>(row + FITTED_BEFORE_FUEL)) != 0;
+    const bool resold = row != FUEL_ROW && Fitted(_state, row) != 0;
     _state.Data().resalePriceInput = resold ? price : std::uint16_t{0};
     FormatTenths(_state, price);
-    PrintTextModeString(_state, DS.priceText.offset, Offset(cell, PRICE_COLUMN));
+    PrintTextModeString(_state, TextIn(priceText), Offset(cell, PRICE_COLUMN));
     const std::uint16_t resale = ComputeResalePrice(_state);
-    std::uint16_t resaleText = NO_RESALE_TEXT;
+    std::string_view resaleText = NO_RESALE_TEXT;
     if (resale != 0)
     {
-      _state.SetWord(Offset(PriceSlot(_state.Data().menuRowCount), 2), resale);
-      FormatDecimal5(_state, resale, DS.priceText.offset);
-      BlankLeadingZeros(_state, DS.priceText.offset, RESALE_DIGITS_BLANKED);
+      SetWordIn(prices, PriceSlot(_state.Data().menuRowCount) + 2, resale);
+      FormatDecimal5(_state, resale, priceText);
+      BlankLeadingZeros(priceText, RESALE_DIGITS_BLANKED);
       // Tenths: the last digit moved right one for the point.
       _state.Data().priceText.data8041 = std::uint8_t{_state.Data().priceText.data8040};
       _state.Data().priceText.data8040 = '.';
-      resaleText = DS.priceText.offset;
+      resaleText = TextIn(priceText);
     }
     PrintTextModeString(_state, resaleText, Offset(cell, RESALE_COLUMN));
     cell = Offset(cell, ROW_BYTES);
-    item = Offset(factor, 2);
+    item = factor + 2;
     if (--left == 0)
     {
       break;
     }
-    _hardware.LoopTurn(EQUIPMENT_LIST_ROW, {left, item, cell});
+    _hardware.LoopTurn(EQUIPMENT_LIST_ROW, {left, _state.OffsetOf(list[item]), cell});
   }
   return RunEquipShipMenu(_state, _hardware, EQUIP_MENU_FIRST_ROW);
 }
@@ -803,24 +803,17 @@ ScreenKey RunEquipShipMenu(GameState& _state, Hardware& _hardware, std::uint16_t
   }
 }
 
-PrintedText DrawLaserMountMenu(GameState& _state)
+std::uint16_t DrawLaserMountMenu(GameState& _state)
 {
   _state.Data().textAttribute = HELP_ATTRIBUTE;
-  PrintCountedTextLines(_state, MOUNT_HEADER_TEXT, MOUNT_HEADER_OFFSET);
+  PrintCountedTextLines(_state, MOUNT_HEADER_LINES, MOUNT_HEADER_OFFSET);
   // Each mount's laser, or Free, one after the other: its bit of laserMountsFitted, its two bits of laserMountTypes.
   const std::uint8_t types = _state.Data().commanderBlock.laserMountTypes;
   const std::uint8_t fitted = _state.Data().commanderBlock.laserMountsFitted;
-  PrintedText printed{FREE_MOUNT_TEXT, MOUNT_NAMES_OFFSET};
+  std::uint16_t printed = MOUNT_NAMES_OFFSET;
   for (std::uint16_t mount = 0; mount < MOUNT_COUNT; ++mount)
   {
-    if (((fitted >> mount) & 1) != 0)
-    {
-      printed.nextCell = PrintTextModeString(_state, MountLaserName(types, mount), printed.nextCell);
-    }
-    else
-    {
-      printed = PrintTextModeString(_state, FREE_MOUNT_TEXT, printed.nextCell);
-    }
+    printed = PrintTextModeString(_state, ((fitted >> mount) & 1) != 0 ? MountLaserName(types, mount) : FREE_MOUNT_TEXT, printed);
   }
   _state.Data().textAttribute = MOUNT_HIGHLIGHT_ATTRIBUTE;
   PaintLaserMountBox(_state, FIRST_MOUNT_BOX);
@@ -844,10 +837,10 @@ void ChooseMountToRemoveLaser(GameState& _state, Hardware& _hardware)
   RunMountChooser(_state, _hardware, REMOVE_CHOOSER, MenuLoop{FIRST_MOUNT_BOX, 0});
 }
 
-PrintedLines RedrawEquipHelpText(GameState& _state)
+std::uint16_t RedrawEquipHelpText(GameState& _state)
 {
   _state.Data().textAttribute = HELP_ATTRIBUTE;
-  const PrintedLines printed = PrintCountedTextLines(_state, DS.equipHelpText.offset, HELP_TEXT_OFFSET);
+  const std::uint16_t printed = PrintCountedTextLines(_state, _state.Data().equipHelpText[0], HELP_TEXT_OFFSET);
   _state.Data().textAttribute = MENU_ATTRIBUTE;
   return printed;
 }
@@ -886,26 +879,26 @@ bool PayForEquipmentItem(GameState& _state, std::uint16_t _bx)
   }
   else
   {
-    tenths = _state.Word(PriceSlot(row));
+    tenths = WordIn(ScreenPrices(_state), PriceSlot(row));
   }
   return SubtractCredits(_state, tenths);
 }
 
-PrintedText ClearEquipmentSellPrice(GameState& _state)
+std::uint16_t ClearEquipmentSellPrice(GameState& _state)
 {
   return PrintEquipmentSellColumn(_state, NO_RESALE_TEXT);
 }
 
-PrintedText ShowEquipmentSellPrice(GameState& _state)
+std::uint16_t ShowEquipmentSellPrice(GameState& _state)
 {
   // The price's slot in screenPrices, and the resale price after it. The original keeps the slot in BX on the stack
   // round ComputeResalePrice.
-  const std::uint16_t slot = PriceSlot(_state.Data().menuSelectedRow);
-  _state.Data().resalePriceInput = _state.Word(slot);
+  const std::size_t slot = PriceSlot(_state.Data().menuSelectedRow);
+  _state.Data().resalePriceInput = WordIn(ScreenPrices(_state), slot);
   const std::uint16_t resale = ComputeResalePrice(_state);
-  _state.SetWord(Offset(slot, 2), resale);
+  SetWordIn(ScreenPrices(_state), slot + 2, resale);
   FormatTenths(_state, resale);
-  return PrintEquipmentSellColumn(_state, DS.priceText.offset);
+  return PrintEquipmentSellColumn(_state, _state.TextAt(_state.Data().priceText));
 }
 
 std::uint16_t MenuFirstRowCell(const GameState& _state) noexcept
@@ -916,7 +909,7 @@ std::uint16_t MenuFirstRowCell(const GameState& _state) noexcept
 MenuCursor StartMenu(GameState& _state)
 {
   SwapTextAttributeNibbles(_state);
-  const PrintedText credits = PrintCreditsOnMessageLine(_state);
+  const std::uint16_t credits = PrintCreditsOnMessageLine(_state);
   SwapTextAttributeNibbles(_state);
   const std::uint16_t row = MenuFirstRowCell(_state);
   _state.Data().menuSelectedRow = 1;
@@ -926,7 +919,7 @@ MenuCursor StartMenu(GameState& _state)
 
 MenuCursor MoveMenuCursorUp(GameState& _state, std::uint16_t _row)
 {
-  const PrintedText credits = PrintCreditsOnMessageLine(_state);
+  const std::uint16_t credits = PrintCreditsOnMessageLine(_state);
   ToggleMenuRowHighlight(_state, GameState::VIDEO_SEGMENT, _row);
   std::uint16_t row = _row;
   const auto selected = static_cast<std::uint8_t>(_state.Data().menuSelectedRow - 1);
@@ -947,7 +940,7 @@ MenuCursor MoveMenuCursorUp(GameState& _state, std::uint16_t _row)
 
 MenuCursor MoveMenuCursorDown(GameState& _state, std::uint16_t _row)
 {
-  const PrintedText credits = PrintCreditsOnMessageLine(_state);
+  const std::uint16_t credits = PrintCreditsOnMessageLine(_state);
   ToggleMenuRowHighlight(_state, GameState::VIDEO_SEGMENT, _row);
   std::uint16_t row = _row;
   const auto selected = static_cast<std::uint8_t>(_state.Data().menuSelectedRow + 1);

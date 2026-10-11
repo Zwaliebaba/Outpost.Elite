@@ -88,6 +88,33 @@ constexpr std::array<std::string_view, 8> SPECIES_TYPE_NAMES = {
   std::string_view{"Insects)"},   // DS:7E8B
 };
 
+/// DS:7C1C
+constexpr std::string_view ECONOMY_LABEL_TEXT = "Economy:      ";
+
+/// DS:7CCD
+constexpr std::string_view GOVERNMENT_LABEL_TEXT = "Government:   ";
+
+/// DS:7D39
+constexpr std::string_view TECH_LEVEL_LABEL_TEXT = "Tech. Level:  ";
+
+/// DS:7D4B
+constexpr std::string_view DISTANCE_LABEL_TEXT = "Distance:     ";
+
+/// DS:7D61
+constexpr std::string_view LIGHT_YEARS_TEXT = " Light Years";
+
+/// DS:7D6E
+constexpr std::string_view POPULATION_LABEL_TEXT = "Population:   ";
+
+/// DS:7D8B
+constexpr std::string_view SPECIES_OPEN_TEXT = "(";
+
+/// DS:7D8D
+constexpr std::string_view HUMAN_COLONIALS_TEXT = "Human Colonials)";
+
+/// DS:7E94
+constexpr std::string_view PRODUCTIVITY_LABEL_TEXT = "Productivity: ";
+
 /// Every phrase descriptionPhraseLists' lists point at, in the order of their addresses: its text up to its NUL, which
 /// may hold the control codes (1-31) and phrase codes (80h on) ExpandDescriptionText expands.
 inline constexpr std::array<std::string_view, 195> DESCRIPTION_PHRASES = {

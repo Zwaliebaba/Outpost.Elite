@@ -93,7 +93,7 @@ std::uint16_t MoveBytes(GameState& _state, std::uint16_t _sourceSegment, std::ui
 void ExitToDos(GameState& _state, Hardware& _hardware)
 {
   _hardware.SetVideoMode(VIDEO_MODE_TEXT_80);
-  _hardware.PrintDosString(_state.DataSegment(), DS.exitMessage.offset);
+  _hardware.PrintDosString(_state.DataSegment(), _state.OffsetOf(_state.Data().exitMessage));
   // At the jump back the original holds in AX the key int 16h took out, and the next turn reads no register before it writes
   // it but DX, the message, which does not change. Every turn takes a key, a change paced time sees, so no turn idles.
   while (_hardware.PeekBiosKey().has_value())
@@ -140,7 +140,7 @@ void CheckCheatArgument(GameState& _state, const Hardware& _hardware)
   }
   for (std::uint16_t at = 0; at < CHEAT_ARGUMENT_BYTES; ++at)
   {
-    const auto expected = static_cast<std::uint8_t>(_state.Byte(Offset(DS.cheatArgumentKey.offset, at)) ^ CHEAT_KEY);
+    const auto expected = static_cast<std::uint8_t>(_state.Data().cheatArgumentKey[at] ^ CHEAT_KEY);
     if (static_cast<std::uint8_t>(tail[at]) != expected)
     {
       return;
@@ -213,7 +213,8 @@ void StartNewGame(GameState& _state, bool _backward)
 {
   // REP MOVSB from DS to ES = DS.
   const std::uint16_t data = _state.DataSegment();
-  MoveBytes(_state, data, DS.startupCommander.offset, data, DS.commanderBlock.offset, _state.Data().commanderFileBytes, _backward);
+  MoveBytes(_state, data, _state.OffsetOf(_state.Data().startupCommander), data, _state.OffsetOf(_state.Data().commanderBlock),
+            _state.Data().commanderFileBytes, _backward);
   _state.Data().commanderBlock.witchspaceCountdown = 0;
   _state.Data().playerEnergy = NEW_GAME_ENERGY;
   _state.Data().foreShield = FULL_SHIELD;
@@ -249,7 +250,7 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _psp, std::uint
   if (_hardware.ReadDosVersion(Low(_psp)).major == 0)
   {
     // DOS 1 reports no major version, and is not enough.
-    _hardware.PrintDosString(_state.DataSegment(), DS.dosVersionMessage.offset);
+    _hardware.PrintDosString(_state.DataSegment(), _state.OffsetOf(_state.Data().dosVersionMessage));
     ExitToDos(_state, _hardware);
     return;
   }
@@ -259,8 +260,7 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _psp, std::uint
   std::uint16_t bytesLeft = AMSTRAD_SIGNATURE_BYTES;
   for (std::uint16_t at = 0; bytesLeft != 0;)
   {
-    const bool same =
-      _state.Byte(Offset(DS.amstradSignature.offset, at)) == _hardware.RomByte(AMSTRAD_ROM_SEGMENT, Offset(AMSTRAD_ROM_SIGNATURE, at));
+    const bool same = _state.Data().amstradSignature[at] == _hardware.RomByte(AMSTRAD_ROM_SEGMENT, Offset(AMSTRAD_ROM_SIGNATURE, at));
     ++at;
     --bytesLeft;
     if (!same)
@@ -360,18 +360,19 @@ void ShowCredits(GameState& _state, Hardware& _hardware, bool _backward)
   ClearDrawBuffer(_state, _backward);
   // Each line from SI, one past the last line's NUL, at DI, a row of characters below the last line's start. The original pushes
   // and pops the count and the place round the print; its LOOP's turns carry the count, the text and the place.
-  std::uint16_t text = DS.creditsScreenText.offset;
+  std::string_view text = _state.TextAt(_state.Data().creditsScreenText);
   std::uint16_t place = CREDITS_FIRST_LINE;
   for (std::uint16_t linesLeft = CREDITS_LINES;;)
   {
     _state.Data().textPaperPattern = 0;
-    text = Offset(DrawViewString(_state, text, WHITE_MASK, place).end, 1);
+    (void)DrawViewString(_state, text, WHITE_MASK, place);
+    text = _state.TextAfter(text);
     place = Offset(place, CREDITS_LINE_STEP);
     if (--linesLeft == 0)
     {
       break;
     }
-    _hardware.LoopTurn(CREDITS_LINE, {linesLeft, text, place});
+    _hardware.LoopTurn(CREDITS_LINE, {linesLeft, _state.OffsetOf(*text.data()), place});
   }
   FinishSpaceViewFrame(_state, _hardware);
   // WaitForTimerTick keeps every register; the LOOP's turns carry the ticks left.

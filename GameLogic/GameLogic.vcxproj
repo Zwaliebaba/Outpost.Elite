@@ -106,6 +106,7 @@
     <ClInclude Include="IntervalTimer.h" />
     <ClInclude Include="Keyboard.h" />
     <ClInclude Include="Market.h" />
+    <ClInclude Include="MarketTables.h" />
     <ClInclude Include="Maths.h" />
     <ClInclude Include="Message.h" />
     <ClInclude Include="Mouse.h" />

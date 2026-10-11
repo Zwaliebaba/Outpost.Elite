@@ -79,7 +79,7 @@ std::uint16_t SpawnAhead(TwinRig& _rig, Spawner _spawner, std::uint8_t _record, 
   }
   const Elite::SlotSearch free = Elite::FindFreeShipSlot(state);
   Assert::IsTrue(free.found, L"a free ship slot");
-  Elite::SpaceObject& ship = state.ObjectAt(free.slot);
+  Elite::SpaceObject& ship = state.Slot(free.slot);
   switch (_spawner)
   {
   case Spawner::Drifter:
@@ -103,7 +103,7 @@ std::uint16_t SpawnAhead(TwinRig& _rig, Spawner _spawner, std::uint8_t _record, 
   ship.zHigh = 0;
   (void)Elite::FacePlayer(state, ship);
   (void)Elite::ComputeVelocity(state, ship);
-  placed = free.slot;
+  placed = Elite::GameState::SlotOffset(free.slot);
   return placed;
 }
 
@@ -120,9 +120,9 @@ std::uint16_t LaunchMissileAtPlayer(TwinRig& _rig, std::uint16_t _launcher)
 {
   std::uint16_t launched = 0;
   Elite::GameState& state = _rig.State();
-  const std::optional<std::uint16_t> slot = Elite::LaunchShipFromObject(state, state.ObjectAt(_launcher), MISSILE_LAUNCH, false);
+  const std::optional<Elite::SlotIndex> slot = Elite::LaunchShipFromObject(state, state.ObjectAt(_launcher), MISSILE_LAUNCH, false);
   Assert::IsTrue(slot.has_value(), L"a free slot for the missile");
-  launched = slot.value_or(0);
+  launched = slot ? Elite::GameState::SlotOffset(*slot) : std::uint16_t{0};
   return launched;
 }
 

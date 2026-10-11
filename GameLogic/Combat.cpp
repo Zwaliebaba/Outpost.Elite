@@ -270,8 +270,8 @@ FragmentsLeft SpawnFragments(GameState& _state, const SpaceObject& _object, std:
   };
   for (std::uint16_t fragments = _count; fragments != 0; --fragments)
   {
-    SpaceObject& debris = _state.ObjectAt(FindDebrisSlot(_state));
-    CopyObject(_state, _state.OffsetOf(_object), _state.OffsetOf(debris), _backward);
+    SpaceObject& debris = _state.Slot(FindDebrisSlot(_state));
+    CopyObject(_state, _object, debris, _backward);
     left.es = _state.DataSegment();
     debris.aiState = 0;
     const std::uint16_t spin = NextRandom(_state);
@@ -356,24 +356,26 @@ Explosion DropCargo(GameState& _state, const SpaceObject& _object, bool _backwar
       return left;
     }
   }
-  // LOOP from CX = the count, PUSH CX and POP CX round each barrel.
-  std::uint16_t source = _state.OffsetOf(_object);
+  // LOOP from CX = the count, PUSH CX and POP CX round each barrel. What the original holds in DI and SI are slots: the object,
+  // the slot a search found, or the one past the last it looked at.
+  SlotIndex source = _state.IndexOf(_object);
   for (; barrels != 0; --barrels)
   {
     const SlotSearch free = FindFreeShipSlot(_state);
     // XCHG DI,SI: the slot found, or past the slots, in DI, and what DI held in SI.
-    const std::uint16_t from = source;
-    left.slot = free.slot;
-    left.si = from;
+    const SlotIndex from = source;
+    left.slot = GameState::SlotOffset(free.slot);
+    left.si = GameState::SlotOffset(from);
     if (!free.found)
     {
-      source = left.slot;
+      source = free.slot;
       continue;
     }
-    SpaceObject& barrel = _state.ObjectAt(free.slot);
+    SpaceObject& barrel = _state.Slot(free.slot);
     // MOV AL,[SI+1Eh] / PUSH AX round the copy and the barrel's template: the device's bit (5) becomes the barrel's bit 6.
-    const std::uint8_t flags = _state.Byte(Offset(from, SLOT_FLAGS));
-    CopyObject(_state, from, free.slot, _backward);
+    const SpaceObject& copied = _state.Slot(from);
+    const std::uint8_t flags = copied.flags;
+    CopyObject(_state, copied, barrel, _backward);
     InitCargoBarrel(_state, barrel);
     barrel.flags = FLAG_RESTING;
     barrel.flags = static_cast<std::uint8_t>(barrel.flags | ((flags & FLAG_DEVICE) << 1));
@@ -386,7 +388,7 @@ Explosion DropCargo(GameState& _state, const SpaceObject& _object, bool _backwar
     left.bx = BxAfterMove(moved, static_cast<std::uint16_t>(velocity.words.z));
     left.dx = moved.dx;
     left.es = ErasedBlip(moved) ? GameState::VIDEO_SEGMENT : _state.DataSegment();
-    left.slot = from;
+    left.slot = GameState::SlotOffset(from);
     source = from;
   }
   return left;
@@ -486,19 +488,20 @@ void DrawLaserSights(GameState& _state)
   }
   // MOV AH,AL / XOR AL,AL / SHR AX,1: 128 bytes a laser type.
   std::uint16_t row = SIGHTS_OFFSET;
-  auto sprite = static_cast<std::uint16_t>(DS.laserSights.offset + (*laser << 7));
+  const std::span<const Counted<std::uint8_t>> sprites(_state.Data().laserSights);
+  std::size_t sprite = std::size_t{*laser} << 7;
   for (std::uint16_t rows = SIGHTS_ROWS; rows != 0; --rows)
   {
     // The buffer's words are big-endian pixels: XCHG AH,AL round the AND and the OR.
     for (int half = 0; half < 2; ++half)
     {
       const std::uint16_t pixels = At(row, 2 * half);
-      const std::uint16_t andMask = _state.Word(At(sprite, 2 * half));
-      const std::uint16_t orMask = _state.Word(At(sprite, 2 * half + 4));
+      const std::uint16_t andMask = WordIn(sprites, sprite + 2 * static_cast<std::size_t>(half));
+      const std::uint16_t orMask = WordIn(sprites, sprite + 2 * static_cast<std::size_t>(half) + 4);
       _state.SetWord(pixels, Swap(static_cast<std::uint16_t>((Swap(_state.Word(pixels)) & andMask) | orMask)));
     }
     row = At(row, VIEW_ROW_BYTES);
-    sprite = At(sprite, SIGHTS_ROW_BYTES);
+    sprite += SIGHTS_ROW_BYTES;
   }
 }
 
@@ -710,11 +713,11 @@ CrosshairTarget FindShipInCrosshairs(GameState& _state)
   // MOV CL,objectSlotCount / SUB CL,2 / XOR CH,CH, then LOOP: a count of 0 runs 65,536 times. BP is the nearest z so far.
   CrosshairTarget target{std::nullopt, 0, 0};
   std::uint16_t nearestZ = 0xFFFF;
-  std::uint16_t slot = DS.stationSlot.offset;
+  SlotIndex slot = SlotIndex::Station;
   const auto slots = static_cast<std::uint8_t>(_state.Data().objectSlotCount - 2);
   for (std::uint32_t count = LoopCount(slots); count != 0; --count)
   {
-    const SpaceObject& object = _state.ObjectAt(slot);
+    const SpaceObject& object = _state.Slot(slot);
     const std::uint8_t type = object.type;
     target.bx = WithLow(target.bx, type);
     if ((type & (SLOT_DRAWN | SLOT_ACTIVE)) == (SLOT_DRAWN | SLOT_ACTIVE) && (object.flags & CROSSHAIR_IGNORED) != CROSSHAIR_IGNORED)
@@ -722,7 +725,7 @@ CrosshairTarget FindShipInCrosshairs(GameState& _state)
       // AND BX,3Eh / MOV AX,[BX+shipTargetRadius] / XCHG AH,AL / XOR DX,DX / DIV [DI+14h] / MOV BX,AX / ADD BX,2: the radius *
       // 256 / z, plus 2, against |x| * 256 / z and |y| * 256 / z.
       target.bx = static_cast<std::uint16_t>(type & (TYPE_MASK << 1));
-      const std::uint16_t radius = Swap(_state.Word(At(DS.shipTargetRadius.offset, target.bx)));
+      const std::uint16_t radius = Swap(_state.Data().shipTargetRadius[target.bx / 2]);
       target.bx = Offset(DivideWord(_state, radius, object.viewZ, target.bx).quotient, 2);
       if (ScaledWithinRadius(_state, object, &SpaceObject::viewX, target.bx) &&
           ScaledWithinRadius(_state, object, &SpaceObject::viewY, target.bx) && object.viewZ < nearestZ)
@@ -731,10 +734,10 @@ CrosshairTarget FindShipInCrosshairs(GameState& _state)
         nearestZ = object.viewZ;
       }
     }
-    slot = At(slot, SLOT_BYTES);
+    slot = SlotAfter(slot);
   }
   // INC BP / JE: none found while BP is still FFFFh; else MOV DI,SI, the nearest.
-  target.di = target.slot.value_or(slot);
+  target.di = GameState::SlotOffset(target.slot.value_or(slot));
   return target;
 }
 
@@ -746,7 +749,7 @@ bool ResolveLaserFire(GameState& _state, Hardware& _hardware, bool _backward)
   }
   if (const CrosshairTarget target = FindShipInCrosshairs(_state); target.slot)
   {
-    SpaceObject& hit = _state.ObjectAt(*target.slot);
+    SpaceObject& hit = _state.Slot(*target.slot);
     if (HitTarget(_state, _hardware, hit))
     {
       return DestroyTarget(_state, _hardware, hit, _backward, target.bx);
@@ -925,11 +928,11 @@ Detonation DetonateEnergyBomb(GameState& _state, Hardware& _hardware, bool _back
   Detonation left{std::nullopt, std::nullopt};
   // Every active ship with a blip explodes, its cargo emptied first: MOV CL,objectSlotCount / SUB CL,3 / XOR CH,CH, then LOOP, a
   // count of 0 running 65,536 times; PUSH DI and PUSH CX round each explosion.
-  std::uint16_t slot = DS.firstShipSlot.offset;
+  SlotIndex slot = SlotIndex::FirstShip;
   const auto slots = static_cast<std::uint8_t>(_state.Data().objectSlotCount - FIRST_SHIP_SLOT);
   for (std::uint32_t count = LoopCount(slots); count != 0; --count)
   {
-    SpaceObject& ship = _state.ObjectAt(slot);
+    SpaceObject& ship = _state.Slot(slot);
     if ((ship.type & SLOT_ACTIVE) != 0 && (ship.flags & FLAG_BLIP_DRAWN) != 0)
     {
       ship.cargo = 0;
@@ -944,7 +947,7 @@ Detonation DetonateEnergyBomb(GameState& _state, Hardware& _hardware, bool _back
         left.es = exploded.es;
       }
     }
-    slot = At(slot, SLOT_BYTES);
+    slot = SlotAfter(slot);
   }
   return left;
 }
@@ -964,9 +967,8 @@ void SpawnPlayerWreckage(GameState& _state)
   // Six splinters: LOOP from CX = 6, PUSH CX and POP CX round each.
   for (std::uint16_t splinters = WRECK_SPLINTERS; splinters != 0; --splinters)
   {
-    const std::uint16_t slot = FindDebrisSlot(_state);
-    ClearObjectSlot(_state, slot);
-    SpaceObject& splinter = _state.ObjectAt(slot);
+    SpaceObject& splinter = _state.Slot(FindDebrisSlot(_state));
+    ClearObjectSlot(_state, splinter);
     splinter.aiState = 0;
     const std::uint16_t random = NextRandom(_state);
     splinter.spinRoll = Low(random);
@@ -987,9 +989,8 @@ void SpawnPlayerWreckage(GameState& _state)
   }
   // The cargo's barrel: four drifts ahead, drifting at a quarter of the drift and a little, turned to face along it.
   const SlotSearch free = FindFreeShipSlot(_state);
-  const std::uint16_t slot = free.found ? free.slot : ReclaimShipSlot(_state).slot;
-  ClearObjectSlot(_state, slot);
-  SpaceObject& barrel = _state.ObjectAt(slot);
+  SpaceObject& barrel = _state.Slot(free.found ? free.slot : ReclaimShipSlot(_state).slot);
+  ClearObjectSlot(_state, barrel);
   constexpr std::array<Counted<std::uint16_t> GameData::*, 3> WRECK_DRIFT = {&GameData::wreckDriftX, &GameData::wreckDriftY,
                                                                              &GameData::wreckDriftZ};
   for (std::size_t axis = 0; axis < WRECK_DRIFT.size(); ++axis)
@@ -1022,7 +1023,7 @@ std::optional<std::uint8_t> KillPlayer(GameState& _state)
 
 void InitMissile(GameState& _state, SpaceObject& _slot)
 {
-  InitObjectFromTemplate(_state, _slot, DS.spawnTemplates.At(MISSILE_TEMPLATE), 0);
+  InitObjectFromTemplate(_state, _slot, MISSILE_TEMPLATE, 0);
   _slot.behaviorClass = MISSILE_CLASS;
 }
 
@@ -1030,10 +1031,10 @@ std::optional<DashboardPixel> RemoveAllMissiles(GameState& _state)
 {
   // MOV CL,objectSlotCount / XOR CH,CH, then LOOP: a count of 0 runs 65,536 times.
   std::optional<DashboardPixel> lastErased;
-  std::uint16_t slot = DS.shipSlots.offset;
+  SlotIndex slot = SlotIndex::Sun;
   for (std::uint32_t count = LoopCount(_state.Data().objectSlotCount); count != 0; --count)
   {
-    SpaceObject& object = _state.ObjectAt(slot);
+    SpaceObject& object = _state.Slot(slot);
     if ((object.type & SpaceObject::ACTIVE) != 0 && TypeOf(object) == TYPE_MISSILE)
     {
       if (const std::optional<DashboardPixel> erased = RemoveObject(_state, object))
@@ -1041,7 +1042,7 @@ std::optional<DashboardPixel> RemoveAllMissiles(GameState& _state)
         lastErased = erased;
       }
     }
-    slot = Offset(slot, SpaceObject::BYTES);
+    slot = SlotAfter(slot);
   }
   return lastErased;
 }
@@ -1049,8 +1050,9 @@ std::optional<DashboardPixel> RemoveAllMissiles(GameState& _state)
 void LaunchPlayerMissile(GameState& _state, std::uint16_t _source, bool _backward)
 {
   // A free slot, or one ReclaimShipSlot takes; one it evicts is left in DI too, so XCHG SI,DI copies that slot onto itself.
-  std::uint16_t source = _source;
-  std::uint16_t slot = 0;
+  // _source is wherever DI was: a slot, or past a buffer another routine filled, whose 64 bytes are copied all the same.
+  SlotIndex slot = SlotIndex::Sun;
+  std::optional<SlotIndex> evicted;
   if (const SlotSearch free = FindFreeShipSlot(_state); free.found)
   {
     slot = free.slot;
@@ -1061,11 +1063,11 @@ void LaunchPlayerMissile(GameState& _state, std::uint16_t _source, bool _backwar
     slot = reclaimed.slot;
     if (reclaimed.evicted)
     {
-      source = reclaimed.slot;
+      evicted = reclaimed.slot;
     }
   }
-  CopyObject(_state, source, slot, _backward);
-  SpaceObject& missile = _state.ObjectAt(slot);
+  SpaceObject& missile = _state.Slot(slot);
+  CopyObject(_state, evicted ? _state.Slot(*evicted) : _state.ObjectAt(_source), missile, _backward);
   InitMissile(_state, missile);
   // 100 along the player's nose: (0, 100, 0) turned by the player's angles, negated.
   (void)SetSinCos(_state, 0, Negate(_state.Data().playerPitchAngle));
@@ -1086,7 +1088,7 @@ void LaunchPlayerMissile(GameState& _state, std::uint16_t _source, bool _backwar
   (void)MoveObject(_state, missile);
 }
 
-std::optional<std::uint16_t> LaunchShipFromObject(GameState& _state, const SpaceObject& _launcher, std::uint8_t _kind, bool _backward)
+std::optional<SlotIndex> LaunchShipFromObject(GameState& _state, const SpaceObject& _launcher, std::uint8_t _kind, bool _backward)
 {
   const SlotSearch free = FindFreeShipSlot(_state);
   if (!free.found)
@@ -1100,8 +1102,8 @@ std::optional<std::uint16_t> LaunchShipFromObject(GameState& _state, const Space
     return std::nullopt;
   }
   // A copy of the launcher in the free slot, made what _kind names, and moved clear of it.
-  CopyObject(_state, _state.OffsetOf(_launcher), free.slot, _backward);
-  SpaceObject& ship = _state.ObjectAt(free.slot);
+  SpaceObject& ship = _state.Slot(free.slot);
+  CopyObject(_state, _launcher, ship, _backward);
   if (_kind == MISSILE_LAUNCH)
   {
     InitMissile(_state, ship);
@@ -1215,10 +1217,10 @@ void UseMaskingDevice(GameState& _state)
   }
   _state.Data().maskingBackgroundColor = MASKING_COLOR;
   // Every ship forgets its state and that the player hit it, and calms a little: LOOP from CX = objectSlotCount.
-  std::uint16_t slot = DS.shipSlots.offset;
+  SlotIndex slot = SlotIndex::Sun;
   for (std::uint32_t count = LoopCount(_state.Data().objectSlotCount); count != 0; --count)
   {
-    SpaceObject& ship = _state.ObjectAt(slot);
+    SpaceObject& ship = _state.Slot(slot);
     ship.aiState = 0;
     ship.flags = static_cast<std::uint8_t>(ship.flags & ~FLAG_HOSTILE);
     const std::uint8_t aggression = ship.aggression;
@@ -1227,7 +1229,7 @@ void UseMaskingDevice(GameState& _state)
     {
       ship.aggression = 0;
     }
-    slot = Offset(slot, SpaceObject::BYTES);
+    slot = SlotAfter(slot);
   }
 }
 
