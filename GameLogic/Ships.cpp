@@ -5,6 +5,7 @@
 #include "Arithmetic.h"
 #include "Flight.h"
 #include "Maths.h"
+#include "ShipsTables.h"
 
 namespace Elite
 {
@@ -146,9 +147,9 @@ struct PositionFit
 
 // MOV BX,record / XOR AL,AL / CALL InitObjectFromTemplate / MOV [DI+33h],_class: _slot from one fixed record of spawnTemplates,
 // of behaviour class _class.
-void InitFromRecord(GameState& _state, SpaceObject& _slot, std::size_t _record, std::uint8_t _class)
+void InitFromRecord(SpaceObject& _slot, std::size_t _record, std::uint8_t _class)
 {
-  InitObjectFromTemplate(_state, _slot, _record, 0);
+  InitObjectFromTemplate(_slot, _record, 0);
   _slot.behaviorClass = _class;
 }
 
@@ -156,7 +157,7 @@ void InitFromRecord(GameState& _state, SpaceObject& _slot, std::size_t _record, 
 // turned to the player.
 void SpawnFromRecord(GameState& _state, SpaceObject& _slot, std::size_t _first, std::uint8_t _index)
 {
-  InitObjectFromTemplate(_state, _slot, _first, _index);
+  InitObjectFromTemplate(_slot, _first, _index);
   PlaceAtSpawnPoint(_state, _slot);
   FacePlayerWithRandomRoll(_state, _slot);
 }
@@ -181,26 +182,26 @@ void ClearObjectSlot(GameState& _state, SpaceObject& _slot)
   }
 }
 
-void InitPoliceViper(GameState& _state, SpaceObject& _slot)
+void InitPoliceViper(SpaceObject& _slot)
 {
-  InitFromRecord(_state, _slot, VIPER_TEMPLATE, TRADER_CLASS);
+  InitFromRecord(_slot, VIPER_TEMPLATE, TRADER_CLASS);
   _slot.owner = SlotIndex::Police;
   _slot.aggression = POLICE_AGGRESSION;
 }
 
-void InitAbandonedCobra(GameState& _state, SpaceObject& _slot)
+void InitAbandonedCobra(SpaceObject& _slot)
 {
-  InitFromRecord(_state, _slot, COBRA_TEMPLATE, ABANDONED_CLASS);
+  InitFromRecord(_slot, COBRA_TEMPLATE, ABANDONED_CLASS);
 }
 
-void InitShuttle(GameState& _state, SpaceObject& _slot)
+void InitShuttle(SpaceObject& _slot)
 {
-  InitFromRecord(_state, _slot, SHUTTLE_TEMPLATE, DRIFTER_CLASS);
+  InitFromRecord(_slot, SHUTTLE_TEMPLATE, DRIFTER_CLASS);
 }
 
-void InitThargon(GameState& _state, SpaceObject& _slot)
+void InitThargon(SpaceObject& _slot)
 {
-  InitFromRecord(_state, _slot, THARGON_TEMPLATE, WOLF_CLASS);
+  InitFromRecord(_slot, THARGON_TEMPLATE, WOLF_CLASS);
 }
 
 void SpawnRandomDrifter(GameState& _state, SpaceObject& _slot)
@@ -233,7 +234,7 @@ void SpawnRandomTrader(GameState& _state, SpaceObject& _slot)
   if (police)
   {
     // Written as a word: the aggression, and a bounty of 0 above it.
-    _slot.aggression = std::uint8_t{_state.Data().commanderBlock.legalStatus};
+    _slot.aggression = std::uint8_t{_state.Data().commander.legalStatus};
     _slot.bounty = 0;
   }
 }
@@ -272,7 +273,7 @@ ReclaimedSlot ReclaimShipSlot(GameState& _state)
 {
   // SUB CL,3 / XOR CH,CH, then LOOP: a count of 0 runs 65,536 times.
   SlotIndex slot = SlotIndex::FirstShip;
-  const auto slots = static_cast<std::uint8_t>(_state.Data().objectSlotCount - FIRST_SHIP_SLOT);
+  const auto slots = static_cast<std::uint8_t>(_state.Data().flight.objectSlotCount - FIRST_SHIP_SLOT);
   for (std::uint32_t count = LoopCount(slots); count != 0; --count)
   {
     if ((_state.Slot(slot).flags & FLAG_BLIP_DRAWN) == 0)
@@ -319,9 +320,9 @@ bool IsObjectNearKeepBlip(const SpaceObject& _slot)
   return PositionFitsWords(_slot).fits;
 }
 
-void InitCargoBarrel(GameState& _state, SpaceObject& _slot)
+void InitCargoBarrel(SpaceObject& _slot)
 {
-  InitFromRecord(_state, _slot, BARREL_TEMPLATE, BARREL_CLASS);
+  InitFromRecord(_slot, BARREL_TEMPLATE, BARREL_CLASS);
 }
 
 void SpawnRandomHunter(GameState& _state, SpaceObject& _slot)
@@ -338,14 +339,14 @@ void SpawnRandomWolf(GameState& _state, SpaceObject& _slot)
 {
   // MOV AL,5, or out of witch space XOR AH,AH / MOV BL,34h / DIV BL: the quotient of a random byte picks the record.
   std::uint8_t record = WITCH_SPACE_WOLF;
-  if (_state.Data().commanderBlock.witchspaceCountdown == 0)
+  if (_state.Data().commander.witchspaceCountdown == 0)
   {
     record = static_cast<std::uint8_t>(Low(NextRandom(_state)) / WOLF_CHOICE_DIVISOR);
   }
   SpawnFromRecord(_state, _slot, WOLF_TEMPLATES, record);
   _slot.behaviorClass = WOLF_CLASS;
   auto aggression = static_cast<std::uint8_t>(Low(NextRandom(_state)) & WOLF_AGGRESSION_MASK);
-  if (_state.Data().spawnGovernment == 0)
+  if (_state.Data().flight.spawnGovernment == 0)
   {
     aggression = static_cast<std::uint8_t>(aggression + ANARCHY_AGGRESSION);
   }
@@ -360,14 +361,14 @@ void SpawnRandomWolf(GameState& _state, SpaceObject& _slot)
   _slot.thargons = static_cast<std::uint8_t>((((Low(random) ^ High(random)) >> 3) & THARGON_COUNT_MASK) + FEWEST_THARGONS);
 }
 
-void InitObjectFromTemplate(GameState& _state, SpaceObject& _slot, std::size_t _first, std::uint8_t _index)
+void InitObjectFromTemplate(SpaceObject& _slot, std::size_t _first, std::uint8_t _index)
 {
   _slot.aiState = 0;
   _slot.flags = 0;
   _slot.aggression = 0;
   _slot.scanned = 1;
   // BX += AL*2, then BX += AL*8: the record _index of ten bytes on.
-  const Counted<std::uint8_t>(&record)[TEMPLATE_BYTES] = _state.Data().spawnTemplates[_first + _index];
+  const std::array<std::uint8_t, TEMPLATE_BYTES>& record = SPAWN_TEMPLATES[_first + _index];
   // STC / RCL AL,1: the type, active.
   _slot.type = static_cast<std::uint8_t>((record[0] << 1) | SpaceObject::ACTIVE);
   for (std::size_t field = 0; field < TEMPLATE_FIELDS.size(); ++field)
@@ -462,7 +463,7 @@ void FacePlayer(GameState& _state, SpaceObject& _slot)
 SlotSearch FindFreeShipSlot(GameState& _state)
 {
   SlotIndex slot = SlotIndex::FirstShip;
-  const auto slots = static_cast<std::uint8_t>(_state.Data().objectSlotCount - FIRST_SHIP_SLOT);
+  const auto slots = static_cast<std::uint8_t>(_state.Data().flight.objectSlotCount - FIRST_SHIP_SLOT);
   for (std::uint32_t count = LoopCount(slots); count != 0; --count)
   {
     if ((_state.Slot(slot).type & SpaceObject::ACTIVE) == 0)
@@ -479,8 +480,8 @@ void ClearAllObjects(GameState& _state, bool _backward)
   // MOV CH,shipSlotCount / XOR CL,CL / SHR CX,1 three times: 32 words a slot, cleared by REP STOSW into ES = DS.
   const std::uint16_t step = StringStep(_backward, 2);
   // Backwards, REP STOSW starts from the first slot's first word and runs down from there, as the original's does.
-  std::uint16_t at = _state.OffsetOf(_state.Data().shipSlots);
-  for (auto words = static_cast<std::uint16_t>(_state.Data().shipSlotCount << 5); words != 0; --words)
+  std::uint16_t at = _state.OffsetOf(_state.Data().world.shipSlots);
+  for (auto words = static_cast<std::uint16_t>(_state.Data().world.shipSlotCount << 5); words != 0; --words)
   {
     _state.SetWord(at, 0);
     at = Offset(at, step);
@@ -489,7 +490,7 @@ void ClearAllObjects(GameState& _state, bool _backward)
 
 SlotIndex FindDebrisSlot(GameState& _state)
 {
-  const std::uint8_t slots = _state.Data().debrisSlotCount;
+  const std::uint8_t slots = _state.Data().flight.debrisSlotCount;
   SlotIndex slot = SlotIndex::FirstDebris;
   for (std::uint32_t count = LoopCount(slots); count != 0; --count)
   {

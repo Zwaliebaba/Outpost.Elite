@@ -3,6 +3,7 @@
 
 #include "Cga.h"
 #include "Counted.h"
+#include "DataPlaces.h"
 #include "GameData.h"
 #include "Reference.h"
 #include "SpaceObject.h"
@@ -19,17 +20,24 @@ namespace Elite
 
 class Game;
 
-/// The game's memory (ADR-012, D19): the reference's data segment as its struct (GameData), by member (Data()) or by offset;
-/// and the CGA's video memory. It owns both, and it has no registers: a routine that takes a GameState takes its inputs as
-/// parameters and gives its results back.
+/// The game's memory (ADR-012, D19, D38): the game's state as its struct (GameData), by member (Data()) or by the original's
+/// address; and the CGA's video memory. It owns both, and it has no registers: a routine that takes a GameState takes its inputs
+/// as parameters and gives its results back.
 ///
-/// The host makes one for the whole run, inside a Game, which loads the reference's data segment into it (Game::Load) at the
-/// segment DOS would have put it at, so that the original's far addresses, segment and offset, still name its bytes: the data
-/// segment and the stack in it at DS:0000, and video memory at B800:0000. A far access resolves its address to one of the two;
-/// an address outside them is not the game's memory, and throws std::out_of_range. The code segment, which the original keeps
-/// data and patches in, is not here (D33, piece 3): native code reads the only bytes of it it needs from generated tables, and
-/// its segment is where the interrupt vectors the game installs point. The vector table, the BIOS's data area and the PSP are not
-/// here either: they are the platform's (Platform, Hardware).
+/// The host makes one for the whole run, inside a Game, which loads the reference's image into it (Game::Load) at the segment
+/// DOS would have put it at, so that the original's far addresses, segment and offset, still name its bytes: the data segment at
+/// DS:0000, and video memory at B800:0000. A far access resolves its address to one of the two; an address outside them is not
+/// the game's memory, and throws std::out_of_range. The code segment, which the original keeps data and patches in, is not here
+/// (D33, piece 3): native code reads the only bytes of it it needs from generated tables, and its segment is where the interrupt
+/// vectors the game installs point. The vector table, the BIOS's data area and the PSP are not here either: they are the
+/// platform's (Platform, Hardware).
+///
+/// The data segment is distributed (D38): GameData is its groups' structs, not the 1987 layout. The accessors by offset, the far
+/// ones and OffsetOf still speak the original's addresses, its 1987 offsets in the data segment, for native code that still
+/// reaches the data by offset (change 3b converts it) and for the loops that wait, which carry the offsets the original holds in
+/// its registers in their turns (ADR-015). Each such address is found where its byte is now (DATA_PLACES): in GameData, or, for
+/// a byte the state does not hold, a constant or a gap nothing uses, in the reference's image, which nothing writes. A write
+/// there, or a text or span that would run across from one place to another, throws std::out_of_range.
 ///
 /// Every write counts in one change count (ChangeCount) when it changes what it writes, as the emulated PC's memory did until
 /// D33: paced time compares the count at each turn of a loop, and a turn that changed nothing idles (ADR-015). A member of
@@ -58,7 +66,7 @@ public:
     return m_dataSegment;
   }
 
-  /// The data segment by member: `_state.Data().commanderBlock.fuel`. Every member counts its own changes (Counted).
+  /// The game's state by member: `_state.Data().commander.fuel`. Every member counts its own changes (Counted).
   [[nodiscard]] GameData& Data() noexcept
   {
     return m_block->data;
@@ -69,88 +77,89 @@ public:
     return m_block->data;
   }
 
-  /// The object record at DS:_offset, where the original's SI or DI points: one of shipSlots' 36 slots, or wherever else it
-  /// reads 64 bytes as one. A record that would run past the data segment's end, which the original would wrap at 64 KiB,
-  /// throws std::out_of_range.
+  /// The object record at the original's DS:_offset, where its SI or DI points: one of shipSlots' 36 slots, or wherever else it
+  /// reads 64 bytes as one. A record whose bytes the state does not hold together throws std::out_of_range, as does one that
+  /// would run past the data segment's end, which the original would wrap at 64 KiB.
   [[nodiscard]] SpaceObject& ObjectAt(std::uint16_t _offset)
   {
-    return *reinterpret_cast<SpaceObject*>(&DataStorage()[ObjectOffset(_offset)]);
+    return *reinterpret_cast<SpaceObject*>(&DataStorage()[HeldRun(ObjectOffset(_offset), sizeof(SpaceObject))]);
   }
 
   [[nodiscard]] const SpaceObject& ObjectAt(std::uint16_t _offset) const
   {
-    return *reinterpret_cast<const SpaceObject*>(&DataBytes()[ObjectOffset(_offset)]);
+    return *reinterpret_cast<const SpaceObject*>(&DataBytes()[HeldRun(ObjectOffset(_offset), sizeof(SpaceObject))]);
   }
 
-  /// The offset in the data segment of _object, a record ObjectAt gave: what the original holds in SI or DI for it.
-  [[nodiscard]] std::uint16_t OffsetOf(const SpaceObject& _object) const noexcept
+  /// The original's offset in the data segment of _object, a record ObjectAt gave: what the original holds in SI or DI for it.
+  [[nodiscard]] std::uint16_t OffsetOf(const SpaceObject& _object) const
   {
-    return static_cast<std::uint16_t>(reinterpret_cast<const std::uint8_t*>(&_object) - DataBytes().data());
+    return OriginalOffsetOf(reinterpret_cast<const std::uint8_t*>(&_object));
   }
 
   /// The slot of shipSlots numbered _slot (SpaceObject.h). A number past the last slot throws std::out_of_range.
   [[nodiscard]] SpaceObject& Slot(SlotIndex _slot)
   {
-    return ObjectAt(SlotOffset(CheckedSlot(_slot)));
+    return Data().world.shipSlots[Number(CheckedSlot(_slot))];
   }
 
   [[nodiscard]] const SpaceObject& Slot(SlotIndex _slot) const
   {
-    return ObjectAt(SlotOffset(CheckedSlot(_slot)));
+    return Data().world.shipSlots[Number(CheckedSlot(_slot))];
   }
 
   /// _object's number, a slot of shipSlots.
-  [[nodiscard]] SlotIndex IndexOf(const SpaceObject& _object) const noexcept
+  [[nodiscard]] SlotIndex IndexOf(const SpaceObject& _object) const
   {
     return SlotAt(OffsetOf(_object));
   }
 
-  /// The offset in the data segment of the slot numbered _slot, past the last one too: what the original holds in SI or DI
-  /// for it, and where a loop that waits carries it in its turns (ADR-015).
+  /// The original's offset in the data segment of the slot numbered _slot, past the last one too: what the original holds in SI
+  /// or DI for it, and where a loop that waits carries it in its turns (ADR-015).
   [[nodiscard]] static constexpr std::uint16_t SlotOffset(SlotIndex _slot) noexcept
   {
     return static_cast<std::uint16_t>(SHIP_SLOTS_OFFSET + Number(_slot) * sizeof(SpaceObject));
   }
 
-  /// The number of the slot at DS:_offset, an offset of shipSlots' records, or the end of their last.
+  /// The number of the slot at the original's DS:_offset, an offset of shipSlots' records, or the end of their last.
   [[nodiscard]] static constexpr SlotIndex SlotAt(std::uint16_t _offset) noexcept
   {
     return static_cast<SlotIndex>((_offset - SHIP_SLOTS_OFFSET) / sizeof(SpaceObject));
   }
 
-  /// The offset in the data segment of _member, a member of Data() at any depth: what the original holds in a register for
-  /// it, where a loop that waits carries it in its turns (ADR-015).
-  template <typename Member> [[nodiscard]] std::uint16_t OffsetOf(const Member& _member) const noexcept
+  /// The original's offset in the data segment of _member, a member of Data() at any depth, or a byte of a view TextAt or
+  /// BytesAt gave: what the original holds in a register for it, where a loop that waits carries it in its turns (ADR-015).
+  /// Anything else throws std::out_of_range.
+  template <typename Member> [[nodiscard]] std::uint16_t OffsetOf(const Member& _member) const
   {
-    return static_cast<std::uint16_t>(reinterpret_cast<const std::uint8_t*>(&_member) - DataBytes().data());
+    return OriginalOffsetOf(reinterpret_cast<const std::uint8_t*>(&_member));
   }
 
   /// The text that starts at _member, a member of Data(), up to its NUL: as the original reads a text, wherever in the data
-  /// segment its NUL is, past the member's end too. The view is of the data segment's bytes, as they are when it is taken.
-  template <typename Member> [[nodiscard]] std::string_view TextAt(const Member& _member) const noexcept
+  /// segment its NUL is, past the member's end too, where the state holds the bytes after it beside it. The view is of the
+  /// state's bytes, as they are when it is taken.
+  template <typename Member> [[nodiscard]] std::string_view TextAt(const Member& _member) const
   {
     return TextFrom(OffsetOf(_member));
   }
 
   /// The text after _text's NUL, up to its own: the next of the texts that follow one another in the data segment, as the
   /// original steps past a NUL to the next. _text is a view TextAt or TextAfter gave.
-  [[nodiscard]] std::string_view TextAfter(std::string_view _text) const noexcept
+  [[nodiscard]] std::string_view TextAfter(std::string_view _text) const
   {
-    const auto* const end = reinterpret_cast<const std::uint8_t*>(_text.data() + _text.size());
-    return TextFrom(static_cast<std::uint16_t>(end - DataBytes().data() + 1));
+    return TextFrom(static_cast<std::uint16_t>(OffsetOf(*(_text.data() + _text.size())) + 1));
   }
 
-  /// The text at DS:_offset up to its NUL, for a text the game writes that the symbol table names no row for: a buffer inside
-  /// a row or a gap, which change 3 of D33's piece 3 names (D33). Every other text is a member's (TextAt) or a constant of the
-  /// subsystem's generated tables (Tools/GenerateTables.py).
-  [[nodiscard]] std::string_view TextAtOffset(std::uint16_t _offset) const noexcept
+  /// The text at the original's DS:_offset up to its NUL, for a text the symbol table names no row for: a buffer inside a row
+  /// or a gap, which change 3b of D38 names. Every other text is a member's (TextAt) or a constant of the subsystem's generated
+  /// tables (Tools/GenerateTables.py).
+  [[nodiscard]] std::string_view TextAtOffset(std::uint16_t _offset) const
   {
     return TextFrom(_offset);
   }
 
-  /// _count bytes of the data segment from _member's first, a member of Data() at any depth, as bytes that count their own
-  /// changes: a buffer a text routine writes into, past the member's end too where the symbol table sizes it short. A span
-  /// that would run past the data segment's end throws std::out_of_range.
+  /// _count bytes from _member's first, a member of Data() at any depth, as bytes that count their own changes: a buffer a text
+  /// routine writes into, past the member's end too where the symbol table sizes it short and the state holds what follows
+  /// beside it. Bytes the state does not hold together throw std::out_of_range.
   template <typename Member> [[nodiscard]] std::span<Counted<std::uint8_t>> BytesFrom(Member& _member, std::size_t _count)
   {
     return BytesAt(OffsetOf(_member), _count);
@@ -162,65 +171,58 @@ public:
     return BytesAt(OffsetOf(_member), _count);
   }
 
-  /// _count bytes of the data segment from DS:_offset, as BytesFrom gives them, for a buffer the symbol table names no row for
-  /// (TextAtOffset).
+  /// _count bytes from the original's DS:_offset, as BytesFrom gives them, for a buffer the symbol table names no row for
+  /// (TextAtOffset). Bytes the state does not hold together throw std::out_of_range.
   [[nodiscard]] std::span<Counted<std::uint8_t>> BytesAt(std::uint16_t _offset, std::size_t _count)
   {
-    if (_offset + _count > sizeof(GameData))
-    {
-      RefuseObject();
-    }
-    return std::span<Counted<std::uint8_t>>(reinterpret_cast<Counted<std::uint8_t>*>(&DataStorage()[_offset]), _count);
+    return std::span<Counted<std::uint8_t>>(reinterpret_cast<Counted<std::uint8_t>*>(&DataStorage()[HeldRun(_offset, _count)]), _count);
   }
 
-  /// BytesAt, to read.
+  /// BytesAt, to read: bytes the state holds together, or bytes of the reference's image it does not hold, which never change.
   [[nodiscard]] std::span<const Counted<std::uint8_t>> BytesAt(std::uint16_t _offset, std::size_t _count) const
   {
-    if (_offset + _count > sizeof(GameData))
-    {
-      RefuseObject();
-    }
-    return std::span<const Counted<std::uint8_t>>(reinterpret_cast<const Counted<std::uint8_t>*>(&DataBytes()[_offset]), _count);
+    return std::span<const Counted<std::uint8_t>>(reinterpret_cast<const Counted<std::uint8_t>*>(ReadRun(_offset, _count)), _count);
   }
 
   /// The word at the start of _member, a member of Data() at any depth whose first word the symbol table does not name on its
   /// own, such as creditsTenths's low word.
-  template <typename Member> [[nodiscard]] std::uint16_t WordOf(const Member& _member) const noexcept
+  template <typename Member> [[nodiscard]] std::uint16_t WordOf(const Member& _member) const
   {
     return Word(OffsetOf(_member));
   }
 
   /// _value into the word at the start of _member, as WordOf reads it, each byte counted when it changes.
-  template <typename Member> void SetWordOf(Member& _member, std::uint16_t _value) noexcept
+  template <typename Member> void SetWordOf(Member& _member, std::uint16_t _value)
   {
     SetWord(OffsetOf(_member), _value);
   }
 
   /// The text _into bytes into _member, a member of Data(), up to its NUL, past the member's end too: a text that follows other
   /// bytes in a record, such as a docked frame's title after its two attributes.
-  template <typename Member> [[nodiscard]] std::string_view TextAt(const Member& _member, std::uint16_t _into) const noexcept
+  template <typename Member> [[nodiscard]] std::string_view TextAt(const Member& _member, std::uint16_t _into) const
   {
     return TextFrom(static_cast<std::uint16_t>(OffsetOf(_member) + _into));
   }
 
-  /// The byte at DS:_offset, where DS is the reference's data segment.
+  /// The byte at the original's DS:_offset, where DS is the reference's data segment.
   [[nodiscard]] std::uint8_t Byte(std::uint16_t _offset) const noexcept
   {
-    return DataBytes()[_offset];
+    return *ReadAt(_offset);
   }
 
-  /// The word at DS:_offset; at offset FFFFh its high byte is at offset 0, as on the 8088.
+  /// The word at the original's DS:_offset; at offset FFFFh its high byte is at offset 0, as on the 8088.
   [[nodiscard]] std::uint16_t Word(std::uint16_t _offset) const noexcept
   {
     return static_cast<std::uint16_t>(Byte(_offset) | (Byte(static_cast<std::uint16_t>(_offset + 1)) << 8));
   }
 
-  void SetByte(std::uint16_t _offset, std::uint8_t _value) noexcept
+  /// _value into the byte at the original's DS:_offset, which the state must hold; a byte it does not throws std::out_of_range.
+  void SetByte(std::uint16_t _offset, std::uint8_t _value)
   {
-    Store(DataStorage()[_offset], _value);
+    Store(WriteAt(_offset), _value);
   }
 
-  void SetWord(std::uint16_t _offset, std::uint16_t _value) noexcept
+  void SetWord(std::uint16_t _offset, std::uint16_t _value)
   {
     SetByte(_offset, static_cast<std::uint8_t>(_value & 0xFF));
     SetByte(static_cast<std::uint16_t>(_offset + 1), static_cast<std::uint8_t>(_value >> 8));
@@ -277,7 +279,7 @@ public:
     SetFarWord(VIDEO_SEGMENT, _offset, _value);
   }
 
-  /// The data segment's 64 KiB, GameData's bytes: what the digest hashes, but for the stack (StateDigest.h).
+  /// GameData's bytes, the game's state: what the state digest hashes (StateDigest.h).
   [[nodiscard]] std::span<const std::uint8_t, sizeof(GameData)> DataBytes() const noexcept
   {
     return std::span<const std::uint8_t, sizeof(GameData)>(reinterpret_cast<const std::uint8_t*>(&m_block->data), sizeof(GameData));
@@ -308,31 +310,115 @@ private:
   friend class Game;
 
   static constexpr std::uint32_t ADDRESS_MASK = 0xFFFFF;
-  static constexpr std::uint16_t SHIP_SLOTS_OFFSET = GAME_DATA_OFFSET(shipSlots);
+  static constexpr std::uint16_t SHIP_SLOTS_OFFSET = OriginalOffset("shipSlots");
   static constexpr std::uint32_t VIDEO_LINEAR = std::uint32_t{VIDEO_SEGMENT} << 4;
+  static constexpr std::uint32_t SEGMENT_BYTES = 0x10000;
 
-  /// Takes the reference's data segment as DOS would have loaded it with its code segment at _codeSegment, uncounted: _image,
-  /// the data segment's image, from DS:0000, which is paragraph DATA_SEGMENT_PARAGRAPH on from _codeSegment, with zeros past the
-  /// image's end. Video memory is left as it is.
-  void Load(std::uint16_t _codeSegment, std::span<const std::uint8_t> _image) noexcept;
+  /// Where each of the original's addresses in the data segment is now, and where each byte of GameData was (DATA_PLACES): the
+  /// same for every GameState, built once.
+  struct OriginalLayout
+  {
+    /// The value of places for a byte the state does not hold: it is the reference's image's.
+    static constexpr std::uint32_t IN_IMAGE = 0xFFFFFFFF;
+
+    /// For each of the original's offsets in the data segment, its byte's offset in GameData, or IN_IMAGE.
+    std::array<std::uint32_t, SEGMENT_BYTES> places;
+    /// For each of the original's offsets, the original's offset where the bytes laid out as they were from it end: the end
+    /// of the run of the data segment that is in one place, in GameData or in the image, a byte after another.
+    std::array<std::uint32_t, SEGMENT_BYTES> runEnds;
+    /// For each offset in GameData, its byte's original offset.
+    std::array<std::uint16_t, sizeof(GameData)> originals;
+    /// The data segment as the reference's image holds it, zeros past it: the bytes the state does not hold, which nothing
+    /// writes.
+    std::array<std::uint8_t, SEGMENT_BYTES> image;
+  };
+
+  /// Builds the original's layout from DATA_PLACES and the reference's image, once, for every GameState.
+  [[nodiscard]] static const OriginalLayout& BuildOriginalLayout();
+
+  /// Takes the game's state as DOS would have loaded the reference with its code segment at _codeSegment, uncounted: _state,
+  /// GameData's bytes as ReferenceLoadImage lays them out, from the data segment's image. Video memory is left as it is. The
+  /// data segment is paragraph DATA_SEGMENT_PARAGRAPH on from _codeSegment.
+  void Load(std::uint16_t _codeSegment, std::span<const std::uint8_t> _state) noexcept;
 
   [[nodiscard]] std::span<std::uint8_t, sizeof(GameData)> DataStorage() noexcept
   {
     return std::span<std::uint8_t, sizeof(GameData)>(reinterpret_cast<std::uint8_t*>(&m_block->data), sizeof(GameData));
   }
 
-  /// The text at DS:_offset, up to its NUL or the data segment's end.
-  [[nodiscard]] std::string_view TextFrom(std::uint16_t _offset) const noexcept
+  /// The byte at the original's DS:_offset, to read: in GameData, or the image's when the state does not hold it.
+  [[nodiscard]] const std::uint8_t* ReadAt(std::uint16_t _offset) const noexcept
   {
-    const std::span<const std::uint8_t> rest = DataBytes().subspan(_offset);
+    const std::uint32_t place = m_layout->places[_offset];
+    return place == OriginalLayout::IN_IMAGE ? &m_layout->image[_offset] : &DataBytes()[place];
+  }
+
+  /// The byte at the original's DS:_offset, to write: in GameData. A byte the state does not hold throws std::out_of_range.
+  [[nodiscard]] std::uint8_t& WriteAt(std::uint16_t _offset)
+  {
+    const std::uint32_t place = m_layout->places[_offset];
+    if (place == OriginalLayout::IN_IMAGE)
+    {
+      RefuseWrite(_offset);
+    }
+    return DataStorage()[place];
+  }
+
+  /// The place in GameData of the _count bytes from the original's DS:_offset, which the state must hold, a byte after another;
+  /// otherwise throws std::out_of_range.
+  [[nodiscard]] std::uint32_t HeldRun(std::uint16_t _offset, std::size_t _count) const
+  {
+    const std::uint32_t place = m_layout->places[_offset];
+    if (place == OriginalLayout::IN_IMAGE || _offset + _count > m_layout->runEnds[_offset])
+    {
+      RefuseRun(_offset, _count);
+    }
+    return place;
+  }
+
+  /// The first of the _count bytes from the original's DS:_offset, which must be in one place, a byte after another: in
+  /// GameData or in the image. Otherwise throws std::out_of_range.
+  [[nodiscard]] const std::uint8_t* ReadRun(std::uint16_t _offset, std::size_t _count) const
+  {
+    if (_offset + _count > m_layout->runEnds[_offset])
+    {
+      RefuseRun(_offset, _count);
+    }
+    return ReadAt(_offset);
+  }
+
+  /// The original's offset of _byte, a byte of GameData or of the image; anything else throws std::out_of_range.
+  [[nodiscard]] std::uint16_t OriginalOffsetOf(const std::uint8_t* _byte) const
+  {
+    const auto address = reinterpret_cast<std::uintptr_t>(_byte);
+    if (const std::uintptr_t into = address - reinterpret_cast<std::uintptr_t>(DataBytes().data()); into < sizeof(GameData))
+    {
+      return m_layout->originals[into];
+    }
+    if (const std::uintptr_t into = address - reinterpret_cast<std::uintptr_t>(m_layout->image.data()); into < SEGMENT_BYTES)
+    {
+      return static_cast<std::uint16_t>(into);
+    }
+    RefuseOriginal();
+  }
+
+  /// The text at the original's DS:_offset, up to its NUL, which must be in one place with it; or up to the data segment's end.
+  [[nodiscard]] std::string_view TextFrom(std::uint16_t _offset) const
+  {
+    const std::uint32_t end = m_layout->runEnds[_offset];
+    const std::span<const std::uint8_t> rest(ReadAt(_offset), end - _offset);
     const auto nul = std::ranges::find(rest, std::uint8_t{0});
+    if (nul == rest.end() && end < SEGMENT_BYTES)
+    {
+      RefuseRun(_offset, rest.size() + 1);
+    }
     return std::string_view(reinterpret_cast<const char*>(rest.data()), static_cast<std::size_t>(nul - rest.begin()));
   }
 
   /// _offset, when a record there ends inside the data segment; otherwise throws std::out_of_range.
   [[nodiscard]] static std::uint16_t ObjectOffset(std::uint16_t _offset)
   {
-    if (_offset > sizeof(GameData) - sizeof(SpaceObject))
+    if (_offset > SEGMENT_BYTES - sizeof(SpaceObject))
     {
       RefuseObject();
     }
@@ -341,6 +427,15 @@ private:
 
   /// Throws the std::out_of_range of an object record past the data segment's end.
   [[noreturn]] static void RefuseObject();
+
+  /// Throws the std::out_of_range of a write to the original's DS:_offset, a byte the state does not hold.
+  [[noreturn]] static void RefuseWrite(std::uint16_t _offset);
+
+  /// Throws the std::out_of_range of _count bytes from the original's DS:_offset that are not in one place.
+  [[noreturn]] static void RefuseRun(std::uint16_t _offset, std::size_t _count);
+
+  /// Throws the std::out_of_range of an address that is neither the state's nor the image's.
+  [[noreturn]] static void RefuseOriginal();
 
   /// _slot, when it is one of shipSlots' 36; otherwise throws std::out_of_range.
   [[nodiscard]] static SlotIndex CheckedSlot(SlotIndex _slot)
@@ -355,7 +450,7 @@ private:
   /// Throws the std::out_of_range of a slot number past the last slot.
   [[noreturn]] static void RefuseSlot();
 
-  /// The data segment and its change count, in storage aligned to COUNTED_BLOCK_ALIGNMENT, so that a member of GameData finds
+  /// The game's state and its change count, in storage aligned to COUNTED_BLOCK_ALIGNMENT, so that a member of GameData finds
   /// the count by rounding its own address down (ChangeCountAt).
   struct Block
   {
@@ -383,13 +478,13 @@ private:
     std::uint32_t index;
   };
 
-  /// Which region holds the byte at _linear, and where in it. Throws std::out_of_range for an address in none of them. Inline,
-  /// and a subtraction and one comparison a region, the data segment first: every far access of the game's comes here, the
-  /// copy of the picture to video memory most of all.
+  /// Which region holds the byte at _linear, and where in it: the original's offset in the data segment, or the offset in video
+  /// memory. Throws std::out_of_range for an address in neither. Inline, and a subtraction and one comparison a region, the
+  /// data segment first: every far access of the game's comes here, the copy of the picture to video memory most of all.
   [[nodiscard]] Place Locate(std::uint32_t _linear) const
   {
     const std::uint32_t linear = _linear & ADDRESS_MASK;
-    if (const std::uint32_t index = linear - Linear(m_dataSegment, 0); index < sizeof(GameData))
+    if (const std::uint32_t index = linear - Linear(m_dataSegment, 0); index < SEGMENT_BYTES)
     {
       return Place{Region::Data, index};
     }
@@ -403,17 +498,20 @@ private:
   /// Throws the std::out_of_range of an address outside the game's memory.
   [[noreturn]] static void RefuseAddress();
 
-  /// Where the byte at _linear is: in the data segment or video memory. Throws std::out_of_range for any other address.
+  /// Where the byte at _linear is: in GameData or video memory. Throws std::out_of_range for any other address, and for a byte
+  /// of the data segment the state does not hold.
   [[nodiscard]] std::uint8_t* At(std::uint32_t _linear)
   {
     const Place place = Locate(_linear);
-    return place.region == Region::Data ? &DataStorage()[place.index] : &m_video[place.index];
+    return place.region == Region::Data ? &WriteAt(static_cast<std::uint16_t>(place.index)) : &m_video[place.index];
   }
 
+  /// Where the byte at _linear is, to read: in GameData, the image or video memory. Throws std::out_of_range for any other
+  /// address.
   [[nodiscard]] const std::uint8_t* At(std::uint32_t _linear) const
   {
     const Place place = Locate(_linear);
-    return place.region == Region::Data ? &DataBytes()[place.index] : &m_video[place.index];
+    return place.region == Region::Data ? ReadAt(static_cast<std::uint16_t>(place.index)) : &m_video[place.index];
   }
 
   void Store(std::uint8_t& _byte, std::uint8_t _value) noexcept
@@ -426,6 +524,7 @@ private:
   }
 
   std::unique_ptr<Block, FreeBlock> m_block;
+  const OriginalLayout* m_layout;
   std::array<std::uint8_t, Cga::VIDEO_MEMORY_BYTES> m_video{};
   std::uint16_t m_codeSegment = 0;
   std::uint16_t m_dataSegment = 0;
@@ -433,6 +532,12 @@ private:
 
 /// The little-endian word at _bytes[_at] and _bytes[_at + 1].
 [[nodiscard]] inline std::uint16_t WordIn(std::span<const Counted<std::uint8_t>> _bytes, std::size_t _at) noexcept
+{
+  return static_cast<std::uint16_t>(_bytes[_at] | (_bytes[_at + 1] << 8));
+}
+
+/// The little-endian word at _bytes[_at] and _bytes[_at + 1] of a constant's table (D38).
+[[nodiscard]] constexpr std::uint16_t WordIn(std::span<const std::uint8_t> _bytes, std::size_t _at) noexcept
 {
   return static_cast<std::uint16_t>(_bytes[_at] | (_bytes[_at + 1] << 8));
 }

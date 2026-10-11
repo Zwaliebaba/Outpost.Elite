@@ -8,20 +8,20 @@ file LEESTI.CDR rich-at-leesti.cdr
 wait 0.5; key space; wait 3.5      # any key: the credits, then the status screen
 key Escape; wait 0.3               # the disc menu
 key c; wait 0.5                    # Catalogue Disc: JAMESON and LEESTI
-digest catalogue 5b4f3917a85b362a78051775a114d1784bd4f6052e358a0c3082db41765a7830
+digest catalogue 5f130fbf57c7bcc20dd5cb0dbeb68a332ede40ab84d35c78c000d0b1c16bb3af
 picture catalogue 4d019bc90d5f384d6751c629e9636f963e822b8537fc0b7f316bc8ac35b1edb0
 outcome catalogue galaxy=0 system=7 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=1000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=0 laserMounts=1 laserTypes=0 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=48 fuel=255 shipSlotsInUse=1 cabinTemperature=12 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 key d; wait 0.3; key l; key e; key e; key s; key t; key i; key Return; wait 0.5
 key c; wait 0.5                    # DELETED: LEESTI, and the catalogue holds JAMESON alone
-digest deleted 9612da996bbbf5af664628f0331a7d2cc941664d5b20fe7dc099c3d9c8bd8f77
+digest deleted c3f547fb267747f3a0b4df463cfc268dd175f69efe493ba12a1be89c869be2c5
 picture deleted 3ad3aef6accb4969f5dfb9477eb42d1d8b5fe056254c2aceaf1c2d26ef8fdce0
 outcome deleted galaxy=0 system=7 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=1000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=0 laserMounts=1 laserTypes=0 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=48 fuel=255 shipSlotsInUse=1 cabinTemperature=12 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 key l; wait 0.3; key 1; key Return; wait 0.3   # FILENAME ERROR: a name starts with a letter
-digest bad-name 20547d589ba8a92c378eb7019effafe329e6fe6835a6f8b29956bc448af8f3a1
+digest bad-name cb5181bc7eb5b393cfb58d988d83a933a94220b66e2f87f97ce452fea65f3fc9
 picture bad-name 36f2656e0c45d318707de49ecbc57f5c3ee3c4cc110b2acaa818d883face588f
 outcome bad-name galaxy=0 system=7 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=1000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=0 laserMounts=1 laserTypes=0 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=48 fuel=255 shipSlotsInUse=1 cabinTemperature=12 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 key l; wait 0.3; key m; key i; key s; key s; key i; key n; key g; key Return; wait 0.5
-digest disk-error 19a4fc48f4a665b271cf74b86f861a05ddf2d353e1e1f81ac6f3419b4f5f415a
+digest disk-error 3f7332ae6c722f3946909641a008f7e3beb8c241c6299ebe35fe319cc8103620
 picture disk-error ab890083b3a8e35babb84d1ac1113e363fda60ed3c90d6864ce2ca289b94b000
 outcome disk-error galaxy=0 system=7 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=1000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=0 laserMounts=1 laserTypes=0 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=48 fuel=255 shipSlotsInUse=1 cabinTemperature=12 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 key n; wait 0.3                    # no retry
@@ -30,19 +30,19 @@ key j; wait 0.3; key i; wait 0.3   # the IBM stick: centre it and press a key
 key space; wait 0.5                # ERROR: No Joystick!
 key j; wait 0.3; key a; wait 0.3   # the Amstrad stick: move it and press a key
 key space; wait 0.5                # it never moved: ERROR: No Joystick!
-digest no-joystick 0fd11bd139fb9d0dfb224118e93014ca3716d0ac507407631292c377b448aa07
+digest no-joystick d883fb20562234150c73e95d734ac4ceffd6ef437434cae55ea0649a8947398b
 picture no-joystick 6d5762c4f30588d9ef047fcce6ac4d883dad5514dcd88289396fb1546b1fadfe
 outcome no-joystick galaxy=0 system=7 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=1000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=0 laserMounts=1 laserTypes=0 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=48 fuel=255 shipSlotsInUse=1 cabinTemperature=12 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 key v; wait 0.3                    # the version
 key k; wait 0.3                    # DEVICE: Keyboard
-digest keyboard 9c64fa6d283d5607622c350b35e84e5f033e12b5263c19a42bf9866330cc2f72
+digest keyboard 34e721588820ae904fcaef3007c7e75c3bbf83d66ed484dc16010951f6714833
 picture keyboard 68d33e202c09ed62cc48d59270bba86e2e2929ccf6ac3b6588c6437b522d3020
 outcome keyboard galaxy=0 system=7 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=1000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=0 laserMounts=1 laserTypes=0 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=48 fuel=255 shipSlotsInUse=1 cabinTemperature=12 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 key l; wait 0.3; key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
-digest loaded e608c5cd17ceb3faa6d60cc10775c8d1946aee301fd41a2c1f1d1557731daa95
+digest loaded b55261747600c311557138d9c8fc11b4d0fa4356dad6c475d78e9f87c3f62ef0
 picture loaded ba1f1766ab673a4191aff1b73034139f8ba7b24bead69e493225095609f2d682
 outcome loaded galaxy=0 system=7 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=1000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=0 laserMounts=1 laserTypes=0 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=48 fuel=255 shipSlotsInUse=1 cabinTemperature=12 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 key F9; wait 0.8
-digest status f21e06c81aa51dd32e8a30355ffdf722c292961ab108f07aad000b7d199fa7bc
+digest status 8f897257a7db5469d65530ededcc1ed41ae5cec350a6ce50a8dbda51473d2c1d
 picture status 5f681d095973410bfa163b956f0ef09a30129a94ed1f7499533e58dfe2e1d548
 outcome status galaxy=0 system=7 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=1000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=0 laserMounts=1 laserTypes=0 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=48 fuel=255 shipSlotsInUse=1 cabinTemperature=12 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0

@@ -10,9 +10,9 @@
 namespace Elite
 {
 
-/// The alignment of the block of memory that holds the data segment with its change count (GameState): a power of two no
-/// smaller than the block, which is the count's 8 bytes and then GameData's 64 KiB. The count is the block's first member, so
-/// rounding the address of any byte of the data segment down to a multiple of this finds it (ChangeCountAt).
+/// The alignment of the block of memory that holds the game's state with its change count (GameState): a power of two no
+/// smaller than the block, which is the count's 8 bytes and then GameData's. The count is the block's first member, so
+/// rounding the address of any byte of the state down to a multiple of this finds it (ChangeCountAt).
 inline constexpr std::size_t COUNTED_BLOCK_ALIGNMENT = 0x20000;
 
 /// The change count of the block that holds the byte at _byte, which must be in a GameState's data segment: _byte's address
@@ -39,11 +39,11 @@ template <typename T> [[nodiscard]] consteval bool IsCountedValue() noexcept
   }
 }
 
-/// A byte or a word of the game's memory, as a member of GameData (D19): its bytes at the reference's layout, little-endian as
-/// the 8088 keeps them, with an alignment of 1 so that it sits anywhere in the packed struct and can be passed by reference. A
-/// field that holds an index or a message in place of the original's address holds it as an enumeration of a byte or a word.
+/// A byte or a word of the game's memory, as a member of GameData (D19, D38): its bytes little-endian as the 8088 keeps them,
+/// with an alignment of 1 so that it sits anywhere in its group's struct and can be passed by reference. A field that holds an
+/// index or a message in place of the original's address holds it as an enumeration of a byte or a word.
 ///
-/// It reads as a value (`_state.Data().commanderBlock.fuel`) and is written by assignment, and a write counts in its own
+/// It reads as a value (`_state.Data().commander.fuel`) and is written by assignment, and a write counts in its own
 /// GameState's change count (ChangeCountAt) exactly when it changes the stored value. A write of the value already there counts
 /// nothing, so a loop that only stores what it found still idles: paced time compares the count from turn to turn (ADR-015).
 /// That makes assignment from a value the only way to write one:

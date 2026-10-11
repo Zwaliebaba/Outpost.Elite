@@ -37,13 +37,13 @@ constexpr std::array<std::array<std::uint16_t, 3>, 3> EDGE_RANDOM_STATES = {
 // commodity's price and resale price, as screenPrices holds them, in tenths of a credit.
 [[nodiscard]] std::string Prices(Elite::GameState& _state, std::uint8_t _economy, std::uint8_t _government, std::uint8_t _techLevel)
 {
-  _state.Data().commanderBlock.currentEconomy = _economy;
-  _state.Data().commanderBlock.currentGovernment = _government;
-  _state.Data().commanderBlock.currentTechLevel = _techLevel;
+  _state.Data().commander.currentEconomy = _economy;
+  _state.Data().commander.currentGovernment = _government;
+  _state.Data().commander.currentTechLevel = _techLevel;
   Elite::ComputeMarketPrices(_state);
   std::string line = std::format("prices {} {} {}", _economy, _government, _techLevel);
   const std::span<const Elite::Counted<std::uint8_t>> prices =
-    _state.BytesFrom(_state.Data().screenPrices, sizeof(Elite::GameData::ScreenPrices));
+    _state.BytesFrom(_state.Data().menus.screenPrices, sizeof(Elite::MenusState::ScreenPrices));
   for (std::size_t commodity = 0; commodity < COMMODITIES; ++commodity)
   {
     const std::size_t at = commodity * PRICE_ENTRY_BYTES;
@@ -56,9 +56,9 @@ constexpr std::array<std::array<std::uint16_t, 3>, 3> EDGE_RANDOM_STATES = {
 // StartMarketRandom, then RollQuantityOnSale for each commodity in turn, '-' for none.
 [[nodiscard]] std::string Quantities(Elite::GameState& _state, const std::array<std::uint16_t, 3>& _random)
 {
-  _state.Data().commanderBlock.randomState0 = _random[0];
-  _state.Data().commanderBlock.randomState1 = _random[1];
-  _state.Data().commanderBlock.randomState2 = _random[2];
+  _state.Data().commander.randomState0 = _random[0];
+  _state.Data().commander.randomState1 = _random[1];
+  _state.Data().commander.randomState2 = _random[2];
   Elite::StartMarketRandom(_state);
   std::string line = std::format("quantities {:04x} {:04x} {:04x}", _random[0], _random[1], _random[2]);
   for (std::size_t commodity = 0; commodity < COMMODITIES; ++commodity)
@@ -94,17 +94,16 @@ public:
       }
     }
 
-    std::array<std::uint16_t, 3> random = {state.Data().commanderBlock.randomState0, state.Data().commanderBlock.randomState1,
-                                           state.Data().commanderBlock.randomState2};
+    std::array<std::uint16_t, 3> random = {state.Data().commander.randomState0, state.Data().commander.randomState1,
+                                           state.Data().commander.randomState2};
     for (std::size_t walked = 0; walked < WALKED_RANDOM_STATES; ++walked)
     {
       answers.push_back(Quantities(state, random));
-      state.Data().commanderBlock.randomState0 = random[0];
-      state.Data().commanderBlock.randomState1 = random[1];
-      state.Data().commanderBlock.randomState2 = random[2];
+      state.Data().commander.randomState0 = random[0];
+      state.Data().commander.randomState1 = random[1];
+      state.Data().commander.randomState2 = random[2];
       (void)Elite::NextRandom(state);
-      random = {state.Data().commanderBlock.randomState0, state.Data().commanderBlock.randomState1,
-                state.Data().commanderBlock.randomState2};
+      random = {state.Data().commander.randomState0, state.Data().commander.randomState1, state.Data().commander.randomState2};
     }
     for (const std::array<std::uint16_t, 3>& edge : EDGE_RANDOM_STATES)
     {

@@ -22,8 +22,8 @@ void AssertAtTheTitle(TwinRig& _rig)
   _rig.Both(
     [](Elite::Platform&, Elite::GameState& _state)
     {
-      Assert::AreEqual(std::uint8_t{0}, std::uint8_t{_state.Data().titleShown}, L"the title runs again");
-      Assert::AreEqual(std::uint8_t{0}, std::uint8_t{_state.Data().inFlight}, L"out of flight");
+      Assert::AreEqual(std::uint8_t{0}, std::uint8_t{_state.Data().flow.titleShown}, L"the title runs again");
+      Assert::AreEqual(std::uint8_t{0}, std::uint8_t{_state.Data().flow.inFlight}, L"out of flight");
     });
 }
 
@@ -48,7 +48,7 @@ public:
   {
     TwinRig rig("TwinDeath");
     rig.Play("key space; wait 3.2");
-    SetBoth(rig, &Elite::GameData::playerDead, 1);
+    SetBoth(rig, &Elite::PlayerShipState::playerDead, 1);
     rig.Play("key F1; wait 4.5\ndigest title-again");
     AssertAtTheTitle(rig);
   }

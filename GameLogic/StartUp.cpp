@@ -7,6 +7,8 @@
 #include "Flight.h"
 #include "Input.h"
 #include "SaveLoad.h"
+#include "SharedTables.h"
+#include "StartUpTables.h"
 #include "Text.h"
 #include "Timer.h"
 #include "Video.h"
@@ -77,7 +79,7 @@ void MoveBytes(GameState& _state, std::uint16_t _sourceSegment, std::uint16_t _s
 void ExitToDos(GameState& _state, Hardware& _hardware)
 {
   _hardware.SetVideoMode(VIDEO_MODE_TEXT_80);
-  _hardware.PrintDosString(_state.DataSegment(), _state.OffsetOf(_state.Data().exitMessage));
+  _hardware.PrintDosString(_state.DataSegment(), OriginalOffset("exitMessage"));
 }
 
 } // namespace
@@ -107,7 +109,7 @@ void RestoreDivideAndKeyboardInterrupts(Hardware& _hardware)
 
 void CheckCheatArgument(GameState& _state, const Hardware& _hardware)
 {
-  _state.Data().cheatEnabled = 0;
+  _state.Data().startUp.cheatEnabled = 0;
   // The command tail DOS gave the program, which the original reads from its PSP: its length, then the text, which
   // cheatArgumentKey holds XORed with AAh.
   const std::string_view tail = _hardware.CommandTail();
@@ -117,47 +119,47 @@ void CheckCheatArgument(GameState& _state, const Hardware& _hardware)
   }
   for (std::uint16_t at = 0; at < CHEAT_ARGUMENT_BYTES; ++at)
   {
-    const auto expected = static_cast<std::uint8_t>(_state.Data().cheatArgumentKey[at] ^ CHEAT_KEY);
+    const auto expected = static_cast<std::uint8_t>(CHEAT_ARGUMENT_KEY[at] ^ CHEAT_KEY);
     if (static_cast<std::uint8_t>(tail[at]) != expected)
     {
       return;
     }
   }
-  _state.Data().cheatEnabled = 1;
+  _state.Data().startUp.cheatEnabled = 1;
 }
 
 void StartNewGame(GameState& _state, bool _backward)
 {
   // REP MOVSB from DS to ES = DS.
   const std::uint16_t data = _state.DataSegment();
-  MoveBytes(_state, data, _state.OffsetOf(_state.Data().startupCommander), data, _state.OffsetOf(_state.Data().commanderBlock),
-            _state.Data().commanderFileBytes, _backward);
-  _state.Data().commanderBlock.witchspaceCountdown = 0;
-  _state.Data().playerEnergy = NEW_GAME_ENERGY;
-  _state.Data().foreShield = FULL_SHIELD;
-  _state.Data().aftShield = FULL_SHIELD;
-  _state.Data().cabinTemperature = NEW_GAME_CABIN_TEMPERATURE;
-  _state.Data().altitude = NEW_GAME_ALTITUDE;
-  _state.Data().playerDead = 0;
-  _state.Data().commanderBlock.missionJumpCount = 0;
-  _state.Data().commanderBlock.data7629 = 0;
-  _state.Data().commanderBlock.missionNumber = 0;
-  _state.Data().warningFrames = 0;
-  _state.Data().incomingMissileAlert = 0;
-  _state.Data().commanderBlock.missionStage = 0;
-  _state.Data().commanderBlock.fuelLeakDelayFrames = 0;
-  _state.Data().commanderBlock.fuelLeakFrames = 0;
-  _state.Data().commanderBlock.supernovaFrames = 0;
-  _state.Data().commanderBlock.supernovaHeat = 0;
-  _state.Data().commanderBlock.maskShipDestroyed = 0;
-  _state.Data().commanderBlock.thargoidInvasionActive = 0;
-  _state.Data().commanderBlock.maskMissionShipsLeft = 0;
-  _state.Data().commanderBlock.invadedStationDestroyed = 0;
-  _state.Data().forceMisjump = 0;
-  _state.Data().messageFrames = 0;
-  _state.Data().missileState = 0;
-  _state.Data().commanderBlock.fledMaskShip = 0;
-  _state.Data().commanderBlock.maskSystemJumps = 0;
+  MoveBytes(_state, data, _state.OffsetOf(_state.Data().saveLoad.startupCommander), data, _state.OffsetOf(_state.Data().commander),
+            COMMANDER_FILE_BYTES, _backward);
+  _state.Data().commander.witchspaceCountdown = 0;
+  _state.Data().playerShip.playerEnergy = NEW_GAME_ENERGY;
+  _state.Data().playerShip.foreShield = FULL_SHIELD;
+  _state.Data().playerShip.aftShield = FULL_SHIELD;
+  _state.Data().playerShip.cabinTemperature = NEW_GAME_CABIN_TEMPERATURE;
+  _state.Data().playerShip.altitude = NEW_GAME_ALTITUDE;
+  _state.Data().playerShip.playerDead = 0;
+  _state.Data().commander.missionJumpCount = 0;
+  _state.Data().commander.data7629 = 0;
+  _state.Data().commander.missionNumber = 0;
+  _state.Data().messages.warningFrames = 0;
+  _state.Data().playerShip.incomingMissileAlert = 0;
+  _state.Data().commander.missionStage = 0;
+  _state.Data().commander.fuelLeakDelayFrames = 0;
+  _state.Data().commander.fuelLeakFrames = 0;
+  _state.Data().commander.supernovaFrames = 0;
+  _state.Data().commander.supernovaHeat = 0;
+  _state.Data().commander.maskShipDestroyed = 0;
+  _state.Data().commander.thargoidInvasionActive = 0;
+  _state.Data().commander.maskMissionShipsLeft = 0;
+  _state.Data().commander.invadedStationDestroyed = 0;
+  _state.Data().jump.forceMisjump = 0;
+  _state.Data().messages.messageFrames = 0;
+  _state.Data().playerShip.missileState = 0;
+  _state.Data().commander.fledMaskShip = 0;
+  _state.Data().commander.maskSystemJumps = 0;
 }
 
 void Start(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward)
@@ -170,7 +172,7 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, b
   std::uint16_t bytesLeft = AMSTRAD_SIGNATURE_BYTES;
   for (std::uint16_t at = 0; bytesLeft != 0;)
   {
-    const bool same = _state.Data().amstradSignature[at] == _hardware.RomByte(AMSTRAD_ROM_SEGMENT, Offset(AMSTRAD_ROM_SIGNATURE, at));
+    const bool same = AMSTRAD_SIGNATURE[at] == _hardware.RomByte(AMSTRAD_ROM_SEGMENT, Offset(AMSTRAD_ROM_SIGNATURE, at));
     ++at;
     --bytesLeft;
     if (!same)
@@ -180,7 +182,7 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, b
   }
   if (bytesLeft != 0)
   {
-    _state.Data().amstradPresent = 0;
+    _state.Data().unused.amstradPresent = 0;
   }
 
   // From here on the direction flag is as the CLD left it, and as GameLoop leaves it; BP as DOS left it, and as GameLoop leaves it.
@@ -199,7 +201,7 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, b
     // HandleDiskRequest (CS:0065): GameLoop comes back only for diskOperation, 0 to leave.
     RestoreDivideAndKeyboardInterrupts(_hardware);
     const BiosClock clock = RestoreTimerInterrupt(_state, _hardware);
-    const std::uint8_t request = _state.Data().diskOperation;
+    const std::uint8_t request = _state.Data().saveLoad.diskOperation;
     if (request == 0)
     {
       WipeProgram(_hardware);
@@ -208,7 +210,7 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, b
     }
     // The request, with the game's own critical-error handler on int 24h, and the handler that was there put back after it.
     // A listing searches with the attributes RestoreTimerInterrupt leaves in CX.
-    _state.Data().diskError = 0;
+    _state.Data().disk.diskError = 0;
     const FarAddress criticalError = _hardware.InterruptVector(CRITICAL_ERROR_VECTOR);
     _hardware.SetInterruptVector(CRITICAL_ERROR_VECTOR, FarAddress{_state.CodeSegment(), CRITICAL_ERROR_INTERRUPT});
     PerformDiskRequest(_state, _hardware, request, ClockLessADayHigh(clock));
@@ -230,7 +232,7 @@ GameLoopExit GameLoop(GameState& _state, Hardware& _hardware, std::uint16_t _cou
   bool backward = _backward;
   for (;;)
   {
-    _state.Data().inFlight = 0;
+    _state.Data().flow.inFlight = 0;
     const DockedExit docked = RunTitleAndDocked(_state, _hardware, countIfNone, backward);
     if (docked.leaves)
     {
@@ -238,14 +240,14 @@ GameLoopExit GameLoop(GameState& _state, Hardware& _hardware, std::uint16_t _cou
       // into Start.
       return GameLoopExit{docked.countLeft, docked.backward};
     }
-    _state.Data().inFlight = 1;
+    _state.Data().flow.inFlight = 1;
     const FlightExit flight = RunFlight(_state, _hardware, docked.backward);
     countIfNone = flight.countLeft;
     backward = flight.backward;
     // After a death the title runs again.
-    if (_state.Data().playerDead == 1)
+    if (_state.Data().playerShip.playerDead == 1)
     {
-      _state.Data().titleShown = 0;
+      _state.Data().flow.titleShown = 0;
     }
     // JMP GameLoop: the next turn reads BP, in RunTitleAndDocked, before it writes it.
     _hardware.LoopTurn(GAME_LOOP, {countIfNone});
@@ -257,18 +259,22 @@ void ShowCredits(GameState& _state, Hardware& _hardware, bool _backward)
   ClearDrawBuffer(_state, _backward);
   // Each line from SI, one past the last line's NUL, at DI, a row of characters below the last line's start. The original pushes
   // and pops the count and the place round the print; its LOOP's turns carry the count, the text and the place.
-  std::string_view text = _state.TextAt(_state.Data().creditsScreenText);
+  // The text from the reference's image at the original's address, which the turns carry: change 3b of D38 converts it to the
+  // table.
+  std::string_view text = _state.TextAtOffset(OriginalOffset("creditsScreenText"));
   std::uint16_t place = CREDITS_FIRST_LINE;
   for (std::uint16_t linesLeft = CREDITS_LINES;;)
   {
-    _state.Data().textPaperPattern = 0;
+    _state.Data().drawing.textPaperPattern = 0;
     (void)DrawViewString(_state, text, WHITE_MASK, place);
-    text = _state.TextAfter(text);
     place = Offset(place, CREDITS_LINE_STEP);
     if (--linesLeft == 0)
     {
       break;
     }
+    // SI past the line's NUL; past the last line, where the state no longer holds the bytes after the text beside it (D38),
+    // nothing reads it.
+    text = _state.TextAfter(text);
     _hardware.LoopTurn(CREDITS_LINE, {linesLeft, _state.OffsetOf(*text.data()), place});
   }
   FinishSpaceViewFrame(_state, _hardware);

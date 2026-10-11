@@ -111,19 +111,19 @@ NearTest IsObjectNear(GameState& _state, SpaceObject& _slot);
 [[nodiscard]] bool IsObjectNearKeepBlip(const SpaceObject& _slot);
 
 /// InitPoliceViper (CS:4C76): _slot made a Viper (spawnTemplates entry 14), class 4, police (+3Ah = 1), aggression 64h.
-void InitPoliceViper(GameState& _state, SpaceObject& _slot);
+void InitPoliceViper(SpaceObject& _slot);
 
 /// InitCargoBarrel (CS:4C99): _slot made a barrel (spawnTemplates entry 3), class 3.
-void InitCargoBarrel(GameState& _state, SpaceObject& _slot);
+void InitCargoBarrel(SpaceObject& _slot);
 
 /// InitAbandonedCobra (CS:4CA6): _slot made a Cobra (entry 9) of class 0: the ship an escape pod leaves.
-void InitAbandonedCobra(GameState& _state, SpaceObject& _slot);
+void InitAbandonedCobra(SpaceObject& _slot);
 
 /// InitShuttle (CS:4CC0): _slot made a shuttle (entry 7), class 3.
-void InitShuttle(GameState& _state, SpaceObject& _slot);
+void InitShuttle(SpaceObject& _slot);
 
 /// InitThargon (CS:4CDA): _slot made a Thargon (entry 28), class 5.
-void InitThargon(GameState& _state, SpaceObject& _slot);
+void InitThargon(SpaceObject& _slot);
 
 /// SpawnRandomDrifter (CS:4CE7): _slot, a free one, made one of the eight drifters from spawnTemplates' entry 1 by a random
 /// word rotated right and its two bytes XORed, placed at the spawn point and turned to the player, of class 3 with turn rate
@@ -158,7 +158,7 @@ void SpawnRandomWolf(GameState& _state, SpaceObject& _slot);
 /// InitObjectFromTemplate (CS:4E1B): _slot from the 10-byte record _index of spawnTemplates from _first, the first of a group of
 /// them, which the original holds the address of in BX: its state, flags and
 /// aggression cleared, its scanned byte 1, its type active, then the record's nine fields.
-void InitObjectFromTemplate(GameState& _state, SpaceObject& _slot, std::size_t _first, std::uint8_t _index);
+void InitObjectFromTemplate(SpaceObject& _slot, std::size_t _first, std::uint8_t _index);
 
 /// PlaceAtSpawnPoint (CS:4E75): _slot placed at a random point 10000 out, by rotation pairs 7 and 6: (a scatter of +-1023,
 /// 10000) turned by pair 7, then (another scatter, what that left of the 10000) by pair 6. Its y, x and z, in that order.

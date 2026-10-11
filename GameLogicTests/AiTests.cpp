@@ -14,7 +14,7 @@ namespace GameLogicTests
 namespace
 {
 
-using Commander = Elite::GameData::CommanderBlock;
+using Commander = Elite::CommanderState;
 
 // The twins' prepared commanders, from Replays/ (Tools/PrepareCommanders.py).
 constexpr std::string_view ARMED = "armed.cdr";
@@ -75,8 +75,8 @@ struct ShipCount
 {
   ShipCount count{0, 0};
   Elite::GameState& state = _rig.State();
-  const Elite::SpaceObject& station = state.Data().shipSlots.stationSlot;
-  for (std::uint16_t index = FIRST_SHIP_SLOT; index < state.Data().objectSlotCount; ++index)
+  const Elite::SpaceObject& station = state.Slot(Elite::SlotIndex::Station);
+  for (std::uint16_t index = FIRST_SHIP_SLOT; index < state.Data().flight.objectSlotCount; ++index)
   {
     const Elite::SpaceObject& ship = state.Slot(static_cast<Elite::SlotIndex>(index));
     const std::uint8_t type = ship.type;

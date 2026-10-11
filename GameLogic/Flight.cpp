@@ -14,6 +14,7 @@
 #include "Input.h"
 #include "Market.h"
 #include "Maths.h"
+#include "SharedTables.h"
 #include "SpaceObject.h"
 #include "Scene.h"
 #include "Ships.h"
@@ -266,8 +267,8 @@ constexpr std::int16_t DEATH_DEBRIS_SPEED = 0x28;
 // load AX with its text's address themselves.
 void SetMessage(GameState& _state, Message _message, std::uint16_t _frames)
 {
-  _state.Data().messagePointer = _message;
-  _state.Data().messageFrames = _frames;
+  _state.Data().messages.messagePointer = _message;
+  _state.Data().messages.messageFrames = _frames;
 }
 
 // ---- Stardust -------------------------------------------------------------------------------------
@@ -275,9 +276,9 @@ void SetMessage(GameState& _state, Message _message, std::uint16_t _frames)
 // The lifetime byte of particle _particle, its copy in stardustPrevious, and the copy marked new, for a respawned particle.
 void MarkDustRespawned(GameState& _state, std::size_t _particle, std::uint8_t _lifetime)
 {
-  _state.Data().stardust[_particle][PARTICLE_LIFETIME] = _lifetime;
-  _state.Data().stardustPrevious[_particle][PARTICLE_LIFETIME] = _lifetime;
-  _state.Data().stardustPrevious[_particle][PARTICLE_NEW] = 1;
+  _state.Data().flight.stardust[_particle][PARTICLE_LIFETIME] = _lifetime;
+  _state.Data().flight.stardustPrevious[_particle][PARTICLE_LIFETIME] = _lifetime;
+  _state.Data().flight.stardustPrevious[_particle][PARTICLE_NEW] = 1;
 }
 
 [[nodiscard]] std::uint8_t RandomLifetime(std::uint16_t _random) noexcept
@@ -314,12 +315,12 @@ bool DrawDust(GameState& _state, std::size_t _particle, DustPosition _position)
   const DustScreenPosition screen = DustToScreen(_position);
   const std::uint8_t x = Low(Word(screen.x));
   const std::uint8_t row = Low(Word(screen.row));
-  if (_state.Data().jumpDriveEngaged == 0)
+  if (_state.Data().flight.jumpDriveEngaged == 0)
   {
     PlotPixel(_state, x, row);
     return false;
   }
-  if (_state.Data().stardustPrevious[_particle][PARTICLE_NEW] != 0)
+  if (_state.Data().flight.stardustPrevious[_particle][PARTICLE_NEW] != 0)
   {
     return false;
   }
@@ -333,7 +334,7 @@ bool DrawDust(GameState& _state, std::size_t _particle, DustPosition _position)
 DustPosition MoveDust(GameState& _state, std::size_t _particle, DustPosition _position, bool _rear)
 {
   DustPosition position = _position;
-  if (_state.Data().playerSpeed != 0)
+  if (_state.Data().playerShip.playerSpeed != 0)
   {
     // ADD AX,BP / ADD BX,DX, or SUB for the rear view.
     const DustStep step = ScaleDustStep(_state, position);
@@ -354,7 +355,7 @@ DustPosition MoveDust(GameState& _state, std::size_t _particle, DustPosition _po
     else if (!IsDustNearCenter(position))
     {
       // DEC BYTE [SI+4] / JE: the lifetime counted down, the particle born again at 0.
-      Counted<std::uint8_t>& lifetime = _state.Data().stardust[_particle][PARTICLE_LIFETIME];
+      Counted<std::uint8_t>& lifetime = _state.Data().flight.stardust[_particle][PARTICLE_LIFETIME];
       lifetime = static_cast<std::uint8_t>(lifetime - 1);
       if (lifetime != 0)
       {
@@ -372,7 +373,7 @@ DustPosition MoveDust(GameState& _state, std::size_t _particle, DustPosition _po
 bool UpdateFrontOrRearStardust(GameState& _state, bool _rear)
 {
   // MOV DX,rollRate / ApplyReverseControlsToDx / AND DH,DH / XOR DL,DL / NEG DX for the front view / SAR DX,1.
-  const std::uint16_t pitchRate = _state.Data().rollRate;
+  const std::uint16_t pitchRate = _state.Data().playerShip.rollRate;
   const std::uint8_t pitch = ApplyReverseControls(_state, Steering{Low(pitchRate), High(pitchRate)}).pitch;
   if (pitch != 0)
   {
@@ -380,7 +381,7 @@ bool UpdateFrontOrRearStardust(GameState& _state, bool _rear)
     ShiftStardustVertically(_state, Signed(Sar(_rear ? step : Negate(step), 1)));
   }
   // MOV AX,rollRate / ApplyReverseControls / CBW / NEG AX for the front view / SHL AX,1: the roll.
-  const std::uint16_t rollRate = _state.Data().rollRate;
+  const std::uint16_t rollRate = _state.Data().playerShip.rollRate;
   const std::uint16_t roll = SignExtend(ApplyReverseControls(_state, Steering{Low(rollRate), High(rollRate)}).roll);
   if (const auto angle = static_cast<std::uint16_t>((_rear ? roll : Negate(roll)) << 1); angle != 0)
   {
@@ -422,7 +423,7 @@ bool UpdateSideStardust(GameState& _state, bool _left)
 {
   // MOV DX,rollRate / ApplyReverseControlsToDx / MOV DH,DL: the reversed roll byte, as DX = roll:00, negated for the right view
   // and halved, shifts the dust vertically.
-  const std::uint16_t rollRate = _state.Data().rollRate;
+  const std::uint16_t rollRate = _state.Data().playerShip.rollRate;
   const std::uint8_t roll = ApplyReverseControls(_state, Steering{Low(rollRate), High(rollRate)}).roll;
   if (roll != 0)
   {
@@ -430,14 +431,14 @@ bool UpdateSideStardust(GameState& _state, bool _left)
     ShiftStardustVertically(_state, Signed(Sar(_left ? step : Negate(step), 1)));
   }
   // The speed, negated for the left view, as DX = its low byte:00, shifted right three times, moves it sideways.
-  if (const std::uint16_t speed = _state.Data().playerSpeed; speed != 0)
+  if (const std::uint16_t speed = _state.Data().playerShip.playerSpeed; speed != 0)
   {
     const std::uint16_t step = Join(Low(_left ? Negate(speed) : speed), 0);
     ShiftStardustSideways(_state, Signed(Sar(step, 3)));
   }
   // MOV AX,rollRate / ApplyReverseControls / MOV AL,AH / CBW / SHL AX,1: the reversed pitch byte, doubled and negated for the
   // left view, rolls it.
-  const std::uint16_t pitchRate = _state.Data().rollRate;
+  const std::uint16_t pitchRate = _state.Data().playerShip.rollRate;
   const auto angle =
     static_cast<std::uint16_t>(SignExtend(ApplyReverseControls(_state, Steering{Low(pitchRate), High(pitchRate)}).pitch) << 1);
   if (angle != 0)
@@ -487,7 +488,7 @@ void DrawBar(GameState& _state, const std::array<std::uint16_t, Lines>& _lines, 
   }
   if (const auto partial = static_cast<std::uint8_t>(_pixels & 3); partial != 0)
   {
-    fill(_state.Data().barPartialBytes[partial]);
+    fill(BAR_PARTIAL_BYTES[partial]);
   }
   const auto rest = static_cast<std::uint8_t>(static_cast<std::uint8_t>(BAR_PIXELS - _pixels) >> 2);
   if (rest == 0)
@@ -560,7 +561,7 @@ void SubtractFloored(Counted<std::uint8_t>& _field, std::uint8_t _value)
 void CheckCollision(GameState& _state, Hardware& _hardware, SpaceObject& _slot)
 {
   // MOV BL,[DI] / AND BX,3Eh: the type, doubled, indexes the box's half sizes.
-  const std::uint16_t range = _state.Data().collisionRanges[(_slot.type & 0x3E) >> 1];
+  const std::uint16_t range = COLLISION_RANGES[(_slot.type & 0x3E) >> 1];
   // The station's collided bit is bit 0 of its yaw's low byte.
   const auto clearCollided = [&_slot] { _slot.yaw = WithLow(_slot.yaw, static_cast<std::uint8_t>(Low(_slot.yaw) & 0xFE)); };
   if (!ObjectWithinBox(_slot, range))
@@ -584,12 +585,12 @@ void CheckCollision(GameState& _state, Hardware& _hardware, SpaceObject& _slot)
       if (CheckDockingAlignment(_state, _slot, 0x64))
       {
         // Aligned: docked, if inside the slot and the station is not the Thargoids'.
-        if (_state.Data().commanderBlock.thargoidInvasionActive != 1 && InsideDockingSlot(_slot, 0x5A) && (_slot.flags & 1) == 0)
+        if (_state.Data().commander.thargoidInvasionActive != 1 && InsideDockingSlot(_slot, 0x5A) && (_slot.flags & 1) == 0)
         {
-          _state.Data().playerDocked = 1;
-          _state.Data().dockingComputerOn = 0;
-          _state.Data().rollRate = 0;
-          _state.Data().viewLocked = 0;
+          _state.Data().flight.playerDocked = 1;
+          _state.Data().playerShip.dockingComputerOn = 0;
+          _state.Data().playerShip.rollRate = 0;
+          _state.Data().playerShip.viewLocked = 0;
           return;
         }
       }
@@ -625,9 +626,9 @@ void CheckCollision(GameState& _state, Hardware& _hardware, SpaceObject& _slot)
 // SetWarning (0x36E7): posts warning _warning, its message WARNING_MESSAGES[_warning] (warningTexts), for 20 frames.
 void SetWarning(GameState& _state, std::uint8_t _warning)
 {
-  _state.Data().warningFrames = 0x14;
-  _state.Data().warningIndex = _warning;
-  _state.Data().warningMessage = WARNING_MESSAGES[_warning];
+  _state.Data().messages.warningFrames = 0x14;
+  _state.Data().flight.warningIndex = _warning;
+  _state.Data().flight.warningMessage = WARNING_MESSAGES[_warning];
 }
 
 // CheckMissileWarning, CheckAltitudeWarning, CheckTemperatureWarning and CheckEnergyWarning (0x36FD,
@@ -638,16 +639,16 @@ void SetWarning(GameState& _state, std::uint8_t _warning)
   {
   case 0:
   {
-    const bool alert = _state.Data().incomingMissileAlert == 1;
-    _state.Data().incomingMissileAlert = 0;
+    const bool alert = _state.Data().playerShip.incomingMissileAlert == 1;
+    _state.Data().playerShip.incomingMissileAlert = 0;
     return alert;
   }
   case 1:
-    return _state.Data().altitude < 0x32;
+    return _state.Data().playerShip.altitude < 0x32;
   case 2:
-    return _state.Data().cabinTemperature >= 0xE1;
+    return _state.Data().playerShip.cabinTemperature >= 0xE1;
   default:
-    return _state.Data().playerEnergy < 0x100;
+    return _state.Data().playerShip.playerEnergy < 0x100;
   }
 }
 
@@ -707,12 +708,12 @@ constexpr std::array<DotStep, 8> COMPASS_RING = {
 // planet's, then where its look at the ships stopped.
 [[nodiscard]] std::uint16_t DashboardCacheEnd(const GameState& _state) noexcept
 {
-  return static_cast<std::uint16_t>(_state.OffsetOf(_state.Data().missileCountShown) + DASHBOARD_CACHE_BYTES);
+  return static_cast<std::uint16_t>(_state.OffsetOf(_state.Data().flight.missileCountShown) + DASHBOARD_CACHE_BYTES);
 }
 
 [[nodiscard]] std::uint16_t StardustEnd(const GameState& _state) noexcept
 {
-  return static_cast<std::uint16_t>(_state.OffsetOf(_state.Data().stardust) + STARDUST_BYTES);
+  return static_cast<std::uint16_t>(_state.OffsetOf(_state.Data().flight.stardust) + STARDUST_BYTES);
 }
 
 constexpr std::uint16_t DRAW_BUFFER_BYTES = 0x2000;
@@ -763,7 +764,7 @@ KeyPress WaitForKey(GameState& _state, Hardware& _hardware, std::uint16_t _call)
 // The pause screen's five options from keyboardRecenter, two bytes each: the option's flag, then its letter.
 [[nodiscard]] std::span<Counted<std::uint8_t>> PauseOptions(GameState& _state)
 {
-  return _state.BytesFrom(_state.Data().keyboardRecenter, std::size_t{PAUSE_OPTIONS} * 2);
+  return _state.BytesFrom(_state.Data().flight.keyboardRecenter, std::size_t{PAUSE_OPTIONS} * 2);
 }
 
 // PauseShowOptions (0x8D8F): the five option letters, in reverse video when on. The loop at 0x8D98 pushes and pops CX, DI
@@ -776,13 +777,13 @@ void ShowPauseOptions(GameState& _state, Hardware& _hardware)
   std::uint16_t optionsLeft = PAUSE_OPTIONS;
   for (;;)
   {
-    _state.Data().textPaperPattern = 0;
+    _state.Data().drawing.textPaperPattern = 0;
     std::uint16_t ink = ALL_COLORS;
     if (options[option] == 1)
     {
       // xchg [textPaperPattern], bx
-      ink = _state.Data().textPaperPattern;
-      _state.Data().textPaperPattern = ALL_COLORS;
+      ink = _state.Data().drawing.textPaperPattern;
+      _state.Data().drawing.textPaperPattern = ALL_COLORS;
     }
     (void)DrawViewChar(_state, options[option + 1], ink, position);
     option += 2;
@@ -826,20 +827,20 @@ enum class PauseExit : std::uint8_t
 void DrawPauseMenu(GameState& _state, Hardware& _hardware, bool _backward)
 {
   ClearDrawBuffer(_state, _backward);
-  _state.Data().textPaperPattern = 0;
+  _state.Data().drawing.textPaperPattern = 0;
   std::size_t line = 0;
   for (std::uint16_t lines = PAUSE_MENU_LINES;;)
   {
     // MOV DI,[SI] / ADD SI,2: the line's place, then its text; INC SI past its NUL.
-    const std::uint16_t at = WordIn(_state.BytesFrom(_state.Data().pauseMenuText, line + 2), line);
-    const std::string_view text = _state.TextAt(_state.Data().pauseMenuText, static_cast<std::uint16_t>(line + 2));
+    const std::uint16_t at = WordIn(_state.BytesFrom(_state.Data().flight.pauseMenuText, line + 2), line);
+    const std::string_view text = _state.TextAt(_state.Data().flight.pauseMenuText, static_cast<std::uint16_t>(line + 2));
     (void)DrawViewString(_state, text, ALL_COLORS, at);
     line += 2 + text.size() + 1;
     if (--lines == 0)
     {
       return;
     }
-    _hardware.LoopTurn(PAUSE_MENU_LOOP, {lines, static_cast<std::uint16_t>(_state.OffsetOf(_state.Data().pauseMenuText) + line)});
+    _hardware.LoopTurn(PAUSE_MENU_LOOP, {lines, static_cast<std::uint16_t>(_state.OffsetOf(_state.Data().flight.pauseMenuText) + line)});
   }
 }
 
@@ -848,19 +849,19 @@ void DrawPauseMenu(GameState& _state, Hardware& _hardware, bool _backward)
 void SetFrameTime(GameState& _state, std::uint8_t _key)
 {
   const auto choice = static_cast<std::uint8_t>(_key - SCAN_F1);
-  _state.Data().minimumFrameMs = std::uint8_t{_state.BytesFrom(_state.Data().frameTimeChoices, std::size_t{choice} + 1)[choice]};
+  _state.Data().flight.minimumFrameMs = std::uint8_t{FRAME_TIME_CHOICES[choice]};
   const auto digit = static_cast<std::uint8_t>(choice + DIGIT_ONE);
   if (digit == DIGIT_NINE + 1)
   {
-    _state.Data().frameRateKeyLabel.gapABFF[0] = DIGIT_ONE;
-    _state.Data().frameRateKeyLabel.dataAC00 = DIGIT_ZERO;
-    _state.Data().frameRateKeyLabel.dataAC01 = CLOSING_BRACKET;
+    _state.Data().flight.frameRateKeyLabel.gapABFF[0] = DIGIT_ONE;
+    _state.Data().flight.frameRateKeyLabel.dataAC00 = DIGIT_ZERO;
+    _state.Data().flight.frameRateKeyLabel.dataAC01 = CLOSING_BRACKET;
   }
   else
   {
-    _state.Data().frameRateKeyLabel.gapABFF[0] = digit;
-    _state.Data().frameRateKeyLabel.dataAC00 = CLOSING_BRACKET;
-    _state.Data().frameRateKeyLabel.dataAC01 = SPACE;
+    _state.Data().flight.frameRateKeyLabel.gapABFF[0] = digit;
+    _state.Data().flight.frameRateKeyLabel.dataAC00 = CLOSING_BRACKET;
+    _state.Data().flight.frameRateKeyLabel.dataAC01 = SPACE;
   }
 }
 
@@ -882,9 +883,9 @@ PauseExit RunPauseOptions(GameState& _state, Hardware& _hardware, bool _backward
         StartBeep(_state);
         ResetKeyboard(_state, _hardware);
         ClearDrawBuffer(_state, _backward);
-        _state.Data().gamePaused = 0;
-        _state.Data().textPaperPattern = 0;
-        _state.Data().keyDown.keyDownSpace = 0;
+        _state.Data().flight.gamePaused = 0;
+        _state.Data().drawing.textPaperPattern = 0;
+        _state.Data().keyboard.keyDown.keyDownSpace = 0;
         return PauseExit::Resume;
       }
       if (TogglePauseOption(_state, key))
@@ -899,9 +900,9 @@ PauseExit RunPauseOptions(GameState& _state, Hardware& _hardware, bool _backward
         ClearDrawBuffer(_state, _backward);
         StopSoundEffects(_state);
         _hardware.EnableInterrupts();
-        _state.Data().gamePaused = 0;
-        _state.Data().textPaperPattern = 0;
-        _state.Data().titleShown = 0;
+        _state.Data().flight.gamePaused = 0;
+        _state.Data().drawing.textPaperPattern = 0;
+        _state.Data().flow.titleShown = 0;
         return PauseExit::Abort;
       }
       if (key < SCAN_F1 || key >= SCAN_PAST_F10)
@@ -922,12 +923,12 @@ PauseExit RunPauseOptions(GameState& _state, Hardware& _hardware, bool _backward
 std::optional<ScreenChange> LeaveFlightScreens(GameState& _state, Hardware& _hardware, bool _backward)
 {
   std::optional<ScreenChange> change;
-  if (_state.Data().flightScreenShown != 0)
+  if (_state.Data().flight.flightScreenShown != 0)
   {
     change = RestoreFlightScreen(_state, _hardware, _backward);
     ResetKeyboard(_state, _hardware);
   }
-  _state.Data().inFlight = 1;
+  _state.Data().flow.inFlight = 1;
   return change;
 }
 
@@ -935,7 +936,7 @@ std::optional<ScreenChange> LeaveFlightScreens(GameState& _state, Hardware& _har
 // Returns whether EraseCompassAndBlips erased anything.
 bool EraseForFlightScreen(GameState& _state)
 {
-  _state.Data().flightScreenShown = 1;
+  _state.Data().flight.flightScreenShown = 1;
   return EraseCompassAndBlips(_state);
 }
 
@@ -996,7 +997,7 @@ FlightScreens DispatchFlightScreens(GameState& _state, Hardware& _hardware, std:
       screens.view = key;
       return leave();
     }
-    if (_state.Data().commanderBlock.witchspaceCountdown == 0)
+    if (_state.Data().commander.witchspaceCountdown == 0)
     {
       erase();
       if (key == SCAN_F5)
@@ -1026,7 +1027,7 @@ FlightScreens DispatchFlightScreens(GameState& _state, Hardware& _hardware, std:
       // market need the navigation computer, which witch space jams.
       if (key == SCAN_F6)
       {
-        if (_state.Data().commanderBlock.witchspaceCountdown == 1)
+        if (_state.Data().commander.witchspaceCountdown == 1)
         {
           erase();
           shown(ShowShortRangeChart(_state, _hardware, screens.backward, segment), true);
@@ -1036,7 +1037,7 @@ FlightScreens DispatchFlightScreens(GameState& _state, Hardware& _hardware, std:
       }
       if (key < SCAN_F9)
       {
-        if (_state.Data().flightScreenShown != 1)
+        if (_state.Data().flight.flightScreenShown != 1)
         {
           StartBeep(_state);
         }
@@ -1051,9 +1052,9 @@ FlightScreens DispatchFlightScreens(GameState& _state, Hardware& _hardware, std:
     if (key == SCAN_F9)
     {
       ResetKeyboard(_state, _hardware);
-      _state.Data().inFlight = 1;
+      _state.Data().flow.inFlight = 1;
       const ScreenKey closed = ShowCommanderStatusScreen(_state, _hardware, screens.backward, countLeft);
-      _state.Data().inFlight = 0;
+      _state.Data().flow.inFlight = 0;
       shown(closed, false);
       continue;
     }
@@ -1083,11 +1084,11 @@ std::optional<std::uint16_t> ChangeView(GameState& _state, std::uint8_t _key)
   }
   constexpr std::array<std::uint16_t, 4> VIEWS = {0, REAR_VIEW, LEFT_VIEW, RIGHT_VIEW};
   const std::uint16_t view = VIEWS[static_cast<std::size_t>(_key - SCAN_F1)];
-  if (_state.Data().viewAngle == view)
+  if (_state.Data().playerShip.viewAngle == view)
   {
     return std::nullopt;
   }
-  _state.Data().viewAngle = view;
+  _state.Data().playerShip.viewAngle = view;
   StartBeep(_state);
   return ResetStardust(_state);
 }
@@ -1104,26 +1105,26 @@ void PostHyperspaceRefusal(GameState& _state, Hardware& _hardware, Message _mess
 // ProcessFlightKeys. _backward is the direction flag ResetHyperspaceRings' copy runs by.
 [[nodiscard]] bool PressHyperspace(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  if (_state.Data().dockingComputerOn == 1 || _state.Data().hyperspaceCountdown != 0)
+  if (_state.Data().playerShip.dockingComputerOn == 1 || _state.Data().jump.hyperspaceCountdown != 0)
   {
     // JE or JNE back to the JMP past the key's handling: a backward jump into shared code, not a loop, so its turn carries
     // nothing.
     _hardware.LoopTurn(PAST_HYPERSPACE_KEY, {});
     return false;
   }
-  if (((_state.Data().commanderBlock.invadedStationDestroyed ^ 1) & _state.Data().commanderBlock.thargoidInvasionActive &
-       _state.Data().commanderBlock.jumpedSinceBriefing) != 0)
+  if (((_state.Data().commander.invadedStationDestroyed ^ 1) & _state.Data().commander.thargoidInvasionActive &
+       _state.Data().commander.jumpedSinceBriefing) != 0)
   {
     SetMessage(_state, Message::HyperspaceJammed, 0x19);
     return false;
   }
-  if (_state.Data().galacticDriveReadyFrames != 0)
+  if (_state.Data().jump.galacticDriveReadyFrames != 0)
   {
-    _state.Data().galacticJumpPending = 1;
+    _state.Data().jump.galacticJumpPending = 1;
   }
   else
   {
-    const std::uint16_t distance = _state.Data().commanderBlock.selectedDistanceTenthsLy;
+    const std::uint16_t distance = _state.Data().commander.selectedDistanceTenthsLy;
     if (distance == 0)
     {
       SetMessage(_state, Message::NoSystemSelected, 0x19);
@@ -1138,22 +1139,22 @@ void PostHyperspaceRefusal(GameState& _state, Hardware& _hardware, Message _mess
     // low byte; then MOV AX,distance / MUL BH / MOV BH,0Ah / DIV BH: the cost, its low byte times 24h over 10, at least 1. BX
     // holds BH and the distance's low byte at each divide.
     const std::uint8_t tenths = Low(distance);
-    const ByteQuotient reach = DivideByte(static_cast<std::uint16_t>(_state.Data().commanderBlock.fuel * FUEL_FACTOR), FUEL_DIVISOR);
+    const ByteQuotient reach = DivideByte(static_cast<std::uint16_t>(_state.Data().commander.fuel * FUEL_FACTOR), FUEL_DIVISOR);
     if (reach.quotient < tenths)
     {
       PostHyperspaceRefusal(_state, _hardware, Message::NotEnoughFuel);
       return false;
     }
-    const auto product = static_cast<std::uint16_t>(Low(_state.Data().commanderBlock.selectedDistanceTenthsLy) * FUEL_DIVISOR);
+    const auto product = static_cast<std::uint16_t>(Low(_state.Data().commander.selectedDistanceTenthsLy) * FUEL_DIVISOR);
     const ByteQuotient cost = DivideByte(product, FUEL_FACTOR);
-    _state.Data().hyperspaceFuelCost = cost.quotient == 0 ? std::uint8_t{1} : cost.quotient;
+    _state.Data().flight.hyperspaceFuelCost = cost.quotient == 0 ? std::uint8_t{1} : cost.quotient;
   }
-  _state.Data().hyperspaceCountdown = 0x0A;
-  _state.Data().hyperspaceCountdownFrames = 0x0A;
+  _state.Data().jump.hyperspaceCountdown = 0x0A;
+  _state.Data().jump.hyperspaceCountdownFrames = 0x0A;
   ShowHyperspaceCountdown(_state);
   ResetHyperspaceRings(_state, _backward);
-  _state.Data().missileState = 0;
-  _state.Data().shipIdRequested = 0;
+  _state.Data().playerShip.missileState = 0;
+  _state.Data().flight.shipIdRequested = 0;
   LatchHyperspaceTarget(_state);
   return true;
 }
@@ -1164,54 +1165,55 @@ void PostHyperspaceRefusal(GameState& _state, Hardware& _hardware, Message _mess
 void HandleMissileKeys(GameState& _state, std::uint16_t _di, bool _backward)
 {
   std::uint16_t source = _di;
-  if (_state.Data().keyDown.keyDownT == 1 && _state.Data().commanderBlock.missileCount != 0 && _state.Data().missileState == 0 &&
-      _state.Data().hyperspaceCountdown == 0 && _state.Data().shipIdRequested != 1)
+  if (_state.Data().keyboard.keyDown.keyDownT == 1 && _state.Data().commander.missileCount != 0 &&
+      _state.Data().playerShip.missileState == 0 && _state.Data().jump.hyperspaceCountdown == 0 &&
+      _state.Data().flight.shipIdRequested != 1)
   {
-    _state.Data().missileState = 1;
-    _state.Data().shipIdRequested = 0;
+    _state.Data().playerShip.missileState = 1;
+    _state.Data().flight.shipIdRequested = 0;
     StartBeep(_state);
     SetMessage(_state, Message::MissilePrimed, 0x0F);
   }
-  if (_state.Data().missileState == 1)
+  if (_state.Data().playerShip.missileState == 1)
   {
     const CrosshairTarget target = FindShipInCrosshairs(_state);
     source = target.di;
     if (target.slot && (_state.Slot(*target.slot).flags & FLAG_MASKED) == 0)
     {
-      _state.Data().missileTarget = *target.slot;
-      _state.Data().missileState = 2;
+      _state.Data().flight.missileTarget = *target.slot;
+      _state.Data().playerShip.missileState = 2;
       StartBeep(_state);
       SetMessage(_state, Message::MissileLocked, 0x14);
     }
   }
-  if (_state.Data().missileState == 2)
+  if (_state.Data().playerShip.missileState == 2)
   {
-    if ((_state.Slot(_state.Data().missileTarget).type & SpaceObject::ACTIVE) == 0)
+    if ((_state.Slot(_state.Data().flight.missileTarget).type & SpaceObject::ACTIVE) == 0)
     {
-      _state.Data().missileState = 0;
+      _state.Data().playerShip.missileState = 0;
       StartLowBeep(_state);
       SetMessage(_state, Message::MissileTargetDestroyed, 0x14);
     }
   }
-  if (_state.Data().keyDown.keyDownU == 1 && _state.Data().missileState != 0)
+  if (_state.Data().keyboard.keyDown.keyDownU == 1 && _state.Data().playerShip.missileState != 0)
   {
-    _state.Data().missileState = 0;
-    _state.Data().shipIdRequested = 0;
+    _state.Data().playerShip.missileState = 0;
+    _state.Data().flight.shipIdRequested = 0;
     StartLowBeep(_state);
     SetMessage(_state, Message::MissileUnarmed, 0x0F);
   }
-  if (_state.Data().keyDown.keyDownM == 1 && _state.Data().missileState == 2 && _state.Data().missileJammed != 1)
+  if (_state.Data().keyboard.keyDown.keyDownM == 1 && _state.Data().playerShip.missileState == 2 && _state.Data().flight.missileJammed != 1)
   {
     if (NextRandom(_state) < MISSILE_JAM_ODDS)
     {
-      _state.Data().missileJammed = 1;
+      _state.Data().flight.missileJammed = 1;
       SetMessage(_state, Message::MissileJammed, 0x19);
       return;
     }
-    _state.Data().missileState = 0;
-    _state.Data().shipIdRequested = 0;
+    _state.Data().playerShip.missileState = 0;
+    _state.Data().flight.shipIdRequested = 0;
     SetMessage(_state, Message::MissileLaunched, 0x14);
-    _state.Data().commanderBlock.missileCount = static_cast<std::uint8_t>(_state.Data().commanderBlock.missileCount - 1);
+    _state.Data().commander.missileCount = static_cast<std::uint8_t>(_state.Data().commander.missileCount - 1);
     LaunchPlayerMissile(_state, source, _backward);
   }
 }
@@ -1224,44 +1226,45 @@ void HandleFireButton(GameState& _state, Hardware& _hardware)
     return;
   }
   const std::optional<std::uint8_t> laser = GetViewLaser(_state);
-  if (!laser || _state.Data().laserTemperature >= LASER_TOO_HOT)
+  if (!laser || _state.Data().flight.laserTemperature >= LASER_TOO_HOT)
   {
     return;
   }
   // ADD [laserTemperature],5, and FFh written over it on a carry, which a temperature below F0h never makes.
-  const std::uint8_t temperature = _state.Data().laserTemperature;
-  _state.Data().laserTemperature = static_cast<std::uint8_t>(temperature + LASER_HEAT_PER_SHOT);
+  const std::uint8_t temperature = _state.Data().flight.laserTemperature;
+  _state.Data().flight.laserTemperature = static_cast<std::uint8_t>(temperature + LASER_HEAT_PER_SHOT);
   if (temperature + LASER_HEAT_PER_SHOT > 0xFF)
   {
-    _state.Data().laserTemperature = 0xFF;
+    _state.Data().flight.laserTemperature = 0xFF;
   }
   if (*laser == PULSE_LASER)
   {
-    _state.Data().laserAlternateFrame = static_cast<std::uint8_t>(_state.Data().laserAlternateFrame ^ 1);
-    if (_state.Data().laserAlternateFrame != 0)
+    _state.Data().flight.laserAlternateFrame = static_cast<std::uint8_t>(_state.Data().flight.laserAlternateFrame ^ 1);
+    if (_state.Data().flight.laserAlternateFrame != 0)
     {
       return;
     }
   }
-  _state.Data().firingLaserType = *laser;
-  _state.Data().laserFiring = 1;
+  _state.Data().flight.firingLaserType = *laser;
+  _state.Data().playerShip.laserFiring = 1;
 }
 
 // 0x82F7-0x8363: I identifies the ship in the sights, and locks a missile on it if there is one.
 void HandleIdentifyKey(GameState& _state)
 {
-  if (_state.Data().shipIdRequested != 1)
+  if (_state.Data().flight.shipIdRequested != 1)
   {
-    if (_state.Data().keyDown.keyDownI != 1 || _state.Data().missileState != 0 || _state.Data().hyperspaceCountdown != 0)
+    if (_state.Data().keyboard.keyDown.keyDownI != 1 || _state.Data().playerShip.missileState != 0 ||
+        _state.Data().jump.hyperspaceCountdown != 0)
     {
       return;
     }
     StartBeep(_state);
-    if (_state.Data().commanderBlock.missileCount != 0)
+    if (_state.Data().commander.missileCount != 0)
     {
-      _state.Data().missileState = 1;
+      _state.Data().playerShip.missileState = 1;
     }
-    _state.Data().shipIdRequested = 1;
+    _state.Data().flight.shipIdRequested = 1;
     SetMessage(_state, Message::IdIndicator, 0x19);
   }
   const CrosshairTarget target = FindShipInCrosshairs(_state);
@@ -1274,15 +1277,15 @@ void HandleIdentifyKey(GameState& _state)
   {
     return;
   }
-  _state.Data().missileState = 0;
-  _state.Data().shipIdRequested = 0;
+  _state.Data().playerShip.missileState = 0;
+  _state.Data().flight.shipIdRequested = 0;
   // PUSH DI / POP DI keep the ship round ShowShipIdentity and StartBeep.
   ShowShipIdentity(_state, static_cast<std::uint8_t>((ship.type >> 1) & TYPE_MASK), ship.behaviorClass, ship);
   StartBeep(_state);
-  if (_state.Data().commanderBlock.missileCount != 0)
+  if (_state.Data().commander.missileCount != 0)
   {
-    _state.Data().missileTarget = _state.IndexOf(ship);
-    _state.Data().missileState = 2;
+    _state.Data().flight.missileTarget = _state.IndexOf(ship);
+    _state.Data().playerShip.missileState = 2;
   }
 }
 
@@ -1290,17 +1293,17 @@ void HandleIdentifyKey(GameState& _state)
 // written over it on a borrow.
 void HandleAntiEcmKey(GameState& _state)
 {
-  _state.Data().antiEcmActive = 0;
-  if (_state.Data().keyDown.keyDownL != 1 || _state.Data().commanderBlock.antiEcmEmulatorFitted != 1)
+  _state.Data().flight.antiEcmActive = 0;
+  if (_state.Data().keyboard.keyDown.keyDownL != 1 || _state.Data().commander.antiEcmEmulatorFitted != 1)
   {
     return;
   }
-  _state.Data().antiEcmActive = 1;
-  const std::uint16_t energy = _state.Data().playerEnergy;
-  _state.Data().playerEnergy = static_cast<std::uint16_t>(energy - 1);
+  _state.Data().flight.antiEcmActive = 1;
+  const std::uint16_t energy = _state.Data().playerShip.playerEnergy;
+  _state.Data().playerShip.playerEnergy = static_cast<std::uint16_t>(energy - 1);
   if (energy == 0)
   {
-    _state.Data().playerEnergy = 0;
+    _state.Data().playerShip.playerEnergy = 0;
   }
 }
 
@@ -1312,28 +1315,28 @@ constexpr std::int16_t AXIS_LENGTH = 0x2710;
 void ApplyPitch(GameState& _state, std::int8_t _pitch)
 {
   (void)SetSinCos(_state, 7, Negate(static_cast<std::uint16_t>(Word(_pitch) << 1)));
-  (void)SetSinCos(_state, 2, Negate(_state.Data().playerRollAngle));
-  (void)SetSinCos(_state, 1, Negate(_state.Data().playerYawAngle));
-  (void)SetSinCos(_state, 0, Negate(_state.Data().playerPitchAngle));
+  (void)SetSinCos(_state, 2, Negate(_state.Data().playerShip.playerRollAngle));
+  (void)SetSinCos(_state, 1, Negate(_state.Data().playerShip.playerYawAngle));
+  (void)SetSinCos(_state, 0, Negate(_state.Data().playerShip.playerPitchAngle));
 
   // The forward axis, turned: the pitch from its y and z, then the yaw from its x and the z turned by the pitch.
   const Vector forward = RotateBySinCos7210(_state, Vector{0, 0, AXIS_LENGTH});
-  const std::uint16_t pitch = ArcTangent2(_state, forward.y, forward.z);
-  _state.Data().pitchAngleScratch = Negate(pitch);
+  const std::uint16_t pitch = ArcTangent2(forward.y, forward.z);
+  _state.Data().flight.pitchAngleScratch = Negate(pitch);
   (void)SetSinCos(_state, 6, pitch);
   const Pair pitched = RotateByStoredSinCos(_state, 6, Pair{forward.y, forward.z});
-  _state.Data().yawAngleScratch = Negate(ArcTangent2(_state, forward.x, pitched.second));
+  _state.Data().flight.yawAngleScratch = Negate(ArcTangent2(forward.x, pitched.second));
 
   // The up axis, turned back by the pitch and the yaw: the roll from what is left.
-  (void)SetSinCos(_state, 6, Negate(Plus(_state.Data().pitchAngleScratch, 0x400)));
+  (void)SetSinCos(_state, 6, Negate(Plus(_state.Data().flight.pitchAngleScratch, 0x400)));
   const Vector up = RotateBySinCos7210(_state, Vector{0, -AXIS_LENGTH, 0});
   const Pair upPitched = RotateByStoredSinCos(_state, 6, Pair{up.y, up.z});
-  (void)SetSinCos(_state, 7, Plus(_state.Data().yawAngleScratch, 0x400));
+  (void)SetSinCos(_state, 7, Plus(_state.Data().flight.yawAngleScratch, 0x400));
   const Pair upYawed = RotateByStoredSinCos(_state, 7, Pair{up.x, upPitched.second});
-  _state.Data().playerRollAngle = ArcTangent2(_state, upYawed.first, upPitched.first);
-  _state.Data().playerYawAngle = Negate(_state.Data().yawAngleScratch);
-  _state.Data().playerPitchAngle = Negate(_state.Data().pitchAngleScratch);
-  _state.Data().velocityDirty = 1;
+  _state.Data().playerShip.playerRollAngle = ArcTangent2(upYawed.first, upPitched.first);
+  _state.Data().playerShip.playerYawAngle = Negate(_state.Data().flight.yawAngleScratch);
+  _state.Data().playerShip.playerPitchAngle = Negate(_state.Data().flight.pitchAngleScratch);
+  _state.Data().playerShip.velocityDirty = 1;
 }
 
 // 0x2A57-0x2B53: the sun in slot 0, the planet in slot 1 and the station in slot 2, each byte written as the original
@@ -1354,7 +1357,7 @@ void PlaceSunPlanetAndStation(GameState& _state)
   sun.zHigh = High(top);
   sun.z = WithHigh(sun.z, Low(top));
   // Colour 1 or 2 from bit 8 of the system's first seed, written as a word.
-  const auto sunColor = static_cast<std::uint16_t>((High(_state.Data().systemSeed0) & 1) + 1);
+  const auto sunColor = static_cast<std::uint16_t>((High(_state.Data().galaxy.systemSeed0) & 1) + 1);
   sun.pitch = WithHigh(sun.pitch, Low(sunColor));
   sun.yaw = WithLow(sun.yaw, High(sunColor));
   sun.behaviorClass = 0;
@@ -1371,7 +1374,7 @@ void PlaceSunPlanetAndStation(GameState& _state)
   planet.z = WithHigh(planet.z, PLANET_Z_TOP);
   planet.zHigh = 0;
   planet.z = WithLow(planet.z, 0);
-  const auto planetColor = static_cast<std::uint16_t>((Low(_state.Data().systemSeed0) & 1) + 1);
+  const auto planetColor = static_cast<std::uint16_t>((Low(_state.Data().galaxy.systemSeed0) & 1) + 1);
   planet.pitch = WithHigh(planet.pitch, Low(planetColor));
   planet.yaw = WithLow(planet.yaw, High(planetColor));
   planet.behaviorClass = 0;
@@ -1382,7 +1385,7 @@ void PlaceSunPlanetAndStation(GameState& _state)
   // 10-17 in its Thargons byte. While the Thargoids invade it has no missiles, Thargons or aggression, and is not
   // hostile.
   SpaceObject& station = _state.ObjectAt(Plus(_state.OffsetOf(planet), SpaceObject::BYTES));
-  const std::uint8_t stationType = _state.Data().commanderBlock.currentTechLevel >= 9 ? 0 : 1;
+  const std::uint8_t stationType = _state.Data().commander.currentTechLevel >= 9 ? 0 : 1;
   station.type = static_cast<std::uint8_t>((stationType << 1) | SpaceObject::ACTIVE);
   station.yaw = STATION_YAW;
   station.roll = 0;
@@ -1399,7 +1402,7 @@ void PlaceSunPlanetAndStation(GameState& _state)
   station.detail = 0xFF;
   station.energy = STATION_ENERGY;
   station.bounty = 0;
-  if (_state.Data().commanderBlock.thargoidInvasionActive == 1)
+  if (_state.Data().commander.thargoidInvasionActive == 1)
   {
     station.missiles = 0;
     station.aggression = 0;
@@ -1408,7 +1411,7 @@ void PlaceSunPlanetAndStation(GameState& _state)
     station.fragments = 0x0A;
     station.flags = static_cast<std::uint8_t>(station.flags & 0xFE);
   }
-  _state.Data().spawnGovernment = std::uint8_t{_state.Data().commanderBlock.currentGovernment};
+  _state.Data().flight.spawnGovernment = std::uint8_t{_state.Data().commander.currentGovernment};
 }
 
 // sub word [si+_low], ax; sbb byte [si+_high], dl; sub word [si+_compass], ax, with DL:AX = _velocityHigh:_velocity:
@@ -1428,16 +1431,16 @@ void SubtractVelocity(SpaceObject& _slot, ObjectByte _high, ObjectWord _low, Obj
 
 bool UpdateStardust(GameState& _state)
 {
-  if (_state.Data().jumpDriveEngaged != 0)
+  if (_state.Data().flight.jumpDriveEngaged != 0)
   {
     SaveStardustPositions(_state);
   }
-  _state.Data().drawColor = std::uint8_t{_state.Data().stardustColor};
-  switch (_state.Data().viewAngle)
+  _state.Data().drawing.drawColor = std::uint8_t{STARDUST_COLOR};
+  switch (_state.Data().playerShip.viewAngle)
   {
   case RIGHT_VIEW:
   case LEFT_VIEW:
-    return UpdateSideStardust(_state, _state.Data().viewAngle == LEFT_VIEW);
+    return UpdateSideStardust(_state, _state.Data().playerShip.viewAngle == LEFT_VIEW);
   case REAR_VIEW:
     return UpdateFrontOrRearStardust(_state, true);
   default:
@@ -1448,18 +1451,18 @@ bool UpdateStardust(GameState& _state)
 void ComputeStardustShift(GameState& _state)
 {
   // MOV AX,34h / SUB AX,playerSpeed / MOV BL,0Ch / DIV BL: a speed above 34h divides into the game's trap.
-  const auto dividend = static_cast<std::uint16_t>(STARDUST_SHIFT_SPEED - _state.Data().playerSpeed);
+  const auto dividend = static_cast<std::uint16_t>(STARDUST_SHIFT_SPEED - _state.Data().playerShip.playerSpeed);
   auto shift = static_cast<std::uint8_t>(DivideByte(dividend, STARDUST_SHIFT_STEP).quotient + 4);
-  if (_state.Data().jumpDriveEngaged != 0)
+  if (_state.Data().flight.jumpDriveEngaged != 0)
   {
     shift = static_cast<std::uint8_t>(shift - 1);
   }
-  _state.Data().stardustShift = shift;
+  _state.Data().flight.stardustShift = shift;
 }
 
 std::optional<DustScreenPosition> GetPreviousDustScreenPosition(const GameState& _state, std::size_t _particle)
 {
-  const Counted<std::uint8_t>(&copy)[PARTICLE_BYTES] = _state.Data().stardustPrevious[_particle];
+  const Counted<std::uint8_t>(&copy)[PARTICLE_BYTES] = _state.Data().flight.stardustPrevious[_particle];
   const DustPosition previous{Signed(WordIn(copy, PARTICLE_X)), Signed(WordIn(copy, PARTICLE_Y))};
   if (!IsDustOnScreen(previous))
   {
@@ -1577,26 +1580,26 @@ bool IsDustNearCenter(DustPosition _position)
 
 DustStep ScaleDustStep(const GameState& _state, DustPosition _position)
 {
-  const std::uint8_t shift = _state.Data().stardustShift;
+  const std::uint8_t shift = _state.Data().flight.stardustShift;
   return DustStep{Signed(Sar(Word(_position.x), shift)), Signed(Sar(Word(_position.y), shift))};
 }
 
 DustPosition LoadDustPosition(const GameState& _state, std::size_t _particle)
 {
-  const Counted<std::uint8_t>(&particle)[PARTICLE_BYTES] = _state.Data().stardust[_particle];
+  const Counted<std::uint8_t>(&particle)[PARTICLE_BYTES] = _state.Data().flight.stardust[_particle];
   return DustPosition{Signed(WordIn(particle, PARTICLE_X)), Signed(WordIn(particle, PARTICLE_Y))};
 }
 
 void StoreDustPosition(GameState& _state, std::size_t _particle, DustPosition _position)
 {
-  SetWordIn(_state.Data().stardust[_particle], PARTICLE_X, Word(_position.x));
-  SetWordIn(_state.Data().stardust[_particle], PARTICLE_Y, Word(_position.y));
+  SetWordIn(_state.Data().flight.stardust[_particle], PARTICLE_X, Word(_position.x));
+  SetWordIn(_state.Data().flight.stardust[_particle], PARTICLE_Y, Word(_position.y));
 }
 
 void StorePreviousDustPosition(GameState& _state, std::size_t _particle, DustPosition _position)
 {
-  SetWordIn(_state.Data().stardustPrevious[_particle], PARTICLE_X, Word(_position.x));
-  SetWordIn(_state.Data().stardustPrevious[_particle], PARTICLE_Y, Word(_position.y));
+  SetWordIn(_state.Data().flight.stardustPrevious[_particle], PARTICLE_X, Word(_position.x));
+  SetWordIn(_state.Data().flight.stardustPrevious[_particle], PARTICLE_Y, Word(_position.y));
 }
 
 DustScreenPosition DustToScreen(DustPosition _position)
@@ -1616,9 +1619,9 @@ DustScreenPosition DustToScreen(DustPosition _position)
 std::uint16_t ResetStardust(GameState& _state)
 {
   // MOV AX,[messageFrames] / AND AL,AL / JNZ / XOR AH,AH / MOV [messageFrames],AX: the word cleared when its low byte is 0.
-  if (Low(_state.Data().messageFrames) == 0)
+  if (Low(_state.Data().messages.messageFrames) == 0)
   {
-    _state.Data().messageFrames = 0;
+    _state.Data().messages.messageFrames = 0;
   }
   // Coordinates within 23h of the centre in the high byte, retried until one is.
   const auto randomCoordinate = [&_state]()
@@ -1634,7 +1637,7 @@ std::uint16_t ResetStardust(GameState& _state)
     }
   };
   std::uint16_t lifetimeRandom = 0;
-  for (Counted<std::uint8_t>(&particle)[PARTICLE_BYTES] : _state.Data().stardust)
+  for (Counted<std::uint8_t>(&particle)[PARTICLE_BYTES] : _state.Data().flight.stardust)
   {
     SetWordIn(particle, PARTICLE_X, randomCoordinate());
     SetWordIn(particle, PARTICLE_Y, randomCoordinate());
@@ -1652,7 +1655,7 @@ void SaveStardustPositions(GameState& _state)
   {
     for (std::size_t index = 0; index < PARTICLE_BYTES; ++index)
     {
-      _state.Data().stardustPrevious[particle][index] = std::uint8_t{_state.Data().stardust[particle][index]};
+      _state.Data().flight.stardustPrevious[particle][index] = std::uint8_t{_state.Data().flight.stardust[particle][index]};
     }
   }
 }
@@ -1660,16 +1663,16 @@ void SaveStardustPositions(GameState& _state)
 FlightScreens HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, std::uint16_t _segment,
                                        bool _backward)
 {
-  _state.Data().inFlight = 0;
+  _state.Data().flow.inFlight = 0;
   // F1-F10 in keyDown, BX the scan code and LOOP counting CX down from 10: each turn back to 0x0BBE carries both.
   std::uint16_t scan = SCAN_F1;
   for (std::uint16_t keys = FUNCTION_KEYS;;)
   {
-    if (_state.BytesFrom(_state.Data().keyDown, std::size_t{scan} + 1)[scan] == 1)
+    if (_state.BytesFrom(_state.Data().keyboard.keyDown, std::size_t{scan} + 1)[scan] == 1)
     {
       // MOV AH,BL, and PUSH AX / CALL ResetKeyboard / POP AX keep it.
       ResetKeyboard(_state, _hardware);
-      _state.Data().flightScreenShown = 0;
+      _state.Data().flight.flightScreenShown = 0;
       return DispatchFlightScreens(_state, _hardware, Low(scan), _countIfNone, _segment, _backward);
     }
     ++scan;
@@ -1679,7 +1682,7 @@ FlightScreens HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware, s
     }
     _hardware.LoopTurn(FUNCTION_KEY_LOOP, {keys, scan});
   }
-  _state.Data().inFlight = 1;
+  _state.Data().flow.inFlight = 1;
   return FlightScreens{0, std::nullopt, _backward};
 }
 
@@ -1688,14 +1691,14 @@ ScreenChange RestoreFlightScreen(GameState& _state, Hardware& _hardware, bool _b
   const ScreenChange change = ShowCockpitScreen(_state, _hardware, _backward);
   InvalidateDashboard(_state);
   StartBeep(_state);
-  _state.Data().messageShown = Message::None;
+  _state.Data().messages.messageShown = Message::None;
   return change;
 }
 
 void InvalidateDashboard(GameState& _state)
 {
   // REP STOSB with ES = DS, upwards: DF is clear wherever the reference calls it, as for SaveStardustPositions.
-  for (Counted<std::uint8_t>& shown : _state.BytesFrom(_state.Data().missileCountShown, DASHBOARD_CACHE_BYTES))
+  for (Counted<std::uint8_t>& shown : _state.BytesFrom(_state.Data().flight.missileCountShown, DASHBOARD_CACHE_BYTES))
   {
     shown = DASHBOARD_STALE;
   }
@@ -1711,17 +1714,17 @@ void UpdateDashboard(GameState& _state)
   // The S glyph inside the station's safe zone, and E for a frame when the ECM fires, each in every colour (BX = FFFFh) at
   // B800:1658 and B800:1656.
   const std::uint8_t safeZoneGlyph = InSafeZone(_state).inside ? SAFE_ZONE_GLYPH : SPACE;
-  if (ExchangeShown(_state.Data().safeZoneGlyphShown, safeZoneGlyph))
+  if (ExchangeShown(_state.Data().flight.safeZoneGlyphShown, safeZoneGlyph))
   {
     (void)DrawScreenChar(_state, safeZoneGlyph, ALL_COLORS, GameState::VIDEO_SEGMENT, SAFE_ZONE_GLYPH_CELL);
   }
   std::uint8_t ecmGlyph = SPACE;
-  if (_state.Data().ecmFired == 1)
+  if (_state.Data().playerShip.ecmFired == 1)
   {
-    _state.Data().ecmFired = 0;
+    _state.Data().playerShip.ecmFired = 0;
     ecmGlyph = ECM_GLYPH;
   }
-  if (ExchangeShown(_state.Data().ecmGlyphShown, ecmGlyph))
+  if (ExchangeShown(_state.Data().flight.ecmGlyphShown, ecmGlyph))
   {
     (void)DrawScreenChar(_state, ecmGlyph, ALL_COLORS, GameState::VIDEO_SEGMENT, ECM_GLYPH_CELL);
   }
@@ -1731,35 +1734,35 @@ void UpdateDashboard(GameState& _state)
   DrawMissileIcons(_state);
 
   // The pitch, then the roll, each indicator redrawn when it changed.
-  const std::uint8_t pitch = High(_state.Data().rollRate);
-  if (pitch != _state.Data().pitchRateShown)
+  const std::uint8_t pitch = High(_state.Data().playerShip.rollRate);
+  if (pitch != _state.Data().flight.pitchRateShown)
   {
-    _state.Data().pitchRateShown = pitch;
+    _state.Data().flight.pitchRateShown = pitch;
     DrawSignedIndicator(_state, PITCH_INDICATOR_LINE, static_cast<std::int8_t>(pitch));
   }
-  const std::uint8_t roll = Low(_state.Data().rollRate);
-  if (roll != _state.Data().rollRateShown)
+  const std::uint8_t roll = Low(_state.Data().playerShip.rollRate);
+  if (roll != _state.Data().flight.rollRateShown)
   {
-    _state.Data().rollRateShown = roll;
+    _state.Data().flight.rollRateShown = roll;
     DrawSignedIndicator(_state, ROLL_INDICATOR_LINE, static_cast<std::int8_t>(roll));
   }
 
   // From DrawEnergyBanks' last LOOP on, CX's high byte stays 0: every draw after it leaves CX = 0, or CL a count.
-  RedrawThreeLineBar(_state, _state.Data().laserTemperature, _state.Data().laserTemperatureShown, 0x3B8C, true);
-  RedrawThreeLineBar(_state, _state.Data().altitude, _state.Data().altitudeShown, 0x3CCC, true);
-  RedrawThreeLineBar(_state, _state.Data().cabinTemperature, _state.Data().cabinTemperatureShown, 0x3A4C, true);
-  RedrawThreeLineBar(_state, _state.Data().commanderBlock.fuel, _state.Data().fuelShown, 0x390C, true);
+  RedrawThreeLineBar(_state, _state.Data().flight.laserTemperature, _state.Data().flight.laserTemperatureShown, 0x3B8C, true);
+  RedrawThreeLineBar(_state, _state.Data().playerShip.altitude, _state.Data().flight.altitudeShown, 0x3CCC, true);
+  RedrawThreeLineBar(_state, _state.Data().playerShip.cabinTemperature, _state.Data().flight.cabinTemperatureShown, 0x3A4C, true);
+  RedrawThreeLineBar(_state, _state.Data().commander.fuel, _state.Data().flight.fuelShown, 0x390C, true);
   // The original never stores the shields' shown values, so a shield bar is drawn every frame.
-  RedrawThreeLineBar(_state, _state.Data().foreShield, _state.Data().foreShieldShown, 0x368C, false);
-  RedrawThreeLineBar(_state, _state.Data().aftShield, _state.Data().aftShieldShown, 0x37CC, false);
+  RedrawThreeLineBar(_state, _state.Data().playerShip.foreShield, _state.Data().flight.foreShieldShown, 0x368C, false);
+  RedrawThreeLineBar(_state, _state.Data().playerShip.aftShield, _state.Data().flight.aftShieldShown, 0x37CC, false);
 
   // The speed, unscaled: MOV AX,playerSpeed / CMP AL,speedShown / JNE, then JMP DrawFiveLineBarPixels.
-  const std::uint8_t speed = Low(_state.Data().playerSpeed);
-  if (speed == _state.Data().speedShown)
+  const std::uint8_t speed = Low(_state.Data().playerShip.playerSpeed);
+  if (speed == _state.Data().flight.speedShown)
   {
     return;
   }
-  _state.Data().speedShown = speed;
+  _state.Data().flight.speedShown = speed;
   DrawBar(_state, FIVE_LINES, SPEED_BAR_LINE, speed, 0);
 }
 
@@ -1788,7 +1791,7 @@ void DrawSignedIndicator(GameState& _state, std::uint16_t _line, std::int8_t _va
   const auto pixel = static_cast<std::uint8_t>(INDICATOR_CENTER + value);
   const auto column = static_cast<std::uint16_t>((pixel >> 2) & 0x0F);
   const std::uint16_t at = Plus(_line, column);
-  const std::uint16_t marker = _state.Data().indicatorMarkers[pixel & 3];
+  const std::uint16_t marker = INDICATOR_MARKERS[pixel & 3];
   if (column == INDICATOR_LAST_COLUMN)
   {
     for (const std::uint16_t scanline : FIVE_LINES)
@@ -1807,12 +1810,12 @@ void DrawThreeLineBar(GameState& _state, std::uint16_t _line, std::uint8_t _valu
 
 void DrawMissileIcons(GameState& _state)
 {
-  const std::uint8_t count = _state.Data().commanderBlock.missileCount;
-  if (count == _state.Data().missileCountShown)
+  const std::uint8_t count = _state.Data().commander.missileCount;
+  if (count == _state.Data().flight.missileCountShown)
   {
     return;
   }
-  _state.Data().missileCountShown = count;
+  _state.Data().flight.missileCountShown = count;
   // A word a cell: the icons for the count's low two bits, then the background to the fourth cell, a byte count that
   // wraps past four missiles.
   std::uint16_t cell = MISSILE_ICONS_LINE;
@@ -1822,7 +1825,7 @@ void DrawMissileIcons(GameState& _state)
     constexpr std::array<std::size_t, 5> ICON_LINES = {0, 2, 4, 1, 3};
     for (std::size_t index = 0; index < FIVE_LINES.size(); ++index)
     {
-      _state.SetVideoWord(Plus(cell, FIVE_LINES[index]), _state.Data().missileIcon[ICON_LINES[index]]);
+      _state.SetVideoWord(Plus(cell, FIVE_LINES[index]), MISSILE_ICON[ICON_LINES[index]]);
     }
     cell = Plus(cell, 2);
   }
@@ -1835,13 +1838,13 @@ void DrawMissileIcons(GameState& _state)
 
 void DrawMissileLockIndicator(GameState& _state)
 {
-  const std::uint8_t missileState = _state.Data().missileState;
-  if (missileState == _state.Data().missileLockShown)
+  const std::uint8_t missileState = _state.Data().playerShip.missileState;
+  if (missileState == _state.Data().flight.missileLockShown)
   {
     return;
   }
-  _state.Data().missileLockShown = missileState;
-  const std::uint8_t fill = _state.Data().colorFillBytes[missileState & 3u];
+  _state.Data().flight.missileLockShown = missileState;
+  const std::uint8_t fill = COLOR_FILL_BYTES[missileState & 3u];
   const std::uint16_t fillWord = Join(fill, fill);
   // Three bytes on each of six lines: a word and a byte in the odd bank, then the same in the even.
   std::uint16_t line = MISSILE_LOCK_LINE;
@@ -1859,9 +1862,9 @@ void DrawEnergyBanks(GameState& _state)
 {
   // Each whole 100h of playerEnergy fills a bank from the top one down, by LOOP from CX = 4, the rest goes in the next, and the
   // banks below it are empty: the bank written is the last of those the count has left.
-  const std::uint16_t energy = _state.Data().playerEnergy;
+  const std::uint16_t energy = _state.Data().playerShip.playerEnergy;
   std::uint8_t wholeBanks = High(energy);
-  Counted<std::uint8_t>(&fills)[ENERGY_BANKS] = _state.Data().energyBankFill;
+  Counted<std::uint8_t>(&fills)[ENERGY_BANKS] = _state.Data().flight.energyBankFill;
   std::uint16_t banks = ENERGY_BANKS;
   for (; banks != 0 && wholeBanks != 0; --banks, --wholeBanks)
   {
@@ -1878,7 +1881,7 @@ void DrawEnergyBanks(GameState& _state)
 
   // Each bank against its shown value, from the top bank's bar upwards, PUSH CX, DI and SI round each: the count left in CX, so
   // CH = 0 for the bar.
-  Counted<std::uint8_t>(&shown)[ENERGY_BANKS] = _state.Data().energyBanksShown;
+  Counted<std::uint8_t>(&shown)[ENERGY_BANKS] = _state.Data().flight.energyBanksShown;
   std::uint16_t line = ENERGY_BANK_LINE;
   for (std::uint16_t count = ENERGY_BANKS; count != 0; --count)
   {
@@ -1894,28 +1897,28 @@ void DrawEnergyBanks(GameState& _state)
 
 void UpdateEnergyAndLaserHeat(GameState& _state)
 {
-  if (_state.Data().gameOverFrames == 0 && _state.Data().escapePodFrames == 0)
+  if (_state.Data().flight.gameOverFrames == 0 && _state.Data().playerShip.escapePodFrames == 0)
   {
-    SubtractFloored(_state.Data().laserTemperature, LASER_COOLING);
-    if (_state.Data().playerEnergy == MOST_ENERGY)
+    SubtractFloored(_state.Data().flight.laserTemperature, LASER_COOLING);
+    if (_state.Data().playerShip.playerEnergy == MOST_ENERGY)
     {
-      AddSaturating(_state.Data().aftShield, 1);
-      AddSaturating(_state.Data().foreShield, 1);
+      AddSaturating(_state.Data().playerShip.aftShield, 1);
+      AddSaturating(_state.Data().playerShip.foreShield, 1);
     }
     else
     {
       // MOV AL,energyUnitFitted / SHL AL,1 / INC AL / CBW / ADD playerEnergy,AX, then CMP 400h / JB / MOV 3FFh: the sum written,
       // and 3FFh over it from 400h.
-      const auto recharge = SignExtend(static_cast<std::uint8_t>((_state.Data().commanderBlock.energyUnitFitted << 1) + 1));
-      const std::uint16_t energy = Plus(_state.Data().playerEnergy, recharge);
-      _state.Data().playerEnergy = energy;
+      const auto recharge = SignExtend(static_cast<std::uint8_t>((_state.Data().commander.energyUnitFitted << 1) + 1));
+      const std::uint16_t energy = Plus(_state.Data().playerShip.playerEnergy, recharge);
+      _state.Data().playerShip.playerEnergy = energy;
       if (energy >= MOST_ENERGY + 1)
       {
-        _state.Data().playerEnergy = MOST_ENERGY;
+        _state.Data().playerShip.playerEnergy = MOST_ENERGY;
       }
     }
   }
-  if (_state.Data().playerEnergy >= ONE_BANK)
+  if (_state.Data().playerShip.playerEnergy >= ONE_BANK)
   {
     return;
   }
@@ -1926,7 +1929,7 @@ void UpdateEnergyAndLaserHeat(GameState& _state)
     return;
   }
   const auto lost = static_cast<std::size_t>(Low(NextRandom(_state)) / EQUIPMENT_LOSS_DIVISOR);
-  Counted<std::uint8_t>& equipment = _state.BytesFrom(_state.Data().commanderBlock.missileCount, lost + 1)[lost];
+  Counted<std::uint8_t>& equipment = _state.BytesFrom(_state.Data().commander.missileCount, lost + 1)[lost];
   if (equipment == 0)
   {
     return;
@@ -1937,37 +1940,37 @@ void UpdateEnergyAndLaserHeat(GameState& _state)
 
 void DrawConditionLight(GameState& _state)
 {
-  std::uint8_t color = _state.Data().conditionColor;
+  std::uint8_t color = _state.Data().flight.conditionColor;
   if (color == 0)
   {
     // Flashing: black and red, on bit 9 of millisecondCounter.
-    color = static_cast<std::uint8_t>(High(_state.Data().millisecondCounter) & 2);
+    color = static_cast<std::uint8_t>(High(_state.Data().timer.millisecondCounter) & 2);
   }
-  if (color == _state.Data().conditionColorShown)
+  if (color == _state.Data().flight.conditionColorShown)
   {
     return;
   }
-  _state.Data().conditionColorShown = color;
-  const std::uint8_t fill = _state.Data().colorFillBytes[color];
+  _state.Data().flight.conditionColorShown = color;
+  const std::uint8_t fill = COLOR_FILL_BYTES[color];
   const std::uint16_t mask = Join(fill, fill);
   // The bitmap's words, byte-swapped and masked by the colour: a line in the odd bank, then the even line below.
   std::uint16_t line = CONDITION_LIGHT_LINE;
   for (std::size_t pair = 0; pair < CONDITION_LIGHT_LINE_PAIRS; ++pair)
   {
-    _state.SetVideoWord(line, static_cast<std::uint16_t>(Swap(_state.Data().conditionLightBitmap[pair * 2]) & mask));
+    _state.SetVideoWord(line, static_cast<std::uint16_t>(Swap(CONDITION_LIGHT_BITMAP[pair * 2]) & mask));
     line = Plus(line, EVEN_BANK);
-    _state.SetVideoWord(line, static_cast<std::uint16_t>(Swap(_state.Data().conditionLightBitmap[pair * 2 + 1]) & mask));
+    _state.SetVideoWord(line, static_cast<std::uint16_t>(Swap(CONDITION_LIGHT_BITMAP[pair * 2 + 1]) & mask));
     line = Plus(line, NEXT_ODD_LINE);
   }
 }
 
 void UpdateConditionColor(GameState& _state)
 {
-  const std::uint16_t energy = _state.Data().playerEnergy;
-  const std::uint8_t cabin = _state.Data().cabinTemperature;
-  const std::uint8_t altitude = _state.Data().altitude;
-  const std::uint8_t fore = _state.Data().foreShield;
-  const std::uint8_t aft = _state.Data().aftShield;
+  const std::uint16_t energy = _state.Data().playerShip.playerEnergy;
+  const std::uint8_t cabin = _state.Data().playerShip.cabinTemperature;
+  const std::uint8_t altitude = _state.Data().playerShip.altitude;
+  const std::uint8_t fore = _state.Data().playerShip.foreShield;
+  const std::uint8_t aft = _state.Data().playerShip.aftShield;
   std::uint8_t color = 1;
   if (energy < 0x100 || cabin >= 0xE0 || altitude < 0x20)
   {
@@ -1981,38 +1984,38 @@ void UpdateConditionColor(GameState& _state)
   {
     color = 3;
   }
-  _state.Data().conditionColor = color;
+  _state.Data().flight.conditionColor = color;
 }
 
 ScreenChange SetUpLocalSpace(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  LoadSystemSeeds(_state, _state.Data().commanderBlock.currentSystemIndex);
+  LoadSystemSeeds(_state, _state.Data().commander.currentSystemIndex);
   InvalidateDashboard(_state);
-  _state.Data().objectSlotCount = 0x14;
-  _state.Data().debrisSlotCount = 0x10;
-  _state.Data().shipSlotCount = 0x24;
+  _state.Data().flight.objectSlotCount = 0x14;
+  _state.Data().flight.debrisSlotCount = 0x10;
+  _state.Data().world.shipSlotCount = 0x24;
   ClearAllObjects(_state, _backward);
   const ScreenChange change = ShowCockpitScreen(_state, _hardware, _backward);
   (void)ResetStardust(_state);
-  _state.Data().hyperspaceCountdown = 0;
-  _state.Data().dockingComputerOn = 0;
-  _state.Data().dataA137 = 0;
-  _state.Data().viewAngle = 0;
-  _state.Data().viewLocked = 0;
-  _state.Data().escapePodFrames = 0;
-  _state.Data().playerDocked = 0;
-  _state.Data().playerVelocityX = 0;
-  _state.Data().playerVelocityY = 0;
-  _state.Data().playerVelocityZ = 0x14;
-  _state.Data().playerSpeed = 0x14;
-  _state.Data().altitude = 0xFF;
-  _state.Data().missileJammed = 0;
-  _state.Data().playerPitchAngle = 0;
-  _state.Data().playerYawAngle = 0;
-  _state.Data().playerRollAngle = 0;
-  if (_state.Data().commanderBlock.witchspaceCountdown != 0)
+  _state.Data().jump.hyperspaceCountdown = 0;
+  _state.Data().playerShip.dockingComputerOn = 0;
+  _state.Data().unused.dataA137 = 0;
+  _state.Data().playerShip.viewAngle = 0;
+  _state.Data().playerShip.viewLocked = 0;
+  _state.Data().playerShip.escapePodFrames = 0;
+  _state.Data().flight.playerDocked = 0;
+  _state.Data().playerShip.playerVelocityX = 0;
+  _state.Data().playerShip.playerVelocityY = 0;
+  _state.Data().playerShip.playerVelocityZ = 0x14;
+  _state.Data().playerShip.playerSpeed = 0x14;
+  _state.Data().playerShip.altitude = 0xFF;
+  _state.Data().flight.missileJammed = 0;
+  _state.Data().playerShip.playerPitchAngle = 0;
+  _state.Data().playerShip.playerYawAngle = 0;
+  _state.Data().playerShip.playerRollAngle = 0;
+  if (_state.Data().commander.witchspaceCountdown != 0)
   {
-    _state.Data().spawnGovernment = 0;
+    _state.Data().flight.spawnGovernment = 0;
     return change;
   }
   PlaceSunPlanetAndStation(_state);
@@ -2023,7 +2026,7 @@ std::uint16_t CheckCollisions(GameState& _state, Hardware& _hardware)
 {
   // MOV CL,objectSlotCount / XOR CH,CH, PUSH CX and POP CX round each slot, then DEC CX / JE: a count of 0 runs 65,536 times.
   SlotIndex slot = SlotIndex::Sun;
-  for (std::uint32_t count = LoopCount(_state.Data().objectSlotCount); count != 0; --count)
+  for (std::uint32_t count = LoopCount(_state.Data().flight.objectSlotCount); count != 0; --count)
   {
     SpaceObject& object = _state.Slot(slot);
     if ((object.type & SpaceObject::ACTIVE) != 0)
@@ -2037,7 +2040,7 @@ std::uint16_t CheckCollisions(GameState& _state, Hardware& _hardware)
 
 SafeZone InSafeZone(const GameState& _state)
 {
-  return SafeZone{(_state.Data().safeZoneFlags & 1) != 0};
+  return SafeZone{(_state.Data().flight.safeZoneFlags & 1) != 0};
 }
 
 void UpdateSafeZone(GameState& _state)
@@ -2045,7 +2048,7 @@ void UpdateSafeZone(GameState& _state)
   SpaceObject& station = _state.Slot(SlotIndex::Station);
   if ((station.type & SpaceObject::ACTIVE) == 0 || !IsStation(station).station)
   {
-    _state.Data().safeZoneFlags = 0;
+    _state.Data().flight.safeZoneFlags = 0;
     return;
   }
   // RCL AL,1: bit 0 the answer, over what AL held: IsObjectNear's last high byte, or the low byte of the station's distance.
@@ -2058,22 +2061,22 @@ void UpdateSafeZone(GameState& _state)
     held = Low(distance);
     inside = distance < SAFE_ZONE_RADIUS;
   }
-  _state.Data().safeZoneFlags = static_cast<std::uint8_t>((held << 1) | (inside ? 1 : 0));
+  _state.Data().flight.safeZoneFlags = static_cast<std::uint8_t>((held << 1) | (inside ? 1 : 0));
 }
 
 Vector ComputeDeathDebrisVector(GameState& _state)
 {
-  (void)SetSinCos(_state, 8, Negate(_state.Data().viewAngle));
-  (void)SetSinCos(_state, 6, Negate(Plus(_state.Data().playerPitchAngle, 0x400)));
-  (void)SetSinCos(_state, 7, Plus(_state.Data().playerYawAngle, 0x400));
+  (void)SetSinCos(_state, 8, Negate(_state.Data().playerShip.viewAngle));
+  (void)SetSinCos(_state, 6, Negate(Plus(_state.Data().playerShip.playerPitchAngle, 0x400)));
+  (void)SetSinCos(_state, 7, Plus(_state.Data().playerShip.playerYawAngle, 0x400));
   // (0, 40, 0), turned by the view and, off the front view, by the roll, which SetSinCos8 puts in the view's place.
   std::int16_t x = 0;
   std::int16_t y = DEATH_DEBRIS_SPEED;
   std::int16_t z = 0;
-  if (_state.Data().viewAngle != 0)
+  if (_state.Data().playerShip.viewAngle != 0)
   {
     const Pair viewed = RotateByStoredSinCos(_state, 8, Pair{x, y});
-    (void)SetSinCos(_state, 8, Negate(_state.Data().playerRollAngle));
+    (void)SetSinCos(_state, 8, Negate(_state.Data().playerShip.playerRollAngle));
     // PUSH AX, BX, CX round SetSinCos8, and POP BX, CX, AX: y and z change places.
     const Pair rolled = RotateByStoredSinCos(_state, 8, Pair{viewed.first, z});
     x = rolled.first;
@@ -2089,21 +2092,21 @@ Vector ComputeDeathDebrisVector(GameState& _state)
 
 void UpdateWarnings(GameState& _state)
 {
-  if (_state.Data().gameOverFrames != 0)
+  if (_state.Data().flight.gameOverFrames != 0)
   {
     return;
   }
-  const std::uint8_t frames = _state.Data().warningFrames;
+  const std::uint8_t frames = _state.Data().messages.warningFrames;
   if (frames != 0)
   {
     // XOR AH,AH / MOV [messageFrames],AX: the frames left, as a word.
-    _state.Data().messageFrames = frames;
-    _state.Data().messagePointer = Message{_state.Data().warningMessage};
-    _state.Data().warningFrames = static_cast<std::uint8_t>(_state.Data().warningFrames - 1);
+    _state.Data().messages.messageFrames = frames;
+    _state.Data().messages.messagePointer = Message{_state.Data().flight.warningMessage};
+    _state.Data().messages.warningFrames = static_cast<std::uint8_t>(_state.Data().messages.warningFrames - 1);
     return;
   }
   // The four checks from the one after the last warning (JMP [BX+warningChecks]).
-  RunWarningChecks(_state, static_cast<std::uint16_t>((_state.Data().warningIndex + 1) & 3), WARNING_CHECKS);
+  RunWarningChecks(_state, static_cast<std::uint16_t>((_state.Data().flight.warningIndex + 1) & 3), WARNING_CHECKS);
 }
 
 void UpdateScannerBlip(GameState& _state, SpaceObject& _slot, Vector _camera)
@@ -2131,17 +2134,17 @@ void UpdateScannerBlip(GameState& _state, SpaceObject& _slot, Vector _camera)
 
 bool UpdateCompass(GameState& _state)
 {
-  if (_state.Data().titleShown == 0)
+  if (_state.Data().flow.titleShown == 0)
   {
     return false;
   }
   // The target: the station when the planet is near, else the planet. Its scale shift goes to its depth byte.
   SlotIndex target = SlotIndex::Planet;
-  _state.Data().compassTargetIsStation = 0;
+  _state.Data().flight.compassTargetIsStation = 0;
   if (IsObjectNearKeepBlip(_state.Slot(target)))
   {
     target = SlotIndex::Station;
-    _state.Data().compassTargetIsStation = 1;
+    _state.Data().flight.compassTargetIsStation = 1;
   }
   SpaceObject& aim = _state.Slot(target);
   const std::uint8_t shift = GetPositionScaleShift(aim).shift;
@@ -2175,7 +2178,7 @@ bool UpdateCompass(GameState& _state)
     static_cast<std::uint8_t>(Low(static_cast<std::uint16_t>(dotY * dotY)) + Low(static_cast<std::uint16_t>(dotX * dotX)));
   if (squared >= COMPASS_NORMALIZED_FROM)
   {
-    const std::uint8_t root = _state.Data().sqrtTable[squared];
+    const std::uint8_t root = SQRT_TABLE[squared];
     const ByteQuotient first = DivideByte(static_cast<std::uint16_t>(SignExtend(dotX) << 3), root);
     dotX = static_cast<std::uint8_t>(first.quotient & COMPASS_STEP_MASK);
     const ByteQuotient second = DivideByte(static_cast<std::uint16_t>(Join(first.remainder, dotY) << 3), root);
@@ -2281,7 +2284,7 @@ std::uint8_t XorDashboardPixel(GameState& _state, std::uint8_t _x, std::uint8_t 
   // The bank from y's parity, 80 bytes a pair of lines, 4 pixels a byte.
   const auto offset =
     static_cast<std::uint16_t>(((_y & 1) != 0 ? EVEN_BANK : 0) + (_y >> 1) * NEXT_LINE_PAIR + (_x >> 2) + DASHBOARD_ORIGIN);
-  const std::uint8_t mask = _state.Data().dashboardPixelMasks[_x & 3u];
+  const std::uint8_t mask = DASHBOARD_PIXEL_MASKS[_x & 3u];
   _state.SetVideoByte(offset, static_cast<std::uint8_t>(_state.VideoByte(offset) ^ mask));
   return mask;
 }
@@ -2302,7 +2305,7 @@ bool EraseCompassAndBlips(GameState& _state)
   }
   // MOV CL,objectSlotCount / XOR CH,CH / SUB CL,3, and LOOP: 65,536 slots for a count of 3.
   SlotIndex slot = SlotIndex::FirstShip;
-  const auto slots = static_cast<std::uint8_t>(_state.Data().objectSlotCount - 3);
+  const auto slots = static_cast<std::uint8_t>(_state.Data().flight.objectSlotCount - 3);
   for (std::uint32_t count = LoopCount(slots); count != 0; --count)
   {
     erased = EraseScannerBlip(_state, _state.Slot(slot)).has_value() || erased;
@@ -2314,33 +2317,33 @@ bool EraseCompassAndBlips(GameState& _state)
 void UpdateFuelLeak(GameState& _state, Hardware& _hardware)
 {
   std::uint8_t border = 0;
-  if (_state.Data().commanderBlock.fuelLeakDelayFrames != 0)
+  if (_state.Data().commander.fuelLeakDelayFrames != 0)
   {
-    _state.Data().commanderBlock.fuelLeakDelayFrames = static_cast<std::uint8_t>(_state.Data().commanderBlock.fuelLeakDelayFrames - 1);
-    if (_state.Data().commanderBlock.fuelLeakDelayFrames == 0)
+    _state.Data().commander.fuelLeakDelayFrames = static_cast<std::uint8_t>(_state.Data().commander.fuelLeakDelayFrames - 1);
+    if (_state.Data().commander.fuelLeakDelayFrames == 0)
     {
-      _state.Data().commanderBlock.fuelLeakFrames = FUEL_LEAK_FRAMES;
+      _state.Data().commander.fuelLeakFrames = FUEL_LEAK_FRAMES;
       return;
     }
-    border = _state.Data().maskingBackgroundColor;
+    border = _state.Data().drawing.maskingBackgroundColor;
   }
-  else if (_state.Data().commanderBlock.fuelLeakFrames != 0)
+  else if (_state.Data().commander.fuelLeakFrames != 0)
   {
-    _state.Data().commanderBlock.fuelLeakFrames = static_cast<std::uint8_t>(_state.Data().commanderBlock.fuelLeakFrames - 1);
+    _state.Data().commander.fuelLeakFrames = static_cast<std::uint8_t>(_state.Data().commander.fuelLeakFrames - 1);
     // SUB [fuel],5, and 0 written over it on a borrow.
-    const std::uint8_t fuel = _state.Data().commanderBlock.fuel;
-    _state.Data().commanderBlock.fuel = static_cast<std::uint8_t>(fuel - FUEL_LEAK_STEP);
+    const std::uint8_t fuel = _state.Data().commander.fuel;
+    _state.Data().commander.fuel = static_cast<std::uint8_t>(fuel - FUEL_LEAK_STEP);
     if (fuel < FUEL_LEAK_STEP)
     {
-      _state.Data().commanderBlock.fuel = 0;
+      _state.Data().commander.fuel = 0;
     }
-    _state.Data().messageFrames = SignExtend(_state.Data().commanderBlock.fuelLeakFrames);
-    _state.Data().messagePointer = Message::FuelLeak;
+    _state.Data().messages.messageFrames = SignExtend(_state.Data().commander.fuelLeakFrames);
+    _state.Data().messages.messagePointer = Message::FuelLeak;
     border = FUEL_LEAK_BORDER;
   }
   else
   {
-    border = _state.Data().maskingBackgroundColor;
+    border = _state.Data().drawing.maskingBackgroundColor;
   }
   _hardware.SetColorSelect(static_cast<std::uint8_t>(border | BRIGHT_PALETTE));
 }
@@ -2384,7 +2387,7 @@ FlightExit RunFlight(GameState& _state, Hardware& _hardware, bool _backward)
     UpdatePlayerMotion(_state, _hardware);
     // DI past the slots, from which M's launch copies the missile unless a routine before it moves DI (ProcessFlightKeys).
     const std::uint16_t slotsEnd = CheckCollisions(_state, _hardware);
-    if (_state.Data().playerDocked == 1)
+    if (_state.Data().flight.playerDocked == 1)
     {
       PlayStationTunnel(_state, _hardware, backward);
       ResetKeyboard(_state, _hardware);
@@ -2408,24 +2411,24 @@ FlightExit RunFlight(GameState& _state, Hardware& _hardware, bool _backward)
     {
       return FlightExit{countLeft, backward};
     }
-    if (_state.Data().playerDead != 1 || _state.Data().cheatEnabled == 1)
+    if (_state.Data().playerShip.playerDead != 1 || _state.Data().startUp.cheatEnabled == 1)
     {
       _hardware.LoopTurn(FLIGHT_FRAME_LOOP, {});
       continue;
     }
     // Dead: GAME OVER for 40 frames, then the title's ELITE on the message line, and back.
-    _state.Data().hyperspaceCountdown = 0;
-    if (_state.Data().gameOverFrames == 0)
+    _state.Data().jump.hyperspaceCountdown = 0;
+    if (_state.Data().flight.gameOverFrames == 0)
     {
       SpawnPlayerWreckage(_state);
-      _state.Data().gameOverFrames = GAME_OVER_FRAMES;
+      _state.Data().flight.gameOverFrames = GAME_OVER_FRAMES;
       SetMessage(_state, Message::GameOver, GAME_OVER_FRAMES);
       StopContinuousNoise(_state);
       _hardware.LoopTurn(FLIGHT_FRAME_LOOP, {});
       continue;
     }
-    _state.Data().gameOverFrames = static_cast<std::uint8_t>(_state.Data().gameOverFrames - 1);
-    if (_state.Data().gameOverFrames != 0)
+    _state.Data().flight.gameOverFrames = static_cast<std::uint8_t>(_state.Data().flight.gameOverFrames - 1);
+    if (_state.Data().flight.gameOverFrames != 0)
     {
       _hardware.LoopTurn(FLIGHT_FRAME_LOOP, {});
       continue;
@@ -2433,30 +2436,30 @@ FlightExit RunFlight(GameState& _state, Hardware& _hardware, bool _backward)
     ResetKeyboard(_state, _hardware);
     // MOV AX,0B800h / MOV ES,AX for the message line and the title.
     ClearMessageLine(_state, GameState::VIDEO_SEGMENT, backward);
-    _state.Data().textPaperPattern = 0;
-    (void)DrawScreenString(_state, _state.TextAt(_state.Data().eliteTitleText), ALL_COLORS, GameState::VIDEO_SEGMENT, TITLE_TEXT_POSITION);
+    _state.Data().drawing.textPaperPattern = 0;
+    (void)DrawScreenString(_state, ELITE_TITLE_TEXT, ALL_COLORS, GameState::VIDEO_SEGMENT, TITLE_TEXT_POSITION);
     return FlightExit{CLEARED_MESSAGE_LINE_BP, backward};
   }
 }
 
 bool TickEscapePod(GameState& _state)
 {
-  if (_state.Data().escapePodFrames == 0)
+  if (_state.Data().playerShip.escapePodFrames == 0)
   {
     return false;
   }
-  _state.Data().escapePodFrames = static_cast<std::uint8_t>(_state.Data().escapePodFrames - 1);
-  return _state.Data().escapePodFrames == 0;
+  _state.Data().playerShip.escapePodFrames = static_cast<std::uint8_t>(_state.Data().playerShip.escapePodFrames - 1);
+  return _state.Data().playerShip.escapePodFrames == 0;
 }
 
 FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, std::uint16_t _di, std::uint16_t _countIfNone,
                                  std::uint16_t _segment, bool _backward)
 {
-  if (_state.Data().gameOverFrames != 0)
+  if (_state.Data().flight.gameOverFrames != 0)
   {
     return FlightKeysExit{false, _backward};
   }
-  if (_state.Data().escapePodFrames != 0)
+  if (_state.Data().playerShip.escapePodFrames != 0)
   {
     // JNE back to the RET above: a backward jump into shared code, not a loop, so its turn carries nothing.
     _hardware.LoopTurn(PROCESS_FLIGHT_KEYS_RETURN, {});
@@ -2467,46 +2470,46 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, std::ui
   // DI, from which M's launch copies the missile, as the routines before it leave it: InvalidateDashboard once the cockpit came
   // back, ResetStardust once the view changed, IsMassLocked once J asked it, and ClearDrawBuffer once the pause screen resumed.
   std::uint16_t di = screens.restored ? DashboardCacheEnd(_state) : _di;
-  if (screens.view != 0 && _state.Data().viewLocked != 1 && ChangeView(_state, screens.view))
+  if (screens.view != 0 && _state.Data().playerShip.viewLocked != 1 && ChangeView(_state, screens.view))
   {
     di = StardustEnd(_state);
   }
-  if (_state.Data().keyDown.keyDownG == 1 && _state.Data().commanderBlock.galacticHyperdriveFitted == 1 &&
-      _state.Data().galacticDriveReadyFrames == 0 && _state.Data().hyperspaceCountdown == 0)
+  if (_state.Data().keyboard.keyDown.keyDownG == 1 && _state.Data().commander.galacticHyperdriveFitted == 1 &&
+      _state.Data().jump.galacticDriveReadyFrames == 0 && _state.Data().jump.hyperspaceCountdown == 0)
   {
     StartBeep(_state);
     SetMessage(_state, Message::GalacticDriveReady, 0x28);
-    _state.Data().galacticDriveReadyFrames = 0x28;
+    _state.Data().jump.galacticDriveReadyFrames = 0x28;
   }
-  if (_state.Data().keyDown.keyDownH == 1 && PressHyperspace(_state, _hardware, backward))
+  if (_state.Data().keyboard.keyDown.keyDownH == 1 && PressHyperspace(_state, _hardware, backward))
   {
     return FlightKeysExit{false, backward};
   }
   // D, released, toggles the docking computer: not in mission 3 until the invaded station is destroyed.
-  if ((_state.Data().commanderBlock.missionNumber != 3 || _state.Data().commanderBlock.invadedStationDestroyed == 1) &&
-      _state.Data().dockingKeyReleased == 1 && _state.Data().commanderBlock.dockingComputerFitted == 1)
+  if ((_state.Data().commander.missionNumber != 3 || _state.Data().commander.invadedStationDestroyed == 1) &&
+      _state.Data().playerShip.dockingKeyReleased == 1 && _state.Data().commander.dockingComputerFitted == 1)
   {
-    if (_state.Data().hyperspaceCountdown != 0)
+    if (_state.Data().jump.hyperspaceCountdown != 0)
     {
-      _state.Data().dockingKeyReleased = 0;
+      _state.Data().playerShip.dockingKeyReleased = 0;
     }
     else
     {
-      _state.Data().jumpDriveEngaged = 0;
+      _state.Data().flight.jumpDriveEngaged = 0;
       ToggleDockingComputer(_state, _hardware);
     }
   }
-  if (_state.Data().keyDown.keyDownJ == 1)
+  if (_state.Data().keyboard.keyDown.keyDownJ == 1)
   {
     if (const JumpDriveRequest request = EngageJumpDrive(_state); request.lock)
     {
       di = DiAfterMassLock(*request.lock, di);
     }
   }
-  if (_state.Data().keyDown.keyDownEsc == 1)
+  if (_state.Data().keyboard.keyDown.keyDownEsc == 1)
   {
-    _state.Data().gamePaused = 1;
-    if (_state.Data().keyDown.keyDownCtrl == 1)
+    _state.Data().flight.gamePaused = 1;
+    if (_state.Data().keyboard.keyDown.keyDownCtrl == 1)
     {
       // Ctrl+Esc freezes the game until a key, without the menu.
       ResetKeyboard(_state, _hardware);
@@ -2522,29 +2525,30 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, std::ui
       }
       di = DrawBufferEnd(backward);
     }
-    _state.Data().gamePaused = 0;
+    _state.Data().flight.gamePaused = 0;
   }
   HandleMissileKeys(_state, di, backward);
   HandleFireButton(_state, _hardware);
-  if (_state.Data().keyDown.keyDownE == 1 && _state.Data().commanderBlock.ecmFitted == 1)
+  if (_state.Data().keyboard.keyDown.keyDownE == 1 && _state.Data().commander.ecmFitted == 1)
   {
-    _state.Data().ecmFired = 1;
+    _state.Data().playerShip.ecmFired = 1;
     SetMessage(_state, Message::EcmActive, 5);
     (void)RemoveAllMissiles(_state);
     DrainEnergy(_state, ECM_ENERGY);
   }
-  if (_state.Data().keyDown.keyDownB == 1 && _state.Data().commanderBlock.energyBombFitted == 1)
+  if (_state.Data().keyboard.keyDown.keyDownB == 1 && _state.Data().commander.energyBombFitted == 1)
   {
-    _state.Data().commanderBlock.energyBombFitted = 0;
+    _state.Data().commander.energyBombFitted = 0;
     DetonateEnergyBomb(_state, _hardware, backward);
   }
-  if (_state.Data().keyDown.keyDownC == 1 && _state.Data().commanderBlock.escapePodFitted == 1 && _state.Data().escapePodFrames == 0)
+  if (_state.Data().keyboard.keyDown.keyDownC == 1 && _state.Data().commander.escapePodFitted == 1 &&
+      _state.Data().playerShip.escapePodFrames == 0)
   {
     StartBeep(_state);
     LaunchEscapePod(_state);
   }
   HandleIdentifyKey(_state);
-  if (_state.Data().keyDown.keyDownN == 1 && _state.Data().commanderBlock.maskingDeviceFitted == 1)
+  if (_state.Data().keyboard.keyDown.keyDownN == 1 && _state.Data().commander.maskingDeviceFitted == 1)
   {
     UseMaskingDevice(_state);
   }
@@ -2556,12 +2560,12 @@ void DrainEnergy(GameState& _state, std::int8_t _amount)
 {
   // CBW / SUB [playerEnergy],AX, and 0 written over it on a borrow.
   const std::uint16_t amount = Word(_amount);
-  const std::uint16_t energy = _state.Data().playerEnergy;
-  _state.Data().playerEnergy = static_cast<std::uint16_t>(energy - amount);
+  const std::uint16_t energy = _state.Data().playerShip.playerEnergy;
+  _state.Data().playerShip.playerEnergy = static_cast<std::uint16_t>(energy - amount);
   if (energy < amount)
   {
-    _state.Data().playerEnergy = 0;
-    _state.Data().playerDead = 1;
+    _state.Data().playerShip.playerEnergy = 0;
+    _state.Data().playerShip.playerDead = 1;
   }
 }
 
@@ -2570,72 +2574,72 @@ JumpDriveRequest EngageJumpDrive(GameState& _state)
   // MOV AX,message, then the shared tail at 8450 posts it for 5 frames.
   const auto post = [&_state](Message _message) { SetMessage(_state, _message, JUMP_DRIVE_MESSAGE_FRAMES); };
   std::optional<MassLock> lock;
-  if (_state.Data().dockingComputerOn != 1)
+  if (_state.Data().playerShip.dockingComputerOn != 1)
   {
-    if (_state.Data().playerSpeed != FULL_SPEED)
+    if (_state.Data().playerShip.playerSpeed != FULL_SPEED)
     {
-      _state.Data().jumpDriveEngaged = 0;
+      _state.Data().flight.jumpDriveEngaged = 0;
       post(Message::JumpDriveVelocityLocked);
       return JumpDriveRequest{lock};
     }
     lock = IsMassLocked(_state);
     if (!lock->locked)
     {
-      _state.Data().jumpDriveEngaged = 1;
-      _state.Data().velocityDirty = 1;
+      _state.Data().flight.jumpDriveEngaged = 1;
+      _state.Data().playerShip.velocityDirty = 1;
       post(Message::JumpDriveEngaged);
       return JumpDriveRequest{lock};
     }
   }
-  _state.Data().jumpDriveEngaged = 0;
+  _state.Data().flight.jumpDriveEngaged = 0;
   post(Message::JumpDriveMassLocked);
   return JumpDriveRequest{lock};
 }
 
 void UpdatePlayerMotion(GameState& _state, Hardware& _hardware)
 {
-  const std::uint8_t gameOver = _state.Data().gameOverFrames;
+  const std::uint8_t gameOver = _state.Data().flight.gameOverFrames;
   if (gameOver != 0 && gameOver != GAME_OVER_FRAMES)
   {
     return;
   }
-  if (_state.Data().escapePodFrames != 0)
+  if (_state.Data().playerShip.escapePodFrames != 0)
   {
     MoveObjectsByVelocity(_state);
     return;
   }
   Steering steering{};
-  if (_state.Data().dockingComputerOn != 0)
+  if (_state.Data().playerShip.dockingComputerOn != 0)
   {
     RunDockingComputer(_state);
-    const std::uint16_t steered = _state.Data().dockingComputerSteering;
+    const std::uint16_t steered = _state.Data().docking.dockingComputerSteering;
     steering = Steering{Low(steered), High(steered)};
   }
   else
   {
     // . and , change the speed's low byte by 4, within 4-48 unless it wraps, and the word is written back.
-    std::uint16_t speed = _state.Data().playerSpeed;
-    if (_state.Data().keyDown.keyDownPeriod == 1)
+    std::uint16_t speed = _state.Data().playerShip.playerSpeed;
+    if (_state.Data().keyboard.keyDown.keyDownPeriod == 1)
     {
       speed = WithLow(speed, static_cast<std::uint8_t>(Low(speed) + SPEED_KEY_STEP));
-      _state.Data().velocityDirty = 1;
+      _state.Data().playerShip.velocityDirty = 1;
       if (Low(speed) >= TOP_SPEED + 1)
       {
         speed = WithLow(speed, TOP_SPEED);
       }
     }
-    if (_state.Data().keyDown.keyDownComma == 1)
+    if (_state.Data().keyboard.keyDown.keyDownComma == 1)
     {
       speed = WithLow(speed, static_cast<std::uint8_t>(Low(speed) - SPEED_KEY_STEP));
-      _state.Data().velocityDirty = 1;
+      _state.Data().playerShip.velocityDirty = 1;
       if (Low(speed) < SPEED_KEY_STEP)
       {
         speed = WithLow(speed, SPEED_KEY_STEP);
       }
     }
-    _state.Data().playerSpeed = speed;
+    _state.Data().playerShip.playerSpeed = speed;
     const Steering read = ReadSteering(_state, _hardware);
-    _state.Data().rollRate = Join(read.pitch, read.roll);
+    _state.Data().playerShip.rollRate = Join(read.pitch, read.roll);
     steering = ApplyReverseControls(_state, read);
   }
 
@@ -2643,13 +2647,14 @@ void UpdatePlayerMotion(GameState& _state, Hardware& _hardware)
   if (const auto roll = static_cast<std::int8_t>(Negate(steering.roll)); roll != 0)
   {
     const std::int8_t held = roll <= -MOST_ROLL - 1 ? static_cast<std::int8_t>(-MOST_ROLL) : roll >= MOST_ROLL + 1 ? MOST_ROLL : roll;
-    _state.Data().playerRollAngle = Plus(_state.Data().playerRollAngle, SignExtend(static_cast<std::uint8_t>(held)) << 1);
+    _state.Data().playerShip.playerRollAngle =
+      Plus(_state.Data().playerShip.playerRollAngle, SignExtend(static_cast<std::uint8_t>(held)) << 1);
   }
   if (steering.pitch != 0)
   {
     ApplyPitch(_state, static_cast<std::int8_t>(steering.pitch));
   }
-  if (_state.Data().dockingComputerOn == 1)
+  if (_state.Data().playerShip.dockingComputerOn == 1)
   {
     return;
   }
@@ -2659,42 +2664,42 @@ void UpdatePlayerMotion(GameState& _state, Hardware& _hardware)
 
 void UpdatePlayerVelocity(GameState& _state)
 {
-  if (_state.Data().velocityDirty != 1)
+  if (_state.Data().playerShip.velocityDirty != 1)
   {
     return;
   }
   // DEC: the 1 becomes 0.
-  _state.Data().velocityDirty = 0;
-  (void)SetSinCos(_state, 6, Negate(Plus(_state.Data().playerPitchAngle, 0x400)));
-  (void)SetSinCos(_state, 7, Plus(_state.Data().playerYawAngle, 0x400));
-  std::uint16_t speed = _state.Data().playerSpeed;
-  if (_state.Data().jumpDriveEngaged == 1)
+  _state.Data().playerShip.velocityDirty = 0;
+  (void)SetSinCos(_state, 6, Negate(Plus(_state.Data().playerShip.playerPitchAngle, 0x400)));
+  (void)SetSinCos(_state, 7, Plus(_state.Data().playerShip.playerYawAngle, 0x400));
+  std::uint16_t speed = _state.Data().playerShip.playerSpeed;
+  if (_state.Data().flight.jumpDriveEngaged == 1)
   {
     // The jump drive: 32 times the speed, for this frame only.
-    _state.Data().velocityDirty = 1;
-    _state.Data().jumpDriveEngaged = 0;
+    _state.Data().playerShip.velocityDirty = 1;
+    _state.Data().flight.jumpDriveEngaged = 0;
     speed = static_cast<std::uint16_t>(speed << 5);
   }
   // (0, speed) turned by the yaw, then (0, what that leaves of the speed) by the pitch.
   const Pair yawed = RotateByStoredSinCos(_state, 7, Pair{0, Signed(speed)});
-  _state.Data().playerVelocityX = Word(yawed.first);
+  _state.Data().playerShip.playerVelocityX = Word(yawed.first);
   const Pair pitched = RotateByStoredSinCos(_state, 6, Pair{0, yawed.second});
-  _state.Data().playerVelocityY = Word(pitched.first);
-  _state.Data().playerVelocityZ = Word(pitched.second);
+  _state.Data().playerShip.playerVelocityY = Word(pitched.first);
+  _state.Data().playerShip.playerVelocityZ = Word(pitched.second);
 }
 
 void MoveObjectsByVelocity(GameState& _state)
 {
   // LOOP from CX = shipSlotCount: a count of 0 runs 65,536 times.
   SlotIndex index = SlotIndex::Sun;
-  for (std::uint32_t slots = LoopCount(_state.Data().shipSlotCount); slots != 0; --slots)
+  for (std::uint32_t slots = LoopCount(_state.Data().world.shipSlotCount); slots != 0; --slots)
   {
     SpaceObject& slot = _state.Slot(index);
-    const std::uint16_t x = _state.Data().playerVelocityX;
+    const std::uint16_t x = _state.Data().playerShip.playerVelocityX;
     SubtractVelocity(slot, &SpaceObject::xHigh, &SpaceObject::x, &SpaceObject::compassX, x, Low(SignWord(x)));
-    const std::uint16_t y = _state.Data().playerVelocityY;
+    const std::uint16_t y = _state.Data().playerShip.playerVelocityY;
     SubtractVelocity(slot, &SpaceObject::yHigh, &SpaceObject::y, &SpaceObject::compassY, y, Low(SignWord(y)));
-    const std::uint16_t z = _state.Data().playerVelocityZ;
+    const std::uint16_t z = _state.Data().playerShip.playerVelocityZ;
     SubtractVelocity(slot, &SpaceObject::zHigh, &SpaceObject::z, &SpaceObject::compassZ, z, Low(SignWord(z)));
     index = SlotAfter(index);
   }

@@ -83,31 +83,52 @@ private:
   TwinAnswers m_answers;
 };
 
-/// A byte of the game's data that a twin's set-up names by member pointer: a member of GameData (`&Elite::GameData::playerDead`),
-/// of the commander's block it nests (`&Elite::GameData::CommanderBlock::fuel`), or of that block's cargo hold
-/// (`&Elite::GameData::CommanderBlock::CargoHold::cargoUsedTonnes`). GameData nests each of those structs once, so the pointer's
-/// class says where the byte is (DataByteIn).
+/// A byte of the game's data that a twin's set-up names by member pointer: a member of one of GameData's groups
+/// (`&Elite::PlayerShipState::playerDead`), of the commander (`&Elite::CommanderState::fuel`), or of the commander's cargo hold
+/// (`&Elite::CommanderState::CargoHold::cargoUsedTonnes`). GameData holds each of those structs once, so the pointer's class
+/// says where the byte is (DataByteIn).
 template <typename Struct> using DataByte = Elite::Counted<std::uint8_t> Struct::*;
+
+/// The struct of _data a twin's member pointers name members of (DataByte): the groups the twins set up, the commander and its
+/// cargo hold.
+template <typename Struct> [[nodiscard]] Struct& StructIn(Elite::GameData& _data) noexcept
+{
+  if constexpr (std::is_same_v<Struct, Elite::CommanderState>)
+  {
+    return _data.commander;
+  }
+  else if constexpr (std::is_same_v<Struct, Elite::CommanderState::CargoHold>)
+  {
+    return _data.commander.cargoHold;
+  }
+  else if constexpr (std::is_same_v<Struct, Elite::PlayerShipState>)
+  {
+    return _data.playerShip;
+  }
+  else if constexpr (std::is_same_v<Struct, Elite::FlightState>)
+  {
+    return _data.flight;
+  }
+  else if constexpr (std::is_same_v<Struct, Elite::InputState>)
+  {
+    return _data.input;
+  }
+  else if constexpr (std::is_same_v<Struct, Elite::SaveLoadState>)
+  {
+    return _data.saveLoad;
+  }
+  else
+  {
+    static_assert(std::is_same_v<Struct, Elite::StartUpState>, "a group the twins set up, the commander or its cargo hold");
+    return _data.startUp;
+  }
+}
 
 /// The byte _member names in _state's data (DataByte).
 template <typename Struct>
 [[nodiscard]] Elite::Counted<std::uint8_t>& DataByteIn(Elite::GameState& _state, DataByte<Struct> _member) noexcept
 {
-  Elite::GameData& data = _state.Data();
-  if constexpr (std::is_same_v<Struct, Elite::GameData>)
-  {
-    return data.*_member;
-  }
-  else if constexpr (std::is_same_v<Struct, Elite::GameData::CommanderBlock>)
-  {
-    return data.commanderBlock.*_member;
-  }
-  else
-  {
-    static_assert(std::is_same_v<Struct, Elite::GameData::CommanderBlock::CargoHold>,
-                  "a member of GameData, of its commander's block or of the block's cargo hold");
-    return data.commanderBlock.cargoHold.*_member;
-  }
+  return StructIn<Struct>(_state.Data()).*_member;
 }
 
 /// A twin (ADR-016): the reference booted to its title screen, or started at power-on, on the native platform

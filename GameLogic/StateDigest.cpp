@@ -4,7 +4,6 @@
 
 #include "Cga.h"
 #include "GameState.h"
-#include "Reference.h"
 #include "Sha256.h"
 
 namespace Elite
@@ -32,10 +31,8 @@ void HashPicture(Sha256& _hash, const GameState& _state, const Cga& _video)
 
 std::string GameStateDigest(const GameState& _state, const Cga& _video)
 {
-  const std::span<const std::uint8_t> data = _state.DataBytes();
   Sha256 hash;
-  hash.Update(data.first(STACK_FIRST_OFFSET));
-  hash.Update(data.subspan(STACK_END_OFFSET));
+  hash.Update(_state.DataBytes());
   HashPicture(hash, _state, _video);
   return Sha256::ToHex(hash.Finish());
 }

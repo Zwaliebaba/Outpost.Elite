@@ -25,10 +25,10 @@ constexpr std::uint8_t NOISE_BURST_TICKS = 100;
 // counter at, which the original leaves in AL.
 [[nodiscard]] std::uint8_t BeginSweep(GameState& _state)
 {
-  _state.Data().sweepTickCounter = 1;
-  const std::uint8_t stepLength = _state.Data().sweepStepLength;
-  _state.Data().sweepStepCounter = stepLength;
-  _state.Data().twoToneStage = 0;
+  _state.Data().audio.sweepTickCounter = 1;
+  const std::uint8_t stepLength = _state.Data().audio.sweepStepLength;
+  _state.Data().audio.sweepStepCounter = stepLength;
+  _state.Data().unused.twoToneStage = 0;
   return stepLength;
 }
 
@@ -36,11 +36,11 @@ constexpr std::uint8_t NOISE_BURST_TICKS = 100;
 // under CLI, which native code does not need: nothing interrupts it. Returns the step length, as BeginSweep does.
 std::uint8_t StartNoiseSweep(GameState& _state, std::uint8_t _stepLength, std::uint8_t _stepShrink)
 {
-  _state.Data().sweepStepLength = _stepLength;
-  _state.Data().sweepStepShrink = _stepShrink;
-  _state.Data().noiseSweepActive = 1;
-  _state.Data().toneSweepActive = 0;
-  _state.Data().sweepPeriodTicks = 1;
+  _state.Data().audio.sweepStepLength = _stepLength;
+  _state.Data().sound.sweepStepShrink = _stepShrink;
+  _state.Data().audio.noiseSweepActive = 1;
+  _state.Data().audio.toneSweepActive = 0;
+  _state.Data().audio.sweepPeriodTicks = 1;
   return BeginSweep(_state);
 }
 
@@ -50,11 +50,11 @@ void StartMusic(GameState& _state, Hardware& _hardware)
 {
   SilenceSpeakerTimer(_hardware);
   // The gate and data on in the port, but not in speakerPortImage.
-  _hardware.SetSystemControl(static_cast<std::uint8_t>(_state.Data().speakerPortImage | SPEAKER_GATE_AND_DATA));
-  _state.Data().noteTicksLeft = 0;
-  _state.Data().noteGapTicks = 0;
-  _state.Data().musicPointer = 0;
-  _state.Data().musicPlaying = 1;
+  _hardware.SetSystemControl(static_cast<std::uint8_t>(_state.Data().audio.speakerPortImage | SPEAKER_GATE_AND_DATA));
+  _state.Data().audio.noteTicksLeft = 0;
+  _state.Data().audio.noteGapTicks = 0;
+  _state.Data().audio.musicPointer = 0;
+  _state.Data().sound.musicPlaying = 1;
 }
 
 void StopAllSound(GameState& _state, Hardware& _hardware)
@@ -62,9 +62,9 @@ void StopAllSound(GameState& _state, Hardware& _hardware)
   // StopSoundEffects clears the effects under CLI and ends with STI.
   StopSoundEffects(_state);
   _hardware.EnableInterrupts();
-  _state.Data().musicPlaying = 0;
-  const auto port = static_cast<std::uint8_t>(_state.Data().speakerPortImage & ~SPEAKER_GATE_AND_DATA);
-  _state.Data().speakerPortImage = port;
+  _state.Data().sound.musicPlaying = 0;
+  const auto port = static_cast<std::uint8_t>(_state.Data().audio.speakerPortImage & ~SPEAKER_GATE_AND_DATA);
+  _state.Data().audio.speakerPortImage = port;
   _hardware.SetSystemControl(port);
 }
 
@@ -75,44 +75,44 @@ void SilenceSpeakerTimer(Hardware& _hardware)
 
 void StartBeep(GameState& _state)
 {
-  _state.Data().beepTicks = BEEP_TICKS;
+  _state.Data().audio.beepTicks = BEEP_TICKS;
 }
 
 void StartLowBeep(GameState& _state)
 {
-  _state.Data().lowBeepTicks = LOW_BEEP_TICKS;
+  _state.Data().audio.lowBeepTicks = LOW_BEEP_TICKS;
 }
 
 void StopSoundEffects(GameState& _state)
 {
-  _state.Data().toneSweepActive = 0;
-  _state.Data().noiseSweepActive = 0;
-  _state.Data().twoToneStage = 0;
-  _state.Data().slowNoiseCount = 0;
-  _state.Data().humEnabled = 0;
-  _state.Data().continuousNoise = 0;
-  _state.Data().sirenEnabled = 0;
-  _state.Data().beepTicks = 0;
-  _state.Data().lowBeepTicks = 0;
+  _state.Data().audio.toneSweepActive = 0;
+  _state.Data().audio.noiseSweepActive = 0;
+  _state.Data().unused.twoToneStage = 0;
+  _state.Data().unused.slowNoiseCount = 0;
+  _state.Data().unused.humEnabled = 0;
+  _state.Data().unused.continuousNoise = 0;
+  _state.Data().unused.sirenEnabled = 0;
+  _state.Data().audio.beepTicks = 0;
+  _state.Data().audio.lowBeepTicks = 0;
 }
 
 std::uint8_t EmitNoiseSample(GameState& _state, Hardware& _hardware)
 {
-  const auto index = static_cast<std::uint16_t>((_state.Data().noiseSourceIndex + 1) & NOISE_SOURCE_MASK);
+  const auto index = static_cast<std::uint16_t>((_state.Data().sound.noiseSourceIndex + 1) & NOISE_SOURCE_MASK);
   const std::uint8_t sample = NOISE_SOURCE[index];
-  _state.Data().noiseSourceIndex = index;
-  const auto image = static_cast<std::uint8_t>(_state.Data().speakerPortImage & ~SPEAKER_DATA);
-  _state.Data().speakerPortImage = image;
+  _state.Data().sound.noiseSourceIndex = index;
+  const auto image = static_cast<std::uint8_t>(_state.Data().audio.speakerPortImage & ~SPEAKER_DATA);
+  _state.Data().audio.speakerPortImage = image;
   const auto port = static_cast<std::uint8_t>((sample & SPEAKER_DATA) | image);
   _hardware.SetSystemControl(port);
-  _state.Data().speakerPortImage = port;
+  _state.Data().audio.speakerPortImage = port;
   return port;
 }
 
 std::uint8_t ToggleSpeaker(GameState& _state, Hardware& _hardware)
 {
-  const auto port = static_cast<std::uint8_t>(_state.Data().speakerPortImage ^ SPEAKER_DATA);
-  _state.Data().speakerPortImage = port;
+  const auto port = static_cast<std::uint8_t>(_state.Data().audio.speakerPortImage ^ SPEAKER_DATA);
+  _state.Data().audio.speakerPortImage = port;
   _hardware.SetSystemControl(port);
   return port;
 }
@@ -134,28 +134,28 @@ std::uint8_t StartPlayerDeathSound(GameState& _state)
 
 void StopContinuousNoise(GameState& _state)
 {
-  _state.Data().continuousNoise = 0;
+  _state.Data().unused.continuousNoise = 0;
 }
 
 std::optional<std::uint8_t> StartLaserSound(GameState& _state)
 {
-  if (_state.Data().noiseSweepActive == 1)
+  if (_state.Data().audio.noiseSweepActive == 1)
   {
     return std::nullopt;
   }
-  _state.Data().noiseSweepActive = 0;
-  _state.Data().toneSweepActive = 1;
-  _state.Data().sweepStepLength = 20;
-  _state.Data().sweepStepShrink = 2;
-  _state.Data().sweepPeriodTicks = 2;
+  _state.Data().audio.noiseSweepActive = 0;
+  _state.Data().audio.toneSweepActive = 1;
+  _state.Data().audio.sweepStepLength = 20;
+  _state.Data().sound.sweepStepShrink = 2;
+  _state.Data().audio.sweepPeriodTicks = 2;
   return BeginSweep(_state);
 }
 
 void StartPlayerHitSound(GameState& _state)
 {
-  _state.Data().toneSweepActive = 0;
-  _state.Data().twoToneStage = 0;
-  _state.Data().noiseBurstTicks = NOISE_BURST_TICKS;
+  _state.Data().audio.toneSweepActive = 0;
+  _state.Data().unused.twoToneStage = 0;
+  _state.Data().audio.noiseBurstTicks = NOISE_BURST_TICKS;
 }
 
 } // namespace Elite

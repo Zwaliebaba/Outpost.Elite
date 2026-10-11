@@ -102,7 +102,7 @@ void SpawnPlayerWreckage(GameState& _state);
 std::optional<std::uint8_t> KillPlayer(GameState& _state);
 
 /// InitMissile (CS:4C8C): _slot made a missile (spawnTemplates entry 0), class 2.
-void InitMissile(GameState& _state, SpaceObject& _slot);
+void InitMissile(SpaceObject& _slot);
 
 /// RemoveAllMissiles (CS:4F9F): every active missile among objectSlotCount slots from shipSlots removed (RemoveObject). Returns
 /// the last pixel of the last scanner blip that erased, if it erased one.

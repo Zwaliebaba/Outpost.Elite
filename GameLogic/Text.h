@@ -55,7 +55,7 @@ std::uint16_t DrawScreenString(GameState& _state, std::string_view _text, std::u
 
 /// FormatDecimal5 (CS:3407): _value as five ASCII digits into the first five of _digits, a buffer of the data segment.
 /// Returns what is left of it below the last divisor: its units.
-std::uint16_t FormatDecimal5(GameState& _state, std::uint16_t _value, std::span<Counted<std::uint8_t>> _digits);
+std::uint16_t FormatDecimal5(std::uint16_t _value, std::span<Counted<std::uint8_t>> _digits);
 
 /// BlankLeadingZeros (CS:3432): up to _most of _text's leading characters below '1' become spaces. Every caller's _most is
 /// less than the digits it blanks, which always end in one kept; LOOP would let 65,536 go for 0.

@@ -26,22 +26,22 @@ constexpr std::size_t SYSTEMS = 256;
 // screens select one: itself, or an earlier system at the same place.
 [[nodiscard]] std::string SystemAnswer(Elite::GameState& _state, std::uint8_t _galaxy, std::uint8_t _system)
 {
-  _state.Data().commanderBlock.galaxyNumber = _galaxy;
-  _state.Data().commanderBlock.chartIsShortRange = 0;
+  _state.Data().commander.galaxyNumber = _galaxy;
+  _state.Data().commander.chartIsShortRange = 0;
   Elite::LoadSystemSeeds(_state, _system);
-  const std::uint8_t x = _state.Data().systemSeed1Bytes.systemX;
-  const std::uint8_t y = _state.Data().systemSeed0Bytes.systemY;
+  const std::uint8_t x = _state.Data().galaxy.systemSeed1Bytes.systemX;
+  const std::uint8_t y = _state.Data().galaxy.systemSeed0Bytes.systemY;
   Elite::MoveCursorToSystem(_state);
   Elite::DescribeSystem(_state);
 
   std::string name;
   const std::span<const Elite::Counted<std::uint8_t>> characters =
-    _state.BytesFrom(_state.Data().commanderBlock.selectedSystemName, _state.Data().commanderBlock.selectedSystemNameLength);
+    _state.BytesFrom(_state.Data().commander.selectedSystemName, _state.Data().commander.selectedSystemNameLength);
   for (const std::uint8_t character : characters)
   {
     name += static_cast<char>(character);
   }
-  const Elite::GameData::CommanderBlock& commander = _state.Data().commanderBlock;
+  const Elite::CommanderState& commander = _state.Data().commander;
   std::string answer = std::format("{} {} {} {} {} {} {} {} {} {} {}", _galaxy, _system, name, x, y,
                                    std::uint8_t{commander.selectedEconomy}, std::uint8_t{commander.selectedGovernment},
                                    std::uint8_t{commander.selectedTechLevel}, std::uint8_t{commander.selectedPopulationTenthsBillion},
