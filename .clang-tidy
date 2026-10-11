@@ -16,7 +16,7 @@
 # set, because the alternative — GNU driver mode against the Windows SDK — disagrees with MSVC in
 # both directions and reports defects that are not there.
 #
-# This repository is GREENFIELD, and at the time of writing it holds no C++ at all. Nothing is
+# This repository was GREENFIELD: this file gated it before its first line of C++. Nothing is
 # grandfathered, a whole-tree pass comes back clean, and a finding is therefore a defect rather
 # than archaeology. That is a claim CI keeps true from the first translation unit onwards; it is
 # not a claim about how careful anyone was. When it breaks, fix the code — do not narrow the
