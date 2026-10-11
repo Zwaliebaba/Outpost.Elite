@@ -114,7 +114,7 @@ The first build of the moved code was 38% slower on the corpus. callgrind found 
 
 **7. Not verified here.**
 - **The MSVC build and the shell.** `Outpost/Application.cpp` changes in `Describe` (it takes the `Platform`; there is no CS:IP to name, so a spin counts turns, and the unported stop names `UnportedAt()`) and in `Application::Run`, which names Elite's types and draws with `Platform::Render`. A translation unit that makes the same calls type-checks under g++, but the file itself is compiled only by CI.
-- **Playing it.** A green build says nothing about whether the game draws, sounds and reads the keys (AGENTS.md §3). The owner plays this build before the natural layout begins.
+- **Playing it.** A green build says nothing about whether the game draws, sounds and reads the keys (AGENTS.md §3). The owner plays this build, and the natural layout's first change does not merge before that play-test.
 
 ## What this forecloses
 
