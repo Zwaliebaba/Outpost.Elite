@@ -138,8 +138,8 @@
     <None Include="MathsAnswers.txt" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\GameLogic\GameLogic.vcxproj">
-      <Project>{092FB942-D1C6-56A9-BD38-795B1F453D7F}</Project>
+    <ProjectReference Include="..\..\GameLogic\GameLogic.vcxproj">
+      <Project>{092fb942-d1c6-56a9-bd38-795b1f453d7f}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
