@@ -24,6 +24,19 @@ constexpr std::string_view MATHS_ANSWERS_FILE = "GameLogicTests/MathsAnswers.txt
 // The BX a divide's trap saves, which no answer reads.
 constexpr std::uint16_t TRAP_BX = 0x5A5A;
 
+// Pairs of inputs, as aggregates: a std::pair's converting constructor would narrow each literal inside <utility>.
+struct UnsignedDivide
+{
+  std::uint32_t dividend;
+  std::uint16_t divisor;
+};
+
+struct Ratio
+{
+  std::uint16_t numerator;
+  std::uint16_t denominator;
+};
+
 // The dividends and divisors of the divides: zero, one, the halves' edges and the signs' edges, and a few between.
 constexpr auto BYTE_DIVIDENDS =
   std::to_array<std::uint16_t>({0x0000, 0x0001, 0x007F, 0x00FF, 0x0100, 0x1234, 0x7EFF, 0x7F00, 0x7FFF, 0x8000, 0xFE01, 0xFF00, 0xFFFF});
@@ -39,8 +52,8 @@ constexpr auto SIGNED_DIVISORS =
 // The instruction after each divide DivideUnsigned serves: ProjectVertices' two, whose memory operand the trap misreads,
 // ProjectDiscCoordinate's two, ScaleByInverseDistance's and ProjectToScreen's two.
 constexpr auto DIVIDE_RETURNS = std::to_array<std::uint16_t>({0x236C, 0x2395, 0x4044, 0x4064, 0x40E2, 0x8D4B, 0x8D56});
-constexpr auto UNSIGNED_DIVIDES = std::to_array<std::pair<std::uint32_t, std::uint16_t>>(
-  {{0x00012345, 0x0010}, {0x0000FFFF, 0x0001}, {0x00100000, 0x0010}, {0x00000001, 0x0000}});
+constexpr auto UNSIGNED_DIVIDES =
+  std::to_array<UnsignedDivide>({{0x00012345, 0x0010}, {0x0000FFFF, 0x0001}, {0x00100000, 0x0010}, {0x00000001, 0x0000}});
 
 // Angles and signed words for the rotations and the arc tangents: zero, one, the quarter turns, the edges of a word.
 constexpr auto WORDS =
@@ -50,18 +63,18 @@ constexpr auto ROTATION_POINTS = std::to_array<Elite::Pair>(
   {{0, 0}, {1, 0}, {0, 1}, {100, -200}, {0x4000, -0x4000}, {0x7FFF, 0}, {-0x8000, 0}, {0x7FFF, 0x7FFF}, {-0x8000, -0x8000}});
 // Sines and cosines no table gives, at the edges of a word.
 constexpr auto RAW_ROTATIONS = std::to_array<Elite::SinCos>({{0x7FFF, 0x7FFF}, {-0x8000, -0x8000}, {0x7FFF, -0x8000}});
-constexpr auto RATIOS = std::to_array<std::pair<std::uint16_t, std::uint16_t>>({{0x0000, 0x0000},
-                                                                                {0x0000, 0x0001},
-                                                                                {0x0001, 0x0001},
-                                                                                {0x0001, 0x0002},
-                                                                                {0x0001, 0x7FFF},
-                                                                                {0x00FF, 0x0100},
-                                                                                {0x3FFF, 0x8000},
-                                                                                {0x7FFE, 0x7FFF},
-                                                                                {0x7FFF, 0x7FFF},
-                                                                                {0x8000, 0xFFFF},
-                                                                                {0xFFFF, 0xFFFF},
-                                                                                {0x0064, 0x012C}});
+constexpr auto RATIOS = std::to_array<Ratio>({{0x0000, 0x0000},
+                                              {0x0000, 0x0001},
+                                              {0x0001, 0x0001},
+                                              {0x0001, 0x0002},
+                                              {0x0001, 0x7FFF},
+                                              {0x00FF, 0x0100},
+                                              {0x3FFF, 0x8000},
+                                              {0x7FFE, 0x7FFF},
+                                              {0x7FFF, 0x7FFF},
+                                              {0x8000, 0xFFFF},
+                                              {0xFFFF, 0xFFFF},
+                                              {0x0064, 0x012C}});
 constexpr auto VECTORS = std::to_array<Elite::Vector>({{0, 0, 0},
                                                        {1, 0, 0},
                                                        {3, 4, 0},
