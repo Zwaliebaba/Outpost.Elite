@@ -9,14 +9,12 @@
 #include "Presenter.h"
 #include "Reference.h"
 #include "Replay.h"
-#include "StateDigest.h"
 #include "Window.h"
 
 #include <objbase.h>
 #include <shlobj.h>
 
 #include <format>
-#include <fstream>
 #include <system_error>
 
 namespace Outpost
@@ -31,7 +29,6 @@ constexpr std::uint32_t LOGICAL_HEIGHT = 480; // ...shown at 4:3 (D8)
 constexpr int START_SCALE = 2;
 constexpr bool START_FULL_SCREEN = true; // borderless over the whole screen, F11 returning to a window START_SCALE times (D42)
 constexpr std::uint32_t SAMPLE_RATE = 44'100;
-constexpr std::uint64_t DIGEST_INTERVAL_MILLISECONDS = 10'000;
 constexpr std::uint64_t LONGEST_CATCH_UP_MILLISECONDS = 250;
 constexpr std::uint8_t BREAK_BIT = 0x80;
 
@@ -75,13 +72,6 @@ std::filesystem::path UserFolder(const wchar_t* _leaf)
   return error ? std::filesystem::path{} : folder;
 }
 
-std::string SessionName()
-{
-  SYSTEMTIME now{};
-  GetLocalTime(&now);
-  return std::format("session-{:04}{:02}{:02}-{:02}{:02}{:02}", now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond);
-}
-
 std::wstring Describe(Elite::StopReason _reason, const Elite::Platform& _platform)
 {
   switch (_reason)
@@ -123,10 +113,9 @@ int Application::Run(HINSTANCE _instance)
   (void)audio.Create(SAMPLE_RATE); // without a sound device the game runs silent
 
   const std::filesystem::path commanders = UserFolder(L"Commanders");
-  const std::filesystem::path replays = UserFolder(L"Replays");
   Elite::DirectoryFileStore files(commanders.empty() ? std::filesystem::current_path() : commanders);
   Elite::Platform::Desc desc;
-  desc.startMoment = Elite::START_MOMENT; // fixed, so the session's replay plays back exactly (ADR-008)
+  desc.startMoment = Elite::START_MOMENT; // fixed, as on a PC/XT without a clock card
   // Every routine is native, in place of the original (ADR-010): the native platform runs them over the memory the GameState
   // owns (D19, D33).
   const auto game = std::make_unique<Elite::Game>(files, desc);
@@ -137,11 +126,8 @@ int Application::Run(HINSTANCE _instance)
   }
   Elite::Platform* const platform = &game->Host();
 
-  const std::string session = SessionName();
-  Elite::ReplayRecorder recorder(std::format("Recorded by Outpost, {}.\nPlay it with ReplayRunner --replay; see ADR-008.", session));
   const Elite::Cycles start = platform->Clock();
   std::uint64_t elapsedMilliseconds = 0;
-  std::uint64_t nextDigest = DIGEST_INTERVAL_MILLISECONDS;
   Elite::Cycles audioCycle = start;
   auto wallStart = std::chrono::steady_clock::now();
   const auto frame = std::make_unique<Elite::FrameImage>();
@@ -160,8 +146,8 @@ int Application::Run(HINSTANCE _instance)
     for (const Engine::KeyEvent& key : window.TakeKeyEvents())
     {
       // The XT has no E0 prefix: the cursor block and the right-hand Ctrl and Alt send the codes of the
-      // keys they copy. A key the XT does not have is neither sent nor recorded.
-      if (recorder.Key(elapsedMilliseconds, key.scanCode, key.down))
+      // keys they copy. A key the XT does not have is not sent.
+      if (Elite::KeyNameOf(key.scanCode))
       {
         platform->KeyboardController().Inject(static_cast<std::uint8_t>(key.scanCode | (key.down ? 0 : BREAK_BIT)));
       }
@@ -181,16 +167,7 @@ int Application::Run(HINSTANCE _instance)
       wallStart += std::chrono::milliseconds(target - elapsedMilliseconds - LONGEST_CATCH_UP_MILLISECONDS);
       target = elapsedMilliseconds + LONGEST_CATCH_UP_MILLISECONDS;
     }
-    while (reason == Elite::StopReason::Reached && nextDigest <= target)
-    {
-      reason = platform->RunUntil(Elite::ReplayCycle(start, nextDigest));
-      recorder.Digest(nextDigest, std::format("t{}", nextDigest / 1000), Elite::TakeCheckpoint(game->State(), platform->Video()));
-      nextDigest += DIGEST_INTERVAL_MILLISECONDS;
-    }
-    if (reason == Elite::StopReason::Reached)
-    {
-      reason = platform->RunUntil(Elite::ReplayCycle(start, target));
-    }
+    reason = platform->RunUntil(Elite::ReplayCycle(start, target));
     elapsedMilliseconds = target;
     if (reason != Elite::StopReason::Reached)
     {
@@ -216,13 +193,6 @@ int Application::Run(HINSTANCE _instance)
     }
   }
 
-  if (!replays.empty() && elapsedMilliseconds > DIGEST_INTERVAL_MILLISECONDS)
-  {
-    // The last digest is where the session ended, so the replay plays to the end, or to the same stop.
-    recorder.Digest(elapsedMilliseconds, "end", Elite::TakeCheckpoint(game->State(), platform->Video()));
-    std::ofstream out(replays / (session + ".replay"), std::ios::binary | std::ios::trunc);
-    out << recorder.Text();
-  }
   if (reason != Elite::StopReason::Reached && reason != Elite::StopReason::Terminated)
   {
     Fail(Describe(reason, *platform));

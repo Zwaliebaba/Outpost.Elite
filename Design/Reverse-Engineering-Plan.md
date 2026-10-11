@@ -1,6 +1,6 @@
 # ELITES.EXE — reverse-engineering and native port plan
 
-**Status:** proposed 2026-10-09. The owner's rulings are D1 to D56 in §8. A ruling becomes a decision when the ADR in §9 records it (AGENTS.md §6). Each phase's section in §5 says how its exit was met.
+**Status:** proposed 2026-10-09. The owner's rulings are D1 to D58 in §8. A ruling becomes a decision when the ADR in §9 records it (AGENTS.md §6). Each phase's section in §5 says how its exit was met.
 
 | Phase | State | Recorded in |
 |---|---|---|
@@ -331,6 +331,7 @@ After D44, no replay reaches the docked screens. Their rules are functions with 
 | D55 | D39's scope: the ruling names the HUD, and §5 applied Bahnschrift to every canvas screen | Every canvas screen. | **Every canvas screen** (2026-10-11): Bahnschrift with tabular figures on the HUD and on the docked screens. Extends D39. |
 | D56 | The plan's status paragraph, 925 words, against §2.4's aim that the plan stays short | A status table. | **A status table** (2026-10-11): the paragraph becomes a table of the phases; the detail is in §5, §8 and the ADRs. |
 | D57 | Whether the tests still hold the port to `ELITES.EXE`, now that `3eeaca6` fits the docking computer at the start and 38 tests fail on it (raised by the owner) | Keep each scenario's own checks, and drop only the comparisons with `ELITES.EXE`. | **Delete the 38 failing tests** (2026-10-11): matching `ELITES.EXE` is no longer needed. The image's hash test, the 36 twins and the corpus test go, with the twins' answers, pictures and outcomes. Asked the same day, what then went unused goes too: the replay corpus in `Replays/`, `PrepareCommanders.py` and the functions that recorded the corpus. The subsystems' answers and `ReplayRunner` stay. ADR-028 records it. Amends D20, D25, D33 and D35. |
+| D58 | Whether `ReplayRunner` is still used, after D57 left it no replay to play (asked by the owner) | Remove it, and the shell's session recording with it, or keep it as a hand-run tool. | **Remove it** (2026-10-11): `ReplayRunner` is deleted, and with it the shell's recording and `ReplayRecorder`, which nothing else used. The replay format stays for the tests. ADR-028 records it. Amends D35 and D57. |
 
 ## 9. ADRs this plan produces
 
@@ -363,7 +364,7 @@ After D44, no replay reaches the docked screens. Their rules are functions with 
 | [ADR-025](ADR/ADR-025-addresses-become-what-they-mean.md) | Stored addresses become what they mean, and the code segment leaves the game's memory (D33, piece 3 change 2) | Phase 5 — written |
 | [ADR-026](ADR/ADR-026-the-data-segment-distributed.md) | The data segment distributed: groups of state, and constants out of it (D38, piece 3 change 3a) | Phase 5 — written |
 | [ADR-027](ADR/ADR-027-the-short-range-chart-capped.md) | The short-range chart capped to its buffers, the first change on purpose (D41) | Phase 5 — written |
-| [ADR-028](ADR/ADR-028-the-match-to-elites-exe-retired.md) | The tests no longer hold the port to `ELITES.EXE` (D57) | Phase 5 — written |
+| [ADR-028](ADR/ADR-028-the-match-to-elites-exe-retired.md) | The tests no longer hold the port to `ELITES.EXE` (D57), and `ReplayRunner` goes (D58) | Phase 5 — written |
 | — | Change 3c: the last members by name, and a loaded commander clamped (D43) | Phase 5, piece 3 — to write |
 | — | The renderer: device, frames in flight, targets, the 2D layer, text and the resolution policy (D47, D48, D55) | Phase 6, piece 1 — to write |
 | — | The space view: the snapshot, interpolation, the field of view, ships, planets and sky (D45, D49, D50) | Phase 6, pieces 2 and 3 — to write |

@@ -1,6 +1,6 @@
 # ADR-028 — The tests no longer hold the port to ELITES.EXE (D57)
 
-**Status:** accepted 2026-10-11, with the change that implements it: 38 tests deleted, with the twins' answer files and the helpers only they used. A second change the same day removed what nothing used after them, at the owner's request: the replay corpus, the tool that prepared its commanders, and the functions that recorded it. It records the owner's ruling D57 ([Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner)) that matching `ELITES.EXE` is no longer needed. It amends ADR-008 item 8, ADR-016, ADR-020 and ADR-022.
+**Status:** accepted 2026-10-11, with the change that implements it: 38 tests deleted, with the twins' answer files and the helpers only they used. A second change the same day removed what nothing used after them, at the owner's request: the replay corpus, the tool that prepared its commanders, and the functions that recorded it. A third change the same day deleted `ReplayRunner` and the shell's session recording, at the owner's ruling D58. It records the owner's ruling D57 ([Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner)) that matching `ELITES.EXE` is no longer needed. It amends ADR-008 item 8, ADR-016, ADR-020 and ADR-022, and with D58 ADR-004 and ADR-009.
 
 ## Context
 
@@ -48,7 +48,17 @@ D26 had already said the corpus and the known answers retire once the game chang
 **What stays:**
 - **The other 102 tests:** the devices, the replay format, the outcomes, the platform and the rest.
 - **The subsystems' known answers** for the galaxies, the markets and the maths (D33), which still hold.
-- **`ReplayRunner`**, for the sessions the shell records: they are recorded on the game as it is, and play headless.
+- **`ReplayRunner`**, for the sessions the shell records: they are recorded on the game as it is, and play headless. D58 deleted it after all (below).
+
+**Then `ReplayRunner` (D58).** Asked whether `ReplayRunner` was still used: no test and no CI step ran it, and its one use was playing back a session the shell had recorded, by hand. The owner ruled that it goes. Without it a recorded session has no player, so the recording goes with it:
+
+| Removed | Why |
+|---|---|
+| `ReplayRunner/`, the project, and its line in the solution | Nothing ran it. `PngWriter`, which only it used, goes with it. |
+| The shell's recording: the recorder, the digest every 10 seconds, the `end` digest and the file in `Saved Games\Outpost.Elite\Replays` | Nothing could play the file. |
+| `ReplayRecorder` (`Replay.h`) and `ReplayTests.ARecordedSessionPlaysBack` | The shell was its only caller outside its test. |
+
+The shell still sends only the keys `Elite::KeyNameOf` names, which it now asks directly, and DOS's clock still starts at `Elite::START_MOMENT`. It runs the machine to the wall clock's moment in one `RunUntil` rather than stopping at each 10-second digest on the way. The replay format, `ReplayPlayer` and the digests stay: the tests drive the game with steps and check it with digests. `.clang-tidy`'s header filter, `Tools/GenerateTables.py` and `Tools/BuildPortable.py` no longer name the project.
 
 ## Measured 2026-10-11
 
@@ -63,4 +73,5 @@ D26 had already said the corpus and the known answers retire once the game chang
 - **Proof that the port is the original.** Nothing checks the image against `ELITES.EXE`, or any state against 1987's. A change to what the game does is caught only by a remaining test's own asserts.
 - **The deleted scenarios' own checks.** Those asserts went with them, for example that a declined supernova mission pays 1,400 credits, and that a system data screen shows a two-digit tech level.
 - **The replay corpus.** D35 kept it so that CI played it on every run. It is deleted, and git's history holds it. A session the shell records can still be played, but nothing checks that it reproduces.
+- **A session played back (D58).** The shell records nothing, so a bug seen in play is no longer a file that reproduces it headless (ADR-009 item 8). Recording would come back with a player to run it.
 - **Phase 6's exit** (§5) asks that "every replay, outcome and answer holds". Of those, only the subsystems' answers are left to hold.
