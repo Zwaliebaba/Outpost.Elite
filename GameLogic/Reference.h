@@ -38,8 +38,7 @@ inline constexpr std::uint16_t PSP_SEGMENT = 0x0813;
 // A PSP's size in paragraphs: DOS loads the image at the paragraph after it.
 inline constexpr std::uint16_t PSP_PARAGRAPHS = 0x10;
 
-// The moment DOS's clock starts from: midnight on 1 January 1980, as on a PC/XT without a clock card, and
-// as Tools/ReferenceScreens.py sets DOSBox-X's.
+// The moment DOS's clock starts from: midnight on 1 January 1980, as on a PC/XT without a clock card.
 inline constexpr DosDateTime START_MOMENT = {1980, 1, 1, 0, 0, 0, 0};
 
 // GetKey: the end of ADR-003's boot trace.
