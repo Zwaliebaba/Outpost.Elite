@@ -66,8 +66,8 @@ BlankedZeros BlankLeadingZeros(std::span<Counted<std::uint8_t>> _text, std::uint
 SmallViewPlace DrawSmallViewChar(GameState& _state, std::uint8_t _letter, std::uint16_t _ink, SmallViewPlace _place);
 
 /// DrawSmallViewString (CS:3527): DrawSmallViewChar for each letter of _text, from _position, which is (line+1)*256 + x: the
-/// buffer's byte _position/4, and the shift bit 1 of x makes. Returns the place of the letter after the last drawn.
-SmallViewPlace DrawSmallViewString(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _position);
+/// buffer's byte _position/4, and the shift bit 1 of x makes.
+void DrawSmallViewString(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _position);
 
 /// FormatCredits (CS:3543): creditsTenths into creditBalanceText, as ten digits with up to eight leading zeros
 /// blanked and a decimal point before the last.
@@ -79,8 +79,8 @@ void FormatCredits(GameState& _state);
 
 /// UpdateMessageLine (CS:35A3): the message line's work for a frame: UpdateWarnings; then while the message drawn has frames
 /// left, one fewer; else, once they run out, the view's name as the message, and the message shown, the line cleared a row at a
-/// time forwards or, _backwards, down, unless it is shown already. Returns whether it drew one.
-bool UpdateMessageLine(GameState& _state, bool _backwards);
+/// time forwards or, _backwards, down, unless it is shown already.
+void UpdateMessageLine(GameState& _state, bool _backwards);
 
 /// ClearMessageLine (CS:3609): zeroes the message line's eight rows of 32 words from _segment:0058, each row forwards
 /// or, _backwards, down (REP STOSW with the direction flag set).
@@ -98,8 +98,8 @@ void ShowShipIdentity(GameState& _state, std::uint8_t _type, std::uint8_t _class
 std::uint16_t PrintTextModeString(GameState& _state, std::string_view _text, std::uint16_t _cell);
 
 /// ToggleMenuRowHighlight (CS:6328): SwapTextAttributeNibbles, and the attribute that makes into the 36 attribute bytes
-/// of a menu row at _segment:_row. Returns that attribute.
-std::uint8_t ToggleMenuRowHighlight(GameState& _state, std::uint16_t _segment, std::uint16_t _row);
+/// of a menu row at _segment:_row.
+void ToggleMenuRowHighlight(GameState& _state, std::uint16_t _segment, std::uint16_t _row);
 
 /// ClearDockedMessageLine (CS:6553): 19 spaces from text offset 78h at _segment, characters only.
 void ClearDockedMessageLine(GameState& _state, std::uint16_t _segment);
@@ -129,10 +129,9 @@ std::uint16_t PrintTextLines(GameState& _state, std::string_view _first, std::ui
 /// ReadTextLine (CS:7694): a line typed into _buffer, a buffer of the data segment of at least _most + 1 bytes, at most _most
 /// characters, after ResetKeyboard and with textPaperPattern cleared; echoed by RedrawInputLine at _segment:_cell, with a
 /// cursor that blinks every 300 timer ticks. Enter ends it, Backspace deletes, a key with no character does nothing, and
-/// letters are lower case unless Shift is held. Returns its length; the buffer holds a NUL after it. Waits for keys as a rule
-/// (ADR-015).
-[[nodiscard]] std::uint16_t ReadTextLine(GameState& _state, Hardware& _hardware, std::span<Counted<std::uint8_t>> _buffer,
-                                         std::uint8_t _most, std::uint16_t _segment, std::uint16_t _cell);
+/// letters are lower case unless Shift is held. The buffer holds a NUL after it. Waits for keys as a rule (ADR-015).
+void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<Counted<std::uint8_t>> _buffer, std::uint8_t _most,
+                  std::uint16_t _segment, std::uint16_t _cell);
 
 /// ToggleInputCursor (CS:7727): the input cursor's character flips between blank and block.
 void ToggleInputCursor(GameState& _state);

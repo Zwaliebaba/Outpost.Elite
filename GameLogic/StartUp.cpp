@@ -59,9 +59,9 @@ constexpr std::uint16_t WHITE_MASK = 0xFFFF;
 constexpr std::uint16_t CREDITS_TIMER_TICKS = 3000; // 3 s
 
 // REP MOVSB: _count bytes from _sourceSegment:_source to _destinationSegment:_destination, forwards or, with DF set
-// (_backward), backwards. Returns how far each offset moved, which the original leaves added to SI and DI.
-std::uint16_t MoveBytes(GameState& _state, std::uint16_t _sourceSegment, std::uint16_t _source, std::uint16_t _destinationSegment,
-                        std::uint16_t _destination, std::uint16_t _count, bool _backward)
+// (_backward), backwards.
+void MoveBytes(GameState& _state, std::uint16_t _sourceSegment, std::uint16_t _source, std::uint16_t _destinationSegment,
+               std::uint16_t _destination, std::uint16_t _count, bool _backward)
 {
   const auto step = static_cast<std::uint16_t>(_backward ? 0xFFFF : 1);
   std::uint16_t moved = 0;
@@ -70,7 +70,6 @@ std::uint16_t MoveBytes(GameState& _state, std::uint16_t _sourceSegment, std::ui
     _state.SetFarByte(_destinationSegment, Offset(_destination, moved), _state.FarByte(_sourceSegment, Offset(_source, moved)));
     moved = Offset(moved, step);
   }
-  return moved;
 }
 
 // ExitToDos (CS:00AD): the BIOS's text mode, the farewell, and the BIOS's key buffer emptied. The RETF that follows, to

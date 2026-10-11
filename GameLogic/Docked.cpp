@@ -195,18 +195,11 @@ std::string_view SkipCashSpaces(const GameState& _state, Hardware& _hardware, st
   }
 }
 
-// What FormatQuantity leaves: FormatDecimal5's units, and where BlankLeadingZeros stopped.
-struct FormattedQuantity
-{
-  std::uint16_t units;
-  BlankedZeros blanked;
-};
-
 // _quantity as five digits into _text, up to four of their leading zeros blanked.
-FormattedQuantity FormatQuantity(GameState& _state, std::uint16_t _quantity, std::span<Counted<std::uint8_t>> _text)
+void FormatQuantity(GameState& _state, std::uint16_t _quantity, std::span<Counted<std::uint8_t>> _text)
 {
-  const std::uint16_t units = FormatDecimal5(_state, _quantity, _text);
-  return FormattedQuantity{units, BlankLeadingZeros(_text, static_cast<std::uint8_t>(QUANTITY_DIGITS_BLANKED))};
+  FormatDecimal5(_state, _quantity, _text);
+  BlankLeadingZeros(_text, static_cast<std::uint8_t>(QUANTITY_DIGITS_BLANKED));
 }
 
 // cargoHold's entries: for each product, the units held, then the units on sale.
@@ -461,13 +454,11 @@ DockedExit DispatchDockedKeys(GameState& _state, Hardware& _hardware, std::uint8
 
 } // namespace
 
-std::uint16_t PrintCreditsOnMessageLine(GameState& _state)
+void PrintCreditsOnMessageLine(GameState& _state)
 {
   SwapTextAttributeNibbles(_state);
-  const std::uint16_t printed =
-    PrintTextModeString(_state, _state.TextAt(_state.Data().commanderBlock.creditBalanceText), CREDITS_ON_MESSAGE_LINE);
+  PrintTextModeString(_state, _state.TextAt(_state.Data().commanderBlock.creditBalanceText), CREDITS_ON_MESSAGE_LINE);
   SwapTextAttributeNibbles(_state);
-  return printed;
 }
 
 void FormatFuelLightYears(GameState& _state)
@@ -506,7 +497,7 @@ void DrawDockedFrameAt(GameState& _state, Hardware& _hardware, std::span<const C
   }
 }
 
-std::uint16_t DrawFrameSides(GameState& _state, std::uint16_t _segment, std::uint16_t _cell, std::uint16_t _rows, std::uint8_t _attribute)
+void DrawFrameSides(GameState& _state, std::uint16_t _segment, std::uint16_t _cell, std::uint16_t _rows, std::uint8_t _attribute)
 {
   const std::uint16_t side = Join(_attribute, FRAME_SIDE_CHARACTER);
   std::uint16_t cell = _cell;
@@ -516,10 +507,9 @@ std::uint16_t DrawFrameSides(GameState& _state, std::uint16_t _segment, std::uin
     _state.SetFarWord(_segment, Offset(cell, FRAME_RIGHT_SIDE), side);
     cell = Offset(cell, TEXT_ROW_BYTES);
   }
-  return cell;
 }
 
-std::uint16_t DrawFrameRow(GameState& _state, std::uint16_t _segment, std::uint16_t _cell, std::uint16_t _value, bool _backwards)
+void DrawFrameRow(GameState& _state, std::uint16_t _segment, std::uint16_t _cell, std::uint16_t _value, bool _backwards)
 {
   const auto step = static_cast<std::uint16_t>(_backwards ? 0xFFFE : 2);
   std::uint16_t cell = _cell;
@@ -528,7 +518,6 @@ std::uint16_t DrawFrameRow(GameState& _state, std::uint16_t _segment, std::uint1
     _state.SetFarWord(_segment, cell, _value);
     cell = Offset(cell, step);
   }
-  return cell;
 }
 
 std::uint8_t AlAfterKey(std::uint8_t _al, const KeyPress& _key) noexcept
@@ -855,7 +844,7 @@ void ShowMissionBriefing(GameState& _state, Hardware& _hardware, bool _backward)
       reply = SUPERNOVA_ACCEPTED_LINES;
     }
     PrintTextLines(_state, reply, LINE_10);
-    (void)WaitForKeyPress(_state, _hardware);
+    WaitForKeyPress(_state, _hardware);
     _state.Data().commanderBlock.supernovaFrames = SUPERNOVA_DELAY_FRAMES;
     _state.Data().commanderBlock.jumpedSinceBriefing = 0;
     return;
@@ -863,13 +852,13 @@ void ShowMissionBriefing(GameState& _state, Hardware& _hardware, bool _backward)
   if (mission == MISSION_MASK_SHIP)
   {
     PrintTextLines(_state, _state.TextAt(_state.Data().maskBriefingText), LINE_4, MASK_BRIEFING_LINES);
-    (void)WaitForKeyPress(_state, _hardware);
+    WaitForKeyPress(_state, _hardware);
     _state.Data().commanderBlock.maskMissionShipsLeft = MASK_SHIPS;
     _state.Data().commanderBlock.maskSystemJumps = MASK_SYSTEM_JUMPS;
     return;
   }
   PrintTextLines(_state, _state.TextAt(_state.Data().invasionBriefingText), LINE_4, INVASION_BRIEFING_LINES);
-  (void)WaitForKeyPress(_state, _hardware);
+  WaitForKeyPress(_state, _hardware);
   _state.Data().commanderBlock.thargoidInvasionActive = 1;
   _state.Data().commanderBlock.jumpedSinceBriefing = 0;
 }
@@ -894,7 +883,7 @@ void ShowMissionDebriefing(GameState& _state, Hardware& _hardware, bool _backwar
     _state.Data().commanderBlock.cargoHold.cargoUsedTonnes = 0;
     AddCredits(_state, fullHold ? REWARD_FULL_HOLD_TENTHS : REWARD_OTHERWISE_TENTHS);
     PrintTextLines(_state, _state.TextAtOffset(SUPERNOVA_DEBRIEFING_TEXT), LINE_4, SUPERNOVA_DEBRIEFING_LINES);
-    (void)WaitForKeyPress(_state, _hardware);
+    WaitForKeyPress(_state, _hardware);
     _state.Data().commanderBlock.missionNumber = 0;
     _state.Data().commanderBlock.missionStage = 0;
     return;
@@ -913,7 +902,7 @@ void ShowMissionDebriefing(GameState& _state, Hardware& _hardware, bool _backwar
       text = MASK_FLED_LINES;
     }
     PrintTextLines(_state, text, LINE_4);
-    (void)WaitForKeyPress(_state, _hardware);
+    WaitForKeyPress(_state, _hardware);
     _state.Data().commanderBlock.maskMissionShipsLeft = 0;
     _state.Data().commanderBlock.maskShipDestroyed = 0;
     _state.Data().commanderBlock.missionNumber = 0;
@@ -924,7 +913,7 @@ void ShowMissionDebriefing(GameState& _state, Hardware& _hardware, bool _backwar
     return;
   }
   PrintTextLines(_state, _state.TextAt(_state.Data().invasionDebriefText), LINE_4, INVASION_DEBRIEFING_LINES);
-  (void)WaitForKeyPress(_state, _hardware);
+  WaitForKeyPress(_state, _hardware);
   AwardArchangelTitle(_state);
   _state.Data().commanderBlock.antiEcmEmulatorFitted = 1;
   _state.Data().commanderBlock.missionNumber = 0;

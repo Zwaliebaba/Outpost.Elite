@@ -387,7 +387,7 @@ bool UpdateFrontOrRearStardust(GameState& _state, bool _rear)
     (void)SetSinCos(_state, 7, angle);
     RollStardust(_state);
   }
-  (void)ComputeStardustShift(_state);
+  ComputeStardustShift(_state);
   bool filled = false;
   for (std::size_t particle = 0; particle < STARDUST_COUNT; ++particle)
   {
@@ -607,7 +607,7 @@ void CheckCollision(GameState& _state, Hardware& _hardware, SpaceObject& _slot)
   }
   // PUSH AX / POP AX keep the damage round the kill's credit.
   (void)CreditKill(_state, _slot);
-  (void)CheckMissileTargetDestroyed(_state, _slot);
+  CheckMissileTargetDestroyed(_state, _slot);
   if (damage == 0x5DC || !IsStation(_slot).station)
   {
     (void)RemoveObject(_state, _slot);
@@ -616,7 +616,7 @@ void CheckCollision(GameState& _state, Hardware& _hardware, SpaceObject& _slot)
   {
     _hardware.EnableInterrupts();
   }
-  (void)StartImpactSound(_state);
+  StartImpactSound(_state);
   _hardware.EnableInterrupts();
 }
 
@@ -1445,7 +1445,7 @@ bool UpdateStardust(GameState& _state)
   }
 }
 
-std::uint8_t ComputeStardustShift(GameState& _state)
+void ComputeStardustShift(GameState& _state)
 {
   // MOV AX,34h / SUB AX,playerSpeed / MOV BL,0Ch / DIV BL: a speed above 34h divides into the game's trap.
   const auto dividend = static_cast<std::uint16_t>(STARDUST_SHIFT_SPEED - _state.Data().playerSpeed);
@@ -1455,7 +1455,6 @@ std::uint8_t ComputeStardustShift(GameState& _state)
     shift = static_cast<std::uint8_t>(shift - 1);
   }
   _state.Data().stardustShift = shift;
-  return shift;
 }
 
 std::optional<DustScreenPosition> GetPreviousDustScreenPosition(const GameState& _state, std::size_t _particle)
@@ -1704,7 +1703,7 @@ void InvalidateDashboard(GameState& _state)
 
 void UpdateDashboard(GameState& _state)
 {
-  (void)UpdateConditionColor(_state);
+  UpdateConditionColor(_state);
   DrawConditionLight(_state);
   UpdateEnergyAndLaserHeat(_state);
   UpdateSafeZone(_state);
@@ -1728,8 +1727,8 @@ void UpdateDashboard(GameState& _state)
   }
 
   DrawEnergyBanks(_state);
-  (void)DrawMissileLockIndicator(_state);
-  (void)DrawMissileIcons(_state);
+  DrawMissileLockIndicator(_state);
+  DrawMissileIcons(_state);
 
   // The pitch, then the roll, each indicator redrawn when it changed.
   const std::uint8_t pitch = High(_state.Data().rollRate);
@@ -1806,12 +1805,12 @@ void DrawThreeLineBar(GameState& _state, std::uint16_t _line, std::uint8_t _valu
   DrawBar(_state, THREE_LINES, _line, ScaleBarValue(_value), _countHigh);
 }
 
-bool DrawMissileIcons(GameState& _state)
+void DrawMissileIcons(GameState& _state)
 {
   const std::uint8_t count = _state.Data().commanderBlock.missileCount;
   if (count == _state.Data().missileCountShown)
   {
-    return false;
+    return;
   }
   _state.Data().missileCountShown = count;
   // A word a cell: the icons for the count's low two bits, then the background to the fourth cell, a byte count that
@@ -1832,15 +1831,14 @@ bool DrawMissileIcons(GameState& _state)
     FillFiveLineWord(_state, cell, BACKGROUND_WORD);
     cell = Plus(cell, 2);
   }
-  return true;
 }
 
-bool DrawMissileLockIndicator(GameState& _state)
+void DrawMissileLockIndicator(GameState& _state)
 {
   const std::uint8_t missileState = _state.Data().missileState;
   if (missileState == _state.Data().missileLockShown)
   {
-    return false;
+    return;
   }
   _state.Data().missileLockShown = missileState;
   const std::uint8_t fill = _state.Data().colorFillBytes[missileState & 3u];
@@ -1855,7 +1853,6 @@ bool DrawMissileLockIndicator(GameState& _state)
     _state.SetVideoByte(Plus(line, EVEN_BANK + 2), fill);
     line = Plus(line, NEXT_LINE_PAIR);
   }
-  return true;
 }
 
 void DrawEnergyBanks(GameState& _state)
@@ -1964,7 +1961,7 @@ void DrawConditionLight(GameState& _state)
   }
 }
 
-std::uint8_t UpdateConditionColor(GameState& _state)
+void UpdateConditionColor(GameState& _state)
 {
   const std::uint16_t energy = _state.Data().playerEnergy;
   const std::uint8_t cabin = _state.Data().cabinTemperature;
@@ -1985,7 +1982,6 @@ std::uint8_t UpdateConditionColor(GameState& _state)
     color = 3;
   }
   _state.Data().conditionColor = color;
-  return color;
 }
 
 ScreenChange SetUpLocalSpace(GameState& _state, Hardware& _hardware, bool _backward)
@@ -2378,8 +2374,8 @@ FlightExit RunFlight(GameState& _state, Hardware& _hardware, bool _backward)
       backward = false;
     }
     UpdateFuelLeak(_state, _hardware);
-    (void)UpdateMessageLine(_state, backward);
-    (void)PollScreenDumpKey(_state, _hardware);
+    UpdateMessageLine(_state, backward);
+    PollScreenDumpKey(_state, _hardware);
     FinishSpaceViewFrame(_state, _hardware);
     // Its CLD, and PresentSpaceView's MOV BP,20h and MOV DX,1FF0h, which UpdateObjectsAndSpawn hands to its first handler.
     backward = false;
@@ -2497,7 +2493,7 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, std::ui
     else
     {
       _state.Data().jumpDriveEngaged = 0;
-      (void)ToggleDockingComputer(_state, _hardware);
+      ToggleDockingComputer(_state, _hardware);
     }
   }
   if (_state.Data().keyDown.keyDownJ == 1)
@@ -2519,7 +2515,7 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, std::ui
     else
     {
       SetMessage(_state, Message::GamePaused, 1);
-      (void)UpdateMessageLine(_state, backward);
+      UpdateMessageLine(_state, backward);
       if (RunPauseScreen(_state, _hardware, backward))
       {
         return FlightKeysExit{true, backward};
@@ -2540,7 +2536,7 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, std::ui
   if (_state.Data().keyDown.keyDownB == 1 && _state.Data().commanderBlock.energyBombFitted == 1)
   {
     _state.Data().commanderBlock.energyBombFitted = 0;
-    (void)DetonateEnergyBomb(_state, _hardware, backward);
+    DetonateEnergyBomb(_state, _hardware, backward);
   }
   if (_state.Data().keyDown.keyDownC == 1 && _state.Data().commanderBlock.escapePodFitted == 1 && _state.Data().escapePodFrames == 0)
   {

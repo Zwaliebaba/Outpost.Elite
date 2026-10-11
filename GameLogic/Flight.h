@@ -128,9 +128,9 @@ void SaveStardustPositions(GameState& _state);
 /// views shift them sideways by the speed (UpdateSideStardust). Returns whether a DrawLine filled bytes with REP STOSB.
 bool UpdateStardust(GameState& _state);
 
-/// ComputeStardustShift (CS:0887): stardustShift = (34h - playerSpeed) / 12 + 4, one less while jumpDriveEngaged, and returned.
-/// A speed above 34h, which the game never sets, divides into the game's trap.
-std::uint8_t ComputeStardustShift(GameState& _state);
+/// ComputeStardustShift (CS:0887): stardustShift = (34h - playerSpeed) / 12 + 4, one less while jumpDriveEngaged. A speed
+/// above 34h, which the game never sets, divides into the game's trap.
+void ComputeStardustShift(GameState& _state);
 
 /// RestoreFlightScreen (CS:15CF): the cockpit back after a function key's screen (ShowCockpitScreen, its copies backwards when
 /// _backward), every gauge marked stale (InvalidateDashboard), a beep, and messageShown cleared. Returns what ShowCockpitScreen
@@ -183,20 +183,19 @@ void InvalidateDashboard(GameState& _state);
 void DrawSignedIndicator(GameState& _state, std::uint16_t _line, std::int8_t _value);
 
 /// DrawMissileIcons (CS:2799): when missileCount changed, that many missileIcon cells at B800:3E0C and the background
-/// up to four. Returns whether it drew.
-bool DrawMissileIcons(GameState& _state);
+/// up to four.
+void DrawMissileIcons(GameState& _state);
 
 /// DrawMissileLockIndicator (CS:2804): when missileState changed, the 12x6-pixel block at B800:1E15 in
-/// colorFillBytes[missileState]. Returns whether it drew.
-bool DrawMissileLockIndicator(GameState& _state);
+/// colorFillBytes[missileState].
+void DrawMissileLockIndicator(GameState& _state);
 
 /// DrawConditionLight (CS:290C): when it changed, conditionLightBitmap at B800:176C in conditionColor, which
 /// flashes black and red on bit 9 of millisecondCounter while it is 0.
 void DrawConditionLight(GameState& _state);
 
-/// UpdateConditionColor (CS:2959): conditionColor from the ship's state, and the colour: 0 flashing, 2 red, 3
-/// yellow or 1 green.
-std::uint8_t UpdateConditionColor(GameState& _state);
+/// UpdateConditionColor (CS:2959): conditionColor from the ship's state: 0 flashing, 2 red, 3 yellow or 1 green.
+void UpdateConditionColor(GameState& _state);
 
 /// InSafeZone (CS:2E63): safeZoneFlags, read.
 [[nodiscard]] SafeZone InSafeZone(const GameState& _state);

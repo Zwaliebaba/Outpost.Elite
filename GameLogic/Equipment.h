@@ -9,7 +9,6 @@
 #include "Text.h"
 
 #include <cstdint>
-#include <optional>
 
 namespace Elite
 {
@@ -22,18 +21,11 @@ namespace Elite
 
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState ──
 
-/// What TryScoopObject did.
-struct Scoop
-{
-  bool inBox;                                ///< the view position is in the scoop's box, and the object was offered to the hold
-  std::optional<DashboardPixel> removedBlip; ///< once it is scooped, what RemoveObject erased of its blip
-};
-
 /// TryScoopObject (CS:4401): freeCargoTonnes, and the object in _slot scooped into the hold if its view position _view is in
 /// the scoop's box: a barrel's random product or its masking device, a splinter's alloys or precious metals, an escape pod's
 /// slaves, a Thargon's alien items, each removed (RemoveObject) with its message, or the message that the hold is full or the
 /// object cannot be scooped.
-Scoop TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view);
+void TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view);
 
 /// PayForEquipmentItem (CS:65A3): menuSelectedRow's price off creditsTenths (SubtractCredits): fuel's by the tank's emptiness.
 /// Returns whether the credits were enough, and are now less the price.
@@ -66,23 +58,23 @@ void ChooseMountToFitLaser(GameState& _state, Hardware& _hardware);
 void ChooseMountToRemoveLaser(GameState& _state, Hardware& _hardware);
 
 /// DrawLaserMountMenu (CS:6367): the mount header, each of the four mounts' laser or "Free" on the line after it, and
-/// FORE's box highlighted; selectedLaserMount = 0. Returns where the last mount's text ends.
-std::uint16_t DrawLaserMountMenu(GameState& _state);
+/// FORE's box highlighted; selectedLaserMount = 0.
+void DrawLaserMountMenu(GameState& _state);
 
 /// RedrawEquipHelpText (CS:653F): the equipment screen's help lines again, over the mount menu, and textAttribute put
 /// back to the menu's.
-std::uint16_t RedrawEquipHelpText(GameState& _state);
+void RedrawEquipHelpText(GameState& _state);
 
 /// PaintLaserMountBox (CS:6564): textAttribute over the 8x3 cells of the mount box whose first attribute byte is at
 /// B800:_box.
 void PaintLaserMountBox(GameState& _state, std::uint16_t _box);
 
 /// ClearEquipmentSellPrice (CS:6946): "-" in menuSelectedRow's resale column, once the last of an item is sold.
-std::uint16_t ClearEquipmentSellPrice(GameState& _state);
+void ClearEquipmentSellPrice(GameState& _state);
 
 /// ShowEquipmentSellPrice (CS:6972): menuSelectedRow's resale price computed by ComputeResalePrice, stored after its
 /// price in screenPrices, and printed in its row's resale column.
-std::uint16_t ShowEquipmentSellPrice(GameState& _state);
+void ShowEquipmentSellPrice(GameState& _state);
 
 // What the menus that wait share, at each one's own addresses: no hook, and no entry.
 

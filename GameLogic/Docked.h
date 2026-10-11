@@ -70,8 +70,8 @@ void ShowMissionBriefing(GameState& _state, Hardware& _hardware, bool _backward)
 void ShowMissionDebriefing(GameState& _state, Hardware& _hardware, bool _backward);
 
 /// PrintCreditsOnMessageLine (CS:658F): creditBalanceText at B800:0078 in the swapped textAttribute, which is swapped
-/// back after. Returns the cell after its last character.
-std::uint16_t PrintCreditsOnMessageLine(GameState& _state);
+/// back after.
+void PrintCreditsOnMessageLine(GameState& _state);
 
 /// FormatFuelLightYears (CS:6923): fuel as "n.n" light years into the fuel text at DS:83E9.
 void FormatFuelLightYears(GameState& _state);
@@ -94,12 +94,12 @@ std::string_view DrawDockedFrame(GameState& _state, Hardware& _hardware, const D
 }
 
 /// DrawFrameSides (CS:7CE9): BAh in attribute _attribute at columns 0 and 39 of _rows rows of the text page at
-/// _segment from _cell, 65,536 for 0, as LOOP counts. Returns the cell a row below the last.
-std::uint16_t DrawFrameSides(GameState& _state, std::uint16_t _segment, std::uint16_t _cell, std::uint16_t _rows, std::uint8_t _attribute);
+/// _segment from _cell, 65,536 for 0, as LOOP counts.
+void DrawFrameSides(GameState& _state, std::uint16_t _segment, std::uint16_t _cell, std::uint16_t _rows, std::uint8_t _attribute);
 
 /// DrawFrameRow (CS:7CF8): the character and attribute _value in 38 cells from _segment:_cell, forwards or,
-/// _backwards, down. Returns the cell after the last, as REP STOSW leaves it.
-std::uint16_t DrawFrameRow(GameState& _state, std::uint16_t _segment, std::uint16_t _cell, std::uint16_t _value, bool _backwards);
+/// _backwards, down.
+void DrawFrameRow(GameState& _state, std::uint16_t _segment, std::uint16_t _cell, std::uint16_t _value, bool _backwards);
 
 /// How the docked screens end (DockedKeyDispatch, CS:0B40), and with them RunTitleAndDocked.
 struct DockedExit

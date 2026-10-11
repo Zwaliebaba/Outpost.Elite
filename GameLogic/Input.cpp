@@ -278,19 +278,15 @@ MouseDriver IsMouseDriverInstalled(Hardware& _hardware)
   return MouseDriver{set && _hardware.HandlerOpcode(vector) != IRET_OPCODE};
 }
 
-KeyPress WaitForKeyPress(GameState& _state, Hardware& _hardware)
+void WaitForKeyPress(GameState& _state, Hardware& _hardware)
 {
   // GetKey until a key comes: each empty turn ends at the original's JE back to the entry. The turn carries nothing: GetKey
   // writes AH before it reads it and keeps BX, and it reads AL only when it takes a code, which changes keyBuffer's count.
-  bool screenshot = false;
   for (;;)
   {
-    KeyPress key = GetKey(_state, _hardware);
-    screenshot = screenshot || key.screenshot;
-    if (key.scanCode != 0)
+    if (GetKey(_state, _hardware).scanCode != 0)
     {
-      key.screenshot = screenshot;
-      return key;
+      return;
     }
     _hardware.LoopTurn(WAIT_FOR_KEY_PRESS, {});
   }
@@ -581,9 +577,9 @@ Steering ReadMouseSteering(GameState& _state, Hardware& _hardware)
   return Steering{MouseRate(rollStep, Low(_state.Data().rollRate)), MouseRate(Negate(pitchStep), _state.Data().rollRateBytes.pitchRate)};
 }
 
-bool PollScreenDumpKey(GameState& _state, Hardware& _hardware)
+void PollScreenDumpKey(GameState& _state, Hardware& _hardware)
 {
-  return SaveScreenshotIfAsked(_state, _hardware);
+  SaveScreenshotIfAsked(_state, _hardware);
 }
 
 void ResetMouseIfSelected(const GameState& _state, Hardware& _hardware)

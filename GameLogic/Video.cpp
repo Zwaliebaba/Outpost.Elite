@@ -525,7 +525,7 @@ void DrawDiscUpperRow(GameState& _state, std::size_t _profile, std::uint16_t _up
   const DiscRowEdges edges = DiscRowSpan(_state, DiscHalfWidth(_state, _profile));
   if (edges.visible)
   {
-    (void)FillSpan(_state, Low(edges.left), Low(edges.right), Low(_upperRow), _backward);
+    FillSpan(_state, Low(edges.left), Low(edges.right), Low(_upperRow), _backward);
   }
 }
 
@@ -538,10 +538,10 @@ void DrawDiscRowPair(GameState& _state, std::size_t _profile, std::uint16_t _low
   {
     return;
   }
-  (void)FillSpan(_state, Low(edges.left), Low(edges.right), Low(_lowerRow), _backward);
+  FillSpan(_state, Low(edges.left), Low(edges.right), Low(_lowerRow), _backward);
   if (High(_upperRow) == 0)
   {
-    (void)FillSpan(_state, Low(edges.left), Low(edges.right), Low(_upperRow), _backward);
+    FillSpan(_state, Low(edges.left), Low(edges.right), Low(_upperRow), _backward);
   }
 }
 
@@ -1261,9 +1261,9 @@ void SpinDelay(Hardware& _hardware, std::uint16_t _turns, std::uint16_t _loop)
 // The copy loop at CS:_loop: _linePairs line pairs of a 64-byte buffer line from DS:_source to B800:_destination, the even
 // line, then the odd one below it, then back to the next even line: MOV CX,BP / REP MOVSW / ADD DI,AX / MOV CX,BP /
 // REP MOVSW / SUB DI,DX / DEC BX / JNZ, with BP, AX and DX the steps SetLinePairSteps gives. Each turn carries what the
-// next reads and changes: SI, DI and BX. Returns where SI and DI end.
-StringOffsets CopyLinePairs(GameState& _state, Hardware& _hardware, std::uint16_t _loop, std::uint16_t _source, std::uint16_t _destination,
-                            std::uint16_t _linePairs, bool _backward)
+// next reads and changes: SI, DI and BX.
+void CopyLinePairs(GameState& _state, Hardware& _hardware, std::uint16_t _loop, std::uint16_t _source, std::uint16_t _destination,
+                   std::uint16_t _linePairs, bool _backward)
 {
   StringOffsets at{_source, _destination};
   std::uint16_t pairs = _linePairs;
@@ -1277,7 +1277,7 @@ StringOffsets CopyLinePairs(GameState& _state, Hardware& _hardware, std::uint16_
     at.destination = static_cast<std::uint16_t>(at.destination - TO_NEXT_EVEN_LINE);
     if (--pairs == 0)
     {
-      return at;
+      return;
     }
     _hardware.LoopTurn(_loop, {at.source, at.destination, pairs});
   }
@@ -1385,8 +1385,8 @@ void PresentSpaceView(GameState& _state, Hardware& _hardware, bool _backward)
   }
   _state.Data().msSinceFrame = 0;
   WaitRetraceThenDelay(_hardware);
-  (void)CopyLinePairs(_state, _hardware, SPACE_VIEW_COPY_LOOP, _state.OffsetOf(_state.Data().spaceViewBuffer), SPACE_VIEW_SCREEN_OFFSET,
-                      SPACE_VIEW_LINE_PAIRS, _backward);
+  CopyLinePairs(_state, _hardware, SPACE_VIEW_COPY_LOOP, _state.OffsetOf(_state.Data().spaceViewBuffer), SPACE_VIEW_SCREEN_OFFSET,
+                SPACE_VIEW_LINE_PAIRS, _backward);
 }
 
 void CopyChartBufferToScreen(GameState& _state, Hardware& _hardware, std::uint8_t _bandsSkipped, bool _backward)
@@ -1399,7 +1399,7 @@ void CopyChartBufferToScreen(GameState& _state, Hardware& _hardware, std::uint8_
   // DS:the bands * 512, as SHL AH,1 leaves the bands doubled in AH.
   const auto linePairs = static_cast<std::uint8_t>(CHART_LINE_PAIRS - static_cast<std::uint8_t>(_bandsSkipped << 2));
   const std::uint16_t source = Join(static_cast<std::uint8_t>(_bandsSkipped << 1), 0);
-  (void)CopyLinePairs(_state, _hardware, CHART_COPY_LOOP, source, CHART_SCREEN_OFFSET, linePairs, _backward);
+  CopyLinePairs(_state, _hardware, CHART_COPY_LOOP, source, CHART_SCREEN_OFFSET, linePairs, _backward);
 }
 
 void ClearDrawBuffer(GameState& _state, bool _backward)
@@ -1623,7 +1623,7 @@ void DrawDisc(GameState& _state, std::uint16_t _radius, std::uint16_t _centerX, 
   }
 }
 
-std::uint16_t FillSpan(GameState& _state, std::uint8_t _left, std::uint8_t _right, std::uint8_t _doubledRow, bool _backward)
+void FillSpan(GameState& _state, std::uint8_t _left, std::uint8_t _right, std::uint8_t _doubledRow, bool _backward)
 {
   const auto row = static_cast<std::uint8_t>(_doubledRow >> 1);
   const std::uint8_t fill = _state.Data().discFillByte;
@@ -1638,7 +1638,7 @@ std::uint16_t FillSpan(GameState& _state, std::uint8_t _left, std::uint8_t _righ
     const auto at = static_cast<std::uint16_t>(Join(row, _left) >> 2);
     Plot(_state, at, static_cast<std::uint8_t>(High(rightMask) | High(leftMask)),
          static_cast<std::uint8_t>(Low(rightMask) & Low(leftMask) & fill));
-    return at;
+    return;
   }
   std::uint16_t at = static_cast<std::uint16_t>(row * ROW_BYTES + leftByte);
   Plot(_state, at, High(leftMask), static_cast<std::uint8_t>(Low(leftMask) & fill));
@@ -1655,7 +1655,6 @@ std::uint16_t FillSpan(GameState& _state, std::uint8_t _left, std::uint8_t _righ
                           StringStep(_backward, 2));
   }
   Plot(_state, at, High(rightMask), static_cast<std::uint8_t>(Low(rightMask) & fill));
-  return at;
 }
 
 bool DrawCircle(GameState& _state, std::uint8_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow)
@@ -1766,7 +1765,7 @@ void FillTriangleSpan(GameState& _state, std::uint16_t _row, std::uint8_t _left,
   Plot(_state, at, High(rightMask), static_cast<std::uint8_t>(Low(rightMask) & _fill));
 }
 
-bool FillTriangle(GameState& _state, Triangle _triangle, bool _backward)
+void FillTriangle(GameState& _state, Triangle _triangle, bool _backward)
 {
   // SHL DX,1 / SHL BP,1 / SHL DI,1: the rows doubled, so that a row on the buffer, 0-127, has a high byte of 0 as an x does.
   const auto doubled = [](ScreenPoint _point)
@@ -1779,13 +1778,13 @@ bool FillTriangle(GameState& _state, Triangle _triangle, bool _backward)
                                               High(word(rowsDoubled.first.y)));
   if (high != 0)
   {
-    return FillClippedTriangle(_state, rowsDoubled, _backward);
+    (void)FillClippedTriangle(_state, rowsDoubled, _backward);
+    return;
   }
   // CS:1C12: A in AL and AH, B in BL and BH, C in CL and CH, the rows halved back (SHR).
   const auto corner = [&word](ScreenPoint _point)
   { return OnScreenCorner{Low(word(_point.x)), static_cast<std::uint8_t>(Low(word(_point.y)) >> 1)}; };
   FillOnScreenTriangle(_state, corner(rowsDoubled.first), corner(rowsDoubled.second), corner(rowsDoubled.third), _backward);
-  return true;
 }
 
 bool FillClippedTriangle(GameState& _state, Triangle _doubled, bool _backward)

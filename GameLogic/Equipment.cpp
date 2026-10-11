@@ -425,14 +425,14 @@ std::uint16_t MoveMountBoxRight(GameState& _state, std::uint16_t _box)
 // 6438 and 6505: the mount message _text on the message line, in the menu's attribute. _jumpedTo, when not 0, is
 // where the original jumps back to on the way: 6509, from 653D, the tail the two messages share (ADR-015). The PUSH SI /
 // POP SI round it keep the box, which the routine never touches.
-std::uint16_t PrintMountMessage(GameState& _state, Hardware& _hardware, std::string_view _text, std::uint16_t _jumpedTo)
+void PrintMountMessage(GameState& _state, Hardware& _hardware, std::string_view _text, std::uint16_t _jumpedTo)
 {
   if (_jumpedTo != 0)
   {
     _hardware.LoopTurn(_jumpedTo, {});
   }
   _state.Data().textAttribute = MENU_ATTRIBUTE;
-  return PrintTextModeString(_state, _text, MESSAGE_OFFSET);
+  PrintTextModeString(_state, _text, MESSAGE_OFFSET);
 }
 
 // SHR CH,CL with CL the selected mount + 1 and CH laserMountsFitted: whether the mount's bit, which it shifts out into the
@@ -580,26 +580,25 @@ void LaunchEscapePod(GameState& _state)
   }
 }
 
-Scoop TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
+void TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
 {
   std::uint8_t space = _state.Data().commanderBlock.largeCargoBayFitted == 1 ? LARGE_CARGO_BAY_TONNES : CARGO_BAY_TONNES;
   space = static_cast<std::uint8_t>(space - _state.Data().commanderBlock.cargoHold.cargoUsedTonnes);
   _state.Data().freeCargoTonnes = space;
   if (!TestScoopBox(_view))
   {
-    return Scoop{false, {}};
+    return;
   }
 
   const auto type = static_cast<std::uint8_t>((_slot.type >> 1) & TYPE_MASK);
   const std::uint8_t flags = _slot.flags;
   const bool full = _state.Data().freeCargoTonnes == 0;
-  Scoop scoop{true, {}};
   Message message = Message::ScoopRetrievalInactive;
   if (type == TYPE_CARGO_BARREL)
   {
     if ((flags & FLAG_MASKING_DEVICE) != 0)
     {
-      scoop.removedBlip = RemoveObject(_state, _slot);
+      (void)RemoveObject(_state, _slot);
       _state.Data().commanderBlock.maskingDeviceRecovered = 1;
       message = Message::MaskingDevice;
     }
@@ -610,7 +609,7 @@ Scoop TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
     else
     {
       // A random product 0-10, furs for slaves, into the hold, and its name for the message. The divide cannot overflow.
-      scoop.removedBlip = RemoveObject(_state, _slot);
+      (void)RemoveObject(_state, _slot);
       const std::uint8_t random = Low(NextRandom(_state));
       std::uint8_t product = DivideByte(random, RANDOM_PRODUCT_DIVISOR).quotient;
       if (product == PRODUCT_SLAVES)
@@ -635,7 +634,7 @@ Scoop TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
   else if (type == TYPE_SPLINTER && (flags & FLAG_PRECIOUS) != 0)
   {
     // Gems, gold and platinum always; minerals or alloys too if there is room. Gold gets the gems' AL, as the original adds it.
-    scoop.removedBlip = RemoveObject(_state, _slot);
+    (void)RemoveObject(_state, _slot);
     const std::uint8_t gems = Low(NextRandom(_state)) & 7;
     AddPrecious(_state.Data().commanderBlock.cargoHold.cargoGemStonesGrams, gems);
     AddPrecious(_state.Data().commanderBlock.cargoHold.cargoGoldKg, gems);
@@ -657,7 +656,7 @@ Scoop TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
     }
     else
     {
-      scoop.removedBlip = RemoveObject(_state, _slot);
+      (void)RemoveObject(_state, _slot);
       GameData::CommanderBlock::CargoHold& hold = _state.Data().commanderBlock.cargoHold;
       Counted<std::uint8_t>& held = type == TYPE_SPLINTER     ? hold.cargoAlloysTonnes
                                     : type == TYPE_ESCAPE_POD ? hold.cargoSlavesTonnes
@@ -670,7 +669,6 @@ Scoop TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
   }
   _state.Data().messagePointer = message;
   _state.Data().messageFrames = SCOOP_MESSAGE_FRAMES;
-  return scoop;
 }
 
 ScreenKey ShowEquipShipScreen(GameState& _state, Hardware& _hardware, bool _backward)
@@ -800,7 +798,7 @@ ScreenKey RunEquipShipMenu(GameState& _state, Hardware& _hardware, std::uint16_t
   }
 }
 
-std::uint16_t DrawLaserMountMenu(GameState& _state)
+void DrawLaserMountMenu(GameState& _state)
 {
   _state.Data().textAttribute = HELP_ATTRIBUTE;
   PrintCountedTextLines(_state, MOUNT_HEADER_LINES, MOUNT_HEADER_OFFSET);
@@ -815,7 +813,6 @@ std::uint16_t DrawLaserMountMenu(GameState& _state)
   _state.Data().textAttribute = MOUNT_HIGHLIGHT_ATTRIBUTE;
   PaintLaserMountBox(_state, FIRST_MOUNT_BOX);
   _state.Data().selectedLaserMount = 0;
-  return printed;
 }
 
 void ChooseMountToFitLaser(GameState& _state, Hardware& _hardware)
@@ -834,12 +831,11 @@ void ChooseMountToRemoveLaser(GameState& _state, Hardware& _hardware)
   RunMountChooser(_state, _hardware, REMOVE_CHOOSER, MenuLoop{FIRST_MOUNT_BOX, 0});
 }
 
-std::uint16_t RedrawEquipHelpText(GameState& _state)
+void RedrawEquipHelpText(GameState& _state)
 {
   _state.Data().textAttribute = HELP_ATTRIBUTE;
-  const std::uint16_t printed = PrintCountedTextLines(_state, _state.Data().equipHelpText[0], HELP_TEXT_OFFSET);
+  PrintCountedTextLines(_state, _state.Data().equipHelpText[0], HELP_TEXT_OFFSET);
   _state.Data().textAttribute = MENU_ATTRIBUTE;
-  return printed;
 }
 
 void PaintLaserMountBox(GameState& _state, std::uint16_t _box)
@@ -880,12 +876,12 @@ bool PayForEquipmentItem(GameState& _state)
   return SubtractCredits(_state, tenths);
 }
 
-std::uint16_t ClearEquipmentSellPrice(GameState& _state)
+void ClearEquipmentSellPrice(GameState& _state)
 {
-  return PrintEquipmentSellColumn(_state, NO_RESALE_TEXT);
+  PrintEquipmentSellColumn(_state, NO_RESALE_TEXT);
 }
 
-std::uint16_t ShowEquipmentSellPrice(GameState& _state)
+void ShowEquipmentSellPrice(GameState& _state)
 {
   // The price's slot in screenPrices, and the resale price after it. The original keeps the slot in BX on the stack
   // round ComputeResalePrice.
@@ -894,7 +890,7 @@ std::uint16_t ShowEquipmentSellPrice(GameState& _state)
   const std::uint16_t resale = ComputeResalePrice(_state);
   SetWordIn(ScreenPrices(_state), slot + 2, resale);
   FormatTenths(_state, resale);
-  return PrintEquipmentSellColumn(_state, _state.TextAt(_state.Data().priceText));
+  PrintEquipmentSellColumn(_state, _state.TextAt(_state.Data().priceText));
 }
 
 std::uint16_t MenuFirstRowCell(const GameState& _state) noexcept

@@ -139,7 +139,7 @@ void ShowCargoMessage(GameState& _state, std::string_view _text, std::uint8_t _s
 [[nodiscard]] Quantity ReadQuantity(GameState& _state, Hardware& _hardware)
 {
   PrintTextModeString(_state, QUANTITY_PROMPT_TEXT, MESSAGE_OFFSET);
-  (void)ReadTextLine(_state, _hardware, _state.Data().quantityText, QUANTITY_DIGITS, GameState::VIDEO_SEGMENT, QUANTITY_INPUT_OFFSET);
+  ReadTextLine(_state, _hardware, _state.Data().quantityText, QUANTITY_DIGITS, GameState::VIDEO_SEGMENT, QUANTITY_INPUT_OFFSET);
   return ParseQuantity(_state.Data().quantityText);
 }
 
@@ -504,7 +504,7 @@ Quantity ParseQuantity(std::span<const Counted<std::uint8_t>> _text)
   return quantity;
 }
 
-std::uint16_t PrintCargoQuantity(GameState& _state, std::uint16_t _quantity)
+void PrintCargoQuantity(GameState& _state, std::uint16_t _quantity)
 {
   std::string_view text = NO_QUANTITY_TEXT;
   if (_quantity != 0)
@@ -518,9 +518,8 @@ std::uint16_t PrintCargoQuantity(GameState& _state, std::uint16_t _quantity)
   // (row-1)*80 bytes, as (row-1)*256/4 and that /4 again.
   const auto quarter = static_cast<std::uint16_t>((static_cast<std::uint8_t>(_state.Data().menuSelectedRow - 1) << 8) >> 2);
   const auto cell = static_cast<std::uint16_t>(MenuFirstRowCell(_state) + QUANTITY_COLUMN + quarter + (quarter >> 2));
-  const std::uint16_t printed = PrintTextModeString(_state, text, cell);
+  PrintTextModeString(_state, text, cell);
   _state.Data().textAttribute = attribute;
-  return printed;
 }
 
 ScreenKey RunCargoTradeMenu(GameState& _state, Hardware& _hardware)
@@ -580,7 +579,7 @@ ScreenKey RunCargoTradeMenu(GameState& _state, Hardware& _hardware)
   }
 }
 
-std::uint8_t AddContrabandPenalty(GameState& _state)
+void AddContrabandPenalty(GameState& _state)
 {
   // The row's trade record, three bytes from data8BDD, in 8 bits: its third byte is the commodity's legal penalty.
   const auto index = static_cast<std::uint8_t>(_state.Data().menuSelectedRow - 1);
@@ -592,7 +591,6 @@ std::uint8_t AddContrabandPenalty(GameState& _state)
   {
     _state.Data().commanderBlock.legalStatus = status;
   }
-  return status;
 }
 
 } // namespace Elite

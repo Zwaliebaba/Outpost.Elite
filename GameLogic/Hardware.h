@@ -86,9 +86,8 @@ public:
   /// IN AL,201h: the game port, the sticks' buttons in bits 4 to 7, each low while pressed.
   [[nodiscard]] std::uint8_t GamePortButtons();
 
-  /// Int 33h AX=0: the mouse driver reset. With no driver, int 33h is the ROM's IRET, and AX comes back as it went: 0, and
-  /// BX as 0.
-  MouseReset ResetMouse();
+  /// Int 33h AX=0: the mouse driver reset. With no driver, int 33h is the ROM's IRET.
+  void ResetMouse();
 
   /// Int 33h AX=5, BX=_button: the buttons held, and _button's presses (0 the left, 1 the right). With no driver, AX and BX
   /// come back as they went, AX=5 and BX=_button, and CX and DX as 0.

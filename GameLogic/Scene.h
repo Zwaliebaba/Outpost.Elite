@@ -96,9 +96,8 @@ struct FacesEnd
 void ProjectVertices(GameState& _state);
 
 /// ReflectVertexAboutCenter (CS:3740): for x, y and z in turn, the vertex at _reflection = drawCenter - the vertex at _vertex,
-/// then the vertex at _vertex += drawCenter, each the byte of vertexBuffer it starts at. Returns drawCenter, each coordinate as it
-/// read it.
-Vector ReflectVertexAboutCenter(GameState& _state, std::size_t _vertex, std::size_t _reflection);
+/// then the vertex at _vertex += drawCenter, each the byte of vertexBuffer it starts at.
+void ReflectVertexAboutCenter(GameState& _state, std::size_t _vertex, std::size_t _reflection);
 
 /// OffsetVertexByCenter (CS:3768): the vertex at byte _vertex of vertexBuffer plus drawCenter, x, y and z in turn. Returns
 /// drawCenter, each coordinate as it read it.
@@ -111,8 +110,8 @@ void BuildBoxCornerVertices(GameState& _state, std::uint16_t _extents);
 
 /// BuildDodoVertices (CS:38BF): the blueprint handler of type 0, the Dodo station: two rings of five from the sine table in
 /// 72-degree steps from the roll angle, a slot of four, rotated as BuildBoxCornerVertices rotates, and the rings reflected
-/// through drawCenter, as vertices 0-23. Returns drawCenter as the last OffsetVertexByCenter read it.
-Vector BuildDodoVertices(GameState& _state);
+/// through drawCenter, as vertices 0-23.
+void BuildDodoVertices(GameState& _state);
 
 /// ScaleDodoRadii (CS:3A13): the signed byte _value scaled to the Dodo's two ring radii by arithmetic shifts and adds.
 [[nodiscard]] DodoRadii ScaleDodoRadii(std::int8_t _value);
@@ -152,7 +151,7 @@ bool RunBlueprintHandler(GameState& _state, const Blueprint& _blueprint, bool _b
 /// ClassifyStationPosition (CS:3C72): ClassifyViewPosition on _slot's compass position, +20h/+22h/+24h: visible, with byte 0 bit 7
 /// set, when z is at least nearClipZ and twice |x| and twice |y| are at most z; the position stored at +10h/+12h/+14h and as
 /// drawCenter once z passes.
-ViewTest ClassifyStationPosition(GameState& _state, SpaceObject& _slot);
+void ClassifyStationPosition(GameState& _state, SpaceObject& _slot);
 
 /// TransformToViewWithBlip (CS:3ED7): _position turned to the camera's frame (RotatePitchYawRoll), the high byte of its z into
 /// _slot's +3Ch, _slot's scanner blip moved there (UpdateScannerBlip), then the frame turned to the view (TransformToView's tail).
@@ -178,8 +177,8 @@ void DrawSunOrPlanet(GameState& _state, Hardware& _hardware, SpaceObject& _slot,
 /// (ProjectToScreen): radius 7 rows when its depth byte +25h is below 14h, smaller further off, and none from 21h to A5h.
 void DrawDistantStation(GameState& _state, SpaceObject& _slot, bool _backward);
 
-/// LoadPlayerAngles (CS:8A16): the player's pitch, yaw and roll into rotation pairs 0-2. Returns the roll's sine and cosine.
-SinCos LoadPlayerAngles(GameState& _state);
+/// LoadPlayerAngles (CS:8A16): the player's pitch, yaw and roll into rotation pairs 0-2.
+void LoadPlayerAngles(GameState& _state);
 
 /// ProjectToScreen (CS:8D2E): _view on the screen, 80h + 256x/z and 40h + 256y/z, each divide saturated by the trap when it
 /// overflows.

@@ -23,7 +23,6 @@ constexpr std::uint8_t BIOS_KEYBOARD_VECTOR = 0x16;
 constexpr std::uint8_t MOUSE_VECTOR = 0x33;
 constexpr std::uint8_t VIDEO_SET_MODE = 0x00;
 constexpr std::uint8_t BIOS_READ_KEY = 0x00;
-constexpr std::uint16_t MOUSE_RESET = 0x0000;
 constexpr std::uint16_t MOUSE_BUTTON_PRESSES = 0x0005;
 
 constexpr std::uint8_t CRTC_CURSOR_ADDRESS_HIGH = 0x0E;
@@ -109,15 +108,15 @@ std::uint8_t Hardware::GamePortButtons()
 // The mouse driver's calls: the driver's when one is loaded; otherwise int 33h reaches what its vector names, the ROM's IRET,
 // and the registers come back as they went.
 
-MouseReset Hardware::ResetMouse()
+void Hardware::ResetMouse()
 {
   Mouse& mouse = m_platform.MouseDriver();
   if (!mouse.Present())
   {
     m_platform.SoftwareInterrupt(MOUSE_VECTOR);
-    return MouseReset{MOUSE_RESET, 0};
+    return;
   }
-  return mouse.Reset();
+  (void)mouse.Reset();
 }
 
 MousePresses Hardware::ReadMousePresses(std::uint16_t _button)

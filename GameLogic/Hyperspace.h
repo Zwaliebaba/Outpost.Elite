@@ -52,9 +52,9 @@ void ResetHyperspaceRings(GameState& _state, bool _backward);
 /// EnterWitchSpace (CS:4917): the witch-space countdown, and the player halfway to the destination on the charts.
 void EnterWitchSpace(GameState& _state);
 
-/// UpdateMissionSchedule (CS:4953): the mask ship's and the missions' jump counts, on an arrival outside witch space.
-/// Returns whether the jump counted towards the missions: outside the first galaxy, or with data7629 set.
-bool UpdateMissionSchedule(GameState& _state);
+/// UpdateMissionSchedule (CS:4953): the mask ship's and the missions' jump counts, on an arrival outside witch space; the
+/// missions' only outside the first galaxy, or with data7629 set.
+void UpdateMissionSchedule(GameState& _state);
 
 /// LatchHyperspaceTarget (CS:49F6): the selected system becomes the hyperspace target: its index, and systemRecordBytes
 /// of its record, 65536 for a count of 0.
@@ -66,8 +66,8 @@ void ShowHyperspaceCountdown(GameState& _state);
 
 /// ArriveInSystem (CS:2B5A): SetUpLocalSpace (its copies backwards when _backward), then, out of witch space, the sun, the planet
 /// and the station moved by one random offset, 200h-3FFh either way in the top 16 bits of x and y and a random word in z's low
-/// word, and the player turned to the station (ComputeAnglesToObject) with a random roll. Returns what ShowCockpitScreen did.
-ScreenChange ArriveInSystem(GameState& _state, Hardware& _hardware, bool _backward);
+/// word, and the player turned to the station (ComputeAnglesToObject) with a random roll.
+void ArriveInSystem(GameState& _state, Hardware& _hardware, bool _backward);
 
 /// CompleteHyperspaceJump (CS:4707): the jump, galactic when galacticJumpPending (GalacticJump, whose search takes _countIfNone, the
 /// BP it is called with): the compass and the blips erased, 'Hyperspace Motors Engaged', the fuel spent and 5 off legalStatus,
@@ -77,9 +77,8 @@ ScreenChange ArriveInSystem(GameState& _state, Hardware& _hardware, bool _backwa
 void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward);
 
 /// DrawHyperspaceRings (CS:48C0): one frame of the hyperspace rings: each counts its delay down, then grows by an eighth, at
-/// least 1, below 150, and from 20 on is drawn (DrawCircle) in its colour about the space view's centre. Returns whether a chord's
-/// DrawLine filled a horizontal line's bytes.
-bool DrawHyperspaceRings(GameState& _state);
+/// least 1, below 150, and from 20 on is drawn (DrawCircle) in its colour about the space view's centre.
+void DrawHyperspaceRings(GameState& _state);
 
 /// PlayHyperspaceTunnel (CS:4906): fifty frames of the hyperspace rings: UpdateMessageLine (the first by _backward, the
 /// direction flag), DrawHyperspaceRings and FinishSpaceViewFrame. Waits, a turn of its loop for each frame after the first.

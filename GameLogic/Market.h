@@ -77,11 +77,11 @@ void StartMarketRandom(GameState& _state);
 [[nodiscard]] Quantity ParseQuantity(std::span<const Counted<std::uint8_t>> _text);
 
 /// PrintCargoQuantity (CS:6AD9): _quantity, or "-" for 0, in the quantity column of menuSelectedRow's row, in its
-/// attribute, and textAttribute put back. Returns the cell after its last character.
-std::uint16_t PrintCargoQuantity(GameState& _state, std::uint16_t _quantity);
+/// attribute, and textAttribute put back.
+void PrintCargoQuantity(GameState& _state, std::uint16_t _quantity);
 
 /// AddContrabandPenalty (CS:6DC1): menuSelectedRow's legal penalty onto legalStatus, unless the sum, in 8 bits,
-/// is 0. Returns that sum.
-std::uint8_t AddContrabandPenalty(GameState& _state);
+/// is 0.
+void AddContrabandPenalty(GameState& _state);
 
 } // namespace Elite

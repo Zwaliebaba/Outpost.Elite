@@ -86,9 +86,9 @@ void ResetMouseIfSelected(const GameState& _state, Hardware& _hardware);
 /// the roll ramp and the pitch ramp negated.
 [[nodiscard]] Steering ReadKeyboardSteering(GameState& _state);
 
-/// WaitForKeyPress (CS:6DEC): GetKey until it gives a key, which it returns, with screenshot set if any of its calls saved one.
-/// Waits as a rule, a turn of its loop for each time GetKey finds none (ADR-015).
-[[nodiscard]] KeyPress WaitForKeyPress(GameState& _state, Hardware& _hardware);
+/// WaitForKeyPress (CS:6DEC): GetKey until it gives a key. Waits as a rule, a turn of its loop for each time GetKey finds none
+/// (ADR-015).
+void WaitForKeyPress(GameState& _state, Hardware& _hardware);
 
 /// ReadSteering (CS:7536): the roll and the pitch from the selected device, within -23..23: the keyboard's (ReadKeyboardSteering)
 /// or the Amstrad stick's integrated into keyboardRollRate and keyboardPitchRate, the IBM stick's (ReadJoystickSteering), or the
@@ -105,8 +105,8 @@ void ResetMouseIfSelected(const GameState& _state, Hardware& _hardware);
 /// sometimes, in ReadJoystickAxes.
 [[nodiscard]] Steering ReadJoystickSteering(GameState& _state, Hardware& _hardware);
 
-/// PollScreenDumpKey (CS:7F3D): SaveScreenshot while Alt and PrtSc are held. Returns whether it saved one.
-bool PollScreenDumpKey(GameState& _state, Hardware& _hardware);
+/// PollScreenDumpKey (CS:7F3D): SaveScreenshot while Alt and PrtSc are held.
+void PollScreenDumpKey(GameState& _state, Hardware& _hardware);
 
 /// ApplyReverseControls (CS:8EA5): the reversing options on _steering: reverseYControl negates the pitch, and
 /// reverseXAndY then both. ApplyReverseControlsToDx (CS:8EBA) is the same routine on DL and DH, and its callers call this.
