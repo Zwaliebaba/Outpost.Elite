@@ -10,8 +10,8 @@
 namespace Elite
 {
 
-// The reference's start-up and protection routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): start-up, the copy
-// protection's remains and the way out to DOS. Each takes values and gives values back, on the GameState and, where it drives a device, the
+// The reference's start-up routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): start-up and the way out to DOS. The copy
+// protection, which D5 closes (ADR-001), is not ported. Each takes values and gives values back, on the GameState and, where it drives a device, the
 // devices (ADR-014). Start also has its entry, at the end, where DOS starts the program (ADR-010).
 
 /// The entries of this subsystem ported so far, for InstallNativeRoutines.
@@ -21,7 +21,7 @@ namespace Elite
 
 /// Start (CS:0000), the program's entry from DOS, _psp its program segment prefix: the DOS version (DOS 1 is told it
 /// is not enough), the start-up commander kept (SaveStartupCommander, by _backward, the direction flag DOS left), the Amstrad's ROM
-/// looked for; then from RestartPlay the DOS clock read twice, the timer, the protection, int 0 and int 9, the cheat argument and
+/// looked for; then from RestartPlay the DOS clock read twice, the timer, int 0 and int 9, the cheat argument and
 /// GameLoop, which comes back only for a disk request (HandleDiskRequest): the interrupts put back, and the request made with the
 /// game's own critical-error handler on int 24h, after which it starts again. _countIfNone is BP as DOS left it, which GameLoop
 /// takes. Returns when the program ends: on DOS 1, or once a request to leave has wiped the program and said farewell (ExitToDos).
@@ -51,11 +51,6 @@ void InstallDivideAndKeyboardInterrupts(GameState& _state, Hardware& _hardware);
 /// (Hardware::BiosInterruptVector), where the original puts back what InstallDivideAndKeyboardInterrupts kept; then interrupts
 /// on.
 void RestoreDivideAndKeyboardInterrupts(Hardware& _hardware);
-
-/// CopyProtection (CS:04A3): nothing while protectionShown is set, as the D5 byte makes it; otherwise, once, a question from
-/// the manual: the BIOS's 40-column text, the title, a question picked by how long NextRandom runs before a vertical retrace,
-/// its page, line and word decoded into the prompt, the answer read by DOS and upper-cased, and a timer tick. Waits then.
-void CopyProtection(GameState& _state, Hardware& _hardware);
 
 /// CheckCheatArgument (CS:02A5): cheatEnabled=1 when the command tail DOS gave the program is exactly ' cheat', 0 otherwise.
 void CheckCheatArgument(GameState& _state, const Hardware& _hardware);

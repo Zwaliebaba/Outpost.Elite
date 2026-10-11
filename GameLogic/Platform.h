@@ -283,9 +283,6 @@ public:
 
   [[nodiscard]] bool InterruptsEnabled() const noexcept;
 
-  /// The direction flag: what the code an interrupt handler interrupted left, and DOS leaves clear for the program's start.
-  [[nodiscard]] bool Backward() const noexcept;
-
   /// One turn of a loop that can wait, ending where the original's backward jump is (ADR-015). _signature stands for the
   /// original's registers there: the loop's address and the values it carries from one turn to the next. A turn with the same
   /// signature as the last that changed no byte and wrote no port idles to the next device event. Then the run ends there if

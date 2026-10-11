@@ -133,19 +133,6 @@ public:
     Assert::IsTrue(rig.Host().RunUntil(2'000'000) == Elite::StopReason::Terminated, L"and stays ended");
   }
 
-  // The copy-protection prompt's line input (CS:051A), which ADR-001's D5 patch skips: refused, not a wait, and the run stops.
-  TEST_METHOD(RefusedCallStopsTheRun)
-  {
-    PlatformRig rig("PlatformFault");
-    rig.Start([&rig] { rig.Native().ReadDosLine(rig.State().DataSegment(), TEXT); });
-    Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Elite::StopReason::Fault);
-    const Elite::ServiceFault fault = FaultOf(rig.Host());
-    Assert::IsTrue(fault.kind == Elite::FaultKind::WouldBlock);
-    Assert::AreEqual(0x21u, std::uint32_t{fault.vector});
-    Assert::AreEqual(0x0Cu, std::uint32_t{fault.ah}, L"flush the buffer...");
-    Assert::AreEqual(0x0Au, std::uint32_t{fault.al}, L"...then buffered input");
-  }
-
   // A run stops at its first refused call, and that is the one reported, even if native code went on and made another.
   TEST_METHOD(TheFirstRefusalIsKept)
   {

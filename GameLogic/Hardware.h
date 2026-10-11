@@ -151,11 +151,6 @@ public:
   /// far jump with the interrupt's frame in place (Platform::CallHandler).
   void RunBiosTimerTick(std::uint16_t _segment, std::uint16_t _offset);
 
-  /// Int 21h AX=0C0Ah: DOS empties its keyboard buffer and reads a line typed at the keyboard into the buffer at
-  /// _segment:_offset. It would wait for ever, because the ROM's int 9 handler discards every key, so it is refused, and the
-  /// run stops: the copy protection, its only caller, is closed by the D5 byte.
-  void ReadDosLine(std::uint16_t _segment, std::uint16_t _offset);
-
   // DOS's file services, int 21h: native, on the platform's DosFiles, which answers as the emulated DOS did.
 
   /// Int 21h AH=1Ah: DOS's disk transfer area, where find-first and find-next leave what they find, at _segment:_offset.
