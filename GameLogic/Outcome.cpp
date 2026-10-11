@@ -83,6 +83,45 @@ constexpr char LAST_PRINTABLE = '~';
   return pairs;
 }
 
+// The place of outcome _name in OUTCOMES, looked for first at _hint, where a text written in their order has it; or
+// OUTCOMES.size() for a name that is not an outcome.
+[[nodiscard]] std::size_t IndexOf(std::string_view _name, std::size_t _hint) noexcept
+{
+  if (_hint < OUTCOMES.size() && OUTCOMES[_hint].name == _name)
+  {
+    return _hint;
+  }
+  std::size_t index = 0;
+  while (index < OUTCOMES.size() && OUTCOMES[index].name != _name)
+  {
+    ++index;
+  }
+  return index;
+}
+
+// What _text holds of each outcome, by its place in OUTCOMES; the last value given, if one is given twice, and nothing for
+// a pair that is not an outcome's.
+[[nodiscard]] std::array<std::optional<std::string_view>, OUTCOMES.size()> ValuesOf(std::string_view _text)
+{
+  std::array<std::optional<std::string_view>, OUTCOMES.size()> values{};
+  std::size_t next = 0;
+  for (const std::string_view pair : Pairs(_text))
+  {
+    const std::size_t equals = pair.find('=');
+    if (equals == std::string_view::npos)
+    {
+      continue;
+    }
+    const std::size_t index = IndexOf(pair.substr(0, equals), next);
+    if (index < OUTCOMES.size())
+    {
+      values[index] = pair.substr(equals + 1);
+      next = index + 1;
+    }
+  }
+  return values;
+}
+
 } // namespace
 
 std::optional<std::string> OutcomeValue(const GameState& _state, std::string_view _name)
@@ -200,7 +239,10 @@ std::optional<std::string_view> FindOutcome(std::string_view _text, std::string_
 
 bool CheckOutcomeText(std::string_view _text, std::string& _error)
 {
-  std::vector<std::string_view> seen;
+  // By place in OUTCOMES: a text in their order, as OutcomeText writes it, finds each name at the first place it looks.
+  std::array<bool, OUTCOMES.size()> seen{};
+  std::size_t next = 0;
+  bool any = false;
   for (const std::string_view pair : Pairs(_text))
   {
     const std::size_t equals = pair.find('=');
@@ -210,19 +252,22 @@ bool CheckOutcomeText(std::string_view _text, std::string& _error)
       _error = std::format("'{}' is not a name=value pair", pair);
       return false;
     }
-    if (std::none_of(OUTCOMES.begin(), OUTCOMES.end(), [name](const OutcomeName& _outcome) { return _outcome.name == name; }))
+    const std::size_t index = IndexOf(name, next);
+    if (index == OUTCOMES.size())
     {
       _error = std::format("'{}' is not an outcome", name);
       return false;
     }
-    if (std::find(seen.begin(), seen.end(), name) != seen.end())
+    if (seen[index])
     {
       _error = std::format("'{}' is given twice", name);
       return false;
     }
-    seen.push_back(name);
+    seen[index] = true;
+    next = index + 1;
+    any = true;
   }
-  if (seen.empty())
+  if (!any)
   {
     _error = "no outcome is given";
     return false;
@@ -232,15 +277,17 @@ bool CheckOutcomeText(std::string_view _text, std::string& _error)
 
 std::vector<OutcomeDifference> CompareOutcomes(std::string_view _recorded, std::string_view _actual)
 {
+  const auto recordedValues = ValuesOf(_recorded);
+  const auto actualValues = ValuesOf(_actual);
   std::vector<OutcomeDifference> differences;
-  for (const OutcomeName& outcome : OUTCOMES)
+  for (std::size_t index = 0; index < OUTCOMES.size(); ++index)
   {
-    const std::optional<std::string_view> recorded = FindOutcome(_recorded, outcome.name);
-    const std::string actual(FindOutcome(_actual, outcome.name).value_or(""));
+    const std::optional<std::string_view>& recorded = recordedValues[index];
+    const std::string actual(actualValues[index].value_or(""));
     if (!recorded || *recorded != actual)
     {
-      differences.push_back(
-        OutcomeDifference{outcome.name, outcome.kind, recorded ? std::optional<std::string>(*recorded) : std::nullopt, actual});
+      differences.push_back(OutcomeDifference{OUTCOMES[index].name, OUTCOMES[index].kind,
+                                              recorded ? std::optional<std::string>(*recorded) : std::nullopt, actual});
     }
   }
   return differences;
