@@ -1103,7 +1103,8 @@ def main() -> int:
   checker = Checker(root)
   checker.run()
   if not checker.projects:
-    print("No .vcxproj in the tree yet: the project rules have nothing to check; the whole-tree rules ran.")
+    print("error: no .vcxproj in the tree, so the project rules have nothing to check", file=sys.stderr)
+    return 2
   findings = sorted(checker.findings)
   for finding in findings:
     print(finding)

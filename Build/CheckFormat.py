@@ -84,8 +84,8 @@ def main() -> int:
 
   files = cpp_files(root)
   if not files:
-    print("CheckFormat: no C++ files in the tree yet -- nothing to check.")
-    return 0
+    print("error: no C++ files found: the tree has them, so the search or the root is wrong", file=sys.stderr)
+    return 2
 
   style = root / ".clang-format"
   if not style.is_file():

@@ -60,9 +60,8 @@ struct Step
   std::size_t line = 0;               ///< the 1-based line the step was read from
 };
 
-/// Parses the steps of a replay (ADR-008), which Tools/ReferenceScreens.py also reads, so one script drives
-/// this host and DOSBox-X alike. A step is a verb and its arguments; steps are separated by ';' or a new
-/// line, and '#' starts a comment that runs to the end of the line.
+/// Parses the steps of a replay (ADR-008). A step is a verb and its arguments; steps are separated by ';' or a
+/// new line, and '#' starts a comment that runs to the end of the line.
 ///
 ///   wait S               S seconds, with up to three decimals (`wait 0.25`)
 ///   key NAME             press and release NAME, an X keysym name as xdotool takes it: F1-F10, space,

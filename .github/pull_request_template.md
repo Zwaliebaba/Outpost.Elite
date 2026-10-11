@@ -25,7 +25,7 @@
 - [ ] Release built locally (CI does not build it — AGENTS.md §6)
 - [ ] Ran the executable (**required** if this touches rendering, input, audio or presentation)
 
-<!-- A checker that is not written yet is not a box to tick. Strike it and say so below. -->
+<!-- A checker you did not run is not a box to tick: leave it unticked and say why. -->
 
 ## Conformance
 

@@ -5,7 +5,7 @@
 
 The suites are every *Tests.vcxproj in the tree (AGENTS.md §3), as x64/<configuration>/<name>.dll, and
 every one must have been built: vstest reports "no tests found" as a pass, so a suite that did not
-build is not a suite that passed. No suites at all is not an error.
+build is not a suite that passed, and no suites at all is an error.
 
 The tests run as concurrent vstest processes, one per shard. Each shard is a group of names, each a
 test class or a single test's method, matched on the test's fully qualified name, and one more shard
@@ -16,8 +16,8 @@ and its counts are read back from it, with what its tests wrote to their log (Lo
 the guard's reports of pictures and outcomes that differ from those recorded (D33), which fail nothing,
 are printed after the shard's output, and under GitHub Actions each difference is also a warning.
 
-Exit status: 0 every shard passed or there is nothing to run, 1 a shard failed, 2 usage or
-environment error (a suite not built, no vstest).
+Exit status: 0 every shard passed, 1 a shard failed, 2 usage or environment error (no suite, a suite
+not built, no vstest).
 """
 
 import argparse
@@ -134,8 +134,8 @@ def main() -> int:
 
   suites = find_suites(arguments.configuration)
   if not suites:
-    print("No *Tests.vcxproj in the tree yet. Nothing to run.")
-    return 0
+    print("error: no *Tests.vcxproj in the tree", file=sys.stderr)
+    return 2
   vstest = arguments.vstest or find_vstest()
   if not vstest:
     print("error: vstest.console.exe not found.", file=sys.stderr)

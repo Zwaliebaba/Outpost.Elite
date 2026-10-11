@@ -4,16 +4,10 @@ name: Build
 #
 # ── What blocks, and what is merely skipped ────────────────────────────────────────────────
 #
-# Every step that has something to run BLOCKS. Nothing here is `continue-on-error`, and a script
-# that exists and fails fails the build.
-#
-# But this repository is a clean start: there is no solution and no project in it yet, and a gate
-# that cannot run must not be dressed up as a gate that passed. So each step that needs one is
-# guarded on it -- the solution, the built test binaries -- and a step whose input is absent is
-# SKIPPED and says so in the log. The moment the file lands, the step starts gating with no edit
-# here. Remove a guard once its input is permanently there; never add one to get past a red build.
-# The checker scripts are permanently there, so their steps are no longer guarded: on a tree with
-# no C++ they run and pass with nothing to check.
+# Every step BLOCKS. Nothing here is `continue-on-error`, and nothing is skipped: while the tree
+# was empty, the build and test steps were guarded on the solution and skipped without it, and the
+# checkers passed with nothing to check. The solution, the projects and the suites are permanently
+# here now, so the guards are gone, and a missing solution, project or suite is an error.
 #
 # Nothing is discovered by name. The solution is whatever single .slnx/.sln sits at the root, and
 # the test suites are whatever *Tests.vcxproj the tree contains -- so adding a project does not
@@ -131,22 +125,16 @@ jobs:
           Write-Output "--- python ---"
           python --version
 
-      # The solution is found, not named. Exactly one at the root, or none while the tree is still
-      # empty; two is a mistake worth failing on rather than picking between.
+      # The solution is found, not named. Exactly one at the root; none, or two, is a mistake worth
+      # failing on rather than guessing at.
       - name: Locate the solution
         id: solution
         shell: pwsh
         run: |
           $found = @(Get-ChildItem -Path . -File | Where-Object { $_.Extension -in '.slnx', '.sln' })
-          if ($found.Count -gt 1) { throw "More than one solution at the repository root: $($found.Name -join ', ')." }
-          if ($found.Count -eq 0) {
-            Write-Output "::notice::No solution at the repository root yet. The build and test steps will be skipped."
-            "path=" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          }
-          else {
-            Write-Output "Solution: $($found[0].Name)"
-            "path=$($found[0].Name)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          }
+          if ($found.Count -ne 1) { throw "Expected one solution at the repository root, found $($found.Count): $($found.Name -join ', ')." }
+          Write-Output "Solution: $($found[0].Name)"
+          "path=$($found[0].Name)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       # First, because it is two seconds and it catches the class of mistake that would otherwise
       # surface as a confusing build failure: a file missing from a project, a header in a
@@ -164,7 +152,6 @@ jobs:
 
       # /warnaserror covers MSBuild's own warnings; /WX for the compiler is set in the projects.
       - name: Build
-        if: steps.solution.outputs.path != ''
         shell: pwsh
         run: |
           msbuild "${{ steps.solution.outputs.path }}" `
@@ -174,7 +161,7 @@ jobs:
 
       # One suite per *Tests.vcxproj in the tree, and every one of them must have produced a DLL:
       # vstest reports "no tests found" as a pass, so a suite that did not build is not a suite
-      # that passed. No suites at all is a state this repository is still legitimately in.
+      # that passed, and no suites at all is an error.
       #
       # Build\RunTests.py runs them as vstest processes at once, one per shard of test classes; one
       # shard takes every class the others do not name, so nothing is left out, and a shard that runs
@@ -182,7 +169,6 @@ jobs:
       # about half of the whole (a private repository's windows-latest has two vCPUs; a public one's
       # has four).
       - name: Run the tests
-        if: steps.solution.outputs.path != ''
         shell: pwsh
         run: python Build\RunTests.py --configuration $env:CONFIGURATION
 
