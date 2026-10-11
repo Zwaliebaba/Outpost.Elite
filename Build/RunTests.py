@@ -12,7 +12,9 @@ test class or a single test's method, matched on the test's fully qualified name
 takes every test the groups do not name, so a class added or renamed still runs. A group that runs no
 test fails, which is how a group left naming a renamed class is found. The groups are a balance of measured times, not a rule: moving a class
 between them changes how long CI takes, never what it runs. Each shard writes TestResults/<shard>.trx,
-and its counts are read back from it.
+and its counts are read back from it, with what its tests wrote to their log (Logger::WriteMessage):
+the guard's reports of pictures and outcomes that differ from those recorded (D33), which fail nothing,
+are printed after the shard's output, and under GitHub Actions each difference is also a warning.
 
 Exit status: 0 every shard passed or there is nothing to run, 1 a shard failed, 2 usage or
 environment error (a suite not built, no vstest).
@@ -20,6 +22,7 @@ environment error (a suite not built, no vstest).
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -94,6 +97,26 @@ def counts(_name: str) -> dict[str, int] | None:
   return None
 
 
+# A logged line that reports a difference: "...: the picture at ... differs: ...", or a summary that counts some.
+DIFFERENCE = re.compile(r" differs?: |\b[1-9][0-9]* differ\b")
+
+
+def messages(_name: str) -> list[str]:
+  """Every line the tests of TestResults/<_name>.trx wrote to their log, in the order of the results."""
+  try:
+    root = ElementTree.parse(ROOT / RESULTS / f"{_name}.trx").getroot()
+  except (OSError, ElementTree.ParseError):
+    return []
+  lines = []
+  for result in root.iter():
+    if not result.tag.endswith("UnitTestResult"):
+      continue
+    for element in result.iter():
+      if (element.tag.endswith("StdOut") or element.tag.endswith("Message")) and element.text:
+        lines.extend(line for line in element.text.splitlines() if line.strip())
+  return lines
+
+
 def main() -> int:
   parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
   parser.add_argument("--configuration", default="Debug", help="the build configuration whose suites to run (default: Debug)")
@@ -152,6 +175,14 @@ def main() -> int:
           summary = "no results" if found is None else f"{found.get('executed', 0)} run, {found.get('passed', 0)} passed"
           print(f"== shard {name}: exit {process.returncode} after {time.monotonic() - started:.0f} s, {summary} ==")
           print(output, flush=True)
+          logged = messages(name)
+          if logged:
+            print(f"== shard {name}: what its tests logged ==")
+            for line in logged:
+              print(line)
+              if os.environ.get("GITHUB_ACTIONS") and DIFFERENCE.search(line):
+                print(f"::warning::{line}")
+            sys.stdout.flush()
           if process.returncode != 0:
             failed.append(name)
           elif found is None or found.get("executed", 0) == 0:

@@ -83,6 +83,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="AnswerFile.h" />
+    <ClInclude Include="GuardReport.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="ReferenceRig.h" />
     <ClInclude Include="TwinRig.h" />
@@ -111,6 +113,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="KnownAnswers.txt" />
+    <None Include="KnownPictures.txt" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\GameLogic\GameLogic.vcxproj">

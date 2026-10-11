@@ -9,6 +9,7 @@ key Escape; wait 0.3               # the disc menu
 key l; wait 0.3                    # Load Commander: it asks for a file name
 key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
 digest loaded 39e5e850c761ba48552806132ef15648c3172cce4a1b8bf68c75854bc4fa41d4
+picture loaded 44fd17ae02fbc25fb600d728cb324d04ff3a9ca1e4d3c452baf2feb4e9d0a706
 key F4; wait 0.8                   # Equip Ship, its cursor on Fuel
 key b; wait 0.3                    # fuel: from 3.5 to 7.0 light years
 key Down; wait 0.15
@@ -16,6 +17,7 @@ key s; wait 0.3                    # a missile sold, and two bought: four
 key b; wait 0.3
 key b; wait 0.3
 digest missiles 28f8462e76040777f8c233b42c9eed584a44d20bff744807558ff39302f13608
+picture missiles 6ce016227b569631405f466c280e8e82ed1f9c769f6db8e77e493908d7f62998
 key Down; wait 0.15
 key b; wait 0.3                    # the cargo bay extension
 key Down; wait 0.15
@@ -31,6 +33,7 @@ key b; wait 0.3                    # the beam laser, aft
 key Right; wait 0.15
 key space; wait 0.3
 digest pulse-and-beam 4bcba41448252c27905329f7591407a9e84c31d8fd69530f6983013929d30eab
+picture pulse-and-beam e7991995c5f67aea7729be09cdc6d243bc9e81860acf5d9fc526db603661d2cf
 key Down; wait 0.15
 key b; wait 0.3                    # fuel scoops
 key Down; wait 0.15
@@ -51,5 +54,7 @@ key Down; wait 0.15
 key b; wait 0.3                    # the military laser, fore
 key space; wait 0.3
 digest equipped 6653e63f4641002a7645da7499e0e0ac952a0de4832418f1997d705a66015239
+picture equipped 1684788347ba5d9653bc830abd0da2a1e641e9b73a4692260fd14cea78583975
 key F9; wait 0.8
 digest status 07763af6ca5e3dc599a727ea819777ccc4013e17a277270e5f1b271c5dde528c
+picture status 9664f7fc36fe301e4f776a23e3d359ffcf789cd4f42f92d91025d897f5a3f80f

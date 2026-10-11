@@ -3,27 +3,38 @@
 wait 3
 key space; wait 4                  # any key: the credits, then the status screen
 digest status 792adf1cdbd7874f6ad97b723312a5fbf12086b5637952458669794127a42548
+picture status b7ee12a527ba7c2fc4299cc3a1c8065e786260b87cad506b70e2b515d759d4e5
 key F2; wait 1
 digest sell-cargo c3ed0ec986efab0444712b1473e608efef944116f8e6b414c5076757e88904f8
+picture sell-cargo a53b056d444b873541be8cf848db91b544f4a09e7f1e7050e4a64de32a156a3d
 key F3; wait 1
 digest buy-cargo 50a77972be460404a6af88edaad1db673472fe9a59ea4612f84d954b248c4bf6
+picture buy-cargo 75258d8e227b36eddd13808b262f4bdc2f7e56e84c7e823ec0f5b1638e2d6027
 key F4; wait 1
 key Down; wait 0.5                 # from fuel to the missile
 key b; wait 1                      # buy one
 digest equip-bought-missile 11632798c37bee4b25aaa56cd418100b572ca89c799849fe20305db573c5add4
+picture equip-bought-missile c7a775f895d39803daee303eb197e535081a29dabc731178dafbff9a8de611e7
 key F5; wait 1
 down Right; wait 0.3; up Right; wait 0.5
 digest galactic-chart 9e400291ff9af6e28e625bae02bbe1dc34714570dc6abf3023ed45c786d71f62
+picture galactic-chart 7000fe040d9ee5459d574f088214e39db95b40e390c0a98488d77bcd97e76a5d
 key F6; wait 1
 down Left; wait 0.55; up Left; wait 0.05 # six frames of the short-range chart (D18): the cursor to Riedquat
 digest short-range-chart cc8dea82c55f006dea290101b3e45107e921059b4c05f67d4b38d3d7284b3519
+picture short-range-chart 729845716450659fa5b50eacaf34371b1a992c1c81486c16951ebbaf17ae9889
 key F7; wait 1                     # data on the system at the cursor: Riedquat
 digest data-on-riedquat e5259bc2a8d7c0581f658dab498dfd5cbeb963b8459b30aac68f362358d3ab4b
+picture data-on-riedquat 560111f927b33d2ad56f24bf06499ef6759050b5949733edee363daf6a6973c7
 key F8; wait 1
 digest market-prices e17a014117325d04940b1dc68f3706a47fedc3f3b2bb1d75423ec0adb31f193f
+picture market-prices 55e7505dccbe2471d481822cb554916679e72cd0c275f2550fdc79146e21b2f1
 key F10; wait 1
 digest inventory e9c82236602edb4cd2bc36473ffcf17bba513cad2a2649113590e0f6e9331b08
+picture inventory 0d02e05b5bf0d3ea85d2f76daba8d6978eb11243a6333a70656d9a2e62260427
 key Escape; wait 1
 digest disc-menu 33c9eccdff8812c1af7fe86a3adec7f183e39043d68d8e73427c3b59e6a8c44a
+picture disc-menu 495d2250bca04995a347d9607ce81af7d444475077ecd2233d98bf9710bdaf9e
 key F9; wait 1
 digest status-again 071214782b7258eb35d6e33d7486f4ed75d615f2a2e024c4b96fedb71ca1ece9
+picture status-again 7c8f778efdb141666814732035a1e39f5eb05db23cd00563c67ec0c712092146

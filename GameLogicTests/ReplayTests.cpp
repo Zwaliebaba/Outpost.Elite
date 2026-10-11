@@ -2,9 +2,10 @@
 
 #include "ReferenceRig.h"
 #include "Replay.h"
-#include "StateDigest.h"
 
+#include <format>
 #include <fstream>
+#include <map>
 #include <stdexcept>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -76,9 +77,9 @@ public:
     {
       ReferenceRig rig("Waits");
       Elite::ReplayPlayer player(rig.Host(), rig.State());
-      std::string digest;
+      Elite::Checkpoint checkpoint;
       for (const Elite::Step& step : run == 0 ? one : many)
-        Assert::IsTrue(player.Play(step, digest) == Machine::StopReason::Reached, L"runs");
+        Assert::IsTrue(player.Play(step, checkpoint) == Machine::StopReason::Reached, L"runs");
       Assert::AreEqual(std::uint64_t{1'000}, player.ElapsedMilliseconds());
       ends[run] = rig.Host().Clock();
     }
@@ -119,7 +120,7 @@ public:
       live.Host().KeyboardController().Inject(static_cast<std::uint8_t>(press.scanCode | (press.down ? 0 : 0x80)));
     }
     Assert::IsTrue(live.Host().RunUntil(Elite::ReplayCycle(start, END_MILLISECONDS)) == Machine::StopReason::Reached, L"runs");
-    const std::string expected = Elite::GameStateDigest(live.State(), live.Host().Video());
+    const Elite::Checkpoint expected = Elite::TakeCheckpoint(live.State(), live.Host().Video());
     recorder.Digest(END_MILLISECONDS, "end", expected);
 
     std::vector<Elite::Step> steps;
@@ -127,10 +128,12 @@ public:
     Assert::IsTrue(Elite::ParseSteps(recorder.Text(), steps, error), L"the recording parses");
     ReferenceRig replay("RecordReplay");
     Elite::ReplayPlayer player(replay.Host(), replay.State());
-    std::string digest;
+    Assert::AreEqual(expected.picture.c_str(), steps.back().expectedPicture.c_str(), false, L"the digest's picture line");
+    Elite::Checkpoint checkpoint;
     for (const Elite::Step& step : steps)
-      Assert::IsTrue(player.Play(step, digest) == Machine::StopReason::Reached, L"plays");
-    Assert::AreEqual(expected.c_str(), digest.c_str());
+      Assert::IsTrue(player.Play(step, checkpoint) == Machine::StopReason::Reached, L"plays");
+    Assert::AreEqual(expected.digest.c_str(), checkpoint.digest.c_str());
+    Assert::AreEqual(expected.picture.c_str(), checkpoint.picture.c_str());
     Assert::AreEqual(live.Host().Clock(), replay.Host().Clock());
     Assert::IsFalse(recorder.Key(END_MILLISECONDS, 0x60, true), L"a code no XT key sends is refused");
   }
@@ -162,6 +165,61 @@ public:
     fails("end 1; key y", "only digest and shot may follow end");
     fails("end 1\nwait 1", "line 2");
     fails("end 1; end 1", "only digest and shot may follow end");
+    fails("picture boot 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "follows the digest step it names");
+    fails("digest boot\npicture boot 1234", "64 lowercase hex digits");
+    fails("digest boot\npicture boot", "picture takes the label of the digest before it and a value");
+    fails("digest boot\nwait 1\npicture boot 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "line 3");
+    fails("digest boot\npicture title 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "follows the digest step it names");
+    fails("digest boot\npicture boot 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n"
+          "picture boot 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "has its picture already");
+  }
+
+  // A picture line (Replay.h) is not a step: it gives the picture digest the digest step just before it must give, even
+  // after an end step, and a replay with picture lines has the same steps as one without.
+  TEST_METHOD(APictureLineBelongsToTheDigestBeforeIt)
+  {
+    constexpr std::string_view DIGEST = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    constexpr std::string_view PICTURE = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210";
+    std::vector<Elite::Step> steps;
+    std::string error;
+    const std::string text =
+      std::format("wait 1\ndigest boot {}\npicture boot {}   # recorded\nend 1; digest dos\npicture dos {}\n", DIGEST, PICTURE, PICTURE);
+    Assert::IsTrue(Elite::ParseSteps(text, steps, error), L"parses");
+    Assert::AreEqual(std::size_t{4}, steps.size(), L"wait, digest, end, digest: the pictures are not steps");
+    Assert::AreEqual(std::string(DIGEST).c_str(), steps[1].expectedDigest.c_str());
+    Assert::AreEqual(std::string(PICTURE).c_str(), steps[1].expectedPicture.c_str());
+    Assert::IsTrue(steps[3].expectedDigest.empty(), L"a digest with no value");
+    Assert::AreEqual(std::string(PICTURE).c_str(), steps[3].expectedPicture.c_str(), false, L"may still have its picture");
+  }
+
+  // Recording a corpus's pictures (RecordCheckpoints) writes each after its digest's line, ending as that line does, and
+  // replaces the picture line there was; every other line, comments and blank lines included, is kept byte for byte.
+  TEST_METHOD(RecordingAPictureKeepsEveryOtherLine)
+  {
+    const std::string digest(64, 'a');
+    const std::string old(64, 'b');
+    const std::string picture(64, 'c');
+    const std::string text = "# a replay\r\nwait 3\r\ndigest boot " + digest + "\r\npicture boot " + old +
+                             "\r\n\nkey F1; wait 1  # launch\n" + "digest flight " + digest;
+    std::vector<Elite::Step> steps;
+    std::string error;
+    Assert::IsTrue(Elite::ParseSteps(text, steps, error), L"parses");
+    const std::map<std::size_t, Elite::Checkpoint> checkpoints = {{3, {digest, picture}}, {7, {digest, picture}}};
+    std::string recorded;
+    Assert::IsTrue(Elite::RecordCheckpoints(text, checkpoints, recorded, error), L"records");
+    const std::string expected = "# a replay\r\nwait 3\r\ndigest boot " + digest + "\r\npicture boot " + picture + "\r\n\n" +
+                                 "key F1; wait 1  # launch\ndigest flight " + digest + "\npicture flight " + picture + "\n";
+    Assert::AreEqual(expected.c_str(), recorded.c_str());
+    std::string again;
+    Assert::IsTrue(Elite::RecordCheckpoints(recorded, checkpoints, again, error), L"records again");
+    Assert::AreEqual(recorded.c_str(), again.c_str(), false, L"a second recording changes nothing");
+
+    Assert::IsFalse(Elite::RecordCheckpoints(text, {{2, {digest, picture}}}, recorded, error), L"line 2 is a wait");
+    Assert::IsTrue(error.find("line 2") != std::string::npos, L"names the line");
+    Assert::IsFalse(Elite::RecordCheckpoints("key F1; digest boot\n", {{1, {digest, picture}}}, recorded, error), L"not alone");
+    Assert::IsFalse(Elite::RecordCheckpoints(text, {{9, {digest, picture}}}, recorded, error), L"past the end");
   }
 
   // An end step (Replay.h) is the last that runs the machine, and the only one in which the program may end, as it must
@@ -206,15 +264,15 @@ public:
       std::string error;
       Assert::IsTrue(Elite::ParseSteps(TO_THE_QUESTION, steps, error), L"parses");
       Elite::ReplayPlayer player(rig.Host(), rig.State());
-      std::string digest;
+      Elite::Checkpoint checkpoint;
       for (const Elite::Step& step : steps)
-        Assert::IsTrue(player.Play(step, digest) == Machine::StopReason::Reached, L"the menus run");
+        Assert::IsTrue(player.Play(step, checkpoint) == Machine::StopReason::Reached, L"the menus run");
       steps.clear();
       Assert::IsTrue(Elite::ParseSteps(ending.steps, steps, error), L"parses");
       std::vector<std::string> digests;
       for (const Elite::Step& step : steps)
       {
-        const Machine::StopReason stop = player.Play(step, digest);
+        const Machine::StopReason stop = player.Play(step, checkpoint);
         if (step.kind == Elite::StepKind::Wait || step.kind == Elite::StepKind::End)
         {
           Assert::IsTrue(stop == ending.stop, L"Y ends the program, and nothing else does");
@@ -223,7 +281,7 @@ public:
         else
           Assert::IsTrue(stop == Machine::StopReason::Reached, L"a key or a digest stops nothing");
         if (step.kind == Elite::StepKind::Digest)
-          digests.push_back(digest);
+          digests.push_back(checkpoint.digest);
       }
       if (!digests.empty())
       {
@@ -255,8 +313,8 @@ public:
     std::string error;
     Assert::IsTrue(Elite::ParseSteps("file pilot.cdr first.cdr", steps, error), L"parses");
     const Machine::Cycles before = rig.Host().Clock();
-    std::string digest;
-    Assert::IsTrue(player.Play(steps[0], digest) == Machine::StopReason::Reached, L"copies");
+    Elite::Checkpoint checkpoint;
+    Assert::IsTrue(player.Play(steps[0], checkpoint) == Machine::StopReason::Reached, L"copies");
     Assert::AreEqual(before, rig.Host().Clock(), L"no time passes");
     Assert::IsTrue(Elite::ReadWholeFile(rig.Files() / "PILOT.CDR") == first, L"the copy, under its DOS name");
 
@@ -271,7 +329,7 @@ public:
 
     steps.clear();
     Assert::IsTrue(Elite::ParseSteps("file PILOT.CDR second.cdr", steps, error), L"parses");
-    Assert::IsTrue(player.Play(steps[0], digest) == Machine::StopReason::Reached, L"copies again");
+    Assert::IsTrue(player.Play(steps[0], checkpoint) == Machine::StopReason::Reached, L"copies again");
     Assert::IsTrue(Elite::ReadWholeFile(rig.Files() / "PILOT.CDR") == second, L"the second copy replaces the first");
   }
 
@@ -285,11 +343,11 @@ public:
     Assert::IsTrue(Elite::ParseSteps("wait 0.5\nfile PILOT.CDR missing.cdr", steps, error), L"parses");
     const auto refusal = [&](Elite::ReplayPlayer& _player)
     {
-      std::string digest;
+      Elite::Checkpoint checkpoint;
       std::string message;
       try
       {
-        static_cast<void>(_player.Play(steps[1], digest));
+        static_cast<void>(_player.Play(steps[1], checkpoint));
       }
       catch (const std::runtime_error& failure)
       {

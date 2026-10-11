@@ -34,8 +34,13 @@
 // A digest with an expected value that does not match fails the run. Nothing writes a digest back: since D7 deleted the
 // interpreter there is no original to record one from, and a digest changes only by a ruling (ADR-008 item 7).
 //
+// A digest's picture line (Replay.h) is checked too, and reported rather than gating: a picture that differs prints both
+// values and does not fail the run, and the last lines sum the pictures checked and those that differ. A digest that names
+// its expected value but has no recorded picture fails the run, naming the line.
+//
 // Exit status: 0 the steps ran and every digest matched, 1 the program stopped them (a refused call, its end, a spin, a
-// native routine that waited where it cannot, or unported code) or a digest did not match, 2 usage or file errors.
+// native routine that waited where it cannot, or unported code), a digest did not match or a checked digest has no
+// picture, 2 usage or file errors. A picture that differs does not change it.
 // Only an end step may end the program, and it must (Elite::ExpectedStop): a replay that leaves for DOS ends with one,
 // and its digests after the end read what the program left.
 
@@ -182,11 +187,14 @@ int Run(int _argc, char** _argv)
   const std::filesystem::path sources = options.replay.empty() ? Elite::FindInRepository("Replays") : options.replay.parent_path();
   Elite::ReplayPlayer player(pc, game->State(), files, sources);
   std::size_t mismatches = 0;
+  std::size_t unrecorded = 0; // checked digests with no picture recorded
+  std::size_t picturesChecked = 0;
+  std::size_t picturesDiffer = 0;
   for (std::size_t index = 0; index < steps.size() && asExpected; ++index)
   {
     const Elite::Step& step = steps[index];
-    std::string digest;
-    const Machine::StopReason stop = player.Play(step, digest);
+    Elite::Checkpoint checkpoint;
+    const Machine::StopReason stop = player.Play(step, checkpoint);
     asExpected = stop == Elite::ExpectedStop(step);
     if (step.kind == Elite::StepKind::Wait || step.kind == Elite::StepKind::End)
       reason = stop;
@@ -205,10 +213,27 @@ int Run(int _argc, char** _argv)
     else if (step.kind == Elite::StepKind::Digest)
     {
       const bool checked = !step.expectedDigest.empty();
-      const bool matches = digest == step.expectedDigest;
+      const bool matches = checkpoint.digest == step.expectedDigest;
       if (checked && !matches)
         ++mismatches;
-      Print(std::format("digest\t{}\t{}{}\n", step.name, digest, !checked ? "" : matches ? "\tmatches" : "\tDOES NOT MATCH"));
+      Print(std::format("digest\t{}\t{}{}\n", step.name, checkpoint.digest, !checked ? "" : matches ? "\tmatches" : "\tDOES NOT MATCH"));
+      if (!step.expectedPicture.empty())
+      {
+        ++picturesChecked;
+        const bool same = checkpoint.picture == step.expectedPicture;
+        picturesDiffer += same ? 0 : 1;
+        Print(std::format("picture\t{}\t{}\t{}\n", step.name, checkpoint.picture,
+                          same ? "matches" : std::format("DIFFERS from the recorded {}", step.expectedPicture)));
+      }
+      else
+      {
+        Print(std::format("picture\t{}\t{}\n", step.name, checkpoint.picture));
+        if (checked)
+        {
+          ++unrecorded;
+          std::fprintf(stderr, "ReferenceRunner: line %zu: digest %s has no recorded picture\n", step.line, step.name.c_str());
+        }
+      }
     }
   }
 
@@ -217,12 +242,15 @@ int Run(int _argc, char** _argv)
   Print(std::format("ran\t{} instructions\t{} cycles\t{:.3f} s\t{}\n", pc.Processor().InstructionCount(), pc.Clock(),
                     static_cast<double>(pc.Clock()) * Machine::CPU_CLOCK_DIVISOR / static_cast<double>(Machine::CRYSTAL_HZ),
                     Describe(reason, pc)));
+  Print(std::format("pictures\t{} checked\t{} differ\n", picturesChecked, picturesDiffer));
+  if (picturesDiffer > 0)
+    std::fprintf(stderr, "ReferenceRunner: %zu picture(s) differ from the recorded ones (reported, not failing the run)\n", picturesDiffer);
   if (mismatches > 0)
   {
     std::fprintf(stderr, "ReferenceRunner: %zu digest(s) did not match\n", mismatches);
     return 1;
   }
-  return asExpected ? 0 : 1;
+  return asExpected && unrecorded == 0 ? 0 : 1;
 }
 
 } // namespace

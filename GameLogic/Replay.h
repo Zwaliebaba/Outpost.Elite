@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -13,6 +14,7 @@
 
 namespace Machine
 {
+class Cga;
 class Pc;
 class FileStore;
 enum class StopReason : std::uint8_t;
@@ -22,6 +24,17 @@ namespace Elite
 {
 
 class GameState;
+
+/// What a digest step takes of the game: the state digest, which checks every byte, and the picture digest, which checks
+/// what the player sees (StateDigest.h). Each is lowercase hex.
+struct Checkpoint
+{
+  std::string digest;  ///< GameStateDigest
+  std::string picture; ///< PictureDigest
+};
+
+/// The checkpoint of the game whose memory _state holds and whose CGA is _video, as it is now.
+[[nodiscard]] Checkpoint TakeCheckpoint(const GameState& _state, const Machine::Cga& _video);
 
 enum class StepKind : std::uint8_t
 {
@@ -42,6 +55,7 @@ struct Step
   std::uint8_t scanCode = 0;          ///< Key, Down and Up: the XT make code
   std::string name;                   ///< Key, Down and Up: as written; Shot and Digest: the label; File: the DOS name, canonical
   std::string expectedDigest;         ///< Digest: lowercase hex, or empty for none
+  std::string expectedPicture;        ///< Digest: the picture digest its picture line gives, lowercase hex, or empty for none
   std::string source;                 ///< File: the name of the file beside the replay that it copies
   std::size_t line = 0;               ///< the 1-based line the step was read from
 };
@@ -65,10 +79,22 @@ struct Step
 ///                        Machine::StopReason::Terminated): how a replay that leaves for DOS ends. It is the
 ///                        last step that runs the machine: only digest and shot steps, which look at what the
 ///                        program left, may follow it. No other step may end the program (ExpectedStop).
+///   picture NAME HEX     not a step but a line of the digest step NAME, which must be the step just before it: the picture
+///                        digest (PictureDigest) that digest point gives, in its Step's expectedPicture. A replay keeps every
+///                        line it had before pictures were recorded; the picture lines were added, each after its digest's
+///                        line (RecordCheckpoints), from runs that met every state digest (D33).
 ///
 /// Appends the steps to _steps and returns true, or returns false with _error naming the first step it
 /// could not read. (Not std::expected: clang 18 with libstdc++ 13 cannot compile it, ADR-004.)
 [[nodiscard]] bool ParseSteps(std::string_view _text, std::vector<Step>& _steps, std::string& _error);
+
+/// _text, a replay, with the checkpoint of each digest step in _checkpoints, by the line the step is on, written after that
+/// line: a picture line. A picture line that followed it before is replaced; every other line is kept, byte for byte, and
+/// a new line ends as the digest's line does. This is how the corpus's pictures are recorded (CorpusTests), only from runs
+/// that met every state digest. Returns false, with _error naming the line, if a digest step in _checkpoints is not alone on
+/// its line or no digest step is on it.
+[[nodiscard]] bool RecordCheckpoints(std::string_view _text, const std::map<std::size_t, Checkpoint>& _checkpoints, std::string& _recorded,
+                                     std::string& _error);
 
 /// How _step must leave the run for its replay to go on (ReplayPlayer::Play): StopReason::Terminated for an end
 /// step, whose program must end within it, and StopReason::Reached for every other step, during which the program
@@ -104,8 +130,9 @@ public:
   /// either, or the replay would not be the session.
   bool Key(std::uint64_t _milliseconds, std::uint8_t _scanCode, bool _down);
 
-  /// A digest labelled _name, with the value it must reproduce, at _milliseconds.
-  void Digest(std::uint64_t _milliseconds, std::string_view _name, std::string_view _value);
+  /// A digest labelled _name at _milliseconds, with the values _checkpoint says it must reproduce: its digest line, then its
+  /// picture line.
+  void Digest(std::uint64_t _milliseconds, std::string_view _name, const Checkpoint& _checkpoint);
 
   /// The replay so far.
   [[nodiscard]] const std::string& Text() const noexcept
@@ -133,13 +160,13 @@ public:
   ReplayPlayer(Machine::Pc& _pc, const GameState& _state, Machine::FileStore& _files, std::filesystem::path _sources);
 
   /// Plays one step: a wait or an end runs the machine on to the next moment (Machine::Pc::RunUntil, ReplayCycle),
-  /// a key queues its codes on the keyboard, a digest sets _digest to GameStateDigest, a file step copies its
+  /// a key queues its codes on the keyboard, a digest sets _checkpoint to TakeCheckpoint, a file step copies its
   /// file into the store. A shot does nothing here; writing pictures is the caller's. Returns why the run
   /// stopped, StopReason::Reached if it did not; ExpectedStop says which the step must return. A digest after
   /// an end step reads the machine as the ended program left it. Throws std::runtime_error for a file step that
   /// cannot be done: no store, a source that cannot be read, or a store that refuses it. That is a fault in how
   /// the replay is set up, not anything the game did.
-  [[nodiscard]] Machine::StopReason Play(const Step& _step, std::string& _digest);
+  [[nodiscard]] Machine::StopReason Play(const Step& _step, Checkpoint& _checkpoint);
 
   /// Milliseconds since the replay began.
   [[nodiscard]] std::uint64_t ElapsedMilliseconds() const noexcept

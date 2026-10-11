@@ -14,6 +14,7 @@ key Escape; wait 0.3               # the disc menu
 key l; wait 0.3                    # Load Commander: it asks for a file name
 key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
 digest loaded 6e9d143c3d5c50dee596f8826b8a31616e031ec2675a9b09ecb2061b15a42238
+picture loaded 44fd17ae02fbc25fb600d728cb324d04ff3a9ca1e4d3c452baf2feb4e9d0a706
 key F1; wait 1                     # launch: an asteroid ahead
 # The flight, as recorded: a step for each change of the keys, and the frames between.
 down period; down Up; wait 0.200
@@ -24,6 +25,7 @@ down Up; wait 0.200
 down Left; up Right; wait 0.050
 up Up; down Down; wait 0.100
 digest identified ee2ee5bf3e99dfd367a4f045592e87a5f2bd51f31cdc327075a070c7b23f8563
+picture identified 9477a2046b18cd684faa35ef0bfe4b8533f1888bd34fb55f139181ec2bc935b1
 wait 0.150
 up Down; wait 0.050
 down Up; wait 0.100
@@ -46,6 +48,7 @@ down comma; down space; wait 0.150
 up comma; down Left; up space; wait 0.050
 up Left; down Down
 digest mined 370a1af4bf4dd5ebd0172ba5fe30c59b1193df48b540b0d321ec3be09b7e3d77
+picture mined 035bb95148af1f55c4cb5e282fd428717992258f51c371a690c92a2be93153fe
 wait 0.200
 down Right; wait 0.100
 down Up; up Down; wait 0.050
@@ -62,3 +65,4 @@ up period; up Left; down Right; wait 0.100
 up Right
 wait 0.100
 digest scooped 972bbd9302134d678d516cc10528f152d036e977c0f5a39d66c26c71665fc11e
+picture scooped a30935a208c683b573680c93bf6c8b611b6fbcdeec15d5ec7645498d70c231f7

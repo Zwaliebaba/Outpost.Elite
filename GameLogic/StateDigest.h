@@ -30,4 +30,14 @@ class GameState;
 /// the game does not read.
 [[nodiscard]] std::string GameStateDigest(const GameState& _state, const Machine::Cga& _video);
 
+/// The SHA-256, as lowercase hex, of what the player sees (D33): the second and third parts of GameStateDigest, in its
+/// order, and nothing else:
+///
+///  1. the CGA's 16 KiB of video memory at B800:0000;
+///  2. the CGA's mode control and colour select registers and its 18 CRTC registers, 20 bytes.
+///
+/// It was recorded beside every state digest of the corpus and the twins while each still met the original's (Phase 5's
+/// first piece), so that what the player sees at those points stays the original's once the rest of the state may differ.
+[[nodiscard]] std::string PictureDigest(const GameState& _state, const Machine::Cga& _video);
+
 } // namespace Elite

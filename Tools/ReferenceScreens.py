@@ -14,6 +14,7 @@ small script of steps, the format GameLogic/Replay.h defines (steps separated by
   down NAME, up NAME press a key and hold it; release it
   shot NAME          write NAME.png to --out
   digest NAME [HEX]  ignored here: ReferenceRunner prints a state digest, and one script serves both
+  picture NAME HEX   ignored here: the picture digest the digest NAME before it gives (D33), for ReferenceRunner
   file NAME SOURCE   copy SOURCE, a file beside the replay (Replays/ for --steps), onto the mounted drive
                      as NAME, upper case, at that moment: how a replay starts from a prepared commander
   end N              as wait: the program ends within it, and DOSBox-X shows the DOS prompt it left for
@@ -165,11 +166,12 @@ def main() -> int:
   text = args.replay.read_text(encoding="utf-8") if args.replay else args.steps
   lines = (line.split("#", 1)[0] for line in text.splitlines())
   steps = [part.split() for line in lines for part in line.split(";") if part.strip()]
-  arguments = {"wait": (2,), "key": (2,), "down": (2,), "up": (2,), "shot": (2,), "digest": (2, 3), "file": (3,), "end": (2,)}
+  arguments = {"wait": (2,), "key": (2,), "down": (2,), "up": (2,), "shot": (2,), "digest": (2, 3), "picture": (3,),
+               "file": (3,), "end": (2,)}
   for step in steps:
     bad = f"bad step {' '.join(step)!r}"
     if len(step) not in arguments.get(step[0], ()):
-      sys.exit(f"{bad}; steps are wait, key, down, up, shot, digest, file and end (GameLogic/Replay.h)")
+      sys.exit(f"{bad}; steps are wait, key, down, up, shot, digest, file and end, and a digest's picture (GameLogic/Replay.h)")
     if step[0] == "file" and not is_bare_file_name(step[2]):
       sys.exit(f"{bad}; a file step copies a file beside the replay, named without a directory")
   sources = args.replay.resolve().parent if args.replay else ROOT / "Replays"
@@ -198,7 +200,7 @@ def main() -> int:
         elif verb in ("key", "down", "up"):
           action = {"key": "key", "down": "keydown", "up": "keyup"}[verb]
           run(["xdotool", action, "--window", window, argument], env)
-        elif verb == "digest":
+        elif verb in ("digest", "picture"):
           pass  # only the host can fingerprint its own state; the step is accepted so one script serves both
         elif verb == "file":
           shutil.copyfile(sources / rest[0], drive / argument.upper())

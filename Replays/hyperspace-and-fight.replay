@@ -7,11 +7,14 @@ key F6; wait 1
 down Left; wait 0.55; up Left; wait 0.05 # the cursor to Riedquat, 6.8 light years: six frames of the short-range chart (D18)
 key F1; wait 8
 digest launched 08b67520652138ab0e03595c5c1f3878daf41e39de2397e7bd379b55ce79efe5
+picture launched 87fe69b6b4f68fa72c58d62dfa6645c97f6f45a82f300352466620d802ede98c
 down h; wait 0.2; up h                   # hyperspace: the countdown, then the jump
 wait 6
 digest arrived 36a793715104471ab935722ed83ed1ed615ce295ba18d795237632b6dcadb6e3
+picture arrived 3405813ad208ab83099a281b7a23524f95c0966cd521d535e80a6709fa8a4296
 wait 34
 digest pirates b08717c30beb97a921871f52bb5261ac29309ba8f1e87a935d620d1130f77767
+picture pirates 849b3c3b35371d3bb351143d573ddcb903b9e3bb468388a3ce6638eebeabc26a
 # The fight, as recorded.
 down Right
 wait 0.55
@@ -812,4 +815,5 @@ up space
 wait 0.05
 up Left
 digest after-the-fight 2a82008b3f66f8c02dcf00e392c57133b019c17a6affd32adb63eced42e35fb0
+picture after-the-fight 2d2ea852301a944f3b8567f8834ad09a68af07aeb2b937086515e8406b3cdbed
 shot after-the-fight

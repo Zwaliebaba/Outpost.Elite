@@ -9,13 +9,17 @@ wait 0.5; key space; wait 3.5      # any key: the credits, then the status scree
 key Escape; wait 0.3               # the disc menu
 key c; wait 0.5                    # Catalogue Disc: JAMESON and LEESTI
 digest catalogue 978aff15e9215700b5539c67d8d11e87c7b88aa3543b52a0209026ca051713ab
+picture catalogue 4d019bc90d5f384d6751c629e9636f963e822b8537fc0b7f316bc8ac35b1edb0
 key d; wait 0.3; key l; key e; key e; key s; key t; key i; key Return; wait 0.5
 key c; wait 0.5                    # DELETED: LEESTI, and the catalogue holds JAMESON alone
 digest deleted cf1311447e9c8f948171973acd9af4598d1686369d2a8bdea2ed6fb9fe537cd1
+picture deleted 3ad3aef6accb4969f5dfb9477eb42d1d8b5fe056254c2aceaf1c2d26ef8fdce0
 key l; wait 0.3; key 1; key Return; wait 0.3   # FILENAME ERROR: a name starts with a letter
 digest bad-name 8aec408c3240356de483993617fb619f510da65888e8ddc545e13f71a497f8c7
+picture bad-name 36f2656e0c45d318707de49ecbc57f5c3ee3c4cc110b2acaa818d883face588f
 key l; wait 0.3; key m; key i; key s; key s; key i; key n; key g; key Return; wait 0.5
 digest disk-error c594ba7ebfe19a0fa56eca9170486388553b8c1160e1c9821105854bb439fa7a
+picture disk-error ab890083b3a8e35babb84d1ac1113e363fda60ed3c90d6864ce2ca289b94b000
 key n; wait 0.3                    # no retry
 key m; wait 0.3                    # ERROR: No Mouse!
 key j; wait 0.3; key i; wait 0.3   # the IBM stick: centre it and press a key
@@ -23,10 +27,14 @@ key space; wait 0.5                # ERROR: No Joystick!
 key j; wait 0.3; key a; wait 0.3   # the Amstrad stick: move it and press a key
 key space; wait 0.5                # it never moved: ERROR: No Joystick!
 digest no-joystick 9c456a32c8da2ec0eb2a4cfaf9cf8fe05b042e8991d07a26429b3e3da4ff2353
+picture no-joystick 6d5762c4f30588d9ef047fcce6ac4d883dad5514dcd88289396fb1546b1fadfe
 key v; wait 0.3                    # the version
 key k; wait 0.3                    # DEVICE: Keyboard
 digest keyboard f596ce705fd72a930b8bb8ceaac3a35b783e10cf9047f6d0471c14a827670831
+picture keyboard 68d33e202c09ed62cc48d59270bba86e2e2929ccf6ac3b6588c6437b522d3020
 key l; wait 0.3; key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
 digest loaded fbe12bd3e4a3110f82f97c73f773e60eeb98870d92049e83203fcf2136a289b2
+picture loaded ba1f1766ab673a4191aff1b73034139f8ba7b24bead69e493225095609f2d682
 key F9; wait 0.8
 digest status 09d3fdef88b41beb18f2c40213e6842a1125f599d48c14b53e523defef0b3d62
+picture status 5f681d095973410bfa163b956f0ef09a30129a94ed1f7499533e58dfe2e1d548

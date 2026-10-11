@@ -8,5 +8,7 @@ wait 0.5; key space; wait 3.5      # any key: the credits, then the status scree
 key Escape; wait 0.3               # the disc menu
 key e; wait 0.3                    # Exit to DOS: Are you sure (Y/N)?
 digest asked f5830f87d98cbd888479d85412e406f9d189671423a5bb4905ca54125118535d
+picture asked d8ab64ce10a6199a77bbdaa48c41666ef55290793ad52ce0342ab2d476112aa7
 key y; end 1                       # Y: the program ends
 digest at-dos 43331b53f70e753022c44b1a10d9e8bc86e39dc19a9bc00cebd80256d0a387f5
+picture at-dos c915388c1f3a1f7ce787dd0e13f7e5034d486f3ab45cb0d0811593e90085eb46

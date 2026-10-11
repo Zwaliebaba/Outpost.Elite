@@ -15,16 +15,20 @@ key Escape; wait 0.3               # the disc menu
 key l; wait 0.3                    # Load Commander: it asks for a file name
 key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
 digest loaded 81451f0a7a4a4af232350861e1d14cb185c611dcdfa74c780a2dc3ff77dcfae7
+picture loaded 44fd17ae02fbc25fb600d728cb324d04ff3a9ca1e4d3c452baf2feb4e9d0a706
 key F1; wait 1.3                   # launch: the mask ship and its escorts, and the escorts ram the ship
 digest rammed 624e50250afaea6e330f8679f2e13c8a1f4e45042640613369ae2b295eab57e6
+picture rammed 95c3eb1c72fbc66973a744a83bdc571ef21905b3089864f0b06cbf1bb7952da8
 wait 2.5                           # GAME OVER, then the title screen
 digest title 3c43b83c2c99d15372e7a0257abeca43a3a6f7c34a795784a2392cde39ea4fa3
+picture title 31a0106ee91e92bc530a1c3959e4226acfaf09ea400e1bae1f658b0191012e51
 key space; wait 3.5                # a new game: the credits, then the status screen
 file JAMESON.CDR mask-mission-fight.cdr
 key Escape; wait 0.3
 key l; wait 0.3
 key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
 digest loaded-again 8c7f01829c7272926c6f1ccc81d034e1d189db027b62b1e7c5815930cd1f616a
+picture loaded-again 44fd17ae02fbc25fb600d728cb324d04ff3a9ca1e4d3c452baf2feb4e9d0a706
 key F1; wait 1                     # launch again: the mask ship and its escorts
 # The fight, as recorded: a step for each change of the keys, and the frames between.
 wait 0.050
@@ -125,3 +129,4 @@ up Left; wait 0.200
 down Right; wait 0.250
 up Right; up Up
 digest after-the-fight 02327f7ff3c68cc714a4cb3acb9aacab70adae68d41bb978b0de6cfa23168dbe
+picture after-the-fight 10e96be834e08a0ff7f810642cbd52e9890492b832f4f9f7461687d35980303f

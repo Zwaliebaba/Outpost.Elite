@@ -14,11 +14,13 @@ key Escape; wait 0.3               # the disc menu
 key l; wait 0.3                    # Load Commander: it asks for a file name
 key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
 digest loaded e2eff85804b6af7386374de898d83c30b292a28e78bd7b5af7e2f7199fbbb23e
+picture loaded 44fd17ae02fbc25fb600d728cb324d04ff3a9ca1e4d3c452baf2feb4e9d0a706
 key F1; wait 0.5                   # launch
 down h; wait 1; up h               # the countdown to Leesti
 down Alt_L; key w; up Alt_L        # Alt+W: a misjump
 wait 8
 digest witch-space 317b5583bebc75695a2b5e4e36aab0a29007f904c0c4075106709ad857d8ec47
+picture witch-space f6b29f711c3525fb71d14f40642b2fe3254150765ac7a01f5846a70273e6d651
 # The fight, as recorded: a step for each change of the keys, and the frames between.
 down Left; wait 0.500
 down Up; wait 0.100
@@ -80,5 +82,7 @@ up space; wait 0.150
 up Down; wait 0.550
 up Left
 digest killed 46d2795eeed7b46e2bb56742f623b42bff74555d8049ab898817434c5009d38e
+picture killed caeb445cbb7f3d05a26510b0ac0cfc24207865b947c309d5e6bd16e5c046aa2f
 wait 2
 digest title e6ea30dabc7a62b1d5d4d6479dc9b4bd0194d9a68da736a34f80dc029be2401f
+picture title a13ebaa75e8a45d55c5b119fd5e9d7684480535cfd2c07eb061d293a5f51608b

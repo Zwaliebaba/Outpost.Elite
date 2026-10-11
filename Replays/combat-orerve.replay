@@ -16,12 +16,14 @@ key Escape; wait 0.3               # the disc menu
 key l; wait 0.3                    # Load Commander: it asks for a file name
 key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
 digest loaded 301ed092a1bbf34d60b8a55a3ec9808679034bb9a0478114711b53c0d8b82489
+picture loaded 44fd17ae02fbc25fb600d728cb324d04ff3a9ca1e4d3c452baf2feb4e9d0a706
 key F6; wait 0.5                   # the short-range chart: F finds a system by name
 key f; wait 0.3; key o; key r; key e; key r; key v; key e; key Return; wait 0.3
 key F1; wait 0.5                   # launch
 down h; wait 1; up h               # the countdown to Orerve
 wait 8
 digest orerve e8fce66bae1bdd6f16f6d7312a4054e3cd336e7b5976d59a2dc409570722e5d0
+picture orerve 7f3ddfc5836ea33fa7178a638a9ee0c2503b4c9363c28299783c96650991388d
 # The fight, as recorded: a step for each change of the keys, and the frames between.
 down period; down j; wait 0.350
 up period; wait 0.300
@@ -36,3 +38,4 @@ up j; wait 12.400
 down Left; up Right; wait 0.300
 up Left; up Up
 digest after-the-fight fc8e19d6435f775b92d184efe2779d1305cc4336d79828ddb564b55e3f4438fd
+picture after-the-fight f546253c7a829441d9054c26ffd525ecbddf85548aa6e8f2f466d698586d38b4

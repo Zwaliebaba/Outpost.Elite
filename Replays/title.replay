@@ -3,16 +3,22 @@
 wait 3
 shot title
 digest title-start dd9308b1b5ecd4a82a65c87e04b8f88be7463706b4411f41ebef07a85ea8763c
+picture title-start af1a147c53eb9319dc3bd4efb8c6cd7e791ab4e9ead23de57716d56c794f1ae4
 wait 5
 digest title-turned c91007204ddd45f9687a5e3a9f6948b5c10793dc345ae5ab8e0b8e24d4ba08fe
+picture title-turned 7d2d7646618ff6d0842ee559f4e2c6611d265c3508b2f92d28f62fb4dd7f9232
 key F10; wait 2
 digest ship-type-27 195a7d2257b7ba89daf73be4142688ec61395240a3e0291fa52ffaad2f60252e
+picture ship-type-27 8e478fb7462e7ee51a1056a3d00fe8fceeeab4c3630a6dc5348060cf6072c6e3
 key F10; wait 2
 key F10; wait 2
 key F10; wait 2
 digest ship-type-2 3cdfc043b3231ccb5d1563c682842dd3e214a01048503c9a48ff841a657fc878
+picture ship-type-2 cc58253bfadd84785125db552751add61dfab771ced91bb0a11fbbced7663724
 key F9; wait 2
 key F9; wait 2
 digest ship-type-29 ee0428b7730837904d19d14ce766e759ca4ad1706e35f5cf27b0cb29876d0436
+picture ship-type-29 5cd9546ab99804df3ef98a6d1c65f851b4dec97d1f86c882b6fa4a209e612f42
 wait 4
 digest title-end 6c53ee85d100c7c2023a5798c1af6bdf661052c37ec948f93329b4e752d9770f
+picture title-end 2441ceb818bff824a200f67606d40299a601605504791ba2c74b0f8692167af6
