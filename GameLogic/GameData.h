@@ -33,6 +33,9 @@ namespace Elite
 /// by reference to a helper that writes it.
 struct GameData
 {
+  GameData() noexcept = default;
+  explicit GameData(const GameData&) noexcept = default;
+
   Counted<std::uint8_t> gap0000[64];
   /// the space view, rows 1-126 of a 256x128 2bpp buffer at DS:0000-1FFF (64 bytes a row); the drawing routines also write rows 0 and 12...
   Counted<std::uint8_t> spaceViewBuffer[8064];
@@ -75,6 +78,9 @@ struct GameData
   /// savedDivideVector's fields, DS:226B-226E.
   struct SavedDivideVector
   {
+    SavedDivideVector() noexcept = default;
+    explicit SavedDivideVector(const SavedDivideVector&) noexcept = default;
+
     Counted<std::uint8_t> gap226B[2];
     /// segment half of savedDivideVector
     Counted<std::uint16_t> data226D;
@@ -84,6 +90,9 @@ struct GameData
   /// savedKeyboardVector's fields, DS:226F-2272.
   struct SavedKeyboardVector
   {
+    SavedKeyboardVector() noexcept = default;
+    explicit SavedKeyboardVector(const SavedKeyboardVector&) noexcept = default;
+
     Counted<std::uint8_t> gap226F[2];
     /// segment half of savedKeyboardVector
     Counted<std::uint16_t> data2271;
@@ -93,6 +102,9 @@ struct GameData
   /// screenshotTextFileName's fields, DS:2273-227D.
   struct ScreenshotTextFileName
   {
+    ScreenshotTextFileName() noexcept = default;
+    explicit ScreenshotTextFileName(const ScreenshotTextFileName&) noexcept = default;
+
     Counted<std::uint8_t> gap2273[5];
     /// the two digits in screenshotTextFileName
     Counted<std::uint16_t> screenshotTextFileDigits;
@@ -103,6 +115,9 @@ struct GameData
   /// screenshotGraphicsFileName's fields, DS:227E-2288.
   struct ScreenshotGraphicsFileName
   {
+    ScreenshotGraphicsFileName() noexcept = default;
+    explicit ScreenshotGraphicsFileName(const ScreenshotGraphicsFileName&) noexcept = default;
+
     Counted<std::uint8_t> gap227E[5];
     /// the two digits in screenshotGraphicsFileName
     Counted<std::uint16_t> screenshotGraphicsFileDigits;
@@ -125,6 +140,9 @@ struct GameData
   /// protectionInput's fields, DS:25C9-25E0.
   struct ProtectionInput
   {
+    ProtectionInput() noexcept = default;
+    explicit ProtectionInput(const ProtectionInput&) noexcept = default;
+
     Counted<std::uint8_t> gap25C9[1];
     Counted<std::uint8_t> data25CA;
     Counted<std::uint8_t> gap25CB[22];
@@ -164,6 +182,9 @@ struct GameData
   /// systemSeed0's two bytes, as the symbol table names them (DS:2970).
   struct SystemSeed0Bytes
   {
+    SystemSeed0Bytes() noexcept = default;
+    explicit SystemSeed0Bytes(const SystemSeed0Bytes&) noexcept = default;
+
     Counted<std::uint8_t> gap2970[1];
     /// the system's y, 0-255; the charts plot y/2
     Counted<std::uint8_t> systemY;
@@ -177,6 +198,9 @@ struct GameData
   /// systemSeed1's two bytes, as the symbol table names them (DS:2972).
   struct SystemSeed1Bytes
   {
+    SystemSeed1Bytes() noexcept = default;
+    explicit SystemSeed1Bytes(const SystemSeed1Bytes&) noexcept = default;
+
     Counted<std::uint8_t> gap2972[1];
     /// the system's x, 0-255
     Counted<std::uint8_t> systemX;
@@ -190,6 +214,9 @@ struct GameData
   /// systemSeed2's two bytes, as the symbol table names them (DS:2974).
   struct SystemSeed2Bytes
   {
+    SystemSeed2Bytes() noexcept = default;
+    explicit SystemSeed2Bytes(const SystemSeed2Bytes&) noexcept = default;
+
     Counted<std::uint8_t> gap2974[1];
     /// bits 0-4 pick the name digrams; species bits
     Counted<std::uint8_t> systemSeed2High;
@@ -210,6 +237,9 @@ struct GameData
   /// distanceDigits's fields, DS:29E4-29E8.
   struct DistanceDigits
   {
+    DistanceDigits() noexcept = default;
+    explicit DistanceDigits(const DistanceDigits&) noexcept = default;
+
     Counted<std::uint8_t> gap29E4[1];
     Counted<std::uint8_t> distanceHundredsDigit;
     Counted<std::uint8_t> distanceTensDigit;
@@ -292,6 +322,9 @@ struct GameData
   /// circlePoints's fields, DS:2EFC-2F7B.
   struct CirclePoints
   {
+    CirclePoints() noexcept = default;
+    explicit CirclePoints(const CirclePoints&) noexcept = default;
+
     Counted<std::uint8_t> gap2EFC[2];
     Counted<std::uint16_t> data2EFE;
     Counted<std::uint8_t> gap2F00[124];
@@ -478,6 +511,9 @@ struct GameData
   /// messageFrames's two bytes, as the symbol table names them (DS:4B09).
   struct MessageFramesBytes
   {
+    MessageFramesBytes() noexcept = default;
+    explicit MessageFramesBytes(const MessageFramesBytes&) noexcept = default;
+
     Counted<std::uint8_t> gap4B09[1];
     /// 0 = a new message is waiting; UpdateMessageLine sets 0xFF
     Counted<std::uint8_t> messageDrawn;
@@ -510,6 +546,9 @@ struct GameData
   /// blueprints's fields, DS:4D70-68C8.
   struct Blueprints
   {
+    Blueprints() noexcept = default;
+    explicit Blueprints(const Blueprints&) noexcept = default;
+
     Counted<std::uint8_t> gap4D70[292];
     /// type 1; 16 projected vertices, 28 face edges of which faces draw 0, 14 faces from DS:4F23 (count byte) with 22 triangle and 0 edg...
     Counted<std::uint8_t> coriolisBlueprint[288];
@@ -578,6 +617,9 @@ struct GameData
   /// shipSlots's fields, DS:6930-722F.
   struct ShipSlots
   {
+    ShipSlots() noexcept = default;
+    explicit ShipSlots(const ShipSlots&) noexcept = default;
+
     SpaceObject gap6930;
     /// slot 1: type 0x1F set up by SetUpLocalSpace; compass target when far
     SpaceObject planetSlot;
@@ -593,6 +635,9 @@ struct GameData
   /// vertexBuffer's fields, DS:7230-732B.
   struct VertexBuffer
   {
+    VertexBuffer() noexcept = default;
+    explicit VertexBuffer(const VertexBuffer&) noexcept = default;
+
     Counted<std::uint8_t> gap7230[204];
     /// vertices 34-41 inside vertexBuffer, written by BuildBoxCornerVertices
     Counted<std::uint8_t> boxCornerVertices[48];
@@ -680,6 +725,9 @@ struct GameData
   /// arrivalGalaxyText's fields, DS:7513-752C.
   struct ArrivalGalaxyText
   {
+    ArrivalGalaxyText() noexcept = default;
+    explicit ArrivalGalaxyText(const ArrivalGalaxyText&) noexcept = default;
+
     Counted<std::uint8_t> gap7513[24];
     /// galaxyNumber + '1', written by GalacticJump into arrivalGalaxyText
     Counted<std::uint8_t> arrivalGalaxyDigit[1];
@@ -700,6 +748,9 @@ struct GameData
   /// commanderBlock's fields, DS:756B-763A.
   struct CommanderBlock
   {
+    CommanderBlock() noexcept = default;
+    explicit CommanderBlock(const CommanderBlock&) noexcept = default;
+
     Counted<std::uint8_t> gap756B[15];
     /// frame bytes 0x0F 0x0D then "COMMANDER " (ShowCommanderStatusScreen)
     Counted<std::uint8_t> commanderTitle[2];
@@ -750,6 +801,9 @@ struct GameData
     /// selectedSystemName's fields, DS:75C4-75CB.
     struct SelectedSystemName
     {
+      SelectedSystemName() noexcept = default;
+      explicit SelectedSystemName(const SelectedSystemName&) noexcept = default;
+
       Counted<std::uint8_t> gap75C4[4];
       /// characters 5-6 of selectedSystemName; GenerateSystemName blanks them
       Counted<std::uint16_t> data75C8;
@@ -827,6 +881,9 @@ struct GameData
     /// creditsTenths's fields, DS:75F3-75F6.
     struct CreditsTenths
     {
+      CreditsTenths() noexcept = default;
+      explicit CreditsTenths(const CreditsTenths&) noexcept = default;
+
       Counted<std::uint8_t> gap75F3[2];
       Counted<std::uint16_t> data75F5;
     };
@@ -841,6 +898,9 @@ struct GameData
     /// cargoHold's fields, DS:7602-7625.
     struct CargoHold
     {
+      CargoHold() noexcept = default;
+      explicit CargoHold(const CargoHold&) noexcept = default;
+
       Counted<std::uint8_t> gap7602[6];
       /// product 3; escape pods
       Counted<std::uint8_t> cargoSlavesTonnes;
@@ -936,6 +996,9 @@ struct GameData
   /// behaviorClassCounts's fields, DS:79A1-79A8.
   struct BehaviorClassCounts
   {
+    BehaviorClassCounts() noexcept = default;
+    explicit BehaviorClassCounts(const BehaviorClassCounts&) noexcept = default;
+
     Counted<std::uint8_t> gap79A1[3];
     /// behaviorClassCounts[3]: class 3 ('Debris'/'Simple' drifters)
     Counted<std::uint8_t> drifterCount;
@@ -954,6 +1017,9 @@ struct GameData
   /// spawnLimitsByGovernment's fields, DS:7ADF-7AFE.
   struct SpawnLimitsByGovernment
   {
+    SpawnLimitsByGovernment() noexcept = default;
+    explicit SpawnLimitsByGovernment(const SpawnLimitsByGovernment&) noexcept = default;
+
     Counted<std::uint8_t> gap7ADF[1];
     /// column of spawnLimitsByGovernment: max class 4
     Counted<std::uint8_t> traderLimitColumn;
@@ -981,6 +1047,9 @@ struct GameData
   /// spawnOddsByGovernment's fields, DS:7B09-7B48.
   struct SpawnOddsByGovernment
   {
+    SpawnOddsByGovernment() noexcept = default;
+    explicit SpawnOddsByGovernment(const SpawnOddsByGovernment&) noexcept = default;
+
     Counted<std::uint8_t> gap7B09[2];
     /// column of spawnOddsByGovernment: class 4
     Counted<std::uint16_t> traderOddsColumn;
@@ -1041,6 +1110,9 @@ struct GameData
   /// priceText's fields, DS:803C-8042.
   struct PriceText
   {
+    PriceText() noexcept = default;
+    explicit PriceText(const PriceText&) noexcept = default;
+
     Counted<std::uint8_t> gap803C[4];
     Counted<std::uint8_t> data8040;
     Counted<std::uint8_t> data8041;
@@ -1071,6 +1143,9 @@ struct GameData
   /// screenPrices's fields, DS:823B-827E.
   struct ScreenPrices
   {
+    ScreenPrices() noexcept = default;
+    explicit ScreenPrices(const ScreenPrices&) noexcept = default;
+
     Counted<std::uint8_t> gap823B[4];
     Counted<std::uint16_t> data823F;
     Counted<std::uint8_t> gap8241[4];
@@ -1130,6 +1205,9 @@ struct GameData
   /// productTradeRecords's fields, DS:8BDD-8C0F.
   struct ProductTradeRecords
   {
+    ProductTradeRecords() noexcept = default;
+    explicit ProductTradeRecords(const ProductTradeRecords&) noexcept = default;
+
     Counted<std::uint8_t> gap8BDD[2];
     Counted<std::uint8_t> data8BDF;
     Counted<std::uint8_t> gap8BE0[48];
@@ -1146,6 +1224,9 @@ struct GameData
   /// marketRandomState's fields, DS:8C1E-8C23.
   struct MarketRandomState
   {
+    MarketRandomState() noexcept = default;
+    explicit MarketRandomState(const MarketRandomState&) noexcept = default;
+
     Counted<std::uint8_t> gap8C1E[2];
     Counted<std::uint16_t> data8C20;
     Counted<std::uint16_t> data8C22;
@@ -1192,6 +1273,9 @@ struct GameData
   /// keyDown's fields, DS:A030-A0AF.
   struct KeyDown
   {
+    KeyDown() noexcept = default;
+    explicit KeyDown(const KeyDown&) noexcept = default;
+
     Counted<std::uint8_t> gapA030[1];
     /// keyDown entry for scan code 01h: pauses the game in flight (ProcessFlightKeys 813D)
     Counted<std::uint8_t> keyDownEsc;
@@ -1340,6 +1424,9 @@ struct GameData
   /// rollRate's two bytes, as the symbol table names them (DS:A133).
   struct RollRateBytes
   {
+    RollRateBytes() noexcept = default;
+    explicit RollRateBytes(const RollRateBytes&) noexcept = default;
+
     Counted<std::uint8_t> gapA133[1];
     /// signed -23..+23: the input code adds to it with clamping (0x7A09); drawn on the DC row (y=161); written with rollRate as one word...
     Counted<std::uint8_t> pitchRate;
@@ -1538,6 +1625,9 @@ struct GameData
   /// frameRateKeyLabel's fields, DS:ABFF-AC01.
   struct FrameRateKeyLabel
   {
+    FrameRateKeyLabel() noexcept = default;
+    explicit FrameRateKeyLabel(const FrameRateKeyLabel&) noexcept = default;
+
     Counted<std::uint8_t> gapABFF[1];
     Counted<std::uint8_t> dataAC00;
     Counted<std::uint8_t> dataAC01;

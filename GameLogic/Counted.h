@@ -36,8 +36,10 @@ inline constexpr std::size_t COUNTED_BLOCK_ALIGNMENT = 0x20000;
 /// - nor do compound assignment and increment; write `a = static_cast<T>(a + 1)`;
 /// - a helper that writes one takes it by reference.
 ///
-/// It can be copied, as GameData must be trivially copyable for the reference's image to load into it as bytes. A copy is not
-/// in a GameState, so a copy is only ever read: a member is never declared `auto`, captured by copy or passed by value.
+/// It can be copied, as GameData must be trivially copyable for the reference's image to load into it as bytes, but only
+/// explicitly. A copy is not in a GameState, and a write to one would count into whatever its address rounds down to, so the
+/// copy constructor is explicit, as GameData's structs' and SpaceObject's are: `auto x = member`, a capture by copy, a
+/// by-value parameter and a return by value do not compile. Read a value as `T x = member`.
 template <typename T> class Counted
 {
   static_assert(std::is_same_v<T, std::uint8_t> || std::is_same_v<T, std::uint16_t>, "a byte or a word of the 8088's memory");
@@ -45,7 +47,7 @@ template <typename T> class Counted
 
 public:
   Counted() noexcept = default;
-  Counted(const Counted&) noexcept = default;
+  explicit Counted(const Counted&) noexcept = default;
   Counted& operator=(const Counted&) = delete;
 
   /// The value stored.
@@ -74,5 +76,6 @@ private:
 static_assert(sizeof(Counted<std::uint8_t>) == 1 && alignof(Counted<std::uint8_t>) == 1);
 static_assert(sizeof(Counted<std::uint16_t>) == 2 && alignof(Counted<std::uint16_t>) == 1);
 static_assert(std::is_trivially_copyable_v<Counted<std::uint16_t>> && std::is_standard_layout_v<Counted<std::uint16_t>>);
+static_assert(!std::is_convertible_v<const Counted<std::uint8_t>&, Counted<std::uint8_t>>, "a copy is only ever explicit");
 
 } // namespace Elite

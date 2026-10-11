@@ -36,6 +36,10 @@ namespace Elite
 /// - cargo and fragments as one word (+2C), and aggression and bounty (+30).
 struct SpaceObject
 {
+  // Trivial, so GameData stays trivially copyable, and the copy explicit, as GameData's structs are (Counted.h).
+  SpaceObject() noexcept = default;
+  explicit SpaceObject(const SpaceObject&) noexcept = default;
+
   /// A record's size, and the step from one to the next.
   static constexpr std::uint16_t BYTES = 0x40;
 
@@ -137,6 +141,7 @@ using ObjectWord = Counted<std::uint16_t> SpaceObject::*;
 
 static_assert(sizeof(SpaceObject) == SpaceObject::BYTES);
 static_assert(std::is_trivially_copyable_v<SpaceObject> && std::is_standard_layout_v<SpaceObject>);
+static_assert(!std::is_convertible_v<const SpaceObject&, SpaceObject>, "a copy is only ever explicit");
 static_assert(SPACE_OBJECT_OFFSET(type) == 0x00);
 static_assert(SPACE_OBJECT_OFFSET(xHigh) == 0x01);
 static_assert(SPACE_OBJECT_OFFSET(yHigh) == 0x02);

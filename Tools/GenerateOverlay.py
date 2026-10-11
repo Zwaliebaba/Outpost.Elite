@@ -316,6 +316,15 @@ def record_declaration(_member: Member, _container: Member) -> str:
   return f"{record} {_member.name};" if count == 1 else f"{record} {_member.name}[{count}];"
 
 
+def emit_copy_rule(_type: str, _indent: str, _out: list[str]) -> None:
+  """A struct's constructors: trivial, so GameData stays trivially copyable, and the copy explicit. A copy is detached from
+  the GameState's block, and a write to one of its Counted members would count into whatever the block's alignment
+  rounds its address down to (Counted.h), so `auto x = member`, a by-value parameter and a return by value do not compile."""
+  _out.append(f"{_indent}{_type}() noexcept = default;")
+  _out.append(f"{_indent}explicit {_type}(const {_type}&) noexcept = default;")
+  _out.append("")
+
+
 def emit_members(_members: list[Member], _indent: str, _out: list[str], _container: Member | None = None) -> None:
   for member in _members:
     note = comment(member.row, COLUMN_LIMIT - len(_indent) - 4) if member.row is not None else ""
@@ -334,6 +343,7 @@ def emit_members(_members: list[Member], _indent: str, _out: list[str], _contain
       _out.append(f"{_indent}/// {member.name}'s two bytes, as the symbol table names them (DS:{member.offset:04X}).")
       _out.append(f"{_indent}struct {type_name(member)}Bytes")
       _out.append(f"{_indent}{{")
+      emit_copy_rule(f"{type_name(member)}Bytes", inner, _out)
       emit_members(member.children, inner, _out)
       _out.append(f"{_indent}}};")
       _out.append(f"{_indent}union")
@@ -347,6 +357,7 @@ def emit_members(_members: list[Member], _indent: str, _out: list[str], _contain
     _out.append(f"{_indent}/// {member.name}'s fields, DS:{member.offset:04X}-{member.end - 1:04X}.")
     _out.append(f"{_indent}struct {type_name(member)}")
     _out.append(f"{_indent}{{")
+    emit_copy_rule(type_name(member), inner, _out)
     emit_members(member.children, inner, _out, member if member.name in RECORDS else None)
     _out.append(f"{_indent}}};")
     if note:
@@ -415,6 +426,7 @@ def generate_game_data(_members: list[Member]) -> str:
     "struct GameData",
     "{",
   ]
+  emit_copy_rule("GameData", "  ", out)
   emit_members(_members, "  ", out)
   out += [
     "};",
