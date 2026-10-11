@@ -1,4 +1,4 @@
-// GameLogicTests/AnswerFile.h
+// Tests/GameLogicTests/AnswerFile.h
 #pragma once
 
 #include "Outcome.h"

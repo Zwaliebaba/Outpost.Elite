@@ -1,4 +1,4 @@
-// GameLogicTests/ReferenceRig.h
+// Tests/GameLogicTests/ReferenceRig.h
 #pragma once
 
 #include "DirectoryFileStore.h"

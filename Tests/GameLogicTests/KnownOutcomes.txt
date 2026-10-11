@@ -1,4 +1,4 @@
-# GameLogicTests/KnownOutcomes.txt
+# Tests/GameLogicTests/KnownOutcomes.txt
 #
 # The twins' outcomes (D33). Beside each of the twins' known answers (KnownAnswers.txt), the outcomes of the same state:
 # the named facts of the game's state a player could notice, as Elite::OutcomeText writes them (GameLogic/Outcome.h), each

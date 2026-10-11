@@ -1,4 +1,4 @@
-// GameLogicTests/GuardReport.h
+// Tests/GameLogicTests/GuardReport.h
 #pragma once
 
 #include "Outcome.h"

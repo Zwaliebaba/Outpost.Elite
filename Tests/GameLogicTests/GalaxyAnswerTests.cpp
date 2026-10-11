@@ -15,7 +15,7 @@ namespace
 {
 
 /// The galaxies' known answers, from the repository's root. The file's header documents its format and states the count.
-constexpr std::string_view GALAXY_ANSWERS_FILE = "GameLogicTests/GalaxyAnswers.txt";
+constexpr std::string_view GALAXY_ANSWERS_FILE = "Tests/GameLogicTests/GalaxyAnswers.txt";
 constexpr std::size_t GALAXIES = 8;
 constexpr std::size_t SYSTEMS = 256;
 

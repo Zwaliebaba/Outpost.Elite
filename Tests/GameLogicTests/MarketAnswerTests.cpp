@@ -18,7 +18,7 @@ namespace
 {
 
 /// The markets' known answers, from the repository's root. The file's header documents its format and states the count.
-constexpr std::string_view MARKET_ANSWERS_FILE = "GameLogicTests/MarketAnswers.txt";
+constexpr std::string_view MARKET_ANSWERS_FILE = "Tests/GameLogicTests/MarketAnswers.txt";
 constexpr std::size_t ECONOMIES = 8;
 constexpr std::size_t GOVERNMENTS = 8;
 // The tech levels the prices are computed at: none, the first, the 9 that ComputeMarketPrices caps it at, and the most a

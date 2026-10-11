@@ -1,4 +1,4 @@
-// GameLogicTests/PlatformRig.h
+// Tests/GameLogicTests/PlatformRig.h
 #pragma once
 
 #include "DirectoryFileStore.h"

@@ -1,4 +1,4 @@
-# GameLogicTests/KnownPictures.txt
+# Tests/GameLogicTests/KnownPictures.txt
 #
 # The twins' pictures (D33). Beside each of the twins' known answers (KnownAnswers.txt), the picture digest of the same
 # state: Elite::PictureDigest, the SHA-256 of what the player sees, the CGA's 16 KiB of video memory and then its 20

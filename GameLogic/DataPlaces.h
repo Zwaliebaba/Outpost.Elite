@@ -37,8 +37,8 @@ struct DataPlace
 
 /// Every top-level member of the 1987 data segment, and every gap of it the game uses, in their 1987 order, and where each is now: what the
 /// reference's image loads by (ReferenceLoadImage), what the GameState finds the original's addresses by, and what the state digests'
-/// re-base checks member by member (GameLogicTests/StateDumps.h). The gaps it does not list are not in the state, and nor is a constant
-/// with no place: the original's addresses there are the reference's image's.
+/// re-base checks member by member (Tests/GameLogicTests/StateDumps.h). The gaps it does not list are not in the state, and nor is a
+/// constant with no place: the original's addresses there are the reference's image's.
 inline constexpr std::array<DataPlace, 480> DATA_PLACES = {{
   {"gap0000", 0x0000, 64, DataFate::State, GAME_DATA_OFFSET(drawing.gap0000)},
   {"spaceViewBuffer", 0x0040, 8064, DataFate::State, GAME_DATA_OFFSET(drawing.spaceViewBuffer)},
