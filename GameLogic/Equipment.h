@@ -89,8 +89,7 @@ std::uint16_t ShowEquipmentSellPrice(GameState& _state);
 /// Where the menu's cursor is, after StartMenu or a move.
 struct MenuCursor
 {
-  std::uint16_t row;     ///< the selected row's first attribute byte on the text page
-  std::uint16_t credits; ///< the cell after the credits PrintCreditsOnMessageLine printed on the way
+  std::uint16_t row; ///< the selected row's first attribute byte on the text page
 };
 
 /// The offset on the text page of the menu's first row's highlighted attribute, from the row menuFirstRowAttr holds, where

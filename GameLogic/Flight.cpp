@@ -21,8 +21,6 @@
 #include "Text.h"
 #include "Video.h"
 
-#include <utility>
-
 namespace Elite
 {
 
@@ -1581,7 +1579,7 @@ bool IsDustNearCenter(DustPosition _position)
 DustStep ScaleDustStep(const GameState& _state, DustPosition _position)
 {
   const std::uint8_t shift = _state.Data().stardustShift;
-  return DustStep{Signed(Sar(Word(_position.x), shift)), Signed(Sar(Word(_position.y), shift)), shift};
+  return DustStep{Signed(Sar(Word(_position.x), shift)), Signed(Sar(Word(_position.y), shift))};
 }
 
 DustPosition LoadDustPosition(const GameState& _state, std::size_t _particle)
@@ -2397,13 +2395,13 @@ FlightExit RunFlight(GameState& _state, Hardware& _hardware, bool _backward)
       StopSoundEffects(_state);
       StopAllSound(_state, _hardware);
       // The tunnel's last frame's CLD and BP of 20h, which the docked status screen goes on with.
-      return FlightExit{FlightEnd::Docked, PRESENT_SPACE_VIEW_BP, false};
+      return FlightExit{PRESENT_SPACE_VIEW_BP, false};
     }
     const FlightKeysExit keys = ProcessFlightKeys(_state, _hardware, slotsEnd, countLeft, _state.DataSegment(), backward);
     backward = keys.backward;
     if (keys.aborted)
     {
-      return FlightExit{FlightEnd::Aborted, CLEARED_MESSAGE_LINE_BP, backward};
+      return FlightExit{CLEARED_MESSAGE_LINE_BP, backward};
     }
     // CompleteHyperspaceJump's tunnel ends with a CLD.
     if (TickHyperspaceCountdown(_state, _hardware, countLeft, backward))
@@ -2412,7 +2410,7 @@ FlightExit RunFlight(GameState& _state, Hardware& _hardware, bool _backward)
     }
     if (TickEscapePod(_state))
     {
-      return FlightExit{FlightEnd::EscapePod, countLeft, backward};
+      return FlightExit{countLeft, backward};
     }
     if (_state.Data().playerDead != 1 || _state.Data().cheatEnabled == 1)
     {
@@ -2441,7 +2439,7 @@ FlightExit RunFlight(GameState& _state, Hardware& _hardware, bool _backward)
     ClearMessageLine(_state, GameState::VIDEO_SEGMENT, backward);
     _state.Data().textPaperPattern = 0;
     (void)DrawScreenString(_state, _state.TextAt(_state.Data().eliteTitleText), ALL_COLORS, GameState::VIDEO_SEGMENT, TITLE_TEXT_POSITION);
-    return FlightExit{FlightEnd::GameOver, CLEARED_MESSAGE_LINE_BP, backward};
+    return FlightExit{CLEARED_MESSAGE_LINE_BP, backward};
   }
 }
 
@@ -2640,8 +2638,7 @@ void UpdatePlayerMotion(GameState& _state, Hardware& _hardware)
       }
     }
     _state.Data().playerSpeed = speed;
-    // ReadSteering fires the stick with AL, the speed's low byte.
-    const Steering read = ReadSteering(_state, _hardware, Low(speed));
+    const Steering read = ReadSteering(_state, _hardware);
     _state.Data().rollRate = Join(read.pitch, read.roll);
     steering = ApplyReverseControls(_state, read);
   }

@@ -243,11 +243,6 @@ public:
     return m_cga;
   }
 
-  [[nodiscard]] const Cga& Video() const noexcept
-  {
-    return m_cga;
-  }
-
   /// The picture the CGA shows now, from the GameState's video memory.
   void Render(FrameImage& _image) const noexcept;
 

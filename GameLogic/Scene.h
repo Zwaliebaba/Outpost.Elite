@@ -10,7 +10,6 @@
 
 #include <array>
 #include <cstdint>
-#include <optional>
 #include <span>
 
 namespace Elite

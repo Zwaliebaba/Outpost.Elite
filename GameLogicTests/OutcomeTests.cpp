@@ -4,8 +4,6 @@
 #include "Outcome.h"
 #include "ReferenceRig.h"
 
-#include <algorithm>
-
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
 namespace GameLogicTests

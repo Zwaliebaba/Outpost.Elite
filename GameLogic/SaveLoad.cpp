@@ -339,12 +339,11 @@ std::uint16_t ShowNoJoystick(GameState& _state)
     }
     return _state.Data().amstradJoystickMoved == 1;
   }
-  // The IBM's: its centre read once a key says the stick is let go. ReadJoystickAxes fires the stick with AL as GetKey leaves
-  // it, from the print's NUL.
+  // The IBM's: its centre read once a key says the stick is let go.
   _state.Data().joystickIsAmstrad = 0;
   PrintAt(_state, CENTER_JOYSTICK_TEXT, HELP_POSITION);
-  const KeyPress key = WaitForKey(_state, _hardware, CENTER_KEY_LOOP);
-  const StickAxes center = ReadJoystickAxes(_state, _hardware, AlAfterKey(0, key));
+  (void)WaitForKey(_state, _hardware, CENTER_KEY_LOOP);
+  const StickAxes center = ReadJoystickAxes(_state, _hardware);
   _state.Data().joystickCenterX = center.x;
   _state.Data().joystickCenterY = center.y;
   if (center.timedOut)

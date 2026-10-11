@@ -36,7 +36,6 @@ struct DustStep
 {
   std::int16_t x;
   std::int16_t y;
-  std::uint8_t shift; ///< stardustShift
 };
 
 /// Where DustToScreen puts a particle in the 256x128 drawing buffer, as words: bits 14-6 of x and of y, signed
@@ -328,20 +327,9 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, std::ui
 /// original drops its own return address and its caller's. Waits for keys as a rule (ADR-015).
 bool RunPauseScreen(GameState& _state, Hardware& _hardware, bool _backward);
 
-/// How RunFlight ends. Two of the ways are returns the original makes from deeper down, by dropping return addresses so that a
-/// callee's RET leaves RunFlight.
-enum class FlightEnd : std::uint8_t
-{
-  Docked,    ///< the player docked, and the station's tunnel played
-  GameOver,  ///< 40 frames after the player's death, with ELITE on the message line
-  EscapePod, ///< the escape pod arrived: TickEscapePod drops its own return address
-  Aborted,   ///< the pause screen's A: RunPauseScreen drops its own return address and ProcessFlightKeys'
-};
-
-/// What RunFlight leaves for GameLoop: how it ended, and BP and the direction flag, which GameLoop hands on to RunTitleAndDocked.
+/// What RunFlight leaves for GameLoop: BP and the direction flag, which GameLoop hands on to RunTitleAndDocked.
 struct FlightExit
 {
-  FlightEnd end;
   /// BP: PresentSpaceView's 20h after docking, ClearMessageLine's 0 after GAME OVER and the pause screen's A, and after the escape
   /// pod the last frame's 20h, which stands in for what the AI's handlers may leave there (Flight.cpp says why that cannot show).
   std::uint16_t countLeft;

@@ -2,7 +2,6 @@
 
 #include "Sound.h"
 
-#include "Arithmetic.h"
 #include "SoundTables.h"
 
 namespace Elite

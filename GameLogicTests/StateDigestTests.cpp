@@ -1,6 +1,5 @@
 #include "pch.h"
 
-#include "ReferenceImage.h"
 #include "ReferenceRig.h"
 #include "StateDigest.h"
 

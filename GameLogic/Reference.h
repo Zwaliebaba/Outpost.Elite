@@ -38,9 +38,6 @@ inline constexpr std::uint16_t PSP_PARAGRAPHS = 0x10;
 // The moment DOS's clock starts from: midnight on 1 January 1980, as on a PC/XT without a clock card.
 inline constexpr DosDateTime START_MOMENT = {1980, 1, 1, 0, 0, 0, 0};
 
-// GetKey: the end of ADR-003's boot trace.
-inline constexpr std::uint16_t GET_KEY_OFFSET = 0x7616;
-
 /// The reference's data segment as DOS's EXEC leaves it, from the load image (ReferenceImage.h) past its code segment: the D5
 /// byte written, and the words the image holds as addresses where the game's state holds a message or an index loaded as what
 /// they mean (D33, piece 3). The code segment's relocations change only its own words, which the game's state does not hold.

@@ -52,11 +52,6 @@ public:
     return m_cga;
   }
 
-  [[nodiscard]] Elite::GameState& State() noexcept
-  {
-    return *m_state;
-  }
-
   void FillVideo(std::uint8_t _value)
   {
     for (std::uint32_t offset = 0; offset < Elite::Cga::VIDEO_MEMORY_BYTES; ++offset)

@@ -145,7 +145,6 @@ struct SpawnOdds
 {
   bool met; // the random word is below the odds
   std::uint16_t random;
-  std::uint16_t odds;
 };
 
 // NextRandom against the entry of the government spawnOddsOffset holds, in _column, a column of spawnOddsByGovernment, which
@@ -155,14 +154,13 @@ template <typename Column> [[nodiscard]] SpawnOdds SpawnOddsMet(GameState& _stat
   const std::uint16_t random = NextRandom(_state);
   const auto row = static_cast<std::size_t>(_state.Data().spawnOddsOffset * SPAWN_ODDS_ROW_BYTES);
   const std::uint16_t odds = ScaleSpawnOdds(_state, WordIn(_state.BytesFrom(_column, row + 2), row));
-  return SpawnOdds{random < odds, random, odds};
+  return SpawnOdds{random < odds, random};
 }
 
 // What BelowSpawnLimit finds: the government's limit for a class, and whether there is room below it.
 struct SpawnLimit
 {
   bool below;
-  std::uint8_t limit; // what the original loads into AL
 };
 
 // The entry of the government spawnLimitOffset holds in _column, a column of spawnLimitsByGovernment, which starts at its first
@@ -172,7 +170,7 @@ template <typename Column>
 {
   const std::size_t row = SpawnLimitRow(_state);
   const std::uint8_t limit = _state.BytesFrom(_column, row + 1)[row];
-  return SpawnLimit{_count < limit, limit};
+  return SpawnLimit{_count < limit};
 }
 
 // FindFreeShipSlot for a spawner: the slot it fills, when one is free. None ends UpdateObjectsAndSpawn.

@@ -74,11 +74,6 @@ public:
     return m_game->Host();
   }
 
-  [[nodiscard]] const Elite::Platform& Host() const noexcept
-  {
-    return m_game->Host();
-  }
-
   /// The game's memory, which the platform runs on.
   [[nodiscard]] Elite::GameState& State() noexcept
   {

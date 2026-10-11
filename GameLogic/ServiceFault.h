@@ -10,7 +10,6 @@ namespace Elite
 enum class FaultKind : std::uint8_t
 {
   UnknownFunction,    ///< AH (AX for int 33h) selects a function the reference never calls.
-  UnknownSubfunction, ///< The function is one it calls, but AL or BH selects a variant it never asks for.
   UnsupportedRequest, ///< A function it calls, with an argument it never passes: a video mode above 6, a standard handle...
   WouldBlock          ///< The call would wait for input that can never arrive.
 };

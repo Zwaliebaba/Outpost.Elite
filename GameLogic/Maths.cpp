@@ -4,8 +4,6 @@
 
 #include "Arithmetic.h"
 
-#include <utility>
-
 namespace Elite
 {
 
@@ -378,7 +376,7 @@ PositionScale GetPositionScaleShift(const SpaceObject& _slot)
     ++shift;
     largest >>= 1;
   }
-  return PositionScale{shift, static_cast<std::uint16_t>(largest)};
+  return PositionScale{shift};
 }
 
 Vector ScalePositionDown(const SpaceObject& _slot, std::uint8_t _shift)

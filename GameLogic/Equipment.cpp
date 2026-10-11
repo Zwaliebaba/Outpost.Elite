@@ -499,14 +499,14 @@ constexpr MountChooser FIT_CHOOSER{0x63B5, 0x63C3, 0x63E1, 0x6405, &FitLaserOnMo
 constexpr MountChooser REMOVE_CHOOSER{0x6482, 0x6490, 0x64AE, 0x64D2, &RemoveLaserFromMount};
 
 // 63B5-6448 and 6482-6515: the box moved by the steering's roll or the arrow keys until Space does its work, from the box and AL
-// in _start. Each turn to the steering carries the box (SI) and AL, which ReadSteering fires the stick with and GetKey shifts each
-// key's Shift into; each turn to a box's move carries the box.
+// in _start. Each turn to the steering carries the box (SI) and AL, which the original fires the stick with and GetKey shifts
+// each key's Shift into; each turn to a box's move carries the box.
 void RunMountChooser(GameState& _state, Hardware& _hardware, const MountChooser& _chooser, MenuLoop _start)
 {
   MenuLoop loop = _start;
   for (;;)
   {
-    const std::uint8_t roll = ReadSteering(_state, _hardware, loop.al).roll;
+    const std::uint8_t roll = ReadSteering(_state, _hardware).roll;
     loop.al = roll;
     if (roll != 0)
     {
@@ -905,17 +905,17 @@ std::uint16_t MenuFirstRowCell(const GameState& _state) noexcept
 MenuCursor StartMenu(GameState& _state)
 {
   SwapTextAttributeNibbles(_state);
-  const std::uint16_t credits = PrintCreditsOnMessageLine(_state);
+  PrintCreditsOnMessageLine(_state);
   SwapTextAttributeNibbles(_state);
   const std::uint16_t row = MenuFirstRowCell(_state);
   _state.Data().menuSelectedRow = 1;
   ToggleMenuRowHighlight(_state, GameState::VIDEO_SEGMENT, row);
-  return MenuCursor{row, credits};
+  return MenuCursor{row};
 }
 
 MenuCursor MoveMenuCursorUp(GameState& _state, std::uint16_t _row)
 {
-  const std::uint16_t credits = PrintCreditsOnMessageLine(_state);
+  PrintCreditsOnMessageLine(_state);
   ToggleMenuRowHighlight(_state, GameState::VIDEO_SEGMENT, _row);
   std::uint16_t row = _row;
   const auto selected = static_cast<std::uint8_t>(_state.Data().menuSelectedRow - 1);
@@ -931,12 +931,12 @@ MenuCursor MoveMenuCursorUp(GameState& _state, std::uint16_t _row)
   }
   row = static_cast<std::uint16_t>(row - ROW_BYTES);
   ToggleMenuRowHighlight(_state, GameState::VIDEO_SEGMENT, row);
-  return MenuCursor{row, credits};
+  return MenuCursor{row};
 }
 
 MenuCursor MoveMenuCursorDown(GameState& _state, std::uint16_t _row)
 {
-  const std::uint16_t credits = PrintCreditsOnMessageLine(_state);
+  PrintCreditsOnMessageLine(_state);
   ToggleMenuRowHighlight(_state, GameState::VIDEO_SEGMENT, _row);
   std::uint16_t row = _row;
   const auto selected = static_cast<std::uint8_t>(_state.Data().menuSelectedRow + 1);
@@ -948,7 +948,7 @@ MenuCursor MoveMenuCursorDown(GameState& _state, std::uint16_t _row)
   }
   row = static_cast<std::uint16_t>(row + ROW_BYTES);
   ToggleMenuRowHighlight(_state, GameState::VIDEO_SEGMENT, row);
-  return MenuCursor{row, credits};
+  return MenuCursor{row};
 }
 
 bool IsScreenKey(std::uint8_t _key) noexcept
@@ -958,7 +958,7 @@ bool IsScreenKey(std::uint8_t _key) noexcept
 
 MenuLoop SteerMenuCursor(GameState& _state, Hardware& _hardware, MenuLoop _loop)
 {
-  const Steering steering = ReadSteering(_state, _hardware, _loop.al);
+  const Steering steering = ReadSteering(_state, _hardware);
   // NEG AH: the pitch negated, and up when that is negative.
   const std::uint8_t pitch = Negate(steering.pitch);
   if (pitch == 0)

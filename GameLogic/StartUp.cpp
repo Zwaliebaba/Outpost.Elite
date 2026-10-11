@@ -6,7 +6,6 @@
 #include "Docked.h"
 #include "Flight.h"
 #include "Input.h"
-#include "Maths.h"
 #include "SaveLoad.h"
 #include "Text.h"
 #include "Timer.h"

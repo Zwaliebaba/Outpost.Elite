@@ -23,8 +23,7 @@ namespace Elite
 /// What IsMouseDriverInstalled finds at the int 33h vector.
 struct MouseDriver
 {
-  bool installed;        ///< the vector is set and does not point at an IRET
-  std::uint16_t segment; ///< the vector's segment, which the original leaves in ES
+  bool installed; ///< the vector is set and does not point at an IRET
 };
 
 /// A roll and a pitch, signed bytes, as the steering routines give them.
@@ -55,10 +54,10 @@ struct StickAxes
 void KeyboardInterrupt(GameState& _state, Hardware& _hardware);
 
 /// ReadJoystickAxes (CS:777E): the IBM stick's two axes as counted polls, with interrupts off from the first firing of the one-shots
-/// (OUT 201h, of _trigger, which the port does not read) to the last poll; then the port's byte into joystickPortByte, and
+/// (OUT 201h, whose byte the port does not read) to the last poll; then the port's byte into joystickPortByte, and
 /// fireLatch set while button 1 is down. Counts the 8088's cycles for its instructions, by which the port times its one-shots, and
 /// waits when X's one-shot drops before Y's, for Y's.
-[[nodiscard]] StickAxes ReadJoystickAxes(GameState& _state, Hardware& _hardware, std::uint8_t _trigger);
+[[nodiscard]] StickAxes ReadJoystickAxes(GameState& _state, Hardware& _hardware);
 
 /// IsMouseDriverInstalled (CS:02D4): the int 33h vector in the interrupt table, and whether a driver is behind it: whether
 /// the code it names is not an IRET.
@@ -93,9 +92,8 @@ void ResetMouseIfSelected(const GameState& _state, Hardware& _hardware);
 
 /// ReadSteering (CS:7536): the roll and the pitch from the selected device, within -23..23: the keyboard's (ReadKeyboardSteering)
 /// or the Amstrad stick's integrated into keyboardRollRate and keyboardPitchRate, the IBM stick's (ReadJoystickSteering), or the
-/// mouse's (ReadMouseSteering). _trigger is the byte the IBM stick's read writes to the game port, which the port does not read:
-/// AL as ReadSteering's caller left it. Waits sometimes, in ReadJoystickAxes.
-[[nodiscard]] Steering ReadSteering(GameState& _state, Hardware& _hardware, std::uint8_t _trigger);
+/// mouse's (ReadMouseSteering). Waits sometimes, in ReadJoystickAxes.
+[[nodiscard]] Steering ReadSteering(GameState& _state, Hardware& _hardware);
 
 /// GetKey (CS:7616): the next code from keyBuffer, taken with interrupts off; then interrupts on, and SaveScreenshot while Alt and
 /// PrtSc are held.
@@ -103,9 +101,9 @@ void ResetMouseIfSelected(const GameState& _state, Hardware& _hardware);
 
 /// ReadJoystickSteering (CS:77C1): the roll and the pitch from the joystick: the Amstrad's keys ramped, or the IBM stick's
 /// counts about joystickCenterX and joystickCenterY, each (count - centre) * 128 / centre by a divide that can trap, at most 127,
-/// over 8 less a dead zone of 4, the pitch negated, within -23..23; 0 and 0 when the IBM stick does not answer. _trigger as for
-/// ReadSteering. Waits sometimes, in ReadJoystickAxes.
-[[nodiscard]] Steering ReadJoystickSteering(GameState& _state, Hardware& _hardware, std::uint8_t _trigger);
+/// over 8 less a dead zone of 4, the pitch negated, within -23..23; 0 and 0 when the IBM stick does not answer. Waits
+/// sometimes, in ReadJoystickAxes.
+[[nodiscard]] Steering ReadJoystickSteering(GameState& _state, Hardware& _hardware);
 
 /// PollScreenDumpKey (CS:7F3D): SaveScreenshot while Alt and PrtSc are held. Returns whether it saved one.
 bool PollScreenDumpKey(GameState& _state, Hardware& _hardware);

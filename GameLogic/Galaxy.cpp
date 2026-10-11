@@ -301,11 +301,10 @@ bool DrawChartCursor(GameState& _state)
 }
 
 // The steering moves a chart's cursor (CS:0DB4, CS:0FDA): the roll across, clamped to the chart, and the pitch negated down,
-// clamped to its 128 rows. _trigger is the AL the chart's loop leaves, which ReadSteering fires the stick with. Returns the
-// cursor, which the original leaves in AX.
-ChartPoint MoveChartCursor(GameState& _state, Hardware& _hardware, std::uint8_t _trigger)
+// clamped to its 128 rows. Returns the cursor, which the original leaves in AX.
+ChartPoint MoveChartCursor(GameState& _state, Hardware& _hardware)
 {
-  const Steering steering = ReadSteering(_state, _hardware, _trigger);
+  const Steering steering = ReadSteering(_state, _hardware);
   const std::uint8_t across = steering.roll;
   const unsigned x = unsigned{across} + unsigned{_state.Data().commanderBlock.chartCursorX};
   ChartPoint cursor{};
@@ -497,7 +496,7 @@ ScreenKey RunChartFrames(GameState& _state, Hardware& _hardware, const ChartKeys
     _chart.drawFrame(_state, _hardware, backward);
     _hardware.Spend(_chart.pacing);
     PresentChartFrame(_state, _hardware);
-    const ChartPoint cursor = MoveChartCursor(_state, _hardware, Low(GameState::VIDEO_SEGMENT));
+    const ChartPoint cursor = MoveChartCursor(_state, _hardware);
     if (const std::optional<ScreenKey> key = ReadChartKey(_state, _hardware, _chart, cursor.x))
     {
       return *key;
@@ -597,7 +596,6 @@ struct ByteComparison
 {
   std::uint16_t compared; // the bytes it compared, which SI and DI move on by and CX goes down by
   bool equal;             // every byte compared was equal: ZF
-  bool below;             // the last byte compared was below the other: CF
 };
 
 // REPE CMPSB: DS:_source with _segment:_destination, for at most _count bytes, backwards when _backwards, until
@@ -606,7 +604,7 @@ struct ByteComparison
                                           std::uint16_t _destination, std::uint16_t _count, bool _backwards)
 {
   const auto step = static_cast<std::uint16_t>(_backwards ? 0xFFFF : 1);
-  ByteComparison comparison{0, true, false};
+  ByteComparison comparison{0, true};
   std::uint16_t source = _source;
   std::uint16_t destination = _destination;
   while (comparison.compared < _count && comparison.equal)
@@ -614,7 +612,6 @@ struct ByteComparison
     const std::uint8_t sourceByte = _state.Byte(source);
     const std::uint8_t destinationByte = _state.FarByte(_segment, destination);
     comparison.equal = sourceByte == destinationByte;
-    comparison.below = sourceByte < destinationByte;
     source = Offset(source, step);
     destination = Offset(destination, step);
     ++comparison.compared;

@@ -6,9 +6,7 @@
 #include "Platform.h"
 #include "ReferenceRig.h"
 
-#include <algorithm>
 #include <array>
-#include <format>
 #include <stdexcept>
 #include <string>
 #include <string_view>

@@ -1,7 +1,6 @@
 // GameLogic/Ai.h
 #pragma once
 
-#include "Flight.h"
 #include "GameState.h"
 #include "Hardware.h"
 #include "Maths.h"

@@ -13,8 +13,6 @@
 #include "Text.h"
 #include "Video.h"
 
-#include <utility>
-
 namespace Elite
 {
 

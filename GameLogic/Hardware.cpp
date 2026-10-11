@@ -175,8 +175,6 @@ std::uint16_t Hardware::ReadBiosKey()
   return *key;
 }
 
-// ── SaveLoad, StartUp, Timer and Input (level 4, group C) ──
-
 std::uint8_t Hardware::CgaStatus()
 {
   return m_platform.Video().ReadStatus();
@@ -205,7 +203,7 @@ void Hardware::SelectPalette(std::uint8_t _palette)
   m_platform.BiosServices().SelectPalette(_palette);
 }
 
-void Hardware::FireGamePort(std::uint8_t /*_value*/)
+void Hardware::FireGamePort()
 {
   m_platform.NotePortWrites(1);
   m_platform.Joystick().Fire();
@@ -294,14 +292,10 @@ DosAnswer Hardware::FindNextFile()
   return m_platform.Files().FindNext();
 }
 
-// ── Docked, Galaxy, StartUp and Scene (level 5, group B3) ──
-
 void Hardware::Spend(const PacingPoint& _point)
 {
   m_platform.Spend(_point.cycles);
 }
-
-// ── Start, GameLoop and RunFlight (level 5, group F) ──
 
 DosVersion Hardware::ReadDosVersion(std::uint8_t /*_al*/)
 {

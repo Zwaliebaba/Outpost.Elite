@@ -277,13 +277,14 @@ ReclaimedSlot ReclaimShipSlot(GameState& _state)
   {
     if ((_state.Slot(slot).flags & FLAG_BLIP_DRAWN) == 0)
     {
-      return ReclaimedSlot{slot, false, std::nullopt};
+      return ReclaimedSlot{slot, false};
     }
     slot = SlotAfter(slot);
   }
   // Every one has a blip: one of slots 4-19 at random (AND AH,0Fh / XOR AL,AL / SHR AX,1 twice), removed first.
   const SlotIndex evicted = SlotAfter(static_cast<SlotIndex>(FIRST_EVICTED_SLOT), EvictedSlots(NextRandom(_state)));
-  return ReclaimedSlot{evicted, true, RemoveObject(_state, _state.Slot(evicted))};
+  (void)RemoveObject(_state, _state.Slot(evicted));
+  return ReclaimedSlot{evicted, true};
 }
 
 NearTest IsObjectNear(GameState& _state, SpaceObject& _slot)

@@ -6,8 +6,6 @@
 #include "Maths.h"
 #include "Video.h"
 
-#include <bit>
-
 namespace Elite
 {
 
@@ -277,7 +275,7 @@ MouseDriver IsMouseDriverInstalled(Hardware& _hardware)
   // The int 33h vector: installed when it is set and does not point at an IRET.
   const FarAddress vector = _hardware.InterruptVector(MOUSE_VECTOR);
   const bool set = (vector.offset | vector.segment) != 0;
-  return MouseDriver{set && _hardware.HandlerOpcode(vector) != IRET_OPCODE, vector.segment};
+  return MouseDriver{set && _hardware.HandlerOpcode(vector) != IRET_OPCODE};
 }
 
 KeyPress WaitForKeyPress(GameState& _state, Hardware& _hardware)
@@ -298,7 +296,7 @@ KeyPress WaitForKeyPress(GameState& _state, Hardware& _hardware)
   }
 }
 
-Steering ReadSteering(GameState& _state, Hardware& _hardware, std::uint8_t _trigger)
+Steering ReadSteering(GameState& _state, Hardware& _hardware)
 {
   const std::uint8_t device = _state.Data().inputDevice;
   if (device == KEYBOARD_DEVICE)
@@ -307,7 +305,7 @@ Steering ReadSteering(GameState& _state, Hardware& _hardware, std::uint8_t _trig
   }
   if (device == JOYSTICK_DEVICE)
   {
-    const Steering stick = ReadJoystickSteering(_state, _hardware, _trigger);
+    const Steering stick = ReadJoystickSteering(_state, _hardware);
     return _state.Data().joystickIsAmstrad == 1 ? ApplyKeyboardRates(_state, stick) : stick;
   }
   return ReadMouseSteering(_state, _hardware);
@@ -416,7 +414,7 @@ bool ReadFireButton(const GameState& _state, Hardware& _hardware)
   return (Low(_hardware.ReadMousePresses(MOUSE_RIGHT_BUTTON).buttons) & MOUSE_LEFT_AND_RIGHT) != 0;
 }
 
-StickAxes ReadJoystickAxes(GameState& _state, Hardware& _hardware, std::uint8_t _trigger)
+StickAxes ReadJoystickAxes(GameState& _state, Hardware& _hardware)
 {
   // With interrupts off, the one-shots fired, and each axis's polls counted until its bit drops. The game port times its one-shots
   // by the instructions executed, so each of the original's is counted (CountInstructionCycles) before the port access after it.
@@ -427,7 +425,7 @@ StickAxes ReadJoystickAxes(GameState& _state, Hardware& _hardware, std::uint8_t 
   std::uint16_t x = AXIS_COUNT_START;
   std::uint16_t y = x;
   _hardware.CountInstructionCycles(BEFORE_FIRING_CYCLES);
-  _hardware.FireGamePort(_trigger);
+  _hardware.FireGamePort();
   _hardware.CountInstructionCycles(OUT_CYCLES);
   std::uint8_t bits = static_cast<std::uint8_t>(_hardware.GamePortOneShots() & BOTH_AXES);
   _hardware.CountInstructionCycles(IN_CYCLES + AND_CYCLES + CMP_CYCLES);
@@ -474,7 +472,7 @@ StickAxes ReadJoystickAxes(GameState& _state, Hardware& _hardware, std::uint8_t 
     _hardware.LoopTurn(BOTH_DOWN_TURN, {bits});
   }
   _hardware.CountInstructionCycles(NOT_TAKEN_CYCLES);
-  _hardware.FireGamePort(bits);
+  _hardware.FireGamePort();
   _hardware.CountInstructionCycles(OUT_CYCLES);
   for (;;)
   {
@@ -516,13 +514,13 @@ StickAxes ReadJoystickAxes(GameState& _state, Hardware& _hardware, std::uint8_t 
   return StickAxes{false, x, y};
 }
 
-Steering ReadJoystickSteering(GameState& _state, Hardware& _hardware, std::uint8_t _trigger)
+Steering ReadJoystickSteering(GameState& _state, Hardware& _hardware)
 {
   if (_state.Data().joystickIsAmstrad == 1)
   {
     return ReadAmstradStick(_state);
   }
-  const StickAxes axes = ReadJoystickAxes(_state, _hardware, _trigger);
+  const StickAxes axes = ReadJoystickAxes(_state, _hardware);
   if (axes.timedOut)
   {
     return Steering{0, 0};

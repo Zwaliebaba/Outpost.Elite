@@ -13,8 +13,6 @@
 namespace Elite
 {
 
-// ── Start, GameLoop and RunFlight (level 5, group F) ──
-
 /// What DOS answers to int 21h AH=30h: its version.
 struct DosVersion
 {
@@ -112,8 +110,6 @@ public:
   /// character in the low.
   std::uint16_t ReadBiosKey();
 
-  // ── SaveLoad, StartUp, Timer and Input (level 4, group C) ──
-
   /// IN AL,3DAh: the CGA's status, bit 3 set during the vertical retrace.
   [[nodiscard]] std::uint8_t CgaStatus();
 
@@ -130,9 +126,9 @@ public:
   /// Int 10h AH=0Bh, BH=1, BL=_palette: the BIOS selects mode 4's palette.
   void SelectPalette(std::uint8_t _palette);
 
-  /// OUT 201h,_value: fires the game port's one-shots, each high until its stick's resistance times it out. The port does
-  /// not read the byte written.
-  void FireGamePort(std::uint8_t _value);
+  /// OUT 201h,AL: fires the game port's one-shots, each high until its stick's resistance times it out. The port does not
+  /// read the byte written, so none is passed.
+  void FireGamePort();
 
   /// IN AL,201h: the game port, its one-shots in bits 0 to 3, each high while it runs, and the buttons in bits 4 to 7.
   [[nodiscard]] std::uint8_t GamePortOneShots();
@@ -189,13 +185,9 @@ public:
   /// Int 21h AH=4Fh: the next file of the search the disk transfer area holds, into it.
   [[nodiscard]] DosAnswer FindNextFile();
 
-  // ── Docked, Galaxy, StartUp and Scene (level 5, group B3) ──
-
   /// _point's cycles pass as they pass in a wait (Platform::Spend): the time the IBM PC spent on work the reference sets no
   /// pace for, paid where an interpreted run paid it (ADR-013).
   void Spend(const PacingPoint& _point);
-
-  // ── Start, GameLoop and RunFlight (level 5, group F) ──
 
   /// Int 21h AH=30h, AL=_al: DOS's version, 3.30. AL goes in as the caller has it: DOS 5 and later read it as which of two
   /// answers to give in BH.
