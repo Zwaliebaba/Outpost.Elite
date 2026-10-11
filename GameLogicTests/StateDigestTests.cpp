@@ -1,10 +1,12 @@
 #include "pch.h"
 
 #include "DataOverlay.h"
+#include "ReferenceImage.h"
 #include "ReferenceRig.h"
 #include "StateDigest.h"
 
 #include <algorithm>
+#include <stdexcept>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
@@ -18,70 +20,86 @@ public:
   TEST_METHOD(CoversTheGameAndNotItsScratch)
   {
     ReferenceRig rig("Digest");
-    Machine::Pc& pc = rig.Host();
-    const std::uint16_t data = Elite::DataSegment(rig.Program());
-    const std::string before = Elite::GameStateDigest(rig.State(), pc.Video());
+    Elite::GameState& state = rig.State();
+    Elite::Cga& video = rig.Host().Video();
+    const std::string before = Elite::GameStateDigest(state, video);
 
-    pc.Processor().Regs().ax = 0x1234;
-    pc.Ram().Write8(data, Elite::STACK_FIRST_OFFSET, 0x55);
-    pc.Ram().Write8(data, static_cast<std::uint16_t>(Elite::STACK_END_OFFSET - 1), 0x55);
-    pc.Ram().Write8(rig.Program().loadSegment, 0x1CC9, 0x2B); // a patch site of the triangle filler
-    Assert::AreEqual(before.c_str(), Elite::GameStateDigest(rig.State(), pc.Video()).c_str(), false, L"registers, stack and code left out");
+    state.SetByte(Elite::STACK_FIRST_OFFSET, 0x55);
+    state.SetByte(static_cast<std::uint16_t>(Elite::STACK_END_OFFSET - 1), 0x55);
+    state.SetCodeByte(0x1CC9, 0x2B); // a patch site of the triangle filler
+    Assert::AreEqual(before.c_str(), Elite::GameStateDigest(state, video).c_str(), false, L"stack and code left out");
 
-    pc.Ram().Write8(data, static_cast<std::uint16_t>(Elite::STACK_FIRST_OFFSET - 1), 0x55);
-    const std::string belowStack = Elite::GameStateDigest(rig.State(), pc.Video());
+    state.SetByte(static_cast<std::uint16_t>(Elite::STACK_FIRST_OFFSET - 1), 0x55);
+    const std::string belowStack = Elite::GameStateDigest(state, video);
     Assert::AreNotEqual(before.c_str(), belowStack.c_str(), false, L"the data segment counts");
 
-    pc.Ram().Write8(data, Elite::STACK_END_OFFSET, 0x55);
-    const std::string aboveStack = Elite::GameStateDigest(rig.State(), pc.Video());
+    state.SetByte(Elite::STACK_END_OFFSET, 0x55);
+    const std::string aboveStack = Elite::GameStateDigest(state, video);
     Assert::AreNotEqual(belowStack.c_str(), aboveStack.c_str(), false, L"so does the cockpit image above the stack");
 
-    pc.Ram().Write8(Machine::Cga::VIDEO_MEMORY_LINEAR + 0x3FFF, 0x55);
-    Assert::AreNotEqual(aboveStack.c_str(), Elite::GameStateDigest(rig.State(), pc.Video()).c_str(), false, L"and video memory");
+    state.SetVideoByte(0x3FFF, 0x55);
+    const std::string videoMemory = Elite::GameStateDigest(state, video);
+    Assert::AreNotEqual(aboveStack.c_str(), videoMemory.c_str(), false, L"and video memory");
+
+    video.SetColorSelect(static_cast<std::uint8_t>(video.ColorSelect() ^ 0x01));
+    Assert::AreNotEqual(videoMemory.c_str(), Elite::GameStateDigest(state, video).c_str(), false, L"and the CGA's registers");
   }
 
-  // The GameState owns the game's memory, and the PC maps it (D19): the load's bytes are taken over, a write either way
-  // reaches the GameState's storage and is counted once by the PC's memory, and a read counts nothing.
-  TEST_METHOD(TheGameStateHoldsWhatThePcMaps)
+  // The GameState owns the game's memory (D19), loaded from the generated image at the segments DOS would have used (D33): the
+  // load's bytes are its own, a write either way is counted once when it changes a byte, a read counts nothing, and an
+  // address outside its three regions is not the game's memory.
+  TEST_METHOD(TheGameStateHoldsTheGamesMemory)
   {
     ReferenceRig rig("GameState");
-    Machine::Pc& pc = rig.Host();
     Elite::GameState& state = rig.State();
-    Assert::AreEqual(std::uint32_t{rig.Program().loadSegment}, std::uint32_t{state.CodeSegment()});
-    Assert::AreEqual(std::uint32_t{Elite::DataSegment(rig.Program())}, std::uint32_t{state.DataSegment()});
+    Assert::AreEqual(std::uint32_t{Elite::PSP_SEGMENT + Elite::PSP_PARAGRAPHS}, std::uint32_t{state.CodeSegment()}, L"the code segment");
+    Assert::AreEqual(std::uint32_t{state.CodeSegment()} + Elite::DATA_SEGMENT_PARAGRAPH, std::uint32_t{state.DataSegment()},
+                     L"the data segment");
 
-    // Memory's own bytes keep what the load wrote under the regions (Machine::Memory::Bytes).
-    const std::span<const std::uint8_t> own = pc.Ram().Bytes();
-    const std::uint32_t data = Machine::Memory::Linear(state.DataSegment(), 0);
-    const std::uint32_t code = Machine::Memory::Linear(state.CodeSegment(), 0);
-    Assert::IsTrue(std::ranges::equal(state.DataBytes(), own.subspan(data, 0x10000)), L"the data segment taken over");
-    Assert::IsTrue(std::ranges::equal(state.VideoBytes(), own.subspan(Machine::Cga::VIDEO_MEMORY_LINEAR, Machine::Cga::VIDEO_MEMORY_BYTES)),
-                   L"video memory taken over");
-    for (std::uint16_t offset = 0; offset < Elite::CODE_SEGMENT_BYTES; ++offset)
-    {
-      if (state.CodeByte(offset) != own[code + offset])
-        Assert::Fail(L"the code segment taken over");
-    }
+    // The image's bytes, relocated for the load segment, with the D5 byte; zeros past the image; and video memory as mode 3
+    // leaves it.
+    const std::vector<std::uint8_t> image = Elite::ReferenceLoadImage(state.CodeSegment()).value_or(std::vector<std::uint8_t>{});
+    Assert::IsFalse(image.empty(), L"the image loads");
+    const std::span<const std::uint8_t> loaded(image);
+    Assert::IsTrue(std::ranges::equal(state.CodeBytes(), loaded.first(Elite::CODE_SEGMENT_BYTES)), L"the code segment's image");
+    const std::span<const std::uint8_t> data = loaded.subspan(Elite::CODE_SEGMENT_BYTES);
+    Assert::IsTrue(std::ranges::equal(state.DataBytes().first(data.size()), data), L"the data segment's image");
+    Assert::IsTrue(std::ranges::all_of(state.DataBytes().subspan(data.size()), [](std::uint8_t _byte) { return _byte == 0; }),
+                   L"zeros past it");
     Assert::AreEqual(1u, std::uint32_t{state.Get(Elite::DS.protectionShown)}, L"with the D5 byte");
+    Assert::AreEqual(std::uint32_t{state.CodeSegment()} + Elite::DATA_SEGMENT_PARAGRAPH, std::uint32_t{state.CodeWord(0x0007)},
+                     L"Start's MOV BX,<data>, relocated");
+    for (std::uint16_t offset = 0; offset < Elite::Cga::VIDEO_MEMORY_BYTES; offset += 2)
+    {
+      if (state.VideoByte(offset) != 0x20 || state.VideoByte(static_cast<std::uint16_t>(offset + 1)) != 0x07)
+        Assert::Fail(L"video memory as video mode 3 leaves it: 0720h words");
+    }
 
-    const std::uint64_t changes = pc.Ram().ChangeCount();
+    const std::uint64_t changes = state.ChangeCount();
     const std::uint8_t fuel = state.Get(Elite::DS.fuel);
     state.Set(Elite::DS.fuel, static_cast<std::uint8_t>(fuel ^ 0xFF));
-    Assert::AreEqual(changes + 1, pc.Ram().ChangeCount(), L"the GameState's write is counted by the PC's memory");
-    Assert::AreEqual(std::uint32_t{fuel ^ 0xFFu}, std::uint32_t{pc.Ram().Read8(state.DataSegment(), Elite::DS.fuel.offset)},
-                     L"the PC reads it");
-    Assert::AreEqual(std::uint32_t{fuel}, std::uint32_t{own[data + Elite::DS.fuel.offset]}, L"from the GameState's storage");
+    Assert::AreEqual(changes + 1, state.ChangeCount(), L"a write that changes a byte is counted");
+    state.Set(Elite::DS.fuel, static_cast<std::uint8_t>(fuel ^ 0xFF));
+    Assert::AreEqual(changes + 1, state.ChangeCount(), L"a write of the byte already there is not");
+    Assert::AreEqual(std::uint32_t{fuel ^ 0xFFu}, std::uint32_t{state.FarByte(state.DataSegment(), Elite::DS.fuel.offset)},
+                     L"a far read finds it");
     (void)state.Word(Elite::DS.fuel.offset);
     (void)state.CodeWord(0);
     (void)state.VideoByte(0);
-    Assert::AreEqual(changes + 1, pc.Ram().ChangeCount(), L"a read counts nothing");
+    Assert::AreEqual(changes + 1, state.ChangeCount(), L"a read counts nothing");
 
-    pc.Ram().Write8(Elite::GameState::VIDEO_SEGMENT, 0x10, static_cast<std::uint8_t>(state.VideoByte(0x10) ^ 0xFF));
-    pc.Ram().Write8(state.CodeSegment(), 0x07D0, static_cast<std::uint8_t>(state.CodeByte(0x07D0) ^ 0xFF));
-    Assert::AreEqual(std::uint32_t{own[Machine::Cga::VIDEO_MEMORY_LINEAR + 0x10] ^ 0xFFu}, std::uint32_t{state.VideoByte(0x10)},
-                     L"the PC's writes reach the GameState");
-    Assert::AreEqual(std::uint32_t{own[code + 0x07D0] ^ 0xFFu}, std::uint32_t{state.CodeByte(0x07D0)});
-    Assert::AreEqual(changes + 3, pc.Ram().ChangeCount());
+    state.SetFarByte(Elite::GameState::VIDEO_SEGMENT, 0x10, static_cast<std::uint8_t>(state.VideoByte(0x10) ^ 0xFF));
+    state.SetFarByte(state.CodeSegment(), 0x07D0, static_cast<std::uint8_t>(state.CodeByte(0x07D0) ^ 0xFF));
+    state.SetFarByte(state.CodeSegment(), Elite::CODE_SEGMENT_BYTES, static_cast<std::uint8_t>(state.Byte(0) ^ 0xFF));
+    Assert::AreEqual(std::uint32_t{0x20 ^ 0xFFu}, std::uint32_t{state.VideoByte(0x10)}, L"far writes reach video memory");
+    Assert::AreEqual(std::uint32_t{loaded[0x07D0] ^ 0xFFu}, std::uint32_t{state.CodeByte(0x07D0)}, L"and the code segment");
+    Assert::AreEqual(std::uint32_t{loaded[Elite::CODE_SEGMENT_BYTES] ^ 0xFFu}, std::uint32_t{state.Byte(0)},
+                     L"and past the code segment's image, the data segment, which follows it");
+    Assert::AreEqual(changes + 4, state.ChangeCount());
+
+    Assert::ExpectException<std::out_of_range>([&state] { (void)state.FarByte(0x0000, 0x0020); }, L"the vector table is not the game's");
+    Assert::ExpectException<std::out_of_range>([&state] { state.SetFarByte(0xF000, 0xFFFE, 0); }, L"nor is the ROM");
+    Assert::AreEqual(changes + 4, state.ChangeCount(), L"and nothing is written there");
   }
 };
 

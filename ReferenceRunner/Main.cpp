@@ -3,7 +3,7 @@
 #include "DirectoryFileStore.h"
 #include "Game.h"
 #include "Outcome.h"
-#include "Pc.h"
+#include "Platform.h"
 #include "PngWriter.h"
 #include "Reference.h"
 #include "Replay.h"
@@ -21,16 +21,16 @@
 #include <system_error>
 #include <vector>
 
-// Plays the reference headless on Machine::Pc (ADR-006), natively: a replay (ADR-008), or steps given on the command
-// line:
+// Plays the reference headless on the native platform (Elite::Platform, D33): a replay (ADR-008), or steps given on the
+// command line:
 //
 //   ReferenceRunner [--out DIR] [--steps TEXT | --replay FILE]
 //
 // It loads the reference from its generated image (D3), so it reads no ELITES.EXE, applies the D5 byte in memory, puts
-// the native routines in place of the original's (ADR-010) on the Pc's Dispatcher, which interprets nothing (ADR-011),
-// and follows the steps (Replay.h) in paced time: shots go to DIR/NAME.png, digests to standard output. DOS's files live
-// in DIR/files, which must be empty when the run starts, as a replay's conditions require (ADR-008); a run refuses one
-// that is not. A file step copies from the replay file's own directory, or from Replays/ in the repository for --steps.
+// the native routines where the original's entries are (ADR-010), and follows the steps (Replay.h) in paced time: shots
+// go to DIR/NAME.png, digests to standard output. DOS's files live in DIR/files, which must be empty when the run
+// starts, as a replay's conditions require (ADR-008); a run refuses one that is not. A file step copies from the replay
+// file's own directory, or from Replays/ in the repository for --steps.
 //
 // A digest with an expected value that does not match fails the run. Nothing writes a digest back: since D7 deleted the
 // interpreter there is no original to record one from, and a digest changes only by a ruling (ADR-008 item 7).
@@ -40,9 +40,9 @@
 // differs is reported (Elite::OutcomeKind). The last lines sum what was checked and what differs. A digest that names its
 // expected value but has no recorded picture or outcomes fails the run, naming the line.
 //
-// Exit status: 0 the steps ran and every digest matched, 1 the program stopped them (a refused call, its end, a spin, a
-// native routine that waited where it cannot, or unported code), a digest or an outcome of progress did not match, or a
-// checked digest has no picture or outcomes, 2 usage or file errors. A picture or a timing outcome that differs does not
+// Exit status: 0 the steps ran and every digest matched, 1 the program stopped them (a refused call, its end, a spin, or
+// an interrupt to unported code), a digest or an outcome of progress did not match, or a checked digest has no picture or
+// outcomes, 2 usage or file errors. A picture or a timing outcome that differs does not
 // change it.
 // Only an end step may end the program, and it must (Elite::ExpectedStop): a replay that leaves for DOS ends with one,
 // and its digests after the end read what the program left.
@@ -94,36 +94,34 @@ std::optional<std::string> ReadText(const std::filesystem::path& _path)
   return text.str();
 }
 
-bool WriteShot(Machine::Pc& _pc, const std::filesystem::path& _path)
+bool WriteShot(const Elite::Platform& _platform, const std::filesystem::path& _path)
 {
-  const auto image = std::make_unique<Machine::FrameImage>();
-  _pc.Video().Render(_pc.Ram(), *image);
+  const auto image = std::make_unique<Elite::FrameImage>();
+  _platform.Render(*image);
   std::array<std::uint32_t, 16> palette = {};
-  const auto colors = Machine::CgaPalette();
+  const auto colors = Elite::CgaPalette();
   for (std::size_t index = 0; index < palette.size(); ++index)
     palette[index] = (std::uint32_t{colors[index].red} << 16) | (std::uint32_t{colors[index].green} << 8) | colors[index].blue;
-  return ReferenceRunner::WritePalettePng(_path, Machine::FrameImage::WIDTH_PIXELS, Machine::FrameImage::HEIGHT_PIXELS, image->pixels,
-                                          palette);
+  return ReferenceRunner::WritePalettePng(_path, Elite::FrameImage::WIDTH_PIXELS, Elite::FrameImage::HEIGHT_PIXELS, image->pixels, palette);
 }
 
-std::string Describe(Machine::StopReason _reason, const Machine::Pc& _pc)
+std::string Describe(Elite::StopReason _reason, const Elite::Platform& _platform)
 {
   switch (_reason)
   {
-  case Machine::StopReason::Fault:
-    if (const std::optional<Machine::ServiceFault>& fault = _pc.Services().Fault(); fault.has_value())
-      return std::format("refused call: int {:02X}h AH={:02X}h AL={:02X}h at {:04X}:{:04X}", fault->vector, fault->ah, fault->al, fault->cs,
-                         fault->ip);
+  case Elite::StopReason::Fault:
+    if (const std::optional<Elite::ServiceFault>& fault = _platform.Fault(); fault.has_value())
+      return std::format("refused call: int {:02X}h AH={:02X}h AL={:02X}h", fault->vector, fault->ah, fault->al);
     break;
-  case Machine::StopReason::Terminated:
+  case Elite::StopReason::Terminated:
     return "the program ended";
-  case Machine::StopReason::Spinning:
-    return std::format("{} steps without waiting, at {:04X}:{:04X}", _pc.SpinLimit(), _pc.Processor().Regs().cs, _pc.Processor().Regs().ip);
-  case Machine::StopReason::Unported:
-    return std::format("code no native routine stands in for, at {:04X}:{:04X}", _pc.Processor().Regs().cs, _pc.Processor().Regs().ip);
-  case Machine::StopReason::Overran:
-    return std::format("native {} waited past the end of a run, and is not hooked as a routine that waits", _pc.Native().Overran());
-  case Machine::StopReason::Reached:
+  case Elite::StopReason::Spinning:
+    return std::format("{} turns without waiting", _platform.SpinLimit());
+  case Elite::StopReason::Unported:
+    if (const std::optional<Elite::FarAddress>& at = _platform.UnportedAt(); at.has_value())
+      return std::format("an interrupt to code no native routine stands in for, at {:04X}:{:04X}", at->segment, at->offset);
+    break;
+  case Elite::StopReason::Reached:
     break;
   }
   return "running";
@@ -232,40 +230,40 @@ int Run(int _argc, char** _argv)
     std::fprintf(stderr, "ReferenceRunner: %s is not empty: empty it, or name another --out\n", (options.out / "files").string().c_str());
     return 2;
   }
-  Machine::DirectoryFileStore files(options.out / "files");
-  Machine::Pc::Desc desc;
+  Elite::DirectoryFileStore files(options.out / "files");
+  Elite::Platform::Desc desc;
   desc.startMoment = Elite::START_MOMENT;
-  // The GameState owns the game's memory and the Pc maps it, the native routines in place of the original's (D19).
+  // The GameState owns the game's memory and the platform runs the native routines over it (D19, D33).
   const auto game = std::make_unique<Elite::Game>(files, desc);
   if (!game->Load(Elite::PSP_SEGMENT))
   {
     std::fputs("ReferenceRunner: the reference did not load\n", stderr);
     return 2;
   }
-  Machine::Pc& pc = game->Host();
+  Elite::Platform& platform = game->Host();
 
   // reason: why the last step that ran the machine returned; asExpected: every step so far left the run as it must
   // (Elite::ExpectedStop), which for an end step is with the program ended.
-  Machine::StopReason reason = Machine::StopReason::Reached;
+  Elite::StopReason reason = Elite::StopReason::Reached;
   bool asExpected = true;
   const std::filesystem::path sources = options.replay.empty() ? Elite::FindInRepository("Replays") : options.replay.parent_path();
-  Elite::ReplayPlayer player(pc, game->State(), files, sources);
+  Elite::ReplayPlayer player(platform, game->State(), files, sources);
   std::size_t mismatches = 0;
   GuardTally tally;
   for (std::size_t index = 0; index < steps.size() && asExpected; ++index)
   {
     const Elite::Step& step = steps[index];
     Elite::Checkpoint checkpoint;
-    const Machine::StopReason stop = player.Play(step, checkpoint);
+    const Elite::StopReason stop = player.Play(step, checkpoint);
     asExpected = stop == Elite::ExpectedStop(step);
     if (step.kind == Elite::StepKind::Wait || step.kind == Elite::StepKind::End)
       reason = stop;
-    if (!asExpected && stop == Machine::StopReason::Reached)
+    if (!asExpected && stop == Elite::StopReason::Reached)
       std::fprintf(stderr, "ReferenceRunner: line %zu: the program has not ended by the end of its end step\n", step.line);
     if (step.kind == Elite::StepKind::Shot)
     {
       const std::filesystem::path path = options.out / (step.name + ".png");
-      if (!WriteShot(pc, path))
+      if (!WriteShot(platform, path))
       {
         std::fprintf(stderr, "ReferenceRunner: cannot write %s\n", path.string().c_str());
         return 2;
@@ -284,11 +282,9 @@ int Run(int _argc, char** _argv)
     }
   }
 
-  for (const auto& [port, counts] : pc.Ports().Unmapped())
-    Print(std::format("unmapped\tport {:04X}h\t{} reads\t{} writes\n", port, counts.reads, counts.writes));
-  Print(std::format("ran\t{} instructions\t{} cycles\t{:.3f} s\t{}\n", pc.Processor().InstructionCount(), pc.Clock(),
-                    static_cast<double>(pc.Clock()) * Machine::CPU_CLOCK_DIVISOR / static_cast<double>(Machine::CRYSTAL_HZ),
-                    Describe(reason, pc)));
+  Print(std::format("ran\t{} interrupts\t{} cycles\t{:.3f} s\t{}\n", platform.InterruptsTaken(), platform.Clock(),
+                    static_cast<double>(platform.Clock()) * Elite::CPU_CLOCK_DIVISOR / static_cast<double>(Elite::CRYSTAL_HZ),
+                    Describe(reason, platform)));
   Print(std::format("pictures\t{} checked\t{} differ\n", tally.picturesChecked, tally.picturesDiffer));
   Print(std::format("outcomes\t{} checked\t{} differ in progress\t{} differ in timing\n", tally.outcomesChecked, tally.progressDiffer,
                     tally.timingDiffer));

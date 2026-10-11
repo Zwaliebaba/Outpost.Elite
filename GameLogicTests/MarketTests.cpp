@@ -19,8 +19,7 @@ using Elite::DS;
 // The data segment byte at _offset, set to _value on the twin.
 void SetByte(TwinRig& _rig, std::uint16_t _offset, std::uint8_t _value)
 {
-  _rig.Both([_offset, _value](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-            { _pc.Ram().Write8(Elite::DataSegment(_program), _offset, _value); });
+  _rig.Both([_offset, _value](Elite::Platform&, Elite::GameState& _state) { _state.SetByte(_offset, _value); });
 }
 
 void SetByte(TwinRig& _rig, Elite::DataField<std::uint8_t> _field, std::uint8_t _value)
@@ -32,11 +31,10 @@ void SetByte(TwinRig& _rig, Elite::DataField<std::uint8_t> _field, std::uint8_t 
 void SetCredits(TwinRig& _rig, std::uint32_t _tenths)
 {
   _rig.Both(
-    [_tenths](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
+    [_tenths](Elite::Platform&, Elite::GameState& _state)
     {
-      const std::uint16_t data = Elite::DataSegment(_program);
-      _pc.Ram().Write16(data, DS.creditsTenths.offset, static_cast<std::uint16_t>(_tenths));
-      _pc.Ram().Write16(data, DS.data75F5.offset, static_cast<std::uint16_t>(_tenths >> 16));
+      _state.SetWord(DS.creditsTenths.offset, static_cast<std::uint16_t>(_tenths));
+      _state.SetWord(DS.data75F5.offset, static_cast<std::uint16_t>(_tenths >> 16));
     });
 }
 
@@ -141,13 +139,12 @@ public:
     TwinRig rig("TwinMarketPrices");
     rig.Play("key space; wait 4");
     rig.Both(
-      [](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
+      [](Elite::Platform&, Elite::GameState& _state)
       {
         constexpr std::string_view NAME = "LA VE";
         for (std::size_t index = 0; index < DS.currentSystemName.SIZE_BYTES; ++index)
         {
-          _pc.Ram().Write8(Elite::DataSegment(_program), DS.currentSystemName.At(index),
-                           index < NAME.size() ? static_cast<std::uint8_t>(NAME[index]) : std::uint8_t{0});
+          _state.SetByte(DS.currentSystemName.At(index), index < NAME.size() ? static_cast<std::uint8_t>(NAME[index]) : std::uint8_t{0});
         }
       });
     rig.Play("key F8; wait 1\nkey F8; wait 0.2\nkey x; wait 0.2\nkey Home; wait 0.2\ndigest prices\nkey F9; wait 0.5\ndigest left");

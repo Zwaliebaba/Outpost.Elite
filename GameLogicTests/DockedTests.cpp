@@ -20,8 +20,7 @@ constexpr std::string_view STATUS_AGAIN = "key F10; wait 0.2\nkey F9; wait 0.2\n
 // Sets the byte _field to _value on the twin.
 void SetBoth(TwinRig& _rig, Elite::DataField<std::uint8_t> _field, std::uint8_t _value)
 {
-  _rig.Both([_field, _value](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-            { _pc.Ram().Write8(Elite::DataSegment(_program), _field.offset, _value); });
+  _rig.Both([_field, _value](Elite::Platform&, Elite::GameState& _state) { _state.SetByte(_field.offset, _value); });
 }
 
 // Sets the byte at _offset in the data segment to _value on the twin.
@@ -55,13 +54,8 @@ void LoadCommander(TwinRig& _rig, std::string_view _source)
 [[nodiscard]] std::uint32_t TwinCreditsTenths(TwinRig& _rig)
 {
   std::uint32_t tenths = 0;
-  _rig.Both(
-    [&tenths](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-    {
-      const std::uint16_t data = Elite::DataSegment(_program);
-      tenths =
-        _pc.Ram().Read16(data, Elite::DS.creditsTenths.offset) | (std::uint32_t{_pc.Ram().Read16(data, Elite::DS.data75F5.offset)} << 16);
-    });
+  _rig.Both([&tenths](Elite::Platform&, Elite::GameState& _state)
+            { tenths = _state.Word(Elite::DS.creditsTenths.offset) | (std::uint32_t{_state.Word(Elite::DS.data75F5.offset)} << 16); });
   return tenths;
 }
 
@@ -69,8 +63,7 @@ void LoadCommander(TwinRig& _rig, std::string_view _source)
 [[nodiscard]] std::uint8_t TwinByte(TwinRig& _rig, Elite::DataField<std::uint8_t> _field)
 {
   std::uint8_t value = 0;
-  _rig.Both([&value, _field](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-            { value = _pc.Ram().Read8(Elite::DataSegment(_program), _field.offset); });
+  _rig.Both([&value, _field](Elite::Platform&, Elite::GameState& _state) { value = _state.Byte(_field.offset); });
   return value;
 }
 

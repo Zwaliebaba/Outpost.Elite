@@ -13285,18 +13285,4 @@ const std::array<std::uint8_t, REFERENCE_IMAGE_BYTES> REFERENCE_IMAGE = {
   0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // DS:EFD8
 };
 
-Machine::Executable ReferenceExecutable()
-{
-  Machine::Executable executable;
-  executable.initialCs = REFERENCE_INITIAL_CS;
-  executable.initialIp = REFERENCE_INITIAL_IP;
-  executable.initialSs = REFERENCE_INITIAL_SS;
-  executable.initialSp = REFERENCE_INITIAL_SP;
-  executable.minAllocationParagraphs = REFERENCE_MIN_ALLOCATION_PARAGRAPHS;
-  executable.maxAllocationParagraphs = REFERENCE_MAX_ALLOCATION_PARAGRAPHS;
-  executable.image = REFERENCE_IMAGE;
-  executable.relocations.assign(REFERENCE_RELOCATIONS.begin(), REFERENCE_RELOCATIONS.end());
-  return executable;
-}
-
 } // namespace Elite

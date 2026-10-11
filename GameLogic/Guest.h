@@ -3,29 +3,28 @@
 
 #include "GameState.h"
 #include "Hardware.h"
-#include "Pc.h"
+#include "Platform.h"
 
 #include <cstdint>
 
 namespace Elite
 {
 
-/// The machine as a hooked entry sees it (ADR-010): the program's registers and stack, beside the game's memory and devices that
-/// the routine behind the entry takes. One is made for each call of an entry, around the Pc that runs the program, and the
-/// GameState and the native Platform the host made for the whole run (Game). Only the entries the Dispatcher reaches have one
-/// (NativeRoutines.h): Start, which sets up the program's registers and stack, and the timer's and keyboard's interrupt
-/// handlers, which keep every register.
+/// What an entry of the program sees when the platform enters it (ADR-010): the game's memory and devices that the routine
+/// behind the entry takes, and the little the 8088 handed the original there. One is made for each call of an entry, around
+/// the GameState and the Platform the host made for the whole run (Game). Only the entries the platform reaches have one
+/// (NativeRoutines.h): Start, where DOS starts the program, and the timer's and keyboard's interrupt handlers.
 class Guest
 {
 public:
-  Guest(Machine::Pc& _pc, GameState& _state, Platform& _platform) noexcept
-    : m_pc(_pc),
+  Guest(Platform& _platform, GameState& _state) noexcept
+    : m_platform(_platform),
       m_state(_state),
-      m_hardware(_pc, _platform)
+      m_hardware(_platform)
   {
   }
 
-  /// The game's memory without the registers: what a de-assembled routine is given (ADR-012).
+  /// The game's memory: what a de-assembled routine is given (ADR-012).
   [[nodiscard]] GameState& State() noexcept
   {
     return m_state;
@@ -38,27 +37,26 @@ public:
     return m_hardware;
   }
 
-  [[nodiscard]] Machine::Registers& Regs() noexcept
+  /// The direction flag: what the code an interrupt handler interrupted left, and what DOS leaves for the program's start.
+  [[nodiscard]] bool Backward() const noexcept
   {
-    return m_pc.Processor().Regs();
+    return m_platform.Backward();
   }
 
-  /// Pushes _value on the program's stack, as PUSH does.
-  void Push(std::uint16_t _value) noexcept
+  /// The segment of the program's PSP: what DOS leaves in DS for the program's start.
+  [[nodiscard]] std::uint16_t PspSegment() const noexcept
   {
-    Machine::Registers& regs = Regs();
-    regs.sp = static_cast<std::uint16_t>(regs.sp - 2);
-    m_state.SetFarWord(regs.ss, regs.sp, _value);
+    return m_platform.PspSegment();
   }
 
-  /// Whether _flag (FLAG_* in Registers.h) is set: the direction flag the code an entry interrupts or is called from left.
-  [[nodiscard]] bool Flag(std::uint16_t _flag) const noexcept
+  /// BP as DOS leaves it for the program's start (Platform::ENTRY_BASE_POINTER).
+  [[nodiscard]] static constexpr std::uint16_t EntryBasePointer() noexcept
   {
-    return (m_pc.Processor().Regs().flags & _flag) != 0;
+    return Platform::ENTRY_BASE_POINTER;
   }
 
 private:
-  Machine::Pc& m_pc;
+  Platform& m_platform;
   GameState& m_state;
   Hardware m_hardware;
 };

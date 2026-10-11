@@ -3,7 +3,6 @@
 #include "Hardware.h"
 
 #include "Arithmetic.h"
-#include "Pc.h"
 
 #include <algorithm>
 #include <array>
@@ -16,16 +15,8 @@ namespace Elite
 namespace
 {
 
-constexpr std::uint16_t PIC_COMMAND_PORT = 0x20;
-constexpr std::uint8_t END_OF_INTERRUPT = 0x20;
-constexpr std::uint16_t PIT_CHANNEL_0_PORT = 0x40;
-constexpr std::uint16_t PIT_CHANNEL_2_PORT = 0x42;
-constexpr std::uint16_t PIT_COMMAND_PORT = 0x43;
-constexpr std::uint8_t PIT_CHANNEL_2_SQUARE_WAVE = 0xB6; // channel 2, low then high byte, mode 3
-constexpr std::uint16_t SYSTEM_CONTROL_PORT = 0x61;
-constexpr std::uint16_t KEYBOARD_DATA_PORT = 0x60;
-constexpr std::uint8_t KEYBOARD_ACKNOWLEDGE = 0x80; // port 61h bit 7, the XT's PB7
-constexpr std::uint16_t GAME_PORT = 0x201;
+constexpr std::uint8_t TIMER_CHANNEL_2_SQUARE_WAVE = 0xB6; // channel 2, low then high byte, mode 3
+constexpr std::uint8_t KEYBOARD_ACKNOWLEDGE = 0x80;        // port 61h bit 7, the XT's PB7
 
 constexpr std::uint8_t VIDEO_VECTOR = 0x10;
 constexpr std::uint8_t BIOS_KEYBOARD_VECTOR = 0x16;
@@ -33,264 +24,227 @@ constexpr std::uint8_t DOS_VECTOR = 0x21;
 constexpr std::uint8_t MOUSE_VECTOR = 0x33;
 constexpr std::uint8_t VIDEO_SET_MODE = 0x00;
 constexpr std::uint8_t BIOS_READ_KEY = 0x00;
-constexpr std::uint8_t BIOS_KEY_STATUS = 0x01;
-constexpr std::uint8_t DOS_PRINT_STRING = 0x09;
+constexpr std::uint8_t DOS_READ_LINE = 0x0C;
+constexpr std::uint8_t DOS_BUFFERED_INPUT = 0x0A;
 constexpr std::uint16_t MOUSE_RESET = 0x0000;
 constexpr std::uint16_t MOUSE_BUTTON_PRESSES = 0x0005;
-constexpr std::uint16_t MOUSE_MOTION = 0x000B;
 
-// A service operation: INT _vector with the registers _setInputs leaves (from the processor's own), and the registers the
-// service leaves returned. The processor's registers are then put back as they were, so the operation has no register effect
-// of its own.
-template <typename SetInputs> Machine::Registers CallService(Machine::Pc& _pc, std::uint8_t _vector, SetInputs _setInputs)
-{
-  Machine::Registers& regs = _pc.Processor().Regs();
-  const Machine::Registers kept = regs;
-  _setInputs(regs);
-  _pc.CallInterrupt(_vector);
-  const Machine::Registers left = regs;
-  regs = kept;
-  return left;
-}
+constexpr std::uint8_t CRTC_CURSOR_ADDRESS_HIGH = 0x0E;
+
+// DOS 3.30, as the emulated DOS was (ADR-006 item 3).
+constexpr std::uint8_t DOS_MAJOR_VERSION = 3;
+constexpr std::uint8_t DOS_MINOR_VERSION = 30;
 
 } // namespace
 
 std::uint8_t Hardware::SystemControl()
 {
-  return m_pc.Ports().In8(SYSTEM_CONTROL_PORT);
+  return m_platform.KeyboardController().SystemControl();
 }
 
 void Hardware::SetSystemControl(std::uint8_t _value)
 {
-  m_pc.Ports().Out8(SYSTEM_CONTROL_PORT, _value);
+  m_platform.NotePortWrites(1);
+  m_platform.KeyboardController().SetSystemControl(_value);
 }
 
 void Hardware::SetToneDivisor(std::uint16_t _divisor)
 {
-  m_pc.Ports().Out8(PIT_COMMAND_PORT, PIT_CHANNEL_2_SQUARE_WAVE);
-  m_pc.Ports().Out8(PIT_CHANNEL_2_PORT, Low(_divisor));
-  m_pc.Ports().Out8(PIT_CHANNEL_2_PORT, High(_divisor));
+  m_platform.NotePortWrites(3);
+  m_platform.Timer().Program(TIMER_CHANNEL_2_SQUARE_WAVE, _divisor);
 }
 
 void Hardware::SetTickDivisor(std::uint8_t _mode, std::uint16_t _divisor)
 {
-  m_pc.Ports().Out8(PIT_COMMAND_PORT, _mode);
-  m_pc.Ports().Out8(PIT_CHANNEL_0_PORT, Low(_divisor));
-  m_pc.Ports().Out8(PIT_CHANNEL_0_PORT, High(_divisor));
-  m_pc.TakeDueInterrupts();
+  m_platform.NotePortWrites(3);
+  m_platform.Timer().Program(_mode, _divisor);
+  m_platform.TakeDueInterrupts();
 }
 
 void Hardware::EndOfInterrupt()
 {
-  m_pc.Ports().Out8(PIC_COMMAND_PORT, END_OF_INTERRUPT);
-  m_pc.TakeDueInterrupts();
+  m_platform.NotePortWrites(1);
+  m_platform.Interrupts().EndOfInterrupt();
+  m_platform.TakeDueInterrupts();
 }
 
 void Hardware::EnableInterrupts()
 {
-  m_pc.Processor().Regs().flags |= Machine::FLAG_INTERRUPT;
-  m_pc.TakeDueInterrupts();
+  m_platform.EnableInterrupts();
+}
+
+void Hardware::DisableInterrupts() noexcept
+{
+  m_platform.DisableInterrupts();
 }
 
 void Hardware::LoopTurn(std::uint16_t _loop, std::initializer_list<std::uint16_t> _carried)
 {
-  std::array<std::uint16_t, Machine::Pc::MOST_TURN_WORDS> signature{};
+  std::array<std::uint16_t, Platform::MOST_TURN_WORDS> signature{};
   if (_carried.size() >= signature.size())
   {
     throw std::logic_error("Hardware::LoopTurn: more carried values than a turn signature holds");
   }
   signature[0] = _loop;
   std::ranges::copy(_carried, signature.begin() + 1);
-  m_pc.LoopTurn(std::span<const std::uint16_t>(signature.data(), _carried.size() + 1));
-}
-
-void Hardware::DisableInterrupts() noexcept
-{
-  m_pc.Processor().Regs().flags = static_cast<std::uint16_t>(m_pc.Processor().Regs().flags & ~Machine::FLAG_INTERRUPT);
+  m_platform.LoopTurn(std::span<const std::uint16_t>(signature.data(), _carried.size() + 1));
 }
 
 std::uint8_t Hardware::KeyboardData()
 {
-  return m_pc.Ports().In8(KEYBOARD_DATA_PORT);
+  return m_platform.KeyboardController().Data();
 }
 
 void Hardware::AcknowledgeKeyboard()
 {
-  const auto pulse = static_cast<std::uint8_t>(m_pc.Ports().In8(SYSTEM_CONTROL_PORT) | KEYBOARD_ACKNOWLEDGE);
-  m_pc.Ports().Out8(SYSTEM_CONTROL_PORT, pulse);
-  m_pc.Ports().Out8(SYSTEM_CONTROL_PORT, static_cast<std::uint8_t>(pulse & ~KEYBOARD_ACKNOWLEDGE));
+  Keyboard& keyboard = m_platform.KeyboardController();
+  const auto pulse = static_cast<std::uint8_t>(keyboard.SystemControl() | KEYBOARD_ACKNOWLEDGE);
+  keyboard.SetSystemControl(pulse);
+  keyboard.SetSystemControl(static_cast<std::uint8_t>(pulse & ~KEYBOARD_ACKNOWLEDGE));
+  m_platform.NotePortWrites(2);
 }
 
 std::uint8_t Hardware::GamePortButtons()
 {
-  return m_pc.Ports().In8(GAME_PORT);
+  return m_platform.Joystick().Read();
 }
+
+// The mouse driver's calls: the driver's when one is loaded; otherwise int 33h reaches what its vector names, the ROM's IRET,
+// and the registers come back as they went.
 
 MouseReset Hardware::ResetMouse()
 {
-  const Machine::Registers left = CallService(m_pc, MOUSE_VECTOR, [](Machine::Registers& _regs) { _regs.ax = MOUSE_RESET; });
-  return MouseReset{left.ax, left.bx};
+  Mouse& mouse = m_platform.MouseDriver();
+  if (!mouse.Present())
+  {
+    m_platform.SoftwareInterrupt(MOUSE_VECTOR);
+    return MouseReset{MOUSE_RESET, 0};
+  }
+  return mouse.Reset();
 }
 
 MousePresses Hardware::ReadMousePresses(std::uint16_t _button)
 {
-  const Machine::Registers left = CallService(m_pc, MOUSE_VECTOR,
-                                              [_button](Machine::Registers& _regs)
-                                              {
-                                                _regs.ax = MOUSE_BUTTON_PRESSES;
-                                                _regs.bx = _button;
-                                              });
-  return MousePresses{left.ax, left.bx, left.cx, left.dx};
+  Mouse& mouse = m_platform.MouseDriver();
+  if (!mouse.Present())
+  {
+    m_platform.SoftwareInterrupt(MOUSE_VECTOR);
+    return MousePresses{MOUSE_BUTTON_PRESSES, _button, 0, 0};
+  }
+  const std::optional<MousePresses> presses = mouse.Presses(_button);
+  if (!presses)
+  {
+    m_platform.Refuse(FaultKind::UnsupportedRequest, MOUSE_VECTOR, High(MOUSE_BUTTON_PRESSES), Low(MOUSE_BUTTON_PRESSES));
+  }
+  return *presses;
 }
 
 MouseMotion Hardware::ReadMouseMotion()
 {
-  const Machine::Registers left = CallService(m_pc, MOUSE_VECTOR, [](Machine::Registers& _regs) { _regs.ax = MOUSE_MOTION; });
-  return MouseMotion{left.cx, left.dx};
+  Mouse& mouse = m_platform.MouseDriver();
+  if (!mouse.Present())
+  {
+    m_platform.SoftwareInterrupt(MOUSE_VECTOR);
+    return MouseMotion{0, 0};
+  }
+  return mouse.Motion();
 }
 
 void Hardware::SetVideoMode(std::uint8_t _mode)
 {
-  CallService(m_pc, VIDEO_VECTOR, [_mode](Machine::Registers& _regs) { _regs.ax = Join(VIDEO_SET_MODE, _mode); });
+  if (!m_platform.BiosServices().SetMode(_mode))
+  {
+    m_platform.Refuse(FaultKind::UnsupportedRequest, VIDEO_VECTOR, VIDEO_SET_MODE, _mode);
+  }
 }
 
 void Hardware::PrintDosString(std::uint16_t _segment, std::uint16_t _offset)
 {
-  CallService(m_pc, DOS_VECTOR,
-              [_segment, _offset](Machine::Registers& _regs)
-              {
-                SetHigh(_regs.ax, DOS_PRINT_STRING);
-                _regs.ds = _segment;
-                _regs.dx = _offset;
-              });
+  m_platform.PrintDosString(_segment, _offset);
 }
 
 std::optional<std::uint16_t> Hardware::PeekBiosKey()
 {
-  const Machine::Registers left =
-    CallService(m_pc, BIOS_KEYBOARD_VECTOR, [](Machine::Registers& _regs) { SetHigh(_regs.ax, BIOS_KEY_STATUS); });
-  if ((left.flags & Machine::FLAG_ZERO) != 0)
-  {
-    return std::nullopt;
-  }
-  return left.ax;
+  return m_platform.BiosServices().PeekKey();
 }
 
 std::uint16_t Hardware::ReadBiosKey()
 {
-  return CallService(m_pc, BIOS_KEYBOARD_VECTOR, [](Machine::Registers& _regs) { SetHigh(_regs.ax, BIOS_READ_KEY); }).ax;
+  const std::optional<std::uint16_t> key = m_platform.BiosServices().ReadKey();
+  if (!key)
+  {
+    m_platform.Refuse(FaultKind::WouldBlock, BIOS_KEYBOARD_VECTOR, BIOS_READ_KEY, 0);
+  }
+  return *key;
 }
 
 // ── SaveLoad, StartUp, Timer and Input (level 4, group C) ──
 
-namespace
-{
-
-constexpr std::uint16_t CRTC_INDEX_PORT = 0x3D4;
-constexpr std::uint16_t CRTC_DATA_PORT = 0x3D5;
-constexpr std::uint8_t CRTC_CURSOR_ADDRESS_HIGH = 0x0E;
-constexpr std::uint16_t CGA_MODE_CONTROL_PORT = 0x3D8;
-constexpr std::uint16_t CGA_COLOR_SELECT_PORT = 0x3D9;
-constexpr std::uint16_t CGA_STATUS_PORT = 0x3DA;
-constexpr std::uint8_t VIDEO_SET_PALETTE = 0x0B;
-constexpr std::uint8_t VIDEO_PALETTE_SELECT = 0x01; // BH=1: BL picks mode 4's palette
-constexpr std::uint8_t TIMER_VECTOR = 0x08;
-constexpr std::uint16_t TIMER_VECTOR_OFFSET = TIMER_VECTOR * 4; // in the interrupt table at 0000:0000
-constexpr std::uint16_t TIMER_VECTOR_SEGMENT = TIMER_VECTOR_OFFSET + 2;
-constexpr std::uint8_t TIME_OF_DAY_VECTOR = 0x1A;
-constexpr std::uint8_t READ_CLOCK = 0x00;
-constexpr std::uint8_t SET_CLOCK = 0x01;
-constexpr std::uint16_t DOS_FLUSH_AND_READ_LINE = 0x0C0A; // AH=0Ch, flush the buffer, then AL=0Ah, buffered input
-
-} // namespace
-
 std::uint8_t Hardware::CgaStatus()
 {
-  return m_pc.Ports().In8(CGA_STATUS_PORT);
+  return m_platform.Video().ReadStatus();
 }
 
 void Hardware::SetColorSelect(std::uint8_t _value)
 {
-  m_pc.Ports().Out8(CGA_COLOR_SELECT_PORT, _value);
+  m_platform.NotePortWrites(1);
+  m_platform.Video().SetColorSelect(_value);
 }
 
 void Hardware::SetCursorAddressHigh(std::uint8_t _value)
 {
-  m_pc.Ports().Out8(CRTC_INDEX_PORT, CRTC_CURSOR_ADDRESS_HIGH);
-  m_pc.Ports().Out8(CRTC_DATA_PORT, _value);
+  m_platform.NotePortWrites(2);
+  m_platform.Video().WriteCrtc(CRTC_CURSOR_ADDRESS_HIGH, _value);
 }
 
 void Hardware::SetModeControl(std::uint8_t _value)
 {
-  m_pc.Ports().Out8(CGA_MODE_CONTROL_PORT, _value);
+  m_platform.NotePortWrites(1);
+  m_platform.Video().SetModeControl(_value);
 }
 
 void Hardware::SelectPalette(std::uint8_t _palette)
 {
-  CallService(m_pc, VIDEO_VECTOR,
-              [_palette](Machine::Registers& _regs)
-              {
-                SetHigh(_regs.ax, VIDEO_SET_PALETTE);
-                _regs.bx = Join(VIDEO_PALETTE_SELECT, _palette);
-              });
+  m_platform.BiosServices().SelectPalette(_palette);
 }
 
-void Hardware::FireGamePort(std::uint8_t _value)
+void Hardware::FireGamePort(std::uint8_t /*_value*/)
 {
-  m_pc.Ports().Out8(GAME_PORT, _value);
+  m_platform.NotePortWrites(1);
+  m_platform.Joystick().Fire();
 }
 
 std::uint8_t Hardware::GamePortOneShots()
 {
-  return m_pc.Ports().In8(GAME_PORT);
+  return m_platform.Joystick().Read();
 }
 
-void Hardware::CountInstructionCycles(Machine::Cycles _cycles) noexcept
+void Hardware::CountInstructionCycles(Cycles _cycles) noexcept
 {
-  m_pc.CountInstructionCycles(_cycles);
+  m_platform.CountInstructionCycles(_cycles);
 }
 
 BiosClock Hardware::ReadBiosClock()
 {
-  const Machine::Registers left = CallService(m_pc, TIME_OF_DAY_VECTOR, [](Machine::Registers& _regs) { SetHigh(_regs.ax, READ_CLOCK); });
-  return BiosClock{(std::uint32_t{left.cx} << 16) | left.dx, Low(left.ax)};
+  return m_platform.BiosServices().ReadClock();
 }
 
 void Hardware::SetBiosClock(std::uint32_t _ticks)
 {
-  CallService(m_pc, TIME_OF_DAY_VECTOR,
-              [_ticks](Machine::Registers& _regs)
-              {
-                SetHigh(_regs.ax, SET_CLOCK);
-                _regs.cx = static_cast<std::uint16_t>(_ticks >> 16);
-                _regs.dx = static_cast<std::uint16_t>(_ticks);
-              });
+  m_platform.BiosServices().SetClock(_ticks);
 }
 
 void Hardware::RunBiosTimerTick(std::uint16_t _segment, std::uint16_t _offset)
 {
-  Machine::Memory& memory = m_pc.Ram();
-  const std::uint16_t offset = memory.Read16(0, TIMER_VECTOR_OFFSET);
-  const std::uint16_t segment = memory.Read16(0, TIMER_VECTOR_SEGMENT);
-  memory.Write16(0, TIMER_VECTOR_OFFSET, _offset);
-  memory.Write16(0, TIMER_VECTOR_SEGMENT, _segment);
-  m_pc.CallInterrupt(TIMER_VECTOR);
-  memory.Write16(0, TIMER_VECTOR_OFFSET, offset);
-  memory.Write16(0, TIMER_VECTOR_SEGMENT, segment);
+  m_platform.CallHandler(FarAddress{_segment, _offset});
 }
 
-void Hardware::ReadDosLine(std::uint16_t _segment, std::uint16_t _offset)
+void Hardware::ReadDosLine(std::uint16_t /*_segment*/, std::uint16_t /*_offset*/)
 {
-  CallService(m_pc, DOS_VECTOR,
-              [_segment, _offset](Machine::Registers& _regs)
-              {
-                _regs.ax = DOS_FLUSH_AND_READ_LINE;
-                _regs.ds = _segment;
-                _regs.dx = _offset;
-              });
+  m_platform.Refuse(FaultKind::WouldBlock, DOS_VECTOR, DOS_READ_LINE, DOS_BUFFERED_INPUT);
 }
 
-// DOS's file services, native (D27): the platform's DosFiles. A stamp is DOS's time at the machine's clock, as the emulated
+// DOS's file services, native (D27): the platform's DosFiles. A stamp is DOS's time at the platform's clock, as the emulated
 // DOS's was.
 
 void Hardware::SetDiskTransferArea(std::uint16_t _segment, std::uint16_t _offset)
@@ -310,7 +264,7 @@ DosAnswer Hardware::SetFileAttributes(std::uint16_t _segment, std::uint16_t _nam
 
 DosAnswer Hardware::CreateFile(std::uint16_t _segment, std::uint16_t _name, std::uint16_t _attributes)
 {
-  return m_platform.Files().Create(_segment, _name, _attributes, m_pc.Clock());
+  return m_platform.Files().Create(_segment, _name, _attributes, m_platform.Clock());
 }
 
 DosAnswer Hardware::OpenFile(std::uint16_t _segment, std::uint16_t _name, std::uint8_t _access)
@@ -325,7 +279,7 @@ DosAnswer Hardware::ReadFile(std::uint16_t _handle, std::uint16_t _segment, std:
 
 DosAnswer Hardware::WriteFile(std::uint16_t _handle, std::uint16_t _segment, std::uint16_t _buffer, std::uint16_t _bytes)
 {
-  return m_platform.Files().Write(_handle, _segment, _buffer, _bytes, m_pc.Clock());
+  return m_platform.Files().Write(_handle, _segment, _buffer, _bytes, m_platform.Clock());
 }
 
 DosAnswer Hardware::CloseFile(std::uint16_t _handle)
@@ -352,30 +306,47 @@ DosAnswer Hardware::FindNextFile()
 
 void Hardware::Spend(const PacingPoint& _point)
 {
-  m_pc.Spend(_point.cycles);
+  m_platform.Spend(_point.cycles);
 }
 
 // ── Start, GameLoop and RunFlight (level 5, group F) ──
 
-namespace
+DosVersion Hardware::ReadDosVersion(std::uint8_t /*_al*/)
 {
-
-constexpr std::uint8_t DOS_GET_TIME = 0x2C;
-constexpr std::uint8_t DOS_GET_VERSION = 0x30;
-
-} // namespace
-
-DosVersion Hardware::ReadDosVersion(std::uint8_t _al)
-{
-  const Machine::Registers left =
-    CallService(m_pc, DOS_VECTOR, [_al](Machine::Registers& _regs) { _regs.ax = Join(DOS_GET_VERSION, _al); });
-  return DosVersion{Low(left.ax), High(left.ax)};
+  return DosVersion{DOS_MAJOR_VERSION, DOS_MINOR_VERSION};
 }
 
 DosTime Hardware::ReadDosTime()
 {
-  const Machine::Registers left = CallService(m_pc, DOS_VECTOR, [](Machine::Registers& _regs) { SetHigh(_regs.ax, DOS_GET_TIME); });
-  return DosTime{High(left.cx), Low(left.cx), High(left.dx), Low(left.dx)};
+  const DosDateTime now = m_platform.Files().Now(m_platform.Clock());
+  return DosTime{now.hour, now.minute, now.second, now.hundredths};
+}
+
+// ── What the emulated PC kept in memory, outside the game's (D33) ──
+
+FarAddress Hardware::InterruptVector(std::uint8_t _vector)
+{
+  return m_platform.InterruptVector(_vector);
+}
+
+void Hardware::SetInterruptVector(std::uint8_t _vector, FarAddress _handler)
+{
+  m_platform.SetInterruptVector(_vector, _handler);
+}
+
+std::uint8_t Hardware::RomByte(std::uint16_t _segment, std::uint16_t _offset)
+{
+  return m_platform.RomByte(FarAddress{_segment, _offset});
+}
+
+std::uint8_t Hardware::HandlerOpcode(FarAddress _handler)
+{
+  return m_platform.HandlerOpcode(_handler);
+}
+
+std::string_view Hardware::CommandTail() const noexcept
+{
+  return m_platform.CommandTail();
 }
 
 } // namespace Elite

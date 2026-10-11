@@ -3,7 +3,7 @@
 
 #include "DirectoryFileStore.h"
 #include "Game.h"
-#include "Pc.h"
+#include "Platform.h"
 #include "Reference.h"
 
 #include <memory>
@@ -51,16 +51,15 @@ private:
   std::filesystem::path m_path;
 };
 
-/// The reference loaded on a PC in paced time (ADR-008), as replays run it and the game does: from its generated image
-/// (D3), the PSP where DOSBox-X puts it, the clock starting at midnight on 1 January 1980 unless _startMoment says
-/// otherwise, DOS's files in a scratch directory, and the native routines in place of the program's code on a
-/// Dispatcher, which interprets nothing (ADR-011). A Game holds the PC and the GameState that owns the game's memory
-/// (D19). A load that fails fails the test that made the rig.
+/// The reference loaded on the native platform in paced time (ADR-008), as replays run it and the game does: from its
+/// generated image (D3), the PSP where DOSBox-X puts it, the clock starting at midnight on 1 January 1980 unless
+/// _startMoment says otherwise, DOS's files in a scratch directory, and the native routines where the program's entries are
+/// (D33). A Game holds the platform and the GameState that owns the game's memory (D19). A load that fails fails the test
+/// that made the rig.
 class ReferenceRig
 {
 public:
-  explicit ReferenceRig(std::string_view _name, const Machine::Dos::DateTime& _startMoment = Elite::START_MOMENT,
-                        bool _mousePresent = false)
+  explicit ReferenceRig(std::string_view _name, const Elite::DosDateTime& _startMoment = Elite::START_MOMENT, bool _mousePresent = false)
     : m_directory(_name),
       m_files(m_directory.Path()),
       m_game(std::make_unique<Elite::Game>(m_files, Desc(_startMoment, _mousePresent)))
@@ -69,17 +68,18 @@ public:
     Assert::IsTrue(m_game->Load(Elite::PSP_SEGMENT), L"the reference loads from its generated image");
   }
 
-  [[nodiscard]] Machine::Pc& Host() noexcept
+  /// The platform the game runs on.
+  [[nodiscard]] Elite::Platform& Host() noexcept
   {
     return m_game->Host();
   }
 
-  [[nodiscard]] const Machine::Pc& Host() const noexcept
+  [[nodiscard]] const Elite::Platform& Host() const noexcept
   {
     return m_game->Host();
   }
 
-  /// The game's memory, which the PC maps.
+  /// The game's memory, which the platform runs on.
   [[nodiscard]] Elite::GameState& State() noexcept
   {
     return m_game->State();
@@ -90,17 +90,6 @@ public:
     return m_game->State();
   }
 
-  /// The native platform the game's devices are moving to (D27): DOS's file services among them.
-  [[nodiscard]] Elite::Platform& NativePlatform() noexcept
-  {
-    return m_game->NativePlatform();
-  }
-
-  [[nodiscard]] const Machine::LoadedProgram& Program() const noexcept
-  {
-    return m_game->Program();
-  }
-
   /// Where DOS's files are.
   [[nodiscard]] const std::filesystem::path& Files() const noexcept
   {
@@ -108,22 +97,22 @@ public:
   }
 
   /// The store DOS keeps its files in, over Files(): what a replay's file steps copy into.
-  [[nodiscard]] Machine::DirectoryFileStore& Store() noexcept
+  [[nodiscard]] Elite::DirectoryFileStore& Store() noexcept
   {
     return m_files;
   }
 
 private:
-  [[nodiscard]] static Machine::Pc::Desc Desc(const Machine::Dos::DateTime& _startMoment, bool _mousePresent) noexcept
+  [[nodiscard]] static Elite::Platform::Desc Desc(const Elite::DosDateTime& _startMoment, bool _mousePresent)
   {
-    Machine::Pc::Desc desc;
+    Elite::Platform::Desc desc;
     desc.startMoment = _startMoment;
     desc.mousePresent = _mousePresent;
     return desc;
   }
 
   ScratchDirectory m_directory;
-  Machine::DirectoryFileStore m_files;
+  Elite::DirectoryFileStore m_files;
   std::unique_ptr<Elite::Game> m_game;
 };
 

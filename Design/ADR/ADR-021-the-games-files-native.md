@@ -1,6 +1,6 @@
 # ADR-021 — The game's files native, on a Platform the Game owns (D27)
 
-**Status:** accepted 2026-10-11, with the change that implements it: `Elite::Platform` and `Elite::DosFiles`, and `Hardware`'s file operations moved off the emulated DOS. It is Phase 5's step 1 (D27). D33 then replaced the rest of D27's steps with its route, and this step stays ([Reverse-Engineering-Plan.md §5](../Reverse-Engineering-Plan.md#phase-5--beyond-the-original-outside-this-plan)).
+**Status:** accepted 2026-10-11, with the change that implements it: `Elite::Platform` and `Elite::DosFiles`, and `Hardware`'s file operations moved off the emulated DOS. It is Phase 5's step 1 (D27). D33 then replaced the rest of D27's steps with its route, and this step stays ([Reverse-Engineering-Plan.md §5](../Reverse-Engineering-Plan.md#phase-5--beyond-the-original-outside-this-plan)). **Amended 2026-10-11 by [ADR-023](ADR-023-the-platform-swap.md):** what item 7 left, `FileStore` and DOS's clock, moved into `GameLogic` with the swap.
 
 ## Context
 

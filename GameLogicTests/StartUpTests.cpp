@@ -1,7 +1,6 @@
 #include "pch.h"
 
 #include "DataOverlay.h"
-#include "Firmware.h"
 #include "TwinRig.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -18,19 +17,17 @@ constexpr std::uint16_t BIOS_KEY_Q = 0x1071;
 // Sets the byte _field to _value on the twin.
 void SetBoth(TwinRig& _rig, Elite::DataField<std::uint8_t> _field, std::uint8_t _value)
 {
-  _rig.Both([_field, _value](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-            { _pc.Ram().Write8(Elite::DataSegment(_program), _field.offset, _value); });
+  _rig.Both([_field, _value](Elite::Platform&, Elite::GameState& _state) { _state.SetByte(_field.offset, _value); });
 }
 
 // The twin is back at the title, out of flight.
 void AssertAtTheTitle(TwinRig& _rig)
 {
   _rig.Both(
-    [](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
+    [](Elite::Platform&, Elite::GameState& _state)
     {
-      const std::uint16_t data = Elite::DataSegment(_program);
-      Assert::AreEqual(std::uint8_t{0}, _pc.Ram().Read8(data, Elite::DS.titleShown.offset), L"the title runs again");
-      Assert::AreEqual(std::uint8_t{0}, _pc.Ram().Read8(data, Elite::DS.inFlight.offset), L"out of flight");
+      Assert::AreEqual(std::uint8_t{0}, _state.Byte(Elite::DS.titleShown.offset), L"the title runs again");
+      Assert::AreEqual(std::uint8_t{0}, _state.Byte(Elite::DS.inFlight.offset), L"out of flight");
     });
 }
 
@@ -45,19 +42,10 @@ public:
   // WipeProgram and ExitToDos, to the end of the program.
   TEST_METHOD(StartAgreesLateInAMinuteAndOnTheWayOut)
   {
-    TwinRig twin("TwinStartAndExit", {.startMoment = Machine::Dos::DateTime{1980, 1, 1, 0, 0, 55, 0}, .fromPowerOn = true});
+    TwinRig twin("TwinStartAndExit", {.startMoment = Elite::DosDateTime{1980, 1, 1, 0, 0, 55, 0}, .fromPowerOn = true});
     twin.Play("wait 3\ndigest title\nkey space; wait 3.2\nkey Escape; wait 0.2\nkey e; wait 0.2\ndigest exit-asked");
-    twin.Both(
-      [](Machine::Pc& _pc, const Machine::LoadedProgram&)
-      {
-        using Machine::Firmware;
-        Machine::Memory& ram = _pc.Ram();
-        const std::uint16_t tail = ram.Read16(Firmware::DATA_SEGMENT, Firmware::KEYBOARD_TAIL);
-        const auto next = static_cast<std::uint16_t>(tail + 2 == Firmware::KEYBOARD_BUFFER_END ? Firmware::KEYBOARD_BUFFER : tail + 2);
-        ram.Write16(Firmware::DATA_SEGMENT, tail, BIOS_KEY_Q);
-        ram.Write16(Firmware::DATA_SEGMENT, Firmware::KEYBOARD_TAIL, next);
-      });
-    twin.Play("key y; wait 0.5", Machine::StopReason::Terminated);
+    twin.Both([](Elite::Platform& _platform, Elite::GameState&) { _platform.BiosServices().InsertKey(BIOS_KEY_Q); });
+    twin.Play("key y; wait 0.5", Elite::StopReason::Terminated);
   }
 
   // GameLoop after a death: RunFlight returns 40 frames after GAME OVER, and the title runs

@@ -4,7 +4,7 @@
 
 #include "FileStore.h"
 #include "Outcome.h"
-#include "Pc.h"
+#include "Platform.h"
 #include "StateDigest.h"
 
 #include <algorithm>
@@ -234,7 +234,7 @@ bool ParseStep(std::string_view _text, std::size_t _line, std::vector<Step>& _st
   else if (isFile)
   {
     std::string canonical;
-    if (Machine::FileStore::CanonicalName(words[1], canonical) != Machine::DosError::None)
+    if (FileStore::CanonicalName(words[1], canonical) != DosError::None)
       return failure("a file's copy is named with a DOS 8.3 name");
     if (!IsBareFileName(words[2]))
       return failure("file copies a file beside the replay, named without a directory");
@@ -387,52 +387,52 @@ bool RecordCheckpoints(std::string_view _text, const std::map<std::size_t, Check
   return true;
 }
 
-Checkpoint TakeCheckpoint(const GameState& _state, const Machine::Cga& _video)
+Checkpoint TakeCheckpoint(const GameState& _state, const Cga& _video)
 {
   return Checkpoint{GameStateDigest(_state, _video), PictureDigest(_state, _video), OutcomeText(_state)};
 }
 
-Machine::StopReason ExpectedStop(const Step& _step) noexcept
+StopReason ExpectedStop(const Step& _step) noexcept
 {
-  return _step.kind == StepKind::End ? Machine::StopReason::Terminated : Machine::StopReason::Reached;
+  return _step.kind == StepKind::End ? StopReason::Terminated : StopReason::Reached;
 }
 
-ReplayPlayer::ReplayPlayer(Machine::Pc& _pc, const GameState& _state) noexcept
-  : m_pc(_pc),
+ReplayPlayer::ReplayPlayer(Platform& _platform, const GameState& _state) noexcept
+  : m_platform(_platform),
     m_state(_state),
-    m_start(_pc.Clock())
+    m_start(_platform.Clock())
 {
 }
 
-ReplayPlayer::ReplayPlayer(Machine::Pc& _pc, const GameState& _state, Machine::FileStore& _files, std::filesystem::path _sources)
-  : m_pc(_pc),
+ReplayPlayer::ReplayPlayer(Platform& _platform, const GameState& _state, FileStore& _files, std::filesystem::path _sources)
+  : m_platform(_platform),
     m_state(_state),
     m_files(&_files),
     m_sources(std::move(_sources)),
-    m_start(_pc.Clock())
+    m_start(_platform.Clock())
 {
 }
 
-Machine::StopReason ReplayPlayer::Play(const Step& _step, Checkpoint& _checkpoint)
+StopReason ReplayPlayer::Play(const Step& _step, Checkpoint& _checkpoint)
 {
   switch (_step.kind)
   {
   case StepKind::Wait:
   case StepKind::End:
     m_elapsedMilliseconds += _step.waitMilliseconds;
-    return m_pc.RunUntil(ReplayCycle(m_start, m_elapsedMilliseconds));
+    return m_platform.RunUntil(ReplayCycle(m_start, m_elapsedMilliseconds));
   case StepKind::Key:
-    m_pc.KeyboardController().Inject(_step.scanCode);
-    m_pc.KeyboardController().Inject(static_cast<std::uint8_t>(_step.scanCode | BREAK_BIT));
+    m_platform.KeyboardController().Inject(_step.scanCode);
+    m_platform.KeyboardController().Inject(static_cast<std::uint8_t>(_step.scanCode | BREAK_BIT));
     break;
   case StepKind::Down:
-    m_pc.KeyboardController().Inject(_step.scanCode);
+    m_platform.KeyboardController().Inject(_step.scanCode);
     break;
   case StepKind::Up:
-    m_pc.KeyboardController().Inject(static_cast<std::uint8_t>(_step.scanCode | BREAK_BIT));
+    m_platform.KeyboardController().Inject(static_cast<std::uint8_t>(_step.scanCode | BREAK_BIT));
     break;
   case StepKind::Digest:
-    _checkpoint = TakeCheckpoint(m_state, m_pc.Video());
+    _checkpoint = TakeCheckpoint(m_state, m_platform.Video());
     break;
   case StepKind::File:
     CopyFile(_step);
@@ -440,7 +440,7 @@ Machine::StopReason ReplayPlayer::Play(const Step& _step, Checkpoint& _checkpoin
   case StepKind::Shot:
     break;
   }
-  return Machine::StopReason::Reached;
+  return StopReason::Reached;
 }
 
 void ReplayPlayer::CopyFile(const Step& _step)
@@ -460,15 +460,15 @@ void ReplayPlayer::CopyFile(const Step& _step)
 
   // Created, then its attributes cleared, as SaveCommanderFile leaves the game's own saves: the loader refuses
   // a file with any attribute set. The stamp is the store's default, DOS's earliest moment.
-  const Machine::FileStamp stamp;
-  std::unique_ptr<Machine::OpenFile> file;
-  if (m_files->Create(_step.name, 0, stamp, file) != Machine::DosError::None)
+  const FileStamp stamp;
+  std::unique_ptr<OpenFile> file;
+  if (m_files->Create(_step.name, 0, stamp, file) != DosError::None)
     FailFileStep(_step, "the DOS directory refuses to create it");
   std::uint32_t written = 0;
-  if (file->Write(bytes, stamp, written) != Machine::DosError::None || written != bytes.size())
+  if (file->Write(bytes, stamp, written) != DosError::None || written != bytes.size())
     FailFileStep(_step, "the DOS directory refuses to write it");
   file.reset();
-  if (m_files->SetAttribute(_step.name, 0) != Machine::DosError::None)
+  if (m_files->SetAttribute(_step.name, 0) != DosError::None)
     FailFileStep(_step, "the DOS directory refuses to clear its attributes");
 }
 

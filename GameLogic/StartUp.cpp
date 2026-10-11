@@ -24,15 +24,11 @@ namespace
 constexpr std::uint16_t DIVIDE_OVERFLOW_INTERRUPT = 0x025E;
 constexpr std::uint16_t KEYBOARD_INTERRUPT = 0x0201;
 
-// The interrupt table's words, at 0000:vector*4.
-constexpr std::uint16_t DIVIDE_VECTOR_OFFSET = 0x0000;
-constexpr std::uint16_t DIVIDE_VECTOR_SEGMENT = 0x0002;
-constexpr std::uint16_t TIMER_VECTOR_SEGMENT = 0x0022;
-constexpr std::uint16_t KEYBOARD_VECTOR_OFFSET = 0x0024;
-constexpr std::uint16_t KEYBOARD_VECTOR_SEGMENT = 0x0026;
+// The vectors the game installs its own handlers on: the divide trap, the timer's tick and the keyboard.
+constexpr std::uint8_t DIVIDE_VECTOR = 0x00;
+constexpr std::uint8_t TIMER_VECTOR = 0x08;
+constexpr std::uint8_t KEYBOARD_VECTOR = 0x09;
 
-constexpr std::uint16_t COMMAND_TAIL = 0x80; // in the PSP: its length, then the text
-constexpr std::uint16_t COMMAND_TAIL_TEXT = 0x81;
 constexpr std::uint8_t CHEAT_KEY = 0xAA;
 constexpr std::uint8_t CHEAT_ARGUMENT_BYTES = 6; // ' cheat'
 
@@ -61,17 +57,11 @@ constexpr std::uint16_t UPPER_CASE_LOOP = 0x0529;
 constexpr std::uint16_t CREDITS_LINE = 0x8F0E;
 constexpr std::uint16_t CREDITS_WAIT = 0x8F2B;
 
-constexpr std::uint16_t CRITICAL_ERROR_VECTOR_OFFSET = 0x0090; // int 24h
-constexpr std::uint16_t CRITICAL_ERROR_VECTOR_SEGMENT = 0x0092;
+constexpr std::uint8_t CRITICAL_ERROR_VECTOR = 0x24;
 constexpr std::uint16_t AMSTRAD_ROM_SEGMENT = 0xFC00;
 constexpr std::uint16_t AMSTRAD_ROM_SIGNATURE = 0x0016;
 constexpr std::uint16_t AMSTRAD_SIGNATURE_BYTES = 7;
 constexpr std::uint8_t VIDEO_MODE_TEXT_80 = 0x02; // 80x25 text
-// The interrupt table's segment, 0000h: where InstallDivideAndKeyboardInterrupts finds it, in the ES InstallTimerInterrupt leaves
-// (XOR AX,AX / MOV ES,AX) and CopyProtection keeps, and where Start puts int 24h's handler round a disk request (XOR BX,BX /
-// MOV ES,BX).
-constexpr std::uint16_t INTERRUPT_TABLE_SEGMENT = 0;
-
 // WipeProgram: the code segment from just past it to the end of the program.
 constexpr std::uint16_t WIPE_FIRST = 0x0564;
 constexpr std::uint16_t WIPE_END = 0x8F31;
@@ -115,47 +105,48 @@ void ExitToDos(GameState& _state, Hardware& _hardware)
 
 } // namespace
 
-void InstallDivideAndKeyboardInterrupts(GameState& _state, Hardware& _hardware, std::uint16_t _vectors)
+void InstallDivideAndKeyboardInterrupts(GameState& _state, Hardware& _hardware)
 {
-  _state.SetWord(DS.savedDivideVector.offset, _state.FarWord(_vectors, DIVIDE_VECTOR_OFFSET));
-  _state.Set(DS.data226D, _state.FarWord(_vectors, DIVIDE_VECTOR_SEGMENT));
-  _state.SetWord(DS.savedKeyboardVector.offset, _state.FarWord(_vectors, KEYBOARD_VECTOR_OFFSET));
-  _state.Set(DS.data2271, _state.FarWord(_vectors, KEYBOARD_VECTOR_SEGMENT));
+  // The BIOS's int 0 and int 9 kept in the data segment, offset then segment.
+  const FarAddress divide = _hardware.InterruptVector(DIVIDE_VECTOR);
+  const FarAddress keyboard = _hardware.InterruptVector(KEYBOARD_VECTOR);
+  _state.SetWord(DS.savedDivideVector.offset, divide.offset);
+  _state.Set(DS.data226D, divide.segment);
+  _state.SetWord(DS.savedKeyboardVector.offset, keyboard.offset);
+  _state.Set(DS.data2271, keyboard.segment);
+  // With interrupts off, the game's own handlers installed, and int 8's segment written again.
   _hardware.DisableInterrupts();
-  _state.SetFarWord(_vectors, DIVIDE_VECTOR_OFFSET, DIVIDE_OVERFLOW_INTERRUPT);
-  _state.SetFarWord(_vectors, KEYBOARD_VECTOR_OFFSET, KEYBOARD_INTERRUPT);
   const std::uint16_t code = _state.CodeSegment();
-  _state.SetFarWord(_vectors, DIVIDE_VECTOR_SEGMENT, code);
-  _state.SetFarWord(_vectors, TIMER_VECTOR_SEGMENT, code);
-  _state.SetFarWord(_vectors, KEYBOARD_VECTOR_SEGMENT, code);
+  _hardware.SetInterruptVector(DIVIDE_VECTOR, FarAddress{code, DIVIDE_OVERFLOW_INTERRUPT});
+  _hardware.SetInterruptVector(KEYBOARD_VECTOR, FarAddress{code, KEYBOARD_INTERRUPT});
+  _hardware.SetInterruptVector(TIMER_VECTOR, FarAddress{code, _hardware.InterruptVector(TIMER_VECTOR).offset});
   _hardware.EnableInterrupts();
   ResetKeyboard(_state, _hardware);
 }
 
 void RestoreDivideAndKeyboardInterrupts(GameState& _state, Hardware& _hardware)
 {
-  // The interrupt table at 0000:0000.
+  // With interrupts off, the BIOS's int 9 and int 0 put back from what InstallDivideAndKeyboardInterrupts kept.
   _hardware.DisableInterrupts();
-  _state.SetFarWord(0, KEYBOARD_VECTOR_SEGMENT, _state.Get(DS.data2271));
-  _state.SetFarWord(0, KEYBOARD_VECTOR_OFFSET, _state.Word(DS.savedKeyboardVector.offset));
-  _state.SetFarWord(0, DIVIDE_VECTOR_SEGMENT, _state.Get(DS.data226D));
-  _state.SetFarWord(0, DIVIDE_VECTOR_OFFSET, _state.Word(DS.savedDivideVector.offset));
+  _hardware.SetInterruptVector(KEYBOARD_VECTOR, FarAddress{_state.Get(DS.data2271), _state.Word(DS.savedKeyboardVector.offset)});
+  _hardware.SetInterruptVector(DIVIDE_VECTOR, FarAddress{_state.Get(DS.data226D), _state.Word(DS.savedDivideVector.offset)});
   _hardware.EnableInterrupts();
 }
 
-void CheckCheatArgument(GameState& _state)
+void CheckCheatArgument(GameState& _state, const Hardware& _hardware)
 {
   _state.Set(DS.cheatEnabled, 0);
-  // The command tail in the PSP: its length, then the text, which cheatArgumentKey holds XORed with AAh.
-  const std::uint16_t psp = _state.Get(DS.pspSegment);
-  if (_state.FarByte(psp, COMMAND_TAIL) != CHEAT_ARGUMENT_BYTES)
+  // The command tail DOS gave the program, which the original reads from its PSP: its length, then the text, which
+  // cheatArgumentKey holds XORed with AAh.
+  const std::string_view tail = _hardware.CommandTail();
+  if (tail.size() != CHEAT_ARGUMENT_BYTES)
   {
     return;
   }
   for (std::uint16_t at = 0; at < CHEAT_ARGUMENT_BYTES; ++at)
   {
     const auto expected = static_cast<std::uint8_t>(_state.Byte(Offset(DS.cheatArgumentKey.offset, at)) ^ CHEAT_KEY);
-    if (_state.FarByte(psp, Offset(COMMAND_TAIL_TEXT, at)) != expected)
+    if (static_cast<std::uint8_t>(tail[at]) != expected)
     {
       return;
     }
@@ -274,7 +265,7 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _psp, std::uint
   for (std::uint16_t at = 0; bytesLeft != 0;)
   {
     const bool same =
-      _state.Byte(Offset(DS.amstradSignature.offset, at)) == _state.FarByte(AMSTRAD_ROM_SEGMENT, Offset(AMSTRAD_ROM_SIGNATURE, at));
+      _state.Byte(Offset(DS.amstradSignature.offset, at)) == _hardware.RomByte(AMSTRAD_ROM_SEGMENT, Offset(AMSTRAD_ROM_SIGNATURE, at));
     ++at;
     --bytesLeft;
     if (!same)
@@ -298,8 +289,8 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _psp, std::uint
     (void)_hardware.ReadDosTime();
     InstallTimerInterrupt(_state, _hardware);
     CopyProtection(_state, _hardware);
-    InstallDivideAndKeyboardInterrupts(_state, _hardware, INTERRUPT_TABLE_SEGMENT);
-    CheckCheatArgument(_state);
+    InstallDivideAndKeyboardInterrupts(_state, _hardware);
+    CheckCheatArgument(_state, _hardware);
     const GameLoopExit loopExit = GameLoop(_state, _hardware, countIfNone, backward);
     countIfNone = loopExit.countLeft;
     backward = loopExit.backward;
@@ -314,16 +305,13 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _psp, std::uint
       ExitToDos(_state, _hardware);
       return;
     }
-    // The request, with the game's own critical-error handler on int 24h: the vector's two words pushed, and popped back segment
-    // first. A listing searches with the attributes RestoreTimerInterrupt leaves in CX.
+    // The request, with the game's own critical-error handler on int 24h, and the handler that was there put back after it.
+    // A listing searches with the attributes RestoreTimerInterrupt leaves in CX.
     _state.Set(DS.diskError, 0);
-    const std::uint16_t savedOffset = _state.FarWord(INTERRUPT_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_OFFSET);
-    const std::uint16_t savedSegment = _state.FarWord(INTERRUPT_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_SEGMENT);
-    _state.SetFarWord(INTERRUPT_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_OFFSET, CRITICAL_ERROR_INTERRUPT);
-    _state.SetFarWord(INTERRUPT_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_SEGMENT, _state.CodeSegment());
+    const FarAddress criticalError = _hardware.InterruptVector(CRITICAL_ERROR_VECTOR);
+    _hardware.SetInterruptVector(CRITICAL_ERROR_VECTOR, FarAddress{_state.CodeSegment(), CRITICAL_ERROR_INTERRUPT});
     PerformDiskRequest(_state, _hardware, request, ClockLessADayHigh(clock));
-    _state.SetFarWord(INTERRUPT_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_SEGMENT, savedSegment);
-    _state.SetFarWord(INTERRUPT_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_OFFSET, savedOffset);
+    _hardware.SetInterruptVector(CRITICAL_ERROR_VECTOR, criticalError);
     // JMP RestartPlay: the next turn reads BP, in GameLoop, before it writes it.
     _hardware.LoopTurn(RESTART_PLAY, {countIfNone});
   }
@@ -407,24 +395,17 @@ void ShowCredits(GameState& _state, Hardware& _hardware, bool _backward)
 
 void StartEntry(Guest& _guest)
 {
-  Machine::Registers& regs = _guest.Regs();
-  // MOV AX,DS / PUSH AX / XOR BX,BX / PUSH BX: the far return to PSP:0000, where INT 20h ends the program, which the hook's RETF
-  // takes once Start returns. Then MOV BX,<data> / MOV DS,BX.
-  const std::uint16_t psp = regs.ds;
-  regs.ax = psp;
-  _guest.Push(psp);
-  regs.bx = 0;
-  _guest.Push(regs.bx);
-  regs.bx = _guest.State().DataSegment();
-  regs.ds = regs.bx;
-  Start(_guest.State(), _guest.Devices(), psp, regs.bp, _guest.Flag(Machine::FLAG_DIRECTION));
+  // DOS leaves the PSP's segment in DS, which the original saves in pspSegment, and BP and the direction flag as Start takes
+  // them. Its first instructions push the far return to PSP:0000, where DOS's INT 20h ends the program, for its RETF to take
+  // once Start returns; on the platform the program ends when Start returns.
+  Start(_guest.State(), _guest.Devices(), _guest.PspSegment(), Guest::EntryBasePointer(), _guest.Backward());
 }
 
 namespace
 {
 
 constexpr std::array ENTRIES = {
-  NativeEntry{0x0000, "Start", &StartEntry, EntryReturn::Far, Machine::NativeWait::Always},
+  NativeEntry{0x0000, "Start", &StartEntry, EntryReturn::Far},
 };
 
 } // namespace

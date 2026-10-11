@@ -75,8 +75,7 @@ public:
   {
     TwinRig rig("TwinJumps");
     Launch(rig);
-    rig.Both([](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-             { _pc.Ram().Write8(Elite::DataSegment(_program), DS.galacticDriveReadyFrames.offset, 3); });
+    rig.Both([](Elite::Platform&, Elite::GameState& _state) { _state.SetByte(DS.galacticDriveReadyFrames.offset, 3); });
     rig.Play("wait 0.5");
     PlayJump(rig, {1, 7, true, 0, 1, 0});
     PlayJump(rig, {1, 8, false, 0, 3, 1});

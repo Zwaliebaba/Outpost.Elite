@@ -41,29 +41,27 @@ void SteerTheChartWithTheStick(TwinRig& _rig)
 {
   _rig.Play("key space; wait 4");
   _rig.Both(
-    [](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
+    [](Elite::Platform&, Elite::GameState& _state)
     {
-      const std::uint16_t segment = Elite::DataSegment(_program);
-      _pc.Ram().Write8(segment, DS.inputDevice.offset, 1);
-      _pc.Ram().Write8(segment, DS.joystickIsAmstrad.offset, 0);
-      _pc.Ram().Write16(segment, DS.joystickCenterX.offset, 81);
-      _pc.Ram().Write16(segment, DS.joystickCenterY.offset, 81);
+      _state.SetByte(DS.inputDevice.offset, 1);
+      _state.SetByte(DS.joystickIsAmstrad.offset, 0);
+      _state.SetWord(DS.joystickCenterX.offset, 81);
+      _state.SetWord(DS.joystickCenterY.offset, 81);
     });
   const auto attach = [&](std::uint32_t _xOhms, std::uint32_t _yOhms)
   {
     _rig.Both(
-      [=](Machine::Pc& _pc, const Machine::LoadedProgram&)
+      [=](Elite::Platform& _platform, Elite::GameState&)
       {
-        _pc.Joystick().SetAxisResistance(0, _xOhms);
-        _pc.Joystick().SetAxisResistance(1, _yOhms);
+        _platform.Joystick().SetAxisResistance(0, _xOhms);
+        _platform.Joystick().SetAxisResistance(1, _yOhms);
       });
   };
   // The chart cursor, x and y.
   const auto cursor = [&]()
   {
     std::uint16_t position = 0;
-    _rig.Both([&](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-              { position = _pc.Ram().Read16(Elite::DataSegment(_program), DS.chartCursorX.offset); });
+    _rig.Both([&](Elite::Platform&, Elite::GameState& _state) { position = _state.Word(DS.chartCursorX.offset); });
     return position;
   };
   attach(50'000, 50'000);
@@ -83,15 +81,15 @@ void SteerTheChartWithTheStick(TwinRig& _rig)
   Assert::IsTrue(low != high, L"the stick moved the cursor back");
 }
 
-// The twin's mouse, through the machine's own driver (Machine::Mouse, a twin made with mousePresent): moved _acrossMickeys right
+// The twin's mouse, through the machine's own driver (Elite::Mouse, a twin made with mousePresent): moved _acrossMickeys right
 // and _downMickeys down, which the next read of its motion (int 33h function 0Bh, once a frame) takes all at once, and with
-// _buttons held (Machine::Mouse::BUTTON_LEFT, BUTTON_RIGHT).
+// _buttons held (Elite::Mouse::BUTTON_LEFT, BUTTON_RIGHT).
 void MoveTwinMouse(TwinRig& _rig, std::int32_t _acrossMickeys, std::int32_t _downMickeys, std::uint8_t _buttons = 0)
 {
   _rig.Both(
-    [=](Machine::Pc& _pc, const Machine::LoadedProgram&)
+    [=](Elite::Platform& _platform, Elite::GameState&)
     {
-      Machine::Mouse& mouse = _pc.Services().MouseDriver();
+      Elite::Mouse& mouse = _platform.MouseDriver();
       mouse.Move(_acrossMickeys, _downMickeys);
       mouse.SetButtons(_buttons);
     });
@@ -101,11 +99,11 @@ void MoveTwinMouse(TwinRig& _rig, std::int32_t _acrossMickeys, std::int32_t _dow
 void SetTwinStick(TwinRig& _rig, std::uint32_t _xOhms, std::uint32_t _yOhms, bool _firing = false)
 {
   _rig.Both(
-    [=](Machine::Pc& _pc, const Machine::LoadedProgram&)
+    [=](Elite::Platform& _platform, Elite::GameState&)
     {
-      _pc.Joystick().SetAxisResistance(0, _xOhms);
-      _pc.Joystick().SetAxisResistance(1, _yOhms);
-      _pc.Joystick().SetButton(0, _firing);
+      _platform.Joystick().SetAxisResistance(0, _xOhms);
+      _platform.Joystick().SetAxisResistance(1, _yOhms);
+      _platform.Joystick().SetButton(0, _firing);
     });
 }
 
@@ -114,10 +112,10 @@ void SetTwinStick(TwinRig& _rig, std::uint32_t _xOhms, std::uint32_t _yOhms, boo
 void SendTwinCodes(TwinRig& _rig, std::initializer_list<std::uint8_t> _codes)
 {
   _rig.Both(
-    [_codes](Machine::Pc& _pc, const Machine::LoadedProgram&)
+    [_codes](Elite::Platform& _platform, Elite::GameState&)
     {
       for (const std::uint8_t code : _codes)
-        _pc.KeyboardController().Inject(code);
+        _platform.KeyboardController().Inject(code);
     });
 }
 
@@ -125,8 +123,7 @@ void SendTwinCodes(TwinRig& _rig, std::initializer_list<std::uint8_t> _codes)
 [[nodiscard]] std::pair<std::int8_t, std::int8_t> FlightRates(TwinRig& _rig)
 {
   std::uint16_t rates = 0;
-  _rig.Both([&rates](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-            { rates = _pc.Ram().Read16(Elite::DataSegment(_program), DS.rollRate.offset); });
+  _rig.Both([&rates](Elite::Platform&, Elite::GameState& _state) { rates = _state.Word(DS.rollRate.offset); });
   return {static_cast<std::int8_t>(rates & 0xFF), static_cast<std::int8_t>(rates >> 8)};
 }
 
@@ -134,8 +131,7 @@ void SendTwinCodes(TwinRig& _rig, std::initializer_list<std::uint8_t> _codes)
 [[nodiscard]] std::uint8_t TwinByte(TwinRig& _rig, Elite::DataField<std::uint8_t> _field)
 {
   std::uint8_t value = 0;
-  _rig.Both([&value, _field](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-            { value = _pc.Ram().Read8(Elite::DataSegment(_program), _field.offset); });
+  _rig.Both([&value, _field](Elite::Platform&, Elite::GameState& _state) { value = _state.Byte(_field.offset); });
   return value;
 }
 
@@ -161,11 +157,10 @@ public:
     TwinRig rig("TwinBriefing");
     rig.Play("key space; wait 4");
     rig.Both(
-      [](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
+      [](Elite::Platform&, Elite::GameState& _state)
       {
-        const std::uint16_t segment = Elite::DataSegment(_program);
-        _pc.Ram().Write8(segment, DS.missionNumber.offset, 2);
-        _pc.Ram().Write8(segment, DS.missionStage.offset, 0);
+        _state.SetByte(DS.missionNumber.offset, 2);
+        _state.SetByte(DS.missionStage.offset, 0);
       });
     rig.Play("key F8; wait 0.5\nkey F9; wait 1\ndigest briefing\nkey space; wait 1\ndigest status");
   }
@@ -185,7 +180,7 @@ public:
     MoveTwinMouse(rig, -0x200, -0x200);
     rig.Play("wait 0.5\ndigest left-and-up");
     const std::pair<std::int8_t, std::int8_t> leftAndUp = FlightRates(rig);
-    MoveTwinMouse(rig, 0, 0, Machine::Mouse::BUTTON_LEFT);
+    MoveTwinMouse(rig, 0, 0, Elite::Mouse::BUTTON_LEFT);
     rig.Play("wait 0.5\ndigest firing");
     Assert::IsTrue(TwinByte(rig, DS.laserTemperature) != 0, L"the laser fired");
     MoveTwinMouse(rig, 0, 0);

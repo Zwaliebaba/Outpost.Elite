@@ -12,16 +12,13 @@
 
 #include "Timing.h"
 
-namespace Machine
-{
-class Cga;
-class Pc;
-class FileStore;
-enum class StopReason : std::uint8_t;
-} // namespace Machine
-
 namespace Elite
 {
+
+class Cga;
+class FileStore;
+class Platform;
+enum class StopReason : std::uint8_t;
 
 class GameState;
 
@@ -36,7 +33,7 @@ struct Checkpoint
 };
 
 /// The checkpoint of the game whose memory _state holds and whose CGA is _video, as it is now.
-[[nodiscard]] Checkpoint TakeCheckpoint(const GameState& _state, const Machine::Cga& _video);
+[[nodiscard]] Checkpoint TakeCheckpoint(const GameState& _state, const Cga& _video);
 
 enum class StepKind : std::uint8_t
 {
@@ -79,7 +76,7 @@ struct Step
 ///                        starts from a prepared commander, which the disc menu then loads as the game's own save.
 ///                        SOURCE is a bare file name, so a replay reaches nothing but the files beside it.
 ///   end S                S seconds, as wait, by the end of which the program must have ended (int 20h, as
-///                        Machine::StopReason::Terminated): how a replay that leaves for DOS ends. It is the
+///                        StopReason::Terminated): how a replay that leaves for DOS ends. It is the
 ///                        last step that runs the machine: only digest and shot steps, which look at what the
 ///                        program left, may follow it. No other step may end the program (ExpectedStop).
 ///   picture NAME HEX     not a step but a line of the digest step NAME, which must be the step just before it: the picture
@@ -105,7 +102,7 @@ struct Step
 /// How _step must leave the run for its replay to go on (ReplayPlayer::Play): StopReason::Terminated for an end
 /// step, whose program must end within it, and StopReason::Reached for every other step, during which the program
 /// must not stop. So only a replay's end step may end the program, and an end step that does not end it fails.
-[[nodiscard]] Machine::StopReason ExpectedStop(const Step& _step) noexcept;
+[[nodiscard]] StopReason ExpectedStop(const Step& _step) noexcept;
 
 /// The XT (scan code set 1) make code of an X keysym name, for the keys the reference reads.
 [[nodiscard]] std::optional<std::uint8_t> ScanCodeOf(std::string_view _keyName) noexcept;
@@ -117,9 +114,9 @@ struct Step
 /// The moment a replay has reached, _milliseconds after it began at machine cycle _start. Time in a replay
 /// is counted in whole milliseconds from its start and converted once, so a recorder that samples time at
 /// any rate and a player that sums the recorded waits land on the same cycle.
-[[nodiscard]] constexpr Machine::Cycles ReplayCycle(Machine::Cycles _start, std::uint64_t _milliseconds) noexcept
+[[nodiscard]] constexpr Cycles ReplayCycle(Cycles _start, std::uint64_t _milliseconds) noexcept
 {
-  return _start + Machine::MicrosecondsToCycles(_milliseconds * 1000);
+  return _start + MicrosecondsToCycles(_milliseconds * 1000);
 }
 
 /// Writes a session as a replay (ADR-008): keys pressed and released, and digests, each at a moment
@@ -153,26 +150,26 @@ private:
   std::uint64_t m_lastMilliseconds = 0;
 };
 
-/// Plays steps on a machine running the reference, from the moment it is made: _pc, and _state, the game's memory it maps
-/// (Game).
+/// Plays steps on a machine running the reference, from the moment it is made: _platform, and _state, the game's memory it
+/// runs on (Game).
 class ReplayPlayer
 {
 public:
   /// A player for steps that copy no file.
-  ReplayPlayer(Machine::Pc& _pc, const GameState& _state) noexcept;
+  ReplayPlayer(Platform& _platform, const GameState& _state) noexcept;
 
   /// A player whose file steps copy from _sources, the directory the replay is in, into _files, the store the
   /// machine's DOS was given.
-  ReplayPlayer(Machine::Pc& _pc, const GameState& _state, Machine::FileStore& _files, std::filesystem::path _sources);
+  ReplayPlayer(Platform& _platform, const GameState& _state, FileStore& _files, std::filesystem::path _sources);
 
-  /// Plays one step: a wait or an end runs the machine on to the next moment (Machine::Pc::RunUntil, ReplayCycle),
+  /// Plays one step: a wait or an end runs the machine on to the next moment (Platform::RunUntil, ReplayCycle),
   /// a key queues its codes on the keyboard, a digest sets _checkpoint to TakeCheckpoint, a file step copies its
   /// file into the store. A shot does nothing here; writing pictures is the caller's. Returns why the run
   /// stopped, StopReason::Reached if it did not; ExpectedStop says which the step must return. A digest after
   /// an end step reads the machine as the ended program left it. Throws std::runtime_error for a file step that
   /// cannot be done: no store, a source that cannot be read, or a store that refuses it. That is a fault in how
   /// the replay is set up, not anything the game did.
-  [[nodiscard]] Machine::StopReason Play(const Step& _step, Checkpoint& _checkpoint);
+  [[nodiscard]] StopReason Play(const Step& _step, Checkpoint& _checkpoint);
 
   /// Milliseconds since the replay began.
   [[nodiscard]] std::uint64_t ElapsedMilliseconds() const noexcept
@@ -183,11 +180,11 @@ public:
 private:
   void CopyFile(const Step& _step);
 
-  Machine::Pc& m_pc;
+  Platform& m_platform;
   const GameState& m_state;
-  Machine::FileStore* m_files = nullptr;
+  FileStore* m_files = nullptr;
   std::filesystem::path m_sources;
-  Machine::Cycles m_start = 0;
+  Cycles m_start = 0;
   std::uint64_t m_elapsedMilliseconds = 0;
 };
 

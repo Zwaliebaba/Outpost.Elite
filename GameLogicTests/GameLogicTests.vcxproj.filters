@@ -63,6 +63,9 @@
     <ClInclude Include="pch.h">
       <Filter>Build</Filter>
     </ClInclude>
+    <ClInclude Include="PlatformRig.h">
+      <Filter>Rigs</Filter>
+    </ClInclude>
     <ClInclude Include="ReferenceRig.h">
       <Filter>Rigs</Filter>
     </ClInclude>
@@ -73,6 +76,15 @@
   <ItemGroup>
     <ClCompile Include="AiTests.cpp">
       <Filter>Ai</Filter>
+    </ClCompile>
+    <ClCompile Include="BiosTests.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="CgaFontTests.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="CgaTests.cpp">
+      <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="CorpusTests.cpp">
       <Filter>Replay</Filter>
@@ -95,11 +107,23 @@
     <ClCompile Include="GalaxyTests.cpp">
       <Filter>Galaxy</Filter>
     </ClCompile>
+    <ClCompile Include="GamePortTests.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
     <ClCompile Include="HyperspaceTests.cpp">
       <Filter>Hyperspace</Filter>
     </ClCompile>
     <ClCompile Include="InputTests.cpp">
       <Filter>Input</Filter>
+    </ClCompile>
+    <ClCompile Include="InterruptControllerTests.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="IntervalTimerTests.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="KeyboardTests.cpp">
+      <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="MarketAnswerTests.cpp">
       <Filter>Market</Filter>
@@ -110,11 +134,17 @@
     <ClCompile Include="MathsAnswerTests.cpp">
       <Filter>Maths</Filter>
     </ClCompile>
+    <ClCompile Include="MouseTests.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
     <ClCompile Include="OutcomeTests.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
     <ClCompile Include="pch.cpp">
       <Filter>Build</Filter>
+    </ClCompile>
+    <ClCompile Include="PlatformTests.cpp">
+      <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="ReferenceImageTests.cpp">
       <Filter>Reference</Filter>
@@ -124,6 +154,12 @@
     </ClCompile>
     <ClCompile Include="SaveLoadTests.cpp">
       <Filter>SaveLoad</Filter>
+    </ClCompile>
+    <ClCompile Include="Sha256Tests.cpp">
+      <Filter>Replay</Filter>
+    </ClCompile>
+    <ClCompile Include="SpeakerTests.cpp">
+      <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="StartUpTests.cpp">
       <Filter>StartUp</Filter>

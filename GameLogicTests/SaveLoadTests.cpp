@@ -19,10 +19,8 @@ namespace GameLogicTests
 namespace
 {
 
-// The interrupt table's words for int 33h, the mouse driver.
-constexpr std::uint16_t MOUSE_VECTOR_OFFSET = 0x00CC;
-constexpr std::uint16_t MOUSE_VECTOR_SEGMENT = 0x00CE;
-constexpr std::uint16_t INTERRUPT_TABLE_SEGMENT = 0;
+// Int 33h, the mouse driver's vector.
+constexpr std::uint8_t MOUSE_VECTOR = 0x33;
 
 // The last byte of keyBuffer: the write address wraps after it.
 constexpr std::uint16_t KEY_BUFFER_WRAP_MASK = 0x000F;
@@ -33,22 +31,15 @@ constexpr std::uint16_t KEY_BUFFER_WRAP_MASK = 0x000F;
 constexpr std::string_view CHART_SCREENSHOT_KEYS = "down Alt_L; down KP_Multiply; wait 0.15; up KP_Multiply; up Alt_L; wait 0.05";
 constexpr std::string_view QUICK_SCREENSHOT_KEYS = "down Alt_L; down KP_Multiply; wait 0.002; up KP_Multiply; up Alt_L; wait 0.05";
 
-void SetDataWord(Machine::Pc& _pc, const Machine::LoadedProgram& _program, std::uint16_t _offset, std::uint16_t _value)
-{
-  _pc.Ram().Write16(Elite::DataSegment(_program), _offset, _value);
-}
-
 // _code at the end of keyBuffer, as ReadScanCode puts a key there: how a test sends a code no replay can name, such as
 // the Amstrad joystick's 77h-7Ch.
-void QueueScanCode(Machine::Pc& _pc, const Machine::LoadedProgram& _program, std::uint8_t _code)
+void QueueScanCode(Elite::GameState& _state, std::uint8_t _code)
 {
-  Machine::Memory& ram = _pc.Ram();
-  const std::uint16_t data = Elite::DataSegment(_program);
-  const std::uint16_t write = ram.Read16(data, Elite::DS.keyBufferWrite.offset);
-  ram.Write8(data, write, _code);
+  const std::uint16_t write = _state.Word(Elite::DS.keyBufferWrite.offset);
+  _state.SetByte(write, _code);
   const auto next = static_cast<std::uint16_t>(write + 1);
-  ram.Write16(data, Elite::DS.keyBufferWrite.offset, (next & KEY_BUFFER_WRAP_MASK) == 0 ? Elite::DS.keyBuffer.offset : next);
-  ram.Write8(data, Elite::DS.keyBufferCount.offset, static_cast<std::uint8_t>(ram.Read8(data, Elite::DS.keyBufferCount.offset) + 1));
+  _state.SetWord(Elite::DS.keyBufferWrite.offset, (next & KEY_BUFFER_WRAP_MASK) == 0 ? Elite::DS.keyBuffer.offset : next);
+  _state.SetByte(Elite::DS.keyBufferCount.offset, static_cast<std::uint8_t>(_state.Byte(Elite::DS.keyBufferCount.offset) + 1));
 }
 
 // A file in DOS's directory: its name, and the SHA-256 of its bytes in lowercase hex, or DIRECTORY for a directory.
@@ -74,7 +65,7 @@ constexpr std::string_view DIRECTORY = "<directory>";
     std::string digest(DIRECTORY);
     if (entry.is_regular_file())
     {
-      digest = Machine::Sha256::ToHex(Machine::Sha256::Of(Elite::ReadWholeFile(entry.path())));
+      digest = Elite::Sha256::ToHex(Elite::Sha256::Of(Elite::ReadWholeFile(entry.path())));
     }
     found.emplace(entry.path().filename().string(), digest);
   }
@@ -110,47 +101,36 @@ void PlayEveryDiscMenuPath(TwinRig& _rig)
 {
   _rig.Play("key space; wait 3.3\nkey Escape; wait 0.1\nkey c; wait 0.1\ndigest no-names");
   _rig.Play("key v; wait 0.05\nkey q; wait 0.05\nkey Next; wait 0.05\nkey m; wait 0.05\ndigest no-mouse");
-  // A mouse driver: int 33h pointing at code that is not an IRET.
-  const Machine::Memory& ram = _rig.Host().Ram();
-  const std::uint16_t mouseOffset = ram.Read16(INTERRUPT_TABLE_SEGMENT, MOUSE_VECTOR_OFFSET);
-  const std::uint16_t mouseSegment = ram.Read16(INTERRUPT_TABLE_SEGMENT, MOUSE_VECTOR_SEGMENT);
-  _rig.Both(
-    [](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-    {
-      _pc.Ram().Write16(INTERRUPT_TABLE_SEGMENT, MOUSE_VECTOR_OFFSET, 0);
-      _pc.Ram().Write16(INTERRUPT_TABLE_SEGMENT, MOUSE_VECTOR_SEGMENT, _program.loadSegment);
-    });
+  // A mouse driver: int 33h pointing at code that is not an IRET, the program's first byte.
+  const Elite::FarAddress mouse = _rig.Host().InterruptVector(MOUSE_VECTOR);
+  _rig.Both([](Elite::Platform& _platform, Elite::GameState& _state)
+            { _platform.SetInterruptVector(MOUSE_VECTOR, Elite::FarAddress{_state.CodeSegment(), 0}); });
   _rig.Play("key m; wait 0.05\ndigest mouse\nkey k; wait 0.05");
-  _rig.Both(
-    [mouseOffset, mouseSegment](Machine::Pc& _pc, const Machine::LoadedProgram&)
-    {
-      _pc.Ram().Write16(INTERRUPT_TABLE_SEGMENT, MOUSE_VECTOR_OFFSET, mouseOffset);
-      _pc.Ram().Write16(INTERRUPT_TABLE_SEGMENT, MOUSE_VECTOR_SEGMENT, mouseSegment);
-    });
+  _rig.Both([mouse](Elite::Platform& _platform, Elite::GameState&) { _platform.SetInterruptVector(MOUSE_VECTOR, mouse); });
   // The IBM stick, with nothing in the port and then with a stick in it.
   _rig.Play("key j; wait 0.05; key q; wait 0.05; key i; wait 0.05; key space; wait 0.1\ndigest no-stick");
   constexpr std::array<std::size_t, 2> AXES = {0, 1};
   _rig.Both(
-    [&AXES](Machine::Pc& _pc, const Machine::LoadedProgram&)
+    [&AXES](Elite::Platform& _platform, Elite::GameState&)
     {
       for (const std::size_t axis : AXES)
-        _pc.Joystick().SetAxisResistance(axis, Machine::GamePort::MAXIMUM_OHMS / 2);
+        _platform.Joystick().SetAxisResistance(axis, Elite::GamePort::MAXIMUM_OHMS / 2);
     });
   _rig.Play("key j; wait 0.05; key i; wait 0.05; key space; wait 0.1\ndigest stick\nkey k; wait 0.05");
   _rig.Both(
-    [&AXES](Machine::Pc& _pc, const Machine::LoadedProgram&)
+    [&AXES](Elite::Platform& _platform, Elite::GameState&)
     {
       for (const std::size_t axis : AXES)
-        _pc.Joystick().SetAxisResistance(axis, Machine::GamePort::AXIS_DISCONNECTED);
+        _platform.Joystick().SetAxisResistance(axis, Elite::GamePort::AXIS_DISCONNECTED);
     });
   // The Amstrad's, which never moves, and then sends codes from beyond the keyboard's before a key.
   _rig.Play("key j; wait 0.05; key a; wait 0.05; key q; wait 0.05\ndigest amstrad-still\nkey j; wait 0.05; key a; wait 0.05");
   _rig.Both(
-    [](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
+    [](Elite::Platform&, Elite::GameState& _state)
     {
       constexpr std::array<std::uint8_t, 3> CODES = {0x60, 0x7D, 0x77};
       for (const std::uint8_t code : CODES)
-        QueueScanCode(_pc, _program, code);
+        QueueScanCode(_state, code);
     });
   _rig.Play("key q; wait 0.05\ndigest amstrad-moved\nkey k; wait 0.05");
   // Leaving for DOS, thought better of.
@@ -198,20 +178,18 @@ public:
     twin.Play("key space; wait 3.3\nkey F5; wait 0.1");
     twin.Play(CHART_SCREENSHOT_KEYS);
     // The numbers run '99', then '00', the name of a directory.
-    twin.Both([](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-              { SetDataWord(_pc, _program, Elite::DS.screenshotNumber.offset, 0x3939); });
+    twin.Both([](Elite::Platform&, Elite::GameState& _state) { _state.SetWord(Elite::DS.screenshotNumber.offset, 0x3939); });
     std::filesystem::create_directories(twin.Files() / "ELITE00.HI");
     twin.Play(CHART_SCREENSHOT_KEYS);
     // GetKey hands the chart one key a frame: the screenshots' Alt and PrtSc go first, then Escape closes it.
     twin.Play("wait 0.6; key Escape; wait 0.15; key s; wait 0.05");
     // '09', then '10'; then '11', a directory.
-    twin.Both([](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-              { SetDataWord(_pc, _program, Elite::DS.screenshotNumber.offset, 0x3930); });
+    twin.Both([](Elite::Platform&, Elite::GameState& _state) { _state.SetWord(Elite::DS.screenshotNumber.offset, 0x3930); });
     twin.Play(QUICK_SCREENSHOT_KEYS);
     std::filesystem::create_directories(twin.Files() / "ELITE11.LO");
     twin.Play(QUICK_SCREENSHOT_KEYS);
     twin.Play("key BackSpace; key BackSpace; key x; key Return; wait 0.1\ndigest saved");
-    twin.Play("key e; wait 0.05; key y; wait 0.5", Machine::StopReason::Terminated);
+    twin.Play("key e; wait 0.05; key y; wait 0.5", Elite::StopReason::Terminated);
     Assert::IsTrue(HoldsExactly(twin.Files(), SCREENSHOT_FILES), L"the files the original wrote");
   }
 

@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 r"""Generate GameLogic/ReferenceImage.h and GameLogic/ReferenceImage.cpp from ELITES.EXE and Design/Symbols.tsv (D3).
 
-The port does not read ELITES.EXE at runtime (D23): what ExeLoader places is these generated tables, the
-original's bytes at their original offsets (D19). This reads the reference, refuses it unless its SHA-256
-is REFERENCE_SHA256 in GameLogic/Reference.h (ADR-007), and writes two files:
+The port does not read ELITES.EXE at runtime (D23): what the Game loads into the GameState is these generated
+tables, the original's bytes at their original offsets (D19, D33). This reads the reference, refuses it unless
+its SHA-256 is REFERENCE_SHA256 in GameLogic/Reference.h (ADR-007), and writes two files:
 
-  ReferenceImage.h    what the MZ header says that the load uses -- the entry CS:IP and SS:SP, the minimum
-                      and maximum allocation, the image's size and the relocation table -- and the image's
+  ReferenceImage.h    what the MZ header says -- the entry CS:IP and SS:SP, the minimum and maximum allocation,
+                      the image's size and the relocation table, which the load applies -- and the image's
                       declaration
   ReferenceImage.cpp  the load image: the code segment, CS:0000 up to CODE_SEGMENT_BYTES, then the data
                       segment's image from DS:0000, which starts at image paragraph DATA_SEGMENT_PARAGRAPH
-                      (both from Reference.h); and the description ExeLoader places
+                      (both from Reference.h)
 
 The image is the file's, unpatched: the host writes D5's byte after the load (ADR-001). It is generated
 whole, code included, because native code reads parts of the code segment and WipeProgram writes most of
@@ -82,7 +82,7 @@ def reference_constant(_text: str, _name: str) -> str:
 
 @dataclass
 class Executable:
-  """What ExeLoader needs from an MZ file: the header's facts, the image and the relocations."""
+  """What the load needs from an MZ file: the header's facts, the image and the relocations."""
   initial_cs: int
   initial_ip: int
   initial_ss: int
@@ -94,7 +94,7 @@ class Executable:
 
 
 def parse(_file: bytes) -> Executable:
-  """The MZ header, read as ExeLoader::Parse reads it."""
+  """The MZ header, read as DOS's EXEC reads it."""
   if len(_file) < 0x1C:
     fail("the reference is too short for an MZ header")
   (signature, last_page_bytes, pages, relocation_count, header_paragraphs, min_allocation, max_allocation, initial_ss,
@@ -219,8 +219,6 @@ def generate_header(_executable: Executable, _segments: list[Segment], _symbols:
     GENERATED,
     "#pragma once",
     "",
-    '#include "ExeLoader.h"',
-    "",
     "#include <array>",
     "#include <cstddef>",
     "#include <cstdint>",
@@ -240,9 +238,17 @@ def generate_header(_executable: Executable, _segments: list[Segment], _symbols:
     f"/// The load image's size: the code segment, {offsets(code)}, then the data segment's image, {offsets(data)}.",
     f"inline constexpr std::size_t REFERENCE_IMAGE_BYTES = {image_bytes};",
     "",
+    "/// One entry of an MZ relocation table: the word at segment:offset from the image's start holds a segment number, to",
+    "/// which the load adds the segment the image is loaded at. A plain record (R8).",
+    "struct Relocation",
+    "{",
+    f"{INDENT}std::uint16_t offset = 0;",
+    f"{INDENT}std::uint16_t segment = 0;",
+    "};",
+    "",
     "/// The relocation table, in the file's order: each entry the offset and segment, from the image's start, of a word",
     "/// the load adds the load segment to. Each comment says where it is and what the word holds.",
-    f"inline constexpr std::array<Machine::Relocation, {len(_executable.relocations)}> REFERENCE_RELOCATIONS = {{{{",
+    f"inline constexpr std::array<Relocation, {len(_executable.relocations)}> REFERENCE_RELOCATIONS = {{{{",
   ]
   entries = []
   for offset, segment in _executable.relocations:
@@ -259,9 +265,6 @@ def generate_header(_executable: Executable, _segments: list[Segment], _symbols:
     "/// The load image, byte for byte as ELITES.EXE holds it: DS:25E4 holds 00, and the host writes D5's byte after the",
     "/// load (ADR-001). Defined in ReferenceImage.cpp, so that its bytes are compiled once.",
     "extern const std::array<std::uint8_t, REFERENCE_IMAGE_BYTES> REFERENCE_IMAGE;",
-    "",
-    "/// The reference as ExeLoader places it: the header's facts, the image and the relocations above.",
-    "[[nodiscard]] Machine::Executable ReferenceExecutable();",
     "",
     "} // namespace Elite",
     "",
@@ -288,20 +291,6 @@ def generate_source(_executable: Executable, _segments: list[Segment], _symbols:
     f"{INDENT}// The code segment, {offsets(code)}, then the data segment's image, {offsets(data)}.",
     *image_rows(_executable.image, _segments, _symbols),
     "};",
-    "",
-    "Machine::Executable ReferenceExecutable()",
-    "{",
-    f"{INDENT}Machine::Executable executable;",
-    f"{INDENT}executable.initialCs = REFERENCE_INITIAL_CS;",
-    f"{INDENT}executable.initialIp = REFERENCE_INITIAL_IP;",
-    f"{INDENT}executable.initialSs = REFERENCE_INITIAL_SS;",
-    f"{INDENT}executable.initialSp = REFERENCE_INITIAL_SP;",
-    f"{INDENT}executable.minAllocationParagraphs = REFERENCE_MIN_ALLOCATION_PARAGRAPHS;",
-    f"{INDENT}executable.maxAllocationParagraphs = REFERENCE_MAX_ALLOCATION_PARAGRAPHS;",
-    f"{INDENT}executable.image = REFERENCE_IMAGE;",
-    f"{INDENT}executable.relocations.assign(REFERENCE_RELOCATIONS.begin(), REFERENCE_RELOCATIONS.end());",
-    f"{INDENT}return executable;",
-    "}",
     "",
     "} // namespace Elite",
     "",

@@ -7,7 +7,7 @@ r"""Compile a project and the projects it references with GCC or Clang, outside 
 
 This is a development tool, not a build system. The solution is the build, and MSVC with /W4 /WX is
 what gates (AGENTS.md §3). What this does is let a Linux session compile and run the parts of the tree
-that are standard C++ -- `Machine`, `GameLogic`, their test suites and `ReferenceRunner` -- so that the
+that are standard C++ -- `GameLogic`, its test suite and `ReferenceRunner` -- so that the
 reference binary can be studied where it is being reverse-engineered (ADR-004 item 4). It proves the code
 compiles and runs; it is not a second description of the product.
 

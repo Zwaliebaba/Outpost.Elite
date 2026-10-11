@@ -111,9 +111,7 @@ constexpr std::uint16_t CHART_SCREEN_OFFSET = 0x0648; // x=32, line 40
 constexpr std::uint8_t CHART_LINE_PAIRS = 0x40;
 
 // SaveScreenshot puts CriticalErrorInterrupt on int 24h, at 0000:0090, while it writes.
-constexpr std::uint16_t VECTOR_TABLE_SEGMENT = 0;
-constexpr std::uint16_t CRITICAL_ERROR_VECTOR_OFFSET = 0x0090;
-constexpr std::uint16_t CRITICAL_ERROR_VECTOR_SEGMENT = 0x0092;
+constexpr std::uint8_t CRITICAL_ERROR_VECTOR = 0x24;
 constexpr std::uint16_t CRITICAL_ERROR_INTERRUPT = 0x02F0;
 constexpr std::uint8_t FIRST_DIGIT = '0';
 constexpr std::uint8_t PAST_DIGITS = ':';               // the character after '9'
@@ -1418,21 +1416,17 @@ void SaveScreenshot(GameState& _state, Hardware& _hardware)
   RestoreDivideAndKeyboardInterrupts(_state, _hardware);
   (void)RestoreTimerInterrupt(_state, _hardware);
   _state.Set(DS.diskError, 0);
-  // Int 24h's vector, pushed round the write and popped back after it.
-  const std::uint16_t errorOffset = _state.FarWord(VECTOR_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_OFFSET);
-  const std::uint16_t errorSegment = _state.FarWord(VECTOR_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_SEGMENT);
-  _state.SetFarWord(VECTOR_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_OFFSET, CRITICAL_ERROR_INTERRUPT);
-  _state.SetFarWord(VECTOR_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_SEGMENT, _state.CodeSegment());
+  // The game's own critical-error handler on int 24h round the write, and the handler that was there put back after it.
+  const FarAddress criticalError = _hardware.InterruptVector(CRITICAL_ERROR_VECTOR);
+  _hardware.SetInterruptVector(CRITICAL_ERROR_VECTOR, FarAddress{_state.CodeSegment(), CRITICAL_ERROR_INTERRUPT});
   WriteScreenshotFile(_state, _hardware);
   if (_state.Get(DS.diskError) != 0)
   {
     ShowDiskError(_state);
   }
-  _state.SetFarWord(VECTOR_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_SEGMENT, errorSegment);
-  _state.SetFarWord(VECTOR_TABLE_SEGMENT, CRITICAL_ERROR_VECTOR_OFFSET, errorOffset);
-  // InstallTimerInterrupt leaves ES = 0, the interrupt table, which InstallDivideAndKeyboardInterrupts takes.
+  _hardware.SetInterruptVector(CRITICAL_ERROR_VECTOR, criticalError);
   InstallTimerInterrupt(_state, _hardware);
-  InstallDivideAndKeyboardInterrupts(_state, _hardware, VECTOR_TABLE_SEGMENT);
+  InstallDivideAndKeyboardInterrupts(_state, _hardware);
 }
 
 void WriteScreenshotFile(GameState& _state, Hardware& _hardware)

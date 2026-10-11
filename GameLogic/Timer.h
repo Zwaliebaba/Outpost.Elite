@@ -24,11 +24,12 @@ namespace Elite
 /// direction flag the interrupted code left.
 void TimerInterrupt(GameState& _state, Hardware& _hardware, bool _backward);
 
-/// InstallTimerInterrupt (CS:00C6): the PIT at about 1 kHz, port 61h saved and the speaker's gate and data cleared,
-/// TimerInterrupt on int 8, and interrupts enabled.
+/// InstallTimerInterrupt (CS:00C6): the PIT at about 1 kHz, port 61h saved and the speaker's gate and data cleared, the
+/// BIOS's int 8 handler kept in the code segment (savedTimerVector) and TimerInterrupt installed on int 8, and interrupts
+/// enabled.
 void InstallTimerInterrupt(GameState& _state, Hardware& _hardware);
 
-/// RestoreTimerInterrupt (CS:016B): with interrupts off, int 8 put back in the interrupt table, segment then offset, port 61h
+/// RestoreTimerInterrupt (CS:016B): with interrupts off, the BIOS's handler put back on int 8, port 61h
 /// as InstallTimerInterrupt found it, and the PIT's tick as the BIOS has it (on the Amstrad, as its mouse driver does); then
 /// interrupts on, and the BIOS clock set back by a day when it is past one. Returns the clock as int 1Ah gave it.
 BiosClock RestoreTimerInterrupt(GameState& _state, Hardware& _hardware);

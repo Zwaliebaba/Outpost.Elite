@@ -8,46 +8,10 @@
 #include <cstdint>
 #include <initializer_list>
 #include <optional>
-
-namespace Machine
-{
-class Pc;
-} // namespace Machine
+#include <string_view>
 
 namespace Elite
 {
-
-/// What the mouse driver answers to a reset (int 33h AX=0).
-struct MouseReset
-{
-  std::uint16_t status;      ///< AX: FFFFh when a driver is installed
-  std::uint16_t buttonCount; ///< BX
-};
-
-/// What the mouse driver gives for int 33h AX=5: the buttons held, and the presses of the one button asked about.
-struct MousePresses
-{
-  std::uint16_t buttons; ///< AX: the buttons held, bit 0 the left and bit 1 the right
-  std::uint16_t presses; ///< BX: the presses of the button asked about since the last call
-  std::uint16_t xPixels; ///< CX: where the last of them was, in the driver's virtual screen
-  std::uint16_t yPixels; ///< DX
-};
-
-/// What the mouse driver gives for int 33h AX=0Bh: the motion since the last call.
-struct MouseMotion
-{
-  std::uint16_t acrossMickeys; ///< CX, right positive
-  std::uint16_t downMickeys;   ///< DX, down positive
-};
-
-// ── SaveLoad, StartUp, Timer and Input (level 4, group C) ──
-
-/// What the BIOS's clock gives for int 1Ah AH=0.
-struct BiosClock
-{
-  std::uint32_t ticks;     ///< CX:DX: the timer's ticks since midnight, about 18.2 a second
-  std::uint8_t rolledOver; ///< AL: non-zero when midnight has passed since the clock was last read
-};
 
 // ── Start, GameLoop and RunFlight (level 5, group F) ──
 
@@ -68,19 +32,19 @@ struct DosTime
 };
 
 /// The IBM PC's devices as the game drives them (ADR-014): what a de-assembled routine does to the speaker, the timer, the
-/// interrupt controller, the keyboard, the game port, the mouse, the BIOS and DOS, named for what it does rather than by port or
-/// vector. Each port operation is the original's own sequence of port accesses, in its order and at its width, so the emulated
-/// devices and paced time's wait detection see what they saw. Each service operation sets the registers the service reads,
-/// calls it as INT does (Pc::CallInterrupt), returns what it gives as a small typed result, and puts the processor's registers
-/// back as they were: it has no register effect of its own. Phase 5 makes the implementation native devices one at a time, on
-/// the Platform beside the Pc (D27), and the routines do not change. DOS's file services are the first: those operations call
-/// no service, and answer from the platform's DosFiles.
+/// interrupt controller, the keyboard, the game port, the mouse, the CGA, the BIOS and DOS, named for what it does rather than
+/// by port or vector. Since D33 every operation is the native Platform's (ADR-021), and the routines did not change.
+///
+/// What paced time sees is kept: each operation counts the port writes the original's own sequence of port accesses made, in
+/// the BIOS's and DOS's services as in the game's own OUTs, and every byte of memory a service changes is counted where it
+/// lies, so a loop's turn idles exactly where it did (ADR-015). Each service operation returns what the service gives as a
+/// small typed result, and a call the services refuse stops the run (Platform::Refuse). Hardware holds no state of its own: a
+/// device's state is the platform's.
 class Hardware
 {
 public:
-  Hardware(Machine::Pc& _pc, Platform& _platform) noexcept
-    : m_pc(_pc),
-      m_platform(_platform)
+  explicit Hardware(Platform& _platform) noexcept
+    : m_platform(_platform)
   {
   }
 
@@ -90,11 +54,11 @@ public:
   /// OUT 61h,_value.
   void SetSystemControl(std::uint8_t _value);
 
-  /// The speaker's tone: OUT 43h,B6h, then _divisor's low and high bytes to the PIT's channel 2 at 42h.
+  /// The speaker's tone: OUT 43h,B6h, then _divisor's low and high bytes to the timer's channel 2 at 42h.
   void SetToneDivisor(std::uint16_t _divisor);
 
-  /// The timer's tick: OUT 43h,_mode, then _divisor's low and high bytes to the PIT's channel 0 at 40h. A control word can raise
-  /// IRQ 0 at once: with interrupts on, it is taken here, as the CPU takes it at the next instruction.
+  /// The timer's tick: OUT 43h,_mode, then _divisor's low and high bytes to the timer's channel 0 at 40h. A control word can
+  /// raise IRQ 0 at once: with interrupts on, it is taken here, as the CPU takes it at the next instruction.
   void SetTickDivisor(std::uint8_t _mode, std::uint16_t _divisor);
 
   /// OUT 20h,20h: the end of an interrupt, to the interrupt controller. With interrupts on, one it held back is taken here.
@@ -111,8 +75,9 @@ public:
   /// original holds in registers there: every one the next turn reads before it writes it, and every one the turn read
   /// from a device; one that cannot change between turns may be left out. A turn that changed no byte and no port, with
   /// the same values as the last, idles to the next device event, as the original's would; then the interrupts that fall
-  /// due are taken. Only a routine hooked as one that waits may call it.
+  /// due are taken.
   void LoopTurn(std::uint16_t _loop, std::initializer_list<std::uint16_t> _carried);
+
   /// IN AL,60h: the scan code the keyboard sent.
   [[nodiscard]] std::uint8_t KeyboardData();
 
@@ -123,15 +88,15 @@ public:
   /// IN AL,201h: the game port, the sticks' buttons in bits 4 to 7, each low while pressed.
   [[nodiscard]] std::uint8_t GamePortButtons();
 
-  /// Int 33h AX=0: the mouse driver reset. With no driver, int 33h is the ROM's IRET, and AX and BX come back as they went.
+  /// Int 33h AX=0: the mouse driver reset. With no driver, int 33h is the ROM's IRET, and AX comes back as it went: 0, and
+  /// BX as 0.
   MouseReset ResetMouse();
 
-  /// Int 33h AX=5, BX=_button: the buttons held, and _button's presses (0 the left, 1 the right). With no driver, AX, BX,
-  /// CX and DX come back as they went: AX=5, BX=_button, and the CX and DX the processor held.
+  /// Int 33h AX=5, BX=_button: the buttons held, and _button's presses (0 the left, 1 the right). With no driver, AX and BX
+  /// come back as they went, AX=5 and BX=_button, and CX and DX as 0.
   [[nodiscard]] MousePresses ReadMousePresses(std::uint16_t _button);
 
-  /// Int 33h AX=0Bh: the mouse's motion since the last call. With no driver, CX and DX come back as the processor held
-  /// them.
+  /// Int 33h AX=0Bh: the mouse's motion since the last call. With no driver, CX and DX come back as 0.
   [[nodiscard]] MouseMotion ReadMouseMotion();
 
   /// Int 10h AH=0, AL=_mode: the BIOS sets the CGA's mode.
@@ -173,8 +138,8 @@ public:
   [[nodiscard]] std::uint8_t GamePortOneShots();
 
   /// The 8088's cycles over instructions that native code stands in for, counted for the devices the instructions executed
-  /// time (Pc::CountInstructionCycles): the game port's one-shots, which a stick read measures by counting polls.
-  void CountInstructionCycles(Machine::Cycles _cycles) noexcept;
+  /// time (Platform::CountInstructionCycles): the game port's one-shots, which a stick read measures by counting polls.
+  void CountInstructionCycles(Cycles _cycles) noexcept;
 
   /// Int 1Ah AH=0: the BIOS's clock, its rollover flag cleared.
   [[nodiscard]] BiosClock ReadBiosClock();
@@ -183,12 +148,12 @@ public:
   void SetBiosClock(std::uint32_t _ticks);
 
   /// The BIOS's handler for the timer's tick at _segment:_offset, run to its IRET as the game's own handler chains to it, by a
-  /// far jump with the interrupt's frame in place. Pc::CallInterrupt reaches a handler through the vector table, so for the
-  /// call int 8's vector at 0000:0020 names the BIOS's handler, and after it what it named before.
+  /// far jump with the interrupt's frame in place (Platform::CallHandler).
   void RunBiosTimerTick(std::uint16_t _segment, std::uint16_t _offset);
 
   /// Int 21h AX=0C0Ah: DOS empties its keyboard buffer and reads a line typed at the keyboard into the buffer at
-  /// _segment:_offset, whose first byte is its size and whose second gets the count of characters read.
+  /// _segment:_offset. It would wait for ever, because the ROM's int 9 handler discards every key, so it is refused, and the
+  /// run stops: the copy protection, its only caller, is closed by the D5 byte.
   void ReadDosLine(std::uint16_t _segment, std::uint16_t _offset);
 
   // DOS's file services, int 21h: native, on the platform's DosFiles, which answers as the emulated DOS did.
@@ -203,7 +168,7 @@ public:
   DosAnswer SetFileAttributes(std::uint16_t _segment, std::uint16_t _name, std::uint16_t _attributes);
 
   /// Int 21h AH=3Ch, CX=_attributes: the file named at _segment:_name created, or emptied, and stamped with DOS's time at the
-  /// machine's clock; AX its handle.
+  /// platform's clock; AX its handle.
   [[nodiscard]] DosAnswer CreateFile(std::uint16_t _segment, std::uint16_t _name, std::uint16_t _attributes);
 
   /// Int 21h AH=3Dh, AL=_access: the file named at _segment:_name opened, 0 to read, 1 to write, 2 both; AX its handle.
@@ -212,7 +177,7 @@ public:
   /// Int 21h AH=3Fh: up to _bytes from the file _handle into _segment:_buffer; AX the count read.
   [[nodiscard]] DosAnswer ReadFile(std::uint16_t _handle, std::uint16_t _segment, std::uint16_t _buffer, std::uint16_t _bytes);
 
-  /// Int 21h AH=40h: _bytes from _segment:_buffer written to the file _handle, stamped with DOS's time at the machine's
+  /// Int 21h AH=40h: _bytes from _segment:_buffer written to the file _handle, stamped with DOS's time at the platform's
   /// clock; AX the count written.
   [[nodiscard]] DosAnswer WriteFile(std::uint16_t _handle, std::uint16_t _segment, std::uint16_t _buffer, std::uint16_t _bytes);
 
@@ -231,21 +196,39 @@ public:
 
   // ── Docked, Galaxy, StartUp and Scene (level 5, group B3) ──
 
-  /// _point's cycles pass as they pass in a wait (Pc::Spend): the time the IBM PC spent on work the reference sets no pace
-  /// for, paid where an interpreted run paid it (ADR-013). Only a routine hooked as one that waits may call it.
+  /// _point's cycles pass as they pass in a wait (Platform::Spend): the time the IBM PC spent on work the reference sets no
+  /// pace for, paid where an interpreted run paid it (ADR-013).
   void Spend(const PacingPoint& _point);
 
   // ── Start, GameLoop and RunFlight (level 5, group F) ──
 
-  /// Int 21h AH=30h, AL=_al: DOS's version. AL goes in as the caller has it: DOS 5 and later read it as which of two answers to
-  /// give in BH.
+  /// Int 21h AH=30h, AL=_al: DOS's version, 3.30. AL goes in as the caller has it: DOS 5 and later read it as which of two
+  /// answers to give in BH.
   [[nodiscard]] DosVersion ReadDosVersion(std::uint8_t _al);
 
   /// Int 21h AH=2Ch: DOS's time of day.
   [[nodiscard]] DosTime ReadDosTime();
 
+  // ── What the emulated PC kept in memory, outside the game's (D33) ──
+
+  /// Interrupt _vector's entry in the vector table, at 0000:_vector*4 on the PC: the handler an INT or an IRQ reaches.
+  [[nodiscard]] FarAddress InterruptVector(std::uint8_t _vector);
+
+  /// Interrupt _vector's entry set to _handler: how the game installs its own handlers and puts the BIOS's back.
+  void SetInterruptVector(std::uint8_t _vector, FarAddress _handler);
+
+  /// The byte of the BIOS's ROM at _segment:_offset (Platform::RomByte): where the game looks for an Amstrad's name, and
+  /// where a vector the BIOS serves points.
+  [[nodiscard]] std::uint8_t RomByte(std::uint16_t _segment, std::uint16_t _offset);
+
+  /// The first byte of the code a vector names (Platform::HandlerOpcode): whether a driver is behind int 33h, or the ROM's
+  /// IRET.
+  [[nodiscard]] std::uint8_t HandlerOpcode(FarAddress _handler);
+
+  /// The command tail DOS gave the program, which its PSP held at 81h, its length at 80h: what the program was started with.
+  [[nodiscard]] std::string_view CommandTail() const noexcept;
+
 private:
-  Machine::Pc& m_pc;
   Platform& m_platform;
 };
 

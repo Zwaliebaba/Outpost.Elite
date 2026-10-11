@@ -24,8 +24,7 @@ public:
   TEST_METHOD(TwinTakesASetUp)
   {
     TwinRig rig("TwinSetUp");
-    rig.Both([](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-             { _pc.Ram().Write8(Elite::DataSegment(_program), Elite::DS.fuel.offset, 0x20); });
+    rig.Both([](Elite::Platform&, Elite::GameState& _state) { _state.SetByte(Elite::DS.fuel.offset, 0x20); });
     rig.Play("key space; wait 4\ndigest docked");
   }
 };

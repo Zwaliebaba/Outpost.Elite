@@ -42,12 +42,12 @@ struct GameLoopExit
 /// leaves for it the next time round. Waits as a rule (ADR-015).
 GameLoopExit GameLoop(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward);
 
-/// InstallDivideAndKeyboardInterrupts (CS:0105): int 0 and int 9 in the interrupt table at _vectors:0000 saved and,
-/// with interrupts off, replaced by the game's, int 8's segment rewritten; then interrupts on, and ResetKeyboard.
-void InstallDivideAndKeyboardInterrupts(GameState& _state, Hardware& _hardware, std::uint16_t _vectors);
+/// InstallDivideAndKeyboardInterrupts (CS:0105): the BIOS's int 0 and int 9 saved in the data segment and, with interrupts
+/// off, the game's handlers installed in their place, int 8's segment rewritten; then interrupts on, and ResetKeyboard.
+void InstallDivideAndKeyboardInterrupts(GameState& _state, Hardware& _hardware);
 
-/// RestoreDivideAndKeyboardInterrupts (CS:0148): with interrupts off, int 9 and int 0 put back in the interrupt table,
-/// segment then offset, from what InstallDivideAndKeyboardInterrupts saved; then interrupts on.
+/// RestoreDivideAndKeyboardInterrupts (CS:0148): with interrupts off, the BIOS's int 9 and int 0 handlers put back from what
+/// InstallDivideAndKeyboardInterrupts saved; then interrupts on.
 void RestoreDivideAndKeyboardInterrupts(GameState& _state, Hardware& _hardware);
 
 /// CopyProtection (CS:04A3): nothing while protectionShown is set, as the D5 byte makes it; otherwise, once, a question from
@@ -55,8 +55,8 @@ void RestoreDivideAndKeyboardInterrupts(GameState& _state, Hardware& _hardware);
 /// its page, line and word decoded into the prompt, the answer read by DOS and upper-cased, and a timer tick. Waits then.
 void CopyProtection(GameState& _state, Hardware& _hardware);
 
-/// CheckCheatArgument (CS:02A5): cheatEnabled=1 when the command tail is exactly ' cheat', 0 otherwise.
-void CheckCheatArgument(GameState& _state);
+/// CheckCheatArgument (CS:02A5): cheatEnabled=1 when the command tail DOS gave the program is exactly ' cheat', 0 otherwise.
+void CheckCheatArgument(GameState& _state, const Hardware& _hardware);
 
 /// WipeProgram (CS:0554): interrupts off, and CS:0564-8F30 filled with the code segment's low byte, a byte at a time,
 /// going up from 0564h, or down from it when _backward (REP STOSB with the direction flag set).
@@ -72,8 +72,7 @@ void ShowCredits(GameState& _state, Hardware& _hardware, bool _backward);
 
 // ── The entry of the program ──
 
-/// DS = the PSP, BP and DF as DOS leaves them. Pushes the far return to PSP:0000 first, as the original does, so that the hook's
-/// RETF, once the program ends, reaches INT 20h there. Out: DS the data segment. Waits.
+/// Start, with the PSP's segment, BP and the direction flag as DOS leaves them. The program ends when it returns. Waits.
 void StartEntry(Guest& _guest);
 
 } // namespace Elite

@@ -26,8 +26,7 @@ constexpr std::uint8_t FLAG_MASKING_DEVICE = 0x40;
 // The data segment byte at _offset, set to _value on the twin.
 void SetByte(TwinRig& _rig, std::uint16_t _offset, std::uint8_t _value)
 {
-  _rig.Both([_offset, _value](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-            { _pc.Ram().Write8(Elite::DataSegment(_program), _offset, _value); });
+  _rig.Both([_offset, _value](Elite::Platform&, Elite::GameState& _state) { _state.SetByte(_offset, _value); });
 }
 
 void SetByte(TwinRig& _rig, Elite::DataField<std::uint8_t> _field, std::uint8_t _value)
@@ -39,11 +38,10 @@ void SetByte(TwinRig& _rig, Elite::DataField<std::uint8_t> _field, std::uint8_t 
 void SetCredits(TwinRig& _rig, std::uint32_t _tenths)
 {
   _rig.Both(
-    [_tenths](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
+    [_tenths](Elite::Platform&, Elite::GameState& _state)
     {
-      const std::uint16_t data = Elite::DataSegment(_program);
-      _pc.Ram().Write16(data, DS.creditsTenths.offset, static_cast<std::uint16_t>(_tenths));
-      _pc.Ram().Write16(data, DS.data75F5.offset, static_cast<std::uint16_t>(_tenths >> 16));
+      _state.SetWord(DS.creditsTenths.offset, static_cast<std::uint16_t>(_tenths));
+      _state.SetWord(DS.data75F5.offset, static_cast<std::uint16_t>(_tenths >> 16));
     });
 }
 
@@ -51,8 +49,7 @@ void SetCredits(TwinRig& _rig, std::uint32_t _tenths)
 [[nodiscard]] std::uint8_t TwinByte(TwinRig& _rig, Elite::DataField<std::uint8_t> _field)
 {
   std::uint8_t value = 0;
-  _rig.Both([&value, _field](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-            { value = _pc.Ram().Read8(Elite::DataSegment(_program), _field.offset); });
+  _rig.Both([&value, _field](Elite::Platform&, Elite::GameState& _state) { value = _state.Byte(_field.offset); });
   return value;
 }
 
@@ -60,8 +57,7 @@ void SetCredits(TwinRig& _rig, std::uint32_t _tenths)
 [[nodiscard]] std::uint16_t TwinMessage(TwinRig& _rig)
 {
   std::uint16_t message = 0;
-  _rig.Both([&message](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-            { message = _pc.Ram().Read16(Elite::DataSegment(_program), DS.messagePointer.offset); });
+  _rig.Both([&message](Elite::Platform&, Elite::GameState& _state) { message = _state.Word(DS.messagePointer.offset); });
   return message;
 }
 

@@ -5,7 +5,7 @@
 #include "AudioStream.h"
 #include "DirectoryFileStore.h"
 #include "Game.h"
-#include "Pc.h"
+#include "Platform.h"
 #include "Presenter.h"
 #include "Reference.h"
 #include "Replay.h"
@@ -81,21 +81,22 @@ std::string SessionName()
   return std::format("session-{:04}{:02}{:02}-{:02}{:02}{:02}", now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond);
 }
 
-std::wstring Describe(Machine::StopReason _reason, const Machine::Pc& _pc)
+std::wstring Describe(Elite::StopReason _reason, const Elite::Platform& _platform)
 {
-  const Machine::Registers& registers = _pc.Processor().Regs();
   switch (_reason)
   {
-  case Machine::StopReason::Fault:
+  case Elite::StopReason::Fault:
     return L"The game made a DOS or BIOS call the host does not provide.";
-  case Machine::StopReason::Spinning:
-    return std::format(L"The game ran {} steps without waiting, at {:04X}:{:04X}.", _pc.SpinLimit(), registers.cs, registers.ip);
-  case Machine::StopReason::Unported:
-    return std::format(L"The game reached code no native routine stands in for, at {:04X}:{:04X}.", registers.cs, registers.ip);
-  case Machine::StopReason::Overran:
-    return L"A native routine waited where it cannot: " + std::wstring(_pc.Native().Overran().begin(), _pc.Native().Overran().end()) + L".";
-  case Machine::StopReason::Terminated:
-  case Machine::StopReason::Reached:
+  case Elite::StopReason::Spinning:
+    return std::format(L"The game ran {} turns without waiting.", _platform.SpinLimit());
+  case Elite::StopReason::Unported:
+    if (const std::optional<Elite::FarAddress>& at = _platform.UnportedAt(); at.has_value())
+    {
+      return std::format(L"The game reached code no native routine stands in for, at {:04X}:{:04X}.", at->segment, at->offset);
+    }
+    break;
+  case Elite::StopReason::Terminated:
+  case Elite::StopReason::Reached:
     break;
   }
   return {};
@@ -119,8 +120,7 @@ int Application::Run(HINSTANCE _instance)
   }
   m_window = window.Handle();
   Engine::Presenter presenter;
-  if (!presenter.Create(window.Handle(), Machine::FrameImage::WIDTH_PIXELS, Machine::FrameImage::HEIGHT_PIXELS, LOGICAL_WIDTH,
-                        LOGICAL_HEIGHT))
+  if (!presenter.Create(window.Handle(), Elite::FrameImage::WIDTH_PIXELS, Elite::FrameImage::HEIGHT_PIXELS, LOGICAL_WIDTH, LOGICAL_HEIGHT))
   {
     Fail(L"Direct3D 12 is not available on this machine.");
     return 1;
@@ -130,37 +130,37 @@ int Application::Run(HINSTANCE _instance)
 
   const std::filesystem::path commanders = UserFolder(L"Commanders");
   const std::filesystem::path replays = UserFolder(L"Replays");
-  Machine::DirectoryFileStore files(commanders.empty() ? std::filesystem::current_path() : commanders);
-  Machine::Pc::Desc desc;
+  Elite::DirectoryFileStore files(commanders.empty() ? std::filesystem::current_path() : commanders);
+  Elite::Platform::Desc desc;
   desc.startMoment = Elite::START_MOMENT; // fixed, so the session's replay plays back exactly (ADR-008)
-  // Every routine is native, in place of the original (ADR-010), so nothing is interpreted: the Pc's Dispatcher runs them
-  // (ADR-011), over the memory the GameState owns (D19).
+  // Every routine is native, in place of the original (ADR-010): the native platform runs them over the memory the GameState
+  // owns (D19, D33).
   const auto game = std::make_unique<Elite::Game>(files, desc);
   if (!game->Load(Elite::PSP_SEGMENT))
   {
     Fail(L"The game would not load.");
     return 1;
   }
-  Machine::Pc* const pc = &game->Host();
+  Elite::Platform* const platform = &game->Host();
 
   const std::string session = SessionName();
   Elite::ReplayRecorder recorder(std::format("Recorded by Outpost, {}.\nPlay it with ReferenceRunner --replay; see ADR-008.", session));
-  const Machine::Cycles start = pc->Clock();
+  const Elite::Cycles start = platform->Clock();
   std::uint64_t elapsedMilliseconds = 0;
   std::uint64_t nextDigest = DIGEST_INTERVAL_MILLISECONDS;
-  Machine::Cycles audioCycle = start;
+  Elite::Cycles audioCycle = start;
   auto wallStart = std::chrono::steady_clock::now();
-  const auto frame = std::make_unique<Machine::FrameImage>();
+  const auto frame = std::make_unique<Elite::FrameImage>();
   std::vector<std::uint32_t> pixels(frame->pixels.size());
   std::vector<std::int16_t> samples;
-  const auto palette = Machine::CgaPalette();
+  const auto palette = Elite::CgaPalette();
   const auto rgb = [&](std::uint8_t _index)
   {
-    const Machine::RgbColor& color = palette[_index & 0x0F];
+    const Elite::RgbColor& color = palette[_index & 0x0F];
     return (std::uint32_t{color.red} << 16) | (std::uint32_t{color.green} << 8) | color.blue;
   };
 
-  Machine::StopReason reason = Machine::StopReason::Reached;
+  Elite::StopReason reason = Elite::StopReason::Reached;
   while (window.PumpMessages())
   {
     for (const Engine::KeyEvent& key : window.TakeKeyEvents())
@@ -169,7 +169,7 @@ int Application::Run(HINSTANCE _instance)
       // keys they copy. A key the XT does not have is neither sent nor recorded.
       if (recorder.Key(elapsedMilliseconds, key.scanCode, key.down))
       {
-        pc->KeyboardController().Inject(static_cast<std::uint8_t>(key.scanCode | (key.down ? 0 : BREAK_BIT)));
+        platform->KeyboardController().Inject(static_cast<std::uint8_t>(key.scanCode | (key.down ? 0 : BREAK_BIT)));
       }
     }
     if (window.TakeResized() && !presenter.Resize())
@@ -187,30 +187,30 @@ int Application::Run(HINSTANCE _instance)
       wallStart += std::chrono::milliseconds(target - elapsedMilliseconds - LONGEST_CATCH_UP_MILLISECONDS);
       target = elapsedMilliseconds + LONGEST_CATCH_UP_MILLISECONDS;
     }
-    while (reason == Machine::StopReason::Reached && nextDigest <= target)
+    while (reason == Elite::StopReason::Reached && nextDigest <= target)
     {
-      reason = pc->RunUntil(Elite::ReplayCycle(start, nextDigest));
-      recorder.Digest(nextDigest, std::format("t{}", nextDigest / 1000), Elite::TakeCheckpoint(game->State(), pc->Video()));
+      reason = platform->RunUntil(Elite::ReplayCycle(start, nextDigest));
+      recorder.Digest(nextDigest, std::format("t{}", nextDigest / 1000), Elite::TakeCheckpoint(game->State(), platform->Video()));
       nextDigest += DIGEST_INTERVAL_MILLISECONDS;
     }
-    if (reason == Machine::StopReason::Reached)
+    if (reason == Elite::StopReason::Reached)
     {
-      reason = pc->RunUntil(Elite::ReplayCycle(start, target));
+      reason = platform->RunUntil(Elite::ReplayCycle(start, target));
     }
     elapsedMilliseconds = target;
-    if (reason != Machine::StopReason::Reached)
+    if (reason != Elite::StopReason::Reached)
     {
       break;
     }
 
-    const std::size_t count = Machine::Speaker::SampleCount(audioCycle, pc->Clock(), SAMPLE_RATE);
+    const std::size_t count = Elite::Speaker::SampleCount(audioCycle, platform->Clock(), SAMPLE_RATE);
     samples.resize(count);
-    samples.resize(pc->Sound().RenderSamples(audioCycle, pc->Clock(), SAMPLE_RATE, samples));
+    samples.resize(platform->Sound().RenderSamples(audioCycle, platform->Clock(), SAMPLE_RATE, samples));
     audio.Submit(samples);
-    audioCycle = pc->Clock();
-    pc->Sound().DiscardBefore(Machine::Speaker::FirstSampleStart(audioCycle, SAMPLE_RATE));
+    audioCycle = platform->Clock();
+    platform->Sound().DiscardBefore(Elite::Speaker::FirstSampleStart(audioCycle, SAMPLE_RATE));
 
-    pc->Video().Render(pc->Ram(), *frame);
+    platform->Render(*frame);
     for (std::size_t index = 0; index < pixels.size(); ++index)
     {
       pixels[index] = rgb(frame->pixels[index]);
@@ -225,13 +225,13 @@ int Application::Run(HINSTANCE _instance)
   if (!replays.empty() && elapsedMilliseconds > DIGEST_INTERVAL_MILLISECONDS)
   {
     // The last digest is where the session ended, so the replay plays to the end, or to the same stop.
-    recorder.Digest(elapsedMilliseconds, "end", Elite::TakeCheckpoint(game->State(), pc->Video()));
+    recorder.Digest(elapsedMilliseconds, "end", Elite::TakeCheckpoint(game->State(), platform->Video()));
     std::ofstream out(replays / (session + ".replay"), std::ios::binary | std::ios::trunc);
     out << recorder.Text();
   }
-  if (reason != Machine::StopReason::Reached && reason != Machine::StopReason::Terminated)
+  if (reason != Elite::StopReason::Reached && reason != Elite::StopReason::Terminated)
   {
-    Fail(Describe(reason, *pc));
+    Fail(Describe(reason, *platform));
     return 1;
   }
   return 0;

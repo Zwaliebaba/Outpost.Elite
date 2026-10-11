@@ -25,8 +25,7 @@ constexpr std::uint16_t SLOT_BYTES = 0x40;
 // A byte of the data segment set on the twin.
 void SetBoth(TwinRig& _rig, Elite::DataField<std::uint8_t> _field, std::uint8_t _value)
 {
-  _rig.Both([&](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-            { _pc.Ram().Write8(Elite::DataSegment(_program), _field.offset, _value); });
+  _rig.Both([&](Elite::Platform&, Elite::GameState& _state) { _state.SetByte(_field.offset, _value); });
 }
 
 // Launches from Lave, and flies on for 6 seconds.

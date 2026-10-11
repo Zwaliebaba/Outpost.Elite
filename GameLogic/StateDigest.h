@@ -3,14 +3,10 @@
 
 #include <string>
 
-namespace Machine
-{
-class Cga;
-} // namespace Machine
-
 namespace Elite
 {
 
+class Cga;
 class GameState;
 
 /// The SHA-256, as lowercase hex, of the game's state (ADR-008): what replays check and what Phase 3
@@ -28,7 +24,7 @@ class GameState;
 /// its sign; the stack range, which holds whatever the last calls and interrupts left below SP, and at
 /// its foot triangleEdgeMasks (DS:AD60-AD6F), constant data; and DOS's and the BIOS's own memory, which
 /// the game does not read.
-[[nodiscard]] std::string GameStateDigest(const GameState& _state, const Machine::Cga& _video);
+[[nodiscard]] std::string GameStateDigest(const GameState& _state, const Cga& _video);
 
 /// The SHA-256, as lowercase hex, of what the player sees (D33): the second and third parts of GameStateDigest, in its
 /// order, and nothing else:
@@ -38,6 +34,6 @@ class GameState;
 ///
 /// It was recorded beside every state digest of the corpus and the twins while each still met the original's (Phase 5's
 /// first piece), so that what the player sees at those points stays the original's once the rest of the state may differ.
-[[nodiscard]] std::string PictureDigest(const GameState& _state, const Machine::Cga& _video);
+[[nodiscard]] std::string PictureDigest(const GameState& _state, const Cga& _video);
 
 } // namespace Elite

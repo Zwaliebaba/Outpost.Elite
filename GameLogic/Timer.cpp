@@ -18,9 +18,7 @@ constexpr std::uint16_t TIMER_INTERRUPT = 0x0215;
 // The BIOS's int 8 vector, which InstallTimerInterrupt keeps in the code segment (savedTimerVector).
 constexpr std::uint16_t SAVED_TIMER_OFFSET = 0x025A;
 constexpr std::uint16_t SAVED_TIMER_SEGMENT = 0x025C;
-constexpr std::uint16_t VECTOR_TABLE_SEGMENT = 0x0000;
-constexpr std::uint16_t TIMER_VECTOR_OFFSET = 0x0020; // 0000:0020, int 8
-constexpr std::uint16_t TIMER_VECTOR_SEGMENT = 0x0022;
+constexpr std::uint8_t TIMER_VECTOR = 0x08;
 
 constexpr std::uint8_t PIT_CHANNEL0_SQUARE_WAVE = 0x36; // channel 0, both bytes, mode 3
 constexpr std::uint8_t PIT_CHANNEL0_RATE = 0x34;        // channel 0, both bytes, mode 2: the Amstrad's mouse
@@ -349,18 +347,19 @@ void InstallTimerInterrupt(GameState& _state, Hardware& _hardware)
   const auto image = static_cast<std::uint8_t>(speaker & ~SPEAKER_BITS);
   _state.Set(DS.speakerPortImage, image);
   _hardware.SetSystemControl(image);
-  _state.SetCodeWord(SAVED_TIMER_OFFSET, _state.FarWord(VECTOR_TABLE_SEGMENT, TIMER_VECTOR_OFFSET));
-  _state.SetCodeWord(SAVED_TIMER_SEGMENT, _state.FarWord(VECTOR_TABLE_SEGMENT, TIMER_VECTOR_SEGMENT));
-  _state.SetFarWord(VECTOR_TABLE_SEGMENT, TIMER_VECTOR_OFFSET, TIMER_INTERRUPT);
-  _state.SetFarWord(VECTOR_TABLE_SEGMENT, TIMER_VECTOR_SEGMENT, _state.CodeSegment());
+  // The BIOS's handler kept, and the game's own installed in its place.
+  const FarAddress bios = _hardware.InterruptVector(TIMER_VECTOR);
+  _state.SetCodeWord(SAVED_TIMER_OFFSET, bios.offset);
+  _state.SetCodeWord(SAVED_TIMER_SEGMENT, bios.segment);
+  _hardware.SetInterruptVector(TIMER_VECTOR, FarAddress{_state.CodeSegment(), TIMER_INTERRUPT});
   _hardware.EnableInterrupts();
 }
 
 BiosClock RestoreTimerInterrupt(GameState& _state, Hardware& _hardware)
 {
   _hardware.DisableInterrupts();
-  _state.SetFarWord(VECTOR_TABLE_SEGMENT, TIMER_VECTOR_SEGMENT, _state.CodeWord(SAVED_TIMER_SEGMENT));
-  _state.SetFarWord(VECTOR_TABLE_SEGMENT, TIMER_VECTOR_OFFSET, _state.CodeWord(SAVED_TIMER_OFFSET));
+  // The BIOS's handler put back, from what InstallTimerInterrupt kept.
+  _hardware.SetInterruptVector(TIMER_VECTOR, FarAddress{_state.CodeWord(SAVED_TIMER_SEGMENT), _state.CodeWord(SAVED_TIMER_OFFSET)});
   _hardware.SetSystemControl(_state.Get(DS.savedSpeakerPort));
   std::uint8_t mode = PIT_CHANNEL0_SQUARE_WAVE;
   std::uint16_t divisor = 0;
@@ -368,7 +367,7 @@ BiosClock RestoreTimerInterrupt(GameState& _state, Hardware& _hardware)
   {
     // The Amstrad's mouse driver keeps its own rate.
     mode = PIT_CHANNEL0_RATE;
-    if (IsMouseDriverInstalled(_state).installed)
+    if (IsMouseDriverInstalled(_hardware).installed)
     {
       divisor = AMSTRAD_MOUSE_DIVISOR;
     }
@@ -401,7 +400,7 @@ void TimerInterrupt(GameState& _state, Hardware& _hardware, bool _backward)
     return;
   }
   // The Amstrad's BIOS clock still needs its 18.2 Hz: every 18th tick, or every 55th with the mouse driver's rate.
-  const bool mouse = IsMouseDriverInstalled(_state).installed;
+  const bool mouse = IsMouseDriverInstalled(_hardware).installed;
   if (Decrement(_state, DS.biosTimerChainCountdown) != 0)
   {
     return;
@@ -448,7 +447,7 @@ void WaitForTimerTick(GameState& _state, Hardware& _hardware)
 void TimerInterruptEntry(Guest& _guest)
 {
   // AX, DS and ES pushed round what it loads into them, and popped: every register is kept, and the IRET takes the flags.
-  TimerInterrupt(_guest.State(), _guest.Devices(), _guest.Flag(Machine::FLAG_DIRECTION));
+  TimerInterrupt(_guest.State(), _guest.Devices(), _guest.Backward());
 }
 
 namespace

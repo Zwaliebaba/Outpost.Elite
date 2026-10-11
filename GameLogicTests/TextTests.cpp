@@ -130,12 +130,11 @@ std::uint16_t LaunchMissileAtPlayer(TwinRig& _rig, std::uint16_t _launcher)
 {
   std::string name;
   _rig.Both(
-    [&name](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
+    [&name](Elite::Platform&, Elite::GameState& _state)
     {
       name.clear();
       for (std::size_t index = 0; index < IDENTITY_CLASS_BYTES; ++index)
-        name += static_cast<char>(_pc.Ram().Read8(Elite::DataSegment(_program),
-                                                  static_cast<std::uint16_t>(DS.shipIdentityText.offset + IDENTITY_CLASS_OFFSET + index)));
+        name += static_cast<char>(_state.Byte(static_cast<std::uint16_t>(DS.shipIdentityText.offset + IDENTITY_CLASS_OFFSET + index)));
     });
   return name;
 }

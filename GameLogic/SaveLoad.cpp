@@ -427,7 +427,7 @@ DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _sh
     }
     if (scan == SCAN_M)
     {
-      if (IsMouseDriverInstalled(_state).installed)
+      if (IsMouseDriverInstalled(_hardware).installed)
       {
         _state.Set(DS.inputDevice, MOUSE_DEVICE);
         _hardware.LoopTurn(SHOW_CONTROL_DEVICE, {});

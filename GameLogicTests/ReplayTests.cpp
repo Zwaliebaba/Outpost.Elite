@@ -72,14 +72,14 @@ public:
     Assert::IsTrue(Elite::ParseSteps("wait 1", one, error), L"parses");
     for (int index = 0; index < 1000; ++index)
       Assert::IsTrue(Elite::ParseSteps("wait 0.001", many, error), L"parses");
-    Machine::Cycles ends[2] = {};
+    Elite::Cycles ends[2] = {};
     for (int run = 0; run < 2; ++run)
     {
       ReferenceRig rig("Waits");
       Elite::ReplayPlayer player(rig.Host(), rig.State());
       Elite::Checkpoint checkpoint;
       for (const Elite::Step& step : run == 0 ? one : many)
-        Assert::IsTrue(player.Play(step, checkpoint) == Machine::StopReason::Reached, L"runs");
+        Assert::IsTrue(player.Play(step, checkpoint) == Elite::StopReason::Reached, L"runs");
       Assert::AreEqual(std::uint64_t{1'000}, player.ElapsedMilliseconds());
       ends[run] = rig.Host().Clock();
     }
@@ -104,7 +104,7 @@ public:
 
     ReferenceRig live("RecordLive");
     Elite::ReplayRecorder recorder("a test session");
-    const Machine::Cycles start = live.Host().Clock();
+    const Elite::Cycles start = live.Host().Clock();
     std::uint64_t now = 0;
     for (const Press& press : presses)
     {
@@ -112,14 +112,14 @@ public:
       for (std::uint64_t step = 13; now + step < press.milliseconds; step += 7)
       {
         now += step;
-        Assert::IsTrue(live.Host().RunUntil(Elite::ReplayCycle(start, now)) == Machine::StopReason::Reached, L"runs");
+        Assert::IsTrue(live.Host().RunUntil(Elite::ReplayCycle(start, now)) == Elite::StopReason::Reached, L"runs");
       }
       now = press.milliseconds;
-      Assert::IsTrue(live.Host().RunUntil(Elite::ReplayCycle(start, now)) == Machine::StopReason::Reached, L"runs");
+      Assert::IsTrue(live.Host().RunUntil(Elite::ReplayCycle(start, now)) == Elite::StopReason::Reached, L"runs");
       Assert::IsTrue(recorder.Key(now, press.scanCode, press.down), L"an XT key");
       live.Host().KeyboardController().Inject(static_cast<std::uint8_t>(press.scanCode | (press.down ? 0 : 0x80)));
     }
-    Assert::IsTrue(live.Host().RunUntil(Elite::ReplayCycle(start, END_MILLISECONDS)) == Machine::StopReason::Reached, L"runs");
+    Assert::IsTrue(live.Host().RunUntil(Elite::ReplayCycle(start, END_MILLISECONDS)) == Elite::StopReason::Reached, L"runs");
     const Elite::Checkpoint expected = Elite::TakeCheckpoint(live.State(), live.Host().Video());
     recorder.Digest(END_MILLISECONDS, "end", expected);
 
@@ -132,7 +132,7 @@ public:
     Assert::AreEqual(expected.outcomes.c_str(), steps.back().expectedOutcomes.c_str(), false, L"and its outcome line");
     Elite::Checkpoint checkpoint;
     for (const Elite::Step& step : steps)
-      Assert::IsTrue(player.Play(step, checkpoint) == Machine::StopReason::Reached, L"plays");
+      Assert::IsTrue(player.Play(step, checkpoint) == Elite::StopReason::Reached, L"plays");
     Assert::AreEqual(expected.digest.c_str(), checkpoint.digest.c_str());
     Assert::AreEqual(expected.picture.c_str(), checkpoint.picture.c_str());
     Assert::AreEqual(expected.outcomes.c_str(), checkpoint.outcomes.c_str());
@@ -248,9 +248,9 @@ public:
     Assert::AreEqual(std::size_t{4}, steps.size());
     Assert::IsTrue(steps[1].kind == Elite::StepKind::End);
     Assert::AreEqual(std::uint64_t{1'500}, steps[1].waitMilliseconds);
-    Assert::IsTrue(Elite::ExpectedStop(steps[1]) == Machine::StopReason::Terminated, L"the program must end in an end step");
+    Assert::IsTrue(Elite::ExpectedStop(steps[1]) == Elite::StopReason::Terminated, L"the program must end in an end step");
     for (const std::size_t other : {std::size_t{0}, std::size_t{2}, std::size_t{3}})
-      Assert::IsTrue(Elite::ExpectedStop(steps[other]) == Machine::StopReason::Reached, L"and in no other");
+      Assert::IsTrue(Elite::ExpectedStop(steps[other]) == Elite::StopReason::Reached, L"and in no other");
     Assert::IsTrue(Elite::ParseSteps("digest again", steps, error), L"a digest may follow, in a later text too");
     Assert::IsFalse(Elite::ParseSteps("wait 1", steps, error), L"a wait may not");
     Assert::IsTrue(error.find("only digest and shot may follow end") != std::string::npos, L"says why");
@@ -267,12 +267,12 @@ public:
     struct Ending
     {
       std::string_view steps;
-      Machine::StopReason stop; // what its step that runs the machine returns
-      bool accepted;            // whether that is what the step must return
+      Elite::StopReason stop; // what its step that runs the machine returns
+      bool accepted;          // whether that is what the step must return
     };
-    const Ending endings[] = {{"key y; end 1; digest dos; digest again", Machine::StopReason::Terminated, true},
-                              {"key y; wait 1", Machine::StopReason::Terminated, false},
-                              {"end 1", Machine::StopReason::Reached, false}};
+    const Ending endings[] = {{"key y; end 1; digest dos; digest again", Elite::StopReason::Terminated, true},
+                              {"key y; wait 1", Elite::StopReason::Terminated, false},
+                              {"end 1", Elite::StopReason::Reached, false}};
     for (const Ending& ending : endings)
     {
       ReferenceRig rig("EndStep");
@@ -282,20 +282,20 @@ public:
       Elite::ReplayPlayer player(rig.Host(), rig.State());
       Elite::Checkpoint checkpoint;
       for (const Elite::Step& step : steps)
-        Assert::IsTrue(player.Play(step, checkpoint) == Machine::StopReason::Reached, L"the menus run");
+        Assert::IsTrue(player.Play(step, checkpoint) == Elite::StopReason::Reached, L"the menus run");
       steps.clear();
       Assert::IsTrue(Elite::ParseSteps(ending.steps, steps, error), L"parses");
       std::vector<std::string> digests;
       for (const Elite::Step& step : steps)
       {
-        const Machine::StopReason stop = player.Play(step, checkpoint);
+        const Elite::StopReason stop = player.Play(step, checkpoint);
         if (step.kind == Elite::StepKind::Wait || step.kind == Elite::StepKind::End)
         {
           Assert::IsTrue(stop == ending.stop, L"Y ends the program, and nothing else does");
           Assert::AreEqual(ending.accepted, stop == Elite::ExpectedStop(step), L"only an end step may end it, and it must");
         }
         else
-          Assert::IsTrue(stop == Machine::StopReason::Reached, L"a key or a digest stops nothing");
+          Assert::IsTrue(stop == Elite::StopReason::Reached, L"a key or a digest stops nothing");
         if (step.kind == Elite::StepKind::Digest)
           digests.push_back(checkpoint.digest);
       }
@@ -328,16 +328,16 @@ public:
     std::vector<Elite::Step> steps;
     std::string error;
     Assert::IsTrue(Elite::ParseSteps("file pilot.cdr first.cdr", steps, error), L"parses");
-    const Machine::Cycles before = rig.Host().Clock();
+    const Elite::Cycles before = rig.Host().Clock();
     Elite::Checkpoint checkpoint;
-    Assert::IsTrue(player.Play(steps[0], checkpoint) == Machine::StopReason::Reached, L"copies");
+    Assert::IsTrue(player.Play(steps[0], checkpoint) == Elite::StopReason::Reached, L"copies");
     Assert::AreEqual(before, rig.Host().Clock(), L"no time passes");
     Assert::IsTrue(Elite::ReadWholeFile(rig.Files() / "PILOT.CDR") == first, L"the copy, under its DOS name");
 
     std::uint8_t attribute = 0xFF;
-    Assert::IsTrue(rig.Store().Attribute("PILOT.CDR", attribute) == Machine::DosError::None, L"DOS finds it");
+    Assert::IsTrue(rig.Store().Attribute("PILOT.CDR", attribute) == Elite::DosError::None, L"DOS finds it");
     Assert::AreEqual(0u, std::uint32_t{attribute}, L"no attribute, not even archive");
-    const std::vector<Machine::FileEntry> listed = rig.Store().List();
+    const std::vector<Elite::FileEntry> listed = rig.Store().List();
     Assert::AreEqual(std::size_t{1}, listed.size());
     Assert::AreEqual(std::uint32_t{0x0021}, std::uint32_t{listed[0].stamp.date}, L"1980-01-01");
     Assert::AreEqual(std::uint32_t{0}, std::uint32_t{listed[0].stamp.time}, L"00:00:00");
@@ -345,7 +345,7 @@ public:
 
     steps.clear();
     Assert::IsTrue(Elite::ParseSteps("file PILOT.CDR second.cdr", steps, error), L"parses");
-    Assert::IsTrue(player.Play(steps[0], checkpoint) == Machine::StopReason::Reached, L"copies again");
+    Assert::IsTrue(player.Play(steps[0], checkpoint) == Elite::StopReason::Reached, L"copies again");
     Assert::IsTrue(Elite::ReadWholeFile(rig.Files() / "PILOT.CDR") == second, L"the second copy replaces the first");
   }
 

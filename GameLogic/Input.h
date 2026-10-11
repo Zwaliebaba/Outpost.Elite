@@ -60,8 +60,9 @@ void KeyboardInterrupt(GameState& _state, Hardware& _hardware);
 /// waits when X's one-shot drops before Y's, for Y's.
 [[nodiscard]] StickAxes ReadJoystickAxes(GameState& _state, Hardware& _hardware, std::uint8_t _trigger);
 
-/// IsMouseDriverInstalled (CS:02D4): the int 33h vector in the interrupt table, and whether a driver is behind it.
-[[nodiscard]] MouseDriver IsMouseDriverInstalled(const GameState& _state);
+/// IsMouseDriverInstalled (CS:02D4): the int 33h vector in the interrupt table, and whether a driver is behind it: whether
+/// the code it names is not an IRET.
+[[nodiscard]] MouseDriver IsMouseDriverInstalled(Hardware& _hardware);
 
 /// ResetKeyboard (CS:7668): every key up, keyBuffer empty, rollRate zero, with interrupts off; then interrupts on.
 void ResetKeyboard(GameState& _state, Hardware& _hardware);

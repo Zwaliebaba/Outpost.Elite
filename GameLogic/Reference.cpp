@@ -2,7 +2,6 @@
 
 #include "Reference.h"
 
-#include "Pc.h"
 #include "ReferenceImage.h"
 
 #include <fstream>
@@ -13,12 +12,27 @@
 namespace Elite
 {
 
-bool LoadReference(Machine::Pc& _pc, std::uint16_t _pspSegment, Machine::LoadedProgram& _program)
+std::optional<std::vector<std::uint8_t>> ReferenceLoadImage(std::uint16_t _loadSegment)
 {
-  Machine::ExeLoader::Desc load;
-  load.pspSegment = _pspSegment;
-  return _pc.Load(ReferenceExecutable(), load, _program) == Machine::LoadError::None &&
-         Machine::ExeLoader::PatchByte(_pc.Ram(), _program, DATA_SEGMENT_PARAGRAPH, D5_OFFSET, 0x00, 0x01);
+  constexpr std::size_t PARAGRAPH_BYTES = 16;
+  std::vector<std::uint8_t> image(REFERENCE_IMAGE.begin(), REFERENCE_IMAGE.end());
+  // Each relocation's word, at its segment and offset from the image's start, holds a segment number the load adds the load
+  // segment to, as EXEC does.
+  for (const Relocation& relocation : REFERENCE_RELOCATIONS)
+  {
+    const std::size_t at = std::size_t{relocation.segment} * PARAGRAPH_BYTES + relocation.offset;
+    const auto word = static_cast<std::uint16_t>((image[at] | (image[at + 1] << 8)) + _loadSegment);
+    image[at] = static_cast<std::uint8_t>(word & 0xFF);
+    image[at + 1] = static_cast<std::uint8_t>(word >> 8);
+  }
+  // D5 (ADR-001): the protection's "already shown" flag, written over the 00 the file holds.
+  const std::size_t d5 = std::size_t{DATA_SEGMENT_PARAGRAPH} * PARAGRAPH_BYTES + D5_OFFSET;
+  if (image[d5] != 0x00)
+  {
+    return std::nullopt;
+  }
+  image[d5] = 0x01;
+  return image;
 }
 
 std::filesystem::path FindInRepository(const std::filesystem::path& _name)

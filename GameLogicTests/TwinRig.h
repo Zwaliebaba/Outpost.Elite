@@ -21,9 +21,9 @@ namespace GameLogicTests
 /// How a TwinRig sets up its machine.
 struct TwinOptions
 {
-  Machine::Dos::DateTime startMoment = Elite::START_MOMENT; ///< DOS's clock at power-on
+  Elite::DosDateTime startMoment = Elite::START_MOMENT; ///< DOS's clock at power-on
   bool fromPowerOn = false;  ///< the twin starts at power-on, its digests counted from there, rather than at the title screen
-  bool mousePresent = false; ///< a mouse driver is loaded, the emulated one the PC services int 33h with
+  bool mousePresent = false; ///< a mouse driver is loaded, the platform's (Elite::Mouse)
 };
 
 /// The twins' known answers, from the repository's root. The file's header documents its format.
@@ -79,12 +79,12 @@ private:
   TwinAnswers m_answers;
 };
 
-/// A twin (ADR-016): the reference booted to its title screen, or started at power-on, on a Dispatcher with the native
-/// routines in place (ReferenceRig), and then a scenario no replay reaches, played step by step. A test sets up its state
-/// through Both, from the values the game's own code writes, and plays it with Play. Each digest it gives, at every digest
-/// step and at the end of every Play, must be the twin's next known answer (KnownAnswers), which the interpreted original
-/// gave for the same scenario before D7 deleted it. On a Dispatcher nothing is interpreted, so a twin also shows that its
-/// scenario reaches no code that no native routine stands in for.
+/// A twin (ADR-016): the reference booted to its title screen, or started at power-on, on the native platform
+/// (ReferenceRig), and then a scenario no replay reaches, played step by step. A test sets up its state through Both, from
+/// the values the game's own code writes, and plays it with Play. Each digest it gives, at every digest step and at the end
+/// of every Play, must be the twin's next known answer (KnownAnswers), which the interpreted original gave for the same
+/// scenario before D7 deleted it. A twin also shows that its scenario sends no interrupt to code no native routine stands in
+/// for.
 ///
 /// Beside each answer, the picture and the outcomes of the same state (D33) are checked against the ones recorded in
 /// KNOWN_PICTURES_FILE and KNOWN_OUTCOMES_FILE (GuardReport). A picture, or a timing outcome, that differs is reported: it
@@ -140,11 +140,11 @@ public:
     }
   }
 
-  /// Calls _change(pc, program) on the machine: how a test sets up a state no replay reaches, through Ram() and the data
-  /// segment (Elite::DataSegment). The name is the one the twins' set-ups were written with, when there were two machines.
+  /// Calls _change(platform, state) on the machine: how a test sets up a state no replay reaches, through the game's memory
+  /// and the platform's devices. The name is the one the twins' set-ups were written with, when there were two machines.
   template <typename Change> void Both(Change _change)
   {
-    _change(m_rig.Host(), m_rig.Program());
+    _change(m_rig.Host(), m_rig.State());
   }
 
   /// The game's memory, for a set-up that calls the game's own routines on it.
@@ -156,7 +156,7 @@ public:
   /// Plays _steps, in Replay.h's syntax. Each must reach the end of every step but the last, which must stop the run as
   /// _end says: StopReason::Terminated for a test that leaves the program. Every digest step, and the state the steps end
   /// in, must be the twin's next known answer.
-  void Play(std::string_view _steps, Machine::StopReason _end = Machine::StopReason::Reached)
+  void Play(std::string_view _steps, Elite::StopReason _end = Elite::StopReason::Reached)
   {
     const std::vector<Elite::Step> steps = Parse(_steps);
     for (std::size_t index = 0; index < steps.size(); ++index)
@@ -172,7 +172,7 @@ public:
     Answer(Elite::TakeCheckpoint(m_rig.State(), m_rig.Host().Video()), Widen(m_name) + L", the state Play ends in");
   }
 
-  [[nodiscard]] Machine::Pc& Host() noexcept
+  [[nodiscard]] Elite::Platform& Host() noexcept
   {
     return m_rig.Host();
   }
@@ -195,9 +195,9 @@ private:
   }
 
   /// How step _index of _count must stop the run: the last as _end says, every other at its end.
-  [[nodiscard]] static Machine::StopReason Stop(std::size_t _index, std::size_t _count, Machine::StopReason _end) noexcept
+  [[nodiscard]] static Elite::StopReason Stop(std::size_t _index, std::size_t _count, Elite::StopReason _end) noexcept
   {
-    return _index + 1 == _count ? _end : Machine::StopReason::Reached;
+    return _index + 1 == _count ? _end : Elite::StopReason::Reached;
   }
 
   /// _step, for a message: the twin, the line, and a digest step's label.
@@ -212,22 +212,17 @@ private:
   }
 
   /// Plays _step, which must stop the run as _expected says, and returns its checkpoint: a digest step's, or empty.
-  [[nodiscard]] Elite::Checkpoint PlayStep(const Elite::Step& _step, Machine::StopReason _expected, const std::wstring& _where)
+  [[nodiscard]] Elite::Checkpoint PlayStep(const Elite::Step& _step, Elite::StopReason _expected, const std::wstring& _where)
   {
     using Microsoft::VisualStudio::CppUnitTestFramework::Assert;
     Elite::Checkpoint checkpoint;
-    const Machine::StopReason stopped = m_player.Play(_step, checkpoint);
-    if (stopped == Machine::StopReason::Unported)
+    const Elite::StopReason stopped = m_player.Play(_step, checkpoint);
+    if (stopped == Elite::StopReason::Unported)
     {
-      const Machine::Registers& at = m_rig.Host().Processor().Regs();
-      Assert::Fail(
-        (_where + L": the twin reached code no native routine stands in for, at " + Widen(std::format("{:04X}:{:04X}", at.cs, at.ip)))
-          .c_str());
-    }
-    if (stopped == Machine::StopReason::Overran)
-    {
-      Assert::Fail(
-        (_where + L": native " + Widen(m_rig.Host().Native().Overran()) + L" waited, and is not hooked as a routine that waits").c_str());
+      const Elite::FarAddress at = m_rig.Host().UnportedAt().value_or(Elite::FarAddress{});
+      Assert::Fail((_where + L": the twin sent an interrupt to code no native routine stands in for, at " +
+                    Widen(std::format("{:04X}:{:04X}", at.segment, at.offset)))
+                     .c_str());
     }
     Assert::IsTrue(stopped == _expected, (_where + L": the run stopped otherwise").c_str());
     return checkpoint;

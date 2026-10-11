@@ -29,8 +29,7 @@ constexpr Position LEESTI = {13, 186};
 // _value into the data segment's _field, on the twin.
 void PokeBoth(TwinRig& _rig, Elite::DataField<std::uint8_t> _field, std::uint8_t _value)
 {
-  _rig.Both([_field, _value](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-            { _pc.Ram().Write8(Elite::DataSegment(_program), _field.offset, _value); });
+  _rig.Both([_field, _value](Elite::Platform&, Elite::GameState& _state) { _state.SetByte(_field.offset, _value); });
 }
 
 } // namespace
@@ -91,8 +90,8 @@ public:
     PokeBoth(rig, DS.chartCursorX, LEESTI.x);
     PokeBoth(rig, DS.chartCursorY, static_cast<std::uint8_t>(LEESTI.y / 2));
     rig.Play("key F7; wait 0.5\ndigest data");
-    rig.Both([](Machine::Pc& _pc, const Machine::LoadedProgram& _program)
-             { Assert::AreEqual(std::uint8_t{'1'}, _pc.Ram().Read8(Elite::DataSegment(_program), DS.data7D48.offset), L"two digits"); });
+    rig.Both([](Elite::Platform&, Elite::GameState& _state)
+             { Assert::AreEqual(std::uint8_t{'1'}, _state.Byte(DS.data7D48.offset), L"two digits"); });
     rig.Play("key F7; wait 0.1; key a; wait 0.1; key Escape; wait 0.3\ndigest closed");
   }
 };

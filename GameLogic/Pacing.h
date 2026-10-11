@@ -16,7 +16,7 @@ namespace Elite
 struct PacingPoint
 {
   std::uint16_t offset;
-  Machine::Cycles cycles;
+  Cycles cycles;
 };
 
 /// A frame of the galactic chart: the loop's call of PresentChartFrame. 521,504 to 522,342 cycles over 24
