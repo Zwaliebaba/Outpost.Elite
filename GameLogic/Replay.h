@@ -25,12 +25,14 @@ namespace Elite
 
 class GameState;
 
-/// What a digest step takes of the game: the state digest, which checks every byte, and the picture digest, which checks
-/// what the player sees (StateDigest.h). Each is lowercase hex.
+/// What a digest step takes of the game: the state digest, which checks every byte, the picture digest, which checks what
+/// the player sees (StateDigest.h), each in lowercase hex, and the outcomes, the named facts a player could notice
+/// (Outcome.h).
 struct Checkpoint
 {
-  std::string digest;  ///< GameStateDigest
-  std::string picture; ///< PictureDigest
+  std::string digest;   ///< GameStateDigest
+  std::string picture;  ///< PictureDigest
+  std::string outcomes; ///< OutcomeText
 };
 
 /// The checkpoint of the game whose memory _state holds and whose CGA is _video, as it is now.
@@ -56,6 +58,7 @@ struct Step
   std::string name;                   ///< Key, Down and Up: as written; Shot and Digest: the label; File: the DOS name, canonical
   std::string expectedDigest;         ///< Digest: lowercase hex, or empty for none
   std::string expectedPicture;        ///< Digest: the picture digest its picture line gives, lowercase hex, or empty for none
+  std::string expectedOutcomes;       ///< Digest: the outcomes its outcome line gives (OutcomeText's form), or empty for none
   std::string source;                 ///< File: the name of the file beside the replay that it copies
   std::size_t line = 0;               ///< the 1-based line the step was read from
 };
@@ -83,16 +86,19 @@ struct Step
 ///                        digest (PictureDigest) that digest point gives, in its Step's expectedPicture. A replay keeps every
 ///                        line it had before pictures were recorded; the picture lines were added, each after its digest's
 ///                        line (RecordCheckpoints), from runs that met every state digest (D33).
+///   outcome NAME FACTS   likewise a line of the digest step NAME just before it, after its picture line if it has one: the
+///                        outcomes (Outcome.h) that digest point gives, FACTS being name=value pairs as OutcomeText writes
+///                        them, in its Step's expectedOutcomes. Recorded as the picture lines are.
 ///
 /// Appends the steps to _steps and returns true, or returns false with _error naming the first step it
 /// could not read. (Not std::expected: clang 18 with libstdc++ 13 cannot compile it, ADR-004.)
 [[nodiscard]] bool ParseSteps(std::string_view _text, std::vector<Step>& _steps, std::string& _error);
 
 /// _text, a replay, with the checkpoint of each digest step in _checkpoints, by the line the step is on, written after that
-/// line: a picture line. A picture line that followed it before is replaced; every other line is kept, byte for byte, and
-/// a new line ends as the digest's line does. This is how the corpus's pictures are recorded (CorpusTests), only from runs
-/// that met every state digest. Returns false, with _error naming the line, if a digest step in _checkpoints is not alone on
-/// its line or no digest step is on it.
+/// line: a picture line, then an outcome line. The picture and outcome lines that followed it before are replaced; every
+/// other line is kept, byte for byte, and a new line ends as the digest's line does. This is how the corpus's pictures and
+/// outcomes are recorded (CorpusTests), only from runs that met every state digest. Returns false, with _error naming the
+/// line, if a digest step in _checkpoints is not alone on its line or no digest step is on it.
 [[nodiscard]] bool RecordCheckpoints(std::string_view _text, const std::map<std::size_t, Checkpoint>& _checkpoints, std::string& _recorded,
                                      std::string& _error);
 
@@ -131,7 +137,7 @@ public:
   bool Key(std::uint64_t _milliseconds, std::uint8_t _scanCode, bool _down);
 
   /// A digest labelled _name at _milliseconds, with the values _checkpoint says it must reproduce: its digest line, then its
-  /// picture line.
+  /// picture line and its outcome line.
   void Digest(std::uint64_t _milliseconds, std::string_view _name, const Checkpoint& _checkpoint);
 
   /// The replay so far.

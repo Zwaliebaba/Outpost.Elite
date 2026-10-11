@@ -129,11 +129,13 @@ public:
     ReferenceRig replay("RecordReplay");
     Elite::ReplayPlayer player(replay.Host(), replay.State());
     Assert::AreEqual(expected.picture.c_str(), steps.back().expectedPicture.c_str(), false, L"the digest's picture line");
+    Assert::AreEqual(expected.outcomes.c_str(), steps.back().expectedOutcomes.c_str(), false, L"and its outcome line");
     Elite::Checkpoint checkpoint;
     for (const Elite::Step& step : steps)
       Assert::IsTrue(player.Play(step, checkpoint) == Machine::StopReason::Reached, L"plays");
     Assert::AreEqual(expected.digest.c_str(), checkpoint.digest.c_str());
     Assert::AreEqual(expected.picture.c_str(), checkpoint.picture.c_str());
+    Assert::AreEqual(expected.outcomes.c_str(), checkpoint.outcomes.c_str());
     Assert::AreEqual(live.Host().Clock(), replay.Host().Clock());
     Assert::IsFalse(recorder.Key(END_MILLISECONDS, 0x60, true), L"a code no XT key sends is refused");
   }
@@ -174,10 +176,17 @@ public:
     fails("digest boot\npicture boot 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n"
           "picture boot 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
           "has its picture already");
+    fails("outcome boot kills=0", "follows the digest step it names");
+    fails("digest boot\noutcome boot", "outcome takes the label of the digest before it and its outcomes");
+    fails("digest boot\noutcome boot kills=0 fuelTonnes=3", "'fuelTonnes' is not an outcome");
+    fails("digest boot\noutcome boot kills=0 kills=1", "'kills' is given twice");
+    fails("digest boot\noutcome boot kills", "not a name=value pair");
+    fails("digest boot\nkey F1\noutcome boot kills=0", "line 3");
+    fails("digest boot\noutcome boot kills=0\noutcome boot fuel=70", "has its outcomes already");
   }
 
-  // A picture line (Replay.h) is not a step: it gives the picture digest the digest step just before it must give, even
-  // after an end step, and a replay with picture lines has the same steps as one without.
+  // A picture or outcome line (Replay.h) is not a step: it gives the picture digest or the outcomes the digest step just
+  // before it must give, even after an end step, and a replay with such lines has the same steps as one without.
   TEST_METHOD(APictureLineBelongsToTheDigestBeforeIt)
   {
     constexpr std::string_view DIGEST = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -185,41 +194,48 @@ public:
     std::vector<Elite::Step> steps;
     std::string error;
     const std::string text =
-      std::format("wait 1\ndigest boot {}\npicture boot {}   # recorded\nend 1; digest dos\npicture dos {}\n", DIGEST, PICTURE, PICTURE);
+      std::format("wait 1\ndigest boot {}\npicture boot {}   # recorded\noutcome boot kills=0  fuel=70\nend 1; digest dos\n"
+                  "outcome dos kills=1\npicture dos {}\n",
+                  DIGEST, PICTURE, PICTURE);
     Assert::IsTrue(Elite::ParseSteps(text, steps, error), L"parses");
-    Assert::AreEqual(std::size_t{4}, steps.size(), L"wait, digest, end, digest: the pictures are not steps");
+    Assert::AreEqual(std::size_t{4}, steps.size(), L"wait, digest, end, digest: the pictures and outcomes are not steps");
+    Assert::AreEqual("kills=0 fuel=70", steps[1].expectedOutcomes.c_str(), false, L"separated by single spaces");
+    Assert::AreEqual("kills=1", steps[3].expectedOutcomes.c_str(), false, L"before the picture line too");
     Assert::AreEqual(std::string(DIGEST).c_str(), steps[1].expectedDigest.c_str());
     Assert::AreEqual(std::string(PICTURE).c_str(), steps[1].expectedPicture.c_str());
     Assert::IsTrue(steps[3].expectedDigest.empty(), L"a digest with no value");
     Assert::AreEqual(std::string(PICTURE).c_str(), steps[3].expectedPicture.c_str(), false, L"may still have its picture");
   }
 
-  // Recording a corpus's pictures (RecordCheckpoints) writes each after its digest's line, ending as that line does, and
-  // replaces the picture line there was; every other line, comments and blank lines included, is kept byte for byte.
+  // Recording a corpus's pictures and outcomes (RecordCheckpoints) writes them after their digest's line, ending as that line
+  // does, and replaces the picture and outcome lines there were; every other line, comments and blank lines included, is
+  // kept byte for byte.
   TEST_METHOD(RecordingAPictureKeepsEveryOtherLine)
   {
     const std::string digest(64, 'a');
     const std::string old(64, 'b');
     const std::string picture(64, 'c');
-    const std::string text = "# a replay\r\nwait 3\r\ndigest boot " + digest + "\r\npicture boot " + old +
+    const std::string text = "# a replay\r\nwait 3\r\ndigest boot " + digest + "\r\npicture boot " + old + "\r\noutcome boot kills=1" +
                              "\r\n\nkey F1; wait 1  # launch\n" + "digest flight " + digest;
     std::vector<Elite::Step> steps;
     std::string error;
     Assert::IsTrue(Elite::ParseSteps(text, steps, error), L"parses");
-    const std::map<std::size_t, Elite::Checkpoint> checkpoints = {{3, {digest, picture}}, {7, {digest, picture}}};
+    const Elite::Checkpoint checkpoint{digest, picture, "kills=2 fuel=70"};
+    const std::map<std::size_t, Elite::Checkpoint> checkpoints = {{3, checkpoint}, {8, checkpoint}};
     std::string recorded;
     Assert::IsTrue(Elite::RecordCheckpoints(text, checkpoints, recorded, error), L"records");
-    const std::string expected = "# a replay\r\nwait 3\r\ndigest boot " + digest + "\r\npicture boot " + picture + "\r\n\n" +
-                                 "key F1; wait 1  # launch\ndigest flight " + digest + "\npicture flight " + picture + "\n";
+    const std::string expected = "# a replay\r\nwait 3\r\ndigest boot " + digest + "\r\npicture boot " + picture +
+                                 "\r\noutcome boot kills=2 fuel=70\r\n\nkey F1; wait 1  # launch\ndigest flight " + digest +
+                                 "\npicture flight " + picture + "\noutcome flight kills=2 fuel=70\n";
     Assert::AreEqual(expected.c_str(), recorded.c_str());
     std::string again;
     Assert::IsTrue(Elite::RecordCheckpoints(recorded, checkpoints, again, error), L"records again");
     Assert::AreEqual(recorded.c_str(), again.c_str(), false, L"a second recording changes nothing");
 
-    Assert::IsFalse(Elite::RecordCheckpoints(text, {{2, {digest, picture}}}, recorded, error), L"line 2 is a wait");
+    Assert::IsFalse(Elite::RecordCheckpoints(text, {{2, checkpoint}}, recorded, error), L"line 2 is a wait");
     Assert::IsTrue(error.find("line 2") != std::string::npos, L"names the line");
-    Assert::IsFalse(Elite::RecordCheckpoints("key F1; digest boot\n", {{1, {digest, picture}}}, recorded, error), L"not alone");
-    Assert::IsFalse(Elite::RecordCheckpoints(text, {{9, {digest, picture}}}, recorded, error), L"past the end");
+    Assert::IsFalse(Elite::RecordCheckpoints("key F1; digest boot\n", {{1, checkpoint}}, recorded, error), L"not alone");
+    Assert::IsFalse(Elite::RecordCheckpoints(text, {{9, checkpoint}}, recorded, error), L"past the end");
   }
 
   // An end step (Replay.h) is the last that runs the machine, and the only one in which the program may end, as it must

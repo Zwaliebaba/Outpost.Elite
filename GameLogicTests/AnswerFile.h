@@ -1,6 +1,7 @@
 // GameLogicTests/AnswerFile.h
 #pragma once
 
+#include "Outcome.h"
 #include "Reference.h"
 
 #include <charconv>
@@ -21,8 +22,9 @@ namespace GameLogicTests
 {
 
 /// The environment variable that makes a run record the guard of D33 instead of checking it, when it is set and not empty:
-/// the corpus's picture lines and the twins' pictures, each recorded only from a run that met every state digest. The guard
-/// is recorded by hand, in one process, never in CI, and a second recording reproduces every file byte for byte.
+/// the corpus's picture and outcome lines and the twins' pictures and outcomes, each recorded only from a run that met every
+/// state digest. The guard is recorded by hand, in one process, never in CI, and a second recording reproduces every file
+/// byte for byte.
 inline constexpr const char* RECORD_GUARD = "OUTPOST_ELITE_RECORD_GUARD";
 
 /// The value of the environment variable _name, or empty if it is not set.
@@ -168,7 +170,8 @@ public:
   /// What a value is.
   enum class Shape : std::uint8_t
   {
-    Sha256 ///< a SHA-256 in lowercase hex: a state digest or a picture digest
+    Sha256,  ///< a SHA-256 in lowercase hex: a state digest or a picture digest
+    Outcomes ///< outcomes as Elite::OutcomeText writes them, name=value pairs separated by single spaces
   };
 
   /// Every answer in _file, a path from the repository's root. A file that is not found, a line that is not an answer of
@@ -226,12 +229,15 @@ private:
   static constexpr std::size_t SHA256_CHARACTERS = 64; // in hex
 
   /// Whether _value is a value of _shape.
-  [[nodiscard]] static bool IsValue(std::string_view _value, Shape _shape) noexcept
+  [[nodiscard]] static bool IsValue(std::string_view _value, Shape _shape)
   {
+    std::string error;
     switch (_shape)
     {
     case Shape::Sha256:
       return _value.size() == SHA256_CHARACTERS && _value.find_first_not_of("0123456789abcdef") == std::string_view::npos;
+    case Shape::Outcomes:
+      return Elite::CheckOutcomeText(_value, error);
     }
     return false;
   }
@@ -243,6 +249,8 @@ private:
     {
     case Shape::Sha256:
       return "a SHA-256 in lowercase hex";
+    case Shape::Outcomes:
+      return "outcomes, name=value pairs of Outcome.h's names";
     }
     return "a value";
   }

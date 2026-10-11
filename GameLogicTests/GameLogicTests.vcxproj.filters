@@ -98,6 +98,9 @@
     <ClCompile Include="MarketTests.cpp">
       <Filter>Market</Filter>
     </ClCompile>
+    <ClCompile Include="OutcomeTests.cpp">
+      <Filter>Replay</Filter>
+    </ClCompile>
     <ClCompile Include="pch.cpp">
       <Filter>Build</Filter>
     </ClCompile>
@@ -125,6 +128,9 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="KnownAnswers.txt">
+      <Filter>Rigs</Filter>
+    </None>
+    <None Include="KnownOutcomes.txt">
       <Filter>Rigs</Filter>
     </None>
     <None Include="KnownPictures.txt">

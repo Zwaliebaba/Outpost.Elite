@@ -3,6 +3,7 @@
 #include "Replay.h"
 
 #include "FileStore.h"
+#include "Outcome.h"
 #include "Pc.h"
 #include "StateDigest.h"
 
@@ -127,7 +128,7 @@ bool IsBareFileName(std::string_view _name) noexcept
   throw std::runtime_error(std::format("line {}: file {} {}: {}", _step.line, _step.name, _step.source, _why));
 }
 
-// The words of one step: at most three are ever needed.
+// The words of one step: three at most, but for an outcome line's.
 std::vector<std::string_view> Words(std::string_view _text)
 {
   std::vector<std::string_view> words;
@@ -140,7 +141,7 @@ std::vector<std::string_view> Words(std::string_view _text)
   return words;
 }
 
-// The digest step named _name if it is the last of _steps, which a picture line belongs to; otherwise nothing.
+// The digest step named _name if it is the last of _steps, which a picture or outcome line belongs to; otherwise nothing.
 Step* DigestBefore(std::vector<Step>& _steps, std::string_view _name) noexcept
 {
   if (_steps.empty() || _steps.back().kind != StepKind::Digest || _steps.back().name != _name)
@@ -171,6 +172,25 @@ bool ParseStep(std::string_view _text, std::size_t _line, std::vector<Step>& _st
     if (!digest->expectedPicture.empty())
       return failure("that digest has its picture already");
     digest->expectedPicture = std::string(words[2]);
+    return true;
+  }
+  if (verb == "outcome")
+  {
+    // Not a step either: the expected outcomes of the digest step just before it.
+    if (words.size() < 3)
+      return failure("outcome takes the label of the digest before it and its outcomes");
+    std::string outcomes;
+    for (std::size_t index = 2; index < words.size(); ++index)
+      outcomes += std::string(index == 2 ? "" : " ") + std::string(words[index]);
+    std::string why;
+    if (!CheckOutcomeText(outcomes, why))
+      return failure("the outcomes are not name=value pairs of Outcome.h's names: " + why);
+    Step* const digest = DigestBefore(_steps, words[1]);
+    if (digest == nullptr)
+      return failure("an outcome line follows the digest step it names");
+    if (!digest->expectedOutcomes.empty())
+      return failure("that digest has its outcomes already");
+    digest->expectedOutcomes = std::move(outcomes);
     return true;
   }
   const bool isDigest = verb == "digest";
@@ -223,7 +243,7 @@ bool ParseStep(std::string_view _text, std::size_t _line, std::vector<Step>& _st
     step.source = std::string(words[2]);
   }
   else
-    return failure("steps are wait, key, down, up, shot, digest, file and end, and a digest's picture");
+    return failure("steps are wait, key, down, up, shot, digest, file and end, and a digest's picture and outcome");
   if (_ended && step.kind != StepKind::Digest && step.kind != StepKind::Shot)
     return failure("only digest and shot may follow end, the last step that runs the machine");
   _ended = _ended || step.kind == StepKind::End;
@@ -280,6 +300,7 @@ void ReplayRecorder::Digest(std::uint64_t _milliseconds, std::string_view _name,
   WaitUntil(_milliseconds);
   m_text += std::format("digest {} {}\n", _name, _checkpoint.digest);
   m_text += std::format("picture {} {}\n", _name, _checkpoint.picture);
+  m_text += std::format("outcome {} {}\n", _name, _checkpoint.outcomes);
 }
 
 void ReplayRecorder::WaitUntil(std::uint64_t _milliseconds)
@@ -320,7 +341,7 @@ bool RecordCheckpoints(std::string_view _text, const std::map<std::size_t, Check
 {
   std::string recorded;
   std::size_t written = 0;
-  bool replacing = false; // past a recorded digest's line, whose old picture lines the new ones replace
+  bool replacing = false; // past a recorded digest's line, whose old picture and outcome lines the new ones replace
   std::size_t line = 0;
   while (!_text.empty())
   {
@@ -332,7 +353,7 @@ bool RecordCheckpoints(std::string_view _text, const std::map<std::size_t, Check
     std::string_view ending = whole.ends_with("\r\n") ? "\r\n" : whole.ends_with('\n') ? "\n" : "";
     const std::string_view content = Trim(whole.substr(0, std::min(whole.find('#'), whole.size() - ending.size())));
     const std::vector<std::string_view> words = Words(content);
-    if (replacing && !words.empty() && words.front() == "picture")
+    if (replacing && !words.empty() && (words.front() == "picture" || words.front() == "outcome"))
       continue;
     replacing = replacing && words.empty();
     recorded += whole;
@@ -352,6 +373,8 @@ bool RecordCheckpoints(std::string_view _text, const std::map<std::size_t, Check
     }
     recorded += std::format("picture {} {}", words[1], checkpoint->second.picture);
     recorded += ending;
+    recorded += std::format("outcome {} {}", words[1], checkpoint->second.outcomes);
+    recorded += ending;
     replacing = true;
     ++written;
   }
@@ -366,7 +389,7 @@ bool RecordCheckpoints(std::string_view _text, const std::map<std::size_t, Check
 
 Checkpoint TakeCheckpoint(const GameState& _state, const Machine::Cga& _video)
 {
-  return Checkpoint{GameStateDigest(_state, _video), PictureDigest(_state, _video)};
+  return Checkpoint{GameStateDigest(_state, _video), PictureDigest(_state, _video), OutcomeText(_state)};
 }
 
 Machine::StopReason ExpectedStop(const Step& _step) noexcept
