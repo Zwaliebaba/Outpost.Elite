@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "GameState.h"
+#include "Hyperspace.h"
 #include "TwinRig.h"
 
 #include <array>
@@ -35,29 +36,22 @@ void Launch(TwinRig& _rig)
   _rig.Play("key space; wait 4\nkey F1; wait 6");
 }
 
-// _jump set up on the twin, to the system selected as LatchHyperspaceTarget would latch it, and played
-// through the tunnel to the arrival.
+// _jump set up on the twin, to the system selected, latched as the target (LatchHyperspaceTarget), and played through the
+// tunnel to the arrival.
 void PlayJump(TwinRig& _rig, const Jump& _jump)
 {
   Elite::GameState& state = _rig.State();
-  state.Data().commanderBlock.hyperspaceTargetIndex = std::uint8_t{state.Data().commanderBlock.selectedSystemIndex};
-  const std::size_t bytes = state.Data().systemRecordBytes;
-  const std::span<const Elite::Counted<std::uint8_t>> from = state.BytesFrom(state.Data().commanderBlock.selectedSystemName, bytes);
-  const std::span<Elite::Counted<std::uint8_t>> to = state.BytesFrom(state.Data().hyperspaceTargetRecord, bytes);
-  for (std::size_t index = 0; index < bytes; ++index)
-  {
-    to[index] = std::uint8_t{from[index]};
-  }
-  state.Data().galacticJumpPending = _jump.galactic;
-  state.Data().commanderBlock.galaxyNumber = _jump.galaxy;
-  state.Data().commanderBlock.randomState0 = _jump.zeroRandom ? std::uint16_t{0} : RANDOM_SEED[0];
-  state.Data().commanderBlock.randomState1 = _jump.zeroRandom ? std::uint16_t{0} : RANDOM_SEED[1];
-  state.Data().commanderBlock.randomState2 = _jump.zeroRandom ? std::uint16_t{0} : RANDOM_SEED[2];
-  state.Data().forceMisjump = _jump.forceMisjump;
-  state.Data().commanderBlock.missionNumber = _jump.mission;
-  state.Data().commanderBlock.missionStage = _jump.missionStage;
-  state.Data().hyperspaceCountdown = 1;
-  state.Data().hyperspaceCountdownFrames = 1;
+  Elite::LatchHyperspaceTarget(state);
+  state.Data().jump.galacticJumpPending = _jump.galactic;
+  state.Data().commander.galaxyNumber = _jump.galaxy;
+  state.Data().commander.randomState0 = _jump.zeroRandom ? std::uint16_t{0} : RANDOM_SEED[0];
+  state.Data().commander.randomState1 = _jump.zeroRandom ? std::uint16_t{0} : RANDOM_SEED[1];
+  state.Data().commander.randomState2 = _jump.zeroRandom ? std::uint16_t{0} : RANDOM_SEED[2];
+  state.Data().jump.forceMisjump = _jump.forceMisjump;
+  state.Data().commander.missionNumber = _jump.mission;
+  state.Data().commander.missionStage = _jump.missionStage;
+  state.Data().jump.hyperspaceCountdown = 1;
+  state.Data().jump.hyperspaceCountdownFrames = 1;
   _rig.Play("wait 3.5\ndigest arrived");
 }
 
@@ -74,7 +68,7 @@ public:
   {
     TwinRig rig("TwinJumps");
     Launch(rig);
-    rig.Both([](Elite::Platform&, Elite::GameState& _state) { _state.Data().galacticDriveReadyFrames = 3; });
+    rig.Both([](Elite::Platform&, Elite::GameState& _state) { _state.Data().jump.galacticDriveReadyFrames = 3; });
     rig.Play("wait 0.5");
     PlayJump(rig, {1, 7, true, 0, 1, 0});
     PlayJump(rig, {1, 8, false, 0, 3, 1});

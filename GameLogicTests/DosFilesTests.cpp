@@ -7,6 +7,7 @@
 #include "ReferenceRig.h"
 
 #include <array>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -20,14 +21,8 @@ namespace GameLogicTests
 namespace
 {
 
-// The game's own places in the data segment: where it points the transfer area, keeps a file's name and a commander's bytes.
-constexpr auto AREA = static_cast<std::uint16_t>(GAME_DATA_OFFSET(diskTransferArea));
-constexpr auto NAME = static_cast<std::uint16_t>(GAME_DATA_OFFSET(commanderFileName));
-constexpr auto BLOCK = static_cast<std::uint16_t>(GAME_DATA_OFFSET(commanderBlock));
 constexpr std::uint16_t BLOCK_BYTES = 208;
-// A second transfer area, for a search that is not the game's, and a place for a name of 130 bytes with no NUL in reach.
-constexpr auto OTHER_AREA = static_cast<std::uint16_t>(GAME_DATA_OFFSET(commanderFileList));
-constexpr auto LONG_NAME = static_cast<std::uint16_t>(GAME_DATA_OFFSET(commanderBlock));
+// A name of 130 bytes with no NUL in DOS's 128.
 constexpr std::size_t LONG_NAME_BYTES = 130;
 
 // The transfer area, in DOS's layout.
@@ -63,16 +58,19 @@ constexpr std::uint32_t START_TIME = 0x645C; // 12 << 11 | 34 << 5 | 56 / 2
 constexpr Elite::Cycles TWO_SECONDS = 9'545'454;
 constexpr std::uint32_t TWO_SECONDS_LATER_TIME = 0x645D;
 
+using Bytes = std::span<Elite::Counted<std::uint8_t>>;
+
 [[nodiscard]] std::wstring Widen(std::string_view _text)
 {
   return std::wstring(_text.begin(), _text.end());
 }
 
 /// DOS's file services natively (DosFiles), on the platform of a Game loaded from the reference, called as the game calls
-/// them, at its own places in the data segment. Each call's changes to the game's memory are counted (LastChanges), and AX is
-/// checked to be 0 where DOS left it as it went in; what a test expects of the answers, it states outright. Until D33 each call
-/// was also made on the emulated DOS it replaced (Machine::Dos), and checked to answer alike, to change the same bytes as many
-/// times and to leave all of memory and the store alike: what the test states outright is what both gave.
+/// them: on its own members of the game's state, a name up to its NUL in commanderFileName, its commander's bytes and its
+/// transfer area (D38). Each call's changes to the game's memory are counted (LastChanges), and AX is checked to be 0 where DOS
+/// left it as it went in; what a test expects of the answers, it states outright. Until D33 each call was also made on the
+/// emulated DOS it replaced (Machine::Dos), and checked to answer alike, to change the same bytes as many times and to leave all
+/// of memory and the store alike: what the test states outright is what both gave.
 class DosRig
 {
 public:
@@ -81,29 +79,67 @@ public:
   {
   }
 
-  [[nodiscard]] std::uint16_t Data() const noexcept
+  /// The game's own places: the transfer area it sets, where it keeps a file's name, and its commander's bytes.
+  [[nodiscard]] Bytes Area() noexcept
   {
-    return m_rig.State().DataSegment();
+    return m_rig.State().Data().saveLoad.diskTransferArea;
   }
 
-  /// _bytes at _segment:_offset, and a NUL after them when _terminate.
-  void Put(std::uint16_t _segment, std::uint16_t _offset, std::string_view _bytes, bool _terminate = true)
+  [[nodiscard]] Bytes NameBuffer() noexcept
+  {
+    return m_rig.State().Data().saveLoad.commanderFileName;
+  }
+
+  [[nodiscard]] Bytes Block()
+  {
+    return m_rig.State().BytesFrom(m_rig.State().Data().commander, BLOCK_BYTES);
+  }
+
+  /// A second transfer area, for a search that is not the game's.
+  [[nodiscard]] Bytes OtherArea() noexcept
+  {
+    return m_rig.State().Data().saveLoad.commanderFileList;
+  }
+
+  /// _bytes into _to from its first, and a NUL after them when _terminate.
+  static void Put(Bytes _to, std::string_view _bytes, bool _terminate = true)
   {
     for (std::size_t index = 0; index < _bytes.size(); ++index)
     {
-      m_rig.State().SetFarByte(_segment, static_cast<std::uint16_t>(_offset + index), static_cast<std::uint8_t>(_bytes[index]));
+      _to[index] = static_cast<std::uint8_t>(_bytes[index]);
     }
     if (_terminate)
     {
-      m_rig.State().SetFarByte(_segment, static_cast<std::uint16_t>(_offset + _bytes.size()), 0);
+      _to[_bytes.size()] = 0;
     }
   }
 
-  /// _name at the game's NAME, in the data segment; returns where.
-  std::uint16_t Name(std::string_view _name)
+  /// _name as the game hands DOS one: in commanderFileName, up to the NUL after it.
+  std::string_view Name(std::string_view _name)
   {
-    Put(Data(), NAME, _name);
-    return NAME;
+    Put(NameBuffer(), _name);
+    return Elite::TextIn(NameBuffer());
+  }
+
+  /// The name the game's buffer holds now, up to its NUL.
+  [[nodiscard]] std::string_view Name() noexcept
+  {
+    return Elite::TextIn(NameBuffer());
+  }
+
+  /// 130 'N's in the commander's bytes, with no NUL in DOS's 128: a name that never ends.
+  std::string_view LongName()
+  {
+    const Bytes bytes = Block().first(LONG_NAME_BYTES);
+    Put(bytes, std::string(LONG_NAME_BYTES, 'N'), false);
+    return Elite::TextIn(bytes);
+  }
+
+  /// The commander's first _bytes as DOS writes them out.
+  [[nodiscard]] std::span<const std::uint8_t> BlockBytes(std::size_t _bytes)
+  {
+    const Bytes block = Block();
+    return std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(block.data()), _bytes);
   }
 
   /// The clock moved on to _clock, from device event to device event, as a wait moves it.
@@ -124,18 +160,18 @@ public:
     std::filesystem::create_directories(m_rig.Files() / _name);
   }
 
-  void SetArea(std::uint16_t _segment, std::uint16_t _offset)
+  void SetArea(Bytes _area)
   {
     const std::uint64_t changes = Changes();
-    Files().SetTransferArea(_segment, _offset);
+    Files().SetTransferArea(_area);
     Done(changes);
     Assert::AreEqual(std::uint64_t{0}, m_lastChanges, L"setting the transfer area changes no memory");
   }
 
-  Elite::DosFileAttributes ReadAttributes(std::uint16_t _name)
+  Elite::DosFileAttributes ReadAttributes(std::string_view _name)
   {
     const std::uint64_t changes = Changes();
-    const Elite::DosFileAttributes answer = Files().ReadAttributes(Data(), _name);
+    const Elite::DosFileAttributes answer = Files().ReadAttributes(_name);
     Done(changes);
     if (!answer.answer.failed)
     {
@@ -148,40 +184,40 @@ public:
     return answer;
   }
 
-  Elite::DosAnswer SetAttributes(std::uint16_t _name, std::uint16_t _attributes)
+  Elite::DosAnswer SetAttributes(std::string_view _name, std::uint16_t _attributes)
   {
     const std::uint64_t changes = Changes();
-    return LeftOnSuccess(Files().SetAttributes(Data(), _name, _attributes), changes, L"set attributes");
+    return LeftOnSuccess(Files().SetAttributes(_name, _attributes), changes, L"set attributes");
   }
 
-  Elite::DosAnswer Create(std::uint16_t _name, std::uint16_t _attributes)
+  Elite::DosAnswer Create(std::string_view _name, std::uint16_t _attributes)
   {
     const std::uint64_t changes = Changes();
-    const Elite::DosAnswer answer = Files().Create(Data(), _name, _attributes, m_rig.Host().Clock());
+    const Elite::DosAnswer answer = Files().Create(_name, _attributes, m_rig.Host().Clock());
     Done(changes);
     return answer;
   }
 
-  Elite::DosAnswer Open(std::uint16_t _name, std::uint8_t _access)
+  Elite::DosAnswer Open(std::string_view _name, std::uint8_t _access)
   {
     const std::uint64_t changes = Changes();
-    const Elite::DosAnswer answer = Files().Open(Data(), _name, _access);
+    const Elite::DosAnswer answer = Files().Open(_name, _access);
     Done(changes);
     return answer;
   }
 
-  Elite::DosAnswer Read(std::uint16_t _handle, std::uint16_t _segment, std::uint16_t _buffer, std::uint16_t _bytes)
+  Elite::DosAnswer Read(std::uint16_t _handle, Bytes _buffer)
   {
     const std::uint64_t changes = Changes();
-    const Elite::DosAnswer answer = Files().Read(_handle, _segment, _buffer, _bytes);
+    const Elite::DosAnswer answer = Files().Read(_handle, _buffer);
     Done(changes);
     return answer;
   }
 
-  Elite::DosAnswer Write(std::uint16_t _handle, std::uint16_t _segment, std::uint16_t _buffer, std::uint16_t _bytes)
+  Elite::DosAnswer Write(std::uint16_t _handle, std::span<const std::uint8_t> _buffer)
   {
     const std::uint64_t changes = Changes();
-    const Elite::DosAnswer answer = Files().Write(_handle, _segment, _buffer, _bytes, m_rig.Host().Clock());
+    const Elite::DosAnswer answer = Files().Write(_handle, _buffer, m_rig.Host().Clock());
     Done(changes);
     return answer;
   }
@@ -192,16 +228,16 @@ public:
     return LeftOnSuccess(Files().Close(_handle), changes, L"close");
   }
 
-  Elite::DosAnswer Delete(std::uint16_t _name)
+  Elite::DosAnswer Delete(std::string_view _name)
   {
     const std::uint64_t changes = Changes();
-    return LeftOnSuccess(Files().Delete(Data(), _name), changes, L"delete");
+    return LeftOnSuccess(Files().Delete(_name), changes, L"delete");
   }
 
-  Elite::DosAnswer FindFirst(std::uint16_t _pattern, std::uint16_t _attributes)
+  Elite::DosAnswer FindFirst(std::string_view _pattern, std::uint16_t _attributes)
   {
     const std::uint64_t changes = Changes();
-    const Elite::DosAnswer answer = Files().FindFirst(Data(), _pattern, _attributes);
+    const Elite::DosAnswer answer = Files().FindFirst(_pattern, _attributes);
     Done(changes);
     return answer;
   }
@@ -220,21 +256,22 @@ public:
   {
     const std::uint64_t changes = Changes();
     Elite::DosFiles& files = Files();
+    const Bytes block = Block().first(_bytes);
+    const std::span<const std::uint8_t> written = BlockBytes(_bytes);
     Assert::ExpectException<std::logic_error>(
       [&]
       {
-        const std::uint16_t data = Data();
         if (_function == 0x3E)
         {
           (void)files.Close(_handle);
         }
         else if (_function == 0x3F)
         {
-          (void)files.Read(_handle, data, BLOCK, _bytes);
+          (void)files.Read(_handle, block);
         }
         else
         {
-          (void)files.Write(_handle, data, BLOCK, _bytes, 0);
+          (void)files.Write(_handle, written, 0);
         }
       },
       L"the native service refuses it");
@@ -247,24 +284,24 @@ public:
     return m_rig.Store().List();
   }
 
-  /// The game's memory's byte and word at _segment:_offset.
-  [[nodiscard]] std::uint32_t Byte(std::uint16_t _segment, std::uint16_t _offset) const
+  /// The game's memory's byte and word _at bytes into _bytes.
+  [[nodiscard]] static std::uint32_t Byte(Bytes _bytes, std::size_t _at)
   {
-    return m_rig.State().FarByte(_segment, _offset);
+    return _bytes[_at];
   }
 
-  [[nodiscard]] std::uint32_t Word(std::uint16_t _segment, std::uint16_t _offset) const
+  [[nodiscard]] static std::uint32_t Word(Bytes _bytes, std::size_t _at)
   {
-    return m_rig.State().FarWord(_segment, _offset);
+    return Elite::WordIn(_bytes, _at);
   }
 
-  /// The game's memory's _bytes at _segment:_offset, as text.
-  [[nodiscard]] std::string Text(std::uint16_t _segment, std::uint16_t _offset, std::size_t _bytes) const
+  /// _count of _bytes from _at, as text.
+  [[nodiscard]] static std::string Text(Bytes _bytes, std::size_t _at, std::size_t _count)
   {
     std::string text;
-    for (std::size_t index = 0; index < _bytes; ++index)
+    for (std::size_t index = 0; index < _count; ++index)
     {
-      text.push_back(static_cast<char>(Byte(_segment, static_cast<std::uint16_t>(_offset + index))));
+      text.push_back(static_cast<char>(_bytes[_at + index]));
     }
     return text;
   }
@@ -312,44 +349,35 @@ void MakeFile(DosRig& _twin, std::string_view _name, std::uint16_t _bytes, std::
 {
   const Elite::DosAnswer created = _twin.Create(_twin.Name(_name), 0);
   Assert::IsFalse(created.failed, L"made: created");
-  Assert::IsFalse(_twin.Write(created.value, _twin.Data(), BLOCK, _bytes).failed, L"made: written");
+  Assert::IsFalse(_twin.Write(created.value, _twin.BlockBytes(_bytes)).failed, L"made: written");
   Assert::IsFalse(_twin.Close(created.value).failed, L"made: closed");
   Assert::IsFalse(_twin.SetAttributes(_twin.Name(_name), _attributes).failed, L"made: its attributes set");
 }
 
-// A name of 130 'N's at LONG_NAME, with no NUL in DOS's 128 bytes.
-void Put130(DosRig& _twin)
+// The transfer area _area holds the search for _template with _attribute, at entry _next.
+void CheckSearch(Bytes _area, std::string_view _template, std::uint32_t _attribute, std::uint32_t _next)
 {
-  _twin.Put(_twin.Data(), LONG_NAME, std::string(LONG_NAME_BYTES, 'N'), false);
-}
-
-// The transfer area at DS:_area holds the search for _template with _attribute, at entry _next.
-void CheckSearch(const DosRig& _twin, std::uint16_t _area, std::string_view _template, std::uint32_t _attribute, std::uint32_t _next)
-{
-  const std::uint16_t data = _twin.Data();
-  Assert::AreEqual(3u, _twin.Byte(data, _area), L"the drive, C:");
-  Assert::IsTrue(_twin.Text(data, static_cast<std::uint16_t>(_area + AREA_TEMPLATE), 11) == _template, L"the search's template");
-  Assert::AreEqual(_attribute, _twin.Byte(data, static_cast<std::uint16_t>(_area + AREA_SEARCH_ATTRIBUTE)), L"the search's attribute");
-  Assert::AreEqual(_next, _twin.Word(data, static_cast<std::uint16_t>(_area + AREA_NEXT_ENTRY)), L"the next entry");
+  Assert::AreEqual(3u, DosRig::Byte(_area, 0), L"the drive, C:");
+  Assert::IsTrue(DosRig::Text(_area, AREA_TEMPLATE, 11) == _template, L"the search's template");
+  Assert::AreEqual(_attribute, DosRig::Byte(_area, AREA_SEARCH_ATTRIBUTE), L"the search's attribute");
+  Assert::AreEqual(_next, DosRig::Word(_area, AREA_NEXT_ENTRY), L"the next entry");
   for (std::uint16_t offset = AREA_NEXT_ENTRY + 2; offset < AREA_ATTRIBUTE; ++offset)
   {
-    Assert::AreEqual(0u, _twin.Byte(data, static_cast<std::uint16_t>(_area + offset)), L"the reserved bytes, zero");
+    Assert::AreEqual(0u, DosRig::Byte(_area, offset), L"the reserved bytes, zero");
   }
 }
 
-// The transfer area at DS:_area holds the file found: _attribute, _time, _date, _sizeBytes and _name, zero-padded to 13 bytes.
-void CheckFound(const DosRig& _twin, std::uint16_t _area, std::uint32_t _attribute, std::uint32_t _time, std::uint32_t _date,
-                std::uint32_t _sizeBytes, std::string_view _name)
+// The transfer area _area holds the file found: _attribute, _time, _date, _sizeBytes and _name, zero-padded to 13 bytes.
+void CheckFound(Bytes _area, std::uint32_t _attribute, std::uint32_t _time, std::uint32_t _date, std::uint32_t _sizeBytes,
+                std::string_view _name)
 {
-  const std::uint16_t data = _twin.Data();
-  const auto at = [_area](std::uint16_t _offset) { return static_cast<std::uint16_t>(_area + _offset); };
-  Assert::AreEqual(_attribute, _twin.Byte(data, at(AREA_ATTRIBUTE)), L"the file's attribute");
-  Assert::AreEqual(_time, _twin.Word(data, at(AREA_TIME)), L"the file's time");
-  Assert::AreEqual(_date, _twin.Word(data, at(AREA_DATE)), L"the file's date");
-  Assert::AreEqual(_sizeBytes, _twin.Word(data, at(AREA_SIZE)) | (_twin.Word(data, at(AREA_SIZE + 2)) << 16), L"the file's size");
+  Assert::AreEqual(_attribute, DosRig::Byte(_area, AREA_ATTRIBUTE), L"the file's attribute");
+  Assert::AreEqual(_time, DosRig::Word(_area, AREA_TIME), L"the file's time");
+  Assert::AreEqual(_date, DosRig::Word(_area, AREA_DATE), L"the file's date");
+  Assert::AreEqual(_sizeBytes, DosRig::Word(_area, AREA_SIZE) | (DosRig::Word(_area, AREA_SIZE + 2) << 16), L"the file's size");
   std::string name(_name);
   name.resize(AREA_NAME_BYTES, '\0');
-  Assert::IsTrue(_twin.Text(data, at(AREA_NAME), AREA_NAME_BYTES) == name, (L"the file's name, zero-padded: " + Widen(_name)).c_str());
+  Assert::IsTrue(DosRig::Text(_area, AREA_NAME, AREA_NAME_BYTES) == name, (L"the file's name, zero-padded: " + Widen(_name)).c_str());
 }
 
 } // namespace
@@ -364,14 +392,13 @@ public:
   TEST_METHOD(CreateWriteCloseOpenReadClose)
   {
     DosRig twin("DosFilesSaveLoad", START);
-    const std::uint16_t data = twin.Data();
     std::string commander;
     for (std::uint16_t index = 0; index < BLOCK_BYTES; ++index)
     {
       commander.push_back(static_cast<char>(1 + index % 251)); // no zero, so that a read into zeros changes every byte
     }
-    twin.Put(data, BLOCK, commander, false);
-    twin.SetArea(data, AREA);
+    DosRig::Put(twin.Block(), commander, false);
+    twin.SetArea(twin.Area());
 
     // A file made at the start moment, and then the commander's two seconds later.
     const Elite::DosAnswer empty = twin.Create(twin.Name("EMPTY.CDR"), 0);
@@ -380,31 +407,31 @@ public:
     twin.AdvanceClock(TWO_SECONDS);
     const Elite::DosAnswer created = twin.Create(twin.Name("JAMESON.CDR"), 0);
     Assert::IsTrue(!created.failed && created.value == 5, L"handle 5, free again");
-    const Elite::DosAnswer written = twin.Write(5, data, BLOCK, BLOCK_BYTES);
+    const Elite::DosAnswer written = twin.Write(5, twin.BlockBytes(BLOCK_BYTES));
     Assert::IsTrue(!written.failed && written.value == BLOCK_BYTES, L"every byte written");
     Assert::IsFalse(twin.Close(5).failed);
-    const Elite::DosFileAttributes archived = twin.ReadAttributes(NAME);
+    const Elite::DosFileAttributes archived = twin.ReadAttributes(twin.Name());
     Assert::IsTrue(!archived.answer.failed && archived.attributes == ARCHIVE && archived.answer.value == ARCHIVE,
                    L"a new file has the archive bit, in CX and AX");
-    Assert::IsFalse(twin.SetAttributes(NAME, 0).failed, L"which the game clears");
-    Assert::AreEqual(0u, std::uint32_t{twin.ReadAttributes(NAME).attributes});
+    Assert::IsFalse(twin.SetAttributes(twin.Name(), 0).failed, L"which the game clears");
+    Assert::AreEqual(0u, std::uint32_t{twin.ReadAttributes(twin.Name()).attributes});
 
     // Loaded over the commander it was saved from, as the game loads one over another: a byte that is already what the file
     // holds is no change, so nothing changes, and every byte is written once.
-    Assert::IsFalse(twin.Open(NAME, 0).failed);
-    Assert::AreEqual(std::uint32_t{BLOCK_BYTES}, std::uint32_t{twin.Read(5, data, BLOCK, BLOCK_BYTES).value}, L"read over itself");
+    Assert::IsFalse(twin.Open(twin.Name(), 0).failed);
+    Assert::AreEqual(std::uint32_t{BLOCK_BYTES}, std::uint32_t{twin.Read(5, twin.Block()).value}, L"read over itself");
     Assert::AreEqual(std::uint64_t{0}, twin.LastChanges(), L"a byte read over the same byte is no change");
     Assert::IsFalse(twin.Close(5).failed);
 
     // Loaded back over zeros.
-    twin.Put(data, BLOCK, std::string(BLOCK_BYTES, '\0'), false);
-    const Elite::DosAnswer opened = twin.Open(NAME, 0);
+    DosRig::Put(twin.Block(), std::string(BLOCK_BYTES, '\0'), false);
+    const Elite::DosAnswer opened = twin.Open(twin.Name(), 0);
     Assert::IsTrue(!opened.failed && opened.value == 5, L"opened as handle 5");
-    const Elite::DosAnswer read = twin.Read(5, data, BLOCK, BLOCK_BYTES);
+    const Elite::DosAnswer read = twin.Read(5, twin.Block());
     Assert::IsTrue(!read.failed && read.value == BLOCK_BYTES, L"every byte read");
     Assert::AreEqual(std::uint64_t{BLOCK_BYTES}, twin.LastChanges(), L"each byte of the block changed once");
-    Assert::IsTrue(twin.Text(data, BLOCK, BLOCK_BYTES) == commander, L"the commander's bytes, back in the block");
-    const Elite::DosAnswer end = twin.Read(5, data, BLOCK, BLOCK_BYTES);
+    Assert::IsTrue(DosRig::Text(twin.Block(), 0, BLOCK_BYTES) == commander, L"the commander's bytes, back in the block");
+    const Elite::DosAnswer end = twin.Read(5, twin.Block());
     Assert::IsTrue(!end.failed && end.value == 0, L"0 at the end of the file");
     Assert::AreEqual(std::uint64_t{0}, twin.LastChanges(), L"and nothing changed");
     Assert::IsFalse(twin.Close(5).failed);
@@ -423,9 +450,8 @@ public:
   TEST_METHOD(FindFirstAndNextToTheEnd)
   {
     DosRig twin("DosFilesFind", START);
-    const std::uint16_t data = twin.Data();
-    twin.Put(data, BLOCK, "0123456789", false);
-    twin.SetArea(data, AREA);
+    DosRig::Put(twin.Block(), "0123456789", false);
+    twin.SetArea(twin.Area());
     MakeFile(twin, "ZED.CDR", 4);
     MakeFile(twin, "A.CDR", 3);
     MakeFile(twin, "B.CDR", 1, HIDDEN);
@@ -436,44 +462,43 @@ public:
     // In the store's order: A.CDR, B.CDR, C.CDR, ELITE01.HI, READ.CDR, ZED.CDR; no directory.
 
     // The game's pattern, with no hidden or system file wanted: A, READ and ZED, then no more, and no more again.
-    twin.Put(data, NAME, "*.cdr");
-    Elite::DosAnswer found = twin.FindFirst(NAME, 0);
+    Elite::DosAnswer found = twin.FindFirst(twin.Name("*.cdr"), 0);
     Assert::IsTrue(!found.failed && found.value == 0, L"A.CDR found");
-    CheckSearch(twin, AREA, "????????CDR", 0, 1);
-    CheckFound(twin, AREA, 0, START_TIME, START_DATE, 3, "A.CDR");
+    CheckSearch(twin.Area(), "????????CDR", 0, 1);
+    CheckFound(twin.Area(), 0, START_TIME, START_DATE, 3, "A.CDR");
     found = twin.FindNext();
     Assert::IsTrue(!found.failed && found.value == 0, L"READ.CDR found");
-    CheckSearch(twin, AREA, "????????CDR", 0, 5);
-    CheckFound(twin, AREA, READ_ONLY, START_TIME, START_DATE, 6, "READ.CDR");
+    CheckSearch(twin.Area(), "????????CDR", 0, 5);
+    CheckFound(twin.Area(), READ_ONLY, START_TIME, START_DATE, 6, "READ.CDR");
     found = twin.FindNext();
-    CheckFound(twin, AREA, 0, START_TIME, START_DATE, 4, "ZED.CDR");
+    CheckFound(twin.Area(), 0, START_TIME, START_DATE, 4, "ZED.CDR");
     found = twin.FindNext();
     Assert::IsTrue(found.failed && found.value == NO_MORE_FILES, L"no more files");
-    CheckSearch(twin, AREA, "????????CDR", 0, 6);
-    CheckFound(twin, AREA, 0, START_TIME, START_DATE, 4, "ZED.CDR"); // the last found is left
+    CheckSearch(twin.Area(), "????????CDR", 0, 6);
+    CheckFound(twin.Area(), 0, START_TIME, START_DATE, 4, "ZED.CDR"); // the last found is left
     found = twin.FindNext();
     Assert::IsTrue(found.failed && found.value == NO_MORE_FILES, L"and no more again");
 
     // The game's search attribute as Start leaves CX, which lets hidden and system files in: all five.
-    found = twin.FindFirst(NAME, 0xFFE7);
-    CheckSearch(twin, AREA, "????????CDR", 0xE7, 1);
+    found = twin.FindFirst(twin.Name(), 0xFFE7);
+    CheckSearch(twin.Area(), "????????CDR", 0xE7, 1);
     const std::array<std::string_view, 4> rest = {"B.CDR", "C.CDR", "READ.CDR", "ZED.CDR"};
     for (const std::string_view name : rest)
     {
       found = twin.FindNext();
-      Assert::IsTrue(!found.failed && twin.Text(data, AREA + AREA_NAME, name.size()) == name, Widen(name).c_str());
+      Assert::IsTrue(!found.failed && DosRig::Text(twin.Area(), AREA_NAME, name.size()) == name, Widen(name).c_str());
     }
     Assert::IsTrue(twin.FindNext().failed);
 
     // Other patterns: a match by '?', none at all, and a volume label, which the store has none of.
     found = twin.FindFirst(twin.Name("ELITE??.*"), 0);
-    CheckFound(twin, AREA, 0, START_TIME, START_DATE, 5, "ELITE01.HI");
+    CheckFound(twin.Area(), 0, START_TIME, START_DATE, 5, "ELITE01.HI");
     found = twin.FindFirst(twin.Name("*.XYZ"), 0);
     Assert::IsTrue(found.failed && found.value == NO_MORE_FILES, L"nothing matches: no more files");
-    CheckSearch(twin, AREA, "????????XYZ", 0, 6);
+    CheckSearch(twin.Area(), "????????XYZ", 0, 6);
     found = twin.FindFirst(twin.Name("*.*"), Elite::FileStore::ATTRIBUTE_VOLUME);
     Assert::IsTrue(found.failed && found.value == NO_MORE_FILES, L"no volume label");
-    CheckSearch(twin, AREA, "???????????", Elite::FileStore::ATTRIBUTE_VOLUME, 0);
+    CheckSearch(twin.Area(), "???????????", Elite::FileStore::ATTRIBUTE_VOLUME, 0);
 
     // Patterns DOS refuses, which leave the transfer area alone.
     found = twin.FindFirst(twin.Name("..\\*.CDR"), 0);
@@ -482,12 +507,11 @@ public:
     Assert::IsTrue(found.failed && found.value == FILE_NOT_FOUND, L"two dots");
     found = twin.FindFirst(twin.Name(""), 0);
     Assert::IsTrue(found.failed && found.value == FILE_NOT_FOUND, L"nothing");
-    Put130(twin);
-    found = twin.FindFirst(LONG_NAME, 0);
+    found = twin.FindFirst(twin.LongName(), 0);
     Assert::IsTrue(found.failed && found.value == PATH_NOT_FOUND, L"no NUL in 128 bytes");
 
     // A transfer area no search has filled: find-next has nothing to go on.
-    twin.SetArea(data, OTHER_AREA);
+    twin.SetArea(twin.OtherArea());
     found = twin.FindNext();
     Assert::IsTrue(found.failed && found.value == NO_MORE_FILES, L"no search in the transfer area");
   }
@@ -498,45 +522,45 @@ public:
   TEST_METHOD(FindBeforeATransferAreaIsRefused)
   {
     DosRig twin("DosFilesPspArea", START);
-    twin.Put(twin.Data(), BLOCK, "x", false);
+    DosRig::Put(twin.Block(), "x", false);
     MakeFile(twin, "ONLY.CDR", 1);
     const std::uint64_t changes = twin.Changes();
-    twin.Name("*.CDR");
+    const std::string_view pattern = twin.Name("*.CDR");
     const std::uint64_t named = twin.Changes();
-    Assert::ExpectException<std::logic_error>([&twin] { (void)twin.Files().FindFirst(twin.Data(), NAME, 0); }, L"find first");
+    Assert::ExpectException<std::logic_error>([&twin, pattern] { (void)twin.Files().FindFirst(pattern, 0); }, L"find first");
     Assert::ExpectException<std::logic_error>([&twin] { (void)twin.Files().FindNext(); }, L"find next");
     Assert::IsTrue(twin.Changes() == named && named >= changes, L"and nothing changed");
-    twin.SetArea(twin.Data(), AREA);
-    Assert::IsFalse(twin.FindFirst(NAME, 0).failed, L"found once there is a transfer area");
-    CheckFound(twin, AREA, 0, START_TIME, START_DATE, 1, "ONLY.CDR");
+    twin.SetArea(twin.Area());
+    Assert::IsFalse(twin.FindFirst(pattern, 0).failed, L"found once there is a transfer area");
+    CheckFound(twin.Area(), 0, START_TIME, START_DATE, 1, "ONLY.CDR");
   }
 
   // DeleteCommanderFile, and the attributes that guard a file.
   TEST_METHOD(DeleteAndAttributes)
   {
     DosRig twin("DosFilesDelete", START);
-    twin.Put(twin.Data(), BLOCK, "abc", false);
+    DosRig::Put(twin.Block(), "abc", false);
     MakeFile(twin, "LOCKED.CDR", 3, READ_ONLY);
     Assert::AreEqual(std::uint32_t{READ_ONLY}, std::uint32_t{twin.ReadAttributes(twin.Name("LOCKED.CDR")).attributes});
-    Elite::DosAnswer answer = twin.Delete(NAME);
+    Elite::DosAnswer answer = twin.Delete(twin.Name());
     Assert::IsTrue(answer.failed && answer.value == ACCESS_DENIED, L"a read-only file is not deleted");
-    answer = twin.Open(NAME, 1);
+    answer = twin.Open(twin.Name(), 1);
     Assert::IsTrue(answer.failed && answer.value == ACCESS_DENIED, L"nor opened to write");
-    answer = twin.Open(NAME, 0);
+    answer = twin.Open(twin.Name(), 0);
     Assert::IsTrue(!answer.failed && answer.value == 5, L"but opened to read");
     Assert::IsFalse(twin.Close(5).failed);
-    answer = twin.SetAttributes(NAME, 0x0100);
+    answer = twin.SetAttributes(twin.Name(), 0x0100);
     Assert::IsTrue(answer.failed && answer.value == ACCESS_DENIED, L"attributes above FFh");
-    answer = twin.SetAttributes(NAME, Elite::FileStore::ATTRIBUTE_DIRECTORY);
+    answer = twin.SetAttributes(twin.Name(), Elite::FileStore::ATTRIBUTE_DIRECTORY);
     Assert::IsTrue(answer.failed && answer.value == ACCESS_DENIED, L"the directory bit");
-    Assert::IsFalse(twin.SetAttributes(NAME, 0).failed);
-    Assert::IsFalse(twin.Delete(NAME).failed, L"deleted");
+    Assert::IsFalse(twin.SetAttributes(twin.Name(), 0).failed);
+    Assert::IsFalse(twin.Delete(twin.Name()).failed, L"deleted");
     Assert::IsTrue(twin.StoredFiles().empty(), L"gone");
-    answer = twin.Delete(NAME);
+    answer = twin.Delete(twin.Name());
     Assert::IsTrue(answer.failed && answer.value == FILE_NOT_FOUND, L"deleted again: not found");
-    const Elite::DosFileAttributes missing = twin.ReadAttributes(NAME);
+    const Elite::DosFileAttributes missing = twin.ReadAttributes(twin.Name());
     Assert::IsTrue(missing.answer.failed && missing.answer.value == FILE_NOT_FOUND, L"no attributes: not found");
-    answer = twin.SetAttributes(NAME, 0);
+    answer = twin.SetAttributes(twin.Name(), 0);
     Assert::IsTrue(answer.failed && answer.value == FILE_NOT_FOUND, L"none to set");
   }
 
@@ -545,37 +569,36 @@ public:
   TEST_METHOD(Errors)
   {
     DosRig twin("DosFilesErrors", START);
-    const std::uint16_t data = twin.Data();
-    twin.Put(data, BLOCK, "abcdef", false);
+    DosRig::Put(twin.Block(), "abcdef", false);
     Elite::DosAnswer answer = twin.Open(twin.Name("MISSING.CDR"), 0);
     Assert::IsTrue(answer.failed && answer.value == FILE_NOT_FOUND, L"a missing file");
     MakeFile(twin, "THERE.CDR", 6);
     answer = twin.Open(twin.Name("THERE.CDR"), 3);
     Assert::IsTrue(answer.failed && answer.value == INVALID_ACCESS_CODE, L"access 3");
-    answer = twin.Open(NAME, 0x40);
+    answer = twin.Open(twin.Name(), 0x40);
     Assert::IsTrue(!answer.failed && answer.value == 5, L"the sharing bits are ignored");
     Assert::IsFalse(twin.Close(5).failed);
 
     answer = twin.Close(7);
     Assert::IsTrue(answer.failed && answer.value == INVALID_HANDLE, L"close: a handle not open");
-    answer = twin.Read(25, data, BLOCK, 4);
+    answer = twin.Read(25, twin.Block().first(4));
     Assert::IsTrue(answer.failed && answer.value == INVALID_HANDLE, L"read: a handle past the table");
-    answer = twin.Write(5, data, BLOCK, 4);
+    answer = twin.Write(5, twin.BlockBytes(4));
     Assert::IsTrue(answer.failed && answer.value == INVALID_HANDLE, L"write: a closed handle");
 
     answer = twin.Create(twin.Name("C:X.CDR"), 0);
     Assert::IsTrue(answer.failed && answer.value == PATH_NOT_FOUND, L"a drive");
     answer = twin.Create(twin.Name("TOOLONG12.CD"), 0);
     Assert::IsTrue(answer.failed && answer.value == FILE_NOT_FOUND, L"a base of nine");
-    Put130(twin);
-    answer = twin.Open(LONG_NAME, 0);
+    const std::string_view longName = twin.LongName();
+    answer = twin.Open(longName, 0);
     Assert::IsTrue(answer.failed && answer.value == PATH_NOT_FOUND, L"open: no NUL in 128 bytes");
-    answer = twin.Create(LONG_NAME, 0);
+    answer = twin.Create(longName, 0);
     Assert::IsTrue(answer.failed && answer.value == PATH_NOT_FOUND, L"create: no NUL in 128 bytes");
-    answer = twin.Delete(LONG_NAME);
+    answer = twin.Delete(longName);
     Assert::IsTrue(answer.failed && answer.value == PATH_NOT_FOUND, L"delete: no NUL in 128 bytes");
-    Assert::IsTrue(twin.ReadAttributes(LONG_NAME).answer.failed, L"read attributes: no NUL in 128 bytes");
-    Assert::IsTrue(twin.SetAttributes(LONG_NAME, 0).failed, L"set attributes: no NUL in 128 bytes");
+    Assert::IsTrue(twin.ReadAttributes(longName).answer.failed, L"read attributes: no NUL in 128 bytes");
+    Assert::IsTrue(twin.SetAttributes(longName, 0).failed, L"set attributes: no NUL in 128 bytes");
 
     // Fifteen handles, 5 to 19, and no more: the game never holds two.
     for (std::uint16_t handle = 5; handle < 20; ++handle)
@@ -583,7 +606,7 @@ public:
       answer = twin.Open(twin.Name("THERE.CDR"), 0);
       Assert::IsTrue(!answer.failed && answer.value == handle, L"the next handle");
     }
-    answer = twin.Open(NAME, 0);
+    answer = twin.Open(twin.Name(), 0);
     Assert::IsTrue(answer.failed && answer.value == TOO_MANY_OPEN_FILES, L"open: too many open files");
     answer = twin.Create(twin.Name("NEW.CDR"), 0);
     Assert::IsTrue(answer.failed && answer.value == TOO_MANY_OPEN_FILES, L"create: too many open files");
@@ -602,33 +625,40 @@ public:
     Assert::IsFalse(twin.Close(answer.value).failed);
   }
 
-  // A read and a write by linear address, as the emulated DOS made them: up to the end of the data segment, and, past it,
-  // refused, because the paragraphs after it are not the game's memory (D33). The game reads and writes inside its own.
-  TEST_METHOD(ReadAndWriteToASegmentsEnd)
+  // A read lands in the buffer it is given, of the game's state, and no further: a buffer shorter than the file takes its own
+  // bytes, and one that is not the game's state, where its writes would not count, is refused whole, as is a transfer area
+  // there or one too short for a search. The game reads and searches into its own members only.
+  TEST_METHOD(BuffersAreTheGameStates)
   {
-    DosRig twin("DosFilesLinear", START);
-    const std::uint16_t data = twin.Data();
+    DosRig twin("DosFilesBuffers", START);
     std::string bytes;
     for (char character = 'A'; character < 'A' + 0x10; ++character)
     {
       bytes.push_back(character);
     }
-    twin.Put(data, 0xFFF0, bytes, false);
-    const Elite::DosAnswer created = twin.Create(twin.Name("LINEAR.CDR"), 0);
-    const Elite::DosAnswer written = twin.Write(created.value, data, 0xFFF0, 0x10);
-    Assert::IsTrue(!written.failed && written.value == 0x10, L"written to the segment's end");
-    Assert::ExpectException<std::out_of_range>([&] { (void)twin.Write(created.value, data, 0xFFF0, 0x20); }, L"and refused past it");
+    DosRig::Put(twin.Block(), bytes, false);
+    const Elite::DosAnswer created = twin.Create(twin.Name("SPAN.CDR"), 0);
+    const Elite::DosAnswer written = twin.Write(created.value, twin.BlockBytes(0x10));
+    Assert::IsTrue(!written.failed && written.value == 0x10, L"written from the block");
     Assert::IsFalse(twin.Close(created.value).failed);
-    Assert::IsTrue(twin.StoredFiles().front().sizeBytes == 0x10, L"what was written, and nothing of the refused write");
 
-    twin.Put(data, 0xFFF0, std::string(0x10, '\0'), false);
-    Assert::IsFalse(twin.Open(NAME, 0).failed);
-    Assert::ExpectException<std::out_of_range>([&] { (void)twin.Read(5, data, 0xFFF0, 0x20); }, L"a read past it is refused");
-    Assert::IsTrue(twin.Text(data, 0xFFF0, 0x10) == std::string(0x10, '\0'), L"whole: nothing of it reaches memory");
-    const Elite::DosAnswer read = twin.Read(5, data, 0xFFF0, 0x10);
-    Assert::IsTrue(!read.failed && read.value == 0x10, L"read to the segment's end");
-    Assert::IsTrue(twin.Text(data, 0xFFF0, 0x10) == bytes, L"at the segment's end");
+    DosRig::Put(twin.Block(), std::string(0x10, '\0'), false);
+    Assert::IsFalse(twin.Open(twin.Name(), 0).failed);
+    std::array<Elite::Counted<std::uint8_t>, Elite::DosFiles::TRANSFER_AREA_BYTES> outside{};
+    const std::uint64_t changes = twin.Changes();
+    Assert::ExpectException<std::out_of_range>([&] { (void)twin.Files().Read(5, outside); }, L"a buffer outside the state is refused");
+    Assert::IsTrue(twin.Changes() == changes, L"and nothing changed");
+    const Elite::DosAnswer first = twin.Read(5, twin.Block().first(4));
+    Assert::IsTrue(!first.failed && first.value == 4, L"a buffer of four takes four");
+    Assert::IsTrue(DosRig::Text(twin.Block(), 0, 0x10) == std::string("ABCD") + std::string(0x0C, '\0'), L"and no more");
+    const Elite::DosAnswer rest = twin.Read(5, twin.Block().subspan(4));
+    Assert::IsTrue(!rest.failed && rest.value == 0x0C, L"the other twelve: the refused read moved nothing");
+    Assert::IsTrue(DosRig::Text(twin.Block(), 0, 0x10) == bytes, L"every byte, once");
     Assert::IsFalse(twin.Close(5).failed);
+
+    Assert::ExpectException<std::out_of_range>([&] { twin.Files().SetTransferArea(outside); }, L"a transfer area outside the state");
+    Assert::ExpectException<std::logic_error>([&] { twin.Files().SetTransferArea(twin.Area().first(0x2A)); },
+                                              L"a transfer area too short for a search");
   }
 
   // DOS's clock, which stamps a file: the start moment plus the machine's time, over midnight and the year's end.

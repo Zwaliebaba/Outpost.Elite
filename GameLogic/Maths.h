@@ -105,7 +105,7 @@ enum class DivideTrap : std::uint8_t
 [[nodiscard]] std::uint16_t NextRandom(GameState& _state);
 
 /// sin and cos of _angle, from sineTable.
-[[nodiscard]] SinCos SinCosOf(const GameState& _state, std::uint16_t _angle);
+[[nodiscard]] SinCos SinCosOf(std::uint16_t _angle);
 
 /// SetSinCos (CS:23B8): sin and cos of _angle, stored as rotationSinCos[_pair].
 SinCos SetSinCos(GameState& _state, std::size_t _pair, std::uint16_t _angle);
@@ -117,14 +117,14 @@ SinCos SetSinCos(GameState& _state, std::size_t _pair, std::uint16_t _angle);
 [[nodiscard]] Pair RotateByStoredSinCos(const GameState& _state, std::size_t _pair, Pair _point);
 
 /// ArcTangent2 (CS:24A5): the angle of (_a, _b), 0 along +_b and 200h along +_a.
-[[nodiscard]] std::uint16_t ArcTangent2(GameState& _state, std::int16_t _a, std::int16_t _b);
+[[nodiscard]] std::uint16_t ArcTangent2(std::int16_t _a, std::int16_t _b);
 
 /// QuadrantArcTangent (CS:24E5): atan(_b/_a) for magnitudes, 0-200h.
-[[nodiscard]] std::uint16_t QuadrantArcTangent(GameState& _state, std::uint16_t _a, std::uint16_t _b);
+[[nodiscard]] std::uint16_t QuadrantArcTangent(std::uint16_t _a, std::uint16_t _b);
 
 /// RatioArcTangent (CS:24F7): atan(_numerator/_denominator) for _numerator <= _denominator, 0-100h, by
 /// a search of tangentTable. A divide that overflows goes through the trap, and gives 100h.
-[[nodiscard]] std::uint16_t RatioArcTangent(GameState& _state, std::uint16_t _numerator, std::uint16_t _denominator);
+[[nodiscard]] std::uint16_t RatioArcTangent(std::uint16_t _numerator, std::uint16_t _denominator);
 
 /// AngleWithinTolerance (CS:2CDB): whether 11-bit angles _a and _b differ by less than _tolerance.
 [[nodiscard]] bool AngleWithinTolerance(std::uint16_t _a, std::uint16_t _b, std::uint16_t _tolerance);

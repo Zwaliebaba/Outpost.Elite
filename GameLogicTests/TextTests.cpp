@@ -61,14 +61,13 @@ constexpr int MOST_DRAWS = 1000;
 // random state drawn on by NextRandom until the spawner's first draw picks that record, as some later moment of play would have
 // it; then put _ahead straight ahead of the player, where a ship flying at the player passes, and turned to the player and set
 // going (FacePlayer, ComputeVelocity), as a spawner turns and sets going a ship it has placed. Returns the slot.
-std::uint16_t SpawnAhead(TwinRig& _rig, Spawner _spawner, std::uint8_t _record, std::uint16_t _ahead)
+Elite::SlotIndex SpawnAhead(TwinRig& _rig, Spawner _spawner, std::uint8_t _record, std::uint16_t _ahead)
 {
-  std::uint16_t placed = 0;
   Elite::GameState& state = _rig.State();
   for (int draws = 0;; ++draws)
   {
     // NextRandom's next result is the sum of the first two words of the state.
-    const auto next = static_cast<std::uint16_t>(state.Data().commanderBlock.randomState0 + state.Data().commanderBlock.randomState1);
+    const auto next = static_cast<std::uint16_t>(state.Data().commander.randomState0 + state.Data().commander.randomState1);
     if (PickedRecord(_spawner, next) == _record)
       break;
     Assert::IsTrue(draws < MOST_DRAWS, L"the spawner's record comes up");
@@ -100,27 +99,24 @@ std::uint16_t SpawnAhead(TwinRig& _rig, Spawner _spawner, std::uint8_t _record, 
   ship.zHigh = 0;
   (void)Elite::FacePlayer(state, ship);
   (void)Elite::ComputeVelocity(state, ship);
-  placed = Elite::GameState::SlotOffset(free.slot);
-  return placed;
+  return free.slot;
 }
 
 // The ship at _slot gone from the twin, as RemoveObject takes one out of play: its active bit cleared and its blip erased.
-void RemoveShip(TwinRig& _rig, std::uint16_t _slot)
+void RemoveShip(TwinRig& _rig, Elite::SlotIndex _slot)
 {
   Elite::GameState& state = _rig.State();
-  (void)Elite::RemoveObject(state, state.ObjectAt(_slot));
+  (void)Elite::RemoveObject(state, state.Slot(_slot));
 }
 
 // A missile launched at the player by the ship at _launcher in the twin, as TryLaunchMissileAtPlayer launches one
 // (LaunchShipFromObject): a copy of the ship in a free slot, made a missile and moved three frames on. Returns its slot.
-std::uint16_t LaunchMissileAtPlayer(TwinRig& _rig, std::uint16_t _launcher)
+Elite::SlotIndex LaunchMissileAtPlayer(TwinRig& _rig, Elite::SlotIndex _launcher)
 {
-  std::uint16_t launched = 0;
   Elite::GameState& state = _rig.State();
-  const std::optional<Elite::SlotIndex> slot = Elite::LaunchShipFromObject(state, state.ObjectAt(_launcher), MISSILE_LAUNCH, false);
+  const std::optional<Elite::SlotIndex> slot = Elite::LaunchShipFromObject(state, state.Slot(_launcher), MISSILE_LAUNCH, false);
   Assert::IsTrue(slot.has_value(), L"a free slot for the missile");
-  launched = slot ? Elite::GameState::SlotOffset(*slot) : std::uint16_t{0};
-  return launched;
+  return slot.value_or(Elite::SlotIndex::None);
 }
 
 // The class name ShowShipIdentity put in shipIdentityText, as the twin has it.
@@ -132,7 +128,7 @@ std::uint16_t LaunchMissileAtPlayer(TwinRig& _rig, std::uint16_t _launcher)
     {
       name.clear();
       for (std::size_t index = 0; index < IDENTITY_CLASS_BYTES; ++index)
-        name += static_cast<char>(std::uint8_t{_state.Data().shipIdentityText[IDENTITY_CLASS_OFFSET + index]});
+        name += static_cast<char>(std::uint8_t{_state.Data().text.shipIdentityText[IDENTITY_CLASS_OFFSET + index]});
     });
   return name;
 }
@@ -190,13 +186,13 @@ public:
                            {Spawner::Drifter, 6, "simple", "Simple "}};
     for (const Named& ship : ships)
     {
-      const std::uint16_t slot = SpawnAhead(rig, ship.spawner, ship.record, IDENTIFY_AHEAD);
+      const Elite::SlotIndex slot = SpawnAhead(rig, ship.spawner, ship.record, IDENTIFY_AHEAD);
       Identify(rig, ship.label, ship.className);
       RemoveShip(rig, slot);
     }
-    const std::uint16_t wolf = SpawnAhead(rig, Spawner::Wolf, 0, IDENTIFY_AHEAD);
+    const Elite::SlotIndex wolf = SpawnAhead(rig, Spawner::Wolf, 0, IDENTIFY_AHEAD);
     Identify(rig, "wolf", "Wolf   ");
-    const std::uint16_t missile = LaunchMissileAtPlayer(rig, wolf);
+    const Elite::SlotIndex missile = LaunchMissileAtPlayer(rig, wolf);
     // A frame for the missile to be drawn, which FindShipInCrosshairs needs; I is read before the frame's drawing.
     rig.Play("wait 0.1");
     Identify(rig, "attack", "Attack ");

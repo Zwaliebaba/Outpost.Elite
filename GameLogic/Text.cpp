@@ -8,7 +8,11 @@
 #include "Ships.h"
 #include "TextTables.h"
 #include "Timer.h"
+#include "Video.h"
 
+#include <algorithm>
+#include <format>
+#include <stdexcept>
 #include <utility>
 
 namespace Elite
@@ -96,42 +100,74 @@ constexpr std::uint8_t CURSOR_TEXT_TOGGLE = 0xFB;     // space <-> DBh, CP437's 
   return static_cast<std::uint16_t>((_ink & _pixels) | (~_pixels & _paper));
 }
 
-// The word of a font's glyph _glyph, of _glyphBytes each from _font's first byte, for its row _row. A character with no glyph,
-// below the first or past the last, reads what lies past the font in the data segment, as the original's indexing does; no
-// text the game prints holds one.
-template <typename Font>
-[[nodiscard]] std::uint16_t FontWord(const GameState& _state, const Font& _font, std::uint8_t _glyph, std::uint16_t _glyphBytes,
+// The fonts' tables, a glyph each, a word a row.
+static_assert(SCREEN_FONT.front().size() == SCREEN_GLYPH_BYTES && SMALL_FONT.front().size() == SMALL_GLYPH_BYTES);
+
+// The word of _font's glyph _glyph for its row _row: a glyph is a word a row, as the original reads the font from the glyph's
+// first byte. A character with no glyph, below the font's first or past its last, would have the original read on past the
+// font's table into the data segment. No text the game prints holds one: the view and screen texts are the program's own and
+// what is typed, which SCAN_CODE_TO_ASCII keeps within the screen font, and the chart labels are system names in capitals.
+// Measured on change 3b's base: of every glyph the 26 replays, the test suite and every short-range chart and system of the
+// nine galaxies read, none was past either font. One throws std::out_of_range.
+template <std::size_t Glyphs, std::size_t GlyphBytes>
+[[nodiscard]] std::uint16_t FontWord(const std::array<std::array<std::uint8_t, GlyphBytes>, Glyphs>& _font, std::uint8_t _glyph,
                                      std::uint16_t _row)
 {
-  const auto into = static_cast<std::size_t>(_glyph * _glyphBytes + _row * 2);
-  return WordIn(_state.BytesFrom(_font, into + 2), into);
+  if (_glyph >= Glyphs)
+  {
+    RefuseBytesPast(std::size_t{_glyph} * GlyphBytes, GlyphBytes, Glyphs * GlyphBytes);
+  }
+  return WordIn(std::span<const std::uint8_t>(_font[_glyph]), std::size_t{_row} * 2);
 }
 
 // Row _row of _character's opaque glyph: its pixels in _ink, the rest in _paper.
-[[nodiscard]] std::uint16_t GlyphRow(const GameState& _state, std::uint8_t _character, std::uint16_t _row, std::uint16_t _ink,
-                                     std::uint16_t _paper)
+[[nodiscard]] std::uint16_t GlyphRow(std::uint8_t _character, std::uint16_t _row, std::uint16_t _ink, std::uint16_t _paper)
 {
   const auto glyph = static_cast<std::uint8_t>(_character - FIRST_GLYPH);
-  return InkOnPaper(FontWord(_state, _state.Data().screenFont, glyph, SCREEN_GLYPH_BYTES, _row), _ink, _paper);
+  return InkOnPaper(FontWord(SCREEN_FONT, glyph, _row), _ink, _paper);
 }
 
-// Row _row of the small letter _letter ('A' is 0), shifted right _shift pixels into a word of the space-view
-// buffer, in memory order: the font holds each row big-endian.
-[[nodiscard]] std::uint16_t SmallGlyphRow(const GameState& _state, std::uint8_t _letter, std::uint16_t _row, std::uint8_t _shift)
+// Row _row of the small letter _letter ('A' is 0), shifted right _shift pixels into a word of the drawing buffer, in memory
+// order: the font holds each row big-endian.
+[[nodiscard]] std::uint16_t SmallGlyphRow(std::uint8_t _letter, std::uint16_t _row, std::uint8_t _shift)
 {
-  const std::uint16_t shifted = ShiftLeft(FontWord(_state, _state.Data().smallFont, _letter, SMALL_GLYPH_BYTES, _row), _shift);
+  const std::uint16_t shifted = ShiftLeft(FontWord(SMALL_FONT, _letter, _row), _shift);
   return Swap(shifted);
 }
 
-// REP STOSW: _count words of _value at _segment:_at, forwards or, _backwards, down. Returns where DI ends.
+// The two bytes of the drawing buffer from its byte _at, where the text printers write a glyph's row as a word. The places the
+// game prints at are on the buffer: the view texts' are constants, and a short-range chart's labels' rows are on the chart. A
+// label that runs out of nudges (NudgeChartLabel) can be left below the chart, where the original prints it on into the data
+// segment after the buffer: the GameState refused the first byte there it did not hold (43 of the 2,304 short-range charts of
+// the nine galaxies stopped there, and none that went on had written past the buffer), and so does this, at the first byte
+// past it.
+[[nodiscard]] std::span<Counted<std::uint8_t>> DrawingBufferWord(GameState& _state, std::uint16_t _at)
+{
+  return BytesWithin(DrawingBuffer(_state), _at, 2);
+}
+
+// ES as a screen printer finds it: the CGA's video segment wherever the game prints on a screen. The one print that ES on the
+// data segment could reach is a chart's title (DrawChartTitle), for a chart entered from flight with its frame up already,
+// which the original would draw through the data segment from DS:0388; the GameState refused it at the title's second row,
+// DS:2388, a byte it did not hold, and this refuses it at the first.
+void CheckScreenSegment(std::uint16_t _segment)
+{
+  if (_segment != GameState::VIDEO_SEGMENT)
+  {
+    throw std::out_of_range(std::format("Text: a screen printed through segment {:04X}h, which is not the CGA's", _segment));
+  }
+}
+
+// REP STOSW: _count words of _value at _segment:_at, the CGA's memory, forwards or, _backwards, down. Returns where DI ends.
 std::uint16_t StoreWords(GameState& _state, std::uint16_t _segment, std::uint16_t _at, std::uint16_t _count, std::uint16_t _value,
                          bool _backwards)
 {
+  CheckScreenSegment(_segment);
   const auto step = static_cast<std::uint16_t>(_backwards ? 0xFFFE : 2);
   std::uint16_t at = _at;
   for (std::uint16_t left = _count; left != 0; --left)
   {
-    _state.SetFarWord(_segment, at, _value);
+    _state.SetVideoWord(at, _value);
     at = static_cast<std::uint16_t>(at + step);
   }
   return at;
@@ -140,12 +176,12 @@ std::uint16_t StoreWords(GameState& _state, std::uint16_t _segment, std::uint16_
 // A loop of byte moves ShowShipIdentity makes (MOV AH,[BX] or MOV AL,[BX], INC BX, the byte to [DI], INC DI, LOOP): the
 // first _to.size() bytes of a name of shipTypeNames, as many as the loop's count, into _to. The name holds one more byte
 // than the field it is copied into, which the loop never moves.
-template <std::size_t Bytes> void CopyNameInto(const Counted<std::uint8_t> (&_name)[Bytes], std::span<Counted<std::uint8_t>> _to)
+template <std::size_t Bytes> void CopyNameInto(const std::array<std::uint8_t, Bytes>& _name, std::span<Counted<std::uint8_t>> _to)
 {
   static_assert(Bytes > 0);
   for (std::size_t moved = 0; moved < _to.size() && moved < Bytes; ++moved)
   {
-    _to[moved] = std::uint8_t{_name[moved]};
+    _to[moved] = _name[moved];
   }
 }
 
@@ -176,7 +212,7 @@ void RedrawTypedLine(GameState& _state, Hardware& _hardware, const TypedLine& _l
 // ReadTextLine's blink (0x76A3): 300 ticks to the next, the cursor flipped, and the line redrawn.
 void RestartInputBlink(GameState& _state, Hardware& _hardware, const TypedLine& _line, std::uint16_t _length)
 {
-  _state.Data().cursorBlinkTicks = CURSOR_BLINK_TICKS;
+  _state.Data().text.cursorBlinkTicks = CURSOR_BLINK_TICKS;
   ToggleInputCursor(_state);
   RedrawTypedLine(_state, _hardware, _line, _length);
 }
@@ -186,10 +222,10 @@ void RestartInputBlink(GameState& _state, Hardware& _hardware, const TypedLine& 
 // Returns whether it drew the message.
 bool ShowMessage(GameState& _state, bool _backwards)
 {
-  _state.Data().messageFramesBytes.messageDrawn = MESSAGE_DRAWN;
-  const Message message = _state.Data().messagePointer;
-  const bool shown = message == _state.Data().messageShown;
-  _state.Data().messageShown = message;
+  _state.Data().messages.messageFramesBytes.messageDrawn = MESSAGE_DRAWN;
+  const Message message = _state.Data().messages.messagePointer;
+  const bool shown = message == _state.Data().messages.messageShown;
+  _state.Data().messages.messageShown = message;
   if (shown)
   {
     return false;
@@ -204,14 +240,30 @@ constexpr std::size_t NUMBER_BYTES = 6;
 
 } // namespace
 
+void RefuseBytesPast(std::size_t _at, std::size_t _count, std::size_t _bytes)
+{
+  throw std::out_of_range(std::format("{} bytes from byte {} of a buffer of {}, past its end", _count, _at, _bytes));
+}
+
+std::string_view TextWithin(std::span<const Counted<std::uint8_t>> _bytes, std::size_t _at)
+{
+  const std::span<const Counted<std::uint8_t>> rest = BytesWithin(_bytes, _at, _bytes.size() - std::min(_at, _bytes.size()));
+  const std::string_view text = TextIn(rest);
+  if (text.size() == rest.size())
+  {
+    RefuseBytesPast(_at, rest.size() + 1, _bytes.size());
+  }
+  return text;
+}
+
 std::uint16_t DrawViewChar(GameState& _state, std::uint8_t _character, std::uint16_t _ink, std::uint16_t _at)
 {
-  const std::uint16_t paper = _state.Data().textPaperPattern;
+  const std::uint16_t paper = _state.Data().drawing.textPaperPattern;
   std::uint16_t address = _at;
   for (std::uint16_t line = 0; line < GLYPH_ROWS; ++line)
   {
-    const std::uint16_t row = GlyphRow(_state, _character, line, _ink, paper);
-    _state.SetWord(address, row);
+    const std::uint16_t row = GlyphRow(_character, line, _ink, paper);
+    SetWordIn(DrawingBufferWord(_state, address), 0, row);
     address = static_cast<std::uint16_t>(address + VIEW_ROW_BYTES);
   }
   return static_cast<std::uint16_t>(_at + 2);
@@ -230,14 +282,15 @@ std::uint16_t DrawViewString(GameState& _state, std::string_view _text, std::uin
 
 std::uint16_t DrawScreenChar(GameState& _state, std::uint8_t _character, std::uint16_t _ink, std::uint16_t _segment, std::uint16_t _cell)
 {
+  CheckScreenSegment(_segment);
   std::uint16_t address = _cell;
   std::uint16_t down = CGA_TO_ODD_BANK;
   std::uint16_t up = CGA_TO_EVEN_BANK;
   for (std::uint16_t line = 0; line < GLYPH_ROWS; ++line)
   {
     // The paper is read again for each row, as the original does.
-    const std::uint16_t row = GlyphRow(_state, _character, line, _ink, _state.Data().textPaperPattern);
-    _state.SetFarWord(_segment, address, row);
+    const std::uint16_t row = GlyphRow(_character, line, _ink, _state.Data().drawing.textPaperPattern);
+    _state.SetVideoWord(address, row);
     if (line + 1 < GLYPH_ROWS)
     {
       address = static_cast<std::uint16_t>(address + down);
@@ -257,13 +310,12 @@ std::uint16_t DrawScreenString(GameState& _state, std::string_view _text, std::u
   return cell;
 }
 
-std::uint16_t FormatDecimal5(GameState& _state, std::uint16_t _value, std::span<Counted<std::uint8_t>> _digits)
+std::uint16_t FormatDecimal5(std::uint16_t _value, std::span<Counted<std::uint8_t>> _digits)
 {
   std::uint16_t value = _value;
   std::size_t digit = 0;
-  for (const Counted<std::uint16_t>& divisorWord : _state.Data().decimalDivisors16)
+  for (const std::uint16_t divisor : DECIMAL_DIVISORS_16)
   {
-    const std::uint16_t divisor = divisorWord;
     if (divisor == 1)
     {
       break;
@@ -302,9 +354,10 @@ SmallViewPlace DrawSmallViewChar(GameState& _state, std::uint8_t _letter, std::u
   {
     // The letter's pixels cleared from the buffer, then set in the ink: AND [DI],BP and OR [DI],AX, two word
     // writes (34C2, 34C4).
-    const std::uint16_t pixels = SmallGlyphRow(_state, letter, line, _place.shift);
-    _state.SetWord(address, static_cast<std::uint16_t>(_state.Word(address) & ~pixels));
-    _state.SetWord(address, static_cast<std::uint16_t>(_state.Word(address) | (pixels & _ink)));
+    const std::uint16_t pixels = SmallGlyphRow(letter, line, _place.shift);
+    const std::span<Counted<std::uint8_t>> word = DrawingBufferWord(_state, address);
+    SetWordIn(word, 0, static_cast<std::uint16_t>(WordIn(word, 0) & ~pixels));
+    SetWordIn(word, 0, static_cast<std::uint16_t>(WordIn(word, 0) | (pixels & _ink)));
     address = static_cast<std::uint16_t>(address + VIEW_ROW_BYTES);
   }
   const auto shift = static_cast<std::uint8_t>(_place.shift ^ SMALL_GLYPH_SHIFT);
@@ -324,11 +377,12 @@ void DrawSmallViewString(GameState& _state, std::string_view _text, std::uint16_
 
 void FormatCredits(GameState& _state)
 {
-  GameData::CommanderBlock& commander = _state.Data().commanderBlock;
+  CommanderState& commander = _state.Data().commander;
   Counted<std::uint8_t>(&text)[sizeof(commander.creditBalanceText)] = commander.creditBalanceText;
-  std::uint32_t value = _state.WordOf(commander.creditsTenths) | (std::uint32_t{commander.creditsTenths.data75F5} << 16);
+  // The low word, the record's first two bytes, then the high word.
+  std::uint32_t value = WordIn(commander.creditsTenths.gap75F3, 0) | (std::uint32_t{commander.creditsTenths.data75F5} << 16);
   std::size_t digit = 0;
-  for (const Counted<std::uint8_t>(&divisorBytes)[4] : _state.Data().decimalDivisors32)
+  for (const std::array<std::uint8_t, 4>& divisorBytes : DECIMAL_DIVISORS_32)
   {
     const auto low = static_cast<std::uint16_t>(divisorBytes[0] | (divisorBytes[1] << 8));
     const auto high = static_cast<std::uint16_t>(divisorBytes[2] | (divisorBytes[3] << 8));
@@ -358,18 +412,25 @@ void FormatCredits(GameState& _state)
 
 std::string_view MessageText(const GameState& _state, Message _message) noexcept
 {
+  // Each text holds its NUL, which nothing writes: the last of bountyText, shipIdentityText, scoopedCargoText and
+  // arrivalGalaxyText's record, and, after hyperspaceCountdownMessage's 24 characters and the countdown's two digits, gapA85B.
+  const HyperspaceState& hyperspace = _state.Data().hyperspace;
+  static_assert(GAME_DATA_OFFSET(hyperspace.hyperspaceCountdownDigits) ==
+                  GAME_DATA_OFFSET(hyperspace.hyperspaceCountdownMessage) + sizeof(HyperspaceState::hyperspaceCountdownMessage) &&
+                GAME_DATA_OFFSET(hyperspace.gapA85B) ==
+                  GAME_DATA_OFFSET(hyperspace.hyperspaceCountdownDigits) + sizeof(HyperspaceState::hyperspaceCountdownDigits));
   switch (_message)
   {
   case Message::Bounty:
-    return _state.TextAt(_state.Data().bountyText);
+    return TextIn(_state.Data().text.bountyText);
   case Message::ShipIdentity:
-    return _state.TextAt(_state.Data().shipIdentityText);
+    return TextIn(_state.Data().text.shipIdentityText);
   case Message::ScoopedCargo:
-    return _state.TextAt(_state.Data().scoopedCargoText);
+    return TextIn(_state.Data().equipment.scoopedCargoText);
   case Message::ArrivalGalaxy:
-    return _state.TextAt(_state.Data().arrivalGalaxyText);
+    return TextIn(BytesOf(hyperspace.arrivalGalaxyText));
   case Message::HyperspaceCountdown:
-    return _state.TextAt(_state.Data().hyperspaceCountdownMessage);
+    return TextIn(BytesThrough(hyperspace.hyperspaceCountdownMessage, hyperspace.gapA85B));
   default:
     break;
   }
@@ -380,20 +441,20 @@ std::string_view MessageText(const GameState& _state, Message _message) noexcept
 void UpdateMessageLine(GameState& _state, bool _backwards)
 {
   UpdateWarnings(_state);
-  if (_state.Data().messageFramesBytes.messageDrawn != 0)
+  if (_state.Data().messages.messageFramesBytes.messageDrawn != 0)
   {
     // messageFrames is a byte here, though ShowBountyMessage writes it as a word.
-    const std::uint8_t frames = Low(_state.Data().messageFrames);
+    const std::uint8_t frames = Low(_state.Data().messages.messageFrames);
     if (frames != 0)
     {
-      _state.Data().messageFrames = WithLow(_state.Data().messageFrames, static_cast<std::uint8_t>(frames - 1));
+      _state.Data().messages.messageFrames = WithLow(_state.Data().messages.messageFrames, static_cast<std::uint8_t>(frames - 1));
       return;
     }
-    const std::uint16_t view = _state.Data().viewAngle;
-    _state.Data().messagePointer = view == 0           ? Message::FrontView
-                                   : view == VIEW_REAR ? Message::RearView
-                                   : view == VIEW_LEFT ? Message::LeftView
-                                                       : Message::RightView;
+    const std::uint16_t view = _state.Data().playerShip.viewAngle;
+    _state.Data().messages.messagePointer = view == 0           ? Message::FrontView
+                                            : view == VIEW_REAR ? Message::RearView
+                                            : view == VIEW_LEFT ? Message::LeftView
+                                                                : Message::RightView;
   }
   ShowMessage(_state, _backwards);
 }
@@ -414,15 +475,15 @@ void ClearMessageLine(GameState& _state, std::uint16_t _segment, bool _backwards
 void ShowBountyMessage(GameState& _state, std::uint16_t _tenths)
 {
   const std::span<Counted<std::uint8_t>> digits =
-    std::span<Counted<std::uint8_t>>(_state.Data().bountyText).subspan(BOUNTY_DIGITS_OFFSET, NUMBER_BYTES);
-  FormatDecimal5(_state, _tenths, digits);
+    std::span<Counted<std::uint8_t>>(_state.Data().text.bountyText).subspan(BOUNTY_DIGITS_OFFSET, NUMBER_BYTES);
+  FormatDecimal5(_tenths, digits);
   BlankLeadingZeros(digits, TENTHS_BLANKS);
   // The tenths digit moves right, and the point takes its place, as one word.
   const std::uint8_t tenths = digits[4];
   digits[4] = '.';
   digits[5] = tenths;
-  _state.Data().messagePointer = Message::Bounty;
-  _state.Data().messageFrames = BOUNTY_FRAMES;
+  _state.Data().messages.messagePointer = Message::Bounty;
+  _state.Data().messages.messageFrames = BOUNTY_FRAMES;
 }
 
 void ShowShipIdentity(GameState& _state, std::uint8_t _type, std::uint8_t _class, const SpaceObject& _slot)
@@ -442,20 +503,20 @@ void ShowShipIdentity(GameState& _state, std::uint8_t _type, std::uint8_t _class
     shipClass = CLASS_POLICE;
   }
   // The class's name, then the type's, a byte at a time, the class's seven bytes of its eight.
-  const std::span<Counted<std::uint8_t>> identity(_state.Data().shipIdentityText);
-  const Counted<std::uint8_t>(&className)[8] = _state.Data().shipClassNames[shipClass];
+  const std::span<Counted<std::uint8_t>> identity(_state.Data().text.shipIdentityText);
+  const std::array<std::uint8_t, 8>& className = SHIP_CLASS_NAMES[shipClass];
   for (std::size_t moved = 0; moved < CLASS_NAME_BYTES; ++moved)
   {
     identity[CLASS_TEXT_OFFSET + moved] = std::uint8_t{className[moved]};
   }
-  CopyNameInto(_state.Data().shipTypeNames[_type], identity.subspan(TYPE_TEXT_OFFSET, TYPE_NAME_BYTES));
-  _state.Data().messagePointer = Message::ShipIdentity;
-  _state.Data().messageFrames = IDENTITY_FRAMES;
+  CopyNameInto(SHIP_TYPE_NAMES[_type], identity.subspan(TYPE_TEXT_OFFSET, TYPE_NAME_BYTES));
+  _state.Data().messages.messagePointer = Message::ShipIdentity;
+  _state.Data().messages.messageFrames = IDENTITY_FRAMES;
 }
 
 std::uint16_t PrintTextModeString(GameState& _state, std::string_view _text, std::uint16_t _cell)
 {
-  const std::uint8_t attribute = _state.Data().textAttribute;
+  const std::uint8_t attribute = _state.Data().drawing.textAttribute;
   std::uint16_t cell = _cell;
   for (const char character : _text)
   {
@@ -468,29 +529,31 @@ std::uint16_t PrintTextModeString(GameState& _state, std::string_view _text, std
 void ToggleMenuRowHighlight(GameState& _state, std::uint16_t _segment, std::uint16_t _row)
 {
   const std::uint8_t attribute = SwapTextAttributeNibbles(_state);
+  CheckScreenSegment(_segment);
   std::uint16_t cell = _row;
   for (std::uint16_t left = MENU_ROW_ATTRIBUTES; left != 0; --left)
   {
-    _state.SetFarByte(_segment, cell, attribute);
+    _state.SetVideoByte(cell, attribute);
     cell = Offset(cell, 2);
   }
 }
 
 void ClearDockedMessageLine(GameState& _state, std::uint16_t _segment)
 {
+  CheckScreenSegment(_segment);
   std::uint16_t cell = DOCKED_MESSAGE_OFFSET;
   for (std::uint16_t left = DOCKED_MESSAGE_CHARACTERS; left != 0; --left)
   {
-    _state.SetFarByte(_segment, cell, ' ');
+    _state.SetVideoByte(cell, ' ');
     cell = Offset(cell, 2);
   }
 }
 
 std::uint8_t SwapTextAttributeNibbles(GameState& _state)
 {
-  const std::uint8_t attribute = _state.Data().textAttribute;
+  const std::uint8_t attribute = _state.Data().drawing.textAttribute;
   const auto swapped = static_cast<std::uint8_t>((attribute >> 4) | (attribute << 4));
-  _state.Data().textAttribute = swapped;
+  _state.Data().drawing.textAttribute = swapped;
   return swapped;
 }
 
@@ -500,19 +563,14 @@ std::uint16_t PrintCountedTextLines(GameState& _state, std::span<const std::stri
   return PrintTextLines(_state, _lines, _cell);
 }
 
-std::uint16_t PrintCountedTextLines(GameState& _state, const Counted<std::uint8_t>& _count, std::uint16_t _cell)
-{
-  return PrintTextLines(_state, _state.TextAt(_count, 1), _cell, _count);
-}
-
 void FormatTenths(GameState& _state, std::uint16_t _tenths)
 {
-  const std::span<Counted<std::uint8_t>> digits = _state.BytesFrom(_state.Data().priceText, NUMBER_BYTES);
-  FormatDecimal5(_state, _tenths, digits);
+  const std::span<Counted<std::uint8_t>> digits = BytesOf(_state.Data().menus.priceText).first(NUMBER_BYTES);
+  FormatDecimal5(_tenths, digits);
   BlankLeadingZeros(digits, TENTHS_BLANKS);
   // The tenths digit moves right, and the point takes its place, a byte at a time.
-  _state.Data().priceText.data8041 = std::uint8_t{_state.Data().priceText.data8040};
-  _state.Data().priceText.data8040 = '.';
+  _state.Data().menus.priceText.data8041 = std::uint8_t{_state.Data().menus.priceText.data8040};
+  _state.Data().menus.priceText.data8040 = '.';
 }
 
 std::uint16_t PrintTextLines(GameState& _state, std::span<const std::string_view> _lines, std::uint16_t _cell)
@@ -547,14 +605,14 @@ void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<Counted<std:
 {
   const TypedLine line{_buffer, _segment, _cell};
   ResetKeyboard(_state, _hardware);
-  _state.Data().textPaperPattern = 0;
-  _state.Data().inputCharsLeft = _most;
+  _state.Data().drawing.textPaperPattern = 0;
+  _state.Data().text.inputCharsLeft = _most;
   std::uint16_t length = 0;
   RestartInputBlink(_state, _hardware, line, length);
   for (;;)
   {
-    const auto blink = static_cast<std::uint16_t>(_state.Data().cursorBlinkTicks - 1);
-    _state.Data().cursorBlinkTicks = blink;
+    const auto blink = static_cast<std::uint16_t>(_state.Data().text.cursorBlinkTicks - 1);
+    _state.Data().text.cursorBlinkTicks = blink;
     if (blink == 0)
     {
       TypedLineTurn(_hardware, INPUT_RESTART_BLINK, length);
@@ -573,7 +631,7 @@ void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<Counted<std:
       TypedLineTurn(_hardware, INPUT_COUNT_BLINK, length);
       continue;
     }
-    std::uint8_t character = _state.Data().scanCodeToAscii[key.scanCode];
+    std::uint8_t character = SCAN_CODE_TO_ASCII[key.scanCode];
     if (character == NO_CHARACTER)
     {
       TypedLineTurn(_hardware, INPUT_COUNT_BLINK, length);
@@ -581,7 +639,7 @@ void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<Counted<std:
     }
     if (character == ENTER_KEY)
     {
-      if (_state.Data().inputCursorText[0] != CURSOR_HIDDEN)
+      if (_state.Data().text.inputCursorText[0] != CURSOR_HIDDEN)
       {
         ToggleInputCursor(_state);
         RedrawInputLine(_state, _buffer, length, _segment, _cell);
@@ -593,7 +651,7 @@ void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<Counted<std:
       if (length != 0)
       {
         --length;
-        _state.Data().inputCharsLeft = static_cast<std::uint8_t>(_state.Data().inputCharsLeft + 1);
+        _state.Data().text.inputCharsLeft = static_cast<std::uint8_t>(_state.Data().text.inputCharsLeft + 1);
         RedrawInputLine(_state, _buffer, length, _segment, _cell);
       }
       TypedLineTurn(_hardware, INPUT_COUNT_BLINK, length);
@@ -610,13 +668,13 @@ void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<Counted<std:
     }
     _buffer[length] = character;
     ++length;
-    const auto left = static_cast<std::uint8_t>(_state.Data().inputCharsLeft - 1);
-    _state.Data().inputCharsLeft = left;
+    const auto left = static_cast<std::uint8_t>(_state.Data().text.inputCharsLeft - 1);
+    _state.Data().text.inputCharsLeft = left;
     if ((left & 0x80) != 0)
     {
       // No room: the character is taken back.
       --length;
-      _state.Data().inputCharsLeft = static_cast<std::uint8_t>(left + 1);
+      _state.Data().text.inputCharsLeft = static_cast<std::uint8_t>(left + 1);
       TypedLineTurn(_hardware, INPUT_REDRAW, length);
     }
     RedrawTypedLine(_state, _hardware, line, length);
@@ -625,8 +683,8 @@ void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<Counted<std:
 
 void ToggleInputCursor(GameState& _state)
 {
-  Counted<std::uint8_t>& cursor = _state.Data().inputCursorText[0];
-  const std::uint8_t toggle = _state.Data().screenLayout == TEXT_LAYOUT ? CURSOR_TEXT_TOGGLE : CURSOR_GRAPHICS_TOGGLE;
+  Counted<std::uint8_t>& cursor = _state.Data().text.inputCursorText[0];
+  const std::uint8_t toggle = _state.Data().drawing.screenLayout == TEXT_LAYOUT ? CURSOR_TEXT_TOGGLE : CURSOR_GRAPHICS_TOGGLE;
   cursor = static_cast<std::uint8_t>(cursor ^ toggle);
 }
 
@@ -635,14 +693,15 @@ void RedrawInputLine(GameState& _state, std::span<Counted<std::uint8_t>> _buffer
 {
   _buffer[_length] = 0;
   const std::uint16_t next = PrintStringForLayout(_state, TextIn(_buffer), MESSAGE_INK, _segment, _cell);
-  (void)PrintStringForLayout(_state, _state.TextAt(_state.Data().inputCursorText), MESSAGE_INK, _segment, next);
+  // The cursor's glyph and a space, and the NUL after them, which nothing writes.
+  (void)PrintStringForLayout(_state, TextWithin(_state.Data().text.inputCursorText, 0), MESSAGE_INK, _segment, next);
 }
 
 std::uint16_t PrintStringForLayout(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _segment,
                                    std::uint16_t _cell)
 {
   // A tail jump to either printer.
-  if (_state.Data().screenLayout == TEXT_LAYOUT)
+  if (_state.Data().drawing.screenLayout == TEXT_LAYOUT)
   {
     return PrintTextModeString(_state, _text, _cell);
   }

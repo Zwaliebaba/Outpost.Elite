@@ -4,7 +4,9 @@
 #include "GameState.h"
 #include "Hardware.h"
 
+#include <cstddef>
 #include <cstdint>
+#include <span>
 
 namespace Elite
 {
@@ -12,6 +14,14 @@ namespace Elite
 // The reference's video routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): drawing: lines, spans, the space view and
 // the dashboard into CGA memory. Each takes values and gives values back, on the GameState and, where it drives a device, the devices
 // (ADR-014).
+
+/// The drawing buffer's bytes: 128 rows of 64, 256 pixels of 2 bits each.
+inline constexpr std::size_t DRAWING_BUFFER_BYTES = 0x2000;
+
+/// The drawing buffer, DS:0000-1FFF in 1987, which the space view, the charts and their texts are drawn into before they are copied
+/// to the screen: drawing.gap0000, spaceViewBuffer and gap1FC0, one after another in DrawingState as in 1987. A byte of it is
+/// numbered as the original addresses it, by its offset in the data segment.
+[[nodiscard]] std::span<Counted<std::uint8_t>, DRAWING_BUFFER_BYTES> DrawingBuffer(GameState& _state) noexcept;
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
@@ -64,11 +74,11 @@ void PresentChartFrame(GameState& _state, Hardware& _hardware);
 void PresentSpaceView(GameState& _state, Hardware& _hardware, bool _backward);
 
 /// CopyChartBufferToScreen (CS:05CC): waits for a vertical retrace and a delay, then copies 64 - 4 * _bandsSkipped line pairs, as
-/// a byte, of the drawing buffer from DS:_bandsSkipped * 512 to the chart's place on the screen, at B800:0648. Its loops turn
+/// a byte, of the drawing buffer from its byte _bandsSkipped * 512 to the chart's place on the screen, at B800:0648. Its loops turn
 /// through _hardware.
 void CopyChartBufferToScreen(GameState& _state, Hardware& _hardware, std::uint8_t _bandsSkipped, bool _backward);
 
-/// ClearDrawBuffer (CS:060D): the drawing buffer, DS:0000-1FFF, zeroed a word at a time as REP STOSW does.
+/// ClearDrawBuffer (CS:060D): the drawing buffer (DrawingBuffer) zeroed a word at a time as REP STOSW does.
 void ClearDrawBuffer(GameState& _state, bool _backward);
 
 /// PlotPixel (CS:15E0): the pixel at _x, _row of the drawing buffer set to colorFillBytes[drawColor].
@@ -126,7 +136,7 @@ void DrawDisc(GameState& _state, std::uint16_t _radius, std::uint16_t _centerX, 
 /// end bytes through spanLeftMasks and spanRightMasks and the bytes between them by STOSB and REP STOSW into ES = DS.
 void FillSpan(GameState& _state, std::uint8_t _left, std::uint8_t _right, std::uint8_t _doubledRow, bool _backward);
 
-/// FillTriangleSpan (CS:1B7A): x = _left to _right, _left first, of the drawing buffer's row at DS:_row filled with _fill: the
+/// FillTriangleSpan (CS:1B7A): x = _left to _right, _left first, of the drawing buffer's row at its byte _row filled with _fill: the
 /// end bytes through triangleEdgeMasks, which the original reads through BP from SS:0000, DS:AD60, and the bytes between
 /// them by STOSB and REP STOSW into ES = DS.
 void FillTriangleSpan(GameState& _state, std::uint16_t _row, std::uint8_t _left, std::uint8_t _right, std::uint8_t _fill, bool _backward);

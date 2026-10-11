@@ -34,10 +34,10 @@ constexpr std::string_view QUICK_SCREENSHOT_KEYS = "down Alt_L; down KP_Multiply
 // the Amstrad joystick's 77h-7Ch.
 void QueueScanCode(Elite::GameState& _state, std::uint8_t _code)
 {
-  const std::uint16_t write = _state.Data().keyBufferWrite;
-  _state.Data().keyBuffer[write] = _code;
-  _state.Data().keyBufferWrite = static_cast<std::uint16_t>((write + 1) & KEY_BUFFER_WRAP_MASK);
-  _state.Data().keyBufferCount = static_cast<std::uint8_t>(_state.Data().keyBufferCount + 1);
+  const std::uint16_t write = _state.Data().input.keyBufferWrite;
+  _state.Data().input.keyBuffer[write] = _code;
+  _state.Data().input.keyBufferWrite = static_cast<std::uint16_t>((write + 1) & KEY_BUFFER_WRAP_MASK);
+  _state.Data().input.keyBufferCount = static_cast<std::uint8_t>(_state.Data().input.keyBufferCount + 1);
 }
 
 // A file in DOS's directory: its name, and the SHA-256 of its bytes in lowercase hex, or DIRECTORY for a directory.
@@ -99,12 +99,15 @@ void PlayEveryDiscMenuPath(TwinRig& _rig)
 {
   _rig.Play("key space; wait 3.3\nkey Escape; wait 0.1\nkey c; wait 0.1\ndigest no-names");
   _rig.Play("key v; wait 0.05\nkey q; wait 0.05\nkey Next; wait 0.05\nkey m; wait 0.05\ndigest no-mouse");
-  // A mouse driver: int 33h pointing at a byte that is not an IRET, the first of the farewell DOS prints, which nothing writes.
-  // The code segment, where the original's first byte was, is not the game's memory (D33, piece 3).
+  // A mouse driver: int 33h pointing at a byte that is not an IRET, cheatEnabled's, which holds 0 or 1. The code segment, where
+  // the original's first byte was, is not the game's memory (D33, piece 3).
   const Elite::FarAddress mouse = _rig.Host().InterruptVector(MOUSE_VECTOR);
   _rig.Both(
     [](Elite::Platform& _platform, Elite::GameState& _state)
-    { _platform.SetInterruptVector(MOUSE_VECTOR, Elite::FarAddress{_state.DataSegment(), _state.OffsetOf(_state.Data().exitMessage)}); });
+    {
+      _platform.SetInterruptVector(MOUSE_VECTOR,
+                                   Elite::FarAddress{_state.DataSegment(), _state.OffsetOf(_state.Data().startUp.cheatEnabled)});
+    });
   _rig.Play("key m; wait 0.05\ndigest mouse\nkey k; wait 0.05");
   _rig.Both([mouse](Elite::Platform& _platform, Elite::GameState&) { _platform.SetInterruptVector(MOUSE_VECTOR, mouse); });
   // The IBM stick, with nothing in the port and then with a stick in it.
@@ -178,13 +181,13 @@ public:
     twin.Play("key space; wait 3.3\nkey F5; wait 0.1");
     twin.Play(CHART_SCREENSHOT_KEYS);
     // The numbers run '99', then '00', the name of a directory.
-    twin.Both([](Elite::Platform&, Elite::GameState& _state) { _state.Data().screenshotNumber = 0x3939; });
+    twin.Both([](Elite::Platform&, Elite::GameState& _state) { _state.Data().video.screenshotNumber = 0x3939; });
     std::filesystem::create_directories(twin.Files() / "ELITE00.HI");
     twin.Play(CHART_SCREENSHOT_KEYS);
     // GetKey hands the chart one key a frame: the screenshots' Alt and PrtSc go first, then Escape closes it.
     twin.Play("wait 0.6; key Escape; wait 0.15; key s; wait 0.05");
     // '09', then '10'; then '11', a directory.
-    twin.Both([](Elite::Platform&, Elite::GameState& _state) { _state.Data().screenshotNumber = 0x3930; });
+    twin.Both([](Elite::Platform&, Elite::GameState& _state) { _state.Data().video.screenshotNumber = 0x3930; });
     twin.Play(QUICK_SCREENSHOT_KEYS);
     std::filesystem::create_directories(twin.Files() / "ELITE11.LO");
     twin.Play(QUICK_SCREENSHOT_KEYS);

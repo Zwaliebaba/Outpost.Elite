@@ -4,7 +4,10 @@
 #include "GameState.h"
 #include "Hardware.h"
 #include "NativeEntry.h"
+#include "SpaceObject.h"
 
+#include <array>
+#include <cstdint>
 #include <span>
 
 namespace Elite
@@ -61,6 +64,11 @@ void WipeProgram(Hardware& _hardware);
 /// StartNewGame (CS:4671): the start-up commander copied back over the commander, a byte at a time, going up or, when
 /// _backward, down (REP MOVSB), and the per-game state reset.
 void StartNewGame(GameState& _state, bool _backward);
+
+/// The 64 bytes after the space view's buffer, DS:2000-203F in 1987, where ClearDrawBuffer leaves DI once it has filled the buffer
+/// going up, and which M's launch then copies its missile from (LaunchPlayerMissile): amstradPresent, amstradSignature,
+/// speakerPortImage, diskOperation, exitMessage and dosVersionMessage's first seven, by name (D38).
+[[nodiscard]] std::array<std::uint8_t, SpaceObject::BYTES> BytesAfterDrawBuffer(const GameState& _state);
 
 /// ShowCredits (CS:8F02): the space view's buffer cleared (ClearDrawBuffer, which goes by _backward, the direction flag), the
 /// nine lines of creditsScreenText drawn in it, presented (FinishSpaceViewFrame), then 3000 timer ticks, about 3 s. Waits.

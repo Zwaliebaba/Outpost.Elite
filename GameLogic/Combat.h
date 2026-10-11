@@ -6,6 +6,7 @@
 #include "Hardware.h"
 #include "SpaceObject.h"
 
+#include <array>
 #include <cstdint>
 #include <optional>
 
@@ -102,7 +103,7 @@ void SpawnPlayerWreckage(GameState& _state);
 std::optional<std::uint8_t> KillPlayer(GameState& _state);
 
 /// InitMissile (CS:4C8C): _slot made a missile (spawnTemplates entry 0), class 2.
-void InitMissile(GameState& _state, SpaceObject& _slot);
+void InitMissile(SpaceObject& _slot);
 
 /// RemoveAllMissiles (CS:4F9F): every active missile among objectSlotCount slots from shipSlots removed (RemoveObject). Returns
 /// the last pixel of the last scanner blip that erased, if it erased one.
@@ -125,10 +126,21 @@ void TallyMaskMissionKill(GameState& _state, const SpaceObject& _slot);
 /// high byte below 70 too, hit squarely.
 void TryFireLaserAtPlayer(GameState& _state, SpaceObject& _slot, std::uint16_t _pitchError, std::uint16_t _yawError);
 
+/// Where M's launch copies the missile from (LaunchPlayerMissile): DI, the original's offset there, on a slot or past a buffer a
+/// routine before the launch filled; and past such a buffer, the 64 bytes the original's data segment holds there, by the members
+/// and constants that hold them now, which the routine that filled it names (D38).
+struct MissileSource
+{
+  std::uint16_t di;
+  std::optional<std::array<std::uint8_t, SpaceObject::BYTES>> past; ///< none when DI is on a slot
+};
+
 /// LaunchPlayerMissile (CS:5242): the 64 bytes at _source copied (CopyObject, backwards when _backward) into a ship slot, free
 /// or reclaimed, and made a missile (InitMissile) 100 along the player's nose, locked on missileTarget, aimed at where that is,
 /// its velocity set and moved twice. A slot ReclaimShipSlot evicts is copied onto itself, as the original's XCHG SI,DI leaves it.
-void LaunchPlayerMissile(GameState& _state, std::uint16_t _source, bool _backward);
+/// A copy that runs down, from DI past the bytes there, still goes by the original's addresses, as change 3c of D38 takes the
+/// direction flag.
+void LaunchPlayerMissile(GameState& _state, const MissileSource& _source, bool _backward);
 
 /// LaunchShipFromObject (CS:534E): a copy of _launcher (CopyObject, backwards when _backward) in a free ship slot, made what
 /// _kind names and moved clear of it: 14h a missile at the player, moved three times, and 7 a Thargon whose mother is _launcher,

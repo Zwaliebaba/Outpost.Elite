@@ -57,12 +57,12 @@ public:
   {
     ReferenceRig rig("OutcomeFields");
     Elite::GameState& state = rig.State();
-    state.SetWordOf(state.Data().commanderBlock.creditsTenths, 0x2345);
-    state.Data().commanderBlock.creditsTenths.data75F5 = 0x0001;
+    state.SetWordOf(state.Data().commander.creditsTenths, 0x2345);
+    state.Data().commander.creditsTenths.data75F5 = 0x0001;
     Assert::AreEqual("74565", Value(state, "creditsTenths").c_str(), false, L"10000h + 2345h tenths");
 
     const std::span<Elite::Counted<std::uint8_t>> hold =
-      state.BytesFrom(state.Data().commanderBlock.cargoHold, sizeof(Elite::GameData::CommanderBlock::CargoHold));
+      state.BytesFrom(state.Data().commander.cargoHold, sizeof(Elite::CommanderState::CargoHold));
     for (std::size_t commodity = 0; commodity < 17; ++commodity)
       hold[commodity * HOLD_ENTRY_BYTES] = static_cast<std::uint8_t>(commodity);
     hold[2 * HOLD_ENTRY_BYTES + 1] = 99; // on sale, not held
@@ -70,16 +70,16 @@ public:
 
     constexpr std::string_view TITLE = "ARCH ANG=";
     for (std::size_t index = 0; index < TITLE.size(); ++index)
-      state.Data().commanderBlock.commanderRankText[index] = static_cast<std::uint8_t>(TITLE[index]);
+      state.Data().commander.commanderRankText[index] = static_cast<std::uint8_t>(TITLE[index]);
     Assert::AreEqual("ARCH%20ANG%3D", Value(state, "title").c_str());
 
-    state.Data().shipSlotCount = 3;
+    state.Data().world.shipSlotCount = 3;
     for (std::uint16_t slot = 0; slot < 4; ++slot)
       state.Slot(static_cast<Elite::SlotIndex>(slot)).type = Elite::SpaceObject::ACTIVE;
     state.Slot(static_cast<Elite::SlotIndex>(1)).type = 0x0A; // type 5, not active
     Assert::AreEqual("2", Value(state, "shipSlotsInUse").c_str(), false, L"slots 0 and 2: slot 1 is not active, slot 3 not walked");
 
-    state.Data().playerEnergy = 0x3FF;
+    state.Data().playerShip.playerEnergy = 0x3FF;
     Assert::AreEqual("1023", Value(state, "energy").c_str());
   }
 
@@ -90,8 +90,8 @@ public:
     ReferenceRig rig("OutcomeDifferences");
     Elite::GameState& state = rig.State();
     const std::string recorded = Elite::OutcomeText(state);
-    state.Data().commanderBlock.killCount = static_cast<std::uint8_t>(state.Data().commanderBlock.killCount + 1);
-    state.Data().playerEnergy = static_cast<std::uint16_t>(state.Data().playerEnergy ^ 1);
+    state.Data().commander.killCount = static_cast<std::uint8_t>(state.Data().commander.killCount + 1);
+    state.Data().playerShip.playerEnergy = static_cast<std::uint16_t>(state.Data().playerShip.playerEnergy ^ 1);
     std::string lacking = recorded;
     lacking.erase(lacking.find(" fuel="), lacking.find(' ', lacking.find(" fuel=") + 1) - lacking.find(" fuel="));
 

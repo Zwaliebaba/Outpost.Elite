@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-r"""Generate each subsystem's tables of the reference, GameLogic/<Subsystem>Tables.h, and GameLogic/Message.h from
-GameLogic/ReferenceImage.cpp and Design/Symbols.tsv (D33, D38).
+r"""Generate each subsystem's tables of the reference, GameLogic/<Subsystem>Tables.h, GameLogic/SharedTables.h and
+GameLogic/Message.h from GameLogic/ReferenceImage.cpp, Design/Symbols.tsv and Design/DataPartition.tsv (D33, D38).
 
 The reference keeps tables of addresses in its data segment: tables of pointers to texts, lists of pointers to phrases, the
 blueprints by ship type, and the docked frame's corners as cells of video memory. Native code reads them as what they mean,
@@ -25,10 +25,18 @@ ELITES.EXE, and follows each table's pointers there.
 A text the program writes into is a buffer, which native code reads from the data segment where it is written: its entry in
 a table is empty, and says what writes it.
 
+The data segment's constants are not in the game's state (D38): every member Design/DataPartition.tsv calls `constant`, which
+nothing writes, is a constexpr table of its bytes in the reference's image, named for it in capitals (sineTable is SINE_TABLE),
+in the header of the subsystem that reads it, or in SharedTables.h when several do. It has the shape its member had in GameData
+(GenerateGameData.py), but where CONSTANT_SHAPES says native code reads it as a text, a run of texts, a docked frame's
+descriptor or flat bytes. Native code that still needs a constant's address in the original, which a DOS call or a loop's turns
+carry, reads the image there instead (GameState, OriginalOffset): change 3b converts it.
+
 Each table goes in the header of the subsystem that reads it (D38): GalaxyTables.h for Galaxy.cpp, SceneTables.h for
 Scene.cpp, and so on, SUBSYSTEMS lists them. One .cpp reads each, so its tables are in an unnamed namespace there, and nothing
-else reaches them: the check fails if any other file includes the header. Message.h is the one header every file may read,
-since GameData's message words hold its enumeration. The types a table's entries have that other files name, Blueprint and
+else reaches them: the check fails if any other file includes the header. SharedTables.h holds the constants several
+subsystems read, inline, and the check fails if a file of a subsystem that reads none of them includes it. Message.h is the one
+header every file may read, since GameData's message words hold its enumeration. The types a table's entries have that other files name, Blueprint and
 BlueprintShape, are the subsystem's own header's (Scene.h).
 
 A text is written as a string literal: printable ASCII as it is, any other byte as a three-digit octal escape, and the
@@ -39,15 +47,18 @@ the whole image, where the same bytes bin-packed between comments of their own t
 Tools/GenerateReference.py, which generated the image from ELITES.EXE until it was deleted, D36).
 
 The headers are generated, never edited: run this again. With --check it writes nothing and fails if a header in the tree
-is not what it would write, or is included by a file other than its subsystem's .cpp. Standard library only.
+is not what it would write, or is included by a file other than its subsystem's .cpp (SharedTables.h: its readers'). Standard
+library only.
 
     python Tools/GenerateTables.py [--check]
 """
 
 import argparse
 import csv
+import importlib.util
 import re
 import sys
+import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -56,6 +67,7 @@ IMAGE = ROOT / "GameLogic" / "ReferenceImage.cpp"
 SYMBOLS = ROOT / "Design" / "Symbols.tsv"
 GAME_LOGIC = ROOT / "GameLogic"
 MESSAGE_HEADER = GAME_LOGIC / "Message.h"
+SHARED_HEADER = GAME_LOGIC / "SharedTables.h"
 # The projects whose files may include a generated header, which the check looks through.
 PROJECTS = ["GameLogic", "GameLogicTests", "ReferenceRunner", "Outpost"]
 
@@ -66,7 +78,11 @@ ROW_ADDRESS = re.compile(r"//\s*(CS|DS):([0-9A-F]{4})")
 BYTE = re.compile(r"0x([0-9A-F]{2})")
 
 # The subsystems that read generated tables, each the stem of its .cpp and of its header, <Subsystem>Tables.h.
-SUBSYSTEMS = ["Docked", "Equipment", "Flight", "Galaxy", "Market", "SaveLoad", "Scene", "Sound", "Text"]
+SUBSYSTEMS = ["Ai", "Combat", "Docked", "Docking", "Equipment", "Flight", "Galaxy", "Hyperspace", "Maths", "Market", "SaveLoad",
+              "Scene", "Ships", "Sound", "StartUp", "Text", "Timer", "Video"]
+# The subsystems that read tables of the reference's addresses as what they mean (D33, piece 3), before the constants came.
+ADDRESS_SUBSYSTEMS = ["Docked", "Equipment", "Flight", "Galaxy", "Market", "SaveLoad", "Scene", "Sound", "Text"]
+COMMENT_LIMIT = 140
 # The code bytes EmitNoiseSample reads as its noise (CS:07D0), 1,024 of them: the only bytes of the code segment native code reads.
 NOISE_SOURCE_START = 0x07D0
 NOISE_SOURCE_BYTES = 0x400
@@ -663,10 +679,186 @@ def noise_source(_image: Image) -> list[str]:
   ]
 
 
-def subsystem_tables(_image: Image, _symbols: dict[str, Symbol], _messages: list[Message], _subsystem: str) -> tuple[list[str], list[str]]:
+# ---- The data segment's constants (D38) ----
+
+PARTITION = ROOT / "Design" / "DataPartition.tsv"
+# The header of the constants several subsystems read, SharedTables.h.
+SHARED = "Shared"
+# How native code reads a constant, where the member's own shape is not how:
+#   text       std::string_view: its text up to its NUL, which must be inside it
+#   lines, N   std::array<std::string_view, N>: N texts from its first, each after the one before's NUL, N the count the code
+#              that prints them loads (PrintTextLines' CX)
+#   counted    lines, as many as the count byte at its first says, from the byte after it
+#   frame      std::string_view: a docked frame's descriptor, its two attributes and then its title, up to its NUL
+#   bytes      std::array<std::uint8_t, N>: its bytes, flat, whatever its entries
+# Otherwise a constant has its member's shape in GameData before it left (GenerateGameData.py): a byte or a word is a
+# std::uint8_t or a std::uint16_t, a table of words a std::array of them, a table of bytes an array of its bytes, a table of
+# entries of a size an array of arrays of their bytes, and anything else, a record with members inside it too, an array of its
+# bytes.
+CONSTANT_SHAPES = {
+  "diskErrorText": ("text",), "blankChartLine": ("text",), "nameLinePadding": ("text",), "findPrompt": ("text",),
+  "shortRangeChartTitle": ("text",), "findErrorPrefix": ("text",), "findErrorSuffix": ("text",), "versionString": ("text",),
+  "descriptionTemplate": ("text",), "pressAnyKeyText": ("text",), "eliteTitleText": ("text",),
+  "supernovaBriefingText": ("lines", 5), "maskBriefingText": ("lines", 9), "invasionBriefingText": ("lines", 12),
+  "equipHelpText": ("counted",), "discMenuText": ("counted",),
+  "sellCargoFrame": ("frame",), "buyCargoFrame": ("frame",), "equipShipFrame": ("frame",), "systemDataFrame": ("frame",),
+  "marketPricesFrame": ("frame",), "discControlFrame": ("frame",), "inventoryFrame": ("frame",), "emergencyFrame": ("frame",),
+  "laserSights": ("bytes",), "smallDiscSprites": ("bytes",), "circleOctant": ("bytes",),
+}
+# The constants whose tables are their entries' texts already (TEXT_TABLES): the member's own words are the original's
+# addresses of those texts, which native code reads only as addresses (OriginalOffset).
+CONSTANT_TEXT_TABLES = {"laserMountNames", "equipmentNames"}
+
+
+@dataclass
+class Constant:
+  """A member of the data segment that nothing writes (Design/DataPartition.tsv's constant), which native code reads: its
+  member as GenerateGameData.py reads the symbol table, the subsystems that read it, its table's entries' size and whether they
+  are words, and the note its comment gives."""
+  member: object
+  readers: list[str]
+  element: int | None
+  words: bool
+  note: str
+
+  @property
+  def name(self) -> str:
+    """The table's name: the member's in capitals, sineTable SINE_TABLE."""
+    return re.sub(r"(?<=[a-z])(?=[A-Z0-9])|(?<=[0-9])(?=[A-Z])", "_", self.member.name).upper()
+
+  @property
+  def header(self) -> str:
+    """The subsystem whose header holds the table, or SHARED when several read it."""
+    return self.readers[0] if len(self.readers) == 1 else SHARED
+
+  @property
+  def size(self) -> int:
+    return self.member.size
+
+
+def read_constants() -> list[Constant]:
+  """Every constant of Design/DataPartition.tsv that native code reads, in the 1987 order, but CONSTANT_TEXT_TABLES."""
+  spec = importlib.util.spec_from_file_location("GenerateGameData", ROOT / "Tools" / "GenerateGameData.py")
+  generator = importlib.util.module_from_spec(spec)
+  spec.loader.exec_module(generator)
+  members = {member.name: member for member in generator.build_members(generator.read_rows())}
+  with PARTITION.open(encoding="utf-8", newline="") as file:
+    rows = list(csv.DictReader([line for line in file if not line.startswith("#")], delimiter="\t"))
+  found = []
+  for row in rows:
+    if row["group"] != "constant" or not row["readers"] or row["member"] in CONSTANT_TEXT_TABLES:
+      continue
+    member = members[row["member"]]
+    readers = row["readers"].split(",")
+    for reader in readers:
+      if reader not in SUBSYSTEMS:
+        fail(f"{member.name} is read by {reader}, which has no tables")
+    symbol = member.row
+    element = None
+    words = False
+    if symbol is not None and symbol["kind"] == "table" and not member.children and generator.byte_size(symbol) is not None:
+      element = generator.element_bytes(symbol["contract"])
+      words = generator.is_word_element(symbol["contract"])
+    note = generator.comment(symbol, 1 << 16) if symbol is not None else ""
+    found.append(Constant(member, readers, element, words, note))
+  return found
+
+
+def word_rows(_words: list[int], _start: int) -> list[str]:
+  """_words as rows of up to eight, each ending in its first's address."""
+  rows = []
+  for at in range(0, len(_words), ROW_BYTES):
+    body = INDENT + ", ".join(f"0x{word:04X}" for word in _words[at:at + ROW_BYTES]) + ","
+    rows.append((body, f"// DS:{_start + 2 * at:04X}"))
+  return aligned(rows)
+
+
+def constant_table(_image: Image, _constant: Constant, _qualifier: str) -> tuple[set[str], list[str]]:
+  """The standard headers _constant's table needs, and the table, from the image."""
+  member = _constant.member
+  name = _constant.name
+  shape = CONSTANT_SHAPES.get(member.name, ("",))[0]
+  heading = f"{member.name} (DS:{member.offset:04X} in 1987)" + (f": {_constant.note}" if _constant.note else "")
+  out = textwrap.wrap(heading, width=COMMENT_LIMIT, initial_indent="/// ", subsequent_indent="/// ", break_on_hyphens=False)
+  data = _image.bytes("DS", member.offset, member.size)
+  if shape in ("text", "frame"):
+    text = _image.text(member.offset)
+    if len(text) >= member.size:
+      fail(f"{member.name}'s text runs past it")
+    if shape == "frame" and (len(text) < 2 or 0 in text[:2]):
+      fail(f"{member.name}'s attributes are not two bytes before its title")
+    return {"<string_view>"}, out + [f"{_qualifier} std::string_view {name} = {literal(text)};", ""]
+  if shape in ("lines", "counted"):
+    first = member.offset
+    count = CONSTANT_SHAPES[member.name][1] if shape == "lines" else _image.byte("DS", member.offset)
+    if shape == "counted":
+      first += 1
+    texts = []
+    at = first
+    for _ in range(count):
+      text = _image.text(at)
+      texts.append((at, text))
+      at += len(text) + 1
+    if at > member.end:
+      fail(f"{member.name}'s {count} texts run past it")
+    return {"<array>", "<string_view>"}, out + [
+      f"{_qualifier} std::array<std::string_view, {count}> {name} = {{",
+      *aligned([(f"{INDENT}{text_view(text)},", f"// DS:{at:04X}") for at, text in texts]),
+      "};",
+      "",
+    ]
+  if shape != "bytes" and member.row is not None and member.row["kind"] == "data" and not member.children and member.size in (1, 2):
+    value = data[0] if member.size == 1 else data[0] | (data[1] << 8)
+    kind, digits = ("std::uint8_t", 2) if member.size == 1 else ("std::uint16_t", 4)
+    return {"<cstdint>"}, out + [f"{_qualifier} {kind} {name} = 0x{value:0{digits}X};", ""]
+  if shape != "bytes" and _constant.words:
+    words = [data[index] | (data[index + 1] << 8) for index in range(0, member.size, 2)]
+    return {"<array>", "<cstdint>"}, out + [
+      f"{_qualifier} std::array<std::uint16_t, {len(words)}> {name} = {{",
+      *word_rows(words, member.offset),
+      "};",
+      "",
+    ]
+  if shape != "bytes" and _constant.element is not None and _constant.element > 1:
+    element = _constant.element
+    entries = [(f"{INDENT}{{{', '.join(f'0x{value:02X}' for value in data[at:at + element])}}},", f"// DS:{member.offset + at:04X}")
+               for at in range(0, member.size, element)]
+    return {"<array>", "<cstdint>"}, out + [
+      f"{_qualifier} std::array<std::array<std::uint8_t, {element}>, {member.size // element}> {name} = {{{{",
+      *aligned(entries),
+      "}};",
+      "",
+    ]
+  rows = byte_rows(data, "DS", member.offset, {})
+  if len(rows) == 1:
+    # A row alone has its comment a space after it, as clang-format aligns a run of one.
+    rows = [re.sub(r" +//", " //", rows[0], count=1)]
+  return {"<array>", "<cstdint>"}, out + [
+    f"{_qualifier} std::array<std::uint8_t, {member.size}> {name} = {{",
+    *rows,
+    "};",
+    "",
+  ]
+
+
+def constant_tables(_image: Image, _constants: list[Constant], _header: str) -> tuple[set[str], list[str]]:
+  """The standard headers the tables of the constants whose header is _header's need, and the tables."""
+  qualifier = "inline constexpr" if _header == SHARED else "constexpr"
+  headers: set[str] = set()
+  out: list[str] = []
+  for constant in _constants:
+    if constant.header == _header:
+      needed, lines = constant_table(_image, constant, qualifier)
+      headers |= needed
+      out += lines
+  return headers, out
+
+
+def subsystem_tables(_image: Image, _symbols: dict[str, Symbol], _messages: list[Message], _constants: list[Constant],
+                     _subsystem: str) -> tuple[list[str], list[str]]:
   """The headers a subsystem's tables need, and the tables."""
   out = text_tables(_image, _symbols, _subsystem) + constant_texts(_image, _symbols, _subsystem)
-  headers = ["<array>", "<string_view>"]
+  headers = ["<array>", "<string_view>"] if _subsystem in ADDRESS_SUBSYSTEMS else []
   if _subsystem == "Galaxy":
     out += phrase_tables(_image, _symbols)
     headers = ["<array>", "<cstdint>", "<string_view>"]
@@ -696,9 +888,24 @@ def subsystem_tables(_image: Image, _symbols: dict[str, Symbol], _messages: list
   elif _subsystem == "Sound":
     out += noise_source(_image)
     headers = ["<array>", "<cstdint>"]
+  needed, constants = constant_tables(_image, _constants, _subsystem)
+  if constants:
+    out += constants
+    quoted = [header for header in headers if header.startswith('"')]
+    standard = sorted({header for header in headers if header.startswith("<")} | needed)
+    headers = quoted + ([""] if quoted else []) + standard
   return headers, out
 
 
+# What a subsystem's header says of its constants (D38), after what it says of its other tables, or alone.
+CONSTANTS_INTRODUCTION = [
+  "// And the constants of the reference's data segment it reads, which nothing writes (D38): from the reference's image, out of",
+  "// the game's state.",
+]
+CONSTANTS_ALONE = [
+  "// The constants of the reference's data segment this subsystem reads, which nothing writes (D38): from the reference's image",
+  "// (ReferenceImage.cpp), out of the game's state.",
+]
 # What a subsystem's header says its tables are, the first lines of its comment.
 INTRODUCTIONS = {
   "": [
@@ -713,12 +920,18 @@ INTRODUCTIONS = {
 }
 
 
-def generate_subsystem(_image: Image, _symbols: dict[str, Symbol], _messages: list[Message], _subsystem: str) -> str:
-  headers, tables = subsystem_tables(_image, _symbols, _messages, _subsystem)
+def generate_subsystem(_image: Image, _symbols: dict[str, Symbol], _messages: list[Message], _constants: list[Constant],
+                       _subsystem: str) -> str:
+  headers, tables = subsystem_tables(_image, _symbols, _messages, _constants, _subsystem)
+  constants = any(constant.header == _subsystem for constant in _constants)
+  if _subsystem not in ADDRESS_SUBSYSTEMS:
+    introduction = CONSTANTS_ALONE
+  else:
+    introduction = INTRODUCTIONS.get(_subsystem, INTRODUCTIONS[""]) + (CONSTANTS_INTRODUCTION if constants else [])
   out = [
     f"// GameLogic/{_subsystem}Tables.h",
-    "// Generated by Tools/GenerateTables.py from GameLogic/ReferenceImage.cpp and Design/Symbols.tsv. Do not edit: run the",
-    "// tool again (D33, D38).",
+    "// Generated by Tools/GenerateTables.py from GameLogic/ReferenceImage.cpp, Design/Symbols.tsv and Design/DataPartition.tsv.",
+    "// Do not edit: run the tool again (D33, D38).",
     "#pragma once",
     "",
     *[f"#include {header}" if header else "" for header in headers],
@@ -726,7 +939,7 @@ def generate_subsystem(_image: Image, _symbols: dict[str, Symbol], _messages: li
     "namespace Elite",
     "{",
     "",
-    *INTRODUCTIONS.get(_subsystem, INTRODUCTIONS[""]),
+    *introduction,
     f"// {_subsystem}.cpp alone includes this, so they are in an unnamed namespace (D38).",
     "namespace",
     "{",
@@ -740,8 +953,34 @@ def generate_subsystem(_image: Image, _symbols: dict[str, Symbol], _messages: li
   return "\r\n".join(out)
 
 
-def foreign_includes() -> list[str]:
-  """Every include of a subsystem's generated header by a file other than its subsystem's .cpp."""
+def generate_shared(_image: Image, _constants: list[Constant]) -> str:
+  needed, tables = constant_tables(_image, _constants, SHARED)
+  out = [
+    "// GameLogic/SharedTables.h",
+    "// Generated by Tools/GenerateTables.py from GameLogic/ReferenceImage.cpp and Design/DataPartition.tsv. Do not edit: run the",
+    "// tool again (D38).",
+    "#pragma once",
+    "",
+    *[f"#include {header}" for header in sorted(needed)],
+    "",
+    "namespace Elite",
+    "{",
+    "",
+    "// The constants of the reference's data segment that several subsystems read, which nothing writes (D38): from the",
+    "// reference's image (ReferenceImage.cpp), out of the game's state. The .cpp files of the subsystems that read them include",
+    "// this, and no other file.",
+    "",
+    *tables,
+    "} // namespace Elite",
+    "",
+  ]
+  return "\r\n".join(out)
+
+
+def foreign_includes(_constants: list[Constant]) -> list[str]:
+  """Every include of a subsystem's generated header by a file other than its subsystem's .cpp, and of SharedTables.h by a file
+  other than the .cpp of a subsystem that reads one of its constants."""
+  readers = {GAME_LOGIC / f"{reader}.cpp" for constant in _constants if constant.header == SHARED for reader in constant.readers}
   found = []
   for project in PROJECTS:
     for path in sorted((ROOT / project).glob("*.[ch]*")):
@@ -751,6 +990,8 @@ def foreign_includes() -> list[str]:
       for subsystem in SUBSYSTEMS:
         if f'#include "{subsystem}Tables.h"' in text and path != GAME_LOGIC / f"{subsystem}.cpp":
           found.append(f"{path.relative_to(ROOT)} includes {subsystem}Tables.h, which {subsystem}.cpp alone may read")
+      if '#include "SharedTables.h"' in text and path not in readers:
+        found.append(f"{path.relative_to(ROOT)} includes SharedTables.h, and reads none of its constants")
   return found
 
 
@@ -761,21 +1002,26 @@ def main() -> int:
   image = Image(read_image())
   symbols = read_symbols()
   found = messages(symbols, image)
-  outputs = {GAME_LOGIC / f"{subsystem}Tables.h": generate_subsystem(image, symbols, found, subsystem) for subsystem in SUBSYSTEMS}
+  constants = read_constants()
+  outputs = {GAME_LOGIC / f"{subsystem}Tables.h": generate_subsystem(image, symbols, found, constants, subsystem)
+             for subsystem in SUBSYSTEMS}
   outputs[MESSAGE_HEADER] = generate_message(found)
+  outputs[SHARED_HEADER] = generate_shared(image, constants)
   if arguments.check:
     stale = [path for path, text in outputs.items() if (path.read_bytes().decode("utf-8") if path.exists() else "") != text]
     for path in stale:
       print(f"GenerateTables: {path.relative_to(ROOT)} is out of date; run python Tools/GenerateTables.py")
-    foreign = foreign_includes()
+    foreign = foreign_includes(constants)
     for line in foreign:
       print(f"GenerateTables: {line}")
     if stale or foreign:
       return 1
     texts = sum(len(entries) for entries in CONSTANT_TEXTS.values())
+    shared = sum(constant.header == SHARED for constant in constants)
     print(f"GenerateTables: up to date ({len(SUBSYSTEMS)} subsystems' tables: {len(TEXT_TABLES)} text tables, {texts} constant "
-          f"texts, the phrases, the blueprints, the frame's corners, {len(found)} messages and the noise source; each included by "
-          f"its own .cpp alone)")
+          f"texts, the phrases, the blueprints, the frame's corners, {len(found)} messages, the noise source and "
+          f"{len(constants)} of the data segment's constants, {sum(constant.size for constant in constants)} bytes, {shared} of "
+          f"them shared; each included by its own .cpp alone, SharedTables.h by its readers)")
     return 0
   for path, text in outputs.items():
     path.write_bytes(text.encode("utf-8"))

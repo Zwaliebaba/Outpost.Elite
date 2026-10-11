@@ -17,6 +17,69 @@ namespace Elite
 // The reference's text routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): printing text and numbers, and reading a
 // line typed. Each takes values and gives values back, on the GameState and, where it drives a device, the devices (ADR-014).
 
+// ── Texts and buffers of the game's state, by member (D38) ──
+//
+// The text and number routines read and write texts and buffers that the original reaches by address. Native code reaches them by
+// member: a member's bytes, the bytes of members that follow one another in their group's struct as they did in the 1987 data
+// segment, where a text or a buffer runs across them, and bytes taken within them, never past their end.
+
+/// _member's bytes, a member of GameData at any depth, a record, a word or an array of them, as bytes that count their own changes.
+template <typename Member> [[nodiscard]] std::span<Counted<std::uint8_t>, sizeof(Member)> BytesOf(Member& _member) noexcept
+{
+  return std::span<Counted<std::uint8_t>, sizeof(Member)>(reinterpret_cast<Counted<std::uint8_t>*>(&_member), sizeof(Member));
+}
+
+/// BytesOf, to read.
+template <typename Member> [[nodiscard]] std::span<const Counted<std::uint8_t>, sizeof(Member)> BytesOf(const Member& _member) noexcept
+{
+  return std::span<const Counted<std::uint8_t>, sizeof(Member)>(reinterpret_cast<const Counted<std::uint8_t>*>(&_member), sizeof(Member));
+}
+
+/// The bytes from _first's first to _last's last: members of one of GameData's structs that follow one another there, as they followed
+/// one another in the 1987 data segment, where a text or a buffer the original reaches runs across them. Each use holds them together
+/// with a static_assert on their places in GameData (GAME_DATA_OFFSET).
+template <typename First, typename Last> [[nodiscard]] std::span<Counted<std::uint8_t>> BytesThrough(First& _first, Last& _last) noexcept
+{
+  auto* const first = reinterpret_cast<Counted<std::uint8_t>*>(&_first);
+  auto* const end = reinterpret_cast<Counted<std::uint8_t>*>(&_last) + sizeof(Last);
+  return std::span<Counted<std::uint8_t>>(first, static_cast<std::size_t>(end - first));
+}
+
+/// BytesThrough, to read.
+template <typename First, typename Last>
+[[nodiscard]] std::span<const Counted<std::uint8_t>> BytesThrough(const First& _first, const Last& _last) noexcept
+{
+  const auto* const first = reinterpret_cast<const Counted<std::uint8_t>*>(&_first);
+  const auto* const end = reinterpret_cast<const Counted<std::uint8_t>*>(&_last) + sizeof(Last);
+  return std::span<const Counted<std::uint8_t>>(first, static_cast<std::size_t>(end - first));
+}
+
+/// Throws the std::out_of_range of _count bytes from _at of a buffer of _bytes: what the original would reach past the buffer's end,
+/// into whatever followed it in the data segment, which native code does not reach (BytesWithin).
+[[noreturn]] void RefuseBytesPast(std::size_t _at, std::size_t _count, std::size_t _bytes);
+
+/// _count of _bytes from its _at. Bytes past _bytes' end throw std::out_of_range: the original would reach on into whatever followed
+/// them in the data segment, and every use says why the game does not, or that it stops there as the GameState did.
+template <typename Byte, std::size_t Extent>
+[[nodiscard]] std::span<Byte> BytesWithin(std::span<Byte, Extent> _bytes, std::size_t _at, std::size_t _count)
+{
+  if (_at > _bytes.size() || _count > _bytes.size() - _at)
+  {
+    RefuseBytesPast(_at, _count, _bytes.size());
+  }
+  return std::span<Byte>(_bytes).subspan(_at, _count);
+}
+
+/// The byte _at of _bytes, as BytesWithin takes it.
+template <typename Byte, std::size_t Extent> [[nodiscard]] Byte& ByteWithin(std::span<Byte, Extent> _bytes, std::size_t _at)
+{
+  return BytesWithin(_bytes, _at, 1)[0];
+}
+
+/// The text in _bytes from its _at up to its NUL, which must be within them: a NUL past their end throws std::out_of_range, as
+/// BytesWithin does, where the original would read on.
+[[nodiscard]] std::string_view TextWithin(std::span<const Counted<std::uint8_t>> _bytes, std::size_t _at);
+
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
 // Each is what the routine Symbols.tsv names computes, with no register in sight: its inputs are
@@ -30,7 +93,7 @@ struct BlankedZeros
   std::uint16_t triesLeft; ///< how many more it could have blanked: 0 once it has blanked as many as it may
 };
 
-/// Where DrawSmallViewChar draws a letter: the byte of the space-view buffer, and the shift, 0 or 4, of the
+/// Where DrawSmallViewChar draws a letter: the byte of the drawing buffer (DrawingBuffer), and the shift, 0 or 4, of the
 /// letter's left edge in it.
 struct SmallViewPlace
 {
@@ -38,15 +101,19 @@ struct SmallViewPlace
   std::uint8_t shift;
 };
 
-/// DrawViewChar (CS:3130): the 8x8 glyph of _character, in _ink on textPaperPattern, at DS:_at in the space-view
-/// buffer. Returns the place of the next character, two bytes on.
+/// DrawViewChar (CS:3130): the 8x8 glyph of _character, in _ink on textPaperPattern, at byte _at of the drawing buffer
+/// (DrawingBuffer, DS:0000-1FFF in 1987, so that the byte is the original's DS:_at too). Returns the place of the next
+/// character, two bytes on.
 std::uint16_t DrawViewChar(GameState& _state, std::uint8_t _character, std::uint16_t _ink, std::uint16_t _at);
 
-/// DrawViewString (CS:31EC): DrawViewChar for each character of _text, from DS:_at. Returns the place after the last.
+/// DrawViewString (CS:31EC): DrawViewChar for each character of _text, from byte _at of the drawing buffer. Returns the place
+/// after the last.
 std::uint16_t DrawViewString(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _at);
 
 /// DrawScreenChar (CS:31F9): the 8x8 glyph of _character, in _ink on textPaperPattern, at _segment:_cell, an even line
-/// of the CGA's memory. Returns the place of the next character, two bytes on.
+/// of the CGA's memory. _segment, ES, is the CGA's video segment; another throws std::out_of_range, where the original would
+/// draw through the data segment (CheckScreenSegment in Text.cpp says why the game does not). Returns the place of the next
+/// character, two bytes on.
 std::uint16_t DrawScreenChar(GameState& _state, std::uint8_t _character, std::uint16_t _ink, std::uint16_t _segment, std::uint16_t _cell);
 
 /// DrawScreenString (CS:32D8): DrawScreenChar for each character of _text, from _segment:_cell. Returns the place after the
@@ -55,13 +122,13 @@ std::uint16_t DrawScreenString(GameState& _state, std::string_view _text, std::u
 
 /// FormatDecimal5 (CS:3407): _value as five ASCII digits into the first five of _digits, a buffer of the data segment.
 /// Returns what is left of it below the last divisor: its units.
-std::uint16_t FormatDecimal5(GameState& _state, std::uint16_t _value, std::span<Counted<std::uint8_t>> _digits);
+std::uint16_t FormatDecimal5(std::uint16_t _value, std::span<Counted<std::uint8_t>> _digits);
 
 /// BlankLeadingZeros (CS:3432): up to _most of _text's leading characters below '1' become spaces. Every caller's _most is
 /// less than the digits it blanks, which always end in one kept; LOOP would let 65,536 go for 0.
 BlankedZeros BlankLeadingZeros(std::span<Counted<std::uint8_t>> _text, std::uint8_t _most);
 
-/// DrawSmallViewChar (CS:349A): the 5-row letter _letter ('A'-'Z') in _ink over the space-view buffer at _place, the
+/// DrawSmallViewChar (CS:349A): the 5-row letter _letter ('A'-'Z') in _ink over the drawing buffer at _place, the
 /// buffer kept around the letter's shape. Returns the next letter's place, six pixels on.
 SmallViewPlace DrawSmallViewChar(GameState& _state, std::uint8_t _letter, std::uint16_t _ink, SmallViewPlace _place);
 
@@ -83,7 +150,7 @@ void FormatCredits(GameState& _state);
 void UpdateMessageLine(GameState& _state, bool _backwards);
 
 /// ClearMessageLine (CS:3609): zeroes the message line's eight rows of 32 words from _segment:0058, each row forwards
-/// or, _backwards, down (REP STOSW with the direction flag set).
+/// or, _backwards, down (REP STOSW with the direction flag set). _segment is the CGA's video segment, as DrawScreenChar's.
 void ClearMessageLine(GameState& _state, std::uint16_t _segment, bool _backwards);
 
 /// ShowBountyMessage (CS:3626): _tenths of a credit into bountyText as "nnnn.n", shown for 20 frames.
@@ -98,10 +165,11 @@ void ShowShipIdentity(GameState& _state, std::uint8_t _type, std::uint8_t _class
 std::uint16_t PrintTextModeString(GameState& _state, std::string_view _text, std::uint16_t _cell);
 
 /// ToggleMenuRowHighlight (CS:6328): SwapTextAttributeNibbles, and the attribute that makes into the 36 attribute bytes
-/// of a menu row at _segment:_row.
+/// of a menu row at _segment:_row. _segment is the CGA's video segment, as DrawScreenChar's.
 void ToggleMenuRowHighlight(GameState& _state, std::uint16_t _segment, std::uint16_t _row);
 
-/// ClearDockedMessageLine (CS:6553): 19 spaces from text offset 78h at _segment, characters only.
+/// ClearDockedMessageLine (CS:6553): 19 spaces from text offset 78h at _segment, characters only. _segment is the CGA's video
+/// segment, as DrawScreenChar's.
 void ClearDockedMessageLine(GameState& _state, std::uint16_t _segment);
 
 /// SwapTextAttributeNibbles (CS:6580): textAttribute's nibbles exchanged, and the attribute that makes.
@@ -110,10 +178,6 @@ std::uint8_t SwapTextAttributeNibbles(GameState& _state);
 /// PrintCountedTextLines (CS:65FA): PrintTextLines for the lines after a count byte, as many as it says: _lines, the
 /// generated lines of such a text (a subsystem's tables). Returns the cell a row below the last line's first.
 std::uint16_t PrintCountedTextLines(GameState& _state, std::span<const std::string_view> _lines, std::uint16_t _cell);
-
-/// PrintCountedTextLines (CS:65FA) for a text of the data segment: _count, its count byte, a member of GameData, and as many
-/// lines as it says after it, one after another (PrintTextLines). Returns the cell a row below the last line's first.
-std::uint16_t PrintCountedTextLines(GameState& _state, const Counted<std::uint8_t>& _count, std::uint16_t _cell);
 
 /// FormatTenths (CS:69B3): _tenths into priceText as "nnnn.n".
 void FormatTenths(GameState& _state, std::uint16_t _tenths);

@@ -3,6 +3,7 @@
 #include "Docking.h"
 
 #include "Arithmetic.h"
+#include "DockingTables.h"
 #include "Flight.h"
 #include "Maths.h"
 #include "Scene.h"
@@ -11,6 +12,8 @@
 #include "Text.h"
 #include "Timer.h"
 #include "Video.h"
+
+#include <span>
 
 namespace Elite
 {
@@ -72,7 +75,8 @@ constexpr std::uint16_t TUNNEL_EDGES = 4;
 constexpr std::uint8_t VIEW_CENTER_X = 0x80;
 constexpr std::uint8_t VIEW_CENTER_ROW = 0x40;
 constexpr std::uint16_t VIEW_ROW_BYTES = 0x40;
-constexpr std::uint16_t VIEW_LAST_WORD = 0x1FFE; // of the buffer at DS:0000, rows 0-127
+constexpr std::uint16_t VIEW_BUFFER_BYTES = 0x2000; // the buffer at DS:0000, rows 0-127
+constexpr std::uint16_t VIEW_LAST_WORD = VIEW_BUFFER_BYTES - 2;
 
 constexpr std::uint16_t HALF_TURN = 0x400; // in 2048ths
 constexpr std::uint16_t ANGLE_MASK = 0x7FF;
@@ -86,22 +90,44 @@ constexpr std::uint8_t SHIP_TYPE_MASK = 0x1F; // of the slot's first byte, shift
   return static_cast<std::uint16_t>((row << 8) | x);
 }
 
-// REP STOSB or REP STOSW: _value, or its low byte, _count times from _segment:_offset, a byte or a word at a time
-// (_bytes), backwards when _backward. Returns the offset after the last, which the original leaves in DI.
-std::uint16_t Store(GameState& _state, std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _count, std::uint16_t _value,
-                    std::uint16_t _bytes, bool _backward)
+// The space view's buffer at DS:0000, 128 rows of 64 bytes: gap0000, its first row, then spaceViewBuffer, and gap1FC0, its
+// last, which the symbol table names apart (D38).
+[[nodiscard]] std::span<Counted<std::uint8_t>> ViewBuffer(GameState& _state)
 {
+  return _state.BytesFrom(_state.Data().drawing.gap0000, VIEW_BUFFER_BYTES);
+}
+
+// REP STOSB or REP STOSW into the space view's buffer from its byte _offset, ES = DS: _value, or its low byte, _count times, a
+// byte or a word at a time (_bytes), backwards when _backward. Returns the offset after the last, which the original leaves in DI.
+// Forwards, and backwards from the buffer's end, every store is in the buffer. Backwards from its start, they run down from
+// DS:0000 to the data segment's end, which only the original's addresses reach: there they still go by them, as change 3c of D38
+// takes the direction flag.
+std::uint16_t Store(GameState& _state, std::uint16_t _offset, std::uint16_t _count, std::uint16_t _value, std::uint16_t _bytes,
+                    bool _backward)
+{
+  const std::span<Counted<std::uint8_t>> buffer = ViewBuffer(_state);
   const auto step = static_cast<std::uint16_t>(_backward ? 0u - _bytes : _bytes);
   std::uint16_t at = _offset;
   for (std::uint16_t left = _count; left != 0; --left)
   {
-    if (_bytes == 2)
+    if (std::size_t{at} + _bytes <= buffer.size())
     {
-      _state.SetFarWord(_segment, at, _value);
+      if (_bytes == 2)
+      {
+        SetWordIn(buffer, at, _value);
+      }
+      else
+      {
+        buffer[at] = Low(_value);
+      }
+    }
+    else if (_bytes == 2)
+    {
+      _state.SetWord(at, _value);
     }
     else
     {
-      _state.SetFarByte(_segment, at, Low(_value));
+      _state.SetByte(at, Low(_value));
     }
     at = Offset(at, step);
   }
@@ -109,11 +135,11 @@ std::uint16_t Store(GameState& _state, std::uint16_t _segment, std::uint16_t _of
 }
 
 // Rectangle _rectangle of tunnelRectangles, its five points of two signed bytes, x and y. The original holds the rectangle's
-// address in SI; the one past the last is the bytes after them.
-[[nodiscard]] std::span<Counted<std::uint8_t>> TunnelRectangle(GameState& _state, std::size_t _rectangle)
+// address in SI, which the loops' turns carry as its number (D38). No loop reaches the one past the last: each turn carries a
+// rectangle the frame draws, and the last frames draw from 0-9 to the tenth.
+[[nodiscard]] std::span<const std::uint8_t> TunnelRectangle(std::size_t _rectangle)
 {
-  return _state.BytesFrom(_state.Data().tunnelRectangles, (_rectangle + 1) * TUNNEL_RECTANGLE_BYTES)
-    .subspan(_rectangle * TUNNEL_RECTANGLE_BYTES);
+  return std::span<const std::uint8_t>(TUNNEL_RECTANGLES).subspan(_rectangle * TUNNEL_RECTANGLE_BYTES, TUNNEL_RECTANGLE_BYTES);
 }
 
 // Where DrawTunnelRectangles stopped.
@@ -124,21 +150,21 @@ struct TunnelDrawn
 };
 
 // _count of tunnelRectangles from _first, each by DrawTunnelRectangle in the tunnel's colour, and the LOOP back to CS:_loop
-// (2DA1, 2DEE), which carries the count and the next rectangle (ADR-015).
+// (2DA1, 2DEE), which carries the count and the next rectangle, by its number (ADR-015, D38).
 TunnelDrawn DrawTunnelRectangles(GameState& _state, Hardware& _hardware, std::size_t _first, std::uint16_t _count, std::uint16_t _loop)
 {
   TunnelDrawn drawn{_first, false};
   std::uint16_t count = _count;
   for (;;)
   {
-    _state.Data().drawColor = TUNNEL_COLOR;
+    _state.Data().drawing.drawColor = TUNNEL_COLOR;
     drawn.filled = DrawTunnelRectangle(_state, drawn.next) || drawn.filled;
     ++drawn.next;
     if (--count == 0)
     {
       return drawn;
     }
-    _hardware.LoopTurn(_loop, {count, _state.OffsetOf(TunnelRectangle(_state, drawn.next)[0])});
+    _hardware.LoopTurn(_loop, {count, static_cast<std::uint16_t>(drawn.next)});
   }
 }
 
@@ -161,8 +187,8 @@ void WaitTimerTicks(GameState& _state, Hardware& _hardware, std::uint16_t _ticks
 // _message posted for 25 frames. Returns it, which the original leaves in AX as its text's address (mov ax, text).
 [[nodiscard]] Message PostDockingMessage(GameState& _state, Message _message)
 {
-  _state.Data().messagePointer = _message;
-  _state.Data().messageFrames = DOCKING_MESSAGE_FRAMES;
+  _state.Data().messages.messagePointer = _message;
+  _state.Data().messages.messageFrames = DOCKING_MESSAGE_FRAMES;
   return _message;
 }
 
@@ -179,29 +205,29 @@ void WaitTimerTicks(GameState& _state, Hardware& _hardware, std::uint16_t _ticks
 // dockingComputerSteering and rollRate both _steering.
 void Steer(GameState& _state, std::uint16_t _steering)
 {
-  _state.Data().dockingComputerSteering = _steering;
-  _state.Data().rollRate = _steering;
+  _state.Data().docking.dockingComputerSteering = _steering;
+  _state.Data().playerShip.rollRate = _steering;
 }
 
 // playerSpeed up by 4, and then held at 48: ADD and a MOV over it.
 void SpeedUp(GameState& _state)
 {
-  const auto speed = static_cast<std::uint16_t>(_state.Data().playerSpeed + SPEED_STEP);
-  _state.Data().playerSpeed = speed;
+  const auto speed = static_cast<std::uint16_t>(_state.Data().playerShip.playerSpeed + SPEED_STEP);
+  _state.Data().playerShip.playerSpeed = speed;
   if (speed > MOST_SPEED)
   {
-    _state.Data().playerSpeed = MOST_SPEED;
+    _state.Data().playerShip.playerSpeed = MOST_SPEED;
   }
 }
 
 // playerSpeed down by 4, and 4 again where that reaches 0: SUB and a MOV over it.
 void SlowDown(GameState& _state)
 {
-  const auto speed = static_cast<std::uint16_t>(_state.Data().playerSpeed - SPEED_STEP);
-  _state.Data().playerSpeed = speed;
+  const auto speed = static_cast<std::uint16_t>(_state.Data().playerShip.playerSpeed - SPEED_STEP);
+  _state.Data().playerShip.playerSpeed = speed;
   if (speed == 0)
   {
-    _state.Data().playerSpeed = LEAST_SPEED;
+    _state.Data().playerShip.playerSpeed = LEAST_SPEED;
   }
 }
 
@@ -217,7 +243,7 @@ void AimRoll(GameState& _state, bool _approach, std::uint8_t _next)
 {
   LoadPlayerAngles(_state);
   const Vector target = RotatePitchYawRoll(_state, LoadStationPosition(_state, _approach));
-  const std::uint16_t angle = ArcTangent2(_state, Quarter(target.x), Quarter(target.y));
+  const std::uint16_t angle = ArcTangent2(Quarter(target.x), Quarter(target.y));
   std::uint16_t magnitude = angle;
   if ((magnitude & ANGLE_SIGN) != 0)
   {
@@ -228,9 +254,9 @@ void AimRoll(GameState& _state, bool _approach, std::uint8_t _next)
   {
     roll = Offset(roll, HALF_TURN);
   }
-  roll = static_cast<std::uint16_t>(Offset(roll, _state.Data().playerRollAngle) & ANGLE_MASK);
-  _state.Data().dockingTargetAngle = roll;
-  _state.Data().dockingComputerState = _next;
+  roll = static_cast<std::uint16_t>(Offset(roll, _state.Data().playerShip.playerRollAngle) & ANGLE_MASK);
+  _state.Data().docking.dockingTargetAngle = roll;
+  _state.Data().docking.dockingComputerState = _next;
 }
 
 // An 11-bit angle sign-extended to 16 bits, as AngleWithinTolerance leaves its second.
@@ -244,16 +270,16 @@ void AimRoll(GameState& _state, bool _approach, std::uint8_t _next)
 // state _next.
 void RollToTarget(GameState& _state, std::uint8_t _next)
 {
-  const std::uint16_t target = _state.Data().dockingTargetAngle;
-  if (AngleWithinTolerance(_state.Data().playerRollAngle, target, ROLL_TOLERANCE))
+  const std::uint16_t target = _state.Data().docking.dockingTargetAngle;
+  if (AngleWithinTolerance(_state.Data().playerShip.playerRollAngle, target, ROLL_TOLERANCE))
   {
-    _state.Data().playerRollAngle = SignExtendAngle(target);
-    _state.Data().dockingComputerState = _next;
-    _state.Data().dockingComputerSteering = 0;
-    _state.Data().rollRate = 0;
+    _state.Data().playerShip.playerRollAngle = SignExtendAngle(target);
+    _state.Data().docking.dockingComputerState = _next;
+    _state.Data().docking.dockingComputerSteering = 0;
+    _state.Data().playerShip.rollRate = 0;
     return;
   }
-  const auto turn = static_cast<std::uint16_t>(_state.Data().dockingTargetAngle - _state.Data().playerRollAngle);
+  const auto turn = static_cast<std::uint16_t>(_state.Data().docking.dockingTargetAngle - _state.Data().playerShip.playerRollAngle);
   Steer(_state, Join(0, (turn & ANGLE_SIGN) != 0 ? Negate(ROLL_STEP) : ROLL_STEP));
 }
 
@@ -266,7 +292,7 @@ void PitchToTarget(GameState& _state, bool _approach, std::uint16_t _tolerance, 
     LoadPlayerAngles(_state);
   }
   const Vector target = RotatePitchYawRoll(_state, LoadStationPosition(_state, _approach));
-  const std::uint16_t angle = ArcTangent2(_state, Quarter(target.y), Quarter(target.z));
+  const std::uint16_t angle = ArcTangent2(Quarter(target.y), Quarter(target.z));
   if (!AngleWithinTolerance(angle, 0, _tolerance))
   {
     // MOV AL,step / TEST AX,400h / NEG AL / MOV AH,AL / XOR AL,AL: the step, against the angle's sign, in the high byte.
@@ -275,15 +301,15 @@ void PitchToTarget(GameState& _state, bool _approach, std::uint16_t _tolerance, 
   }
   // SAR AX,1 / MOV AH,AL / XOR AL,AL: half the angle, its low byte in the high byte.
   Steer(_state, Join(Low(Sar(angle, 1)), 0));
-  if (_state.Data().dockingAlignPasses != 1)
+  if (_state.Data().docking.dockingAlignPasses != 1)
   {
-    _state.Data().dockingAlignPasses = static_cast<std::uint8_t>(_state.Data().dockingAlignPasses + 1);
-    _state.Data().dockingComputerState = _again;
+    _state.Data().docking.dockingAlignPasses = static_cast<std::uint8_t>(_state.Data().docking.dockingAlignPasses + 1);
+    _state.Data().docking.dockingComputerState = _again;
     return;
   }
-  _state.Data().dockingComputerState = _next;
-  _state.Data().playerSpeed = LEAST_SPEED;
-  _state.Data().velocityDirty = 1;
+  _state.Data().docking.dockingComputerState = _next;
+  _state.Data().playerShip.playerSpeed = LEAST_SPEED;
+  _state.Data().playerShip.velocityDirty = 1;
 }
 
 // CWD / IDIV BX: _coordinate over _frames, the frames left; with no frame left it divides by 0 into the game's trap.
@@ -310,23 +336,23 @@ void FlyToApproachPoint(GameState& _state)
   {
     SlowDown(_state);
   }
-  const std::uint16_t frames = DivideWord(distance, _state.Data().playerSpeed).quotient;
+  const std::uint16_t frames = DivideWord(distance, _state.Data().playerShip.playerSpeed).quotient;
   if (frames == 1)
   {
-    _state.Data().playerSpeed = 0;
-    _state.Data().velocityDirty = 1;
-    _state.Data().playerVelocityX = static_cast<std::uint16_t>(approach.x);
-    _state.Data().playerVelocityY = static_cast<std::uint16_t>(approach.y);
-    _state.Data().playerVelocityZ = static_cast<std::uint16_t>(approach.z);
+    _state.Data().playerShip.playerSpeed = 0;
+    _state.Data().playerShip.velocityDirty = 1;
+    _state.Data().playerShip.playerVelocityX = static_cast<std::uint16_t>(approach.x);
+    _state.Data().playerShip.playerVelocityY = static_cast<std::uint16_t>(approach.y);
+    _state.Data().playerShip.playerVelocityZ = static_cast<std::uint16_t>(approach.z);
     MoveObjectsByVelocity(_state);
-    _state.Data().dockingComputerState = AIM_ROLL_AT_STATION;
-    _state.Data().dockingAlignPasses = 0;
+    _state.Data().docking.dockingComputerState = AIM_ROLL_AT_STATION;
+    _state.Data().docking.dockingAlignPasses = 0;
     return;
   }
   // MOV AX,[DI+axis] (and ADD AX,7D0h for z), then the divide, for x, y and z.
-  _state.Data().playerVelocityX = VelocityOver(static_cast<std::uint16_t>(approach.x), frames);
-  _state.Data().playerVelocityY = VelocityOver(static_cast<std::uint16_t>(approach.y), frames);
-  _state.Data().playerVelocityZ = VelocityOver(static_cast<std::uint16_t>(approach.z), frames);
+  _state.Data().playerShip.playerVelocityX = VelocityOver(static_cast<std::uint16_t>(approach.x), frames);
+  _state.Data().playerShip.playerVelocityY = VelocityOver(static_cast<std::uint16_t>(approach.y), frames);
+  _state.Data().playerShip.playerVelocityZ = VelocityOver(static_cast<std::uint16_t>(approach.z), frames);
   MoveObjectsByVelocity(_state);
 }
 
@@ -337,13 +363,13 @@ void CloseIn(GameState& _state)
   const std::uint16_t distance = Negate(_state.Slot(SlotIndex::Station).z);
   if (distance < STOP_CLOSING_DISTANCE)
   {
-    _state.Data().dockingComputerState = MATCH_SPIN;
-    if (_state.Data().viewAngle != 0)
+    _state.Data().docking.dockingComputerState = MATCH_SPIN;
+    if (_state.Data().playerShip.viewAngle != 0)
     {
-      _state.Data().viewAngle = 0;
+      _state.Data().playerShip.viewAngle = 0;
     }
     (void)ResetStardust(_state);
-    _state.Data().viewLocked = 1;
+    _state.Data().playerShip.viewLocked = 1;
     return;
   }
   if (distance < CLOSE_SLOWLY_DISTANCE)
@@ -354,11 +380,11 @@ void CloseIn(GameState& _state)
   {
     SpeedUp(_state);
   }
-  _state.Data().playerVelocityX = 0;
-  _state.Data().playerVelocityY = 0;
-  _state.Data().playerVelocityZ = Negate(_state.Data().playerSpeed);
+  _state.Data().playerShip.playerVelocityX = 0;
+  _state.Data().playerShip.playerVelocityY = 0;
+  _state.Data().playerShip.playerVelocityZ = Negate(_state.Data().playerShip.playerSpeed);
   MoveObjectsByVelocity(_state);
-  _state.Data().velocityDirty = 1;
+  _state.Data().playerShip.velocityDirty = 1;
 }
 
 // The station's spin angle plus _turn, negated for a Dodo (IsStation's CF) (CS:8980, CS:89B9, CS:89EA).
@@ -375,15 +401,15 @@ void MatchSpin(GameState& _state)
 {
   MoveObjectsByVelocity(_state);
   const std::uint16_t spin = LoadStationSpin(_state, 0);
-  const std::uint16_t roll = _state.Data().playerRollAngle;
+  const std::uint16_t roll = _state.Data().playerShip.playerRollAngle;
   if (AngleWithinTolerance(spin, roll, SPIN_TOLERANCE))
   {
-    _state.Data().dockingComputerState = ROLL_WITH_SPIN;
+    _state.Data().docking.dockingComputerState = ROLL_WITH_SPIN;
   }
   else if (AngleWithinTolerance(spin, Offset(roll, HALF_TURN), SPIN_TOLERANCE))
   {
     // ADD CX,400h on the roll the first test left sign-extended in CX, which the second masks off again.
-    _state.Data().dockingComputerState = ROLL_WITH_SPIN_TURNED;
+    _state.Data().docking.dockingComputerState = ROLL_WITH_SPIN_TURNED;
   }
 }
 
@@ -393,7 +419,7 @@ void RollWithSpin(GameState& _state, std::uint16_t _turn)
 {
   MoveObjectsByVelocity(_state);
   const auto spin = static_cast<std::uint16_t>(LoadStationSpin(_state, _turn) & ANGLE_MASK);
-  const auto roll = static_cast<std::uint16_t>(_state.Data().playerRollAngle & ANGLE_MASK);
+  const auto roll = static_cast<std::uint16_t>(_state.Data().playerShip.playerRollAngle & ANGLE_MASK);
   Steer(_state, Negate(Low(Sar(static_cast<std::uint16_t>(spin - roll), 1))));
 }
 
@@ -401,7 +427,7 @@ void RollWithSpin(GameState& _state, std::uint16_t _turn)
 
 bool DrawTunnelRectangle(GameState& _state, std::size_t _rectangle)
 {
-  const std::span<const Counted<std::uint8_t>> points = TunnelRectangle(_state, _rectangle);
+  const std::span<const std::uint8_t> points = TunnelRectangle(_rectangle);
   bool filled = false;
   std::size_t point = 0;
   for (std::uint16_t edge = 0; edge < TUNNEL_EDGES; ++edge)
@@ -417,7 +443,7 @@ bool DrawTunnelRectangle(GameState& _state, std::size_t _rectangle)
 bool CheckDockingAlignment(const GameState& _state, const SpaceObject& _station, std::uint16_t _tolerance)
 {
   // Pitch near 0 wants yaw near a half turn, and pitch near a half turn wants yaw near 0.
-  const std::uint16_t pitch = _state.Data().playerPitchAngle;
+  const std::uint16_t pitch = _state.Data().playerShip.playerPitchAngle;
   std::uint16_t yaw = HALF_TURN;
   if (!AngleWithinTolerance(pitch, 0, _tolerance))
   {
@@ -427,13 +453,13 @@ bool CheckDockingAlignment(const GameState& _state, const SpaceObject& _station,
     }
     yaw = 0;
   }
-  if (!AngleWithinTolerance(_state.Data().playerYawAngle, yaw, _tolerance))
+  if (!AngleWithinTolerance(_state.Data().playerShip.playerYawAngle, yaw, _tolerance))
   {
     return false;
   }
 
   // Roll near the station's spin, negated for ship type 0, or half a turn from it.
-  const std::uint16_t roll = _state.Data().playerRollAngle;
+  const std::uint16_t roll = _state.Data().playerShip.playerRollAngle;
   std::uint16_t spin = _station.roll;
   if (((_station.type >> 1) & SHIP_TYPE_MASK) == 0)
   {
@@ -451,28 +477,27 @@ void MaskOutsideTunnel(GameState& _state, std::size_t _rectangle, bool _backward
 {
   // The margins: x/4 bytes either side, and the rows above and below the rectangle, in the space-view buffer at DS:0000,
   // through ES = DS.
-  const std::uint16_t segment = _state.DataSegment();
-  const std::span<const Counted<std::uint8_t>> corner = TunnelRectangle(_state, _rectangle);
+  const std::span<const std::uint8_t> corner = TunnelRectangle(_rectangle);
   const auto sideBytes = static_cast<std::uint16_t>(static_cast<std::uint8_t>(corner[0] + VIEW_CENTER_X) >> 2);
   const std::uint8_t top = corner[1];
   const auto rows = static_cast<std::uint16_t>(static_cast<std::uint8_t>(Negate(top) << 1));
   const auto marginWords = static_cast<std::uint16_t>(static_cast<std::uint8_t>(top + VIEW_CENTER_ROW) << 5);
   // The rows above, then the sides of each row of the rectangle, forwards or, as the direction flag says, down; DEC BX
   // and JNE count the rows, 65,536 for 0.
-  std::uint16_t row = Store(_state, segment, 0, marginWords, 0, 2, _backwards);
+  std::uint16_t row = Store(_state, 0, marginWords, 0, 2, _backwards);
   std::uint16_t left = rows;
   do
   {
-    Store(_state, segment, row, sideBytes, 0, 1, _backwards);
+    Store(_state, row, sideBytes, 0, 1, _backwards);
     row = Offset(row, VIEW_ROW_BYTES);
   } while (--left != 0);
 
   // The same from the end of the buffer, backwards (STD).
-  row = Offset(Store(_state, segment, VIEW_LAST_WORD, marginWords, 0, 2, true), 1);
+  row = Offset(Store(_state, VIEW_LAST_WORD, marginWords, 0, 2, true), 1);
   left = rows;
   do
   {
-    Store(_state, segment, row, sideBytes, 0, 1, true);
+    Store(_state, row, sideBytes, 0, 1, true);
     row = static_cast<std::uint16_t>(row - VIEW_ROW_BYTES);
   } while (--left != 0);
 }
@@ -480,8 +505,8 @@ void MaskOutsideTunnel(GameState& _state, std::size_t _rectangle, bool _backward
 void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
 {
   // MOV AX,leavingStationMessage, or autoDockMessage when docked, for one frame.
-  _state.Data().messagePointer = _state.Data().playerDocked != 0 ? Message::AutoDock : Message::LeavingStation;
-  _state.Data().messageFrames = 1;
+  _state.Data().messages.messagePointer = _state.Data().flight.playerDocked != 0 ? Message::AutoDock : Message::LeavingStation;
+  _state.Data().messages.messageFrames = 1;
   UpdateMessageLine(_state, _backward);
   UpdateDashboard(_state);
 
@@ -492,7 +517,7 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
   bool backward = _backward;
   for (std::uint16_t frame = 1;;)
   {
-    if (_state.Data().playerDocked == 0)
+    if (_state.Data().flight.playerDocked == 0)
     {
       backward = TransformAndDrawObjects(_state, _hardware, backward);
       MoveObjectsByVelocity(_state);
@@ -524,11 +549,11 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
   }
 
   // The last ten draw ten rectangles less one each frame, from one further along each time: CX and SI, pushed twice round the
-  // frame, which the turns carry.
+  // frame, which the turns carry, SI as the rectangle's number (D38).
   std::size_t first = 0;
   for (std::uint16_t frames = TUNNEL_FRAMES;;)
   {
-    if (_state.Data().playerDocked == 0)
+    if (_state.Data().flight.playerDocked == 0)
     {
       backward = TransformAndDrawObjects(_state, _hardware, backward);
       if (UpdateStardust(_state))
@@ -554,22 +579,22 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
     {
       return;
     }
-    _hardware.LoopTurn(LAST_TUNNEL_FRAME, {frames, _state.OffsetOf(TunnelRectangle(_state, first)[0])});
+    _hardware.LoopTurn(LAST_TUNNEL_FRAME, {frames, static_cast<std::uint16_t>(first)});
   }
 }
 
 void ToggleDockingComputer(GameState& _state, Hardware& _hardware)
 {
-  _state.Data().dockingKeyReleased = 0;
-  if (_state.Data().dockingComputerOn == 1)
+  _state.Data().playerShip.dockingKeyReleased = 0;
+  if (_state.Data().playerShip.dockingComputerOn == 1)
   {
     StopAllSound(_state, _hardware);
-    _state.Data().dockingComputerOn = 0;
-    _state.Data().viewLocked = 0;
-    if (_state.Data().playerSpeed == 0)
+    _state.Data().playerShip.dockingComputerOn = 0;
+    _state.Data().playerShip.viewLocked = 0;
+    if (_state.Data().playerShip.playerSpeed == 0)
     {
-      _state.Data().playerSpeed = LEAST_SPEED;
-      _state.Data().velocityDirty = 1;
+      _state.Data().playerShip.playerSpeed = LEAST_SPEED;
+      _state.Data().playerShip.velocityDirty = 1;
     }
     StartLowBeep(_state);
     (void)PostDockingMessage(_state, Message::DockingComputerOff);
@@ -577,21 +602,21 @@ void ToggleDockingComputer(GameState& _state, Hardware& _hardware)
   }
   if (!InSafeZone(_state).inside)
   {
-    _state.Data().dataA137 = 0;
+    _state.Data().unused.dataA137 = 0;
     StartLowBeep(_state);
     (void)PostDockingMessage(_state, Message::StationOutOfRange);
     return;
   }
   if ((_state.Slot(SlotIndex::Station).flags & STATION_SHOT) != 0)
   {
-    _state.Data().dataA137 = 0;
+    _state.Data().unused.dataA137 = 0;
     StartLowBeep(_state);
     (void)PostDockingMessage(_state, Message::DockingDenied);
     return;
   }
-  _state.Data().dockingComputerSteering = 0;
-  _state.Data().dockingComputerState = SLOW_TO_STOP;
-  _state.Data().dockingComputerOn = 1;
+  _state.Data().docking.dockingComputerSteering = 0;
+  _state.Data().docking.dockingComputerState = SLOW_TO_STOP;
+  _state.Data().playerShip.dockingComputerOn = 1;
   StartMusic(_state, _hardware);
   StartBeep(_state);
   (void)PostDockingMessage(_state, Message::DockingComputerOn);
@@ -600,19 +625,19 @@ void ToggleDockingComputer(GameState& _state, Hardware& _hardware)
 void RunDockingComputer(GameState& _state)
 {
   Steer(_state, 0);
-  const std::uint8_t state = _state.Data().dockingComputerState;
+  const std::uint8_t state = _state.Data().docking.dockingComputerState;
   switch (state)
   {
   case SLOW_TO_STOP:
     // SUB WORD playerSpeed,4 while it is not 0, then on to state 1.
-    if (_state.Data().playerSpeed != 0)
+    if (_state.Data().playerShip.playerSpeed != 0)
     {
-      _state.Data().playerSpeed = static_cast<std::uint16_t>(_state.Data().playerSpeed - SPEED_STEP);
-      _state.Data().velocityDirty = 1;
+      _state.Data().playerShip.playerSpeed = static_cast<std::uint16_t>(_state.Data().playerShip.playerSpeed - SPEED_STEP);
+      _state.Data().playerShip.velocityDirty = 1;
       break;
     }
-    _state.Data().dockingComputerState = AIM_ROLL_AT_APPROACH;
-    _state.Data().dockingAlignPasses = 0;
+    _state.Data().docking.dockingComputerState = AIM_ROLL_AT_APPROACH;
+    _state.Data().docking.dockingAlignPasses = 0;
     break;
   case AIM_ROLL_AT_APPROACH:
     AimRoll(_state, true, ROLL_TO_APPROACH);
@@ -652,13 +677,13 @@ void RunDockingComputer(GameState& _state)
 
 void CancelDockingComputer(GameState& _state, Hardware& _hardware)
 {
-  if (_state.Data().dockingComputerOn != 1)
+  if (_state.Data().playerShip.dockingComputerOn != 1)
   {
     return;
   }
-  _state.Data().dockingComputerOn = 0;
-  _state.Data().dataA137 = 0;
-  _state.Data().viewLocked = 0;
+  _state.Data().playerShip.dockingComputerOn = 0;
+  _state.Data().unused.dataA137 = 0;
+  _state.Data().playerShip.viewLocked = 0;
   // PUSH AX / POP AX round it: StopAllSound's AX does not come out.
   StopAllSound(_state, _hardware);
 }
