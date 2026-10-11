@@ -243,6 +243,9 @@
     <ClInclude Include="Sound.h">
       <Filter>Sound</Filter>
     </ClInclude>
+    <ClInclude Include="SoundTables.h">
+      <Filter>Sound</Filter>
+    </ClInclude>
     <ClInclude Include="Speaker.h">
       <Filter>Platform</Filter>
     </ClInclude>

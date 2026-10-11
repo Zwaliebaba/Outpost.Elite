@@ -62,9 +62,6 @@ constexpr std::uint16_t AMSTRAD_ROM_SEGMENT = 0xFC00;
 constexpr std::uint16_t AMSTRAD_ROM_SIGNATURE = 0x0016;
 constexpr std::uint16_t AMSTRAD_SIGNATURE_BYTES = 7;
 constexpr std::uint8_t VIDEO_MODE_TEXT_80 = 0x02; // 80x25 text
-// WipeProgram: the code segment from just past it to the end of the program.
-constexpr std::uint16_t WIPE_FIRST = 0x0564;
-constexpr std::uint16_t WIPE_END = 0x8F31;
 
 constexpr std::uint16_t CREDITS_FIRST_LINE = 0x202;
 constexpr std::uint16_t CREDITS_LINES = 9;
@@ -296,7 +293,7 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _psp, std::uint
     const std::uint8_t request = _state.Data().diskOperation;
     if (request == 0)
     {
-      WipeProgram(_state, _hardware, backward);
+      WipeProgram(_hardware);
       ExitToDos(_state, _hardware);
       return;
     }
@@ -312,18 +309,9 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _psp, std::uint
   }
 }
 
-void WipeProgram(GameState& _state, Hardware& _hardware, bool _backward)
+void WipeProgram(Hardware& _hardware)
 {
   _hardware.DisableInterrupts();
-  // REP STOSB of AL, the code segment's low byte, CX = 8F31h - 0564h times from DI = 0564h.
-  const std::uint8_t fill = Low(_state.CodeSegment());
-  const auto step = static_cast<std::uint16_t>(_backward ? 0xFFFF : 1);
-  std::uint16_t at = WIPE_FIRST;
-  for (auto left = static_cast<std::uint16_t>(WIPE_END - WIPE_FIRST); left != 0; --left)
-  {
-    _state.SetCodeByte(at, fill);
-    at = Offset(at, step);
-  }
 }
 
 GameLoopExit GameLoop(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward)

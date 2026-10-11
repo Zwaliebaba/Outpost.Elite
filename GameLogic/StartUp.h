@@ -60,9 +60,9 @@ void CopyProtection(GameState& _state, Hardware& _hardware);
 /// CheckCheatArgument (CS:02A5): cheatEnabled=1 when the command tail DOS gave the program is exactly ' cheat', 0 otherwise.
 void CheckCheatArgument(GameState& _state, const Hardware& _hardware);
 
-/// WipeProgram (CS:0554): interrupts off, and CS:0564-8F30 filled with the code segment's low byte, a byte at a time,
-/// going up from 0564h, or down from it when _backward (REP STOSB with the direction flag set).
-void WipeProgram(GameState& _state, Hardware& _hardware, bool _backward);
+/// WipeProgram (CS:0554): interrupts off. The original then fills CS:0564-8F30 with the code segment's low byte, which nothing
+/// reads: the code segment is not the game's memory.
+void WipeProgram(Hardware& _hardware);
 
 /// StartNewGame (CS:4671): the start-up commander copied back over the commander, a byte at a time, going up or, when
 /// _backward, down (REP MOVSB), and the per-game state reset.

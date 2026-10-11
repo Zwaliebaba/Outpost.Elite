@@ -35,10 +35,9 @@ struct Scoop
 /// object cannot be scooped.
 Scoop TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view);
 
-/// PayForEquipmentItem (CS:65A3): menuSelectedRow's price off creditsTenths (SubtractCredits): fuel's by the tank's emptiness,
-/// by a divide whose trap saves _bx, its caller's BX, with the row in BL. Returns whether the credits were enough, and are now
-/// less the price.
-[[nodiscard]] bool PayForEquipmentItem(GameState& _state, std::uint16_t _bx);
+/// PayForEquipmentItem (CS:65A3): menuSelectedRow's price off creditsTenths (SubtractCredits): fuel's by the tank's emptiness.
+/// Returns whether the credits were enough, and are now less the price.
+[[nodiscard]] bool PayForEquipmentItem(GameState& _state);
 
 /// LaunchEscapePod (CS:2F0F): an abandoned Cobra in a free ship slot, or one ReclaimShipSlot makes, the player turned away
 /// at speed 20 and moved 12 frames, the escape pod and the cargo hold gone.

@@ -175,9 +175,8 @@ bool DrawBeam(GameState& _state, std::uint8_t _x, std::uint16_t _target)
   return DrawLine(_state, Low(_target), High(_target), _x, BEAM_ROW);
 }
 
-// The crosshairs' test on one axis (8A7C, 8A93): |the view coordinate _axis of _slot| * 256 over its view z, below _radius, the
-// BX the divide's trap saves.
-[[nodiscard]] bool ScaledWithinRadius(GameState& _state, const SpaceObject& _slot, ObjectWord _axis, std::uint16_t _radius)
+// The crosshairs' test on one axis (8A7C, 8A93): |the view coordinate _axis of _slot| * 256 over its view z, below _radius.
+[[nodiscard]] bool ScaledWithinRadius(const SpaceObject& _slot, ObjectWord _axis, std::uint16_t _radius)
 {
   std::uint16_t magnitude = _slot.*_axis;
   if ((magnitude & 0x8000) != 0)
@@ -186,7 +185,7 @@ bool DrawBeam(GameState& _state, std::uint8_t _x, std::uint16_t _target)
   }
   // CWD / MOV DL,AH / MOV AH,AL / XOR AL,AL: DX:AX = the magnitude * 256, with DH its sign.
   const std::uint32_t dividend = (std::uint32_t{Join(High(SignWord(magnitude)), High(magnitude))} << 16) | Join(Low(magnitude), 0);
-  return DivideWord(_state, dividend, _slot.viewZ, _radius).quotient < _radius;
+  return DivideWord(dividend, _slot.viewZ).quotient < _radius;
 }
 
 // What BX holds after MoveObject: the mask of the last blip it erased, as XorDashboardPixel leaves it, else _bx.
@@ -330,7 +329,7 @@ FragmentsLeft SpawnFragments(GameState& _state, const SpaceObject& _object, std:
 
 // DropCargo (5099), the tail ExplodeObject ends in, with DI on _object and what ExplodeObject has left in _left: the barrels it
 // leaves, one when it carries the device, else a random byte / (255 / (cargo + 1) + 1), its first divide by 0 into the game's
-// trap for a cargo of FFh, which saves BX. Each barrel goes in a free ship slot, copied from what DI holds (CopyObject, backwards
+// trap for a cargo of FFh. Each barrel goes in a free ship slot, copied from what DI holds (CopyObject, backwards
 // when _backward), with a random heading, its velocity set and moved. A failed slot search leaves DI past the slots and SI on
 // what DI held, as the original's XCHG does, so a later barrel would be copied from there. Returns what it leaves in DI, BX, DX,
 // SI and ES.
@@ -348,9 +347,9 @@ Explosion DropCargo(GameState& _state, const SpaceObject& _object, bool _backwar
       return left;
     }
     left.bx = WithLow(left.bx, static_cast<std::uint8_t>(cargo + 1));
-    const std::uint8_t share = DivideByte(_state, 0x00FF, Low(left.bx), left.bx).quotient;
+    const std::uint8_t share = DivideByte(0x00FF, Low(left.bx)).quotient;
     left.bx = WithLow(left.bx, static_cast<std::uint8_t>(share + 1));
-    barrels = DivideByte(_state, Low(NextRandom(_state)), Low(left.bx), left.bx).quotient;
+    barrels = DivideByte(Low(NextRandom(_state)), Low(left.bx)).quotient;
     if (barrels == 0)
     {
       return left;
@@ -726,9 +725,9 @@ CrosshairTarget FindShipInCrosshairs(GameState& _state)
       // 256 / z, plus 2, against |x| * 256 / z and |y| * 256 / z.
       target.bx = static_cast<std::uint16_t>(type & (TYPE_MASK << 1));
       const std::uint16_t radius = Swap(_state.Data().shipTargetRadius[target.bx / 2]);
-      target.bx = Offset(DivideWord(_state, radius, object.viewZ, target.bx).quotient, 2);
-      if (ScaledWithinRadius(_state, object, &SpaceObject::viewX, target.bx) &&
-          ScaledWithinRadius(_state, object, &SpaceObject::viewY, target.bx) && object.viewZ < nearestZ)
+      target.bx = Offset(DivideWord(radius, object.viewZ).quotient, 2);
+      if (ScaledWithinRadius(object, &SpaceObject::viewX, target.bx) && ScaledWithinRadius(object, &SpaceObject::viewY, target.bx) &&
+          object.viewZ < nearestZ)
       {
         target.slot = slot;
         nearestZ = object.viewZ;
@@ -832,7 +831,7 @@ bool ApplyEnemyLaserHit(GameState& _state, Hardware& _hardware)
     // the view, x in CX and the row in AX: the top edge, the bottom, the left or the right, by four ranges of the random word.
     const Vector view{static_cast<std::int16_t>(attacker.viewX), static_cast<std::int16_t>(attacker.viewY),
                       static_cast<std::int16_t>(attacker.viewZ)};
-    const ScreenPoint from = ProjectToScreen(_state, view);
+    const ScreenPoint from = ProjectToScreen(view);
     const std::uint16_t random = NextRandom(_state);
     std::uint16_t edgeX = 0;
     std::uint16_t edgeRow = 0;
@@ -936,7 +935,7 @@ Detonation DetonateEnergyBomb(GameState& _state, Hardware& _hardware, bool _back
     if ((ship.type & SLOT_ACTIVE) != 0 && (ship.flags & FLAG_BLIP_DRAWN) != 0)
     {
       ship.cargo = 0;
-      // With no cargo the barrel count is never divided, so no BX reaches the divide trap's save.
+      // With no cargo the barrel count is never divided, and the BX it is called with reaches nothing.
       const Explosion exploded = ExplodeObject(_state, _hardware, ship, _backward, 0);
       if (exploded.si)
       {

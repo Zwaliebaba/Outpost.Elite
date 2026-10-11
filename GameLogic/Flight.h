@@ -126,14 +126,12 @@ void SaveStardustPositions(GameState& _state);
 /// UpdateStardust (CS:068F): the 30 stardust particles moved and drawn for viewAngle, once a frame, in stardustColor; streaks
 /// from where they were while the jump drive is engaged (SaveStardustPositions first). The front and rear views shift them by
 /// the pitch, roll them by the roll and move them by the speed (ComputeStardustShift), the rear inwards with lifetimes; the side
-/// views shift them sideways by the speed (UpdateSideStardust). _bx is the BX it is called with, which reaches
-/// ComputeStardustShift's divide when neither the pitch nor the roll has turned the dust. Returns whether a DrawLine filled bytes
-/// with REP STOSB.
-bool UpdateStardust(GameState& _state, std::uint16_t _bx);
+/// views shift them sideways by the speed (UpdateSideStardust). Returns whether a DrawLine filled bytes with REP STOSB.
+bool UpdateStardust(GameState& _state);
 
 /// ComputeStardustShift (CS:0887): stardustShift = (34h - playerSpeed) / 12 + 4, one less while jumpDriveEngaged, and returned.
-/// A speed above 34h, which the game never sets, divides into the game's trap, which saves BX: _bh over 12.
-std::uint8_t ComputeStardustShift(GameState& _state, std::uint8_t _bh);
+/// A speed above 34h, which the game never sets, divides into the game's trap.
+std::uint8_t ComputeStardustShift(GameState& _state);
 
 /// RestoreFlightScreen (CS:15CF): the cockpit back after a function key's screen (ShowCockpitScreen, its copies backwards when
 /// _backward), every gauge marked stale (InvalidateDashboard), a beep, and messageShown cleared. Returns what ShowCockpitScreen

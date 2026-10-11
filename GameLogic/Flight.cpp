@@ -36,12 +36,6 @@ constexpr std::uint16_t FLIGHT_FRAME_LOOP = 0x7EA4;
 
 // What RunFlight hands its callees for the registers the original passes them by accident and no value routine computes (ADR-012).
 // Each reaches nothing the game can show:
-// - UpdateStardust's BX is what the frame's drawing leaves there: TransformAndDrawObjects', ApplyEnemyLaserHit's or ResolveLaserFire's
-//   last write to BX. Its BH reaches only ComputeStardustShift's divide trap, which saves BX, and only a speed above 34h divides into
-//   the trap. The speeds the game sets run from 4 to 30h (TOP_SPEED, MOST_SPEED), with 0 while the docking computer turns, as
-//   PlayStationTunnel's BX assumes (Docking.cpp). One state escapes that: the station shot while the docking computer has stopped
-//   (CancelDockingComputer), then , pressed, which takes the speed from 0 to FCh, as UpdatePlayerMotion's floor at 4 lets through.
-//   There the trap saves the drawing's BH, which this does not reproduce.
 // - ProcessFlightKeys' ES is DS, as UpdateObjectsAndSpawn's PUSH DS / POP ES leaves it, or B800h, once a blip was XORed after it
 //   (XorDashboardPixel). Only a chart drawn while its frame shows already reads it (ChartSegment), and in flight the cockpit always
 //   shows when ProcessFlightKeys runs: SetUpLocalSpace shows it, and so does every leaving of the function keys' screens
@@ -54,7 +48,6 @@ constexpr std::uint16_t FLIGHT_FRAME_LOOP = 0x7EA4;
 //   screen; and a system always is. On the galactic chart every system is, and from any cursor one of each galaxy, 0 to 8, is near
 //   enough for its distance not to carry (at worst 19962, in galaxy 8, measured over every cursor with a scratch model of the search
 //   outside the repository); on the short-range chart, the current system at its centre is.
-constexpr std::uint16_t STARDUST_BX = 0;
 // ClearMessageLine counts its eight rows down in BP (MOV BP,8 / DEC BP), and leaves it 0: after GAME OVER, and after the pause
 // screen's A, which clears the message line.
 constexpr std::uint16_t CLEARED_MESSAGE_LINE_BP = 0;
@@ -337,13 +330,6 @@ bool DrawDust(GameState& _state, std::size_t _particle, DustPosition _position)
   return previous && DrawLine(_state, x, row, Low(Word(previous->x)), Low(Word(previous->row)));
 }
 
-// What RollStardust and ShiftStardustVertically leave in BX: the last particle's y, as their last LoadDustPosition read it or
-// their last StoreDustPosition wrote it.
-[[nodiscard]] std::uint16_t LastDustY(const GameState& _state)
-{
-  return Word(LoadDustPosition(_state, STARDUST_COUNT - 1).y);
-}
-
 // Particle _particle, which LoadDustPosition found on screen at _position, moved by _step (ScaleDustStep's), outwards
 // for the front view and inwards for the rear; then stored, and born again anywhere (RespawnDustAnywhere) while it is off
 // screen, or for the rear view near the centre, or at the end of its life, which the rear view counts down. Returns where it is.
@@ -385,12 +371,9 @@ DustPosition MoveDust(GameState& _state, std::size_t _particle, DustPosition _po
 
 // UpdateFrontStardust (0x06C0) and UpdateRearStardust (0x0742), which UpdateStardust jumps to: the pitch shifts the dust
 // vertically and the roll rolls it, _rear reversing both; then each of the 30 particles on screen moves (MoveDust) and is drawn
-// (DrawDust), PUSH CX and POP CX keeping the count round each. _bx is the BX UpdateStardust was called with, which
-// ComputeStardustShift's divide would save in the trap with what the shift and the roll leave over it. Returns whether a DrawLine
-// filled bytes with REP STOSB.
-bool UpdateFrontOrRearStardust(GameState& _state, bool _rear, std::uint16_t _bx)
+// (DrawDust), PUSH CX and POP CX keeping the count round each. Returns whether a DrawLine filled bytes with REP STOSB.
+bool UpdateFrontOrRearStardust(GameState& _state, bool _rear)
 {
-  std::uint16_t bx = _bx;
   // MOV DX,rollRate / ApplyReverseControlsToDx / AND DH,DH / XOR DL,DL / NEG DX for the front view / SAR DX,1.
   const std::uint16_t pitchRate = _state.Data().rollRate;
   const std::uint8_t pitch = ApplyReverseControls(_state, Steering{Low(pitchRate), High(pitchRate)}).pitch;
@@ -398,7 +381,6 @@ bool UpdateFrontOrRearStardust(GameState& _state, bool _rear, std::uint16_t _bx)
   {
     const std::uint16_t step = Join(pitch, 0);
     ShiftStardustVertically(_state, Signed(Sar(_rear ? step : Negate(step), 1)));
-    bx = LastDustY(_state);
   }
   // MOV AX,rollRate / ApplyReverseControls / CBW / NEG AX for the front view / SHL AX,1: the roll.
   const std::uint16_t rollRate = _state.Data().rollRate;
@@ -407,9 +389,8 @@ bool UpdateFrontOrRearStardust(GameState& _state, bool _rear, std::uint16_t _bx)
   {
     (void)SetSinCos(_state, 7, angle);
     RollStardust(_state);
-    bx = LastDustY(_state);
   }
-  (void)ComputeStardustShift(_state, High(bx));
+  (void)ComputeStardustShift(_state);
   bool filled = false;
   for (std::size_t particle = 0; particle < STARDUST_COUNT; ++particle)
   {
@@ -698,14 +679,14 @@ void RunWarningChecks(GameState& _state, std::uint16_t _first, std::uint16_t _ch
 
 // ScaleCompassAxis (0x41FF-0x4217, and again at 0x421B-0x4233): CMP CX,AX / JB, then CWD, three SHL AX / RCL DX and DIV CX:
 // 8 * _magnitude / _range when _range is not below _magnitude, else _magnitude; then at most 7. A magnitude of 8000h, which
-// NEG leaves so, is negative to CWD, and the divide traps, with BX = _bx.
-[[nodiscard]] std::uint16_t ScaleCompassAxis(GameState& _state, std::uint16_t _magnitude, std::uint16_t _range, std::uint16_t _bx)
+// NEG leaves so, is negative to CWD, and the divide traps.
+[[nodiscard]] std::uint16_t ScaleCompassAxis(std::uint16_t _magnitude, std::uint16_t _range)
 {
   std::uint16_t scaled = _magnitude;
   if (_range >= _magnitude)
   {
     const std::uint32_t dividend = ((std::uint32_t{SignWord(_magnitude)} << 16) | _magnitude) << 3;
-    scaled = DivideWord(_state, dividend, _range, _bx).quotient;
+    scaled = DivideWord(dividend, _range).quotient;
   }
   return scaled >= COMPASS_STEPS ? COMPASS_LAST_STEP : scaled;
 }
@@ -1160,15 +1141,14 @@ void PostHyperspaceRefusal(GameState& _state, Hardware& _hardware, Message _mess
     // low byte; then MOV AX,distance / MUL BH / MOV BH,0Ah / DIV BH: the cost, its low byte times 24h over 10, at least 1. BX
     // holds BH and the distance's low byte at each divide.
     const std::uint8_t tenths = Low(distance);
-    const ByteQuotient reach = DivideByte(_state, static_cast<std::uint16_t>(_state.Data().commanderBlock.fuel * FUEL_FACTOR), FUEL_DIVISOR,
-                                          Join(FUEL_DIVISOR, tenths));
+    const ByteQuotient reach = DivideByte(static_cast<std::uint16_t>(_state.Data().commanderBlock.fuel * FUEL_FACTOR), FUEL_DIVISOR);
     if (reach.quotient < tenths)
     {
       PostHyperspaceRefusal(_state, _hardware, Message::NotEnoughFuel);
       return false;
     }
     const auto product = static_cast<std::uint16_t>(Low(_state.Data().commanderBlock.selectedDistanceTenthsLy) * FUEL_DIVISOR);
-    const ByteQuotient cost = DivideByte(_state, product, FUEL_FACTOR, Join(FUEL_FACTOR, tenths));
+    const ByteQuotient cost = DivideByte(product, FUEL_FACTOR);
     _state.Data().hyperspaceFuelCost = cost.quotient == 0 ? std::uint8_t{1} : cost.quotient;
   }
   _state.Data().hyperspaceCountdown = 0x0A;
@@ -1449,7 +1429,7 @@ void SubtractVelocity(SpaceObject& _slot, ObjectByte _high, ObjectWord _low, Obj
 
 } // namespace
 
-bool UpdateStardust(GameState& _state, std::uint16_t _bx)
+bool UpdateStardust(GameState& _state)
 {
   if (_state.Data().jumpDriveEngaged != 0)
   {
@@ -1462,17 +1442,17 @@ bool UpdateStardust(GameState& _state, std::uint16_t _bx)
   case LEFT_VIEW:
     return UpdateSideStardust(_state, _state.Data().viewAngle == LEFT_VIEW);
   case REAR_VIEW:
-    return UpdateFrontOrRearStardust(_state, true, _bx);
+    return UpdateFrontOrRearStardust(_state, true);
   default:
-    return UpdateFrontOrRearStardust(_state, false, _bx);
+    return UpdateFrontOrRearStardust(_state, false);
   }
 }
 
-std::uint8_t ComputeStardustShift(GameState& _state, std::uint8_t _bh)
+std::uint8_t ComputeStardustShift(GameState& _state)
 {
-  // MOV AX,34h / SUB AX,playerSpeed / MOV BL,0Ch / DIV BL: a speed above 34h divides into the game's trap, which saves BX.
+  // MOV AX,34h / SUB AX,playerSpeed / MOV BL,0Ch / DIV BL: a speed above 34h divides into the game's trap.
   const auto dividend = static_cast<std::uint16_t>(STARDUST_SHIFT_SPEED - _state.Data().playerSpeed);
-  auto shift = static_cast<std::uint8_t>(DivideByte(_state, dividend, STARDUST_SHIFT_STEP, Join(_bh, STARDUST_SHIFT_STEP)).quotient + 4);
+  auto shift = static_cast<std::uint8_t>(DivideByte(dividend, STARDUST_SHIFT_STEP).quotient + 4);
   if (_state.Data().jumpDriveEngaged != 0)
   {
     shift = static_cast<std::uint8_t>(shift - 1);
@@ -2191,9 +2171,8 @@ bool UpdateCompass(GameState& _state)
   const bool below = Negative(Word(camera.y));
   const std::uint16_t xMagnitude = left ? Negate(Word(camera.x)) : Word(camera.x);
   const std::uint16_t yMagnitude = below ? Negate(Word(camera.y)) : Word(camera.y);
-  // XCHG BX,AX between the two: x's divide has |y| in BX, and y's has x's step.
-  const std::uint16_t xStep = ScaleCompassAxis(_state, xMagnitude, range, yMagnitude);
-  const std::uint16_t yStep = ScaleCompassAxis(_state, yMagnitude, range, xStep);
+  const std::uint16_t xStep = ScaleCompassAxis(xMagnitude, range);
+  const std::uint16_t yStep = ScaleCompassAxis(yMagnitude, range);
   auto dotX = static_cast<std::uint8_t>(xStep);
   auto dotY = static_cast<std::uint8_t>(yStep);
   // MUL AL twice: the dot's distance squared; from 41h, each step CBW'd or under the remainder AH still holds, times 8, divided
@@ -2204,9 +2183,9 @@ bool UpdateCompass(GameState& _state)
   if (squared >= COMPASS_NORMALIZED_FROM)
   {
     const std::uint8_t root = _state.Data().sqrtTable[squared];
-    const ByteQuotient first = DivideByte(_state, static_cast<std::uint16_t>(SignExtend(dotX) << 3), root, root);
+    const ByteQuotient first = DivideByte(static_cast<std::uint16_t>(SignExtend(dotX) << 3), root);
     dotX = static_cast<std::uint8_t>(first.quotient & COMPASS_STEP_MASK);
-    const ByteQuotient second = DivideByte(_state, static_cast<std::uint16_t>(Join(first.remainder, dotY) << 3), root, root);
+    const ByteQuotient second = DivideByte(static_cast<std::uint16_t>(Join(first.remainder, dotY) << 3), root);
     dotY = static_cast<std::uint8_t>(second.quotient & COMPASS_STEP_MASK);
   }
   if (left)
@@ -2397,7 +2376,7 @@ FlightExit RunFlight(GameState& _state, Hardware& _hardware, bool _backward)
     {
       backward = false;
     }
-    if (UpdateStardust(_state, STARDUST_BX))
+    if (UpdateStardust(_state))
     {
       backward = false;
     }

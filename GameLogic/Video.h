@@ -100,12 +100,12 @@ struct ClipStep
 
 /// ClipLineToLowEdge (CS:1686): of _line's ends, the one below 0 on the cut axis moved along the line onto 0, the first end, or
 /// the second with the ends swapped (SwapThenCutLine); BP less one when the moved end lands inside. Both below: nothing to draw.
-[[nodiscard]] ClipStep ClipLineToLowEdge(GameState& _state, ClipLine _line);
+[[nodiscard]] ClipStep ClipLineToLowEdge(ClipLine _line);
 
 /// ClipLineToHighEdge (CS:16C1): ClipLineToLowEdge for the edge at 255, the caller having subtracted 0FFh from the cut
 /// coordinates: the end at or beyond 0 is the one moved. Both inside: still to draw; both beyond: nothing to draw, ZF set when
 /// the first end's high byte is 0.
-[[nodiscard]] ClipStep ClipLineToHighEdge(GameState& _state, ClipLine _line);
+[[nodiscard]] ClipStep ClipLineToHighEdge(ClipLine _line);
 
 /// DrawCircle (CS:1AC1): a circle of radius _radius about (_centerX, _centerRow) as 32 chords through DrawClippedLine, its points
 /// circleOctant scaled by _radius/128 and turned through the eight octants into circlePoints. Returns whether any chord's

@@ -203,10 +203,9 @@ Steering ReadAmstradStick(GameState& _state)
   return Steering{_state.Data().amstradStickRollRamp, Negate(_state.Data().amstradStickPitchRamp)};
 }
 
-// One axis of ReadJoystickSteering: (_count - centre) * 256 / centre by a DIV that can overflow into the game's trap, which
-// saves _xCount, the X count ReadJoystickSteering holds in BX throughout; halved and saturated at 127, over 8, less a dead zone of
-// 4, with the sign put back.
-[[nodiscard]] std::uint8_t StickAxis(GameState& _state, std::uint16_t _count, const Counted<std::uint16_t>& _center, std::uint16_t _xCount)
+// One axis of ReadJoystickSteering: (_count - centre) * 256 / centre by a DIV that can overflow into the game's trap; halved and
+// saturated at 127, over 8, less a dead zone of 4, with the sign put back.
+[[nodiscard]] std::uint8_t StickAxis(std::uint16_t _count, const Counted<std::uint16_t>& _center)
 {
   auto difference = static_cast<std::uint16_t>(_count - _center);
   const bool negative = (difference & 0x8000) != 0;
@@ -216,7 +215,7 @@ Steering ReadAmstradStick(GameState& _state)
   }
   // XOR DH,DH / MOV DL,AH / MOV AH,AL / XOR AL,AL: DX:AX = the difference * 256.
   const std::uint32_t dividend = std::uint32_t{difference} << 8;
-  const auto halved = static_cast<std::uint16_t>(DivideWord(_state, dividend, _center, _xCount).quotient >> 1);
+  const auto halved = static_cast<std::uint16_t>(DivideWord(dividend, _center).quotient >> 1);
   const std::uint8_t saturated = halved >= STICK_STEP_LIMIT ? MOST_STICK_STEP : Low(halved);
   const auto step = static_cast<std::uint8_t>(saturated >> 3);
   const std::uint8_t value = step >= STICK_DEAD_ZONE ? static_cast<std::uint8_t>(step - STICK_DEAD_ZONE) : std::uint8_t{0};
@@ -529,8 +528,8 @@ Steering ReadJoystickSteering(GameState& _state, Hardware& _hardware, std::uint8
   {
     return Steering{0, 0};
   }
-  const std::uint8_t roll = StickAxis(_state, axes.x, _state.Data().joystickCenterX, axes.x);
-  const std::uint8_t pitch = StickAxis(_state, axes.y, _state.Data().joystickCenterY, axes.x);
+  const std::uint8_t roll = StickAxis(axes.x, _state.Data().joystickCenterX);
+  const std::uint8_t pitch = StickAxis(axes.y, _state.Data().joystickCenterY);
   // ClampJoystickSteering (7A3C): the roll, then the pitch negated.
   return Steering{ClampRate(roll), ClampRate(Negate(pitch))};
 }

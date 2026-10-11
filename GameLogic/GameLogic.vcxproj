@@ -127,6 +127,7 @@
     <ClInclude Include="Sha256.h" />
     <ClInclude Include="Ships.h" />
     <ClInclude Include="Sound.h" />
+    <ClInclude Include="SoundTables.h" />
     <ClInclude Include="SpaceObject.h" />
     <ClInclude Include="Speaker.h" />
     <ClInclude Include="StartUp.h" />

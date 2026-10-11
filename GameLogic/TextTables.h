@@ -11,9 +11,10 @@
 namespace Elite
 {
 
-// Text.cpp's tables of the reference's addresses, as what they mean (D33, piece 3): each entry what its address points
-// at, read from the reference's image (ReferenceImage.cpp). The tables' own words stay in the data segment, which nothing
-// reads them from. Text.cpp alone includes this, so they are in an unnamed namespace (D38).
+// The tables of the reference's addresses this subsystem reads, as what they mean (D33, piece 3): each entry what its address
+// points at, read from the reference's image (ReferenceImage.cpp). The tables' own words stay in the data segment, which
+// nothing reads them from.
+// Text.cpp alone includes this, so they are in an unnamed namespace (D38).
 namespace
 {
 

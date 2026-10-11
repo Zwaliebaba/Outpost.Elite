@@ -100,10 +100,12 @@ void PlayEveryDiscMenuPath(TwinRig& _rig)
 {
   _rig.Play("key space; wait 3.3\nkey Escape; wait 0.1\nkey c; wait 0.1\ndigest no-names");
   _rig.Play("key v; wait 0.05\nkey q; wait 0.05\nkey Next; wait 0.05\nkey m; wait 0.05\ndigest no-mouse");
-  // A mouse driver: int 33h pointing at code that is not an IRET, the program's first byte.
+  // A mouse driver: int 33h pointing at a byte that is not an IRET, the first of the farewell DOS prints, which nothing writes.
+  // The code segment, where the original's first byte was, is not the game's memory (D33, piece 3).
   const Elite::FarAddress mouse = _rig.Host().InterruptVector(MOUSE_VECTOR);
-  _rig.Both([](Elite::Platform& _platform, Elite::GameState& _state)
-            { _platform.SetInterruptVector(MOUSE_VECTOR, Elite::FarAddress{_state.CodeSegment(), 0}); });
+  _rig.Both(
+    [](Elite::Platform& _platform, Elite::GameState& _state)
+    { _platform.SetInterruptVector(MOUSE_VECTOR, Elite::FarAddress{_state.DataSegment(), _state.OffsetOf(_state.Data().exitMessage)}); });
   _rig.Play("key m; wait 0.05\ndigest mouse\nkey k; wait 0.05");
   _rig.Both([mouse](Elite::Platform& _platform, Elite::GameState&) { _platform.SetInterruptVector(MOUSE_VECTOR, mouse); });
   // The IBM stick, with nothing in the port and then with a stick in it.

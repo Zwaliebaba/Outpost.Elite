@@ -23,14 +23,13 @@ namespace
 // objectSlotCount less these.
 constexpr std::uint8_t BOMB_FIRST_SLOT = 3;
 
-// The instruction after each divide, where DivideOverflowInterrupt looks for its opcode. ProjectVertices'
-// divides take a memory operand, so the handler reads their ModRM byte 74h and saturates only AL.
-constexpr std::uint16_t VERTEX_X_DIVIDE_RETURN = 0x236C;
-constexpr std::uint16_t VERTEX_Y_DIVIDE_RETURN = 0x2395;
-constexpr std::uint16_t DISC_Y_DIVIDE_RETURN = 0x4044;
-constexpr std::uint16_t DISC_X_DIVIDE_RETURN = 0x4064;
-constexpr std::uint16_t SCREEN_X_DIVIDE_RETURN = 0x8D4B;
-constexpr std::uint16_t SCREEN_Y_DIVIDE_RETURN = 0x8D56;
+// What DivideOverflowInterrupt makes of each divide here, by the byte two before the instruction after it. ProjectVertices'
+// divides, DIV [SI+4] (returning to CS:236C and CS:2395), take a memory operand, so the handler reads their ModRM byte 74h and
+// saturates only AL; ProjectDiscCoordinate's DIV [DI+14h] (CS:4044, CS:4064) has ModRM byte 75h, and ProjectToScreen's DIV CX
+// (CS:8D4B, CS:8D56) a word divide's opcode.
+constexpr DivideTrap VERTEX_DIVIDE_TRAP = DivideTrap::LowByte;
+constexpr DivideTrap DISC_DIVIDE_TRAP = DivideTrap::Word;
+constexpr DivideTrap SCREEN_DIVIDE_TRAP = DivideTrap::Word;
 
 // Byte 0 of a slot, with Ships.h's SLOT_ACTIVE.
 constexpr std::uint8_t SLOT_TYPE_BITS = 0x3E;
@@ -217,12 +216,11 @@ void RotateVerticesToView(GameState& _state, std::size_t _first, std::uint16_t _
 // before it leave 0, or the edge count's doubling. Returns the direction flag as DrawVisibleFaces leaves it.
 [[nodiscard]] bool RenderBlueprint(GameState& _state, const Blueprint& _blueprint, Vector _accumulator, bool _backward)
 {
-  const Vector accumulator = RunVertexProgram(_state, _blueprint.vertexProgram, _accumulator);
+  (void)RunVertexProgram(_state, _blueprint.vertexProgram, _accumulator);
   std::uint16_t count = 0;
   SetLow(count, _blueprint.projectedVertices);
   _state.Data().projectedVertexCount = count;
-  // ProjectVertices' divides save BX, the accumulator's y, which RunVertexProgram leaves there.
-  ProjectVertices(_state, High(static_cast<std::uint16_t>(accumulator.y)));
+  ProjectVertices(_state);
   count = 0;
   // Fixed edges, then face edges: a count byte, then two bytes for each.
   SetLow(count, static_cast<std::uint8_t>(_blueprint.fixedEdges.size() / 2));
@@ -245,15 +243,12 @@ void RotateVerticesToView(GameState& _state, std::size_t _first, std::uint16_t _
 }
 
 // One coordinate of a vertex (CS:2356, CS:237E): 256|_value| over _z, the vertex's z, by DIV [SI+4], plus one when the quotient
-// is below twice the remainder (SHL DX,1 / CMP AX,DX / ADC AX,0), with _value's sign put back. A divide that overflows saves BX,
-// _trapHigh over the sign BL holds, 1 for a negative _value.
-[[nodiscard]] std::uint16_t ProjectVertexCoordinate(GameState& _state, std::uint16_t _value, std::uint16_t _z, std::uint16_t _returnOffset,
-                                                    std::uint8_t _trapHigh)
+// is below twice the remainder (SHL DX,1 / CMP AX,DX / ADC AX,0), with _value's sign put back.
+[[nodiscard]] std::uint16_t ProjectVertexCoordinate(std::uint16_t _value, std::uint16_t _z)
 {
   const bool negative = Negative(_value);
   const std::uint16_t magnitude = negative ? Negate(_value) : _value;
-  const WordQuotient divided =
-    DivideUnsigned(_state, ScaledDividend(magnitude), _z, _returnOffset, Join(_trapHigh, negative ? std::uint8_t{1} : std::uint8_t{0}));
+  const WordQuotient divided = DivideUnsigned(ScaledDividend(magnitude), _z, VERTEX_DIVIDE_TRAP);
   std::uint16_t coordinate = divided.quotient;
   if (coordinate < static_cast<std::uint16_t>(divided.remainder << 1))
   {
@@ -569,7 +564,7 @@ struct WindingProducts
 // POP DI round it keep the slot.
 void DrawObjectAsDot(GameState& _state, SpaceObject& _slot, bool _backward)
 {
-  const ScreenPoint at = ProjectToScreen(_state, ViewPosition(_slot));
+  const ScreenPoint at = ProjectToScreen(ViewPosition(_slot));
   _state.Data().drawColor = DOT_COLOR;
   DrawDisc(_state, DOT_RADIUS, static_cast<std::uint16_t>(at.x), static_cast<std::uint16_t>(at.y), _backward);
 }
@@ -647,13 +642,12 @@ void DrawObjectAsDot(GameState& _state, SpaceObject& _slot, bool _backward)
 }
 
 // One coordinate of the sun's or planet's centre (CS:4030, CS:404E): 256|_value| over _slot's view z, by DIV [DI+14h], rounded
-// down, with _value's sign put back. A divide that overflows saves BX, _radius.
-[[nodiscard]] std::uint16_t ProjectDiscCoordinate(GameState& _state, SpaceObject& _slot, std::uint16_t _value, std::uint16_t _returnOffset,
-                                                  std::uint16_t _radius)
+// down, with _value's sign put back.
+[[nodiscard]] std::uint16_t ProjectDiscCoordinate(const SpaceObject& _slot, std::uint16_t _value)
 {
   const bool negative = Negative(_value);
   const std::uint16_t magnitude = negative ? Negate(_value) : _value;
-  const std::uint16_t coordinate = DivideUnsigned(_state, ScaledDividend(magnitude), _slot.viewZ, _returnOffset, _radius).quotient;
+  const std::uint16_t coordinate = DivideUnsigned(ScaledDividend(magnitude), _slot.viewZ, DISC_DIVIDE_TRAP).quotient;
   return negative ? Negate(coordinate) : coordinate;
 }
 
@@ -675,8 +669,8 @@ void DrawObjectAsDot(GameState& _state, SpaceObject& _slot, bool _backward)
 // when the disc's whole box is on the 256x128 view: DrawDisc with twice the radius.
 void DrawSunOrPlanetDisc(GameState& _state, SpaceObject& _slot, std::uint16_t _radius, bool _backward)
 {
-  const auto row = Offset(ProjectDiscCoordinate(_state, _slot, _slot.viewY, DISC_Y_DIVIDE_RETURN, _radius), SCREEN_CENTER_Y);
-  const auto x = Offset(ProjectDiscCoordinate(_state, _slot, _slot.viewX, DISC_X_DIVIDE_RETURN, _radius), SCREEN_CENTER_X);
+  const auto row = Offset(ProjectDiscCoordinate(_slot, _slot.viewY), SCREEN_CENTER_Y);
+  const auto x = Offset(ProjectDiscCoordinate(_slot, _slot.viewX), SCREEN_CENTER_X);
   if (!DiscWithin(x, _radius, SCREEN_RIGHT) || !DiscWithin(row, _radius, SCREEN_BOTTOM))
   {
     return;
@@ -759,7 +753,7 @@ struct SunDisc
   else
   {
     // MOV DX,64h / XOR AX,AX: DX:AX = 100 * 65536.
-    disc.radius = ScaleByInverseDistance(_state, _slot, std::uint32_t{SUN_SCALE} << 16);
+    disc.radius = ScaleByInverseDistance(_slot, std::uint32_t{SUN_SCALE} << 16);
   }
   _state.Data().cabinTemperature = Low(disc.radius);
   if ((High(_state.ObjectAt(disc.slot).viewZ) & 0x80) != 0)
@@ -814,7 +808,7 @@ std::optional<std::uint16_t> SizePlanet(GameState& _state, Hardware& _hardware, 
 {
   _state.Data().sunFringeMask = FRINGE_NONE;
   // MOV DX,32h / XOR AX,AX: DX:AX = 50 * 65536.
-  const std::uint16_t scaled = ScaleByInverseDistance(_state, _slot, std::uint32_t{PLANET_SCALE} << 16);
+  const std::uint16_t scaled = ScaleByInverseDistance(_slot, std::uint32_t{PLANET_SCALE} << 16);
   auto altitude = static_cast<std::uint8_t>(~Low(scaled));
   if (altitude > ALTITUDE_LIMIT)
   {
@@ -844,7 +838,7 @@ std::optional<std::uint16_t> SizePlanet(GameState& _state, Hardware& _hardware, 
 
 } // namespace
 
-void ProjectVertices(GameState& _state, std::uint8_t _trapHigh)
+void ProjectVertices(GameState& _state)
 {
   // MOV CX,[projectedVertexCount] / AND CX,CX / JE, then LOOP: a count of the whole word, 0 none. SI walks the vertices and DI the
   // points they become, in place; PUSH SI / POP SI keep the caller's.
@@ -861,11 +855,9 @@ void ProjectVertices(GameState& _state, std::uint8_t _trapHigh)
     }
     else
     {
-      const std::uint16_t x =
-        ProjectVertexCoordinate(_state, WordIn(vertices, vertex), WordIn(vertices, z), VERTEX_X_DIVIDE_RETURN, _trapHigh);
+      const std::uint16_t x = ProjectVertexCoordinate(WordIn(vertices, vertex), WordIn(vertices, z));
       SetWordIn(vertices, point, Offset(x, SCREEN_CENTER_X));
-      const std::uint16_t y =
-        ProjectVertexCoordinate(_state, WordIn(vertices, vertex + 2), WordIn(vertices, z), VERTEX_Y_DIVIDE_RETURN, _trapHigh);
+      const std::uint16_t y = ProjectVertexCoordinate(WordIn(vertices, vertex + 2), WordIn(vertices, z));
       SetWordIn(vertices, point + 2, Offset(y, SCREEN_CENTER_Y));
     }
     point += POINT_BYTES;
@@ -1250,7 +1242,7 @@ void DrawSunOrPlanet(GameState& _state, Hardware& _hardware, SpaceObject& _slot,
 
 void DrawDistantStation(GameState& _state, SpaceObject& _slot, bool _backward)
 {
-  const ScreenPoint at = ProjectToScreen(_state, CompassPosition(_slot));
+  const ScreenPoint at = ProjectToScreen(CompassPosition(_slot));
   const auto x = static_cast<std::uint16_t>(at.x);
   const auto row = static_cast<std::uint16_t>(at.y);
   _state.Data().drawColor = STATION_COLOR;
@@ -1282,7 +1274,7 @@ SinCos LoadPlayerAngles(GameState& _state)
   return SetSinCos(_state, 2, _state.Data().playerRollAngle);
 }
 
-ScreenPoint ProjectToScreen(GameState& _state, Vector _view)
+ScreenPoint ProjectToScreen(Vector _view)
 {
   // AND / JNS / NEG: the magnitudes, BP bit 1 for a negative x and bit 0 for a negative y.
   const bool negativeX = _view.x < 0;
@@ -1290,10 +1282,9 @@ ScreenPoint ProjectToScreen(GameState& _state, Vector _view)
   const std::uint16_t x = negativeX ? Negate(static_cast<std::uint16_t>(_view.x)) : static_cast<std::uint16_t>(_view.x);
   const std::uint16_t y = negativeY ? Negate(static_cast<std::uint16_t>(_view.y)) : static_cast<std::uint16_t>(_view.y);
   const auto z = static_cast<std::uint16_t>(_view.z);
-  // XOR DH,DH / MOV DL,AH / MOV AH,AL / XOR AL,AL, then DIV CX: x first, with BX = |y| for the trap; XCHG BX,AX, then y, with BX
-  // the first quotient.
-  const std::uint16_t across = DivideUnsigned(_state, std::uint32_t{x} << 8, z, SCREEN_X_DIVIDE_RETURN, y).quotient;
-  const std::uint16_t down = DivideUnsigned(_state, std::uint32_t{y} << 8, z, SCREEN_Y_DIVIDE_RETURN, across).quotient;
+  // XOR DH,DH / MOV DL,AH / MOV AH,AL / XOR AL,AL, then DIV CX: x first; XCHG BX,AX, then y.
+  const std::uint16_t across = DivideUnsigned(std::uint32_t{x} << 8, z, SCREEN_DIVIDE_TRAP).quotient;
+  const std::uint16_t down = DivideUnsigned(std::uint32_t{y} << 8, z, SCREEN_DIVIDE_TRAP).quotient;
   return ScreenPoint{static_cast<std::int16_t>(Offset(negativeX ? Negate(across) : across, SCREEN_CENTER_X)),
                      static_cast<std::int16_t>(Offset(negativeY ? Negate(down) : down, SCREEN_CENTER_Y))};
 }

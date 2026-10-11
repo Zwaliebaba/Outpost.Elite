@@ -20,6 +20,7 @@ ELITES.EXE, and follows each table's pointers there.
   warningTexts         WARNING_MESSAGES, the four warnings' messages
   CONSTANT_TEXTS       the texts a subsystem prints that no row of the symbol table starts at, each named for what it says:
                        std::string_view, or std::array<std::string_view, N> for N texts one after another
+  noiseSource          NOISE_SOURCE, the 1,024 bytes of code at CS:07D0 that the speaker's noise reads as data
 
 A text the program writes into is a buffer, which native code reads from the data segment where it is written: its entry in
 a table is empty, and says what writes it.
@@ -32,8 +33,10 @@ BlueprintShape, are the subsystem's own header's (Scene.h).
 
 A text is written as a string literal: printable ASCII as it is, any other byte as a three-digit octal escape, and the
 literal broken after an escape that a digit follows, so that no compiler reads the digit as part of it. Bytes are written
-eight to a row, each row ending in its address in a comment, which keeps clang-format's layout cheap and stable
-(Tools/GenerateReference.py measured why).
+eight to a row, each row ending in its address in a comment, as ReferenceImage.cpp's are, which keeps clang-format's layout
+cheap and stable: clang-format 18 lays out a braced list whose rows each end in a comment as columns, in under a second for
+the whole image, where the same bytes bin-packed between comments of their own took it 40 s and 7 GiB (measured 2026-10-10 by
+Tools/GenerateReference.py, which generated the image from ELITES.EXE until it was deleted, D36).
 
 The headers are generated, never edited: run this again. With --check it writes nothing and fails if a header in the tree
 is not what it would write, or is included by a file other than its subsystem's .cpp. Standard library only.
@@ -63,7 +66,10 @@ ROW_ADDRESS = re.compile(r"//\s*(CS|DS):([0-9A-F]{4})")
 BYTE = re.compile(r"0x([0-9A-F]{2})")
 
 # The subsystems that read generated tables, each the stem of its .cpp and of its header, <Subsystem>Tables.h.
-SUBSYSTEMS = ["Docked", "Equipment", "Flight", "Galaxy", "Market", "SaveLoad", "Scene", "Text"]
+SUBSYSTEMS = ["Docked", "Equipment", "Flight", "Galaxy", "Market", "SaveLoad", "Scene", "Sound", "Text"]
+# The code bytes EmitNoiseSample reads as its noise (CS:07D0), 1,024 of them: the only bytes of the code segment native code reads.
+NOISE_SOURCE_START = 0x07D0
+NOISE_SOURCE_BYTES = 0x400
 # The constant texts each subsystem prints that start where no row of the symbol table does, which native code named by their
 # addresses: each its name, its first character's address, and how many texts follow one another from there, each after the
 # one before's NUL. One is a std::string_view; more are a std::array of them. COUNTED reads how many from the byte before the
@@ -646,6 +652,17 @@ def constant_texts(_image: Image, _symbols: dict[str, Symbol], _subsystem: str) 
   return out
 
 
+def noise_source(_image: Image) -> list[str]:
+  data = _image.bytes("CS", NOISE_SOURCE_START, NOISE_SOURCE_BYTES)
+  return [
+    f"/// noiseSource (CS:{NOISE_SOURCE_START:04X}): the code bytes EmitNoiseSample reads as data, of which the speaker takes bit 1.",
+    f"constexpr std::array<std::uint8_t, {len(data)}> NOISE_SOURCE = {{",
+    *byte_rows(data, "CS", NOISE_SOURCE_START, {}),
+    "};",
+    "",
+  ]
+
+
 def subsystem_tables(_image: Image, _symbols: dict[str, Symbol], _messages: list[Message], _subsystem: str) -> tuple[list[str], list[str]]:
   """The headers a subsystem's tables need, and the tables."""
   out = text_tables(_image, _symbols, _subsystem) + constant_texts(_image, _symbols, _subsystem)
@@ -676,7 +693,24 @@ def subsystem_tables(_image: Image, _symbols: dict[str, Symbol], _messages: list
   elif _subsystem == "Flight":
     out += warning_messages(_messages)
     headers = ['"Message.h"', "", "<array>"]
+  elif _subsystem == "Sound":
+    out += noise_source(_image)
+    headers = ["<array>", "<cstdint>"]
   return headers, out
+
+
+# What a subsystem's header says its tables are, the first lines of its comment.
+INTRODUCTIONS = {
+  "": [
+    "// The tables of the reference's addresses this subsystem reads, as what they mean (D33, piece 3): each entry what its address",
+    "// points at, read from the reference's image (ReferenceImage.cpp). The tables' own words stay in the data segment, which",
+    "// nothing reads them from.",
+  ],
+  "Sound": [
+    "// The code bytes the speaker's noise reads as data (D33, piece 3), from the reference's image (ReferenceImage.cpp): the code",
+    "// segment is not in the game's memory, and these are the only bytes of it native code reads.",
+  ],
+}
 
 
 def generate_subsystem(_image: Image, _symbols: dict[str, Symbol], _messages: list[Message], _subsystem: str) -> str:
@@ -692,9 +726,8 @@ def generate_subsystem(_image: Image, _symbols: dict[str, Symbol], _messages: li
     "namespace Elite",
     "{",
     "",
-    f"// {_subsystem}.cpp's tables of the reference's addresses, as what they mean (D33, piece 3): each entry what its address points",
-    "// at, read from the reference's image (ReferenceImage.cpp). The tables' own words stay in the data segment, which nothing",
-    f"// reads them from. {_subsystem}.cpp alone includes this, so they are in an unnamed namespace (D38).",
+    *INTRODUCTIONS.get(_subsystem, INTRODUCTIONS[""]),
+    f"// {_subsystem}.cpp alone includes this, so they are in an unnamed namespace (D38).",
     "namespace",
     "{",
     "",
@@ -741,7 +774,8 @@ def main() -> int:
       return 1
     texts = sum(len(entries) for entries in CONSTANT_TEXTS.values())
     print(f"GenerateTables: up to date ({len(SUBSYSTEMS)} subsystems' tables: {len(TEXT_TABLES)} text tables, {texts} constant "
-          f"texts, the phrases, the blueprints, the frame's corners and {len(found)} messages; each included by its own .cpp alone)")
+          f"texts, the phrases, the blueprints, the frame's corners, {len(found)} messages and the noise source; each included by "
+          f"its own .cpp alone)")
     return 0
   for path, text in outputs.items():
     path.write_bytes(text.encode("utf-8"))

@@ -93,9 +93,8 @@ struct FacesEnd
 
 /// ProjectVertices (CS:2340): the first projectedVertexCount 6-byte vertices of vertexBuffer projected in place to 4-byte points,
 /// 80h + 256x/z and 40h + 256y/z rounded; a vertex nearer than nearPlaneZ gets x = 8000h and keeps a stale y. Each divide takes a
-/// memory operand, so the trap saturates only AL when it overflows; it saves BX, _trapHigh over the coordinate's sign, _trapHigh
-/// being the high byte of the BX its caller leaves.
-void ProjectVertices(GameState& _state, std::uint8_t _trapHigh);
+/// memory operand, so the trap saturates only AL when it overflows.
+void ProjectVertices(GameState& _state);
 
 /// ReflectVertexAboutCenter (CS:3740): for x, y and z in turn, the vertex at _reflection = drawCenter - the vertex at _vertex,
 /// then the vertex at _vertex += drawCenter, each the byte of vertexBuffer it starts at. Returns drawCenter, each coordinate as it
@@ -185,6 +184,6 @@ SinCos LoadPlayerAngles(GameState& _state);
 
 /// ProjectToScreen (CS:8D2E): _view on the screen, 80h + 256x/z and 40h + 256y/z, each divide saturated by the trap when it
 /// overflows.
-[[nodiscard]] ScreenPoint ProjectToScreen(GameState& _state, Vector _view);
+[[nodiscard]] ScreenPoint ProjectToScreen(Vector _view);
 
 } // namespace Elite

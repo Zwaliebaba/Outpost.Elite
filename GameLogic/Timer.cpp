@@ -15,9 +15,6 @@ namespace
 
 constexpr std::uint16_t TIMER_INTERRUPT = 0x0215;
 
-// The BIOS's int 8 vector, which InstallTimerInterrupt keeps in the code segment (savedTimerVector).
-constexpr std::uint16_t SAVED_TIMER_OFFSET = 0x025A;
-constexpr std::uint16_t SAVED_TIMER_SEGMENT = 0x025C;
 constexpr std::uint8_t TIMER_VECTOR = 0x08;
 
 constexpr std::uint8_t PIT_CHANNEL0_SQUARE_WAVE = 0x36; // channel 0, both bytes, mode 3
@@ -332,10 +329,12 @@ void TickSoundEffects(GameState& _state, Hardware& _hardware)
 
 // TimerInterrupt's chain to the BIOS (0x0255): a far jump, through savedTimerVector, to the BIOS's handler for the tick, with
 // the interrupt's frame in place, so that the BIOS's IRET ends the interrupt. Here the handler is run to its IRET, which comes
-// back to this routine, and TimerInterrupt's own IRET takes the frame.
-void ChainToBiosTimer(const GameState& _state, Hardware& _hardware)
+// back to this routine, and TimerInterrupt's own IRET takes the frame. savedTimerVector, in the code segment, holds what
+// InstallTimerInterrupt found on int 8, the BIOS's own handler: native code chains to that.
+void ChainToBiosTimer(Hardware& _hardware)
 {
-  _hardware.RunBiosTimerTick(_state.CodeWord(SAVED_TIMER_SEGMENT), _state.CodeWord(SAVED_TIMER_OFFSET));
+  const FarAddress bios = _hardware.BiosInterruptVector(TIMER_VECTOR);
+  _hardware.RunBiosTimerTick(bios.segment, bios.offset);
 }
 
 } // namespace
@@ -348,10 +347,8 @@ void InstallTimerInterrupt(GameState& _state, Hardware& _hardware)
   const auto image = static_cast<std::uint8_t>(speaker & ~SPEAKER_BITS);
   _state.Data().speakerPortImage = image;
   _hardware.SetSystemControl(image);
-  // The BIOS's handler kept, and the game's own installed in its place.
-  const FarAddress bios = _hardware.InterruptVector(TIMER_VECTOR);
-  _state.SetCodeWord(SAVED_TIMER_OFFSET, bios.offset);
-  _state.SetCodeWord(SAVED_TIMER_SEGMENT, bios.segment);
+  // The game's own handler installed in place of the BIOS's, which the original keeps in savedTimerVector and native code takes
+  // from the BIOS (ChainToBiosTimer, RestoreTimerInterrupt).
   _hardware.SetInterruptVector(TIMER_VECTOR, FarAddress{_state.CodeSegment(), TIMER_INTERRUPT});
   _hardware.EnableInterrupts();
 }
@@ -359,8 +356,8 @@ void InstallTimerInterrupt(GameState& _state, Hardware& _hardware)
 BiosClock RestoreTimerInterrupt(GameState& _state, Hardware& _hardware)
 {
   _hardware.DisableInterrupts();
-  // The BIOS's handler put back, from what InstallTimerInterrupt kept.
-  _hardware.SetInterruptVector(TIMER_VECTOR, FarAddress{_state.CodeWord(SAVED_TIMER_SEGMENT), _state.CodeWord(SAVED_TIMER_OFFSET)});
+  // The BIOS's handler put back, as InstallTimerInterrupt found it.
+  _hardware.SetInterruptVector(TIMER_VECTOR, _hardware.BiosInterruptVector(TIMER_VECTOR));
   _hardware.SetSystemControl(_state.Data().savedSpeakerPort);
   std::uint8_t mode = PIT_CHANNEL0_SQUARE_WAVE;
   std::uint16_t divisor = 0;
@@ -407,7 +404,7 @@ void TimerInterrupt(GameState& _state, Hardware& _hardware, bool _backward)
     return;
   }
   _state.Data().biosTimerChainCountdown = mouse ? BIOS_CHAIN_TICKS_WITH_MOUSE : BIOS_CHAIN_TICKS;
-  ChainToBiosTimer(_state, _hardware);
+  ChainToBiosTimer(_hardware);
 }
 
 void TimerTick(GameState& _state, Hardware& _hardware, bool _backward)

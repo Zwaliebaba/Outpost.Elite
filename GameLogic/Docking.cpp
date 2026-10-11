@@ -35,10 +35,6 @@ constexpr std::uint16_t FIRST_FRAME_WAIT = 0x2DB8;
 constexpr std::uint16_t LAST_TUNNEL_FRAME = 0x2DC9;
 constexpr std::uint16_t LAST_FRAME_WAIT = 0x2DE7;
 constexpr std::uint16_t LAST_RECTANGLES = 0x2DEE;
-// The BX PlayStationTunnel calls UpdateStardust with is what TransformAndDrawObjects leaves there, which MoveObjectsByVelocity
-// keeps. It reaches nothing but ComputeStardustShift's divide trap, which only a speed above 34h reaches, and no speed the game
-// sets is above 30h (TOP_SPEED, MOST_SPEED): 0 stands in for it.
-constexpr std::uint16_t STARDUST_BX = 0;
 
 // The station's slot, whose fields SLOT_X, SLOT_Y, SLOT_Z and SLOT_FLAGS name (Ships.h).
 constexpr std::uint8_t STATION_SHOT = 0x01; // in the slot's flags: docking is refused
@@ -291,35 +287,16 @@ void PitchToTarget(GameState& _state, bool _approach, std::uint16_t _tolerance, 
   _state.Data().velocityDirty = 1;
 }
 
-// CWD / IDIV BX: _coordinate over _frames, the frames left; with no frame left it divides by 0 into the game's trap, which saves
-// BX, _frames.
-[[nodiscard]] std::uint16_t VelocityOver(GameState& _state, std::uint16_t _coordinate, std::uint16_t _frames)
+// CWD / IDIV BX: _coordinate over _frames, the frames left; with no frame left it divides by 0 into the game's trap.
+[[nodiscard]] std::uint16_t VelocityOver(std::uint16_t _coordinate, std::uint16_t _frames)
 {
   const auto dividend = static_cast<std::uint32_t>(static_cast<std::int32_t>(static_cast<std::int16_t>(_coordinate)));
-  return DivideSignedWord(_state, dividend, _frames, _frames).quotient;
-}
-
-// What VectorLength leaves in BX: the last odd number its root subtracted, twice the root of the top 16 bits of _vector's squared
-// length, plus 1.
-[[nodiscard]] std::uint16_t VectorLengthOddLeftover(Vector _vector, std::uint16_t _length)
-{
-  const auto square = [](std::int16_t _value) { return static_cast<std::uint32_t>(std::int32_t{_value} * _value); };
-  const std::uint32_t sum = square(_vector.x) + square(_vector.y) + square(_vector.z);
-  unsigned shift = 0;
-  if ((sum >> 24) != 0)
-  {
-    shift = 8;
-  }
-  else if ((sum >> 16) != 0)
-  {
-    shift = 4;
-  }
-  return static_cast<std::uint16_t>(((_length >> shift) << 1) + 1);
+  return DivideSignedWord(dividend, _frames).quotient;
 }
 
 // State 4 (CS:8762): fly straight to the approach point, faster while 350 or more away (SpeedUp, SlowDown), at the velocity
 // that gets there in the frames left, the distance over the speed: XOR DX,DX / DIV playerSpeed, a speed of 0 dividing into the
-// game's trap, which saves the BX VectorLength left. On the last frame there, the ship stops on it and goes on to state 5.
+// game's trap. On the last frame there, the ship stops on it and goes on to state 5.
 // MoveObjectsByVelocity moves the world either way.
 void FlyToApproachPoint(GameState& _state)
 {
@@ -334,8 +311,7 @@ void FlyToApproachPoint(GameState& _state)
   {
     SlowDown(_state);
   }
-  const std::uint16_t frames =
-    DivideWord(_state, distance, _state.Data().playerSpeed, VectorLengthOddLeftover(approach, distance)).quotient;
+  const std::uint16_t frames = DivideWord(distance, _state.Data().playerSpeed).quotient;
   if (frames == 1)
   {
     _state.Data().playerSpeed = 0;
@@ -349,9 +325,9 @@ void FlyToApproachPoint(GameState& _state)
     return;
   }
   // MOV AX,[DI+axis] (and ADD AX,7D0h for z), then the divide, for x, y and z.
-  _state.Data().playerVelocityX = VelocityOver(_state, static_cast<std::uint16_t>(approach.x), frames);
-  _state.Data().playerVelocityY = VelocityOver(_state, static_cast<std::uint16_t>(approach.y), frames);
-  _state.Data().playerVelocityZ = VelocityOver(_state, static_cast<std::uint16_t>(approach.z), frames);
+  _state.Data().playerVelocityX = VelocityOver(static_cast<std::uint16_t>(approach.x), frames);
+  _state.Data().playerVelocityY = VelocityOver(static_cast<std::uint16_t>(approach.y), frames);
+  _state.Data().playerVelocityZ = VelocityOver(static_cast<std::uint16_t>(approach.z), frames);
   MoveObjectsByVelocity(_state);
 }
 
@@ -521,7 +497,7 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
     {
       backward = TransformAndDrawObjects(_state, _hardware, backward);
       MoveObjectsByVelocity(_state);
-      if (UpdateStardust(_state, STARDUST_BX))
+      if (UpdateStardust(_state))
       {
         backward = false;
       }
@@ -556,7 +532,7 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
     if (_state.Data().playerDocked == 0)
     {
       backward = TransformAndDrawObjects(_state, _hardware, backward);
-      if (UpdateStardust(_state, STARDUST_BX))
+      if (UpdateStardust(_state))
       {
         backward = false;
       }

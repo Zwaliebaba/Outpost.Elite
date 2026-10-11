@@ -240,11 +240,11 @@ void ShowEquipMessage(GameState& _state, std::string_view _text, std::uint8_t _s
   return ToEquipMessage(_hardware, NOT_ENOUGH_CREDITS_TEXT);
 }
 
-// 6228: an item or a laser paid for and counted in _fitted, whose address the original holds in BX and pushes round the
-// payment, its resale price shown, and a laser's mount chosen. Returns the message.
+// 6228: an item or a laser paid for and counted in _fitted, its resale price shown, and a laser's mount chosen. Returns the
+// message.
 [[nodiscard]] std::string_view BuyFittedItem(GameState& _state, Hardware& _hardware, Counted<std::uint8_t>& _fitted)
 {
-  if (!PayForEquipmentItem(_state, _state.OffsetOf(_fitted)))
+  if (!PayForEquipmentItem(_state))
   {
     return ToEquipMessage(_hardware, NOT_ENOUGH_CREDITS_TEXT);
   }
@@ -257,8 +257,8 @@ void ShowEquipMessage(GameState& _state, std::string_view _text, std::uint8_t _s
   return ToEquipMessage(_hardware, ITEM_PURCHASED_TEXT);
 }
 
-// 6246: B on fuel (a full tank, never in mission 1) or a missile (up to four), _row 1 or 2. The original holds the row less 1
-// in BX, which PayForEquipmentItem's divide trap saves with the row in BL. Returns the message.
+// 6246: B on fuel (a full tank, never in mission 1) or a missile (up to four), _row 1 or 2, by the row less 1, which the
+// original holds in BX. Returns the message.
 [[nodiscard]] std::string_view BuyFuelOrMissile(GameState& _state, Hardware& _hardware, std::uint8_t _row)
 {
   const auto bx = static_cast<std::uint16_t>(static_cast<std::uint8_t>(_row - 1));
@@ -268,7 +268,7 @@ void ShowEquipMessage(GameState& _state, std::string_view _text, std::uint8_t _s
     {
       return ToEquipMessage(_hardware, FOUR_MISSILES_ONLY_TEXT);
     }
-    if (!PayForEquipmentItem(_state, bx))
+    if (!PayForEquipmentItem(_state))
     {
       return ReportNotEnoughCredits(_hardware);
     }
@@ -284,7 +284,7 @@ void ShowEquipMessage(GameState& _state, std::string_view _text, std::uint8_t _s
   {
     return ToEquipMessage(_hardware, FUEL_FULL_TEXT);
   }
-  if (!PayForEquipmentItem(_state, bx))
+  if (!PayForEquipmentItem(_state))
   {
     return ReportNotEnoughCredits(_hardware);
   }
@@ -610,12 +610,10 @@ Scoop TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
     }
     else
     {
-      // A random product 0-10, furs for slaves, into the hold, and its name for the message. The divide cannot overflow; the
-      // BX its trap would save is y's high byte over the divisor.
+      // A random product 0-10, furs for slaves, into the hold, and its name for the message. The divide cannot overflow.
       scoop.removedBlip = RemoveObject(_state, _slot);
       const std::uint8_t random = Low(NextRandom(_state));
-      const auto y = static_cast<std::uint16_t>(_view.y);
-      std::uint8_t product = DivideByte(_state, random, RANDOM_PRODUCT_DIVISOR, Join(High(y), RANDOM_PRODUCT_DIVISOR)).quotient;
+      std::uint8_t product = DivideByte(random, RANDOM_PRODUCT_DIVISOR).quotient;
       if (product == PRODUCT_SLAVES)
       {
         product = PRODUCT_FURS;
@@ -860,17 +858,16 @@ void PaintLaserMountBox(GameState& _state, std::uint16_t _box)
   }
 }
 
-bool PayForEquipmentItem(GameState& _state, std::uint16_t _bx)
+bool PayForEquipmentItem(GameState& _state)
 {
   const std::uint8_t row = _state.Data().menuSelectedRow;
   std::uint16_t tenths = 0;
   if (row == FUEL_ROW)
   {
-    // What fills the tank: (255-fuel) * the price's low byte / 36, at least 1, by a DIV that can overflow into the game's trap,
-    // which saves BX with the row in BL.
+    // What fills the tank: (255-fuel) * the price's low byte / 36, at least 1, by a DIV that can overflow into the game's trap.
     const auto missing = static_cast<std::uint8_t>(~_state.Data().commanderBlock.fuel);
     const auto product = static_cast<std::uint16_t>(missing * Low(_state.Data().screenPrices.data823F));
-    std::uint8_t units = DivideByte(_state, product, FUEL_UNITS_PER_TENTH, WithLow(_bx, row)).quotient;
+    std::uint8_t units = DivideByte(product, FUEL_UNITS_PER_TENTH).quotient;
     if (units == 0)
     {
       units = 1;

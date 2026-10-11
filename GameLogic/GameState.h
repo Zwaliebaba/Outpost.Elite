@@ -21,15 +21,16 @@ namespace Elite
 class Game;
 
 /// The game's memory (ADR-012, D19): the reference's data segment as its struct (GameData), by member (Data()), by name
-/// (DataOverlay.h) or by offset; the code segment's image, which the original keeps data and patches in; and the CGA's video
-/// memory. It owns all three, and it has no registers: a routine that takes a GameState takes its inputs as parameters and gives
-/// its results back.
+/// (DataOverlay.h) or by offset; and the CGA's video memory. It owns both, and it has no registers: a routine that takes a
+/// GameState takes its inputs as parameters and gives its results back.
 ///
-/// The host makes one for the whole run, inside a Game, which loads the reference into it (Game::Load) at the segments DOS
-/// would have put it at, so that the original's far addresses, segment and offset, still name its bytes: the code segment
-/// at CS:0000, the data segment and the stack in it at DS:0000, and video memory at B800:0000. A far access resolves its
-/// address to one of the three; an address outside them is not the game's memory, and throws std::out_of_range. The vector
-/// table, the BIOS's data area and the PSP are not here: they are the platform's (Platform, Hardware).
+/// The host makes one for the whole run, inside a Game, which loads the reference's data segment into it (Game::Load) at the
+/// segment DOS would have put it at, so that the original's far addresses, segment and offset, still name its bytes: the data
+/// segment and the stack in it at DS:0000, and video memory at B800:0000. A far access resolves its address to one of the two;
+/// an address outside them is not the game's memory, and throws std::out_of_range. The code segment, which the original keeps
+/// data and patches in, is not here (D33, piece 3): native code reads the only bytes of it it needs from generated tables, and
+/// its segment is where the interrupt vectors the game installs point. The vector table, the BIOS's data area and the PSP are not
+/// here either: they are the platform's (Platform, Hardware).
 ///
 /// Every write counts in one change count (ChangeCount) when it changes what it writes, as the emulated PC's memory did until
 /// D33: paced time compares the count at each turn of a loop, and a turn that changed nothing idles (ADR-015). A member of
@@ -281,28 +282,6 @@ public:
     Store(*At(_linear), _value);
   }
 
-  /// The byte at CS:_offset: data the original keeps in its code segment, and the code it patches. Past the code segment's
-  /// image, CS:_offset is in the data segment, which follows it.
-  [[nodiscard]] std::uint8_t CodeByte(std::uint16_t _offset) const
-  {
-    return _offset < m_code.size() ? m_code[_offset] : FarByte(m_codeSegment, _offset);
-  }
-
-  [[nodiscard]] std::uint16_t CodeWord(std::uint16_t _offset) const
-  {
-    return static_cast<std::uint16_t>(CodeByte(_offset) | (CodeByte(static_cast<std::uint16_t>(_offset + 1)) << 8));
-  }
-
-  void SetCodeByte(std::uint16_t _offset, std::uint8_t _value)
-  {
-    SetFarByte(m_codeSegment, _offset, _value);
-  }
-
-  void SetCodeWord(std::uint16_t _offset, std::uint16_t _value)
-  {
-    SetFarWord(m_codeSegment, _offset, _value);
-  }
-
   /// The byte at B800:_offset, in the CGA's video memory, which must be in its 16 KiB.
   [[nodiscard]] std::uint8_t VideoByte(std::uint16_t _offset) const
   {
@@ -331,12 +310,6 @@ public:
     return m_video;
   }
 
-  /// The code segment's image.
-  [[nodiscard]] std::span<const std::uint8_t, CODE_SEGMENT_BYTES> CodeBytes() const noexcept
-  {
-    return m_code;
-  }
-
   /// Writes that changed a byte, counted since construction. A write of the value already there is not counted, so a loop
   /// that only stores what it found leaves the count alone: paced time uses that to tell a program that is waiting from one
   /// that is working (ADR-015).
@@ -359,9 +332,9 @@ private:
   static constexpr std::uint16_t SHIP_SLOTS_OFFSET = GAME_DATA_OFFSET(shipSlots);
   static constexpr std::uint32_t VIDEO_LINEAR = std::uint32_t{VIDEO_SEGMENT} << 4;
 
-  /// Takes the reference's load image, the code segment and then the data segment's image, as DOS would have put it at
-  /// _codeSegment, uncounted: the code segment's image from _image's start, and the data segment, from paragraph
-  /// DATA_SEGMENT_PARAGRAPH of it, with zeros past the image's end. Video memory is left as it is.
+  /// Takes the reference's data segment as DOS would have loaded it with its code segment at _codeSegment, uncounted: _image,
+  /// the data segment's image, from DS:0000, which is paragraph DATA_SEGMENT_PARAGRAPH on from _codeSegment, with zeros past the
+  /// image's end. Video memory is left as it is.
   void Load(std::uint16_t _codeSegment, std::span<const std::uint8_t> _image) noexcept;
 
   [[nodiscard]] std::span<std::uint8_t, sizeof(GameData)> DataStorage() noexcept
@@ -421,7 +394,6 @@ private:
 
   enum class Region : std::uint8_t
   {
-    Code,
     Data,
     Video
   };
@@ -446,46 +418,23 @@ private:
     {
       return Place{Region::Video, index};
     }
-    if (const std::uint32_t index = linear - Linear(m_codeSegment, 0); index < CODE_SEGMENT_BYTES)
-    {
-      return Place{Region::Code, index};
-    }
     RefuseAddress();
   }
 
   /// Throws the std::out_of_range of an address outside the game's memory.
   [[noreturn]] static void RefuseAddress();
 
-  /// Where the byte at _linear is: in the code segment's image, the data segment or video memory. Throws std::out_of_range
-  /// for any other address.
+  /// Where the byte at _linear is: in the data segment or video memory. Throws std::out_of_range for any other address.
   [[nodiscard]] std::uint8_t* At(std::uint32_t _linear)
   {
     const Place place = Locate(_linear);
-    switch (place.region)
-    {
-    case Region::Data:
-      return &DataStorage()[place.index];
-    case Region::Video:
-      return &m_video[place.index];
-    case Region::Code:
-      break;
-    }
-    return &m_code[place.index];
+    return place.region == Region::Data ? &DataStorage()[place.index] : &m_video[place.index];
   }
 
   [[nodiscard]] const std::uint8_t* At(std::uint32_t _linear) const
   {
     const Place place = Locate(_linear);
-    switch (place.region)
-    {
-    case Region::Data:
-      return &DataBytes()[place.index];
-    case Region::Video:
-      return &m_video[place.index];
-    case Region::Code:
-      break;
-    }
-    return &m_code[place.index];
+    return place.region == Region::Data ? &DataBytes()[place.index] : &m_video[place.index];
   }
 
   void Store(std::uint8_t& _byte, std::uint8_t _value) noexcept
@@ -498,7 +447,6 @@ private:
   }
 
   std::unique_ptr<Block, FreeBlock> m_block;
-  std::array<std::uint8_t, CODE_SEGMENT_BYTES> m_code{};
   std::array<std::uint8_t, Cga::VIDEO_MEMORY_BYTES> m_video{};
   std::uint16_t m_codeSegment = 0;
   std::uint16_t m_dataSegment = 0;

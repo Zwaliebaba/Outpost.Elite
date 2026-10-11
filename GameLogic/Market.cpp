@@ -57,7 +57,7 @@ constexpr std::uint16_t RESALE_PRICE_CEILING = 100;
 constexpr std::uint16_t COMMODITY_COUNT = 0x11;
 constexpr std::uint16_t PRODUCT_NAME_BYTES = 0x11;
 constexpr std::size_t TRADE_PRICES_BYTES = 4; // a product's buy price and then its sell price, in screenPrices
-constexpr std::size_t LEGAL_PENALTY = 2;        // a trade record's third byte
+constexpr std::size_t LEGAL_PENALTY = 2;      // a trade record's third byte
 // A price factor of 1.0, in 256ths.
 constexpr std::uint16_t UNIT_FACTOR = 0x100;
 // The price factor tables are by commodity, 16 bytes to a row.
