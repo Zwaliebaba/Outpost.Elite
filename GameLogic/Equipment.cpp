@@ -12,6 +12,8 @@
 #include "Text.h"
 #include "Timer.h"
 
+#include <utility>
+
 namespace Elite
 {
 
@@ -557,7 +559,7 @@ void LaunchEscapePod(GameState& _state)
   const SlotSearch free = FindFreeShipSlot(_state);
   SpaceObject& pod = _state.Slot(free.found ? free.slot : ReclaimShipSlot(_state).slot);
   ClearObjectSlot(_state, pod);
-  InitAbandonedCobra(_state, pod);
+  InitAbandonedCobra(pod);
   _state.Data().playerShip.playerPitchAngle = static_cast<std::uint16_t>(_state.Data().playerShip.playerPitchAngle + HALF_TURN);
   _state.Data().playerShip.viewAngle = HALF_TURN;
   _state.Data().playerShip.viewLocked = 1;
@@ -666,13 +668,14 @@ void TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
 
 ScreenKey ShowEquipShipScreen(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, _state.Data().constants.equipShipFrame, _backward), TITLE_OFFSET);
-  PrintCountedTextLines(_state, _state.Data().constants.equipHelpText[0], HELP_TEXT_OFFSET);
+  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, EQUIP_SHIP_FRAME, _backward), TITLE_OFFSET);
+  PrintCountedTextLines(_state, EQUIP_HELP_TEXT, HELP_TEXT_OFFSET);
 
   // equipmentList: a count, then for each item its tech level, name, government and economy factors and base price. The list is
   // sorted by tech level, so the first item beyond currentTechLevel+1 ends it. Each turn carries the count, the item's place and
-  // the row's place.
-  const std::span<const Counted<std::uint8_t>> list(_state.Data().constants.equipmentList);
+  // the row's place. Read from the reference's image at the original's address, which change 3b of D38 converts to the table.
+  const std::span<const Counted<std::uint8_t>> list =
+    std::as_const(_state).BytesAt(OriginalOffset("equipmentList"), OriginalBytes("equipmentList"));
   std::uint16_t left = list[0];
   std::size_t item = 1;
   const auto techLimit = static_cast<std::uint8_t>(_state.Data().commander.currentTechLevel + 2);
@@ -705,7 +708,7 @@ ScreenKey ShowEquipShipScreen(GameState& _state, Hardware& _hardware, bool _back
     if (resale != 0)
     {
       SetWordIn(prices, PriceSlot(_state.Data().menus.menuRowCount) + 2, resale);
-      FormatDecimal5(_state, resale, priceText);
+      FormatDecimal5(resale, priceText);
       BlankLeadingZeros(priceText, RESALE_DIGITS_BLANKED);
       // Tenths: the last digit moved right one for the point.
       _state.Data().menus.priceText.data8041 = std::uint8_t{_state.Data().menus.priceText.data8040};
@@ -827,7 +830,7 @@ void ChooseMountToRemoveLaser(GameState& _state, Hardware& _hardware)
 void RedrawEquipHelpText(GameState& _state)
 {
   _state.Data().drawing.textAttribute = HELP_ATTRIBUTE;
-  PrintCountedTextLines(_state, _state.Data().constants.equipHelpText[0], HELP_TEXT_OFFSET);
+  PrintCountedTextLines(_state, EQUIP_HELP_TEXT, HELP_TEXT_OFFSET);
   _state.Data().drawing.textAttribute = MENU_ATTRIBUTE;
 }
 

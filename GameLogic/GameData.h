@@ -32,7 +32,6 @@
 #include "JumpState.h"
 #include "KeyboardState.h"
 #include "CommanderState.h"
-#include "ConstantState.h"
 #include "UnusedState.h"
 
 #include <cstddef>
@@ -89,7 +88,6 @@ struct GameData
   JumpState jump;
   KeyboardState keyboard;
   CommanderState commander;
-  ConstantState constants;
   UnusedState unused;
 };
 

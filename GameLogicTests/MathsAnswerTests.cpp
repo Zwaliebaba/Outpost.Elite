@@ -177,11 +177,11 @@ void RandomNumbers(Elite::GameState& _state, std::vector<std::string>& _answers)
 }
 
 // The sine table at every angle, and the rotations by its sines and by words at the edges.
-void Rotations(Elite::GameState& _state, std::vector<std::string>& _answers)
+void Rotations(std::vector<std::string>& _answers)
 {
   const auto sinCos = [&](std::uint16_t _angle)
   {
-    const Elite::SinCos result = Elite::SinCosOf(_state, _angle);
+    const Elite::SinCos result = Elite::SinCosOf(_angle);
     _answers.push_back(std::format("SinCosOf {:04x} = {:04x} {:04x}", _angle, Word(result.sine), Word(result.cosine)));
   };
   for (std::uint16_t angle = 0; angle < SINE_ANGLES; ++angle)
@@ -196,7 +196,7 @@ void Rotations(Elite::GameState& _state, std::vector<std::string>& _answers)
   rotations.reserve(ROTATION_ANGLES.size() + RAW_ROTATIONS.size());
   for (const std::uint16_t angle : ROTATION_ANGLES)
   {
-    rotations.push_back(Elite::SinCosOf(_state, angle));
+    rotations.push_back(Elite::SinCosOf(angle));
   }
   rotations.insert(rotations.end(), RAW_ROTATIONS.begin(), RAW_ROTATIONS.end());
   for (const Elite::Pair& point : ROTATION_POINTS)
@@ -211,21 +211,21 @@ void Rotations(Elite::GameState& _state, std::vector<std::string>& _answers)
 }
 
 // The arc tangents: of every pair of WORDS, and of each ratio directly and by its quadrant.
-void ArcTangents(Elite::GameState& _state, std::vector<std::string>& _answers)
+void ArcTangents(std::vector<std::string>& _answers)
 {
   for (const std::int16_t a : WORDS)
   {
     for (const std::int16_t b : WORDS)
     {
-      _answers.push_back(std::format("ArcTangent2 {:04x} {:04x} = {:04x}", Word(a), Word(b), Elite::ArcTangent2(_state, a, b)));
+      _answers.push_back(std::format("ArcTangent2 {:04x} {:04x} = {:04x}", Word(a), Word(b), Elite::ArcTangent2(a, b)));
     }
   }
   for (const auto& [numerator, denominator] : RATIOS)
   {
-    _answers.push_back(std::format("RatioArcTangent {:04x} {:04x} = {:04x}", numerator, denominator,
-                                   Elite::RatioArcTangent(_state, numerator, denominator)));
-    _answers.push_back(std::format("QuadrantArcTangent {:04x} {:04x} = {:04x}", denominator, numerator,
-                                   Elite::QuadrantArcTangent(_state, denominator, numerator)));
+    _answers.push_back(
+      std::format("RatioArcTangent {:04x} {:04x} = {:04x}", numerator, denominator, Elite::RatioArcTangent(numerator, denominator)));
+    _answers.push_back(
+      std::format("QuadrantArcTangent {:04x} {:04x} = {:04x}", denominator, numerator, Elite::QuadrantArcTangent(denominator, numerator)));
   }
 }
 
@@ -277,8 +277,8 @@ public:
     std::vector<std::string> answers;
     Divides(answers);
     RandomNumbers(state, answers);
-    Rotations(state, answers);
-    ArcTangents(state, answers);
+    Rotations(answers);
+    ArcTangents(answers);
     Measures(answers);
     CheckSubsystemAnswers(MATHS_ANSWERS_FILE, answers, MATHS_ANSWERS);
   }

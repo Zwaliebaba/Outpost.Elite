@@ -75,6 +75,7 @@
   <ItemGroup>
     <ClInclude Include="Ai.h" />
     <ClInclude Include="AiState.h" />
+    <ClInclude Include="AiTables.h" />
     <ClInclude Include="Arithmetic.h" />
     <ClInclude Include="AudioState.h" />
     <ClInclude Include="Bios.h" />
@@ -82,8 +83,8 @@
     <ClInclude Include="CgaFont.h" />
     <ClInclude Include="Combat.h" />
     <ClInclude Include="CombatState.h" />
+    <ClInclude Include="CombatTables.h" />
     <ClInclude Include="CommanderState.h" />
-    <ClInclude Include="ConstantState.h" />
     <ClInclude Include="Counted.h" />
     <ClInclude Include="DataPlaces.h" />
     <ClInclude Include="DirectoryFileStore.h" />
@@ -93,6 +94,7 @@
     <ClInclude Include="DockedTables.h" />
     <ClInclude Include="Docking.h" />
     <ClInclude Include="DockingState.h" />
+    <ClInclude Include="DockingTables.h" />
     <ClInclude Include="DosFiles.h" />
     <ClInclude Include="DrawingState.h" />
     <ClInclude Include="Equipment.h" />
@@ -114,6 +116,7 @@
     <ClInclude Include="Hardware.h" />
     <ClInclude Include="Hyperspace.h" />
     <ClInclude Include="HyperspaceState.h" />
+    <ClInclude Include="HyperspaceTables.h" />
     <ClInclude Include="Input.h" />
     <ClInclude Include="InputState.h" />
     <ClInclude Include="InterruptController.h" />
@@ -126,6 +129,7 @@
     <ClInclude Include="MarketTables.h" />
     <ClInclude Include="Maths.h" />
     <ClInclude Include="MathsState.h" />
+    <ClInclude Include="MathsTables.h" />
     <ClInclude Include="MenusState.h" />
     <ClInclude Include="Message.h" />
     <ClInclude Include="MessagesState.h" />
@@ -147,7 +151,9 @@
     <ClInclude Include="SceneState.h" />
     <ClInclude Include="SceneTables.h" />
     <ClInclude Include="Sha256.h" />
+    <ClInclude Include="SharedTables.h" />
     <ClInclude Include="Ships.h" />
+    <ClInclude Include="ShipsTables.h" />
     <ClInclude Include="Sound.h" />
     <ClInclude Include="SoundState.h" />
     <ClInclude Include="SoundTables.h" />
@@ -155,16 +161,19 @@
     <ClInclude Include="Speaker.h" />
     <ClInclude Include="StartUp.h" />
     <ClInclude Include="StartUpState.h" />
+    <ClInclude Include="StartUpTables.h" />
     <ClInclude Include="StateDigest.h" />
     <ClInclude Include="Text.h" />
     <ClInclude Include="TextState.h" />
     <ClInclude Include="TextTables.h" />
     <ClInclude Include="Timer.h" />
     <ClInclude Include="TimerState.h" />
+    <ClInclude Include="TimerTables.h" />
     <ClInclude Include="Timing.h" />
     <ClInclude Include="UnusedState.h" />
     <ClInclude Include="Video.h" />
     <ClInclude Include="VideoState.h" />
+    <ClInclude Include="VideoTables.h" />
     <ClInclude Include="WorldState.h" />
   </ItemGroup>
   <ItemGroup>

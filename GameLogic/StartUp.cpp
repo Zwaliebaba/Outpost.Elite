@@ -7,6 +7,8 @@
 #include "Flight.h"
 #include "Input.h"
 #include "SaveLoad.h"
+#include "SharedTables.h"
+#include "StartUpTables.h"
 #include "Text.h"
 #include "Timer.h"
 #include "Video.h"
@@ -77,7 +79,7 @@ void MoveBytes(GameState& _state, std::uint16_t _sourceSegment, std::uint16_t _s
 void ExitToDos(GameState& _state, Hardware& _hardware)
 {
   _hardware.SetVideoMode(VIDEO_MODE_TEXT_80);
-  _hardware.PrintDosString(_state.DataSegment(), _state.OffsetOf(_state.Data().constants.exitMessage));
+  _hardware.PrintDosString(_state.DataSegment(), OriginalOffset("exitMessage"));
 }
 
 } // namespace
@@ -117,7 +119,7 @@ void CheckCheatArgument(GameState& _state, const Hardware& _hardware)
   }
   for (std::uint16_t at = 0; at < CHEAT_ARGUMENT_BYTES; ++at)
   {
-    const auto expected = static_cast<std::uint8_t>(_state.Data().constants.cheatArgumentKey[at] ^ CHEAT_KEY);
+    const auto expected = static_cast<std::uint8_t>(CHEAT_ARGUMENT_KEY[at] ^ CHEAT_KEY);
     if (static_cast<std::uint8_t>(tail[at]) != expected)
     {
       return;
@@ -131,7 +133,7 @@ void StartNewGame(GameState& _state, bool _backward)
   // REP MOVSB from DS to ES = DS.
   const std::uint16_t data = _state.DataSegment();
   MoveBytes(_state, data, _state.OffsetOf(_state.Data().saveLoad.startupCommander), data, _state.OffsetOf(_state.Data().commander),
-            _state.Data().constants.commanderFileBytes, _backward);
+            COMMANDER_FILE_BYTES, _backward);
   _state.Data().commander.witchspaceCountdown = 0;
   _state.Data().playerShip.playerEnergy = NEW_GAME_ENERGY;
   _state.Data().playerShip.foreShield = FULL_SHIELD;
@@ -170,8 +172,7 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, b
   std::uint16_t bytesLeft = AMSTRAD_SIGNATURE_BYTES;
   for (std::uint16_t at = 0; bytesLeft != 0;)
   {
-    const bool same =
-      _state.Data().constants.amstradSignature[at] == _hardware.RomByte(AMSTRAD_ROM_SEGMENT, Offset(AMSTRAD_ROM_SIGNATURE, at));
+    const bool same = AMSTRAD_SIGNATURE[at] == _hardware.RomByte(AMSTRAD_ROM_SEGMENT, Offset(AMSTRAD_ROM_SIGNATURE, at));
     ++at;
     --bytesLeft;
     if (!same)
@@ -258,7 +259,9 @@ void ShowCredits(GameState& _state, Hardware& _hardware, bool _backward)
   ClearDrawBuffer(_state, _backward);
   // Each line from SI, one past the last line's NUL, at DI, a row of characters below the last line's start. The original pushes
   // and pops the count and the place round the print; its LOOP's turns carry the count, the text and the place.
-  std::string_view text = _state.TextAt(_state.Data().constants.creditsScreenText);
+  // The text from the reference's image at the original's address, which the turns carry: change 3b of D38 converts it to the
+  // table.
+  std::string_view text = _state.TextAtOffset(OriginalOffset("creditsScreenText"));
   std::uint16_t place = CREDITS_FIRST_LINE;
   for (std::uint16_t linesLeft = CREDITS_LINES;;)
   {

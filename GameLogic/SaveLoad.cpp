@@ -6,6 +6,7 @@
 #include "Docked.h"
 #include "Input.h"
 #include "SaveLoadTables.h"
+#include "SharedTables.h"
 #include "Text.h"
 
 #include <utility>
@@ -137,8 +138,8 @@ void LoadCommanderFile(GameState& _state, Hardware& _hardware)
     return;
   }
   _state.Data().disk.fileHandle = opened.value;
-  const DosAnswer read = _hardware.ReadFile(_state.Data().disk.fileHandle, data, _state.OffsetOf(_state.Data().commander),
-                                            _state.Data().constants.commanderFileBytes);
+  const DosAnswer read =
+    _hardware.ReadFile(_state.Data().disk.fileHandle, data, _state.OffsetOf(_state.Data().commander), COMMANDER_FILE_BYTES);
   if (read.failed)
   {
     CloseAndFail(_state, _hardware, read.value);
@@ -163,8 +164,8 @@ void SaveCommanderFile(GameState& _state, Hardware& _hardware)
     return;
   }
   _state.Data().disk.fileHandle = created.value;
-  const DosAnswer written = _hardware.WriteFile(_state.Data().disk.fileHandle, data, _state.OffsetOf(_state.Data().commander),
-                                                _state.Data().constants.commanderFileBytes);
+  const DosAnswer written =
+    _hardware.WriteFile(_state.Data().disk.fileHandle, data, _state.OffsetOf(_state.Data().commander), COMMANDER_FILE_BYTES);
   if (written.failed)
   {
     CloseAndFail(_state, _hardware, written.value);
@@ -189,8 +190,7 @@ void ListCommanderFiles(GameState& _state, Hardware& _hardware, std::uint16_t _a
 {
   _state.Data().saveLoad.commanderFileCount = 0;
   _state.Data().saveLoad.commanderFileListNext = 0;
-  DosAnswer found =
-    _hardware.FindFirstFile(_state.DataSegment(), _state.OffsetOf(_state.Data().constants.commanderFilePattern), _attributes);
+  DosAnswer found = _hardware.FindFirstFile(_state.DataSegment(), OriginalOffset("commanderFilePattern"), _attributes);
   while (!found.failed)
   {
     if (_state.Data().saveLoad.diskTransferArea[FOUND_ATTRIBUTE] == 0)
@@ -447,7 +447,7 @@ DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _sh
     }
     if (scan == SCAN_V)
     {
-      PrintAt(_state, _state.TextAt(_state.Data().constants.versionString), HELP_POSITION);
+      PrintAt(_state, VERSION_STRING, HELP_POSITION);
       _hardware.LoopTurn(DISC_CONTROL_KEY_LOOP, {});
       al = 0;
       continue;
@@ -542,7 +542,7 @@ void SaveStartupCommander(GameState& _state, bool _backward)
   const auto step = static_cast<std::uint16_t>(_backward ? 0xFFFF : 1);
   std::uint16_t from = _state.OffsetOf(_state.Data().commander);
   std::uint16_t to = _state.OffsetOf(_state.Data().saveLoad.startupCommander);
-  for (std::uint16_t left = _state.Data().constants.commanderFileBytes; left != 0; --left)
+  for (std::uint16_t left = COMMANDER_FILE_BYTES; left != 0; --left)
   {
     _state.SetByte(to, _state.Byte(from));
     from = Offset(from, step);
@@ -555,16 +555,15 @@ void ShowDiskError(GameState& _state)
   _state.Data().disk.diskError = 0;
   if ((_state.Data().drawing.screenLayout & TEXT_LAYOUT_BIT) == 0)
   {
-    DrawScreenString(_state, _state.TextAt(_state.Data().constants.diskErrorText), ERROR_INK, GameState::VIDEO_SEGMENT,
-                     GRAPHICS_ERROR_POSITION);
+    DrawScreenString(_state, DISK_ERROR_TEXT, ERROR_INK, GameState::VIDEO_SEGMENT, GRAPHICS_ERROR_POSITION);
     return;
   }
   // The characters alone, over the text page's attributes.
-  const std::span<const Counted<std::uint8_t>> error = _state.BytesFrom(_state.Data().constants.diskErrorText, DISK_ERROR_CHARACTERS);
+  static_assert(DISK_ERROR_TEXT.size() == DISK_ERROR_CHARACTERS);
   std::uint16_t to = TEXT_ERROR_POSITION;
-  for (const Counted<std::uint8_t>& character : error)
+  for (const char character : DISK_ERROR_TEXT)
   {
-    _state.SetVideoByte(to, character);
+    _state.SetVideoByte(to, static_cast<std::uint8_t>(character));
     to = Offset(to, 2);
   }
 }
@@ -573,8 +572,8 @@ DiscMenuExit ShowDiscControlScreen(GameState& _state, Hardware& _hardware, bool 
 {
   if (_state.Data().saveLoad.resumeAtDiskMenu == 0)
   {
-    PrintAt(_state, DrawDockedFrame(_state, _hardware, _state.Data().constants.discControlFrame, _backward), TITLE_POSITION);
-    PrintCountedTextLines(_state, _state.Data().constants.discMenuText[0], MENU_POSITION);
+    PrintAt(_state, DrawDockedFrame(_state, _hardware, DISC_CONTROL_FRAME, _backward), TITLE_POSITION);
+    PrintCountedTextLines(_state, DISC_MENU_TEXT, MENU_POSITION);
     return RunDiscControlKeys(_state, _hardware, true, 0);
   }
   // Back from Start's disk work.

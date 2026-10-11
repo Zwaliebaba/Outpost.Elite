@@ -5,6 +5,7 @@
 #include "Arithmetic.h"
 #include "Flight.h"
 #include "Galaxy.h"
+#include "HyperspaceTables.h"
 #include "Maths.h"
 #include "Ships.h"
 #include "Sound.h"
@@ -265,7 +266,7 @@ void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_
   // 65,536. Each turn carries the count, SI and DI.
   _state.Data().commander.selectedDistanceTenthsLy = 0;
   const bool galactic = _state.Data().jump.galacticJumpPending == 1;
-  const std::uint32_t bytes = LoopCount(_state.Data().constants.systemRecordBytes);
+  const std::uint32_t bytes = LoopCount(SYSTEM_RECORD_BYTES);
   const std::span<const Counted<std::uint8_t>> from = galactic ? _state.BytesFrom(_state.Data().commander.selectedSystemName, bytes)
                                                                : _state.BytesFrom(_state.Data().hyperspace.hyperspaceTargetRecord, bytes);
   const std::span<Counted<std::uint8_t>> to = _state.BytesFrom(_state.Data().commander.currentSystemName, bytes);
@@ -335,7 +336,7 @@ void ResetHyperspaceRings(GameState& _state, bool _backward)
 {
   // REP MOVSW within the data segment, a word at a time, SI and DI from the tables' starts, forwards or, _backward, down.
   const auto step = static_cast<std::uint16_t>(_backward ? 0xFFFE : 2);
-  std::uint16_t from = _state.OffsetOf(_state.Data().constants.hyperspaceRingStart);
+  std::uint16_t from = OriginalOffset("hyperspaceRingStart");
   std::uint16_t to = _state.OffsetOf(_state.Data().hyperspace.hyperspaceRings);
   for (std::uint16_t word = 0; word < HYPERSPACE_RING_WORDS; ++word)
   {
@@ -440,7 +441,7 @@ void LatchHyperspaceTarget(GameState& _state)
 {
   _state.Data().commander.hyperspaceTargetIndex = std::uint8_t{_state.Data().commander.selectedSystemIndex};
   // LOOP: a count of 0 copies 65536 bytes.
-  const std::uint32_t bytes = LoopCount(_state.Data().constants.systemRecordBytes);
+  const std::uint32_t bytes = LoopCount(SYSTEM_RECORD_BYTES);
   const std::span<const Counted<std::uint8_t>> from = _state.BytesFrom(_state.Data().commander.selectedSystemName, bytes);
   const std::span<Counted<std::uint8_t>> to = _state.BytesFrom(_state.Data().hyperspace.hyperspaceTargetRecord, bytes);
   for (std::uint32_t copied = 0; copied < bytes; ++copied)

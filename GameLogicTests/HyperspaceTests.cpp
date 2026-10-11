@@ -41,7 +41,7 @@ void PlayJump(TwinRig& _rig, const Jump& _jump)
 {
   Elite::GameState& state = _rig.State();
   state.Data().commander.hyperspaceTargetIndex = std::uint8_t{state.Data().commander.selectedSystemIndex};
-  const std::size_t bytes = state.Data().constants.systemRecordBytes;
+  const std::size_t bytes = state.Word(Elite::OriginalOffset("systemRecordBytes"));
   const std::span<const Elite::Counted<std::uint8_t>> from = state.BytesFrom(state.Data().commander.selectedSystemName, bytes);
   const std::span<Elite::Counted<std::uint8_t>> to = state.BytesFrom(state.Data().hyperspace.hyperspaceTargetRecord, bytes);
   for (std::size_t index = 0; index < bytes; ++index)

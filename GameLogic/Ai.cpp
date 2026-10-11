@@ -2,6 +2,7 @@
 
 #include "Ai.h"
 
+#include "AiTables.h"
 #include "Arithmetic.h"
 #include "Combat.h"
 #include "Maths.h"
@@ -133,6 +134,12 @@ Turn TurnToVector(GameState& _state, SpaceObject& _slot, Vector _vector)
 // A government's row of spawnOddsByGovernment and of spawnLimitsByGovernment: four words and four bytes.
 constexpr std::uint16_t SPAWN_ODDS_ROW_BYTES = 8;
 constexpr std::uint16_t SPAWN_LIMIT_ROW_BYTES = 4;
+// The classes' columns, each its entry's place in a row, a word of spawnOddsByGovernment's and a byte of
+// spawnLimitsByGovernment's, where the original holds the address of the column's first entry.
+constexpr std::size_t DRIFTER_COLUMN = 0;
+constexpr std::size_t TRADER_COLUMN = 1;
+constexpr std::size_t HUNTER_COLUMN = 2;
+constexpr std::size_t WOLF_COLUMN = 3;
 
 // The offset in spawnLimitsByGovernment of the row of the government spawnLimitOffset holds.
 [[nodiscard]] std::uint16_t SpawnLimitRow(const GameState& _state) noexcept
@@ -147,13 +154,13 @@ struct SpawnOdds
   std::uint16_t random;
 };
 
-// NextRandom against the entry of the government spawnOddsOffset holds, in _column, a column of spawnOddsByGovernment, which
-// starts at its first row's entry, scaled.
-template <typename Column> [[nodiscard]] SpawnOdds SpawnOddsMet(GameState& _state, const Column& _column)
+// NextRandom against the entry of the government spawnOddsOffset holds, in _column, a column of spawnOddsByGovernment,
+// scaled.
+[[nodiscard]] SpawnOdds SpawnOddsMet(GameState& _state, std::size_t _column)
 {
   const std::uint16_t random = NextRandom(_state);
   const auto row = static_cast<std::size_t>(_state.Data().ai.spawnOddsOffset * SPAWN_ODDS_ROW_BYTES);
-  const std::uint16_t odds = ScaleSpawnOdds(_state, WordIn(_state.BytesFrom(_column, row + 2), row));
+  const std::uint16_t odds = ScaleSpawnOdds(_state, WordIn(SPAWN_ODDS_BY_GOVERNMENT, row + 2 * _column));
   return SpawnOdds{random < odds, random};
 }
 
@@ -163,13 +170,11 @@ struct SpawnLimit
   bool below;
 };
 
-// The entry of the government spawnLimitOffset holds in _column, a column of spawnLimitsByGovernment, which starts at its first
-// row's entry, against the class count _count: below while there is room.
-template <typename Column>
-[[nodiscard]] SpawnLimit BelowSpawnLimit(GameState& _state, const Column& _column, const Counted<std::uint8_t>& _count)
+// The entry of the government spawnLimitOffset holds in _column, a column of spawnLimitsByGovernment, against the class count
+// _count: below while there is room.
+[[nodiscard]] SpawnLimit BelowSpawnLimit(const GameState& _state, std::size_t _column, const Counted<std::uint8_t>& _count)
 {
-  const std::size_t row = SpawnLimitRow(_state);
-  const std::uint8_t limit = _state.BytesFrom(_column, row + 1)[row];
+  const std::uint8_t limit = SPAWN_LIMITS_BY_GOVERNMENT[SpawnLimitRow(_state) + _column];
   return SpawnLimit{_count < limit};
 }
 
@@ -192,13 +197,12 @@ void SpawnByGovernment(GameState& _state)
   {
     // MOV AL,[BX+spawnLimitsByGovernment], INC AL with a mining laser fitted.
     const std::size_t row = SpawnLimitRow(_state);
-    auto drifters = std::uint8_t{_state.BytesFrom(_state.Data().constants.spawnLimitsByGovernment, row + 1)[row]};
+    auto drifters = std::uint8_t{SPAWN_LIMITS_BY_GOVERNMENT[row + DRIFTER_COLUMN]};
     if (_state.Data().commander.miningLaserCount == 1)
     {
       drifters = static_cast<std::uint8_t>(drifters + 1);
     }
-    if (_state.Data().ai.behaviorClassCounts.drifterCount < drifters &&
-        SpawnOddsMet(_state, _state.Data().constants.spawnOddsByGovernment).met)
+    if (_state.Data().ai.behaviorClassCounts.drifterCount < drifters && SpawnOddsMet(_state, DRIFTER_COLUMN).met)
     {
       const SlotSearch free = TakeFreeShipSlot(_state);
       if (!free.found)
@@ -207,10 +211,8 @@ void SpawnByGovernment(GameState& _state)
       }
       SpawnRandomDrifter(_state, _state.Slot(free.slot));
     }
-    if (BelowSpawnLimit(_state, _state.Data().constants.spawnLimitsByGovernment.traderLimitColumn,
-                        _state.Data().ai.behaviorClassCounts.traderCount)
-          .below &&
-        SpawnOddsMet(_state, _state.Data().constants.spawnOddsByGovernment.traderOddsColumn).met)
+    if (BelowSpawnLimit(_state, TRADER_COLUMN, _state.Data().ai.behaviorClassCounts.traderCount).below &&
+        SpawnOddsMet(_state, TRADER_COLUMN).met)
     {
       const SlotSearch free = TakeFreeShipSlot(_state);
       if (!free.found)
@@ -219,10 +221,8 @@ void SpawnByGovernment(GameState& _state)
       }
       (void)SpawnRandomTrader(_state, _state.Slot(free.slot));
     }
-    if (BelowSpawnLimit(_state, _state.Data().constants.spawnLimitsByGovernment.hunterLimitColumn,
-                        _state.Data().ai.behaviorClassCounts.hunterCount)
-          .below &&
-        SpawnOddsMet(_state, _state.Data().constants.spawnOddsByGovernment.hunterOddsColumn).met)
+    if (BelowSpawnLimit(_state, HUNTER_COLUMN, _state.Data().ai.behaviorClassCounts.hunterCount).below &&
+        SpawnOddsMet(_state, HUNTER_COLUMN).met)
     {
       const SlotSearch free = TakeFreeShipSlot(_state);
       if (!free.found)
@@ -232,15 +232,13 @@ void SpawnByGovernment(GameState& _state)
       SpawnRandomHunter(_state, _state.Slot(free.slot));
     }
   }
-  if (!BelowSpawnLimit(_state, _state.Data().constants.spawnLimitsByGovernment.wolfLimitColumn,
-                       _state.Data().ai.behaviorClassCounts.wolfCount)
-         .below)
+  if (!BelowSpawnLimit(_state, WOLF_COLUMN, _state.Data().ai.behaviorClassCounts.wolfCount).below)
   {
     return;
   }
   if (_state.Data().commander.witchspaceCountdown == 0)
   {
-    const SpawnOdds odds = SpawnOddsMet(_state, _state.Data().constants.spawnOddsByGovernment.wolfOddsColumn);
+    const SpawnOdds odds = SpawnOddsMet(_state, WOLF_COLUMN);
     if (!odds.met || (_state.Data().flight.spawnGovernment != 0 && odds.random >= WOLF_ODDS_LIMIT))
     {
       return;
@@ -365,11 +363,11 @@ OffenderLaunch LaunchAtOffender(GameState& _state, SpaceObject& _station, bool _
   const std::uint16_t pick = NextRandom(_state);
   if (pick >= POLICE_FROM)
   {
-    InitPoliceViper(_state, ship);
+    InitPoliceViper(ship);
   }
   else if (pick >= SHUTTLE_FROM)
   {
-    InitShuttle(_state, ship);
+    InitShuttle(ship);
   }
   else
   {

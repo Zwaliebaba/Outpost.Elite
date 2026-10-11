@@ -109,11 +109,12 @@ std::uint16_t Store(GameState& _state, std::uint16_t _segment, std::uint16_t _of
 }
 
 // Rectangle _rectangle of tunnelRectangles, its five points of two signed bytes, x and y. The original holds the rectangle's
-// address in SI; the one past the last is the bytes after them.
-[[nodiscard]] std::span<Counted<std::uint8_t>> TunnelRectangle(GameState& _state, std::size_t _rectangle)
+// address in SI, which the loops' turns carry; the one past the last is the bytes after them. Read from the reference's image
+// at the original's address, which change 3b of D38 converts to the table.
+[[nodiscard]] std::span<const Counted<std::uint8_t>> TunnelRectangle(const GameState& _state, std::size_t _rectangle)
 {
-  return _state.BytesFrom(_state.Data().constants.tunnelRectangles, (_rectangle + 1) * TUNNEL_RECTANGLE_BYTES)
-    .subspan(_rectangle * TUNNEL_RECTANGLE_BYTES);
+  return _state.BytesAt(static_cast<std::uint16_t>(OriginalOffset("tunnelRectangles") + _rectangle * TUNNEL_RECTANGLE_BYTES),
+                        TUNNEL_RECTANGLE_BYTES);
 }
 
 // Where DrawTunnelRectangles stopped.
@@ -217,7 +218,7 @@ void AimRoll(GameState& _state, bool _approach, std::uint8_t _next)
 {
   LoadPlayerAngles(_state);
   const Vector target = RotatePitchYawRoll(_state, LoadStationPosition(_state, _approach));
-  const std::uint16_t angle = ArcTangent2(_state, Quarter(target.x), Quarter(target.y));
+  const std::uint16_t angle = ArcTangent2(Quarter(target.x), Quarter(target.y));
   std::uint16_t magnitude = angle;
   if ((magnitude & ANGLE_SIGN) != 0)
   {
@@ -266,7 +267,7 @@ void PitchToTarget(GameState& _state, bool _approach, std::uint16_t _tolerance, 
     LoadPlayerAngles(_state);
   }
   const Vector target = RotatePitchYawRoll(_state, LoadStationPosition(_state, _approach));
-  const std::uint16_t angle = ArcTangent2(_state, Quarter(target.y), Quarter(target.z));
+  const std::uint16_t angle = ArcTangent2(Quarter(target.y), Quarter(target.z));
   if (!AngleWithinTolerance(angle, 0, _tolerance))
   {
     // MOV AL,step / TEST AX,400h / NEG AL / MOV AH,AL / XOR AL,AL: the step, against the angle's sign, in the high byte.

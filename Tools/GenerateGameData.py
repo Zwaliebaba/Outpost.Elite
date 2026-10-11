@@ -12,7 +12,8 @@ the groups' structs (`GameData::flight`, `GameData::commander`, ...):
   a shared group       what several subsystems write: PlayerShipState, MessagesState, ...
   Commander            commanderBlock, kept whole at its 1987 layout, every member's offset asserted, as CommanderState: it is the
                        .cdr file's format, and Replays/*.cdr are files of it
-  constant             what nothing writes, which change 3a takes out of the state; until then ConstantState
+  constant             what nothing writes: not in the state, but its readers' constexpr tables (Tools/GenerateTables.py),
+                       which the reference's image no longer loads
   unused               what nothing reads, UnusedState, which change 3b removes
 
 A group's members keep their names and their 1987 order. The gaps between them go, but for the ones the partition lists, which
@@ -47,8 +48,8 @@ A row that starts inside another and ends past it is an error. Every struct is t
 copy constructor explicit (ADR-024).
 
 DataPlaces.h is the map from the 1987 layout to this one: DATA_PLACES, every top-level member's name, its 1987 offset and size,
-and its place in GameData, which the GameState builds its view of the original's addresses from, the reference's image loads by
-(ReferenceLoadImage), and the state digests' re-base checks by.
+and its place in GameData, or none for a constant, which the GameState builds its view of the original's addresses from, the
+reference's image loads by (ReferenceLoadImage), and the state digests' re-base checks by.
 
 The headers are generated, never edited: change the symbol table or the partition and run this again. With --check it writes
 nothing and fails if a header in the tree is not what it would write, or a header it once wrote is left over. Standard library
@@ -376,8 +377,6 @@ SHARED = {
   "Flow": "Where the game is, at the title, docked or in flight, and the frame's clock, which several subsystems write.",
   "Jump": "The hyperspace and galactic jumps under way, which flight starts and Hyperspace counts down.",
   "Keyboard": "The keys held, which the keyboard's handler writes and flight clears.",
-  CONSTANT: "What nothing writes (Design/DataPartition.tsv's constant), loaded from the reference's image and never changed, until "
-            "it leaves the state as its readers' constexpr tables.",
   UNUSED: "What nothing reads (Design/DataPartition.tsv's unused): kept, and written where the game writes it, for change 3b, which "
           "removes it with the turn probe.",
 }
@@ -391,11 +390,11 @@ class Group:
 
   @property
   def type(self) -> str:
-    return {CONSTANT: "ConstantState", UNUSED: "UnusedState"}.get(self.name, f"{self.name}State")
+    return {UNUSED: "UnusedState"}.get(self.name, f"{self.name}State")
 
   @property
   def member(self) -> str:
-    return {CONSTANT: "constants", UNUSED: "unused"}.get(self.name, self.name[0].lower() + self.name[1:])
+    return {UNUSED: "unused"}.get(self.name, self.name[0].lower() + self.name[1:])
 
   @property
   def header(self) -> Path:
@@ -422,7 +421,7 @@ def read_partition() -> list[dict[str, str]]:
 
 def build_groups(_members: list[Member]) -> list[Group]:
   """Every top-level member the partition keeps in the state, in its group, in the 1987 order; the groups in the order GameData
-  holds them: the subsystems', then the shared groups', the constants and the unused last."""
+  holds them: the subsystems', then the shared groups', and the unused last. A constant is in none: it is not in the state."""
   by_name = {member.name: member for member in _members}
   groups: dict[str, Group] = {}
   rows = read_partition()
@@ -438,17 +437,18 @@ def build_groups(_members: list[Member]) -> list[Group]:
     if row["address"] != f"DS:{member.offset:04X}" or int(row["bytes"]) != member.size:
       sys.exit(f"GenerateGameData: Design/DataPartition.tsv gives {name} as {row['address']}, {row['bytes']} bytes, and the "
                f"symbol table as DS:{member.offset:04X}, {member.size}")
-    if group not in SUBSYSTEMS and group not in SHARED and group != "Commander":
+    if group not in SUBSYSTEMS and group not in SHARED and group not in ("Commander", CONSTANT):
       sys.exit(f"GenerateGameData: {name}'s group, {group}, is neither a subsystem nor a shared group")
     if (group == "Commander") != (name == COMMANDER):
       sys.exit("GenerateGameData: the Commander group is commanderBlock, alone")
-    groups.setdefault(group, Group(group)).members.append(member)
+    if group != CONSTANT:
+      groups.setdefault(group, Group(group)).members.append(member)
   missing = [member.name for member in _members if member.row is not None and member.name not in seen]
   if missing:
     sys.exit(f"GenerateGameData: Design/DataPartition.tsv does not place {', '.join(missing)}")
   order = [name for name in SUBSYSTEMS if name in groups] + [name for name in [*SHARED, "Commander"]
-                                                             if name in groups and name not in (CONSTANT, UNUSED)]
-  order += [name for name in (CONSTANT, UNUSED) if name in groups]
+                                                             if name in groups and name != UNUSED]
+  order += [name for name in (UNUSED,) if name in groups]
   for group in groups.values():
     group.members.sort(key=lambda _member: _member.offset)
   return [groups[name] for name in order]
@@ -617,11 +617,11 @@ def generate_data_places(_groups: list[Group], _members: list[Member]) -> str:
     "enum class DataFate : std::uint8_t",
     "{",
     "  State,    ///< a member of GameData, in its group",
-    "  Constant, ///< nothing writes it: a constant",
+    "  Constant, ///< nothing writes it: not in GameData, but its readers' constexpr tables (Tools/GenerateTables.py)",
     "  Unused,   ///< nothing reads it: a member of GameData, in UnusedState, which change 3b removes",
     "};",
     "",
-    "/// No place in GameData: a constant the state no longer holds.",
+    "/// No place in GameData: a constant, which the state does not hold.",
     "inline constexpr std::uint32_t NO_PLACE = 0xFFFFFFFF;",
     "",
     "/// A top-level member of the 1987 data segment, or a gap of it the game uses: its name, its offset and size there, what became",
@@ -663,6 +663,12 @@ def generate_data_places(_groups: list[Group], _members: list[Member]) -> str:
     "[[nodiscard]] consteval std::uint16_t OriginalOffset(std::string_view _name)",
     "{",
     "  return DATA_PLACES[DataPlaceIndex(_name)].original;",
+    "}",
+    "",
+    "/// The size in 1987 of the top-level member named _name, as OriginalOffset finds it.",
+    "[[nodiscard]] consteval std::uint16_t OriginalBytes(std::string_view _name)",
+    "{",
+    "  return DATA_PLACES[DataPlaceIndex(_name)].bytes;",
     "}",
     "",
     "} // namespace Elite",

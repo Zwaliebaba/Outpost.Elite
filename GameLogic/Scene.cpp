@@ -7,6 +7,7 @@
 #include "Equipment.h"
 #include "Maths.h"
 #include "SceneTables.h"
+#include "SharedTables.h"
 #include "Video.h"
 
 #include <initializer_list>
@@ -132,9 +133,9 @@ constexpr std::size_t BOX_REFLECTION_SKIP = 0x12; // three vertices
 }
 
 // The high byte of sineTable's word at byte _angle, which is even: a signed byte.
-[[nodiscard]] std::uint8_t SineHigh(const GameState& _state, std::uint16_t _angle)
+[[nodiscard]] std::uint8_t SineHigh(std::uint16_t _angle)
 {
-  return High(_state.Data().constants.sineTable[_angle >> 1]);
+  return High(SINE_TABLE[_angle >> 1]);
 }
 
 // The handlers' rotations by the drawn object's angles: -roll into rotation pair 3, yaw into 4, and pitch with the
@@ -323,8 +324,8 @@ struct WindingProducts
 [[nodiscard]] std::uint16_t DrawFaceTriangle(GameState& _state, std::uint8_t _item, std::span<const std::uint8_t> _list,
                                              std::uint16_t _vertices, bool _backward)
 {
-  _state.Data().scene.triangleFillPattern =
-    WordIn(_state.BytesFrom(_state.Data().constants.faceFillPatterns, std::size_t{_item} + 2), _item);
+  // _item is even, and inside the table: Tools/GenerateTables.py checks every triangle item's.
+  _state.Data().scene.triangleFillPattern = FACE_FILL_PATTERNS[_item / 2];
   const Triangle triangle = LoadTriangle(_state, _list, _vertices, 1);
   const auto offScreen = [](ScreenPoint _point) { return static_cast<std::uint16_t>(_point.x) == OFF_SCREEN; };
   if (!offScreen(triangle.first) && !offScreen(triangle.second) && !offScreen(triangle.third))
@@ -385,7 +386,7 @@ struct WindingProducts
   const auto x = static_cast<std::uint16_t>(_view.x);
   const auto y = static_cast<std::uint16_t>(_view.y);
   const auto z = static_cast<std::uint16_t>(_view.z);
-  if (Negative(z) || z < _state.Data().constants.nearClipZ)
+  if (Negative(z) || z < NEAR_CLIP_Z)
   {
     return ViewTest::TooNear;
   }
@@ -444,14 +445,14 @@ struct WindingProducts
 // CheckShipInRange's test once IsObjectNear has passed (CS:3BEF): |x|, |y| and |z| below maxAxisDistance, then the high words
 // of their unsigned squares, summed, below maxDistanceSquaredHigh after the second and the third. Within, the sum shifted
 // right 6 is the ship's size, and byte 0 bit 6 is set.
-[[nodiscard]] ShipRange ShipWithinRange(GameState& _state, SpaceObject& _slot)
+[[nodiscard]] ShipRange ShipWithinRange(SpaceObject& _slot)
 {
   ShipRange range{};
   constexpr std::array<ObjectWord, 3> POSITION = {&SpaceObject::x, &SpaceObject::y, &SpaceObject::z};
   for (std::size_t axis = 0; axis < POSITION.size(); ++axis)
   {
     range.magnitudes[axis] = Magnitude(_slot.*POSITION[axis]);
-    if (range.magnitudes[axis] >= _state.Data().constants.maxAxisDistance)
+    if (range.magnitudes[axis] >= MAX_AXIS_DISTANCE)
     {
       return range;
     }
@@ -459,7 +460,7 @@ struct WindingProducts
   for (std::size_t axis = 0; axis < POSITION.size(); ++axis)
   {
     range.squaredHigh = Offset(range.squaredHigh, static_cast<std::uint16_t>(UnsignedSquare(range.magnitudes[axis]) >> 16));
-    if (axis != 0 && range.squaredHigh >= _state.Data().constants.maxDistanceSquaredHigh)
+    if (axis != 0 && range.squaredHigh >= MAX_DISTANCE_SQUARED_HIGH)
     {
       return range;
     }
@@ -849,7 +850,7 @@ void ProjectVertices(GameState& _state)
   for (std::uint16_t left = count; left != 0; --left)
   {
     const std::size_t z = vertex + VERTEX_Z;
-    if (static_cast<std::int16_t>(WordIn(vertices, z)) < static_cast<std::int16_t>(_state.Data().constants.nearPlaneZ))
+    if (static_cast<std::int16_t>(WordIn(vertices, z)) < static_cast<std::int16_t>(NEAR_PLANE_Z))
     {
       SetWordIn(vertices, point, NEAR_VERTEX_X);
     }
@@ -962,7 +963,7 @@ void BuildDodoVertices(GameState& _state)
   SetDrawAngles(_state);
   // From the roll angle, in 72-degree steps: the sine and cosine high bytes of each, scaled to the two rings.
   // The angle a byte offset into sineTable, always even.
-  const auto ringRadii = [&_state](std::uint16_t _angle) { return ScaleDodoRadii(static_cast<std::int8_t>(SineHigh(_state, _angle))); };
+  const auto ringRadii = [](std::uint16_t _angle) { return ScaleDodoRadii(static_cast<std::int8_t>(SineHigh(_angle))); };
   auto angle = static_cast<std::uint16_t>((_state.Data().scene.drawRollAngle & ANGLE_BITS) << 1);
   const std::span<Counted<std::uint8_t>> vertices = Vertices(_state);
   std::size_t vertex = 0;
@@ -981,7 +982,7 @@ void BuildDodoVertices(GameState& _state)
     vertex += VERTEX_BYTES;
   }
   // The slot: two corners at half the high bytes, and their opposites.
-  const auto slotHalf = [&_state](std::uint16_t _angle) { return Sar(SignExtend(SineHigh(_state, _angle)), 1); };
+  const auto slotHalf = [](std::uint16_t _angle) { return Sar(SignExtend(SineHigh(_angle)), 1); };
   vertex += DODO_OUTER_RING;
   angle = static_cast<std::uint16_t>((angle + DODO_SLOT_START_BYTES) & SINE_BYTE_BITS);
   for (std::uint16_t left = DODO_SLOT_VERTICES; left != 0; --left)
@@ -1123,7 +1124,7 @@ ShipRangeCheck CheckShipInRange(GameState& _state, SpaceObject& _slot)
   ShipRangeCheck check{IsObjectNear(_state, _slot), ShipRange{}};
   if (check.near.nearby)
   {
-    check.range = ShipWithinRange(_state, _slot);
+    check.range = ShipWithinRange(_slot);
     if (check.range.within)
     {
       return check;

@@ -3,6 +3,8 @@
 #include "Maths.h"
 
 #include "Arithmetic.h"
+#include "MathsTables.h"
+#include "SharedTables.h"
 
 namespace Elite
 {
@@ -140,16 +142,16 @@ std::uint16_t NextRandom(GameState& _state)
   return sum;
 }
 
-SinCos SinCosOf(const GameState& _state, std::uint16_t _angle)
+SinCos SinCosOf(std::uint16_t _angle)
 {
   const auto index = static_cast<std::uint16_t>(_angle & ANGLE_MASK);
   const auto cosineIndex = static_cast<std::uint16_t>((index + COSINE_OFFSET_BYTES / 2) & (SINE_WORDS - 1));
-  return SinCos{Signed(_state.Data().constants.sineTable[index]), Signed(_state.Data().constants.sineTable[cosineIndex])};
+  return SinCos{Signed(SINE_TABLE[index]), Signed(SINE_TABLE[cosineIndex])};
 }
 
 SinCos SetSinCos(GameState& _state, std::size_t _pair, std::uint16_t _angle)
 {
-  const SinCos pair = SinCosOf(_state, _angle);
+  const SinCos pair = SinCosOf(_angle);
   Counted<std::uint8_t>(&stored)[4] = _state.Data().maths.rotationSinCos[_pair];
   SetWordIn(stored, 0, Word(pair.sine));
   SetWordIn(stored, 2, Word(pair.cosine));
@@ -173,11 +175,11 @@ Pair RotateByStoredSinCos(const GameState& _state, std::size_t _pair, Pair _poin
   return RotateBySinCos(_point, SinCos{Signed(WordIn(stored, 0)), Signed(WordIn(stored, 2))});
 }
 
-std::uint16_t ArcTangent2(GameState& _state, std::int16_t _a, std::int16_t _b)
+std::uint16_t ArcTangent2(std::int16_t _a, std::int16_t _b)
 {
   const bool negativeA = _a < 0;
   const bool negativeB = _b < 0;
-  std::uint16_t angle = QuadrantArcTangent(_state, Magnitude(Word(_a)), Magnitude(Word(_b)));
+  std::uint16_t angle = QuadrantArcTangent(Magnitude(Word(_a)), Magnitude(Word(_b)));
   if (negativeA == negativeB)
   {
     angle = Negate(angle);
@@ -186,16 +188,16 @@ std::uint16_t ArcTangent2(GameState& _state, std::int16_t _a, std::int16_t _b)
   return static_cast<std::uint16_t>(angle & ANGLE_MASK);
 }
 
-std::uint16_t QuadrantArcTangent(GameState& _state, std::uint16_t _a, std::uint16_t _b)
+std::uint16_t QuadrantArcTangent(std::uint16_t _a, std::uint16_t _b)
 {
   if (_b < _a)
   {
-    return RatioArcTangent(_state, _b, _a);
+    return RatioArcTangent(_b, _a);
   }
-  return static_cast<std::uint16_t>(Negate(RatioArcTangent(_state, _a, _b)) + QUARTER_TURN);
+  return static_cast<std::uint16_t>(Negate(RatioArcTangent(_a, _b)) + QUARTER_TURN);
 }
 
-std::uint16_t RatioArcTangent(GameState& _state, std::uint16_t _numerator, std::uint16_t _denominator)
+std::uint16_t RatioArcTangent(std::uint16_t _numerator, std::uint16_t _denominator)
 {
   // _numerator * 32768 over _denominator; a quotient that does not fit goes through the trap.
   const std::uint32_t dividend = std::uint32_t{_numerator} << 15;
@@ -216,7 +218,7 @@ std::uint16_t RatioArcTangent(GameState& _state, std::uint16_t _numerator, std::
   for (std::uint16_t steps = TANGENT_SEARCH_STEPS; steps != 0; --steps)
   {
     middle = static_cast<std::uint16_t>(((low + high) >> 1) & 0xFFFE);
-    const std::uint16_t tangent = _state.Data().constants.tangentTable[middle >> 1];
+    const std::uint16_t tangent = TANGENT_TABLE[middle >> 1];
     if (tangent == ratio)
     {
       break;
@@ -389,10 +391,10 @@ Vector ScalePositionDown(const SpaceObject& _slot, std::uint8_t _shift)
 Angles ComputeAnglesToObject(GameState& _state, const SpaceObject& _slot)
 {
   const Vector scaled = ScalePositionDown(_slot, GetPositionScaleShift(_slot).shift);
-  const std::uint16_t first = ArcTangent2(_state, scaled.y, scaled.z);
+  const std::uint16_t first = ArcTangent2(scaled.y, scaled.z);
   (void)SetSinCos(_state, 6, first);
   const Pair yz = RotateByStoredSinCos(_state, 6, Pair{scaled.y, scaled.z});
-  return Angles{first, ArcTangent2(_state, scaled.x, yz.second)};
+  return Angles{first, ArcTangent2(scaled.x, yz.second)};
 }
 
 Angles ConvertVectorToAngles(GameState& _state, Vector _vector)
@@ -401,10 +403,10 @@ Angles ConvertVectorToAngles(GameState& _state, Vector _vector)
   const std::int16_t x = quarter(_vector.x);
   const std::int16_t y = quarter(_vector.y);
   const std::int16_t z = quarter(_vector.z);
-  const std::uint16_t first = ArcTangent2(_state, y, z);
+  const std::uint16_t first = ArcTangent2(y, z);
   (void)SetSinCos(_state, 8, first);
   const Pair yz = RotateByStoredSinCos(_state, 8, Pair{y, z});
-  return Angles{Negate(first), Negate(ArcTangent2(_state, x, yz.second))};
+  return Angles{Negate(first), Negate(ArcTangent2(x, yz.second))};
 }
 
 } // namespace Elite

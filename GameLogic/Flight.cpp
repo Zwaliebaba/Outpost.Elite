@@ -14,6 +14,7 @@
 #include "Input.h"
 #include "Market.h"
 #include "Maths.h"
+#include "SharedTables.h"
 #include "SpaceObject.h"
 #include "Scene.h"
 #include "Ships.h"
@@ -487,7 +488,7 @@ void DrawBar(GameState& _state, const std::array<std::uint16_t, Lines>& _lines, 
   }
   if (const auto partial = static_cast<std::uint8_t>(_pixels & 3); partial != 0)
   {
-    fill(_state.Data().constants.barPartialBytes[partial]);
+    fill(BAR_PARTIAL_BYTES[partial]);
   }
   const auto rest = static_cast<std::uint8_t>(static_cast<std::uint8_t>(BAR_PIXELS - _pixels) >> 2);
   if (rest == 0)
@@ -560,7 +561,7 @@ void SubtractFloored(Counted<std::uint8_t>& _field, std::uint8_t _value)
 void CheckCollision(GameState& _state, Hardware& _hardware, SpaceObject& _slot)
 {
   // MOV BL,[DI] / AND BX,3Eh: the type, doubled, indexes the box's half sizes.
-  const std::uint16_t range = _state.Data().constants.collisionRanges[(_slot.type & 0x3E) >> 1];
+  const std::uint16_t range = COLLISION_RANGES[(_slot.type & 0x3E) >> 1];
   // The station's collided bit is bit 0 of its yaw's low byte.
   const auto clearCollided = [&_slot] { _slot.yaw = WithLow(_slot.yaw, static_cast<std::uint8_t>(Low(_slot.yaw) & 0xFE)); };
   if (!ObjectWithinBox(_slot, range))
@@ -848,8 +849,7 @@ void DrawPauseMenu(GameState& _state, Hardware& _hardware, bool _backward)
 void SetFrameTime(GameState& _state, std::uint8_t _key)
 {
   const auto choice = static_cast<std::uint8_t>(_key - SCAN_F1);
-  _state.Data().flight.minimumFrameMs =
-    std::uint8_t{_state.BytesFrom(_state.Data().constants.frameTimeChoices, std::size_t{choice} + 1)[choice]};
+  _state.Data().flight.minimumFrameMs = std::uint8_t{FRAME_TIME_CHOICES[choice]};
   const auto digit = static_cast<std::uint8_t>(choice + DIGIT_ONE);
   if (digit == DIGIT_NINE + 1)
   {
@@ -1321,11 +1321,11 @@ void ApplyPitch(GameState& _state, std::int8_t _pitch)
 
   // The forward axis, turned: the pitch from its y and z, then the yaw from its x and the z turned by the pitch.
   const Vector forward = RotateBySinCos7210(_state, Vector{0, 0, AXIS_LENGTH});
-  const std::uint16_t pitch = ArcTangent2(_state, forward.y, forward.z);
+  const std::uint16_t pitch = ArcTangent2(forward.y, forward.z);
   _state.Data().flight.pitchAngleScratch = Negate(pitch);
   (void)SetSinCos(_state, 6, pitch);
   const Pair pitched = RotateByStoredSinCos(_state, 6, Pair{forward.y, forward.z});
-  _state.Data().flight.yawAngleScratch = Negate(ArcTangent2(_state, forward.x, pitched.second));
+  _state.Data().flight.yawAngleScratch = Negate(ArcTangent2(forward.x, pitched.second));
 
   // The up axis, turned back by the pitch and the yaw: the roll from what is left.
   (void)SetSinCos(_state, 6, Negate(Plus(_state.Data().flight.pitchAngleScratch, 0x400)));
@@ -1333,7 +1333,7 @@ void ApplyPitch(GameState& _state, std::int8_t _pitch)
   const Pair upPitched = RotateByStoredSinCos(_state, 6, Pair{up.y, up.z});
   (void)SetSinCos(_state, 7, Plus(_state.Data().flight.yawAngleScratch, 0x400));
   const Pair upYawed = RotateByStoredSinCos(_state, 7, Pair{up.x, upPitched.second});
-  _state.Data().playerShip.playerRollAngle = ArcTangent2(_state, upYawed.first, upPitched.first);
+  _state.Data().playerShip.playerRollAngle = ArcTangent2(upYawed.first, upPitched.first);
   _state.Data().playerShip.playerYawAngle = Negate(_state.Data().flight.yawAngleScratch);
   _state.Data().playerShip.playerPitchAngle = Negate(_state.Data().flight.pitchAngleScratch);
   _state.Data().playerShip.velocityDirty = 1;
@@ -1435,7 +1435,7 @@ bool UpdateStardust(GameState& _state)
   {
     SaveStardustPositions(_state);
   }
-  _state.Data().drawing.drawColor = std::uint8_t{_state.Data().constants.stardustColor};
+  _state.Data().drawing.drawColor = std::uint8_t{STARDUST_COLOR};
   switch (_state.Data().playerShip.viewAngle)
   {
   case RIGHT_VIEW:
@@ -1791,7 +1791,7 @@ void DrawSignedIndicator(GameState& _state, std::uint16_t _line, std::int8_t _va
   const auto pixel = static_cast<std::uint8_t>(INDICATOR_CENTER + value);
   const auto column = static_cast<std::uint16_t>((pixel >> 2) & 0x0F);
   const std::uint16_t at = Plus(_line, column);
-  const std::uint16_t marker = _state.Data().constants.indicatorMarkers[pixel & 3];
+  const std::uint16_t marker = INDICATOR_MARKERS[pixel & 3];
   if (column == INDICATOR_LAST_COLUMN)
   {
     for (const std::uint16_t scanline : FIVE_LINES)
@@ -1825,7 +1825,7 @@ void DrawMissileIcons(GameState& _state)
     constexpr std::array<std::size_t, 5> ICON_LINES = {0, 2, 4, 1, 3};
     for (std::size_t index = 0; index < FIVE_LINES.size(); ++index)
     {
-      _state.SetVideoWord(Plus(cell, FIVE_LINES[index]), _state.Data().constants.missileIcon[ICON_LINES[index]]);
+      _state.SetVideoWord(Plus(cell, FIVE_LINES[index]), MISSILE_ICON[ICON_LINES[index]]);
     }
     cell = Plus(cell, 2);
   }
@@ -1844,7 +1844,7 @@ void DrawMissileLockIndicator(GameState& _state)
     return;
   }
   _state.Data().flight.missileLockShown = missileState;
-  const std::uint8_t fill = _state.Data().constants.colorFillBytes[missileState & 3u];
+  const std::uint8_t fill = COLOR_FILL_BYTES[missileState & 3u];
   const std::uint16_t fillWord = Join(fill, fill);
   // Three bytes on each of six lines: a word and a byte in the odd bank, then the same in the even.
   std::uint16_t line = MISSILE_LOCK_LINE;
@@ -1951,15 +1951,15 @@ void DrawConditionLight(GameState& _state)
     return;
   }
   _state.Data().flight.conditionColorShown = color;
-  const std::uint8_t fill = _state.Data().constants.colorFillBytes[color];
+  const std::uint8_t fill = COLOR_FILL_BYTES[color];
   const std::uint16_t mask = Join(fill, fill);
   // The bitmap's words, byte-swapped and masked by the colour: a line in the odd bank, then the even line below.
   std::uint16_t line = CONDITION_LIGHT_LINE;
   for (std::size_t pair = 0; pair < CONDITION_LIGHT_LINE_PAIRS; ++pair)
   {
-    _state.SetVideoWord(line, static_cast<std::uint16_t>(Swap(_state.Data().constants.conditionLightBitmap[pair * 2]) & mask));
+    _state.SetVideoWord(line, static_cast<std::uint16_t>(Swap(CONDITION_LIGHT_BITMAP[pair * 2]) & mask));
     line = Plus(line, EVEN_BANK);
-    _state.SetVideoWord(line, static_cast<std::uint16_t>(Swap(_state.Data().constants.conditionLightBitmap[pair * 2 + 1]) & mask));
+    _state.SetVideoWord(line, static_cast<std::uint16_t>(Swap(CONDITION_LIGHT_BITMAP[pair * 2 + 1]) & mask));
     line = Plus(line, NEXT_ODD_LINE);
   }
 }
@@ -2178,7 +2178,7 @@ bool UpdateCompass(GameState& _state)
     static_cast<std::uint8_t>(Low(static_cast<std::uint16_t>(dotY * dotY)) + Low(static_cast<std::uint16_t>(dotX * dotX)));
   if (squared >= COMPASS_NORMALIZED_FROM)
   {
-    const std::uint8_t root = _state.Data().constants.sqrtTable[squared];
+    const std::uint8_t root = SQRT_TABLE[squared];
     const ByteQuotient first = DivideByte(static_cast<std::uint16_t>(SignExtend(dotX) << 3), root);
     dotX = static_cast<std::uint8_t>(first.quotient & COMPASS_STEP_MASK);
     const ByteQuotient second = DivideByte(static_cast<std::uint16_t>(Join(first.remainder, dotY) << 3), root);
@@ -2284,7 +2284,7 @@ std::uint8_t XorDashboardPixel(GameState& _state, std::uint8_t _x, std::uint8_t 
   // The bank from y's parity, 80 bytes a pair of lines, 4 pixels a byte.
   const auto offset =
     static_cast<std::uint16_t>(((_y & 1) != 0 ? EVEN_BANK : 0) + (_y >> 1) * NEXT_LINE_PAIR + (_x >> 2) + DASHBOARD_ORIGIN);
-  const std::uint8_t mask = _state.Data().constants.dashboardPixelMasks[_x & 3u];
+  const std::uint8_t mask = DASHBOARD_PIXEL_MASKS[_x & 3u];
   _state.SetVideoByte(offset, static_cast<std::uint8_t>(_state.VideoByte(offset) ^ mask));
   return mask;
 }
@@ -2437,8 +2437,7 @@ FlightExit RunFlight(GameState& _state, Hardware& _hardware, bool _backward)
     // MOV AX,0B800h / MOV ES,AX for the message line and the title.
     ClearMessageLine(_state, GameState::VIDEO_SEGMENT, backward);
     _state.Data().drawing.textPaperPattern = 0;
-    (void)DrawScreenString(_state, _state.TextAt(_state.Data().constants.eliteTitleText), ALL_COLORS, GameState::VIDEO_SEGMENT,
-                           TITLE_TEXT_POSITION);
+    (void)DrawScreenString(_state, ELITE_TITLE_TEXT, ALL_COLORS, GameState::VIDEO_SEGMENT, TITLE_TEXT_POSITION);
     return FlightExit{CLEARED_MESSAGE_LINE_BP, backward};
   }
 }

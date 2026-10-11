@@ -96,15 +96,14 @@ constexpr std::uint8_t CURSOR_TEXT_TOGGLE = 0xFB;     // space <-> DBh, CP437's 
   return static_cast<std::uint16_t>((_ink & _pixels) | (~_pixels & _paper));
 }
 
-// The word of a font's glyph _glyph, of _glyphBytes each from _font's first byte, for its row _row. A character with no glyph,
-// below the first or past the last, reads what lies past the font in the data segment, as the original's indexing does; no
-// text the game prints holds one.
-template <typename Font>
-[[nodiscard]] std::uint16_t FontWord(const GameState& _state, const Font& _font, std::uint8_t _glyph, std::uint16_t _glyphBytes,
+// The word of a font's glyph _glyph, of _glyphBytes each from the font's first byte, at the original's DS:_font, for its row
+// _row. A character with no glyph, below the first or past the last, reads what lies past the font in the data segment, as the
+// original's indexing does; no text the game prints holds one. Read from the reference's image at the original's address,
+// which change 3b of D38 converts to the font's table.
+[[nodiscard]] std::uint16_t FontWord(const GameState& _state, std::uint16_t _font, std::uint8_t _glyph, std::uint16_t _glyphBytes,
                                      std::uint16_t _row)
 {
-  const auto into = static_cast<std::size_t>(_glyph * _glyphBytes + _row * 2);
-  return WordIn(_state.BytesFrom(_font, into + 2), into);
+  return _state.Word(static_cast<std::uint16_t>(_font + _glyph * _glyphBytes + _row * 2));
 }
 
 // Row _row of _character's opaque glyph: its pixels in _ink, the rest in _paper.
@@ -112,14 +111,14 @@ template <typename Font>
                                      std::uint16_t _paper)
 {
   const auto glyph = static_cast<std::uint8_t>(_character - FIRST_GLYPH);
-  return InkOnPaper(FontWord(_state, _state.Data().constants.screenFont, glyph, SCREEN_GLYPH_BYTES, _row), _ink, _paper);
+  return InkOnPaper(FontWord(_state, OriginalOffset("screenFont"), glyph, SCREEN_GLYPH_BYTES, _row), _ink, _paper);
 }
 
 // Row _row of the small letter _letter ('A' is 0), shifted right _shift pixels into a word of the space-view
 // buffer, in memory order: the font holds each row big-endian.
 [[nodiscard]] std::uint16_t SmallGlyphRow(const GameState& _state, std::uint8_t _letter, std::uint16_t _row, std::uint8_t _shift)
 {
-  const std::uint16_t shifted = ShiftLeft(FontWord(_state, _state.Data().constants.smallFont, _letter, SMALL_GLYPH_BYTES, _row), _shift);
+  const std::uint16_t shifted = ShiftLeft(FontWord(_state, OriginalOffset("smallFont"), _letter, SMALL_GLYPH_BYTES, _row), _shift);
   return Swap(shifted);
 }
 
@@ -140,12 +139,12 @@ std::uint16_t StoreWords(GameState& _state, std::uint16_t _segment, std::uint16_
 // A loop of byte moves ShowShipIdentity makes (MOV AH,[BX] or MOV AL,[BX], INC BX, the byte to [DI], INC DI, LOOP): the
 // first _to.size() bytes of a name of shipTypeNames, as many as the loop's count, into _to. The name holds one more byte
 // than the field it is copied into, which the loop never moves.
-template <std::size_t Bytes> void CopyNameInto(const Counted<std::uint8_t> (&_name)[Bytes], std::span<Counted<std::uint8_t>> _to)
+template <std::size_t Bytes> void CopyNameInto(const std::array<std::uint8_t, Bytes>& _name, std::span<Counted<std::uint8_t>> _to)
 {
   static_assert(Bytes > 0);
   for (std::size_t moved = 0; moved < _to.size() && moved < Bytes; ++moved)
   {
-    _to[moved] = std::uint8_t{_name[moved]};
+    _to[moved] = _name[moved];
   }
 }
 
@@ -257,13 +256,12 @@ std::uint16_t DrawScreenString(GameState& _state, std::string_view _text, std::u
   return cell;
 }
 
-std::uint16_t FormatDecimal5(GameState& _state, std::uint16_t _value, std::span<Counted<std::uint8_t>> _digits)
+std::uint16_t FormatDecimal5(std::uint16_t _value, std::span<Counted<std::uint8_t>> _digits)
 {
   std::uint16_t value = _value;
   std::size_t digit = 0;
-  for (const Counted<std::uint16_t>& divisorWord : _state.Data().constants.decimalDivisors16)
+  for (const std::uint16_t divisor : DECIMAL_DIVISORS_16)
   {
-    const std::uint16_t divisor = divisorWord;
     if (divisor == 1)
     {
       break;
@@ -328,7 +326,7 @@ void FormatCredits(GameState& _state)
   Counted<std::uint8_t>(&text)[sizeof(commander.creditBalanceText)] = commander.creditBalanceText;
   std::uint32_t value = _state.WordOf(commander.creditsTenths) | (std::uint32_t{commander.creditsTenths.data75F5} << 16);
   std::size_t digit = 0;
-  for (const Counted<std::uint8_t>(&divisorBytes)[4] : _state.Data().constants.decimalDivisors32)
+  for (const std::array<std::uint8_t, 4>& divisorBytes : DECIMAL_DIVISORS_32)
   {
     const auto low = static_cast<std::uint16_t>(divisorBytes[0] | (divisorBytes[1] << 8));
     const auto high = static_cast<std::uint16_t>(divisorBytes[2] | (divisorBytes[3] << 8));
@@ -415,7 +413,7 @@ void ShowBountyMessage(GameState& _state, std::uint16_t _tenths)
 {
   const std::span<Counted<std::uint8_t>> digits =
     std::span<Counted<std::uint8_t>>(_state.Data().text.bountyText).subspan(BOUNTY_DIGITS_OFFSET, NUMBER_BYTES);
-  FormatDecimal5(_state, _tenths, digits);
+  FormatDecimal5(_tenths, digits);
   BlankLeadingZeros(digits, TENTHS_BLANKS);
   // The tenths digit moves right, and the point takes its place, as one word.
   const std::uint8_t tenths = digits[4];
@@ -443,12 +441,12 @@ void ShowShipIdentity(GameState& _state, std::uint8_t _type, std::uint8_t _class
   }
   // The class's name, then the type's, a byte at a time, the class's seven bytes of its eight.
   const std::span<Counted<std::uint8_t>> identity(_state.Data().text.shipIdentityText);
-  const Counted<std::uint8_t>(&className)[8] = _state.Data().constants.shipClassNames[shipClass];
+  const std::array<std::uint8_t, 8>& className = SHIP_CLASS_NAMES[shipClass];
   for (std::size_t moved = 0; moved < CLASS_NAME_BYTES; ++moved)
   {
     identity[CLASS_TEXT_OFFSET + moved] = std::uint8_t{className[moved]};
   }
-  CopyNameInto(_state.Data().constants.shipTypeNames[_type], identity.subspan(TYPE_TEXT_OFFSET, TYPE_NAME_BYTES));
+  CopyNameInto(SHIP_TYPE_NAMES[_type], identity.subspan(TYPE_TEXT_OFFSET, TYPE_NAME_BYTES));
   _state.Data().messages.messagePointer = Message::ShipIdentity;
   _state.Data().messages.messageFrames = IDENTITY_FRAMES;
 }
@@ -508,7 +506,7 @@ std::uint16_t PrintCountedTextLines(GameState& _state, const Counted<std::uint8_
 void FormatTenths(GameState& _state, std::uint16_t _tenths)
 {
   const std::span<Counted<std::uint8_t>> digits = _state.BytesFrom(_state.Data().menus.priceText, NUMBER_BYTES);
-  FormatDecimal5(_state, _tenths, digits);
+  FormatDecimal5(_tenths, digits);
   BlankLeadingZeros(digits, TENTHS_BLANKS);
   // The tenths digit moves right, and the point takes its place, a byte at a time.
   _state.Data().menus.priceText.data8041 = std::uint8_t{_state.Data().menus.priceText.data8040};
@@ -573,7 +571,7 @@ void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<Counted<std:
       TypedLineTurn(_hardware, INPUT_COUNT_BLINK, length);
       continue;
     }
-    std::uint8_t character = _state.Data().constants.scanCodeToAscii[key.scanCode];
+    std::uint8_t character = SCAN_CODE_TO_ASCII[key.scanCode];
     if (character == NO_CHARACTER)
     {
       TypedLineTurn(_hardware, INPUT_COUNT_BLINK, length);

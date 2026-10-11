@@ -6,8 +6,10 @@
 #include "Combat.h"
 #include "Maths.h"
 #include "SaveLoad.h"
+#include "SharedTables.h"
 #include "StartUp.h"
 #include "Timer.h"
+#include "VideoTables.h"
 
 #include <initializer_list>
 #include <utility>
@@ -140,9 +142,9 @@ constexpr std::size_t CIRCLE_POINT_BYTES = 4;
 
 // MOV BX,colorFillBytes / ADD BL,[drawColor]: the ADD carries nothing into BH, so a colour past the page's end would wrap to its
 // start. The offset the original reads.
-[[nodiscard]] std::uint16_t ColorFillByteOffset(const GameState& _state, std::uint8_t _color) noexcept
+[[nodiscard]] std::uint16_t ColorFillByteOffset(std::uint8_t _color) noexcept
 {
-  const std::uint16_t table = _state.OffsetOf(_state.Data().constants.colorFillBytes);
+  const std::uint16_t table = OriginalOffset("colorFillBytes");
   return Join(High(table), static_cast<std::uint8_t>(Low(table) + _color));
 }
 
@@ -458,7 +460,7 @@ bool DrawHalvedRows(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromDo
 // fringe while sunFringeMask is set. The DX the fringe leaves is dead: DiscRowSpan's first instruction loads DX.
 [[nodiscard]] std::uint16_t DiscHalfWidth(GameState& _state, std::size_t _profile)
 {
-  auto profile = static_cast<std::uint8_t>(_state.BytesFrom(_state.Data().constants.circleProfile, _profile + 1)[_profile] + 1);
+  auto profile = static_cast<std::uint8_t>(CIRCLE_PROFILE[_profile] + 1);
   if (profile == 0)
   {
     --profile; // INC AL that stops at FFh
@@ -623,8 +625,7 @@ struct SmallDiscPlace
 void DrawSmallDisc(GameState& _state, const SmallDiscPlace& _place)
 {
   std::uint16_t at = static_cast<std::uint16_t>(Join(Low(_place.row), Low(_place.x)) >> 2);
-  const std::span<const Counted<std::uint8_t>> sprite =
-    _state.BytesFrom(_state.Data().constants.smallDiscSprites, _place.sprite + _place.rows);
+  const std::span<const std::uint8_t> sprite(SMALL_DISC_SPRITES);
   std::size_t row = _place.sprite;
   std::uint8_t clip = _place.clip;
   // The sprite's shift into its first byte, 2 bits a pixel.
@@ -668,9 +669,9 @@ void DrawSmallDisc(GameState& _state, const SmallDiscPlace& _place)
 // MOV BP,DX / AND BP,3 / SHL BP,1, then MOV AX,[BP] for a span's left end or [BP+8] for its right: triangleEdgeMasks' word for
 // an end at x = _x, its fill bits in the low byte and the bits it keeps in the high. BP addresses the stack segment, and
 // SS:0000 is DS:AD60, where the table is.
-[[nodiscard]] std::uint16_t TriangleEdgeMask(const GameState& _state, std::uint8_t _x, bool _right) noexcept
+[[nodiscard]] std::uint16_t TriangleEdgeMask(std::uint8_t _x, bool _right) noexcept
 {
-  return _state.Data().constants.triangleEdgeMasks[(_right ? 4u : 0u) + (_x & 3u)];
+  return TRIANGLE_EDGE_MASKS[(_right ? 4u : 0u) + (_x & 3u)];
 }
 
 // The spans a triangle's walk pushes for DrawStackedSpansFromRow, each DL the left x and DH the right, in the order the original
@@ -1414,7 +1415,7 @@ void PlotPixel(GameState& _state, std::uint8_t _x, std::uint8_t _row)
 {
   // The pixel's two bits in the colour's fill byte, kept from the byte at row * 64 + x / 4 by the AND, set by the OR.
   const std::uint8_t pixel = RotateRight(LEFT_PIXEL_MASK, static_cast<unsigned>((_x & 3) << 1));
-  const auto color = static_cast<std::uint8_t>(pixel & _state.Byte(ColorFillByteOffset(_state, _state.Data().drawing.drawColor)));
+  const auto color = static_cast<std::uint8_t>(pixel & _state.Byte(ColorFillByteOffset(_state.Data().drawing.drawColor)));
   Plot(_state, static_cast<std::uint16_t>(Join(_row, _x) >> 2), static_cast<std::uint8_t>(~pixel), color);
 }
 
@@ -1538,7 +1539,7 @@ bool DrawLine(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromRow, std
   }
   line.bh = line.al;
   line.di = static_cast<std::uint16_t>(Join(row, x) >> 2);
-  line.al = _state.Byte(ColorFillByteOffset(_state, _state.Data().drawing.drawColor));
+  line.al = _state.Byte(ColorFillByteOffset(_state.Data().drawing.drawColor));
   line.ah = line.al;
   // DL the pixel's color in place, DH the mask that keeps the rest of its byte.
   const auto shift = static_cast<std::uint8_t>((x & 3) << 1);
@@ -1573,7 +1574,7 @@ bool DrawLine(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromRow, std
 
 void DrawDisc(GameState& _state, std::uint16_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow, bool _backward)
 {
-  _state.Data().video.discFillByte = std::uint8_t{_state.Data().constants.colorFillBytes[_state.Data().drawing.drawColor & 3u]};
+  _state.Data().video.discFillByte = std::uint8_t{COLOR_FILL_BYTES[_state.Data().drawing.drawColor & 3u]};
   if (_radius < SMALL_DISC_RADIUS)
   {
     const SmallDiscPlace place = PlaceSmallDisc(Low(_radius), Signed(_centerX), Signed(_centerRow));
@@ -1631,8 +1632,8 @@ void FillSpan(GameState& _state, std::uint8_t _left, std::uint8_t _right, std::u
   const std::uint8_t fill = _state.Data().video.discFillByte;
   const auto leftByte = static_cast<std::uint8_t>(_left >> 2);
   const auto rightByte = static_cast<std::uint8_t>(_right >> 2);
-  const std::uint16_t leftMask = _state.Data().constants.spanLeftMasks[_left & 3u];
-  const std::uint16_t rightMask = _state.Data().constants.spanRightMasks[_right & 3u];
+  const std::uint16_t leftMask = SPAN_LEFT_MASKS[_left & 3u];
+  const std::uint16_t rightMask = SPAN_RIGHT_MASKS[_right & 3u];
   const auto bytes = static_cast<std::uint8_t>(rightByte - leftByte);
   if (bytes == 0)
   {
@@ -1666,7 +1667,7 @@ bool DrawCircle(GameState& _state, std::uint8_t _radius, std::uint16_t _centerX,
     _state.BytesFrom(_state.Data().video.circlePoints, std::size_t{CIRCLE_CHORDS} * CIRCLE_POINT_BYTES);
   // PUSH CX / PUSH DX keep the centre. The first octant, circleOctant's eight bytes scaled by the radius / 128 (MUL BL / SHL AX,1 /
   // MOV AL,AH), a byte of 0 staying 0, as four points of words.
-  const std::span<const Counted<std::uint8_t>> octant = _state.BytesFrom(_state.Data().constants.circleOctant, 8);
+  const std::span<const std::uint8_t> octant(CIRCLE_OCTANT);
   std::size_t point = 0;
   for (std::size_t octantByte = 0; octantByte != 8; ++octantByte)
   {
@@ -1733,11 +1734,11 @@ void FillTriangleSpan(GameState& _state, std::uint16_t _row, std::uint8_t _left,
   const auto leftByte = static_cast<std::uint8_t>(_left >> 2);
   auto at = static_cast<std::uint16_t>(_row + leftByte);
   const auto bytes = static_cast<std::uint8_t>((_right >> 2) - leftByte);
-  const std::uint16_t leftMask = TriangleEdgeMask(_state, _left, false);
+  const std::uint16_t leftMask = TriangleEdgeMask(_left, false);
   if (bytes == 0)
   {
     // FillTriangleSpanOneByte (CS:1BD5): both edges in one byte.
-    const std::uint16_t rightMask = TriangleEdgeMask(_state, _right, true);
+    const std::uint16_t rightMask = TriangleEdgeMask(_right, true);
     Plot(_state, at, static_cast<std::uint8_t>(High(leftMask) | High(rightMask)),
          static_cast<std::uint8_t>(Low(leftMask) & Low(rightMask) & _fill));
     return;
@@ -1763,7 +1764,7 @@ void FillTriangleSpan(GameState& _state, std::uint16_t _row, std::uint8_t _left,
       at = StoreByte(_state, _state.DataSegment(), at, _fill, StringStep(_backward, 1));
     }
   }
-  const std::uint16_t rightMask = TriangleEdgeMask(_state, _right, true);
+  const std::uint16_t rightMask = TriangleEdgeMask(_right, true);
   Plot(_state, at, High(rightMask), static_cast<std::uint8_t>(Low(rightMask) & _fill));
 }
 
@@ -1882,7 +1883,7 @@ ScreenChange ShowCockpitScreen(GameState& _state, Hardware& _hardware, bool _bac
   _state.Data().drawing.screenLayout = 0;
   // PUSH DS / MOV DS,<cockpitImage's segment>, then from its start both banks, after CLD (REP MOVSW): the even lines' 8000 bytes
   // and the odd lines' after them.
-  const std::span<const Counted<std::uint8_t>> cockpit(_state.Data().constants.cockpitImage);
+  const std::span<const std::uint8_t> cockpit(COCKPIT_IMAGE);
   for (std::uint16_t word = 0; word < CGA_BANK_WORDS; ++word)
   {
     _state.SetVideoWord(static_cast<std::uint16_t>(word * 2), WordIn(cockpit, std::size_t{word} * 2));

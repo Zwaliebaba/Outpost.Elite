@@ -291,7 +291,7 @@ void ShowCargoMessage(GameState& _state, std::string_view _text, std::uint8_t _s
 
 ScreenKey ShowMarketPricesScreen(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _countIfNone)
 {
-  const std::string_view title = DrawDockedFrame(_state, _hardware, _state.Data().constants.marketPricesFrame, _backward);
+  const std::string_view title = DrawDockedFrame(_state, _hardware, MARKET_PRICES_FRAME, _backward);
   // The system's name, cut for good at its first space after the first letter; each turn of the scan carries its place, SI.
   const std::span<Counted<std::uint8_t>> name(_state.Data().commander.currentSystemName);
   for (std::size_t letter = 1;; ++letter)
@@ -405,19 +405,18 @@ void ComputeMarketPrices(GameState& _state)
   for (std::uint16_t commodity = 0; commodity < COMMODITY_COUNT; ++commodity)
   {
     const std::uint16_t economyFactor = _state.Data().market.data8C10;
-    std::uint16_t price = ScaledProduct(UNIT_FACTOR, _state.Data().constants.economyPriceFactors[economyFactor]);
+    std::uint16_t price = ScaledProduct(UNIT_FACTOR, ECONOMY_PRICE_FACTORS[economyFactor]);
     _state.Data().market.data8C10 = static_cast<std::uint16_t>(economyFactor + PRICE_FACTOR_ROW_WORDS);
     const std::uint16_t governmentFactor = _state.Data().market.data8C12;
-    price = ScaledProduct(price, _state.Data().constants.governmentPriceFactors[governmentFactor]);
+    price = ScaledProduct(price, GOVERNMENT_PRICE_FACTORS[governmentFactor]);
     _state.Data().market.data8C12 = static_cast<std::uint16_t>(governmentFactor + PRICE_FACTOR_ROW_WORDS);
     price = ScaledProduct(price, UNIT_FACTOR);
-    price = ScaledProduct(price, _state.Data().constants.productBasePrices[commodity]);
+    price = ScaledProduct(price, PRODUCT_BASE_PRICES[commodity]);
 
     // 256 + the price adjustment + the tech-level factor times marketTechLevel, both signed bytes.
     const std::uint16_t recordIndex = _state.Data().market.data8C14;
-    const std::span<Counted<std::uint8_t>> record =
-      _state.BytesFrom(_state.Data().constants.productTradeRecords, sizeof(ConstantState::ProductTradeRecords))
-        .subspan(recordIndex * TRADE_RECORD_BYTES, TRADE_RECORD_BYTES);
+    const std::span<const std::uint8_t> record =
+      std::span<const std::uint8_t>(PRODUCT_TRADE_RECORDS).subspan(recordIndex * TRADE_RECORD_BYTES, TRADE_RECORD_BYTES);
     const auto techFactor = static_cast<std::int8_t>(std::uint8_t{record[1]});
     const auto techTerm = static_cast<std::uint16_t>(techFactor * static_cast<std::int8_t>(_state.Data().market.marketTechLevel));
     const auto adjustment = static_cast<std::int8_t>(std::uint8_t{record[0]});
@@ -509,7 +508,7 @@ void PrintCargoQuantity(GameState& _state, std::uint16_t _quantity)
   std::string_view text = NO_QUANTITY_TEXT;
   if (_quantity != 0)
   {
-    FormatDecimal5(_state, _quantity, _state.Data().menus.quantityText);
+    FormatDecimal5(_quantity, _state.Data().menus.quantityText);
     BlankLeadingZeros(_state.Data().menus.quantityText, QUANTITY_DIGITS_BLANKED);
     text = _state.TextAt(_state.Data().menus.quantityText);
   }
@@ -584,8 +583,7 @@ void AddContrabandPenalty(GameState& _state)
   // The row's trade record, three bytes from data8BDD, in 8 bits: its third byte is the commodity's legal penalty.
   const auto index = static_cast<std::uint8_t>(_state.Data().menus.menuSelectedRow - 1);
   const auto record = static_cast<std::uint8_t>(index * 2 + index);
-  const std::span<Counted<std::uint8_t>> records =
-    _state.BytesFrom(_state.Data().constants.productTradeRecords, sizeof(ConstantState::ProductTradeRecords));
+  const std::span<const std::uint8_t> records(PRODUCT_TRADE_RECORDS);
   const auto status = static_cast<std::uint8_t>(records[std::size_t{record} + LEGAL_PENALTY] + _state.Data().commander.legalStatus);
   if (status != 0)
   {

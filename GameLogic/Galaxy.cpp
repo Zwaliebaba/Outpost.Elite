@@ -10,6 +10,7 @@
 
 #include <initializer_list>
 #include <optional>
+#include <utility>
 
 namespace Elite
 {
@@ -216,6 +217,15 @@ void CopyBytes(std::span<const Counted<std::uint8_t>> _from, std::span<Counted<s
   for (std::size_t done = 0; done < _from.size(); ++done)
   {
     _to[done] = std::uint8_t{_from[done]};
+  }
+}
+
+// CopyBytes from a constant's table (D38).
+void CopyBytes(std::span<const std::uint8_t> _from, std::span<Counted<std::uint8_t>> _to)
+{
+  for (std::size_t done = 0; done < _from.size(); ++done)
+  {
+    _to[done] = _from[done];
   }
 }
 
@@ -621,10 +631,9 @@ struct ByteComparison
 // between the other two parts.
 void ShowNotOnMap(GameState& _state, std::uint16_t _segment)
 {
-  const std::uint16_t prefixEnd =
-    DrawScreenString(_state, _state.TextAt(_state.Data().constants.findErrorPrefix), INK_3, _segment, CHART_TEXT_LINE_2);
+  const std::uint16_t prefixEnd = DrawScreenString(_state, FIND_ERROR_PREFIX, INK_3, _segment, CHART_TEXT_LINE_2);
   const std::uint16_t nameEnd = DrawScreenString(_state, _state.TextAt(_state.Data().galaxy.findInputEcho), INK_2, _segment, prefixEnd);
-  (void)DrawScreenString(_state, _state.TextAt(_state.Data().constants.findErrorSuffix), INK_3, _segment, nameEnd);
+  (void)DrawScreenString(_state, FIND_ERROR_SUFFIX, INK_3, _segment, nameEnd);
 }
 
 // FindNearestSystem's search (CS:1292): what it leaves in BP, the count its loop had left at the nearest system on the current
@@ -667,7 +676,7 @@ std::uint16_t SelectNearestSystem(GameState& _state, std::uint16_t _countIfNone)
   const std::uint16_t countLeft = SearchNearestSystem(_state, _countIfNone);
   ComputeDistanceToSystem(_state);
   const std::span<Counted<std::uint8_t>> digits = _state.BytesFrom(_state.Data().galaxy.distanceDigits, DECIMAL_DIGITS);
-  FormatDecimal5(_state, _state.Data().commander.selectedDistanceTenthsLy, digits);
+  FormatDecimal5(_state.Data().commander.selectedDistanceTenthsLy, digits);
   BlankLeadingZeros(digits, DISTANCE_ZEROS_BLANKED);
   return countLeft;
 }
@@ -693,7 +702,7 @@ ScreenKey ShowShortRangeChart(GameState& _state, Hardware& _hardware, bool _back
 {
   _state.Data().drawing.sunFringeMask = 0;
   const std::uint16_t segment = ChartSegment(DrawChartFrame(_state, _hardware, _backward), _segment);
-  DrawChartTitle(_state, _state.TextAt(_state.Data().constants.shortRangeChartTitle), segment);
+  DrawChartTitle(_state, SHORT_RANGE_CHART_TITLE, segment);
   _state.Data().commander.chartCursorX = std::uint8_t{_state.Data().commander.shortRangeCursorX};
   _state.Data().commander.chartCursorY = std::uint8_t{_state.Data().commander.shortRangeCursorY};
   _state.Data().commander.chartIsShortRange = 1;
@@ -766,10 +775,11 @@ void TwistSystemSeeds(GameState& _state)
 
 void LoadGalaxySeeds(GameState& _state)
 {
-  // The table offset is figured in BL, so it wraps at a byte.
+  // The table offset is figured in BL, so it wraps at a byte: the ninth galaxy's seeds are the six bytes after the table. Read
+  // from the reference's image at the original's address, which change 3b of D38 converts to the table.
   const auto entry = static_cast<std::uint8_t>(_state.Data().commander.galaxyNumber * GALAXY_SEED_BYTES);
   const std::span<const Counted<std::uint8_t>> seeds =
-    _state.BytesFrom(_state.Data().constants.galaxySeeds, std::size_t{entry} + GALAXY_SEED_BYTES).subspan(entry);
+    std::as_const(_state).BytesAt(static_cast<std::uint16_t>(OriginalOffset("galaxySeeds") + entry), GALAXY_SEED_BYTES);
   _state.Data().galaxy.systemSeed0 = WordIn(seeds, 0);
   _state.Data().galaxy.systemSeed1 = WordIn(seeds, 2);
   _state.Data().galaxy.systemSeed2 = WordIn(seeds, 4);
@@ -900,7 +910,7 @@ void ShowNearestSystemDistance(GameState& _state, std::uint16_t _countIfNone, st
   DrawScreenString(_state, _state.TextAt(_state.Data().galaxy.distanceText), INK_3, _segment, CHART_TEXT_LINE_2);
   GenerateSystemName(_state);
   DrawScreenString(_state, _state.TextAt(_state.Data().commander.selectedSystemName), INK_2, _segment, CHART_TEXT_LINE_1);
-  DrawScreenString(_state, _state.TextAt(_state.Data().constants.nameLinePadding), INK_2, _segment, CHART_NAME_PADDING);
+  DrawScreenString(_state, NAME_LINE_PADDING, INK_2, _segment, CHART_NAME_PADDING);
 }
 
 void LoadSystemSeeds(GameState& _state, std::uint8_t _system)
@@ -934,7 +944,7 @@ std::uint8_t GenerateSystemName(GameState& _state)
   {
     const std::uint8_t pick = _state.Data().galaxy.systemSeed2Bytes.systemSeed2High;
     TwistSystemSeeds(_state);
-    const Counted<std::uint8_t>(&letters)[2] = _state.Data().constants.systemNameDigrams[pick & 0x1F];
+    const std::array<std::uint8_t, 2>& letters = SYSTEM_NAME_DIGRAMS[pick & 0x1F];
     const std::uint16_t digram = MakeWord(letters[0], letters[1]);
     if (pair + 1 == SYSTEM_NAME_PAIRS && !fourPairs)
     {
@@ -960,8 +970,8 @@ std::uint8_t GenerateSystemName(GameState& _state)
 void FindSystemByName(GameState& _state, Hardware& _hardware, std::uint16_t _segment, std::uint16_t _countIfNone, bool _backward)
 {
   LoadGalaxySeeds(_state);
-  DrawScreenString(_state, _state.TextAt(_state.Data().constants.findPrompt), INK_1, _segment, CHART_TEXT_LINE_1);
-  DrawScreenString(_state, _state.TextAt(_state.Data().constants.blankChartLine), INK_1, _segment, CHART_TEXT_LINE_2);
+  DrawScreenString(_state, FIND_PROMPT, INK_1, _segment, CHART_TEXT_LINE_1);
+  DrawScreenString(_state, BLANK_CHART_LINE, INK_1, _segment, CHART_TEXT_LINE_2);
   const std::span<Counted<std::uint8_t>> typed(_state.Data().galaxy.findInput);
   for (std::size_t word = 0; word < SYSTEM_NAME_BYTES; word += 2)
   {
@@ -1149,14 +1159,13 @@ bool ChartItemOverlaps(const GameState& _state, std::size_t _item, ChartSpan _x,
 
 void ClearChartTextLines(GameState& _state, std::uint16_t _ink, std::uint16_t _segment)
 {
-  DrawScreenString(_state, _state.TextAt(_state.Data().constants.blankChartLine), _ink, _segment, CHART_TEXT_LINE_1);
-  DrawScreenString(_state, _state.TextAt(_state.Data().constants.blankChartLine), _ink, _segment, CHART_TEXT_LINE_2);
+  DrawScreenString(_state, BLANK_CHART_LINE, _ink, _segment, CHART_TEXT_LINE_1);
+  DrawScreenString(_state, BLANK_CHART_LINE, _ink, _segment, CHART_TEXT_LINE_2);
 }
 
 ScreenKey ShowSystemDataScreen(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _countIfNone)
 {
-  const std::uint16_t titleEnd =
-    PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, _state.Data().constants.systemDataFrame, _backward), DATA_TITLE);
+  const std::uint16_t titleEnd = PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, SYSTEM_DATA_FRAME, _backward), DATA_TITLE);
   TerminateSelectedSystemName(_state);
   PrintTextModeString(_state, _state.TextAt(_state.Data().commander.selectedSystemName), titleEnd);
   std::uint16_t printed = PrintTextModeString(_state, DISTANCE_LABEL_TEXT, DISTANCE_ROW);
@@ -1183,7 +1192,7 @@ ScreenKey ShowSystemDataScreen(GameState& _state, Hardware& _hardware, bool _bac
 
   // The population in tenths of a billion, its last two digits about a point.
   const std::span<Counted<std::uint8_t>> population = _state.BytesAt(POPULATION_DIGITS, DECIMAL_DIGITS);
-  FormatDecimal5(_state, _state.Data().commander.selectedPopulationTenthsBillion, population);
+  FormatDecimal5(_state.Data().commander.selectedPopulationTenthsBillion, population);
   printed = PrintTextModeString(_state, POPULATION_LABEL_TEXT, POPULATION_ROW);
   population[POPULATION_SHOWN] = std::uint8_t{population[POPULATION_SHOWN + 1]};
   population[POPULATION_SHOWN + 1] = DECIMAL_POINT;
@@ -1206,7 +1215,7 @@ ScreenKey ShowSystemDataScreen(GameState& _state, Hardware& _hardware, bool _bac
   }
 
   // The productivity, its leading zero blanked a column left; the radius, its leading digit blanked.
-  FormatDecimal5(_state, _state.Data().commander.selectedProductivityMillionCredits,
+  FormatDecimal5(_state.Data().commander.selectedProductivityMillionCredits,
                  _state.BytesFrom(_state.Data().galaxy.data7EA3, DECIMAL_DIGITS));
   cell = PrintTextModeString(_state, PRODUCTIVITY_LABEL_TEXT, PRODUCTIVITY_ROW);
   if (_state.Data().galaxy.data7EA3 == '0')
@@ -1215,7 +1224,7 @@ ScreenKey ShowSystemDataScreen(GameState& _state, Hardware& _hardware, bool _bac
     cell = static_cast<std::uint16_t>(cell - 2);
   }
   PrintTextModeString(_state, _state.TextAt(_state.Data().galaxy.data7EA3), cell);
-  FormatDecimal5(_state, _state.Data().commander.selectedRadiusKm, _state.BytesFrom(_state.Data().galaxy.data7EBB, DECIMAL_DIGITS));
+  FormatDecimal5(_state.Data().commander.selectedRadiusKm, _state.BytesFrom(_state.Data().galaxy.data7EBB, DECIMAL_DIGITS));
   _state.Data().galaxy.data7EBB = SPACE;
   PrintTextModeString(_state, _state.TextAtOffset(RADIUS_TEXT), RADIUS_ROW);
   ShowSystemDescription(_state, _backward);
@@ -1259,7 +1268,7 @@ void ShowSystemDescription(GameState& _state, bool _backward)
     _state.SetWord(word, 0);
     word = Offset(word, WordStep(_backward));
   }
-  const std::uint16_t expanded = ExpandDescriptionText(_state, _state.TextAt(_state.Data().constants.descriptionTemplate), buffer);
+  const std::uint16_t expanded = ExpandDescriptionText(_state, DESCRIPTION_TEMPLATE, buffer);
   _state.SetByte(expanded, 0);
 
   // Word-wrapped at the last space within 36 characters, a text row at a time: SI the line and DI its end.
@@ -1341,7 +1350,7 @@ std::uint16_t InsertSystemAdjective(GameState& _state, std::uint16_t _output)
   {
     --suffix;
   }
-  CopyBytes(_state.Data().constants.adjectiveSuffix, name.subspan(suffix, ADJECTIVE_SUFFIX_BYTES));
+  CopyBytes(ADJECTIVE_SUFFIX, name.subspan(suffix, ADJECTIVE_SUFFIX_BYTES));
   return ExpandDescriptionText(_state, _state.TextAt(_state.Data().galaxy.descriptionNameBuffer), _output);
 }
 

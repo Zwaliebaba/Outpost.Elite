@@ -536,6 +536,12 @@ private:
   return static_cast<std::uint16_t>(_bytes[_at] | (_bytes[_at + 1] << 8));
 }
 
+/// The little-endian word at _bytes[_at] and _bytes[_at + 1] of a constant's table (D38).
+[[nodiscard]] constexpr std::uint16_t WordIn(std::span<const std::uint8_t> _bytes, std::size_t _at) noexcept
+{
+  return static_cast<std::uint16_t>(_bytes[_at] | (_bytes[_at + 1] << 8));
+}
+
 /// _value into _bytes[_at] and _bytes[_at + 1], low byte first, each counted when it changes, as GameState::SetWord writes a
 /// word.
 inline void SetWordIn(std::span<Counted<std::uint8_t>> _bytes, std::size_t _at, std::uint16_t _value) noexcept

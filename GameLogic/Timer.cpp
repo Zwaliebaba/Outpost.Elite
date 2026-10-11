@@ -4,6 +4,7 @@
 
 #include "Arithmetic.h"
 #include "Sound.h"
+#include "TimerTables.h"
 
 namespace Elite
 {
@@ -81,8 +82,8 @@ void TickMusic(GameState& _state, Hardware& _hardware)
   // entry restarts it.
   const std::uint16_t next = _state.Data().audio.musicPointer;
   const std::size_t entry = std::size_t{next} * 2;
-  const std::uint8_t note = _state.Data().constants.titleTune[entry];
-  const std::uint8_t beats = _state.Data().constants.titleTune[entry + 1];
+  const std::uint8_t note = TITLE_TUNE[entry];
+  const std::uint8_t beats = TITLE_TUNE[entry + 1];
   const auto ticks = static_cast<std::uint16_t>(NOTE_TICKS_PER_BEAT * beats);
   if (note == TUNE_RESTART)
   {
@@ -109,7 +110,7 @@ void TickMusic(GameState& _state, Hardware& _hardware)
       }
       _state.Data().audio.noteTicksLeft = sounding;
       const auto index = static_cast<std::uint8_t>(pitch - NOTE_BASE);
-      _hardware.SetToneDivisor(_state.Data().constants.notePeriods[index]);
+      _hardware.SetToneDivisor(NOTE_PERIODS[index]);
       return;
     }
   }

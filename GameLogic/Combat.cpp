@@ -4,6 +4,7 @@
 
 #include "Ai.h"
 #include "Arithmetic.h"
+#include "CombatTables.h"
 #include "Docking.h"
 #include "Market.h"
 #include "Maths.h"
@@ -373,7 +374,7 @@ Explosion DropCargo(GameState& _state, const SpaceObject& _object, bool _backwar
     const SpaceObject& copied = _state.Slot(from);
     const std::uint8_t flags = copied.flags;
     CopyObject(_state, copied, barrel, _backward);
-    InitCargoBarrel(_state, barrel);
+    InitCargoBarrel(barrel);
     barrel.flags = FLAG_RESTING;
     barrel.flags = static_cast<std::uint8_t>(barrel.flags | ((flags & FLAG_DEVICE) << 1));
     const std::uint16_t heading = NextRandom(_state);
@@ -485,7 +486,7 @@ void DrawLaserSights(GameState& _state)
   }
   // MOV AH,AL / XOR AL,AL / SHR AX,1: 128 bytes a laser type.
   std::uint16_t row = SIGHTS_OFFSET;
-  const std::span<const Counted<std::uint8_t>> sprites(_state.Data().constants.laserSights);
+  const std::span<const std::uint8_t> sprites(LASER_SIGHTS);
   std::size_t sprite = std::size_t{*laser} << 7;
   for (std::uint16_t rows = SIGHTS_ROWS; rows != 0; --rows)
   {
@@ -506,7 +507,7 @@ std::optional<std::uint8_t> GetViewLaser(const GameState& _state)
 {
   // MOV BL,AH / SHR BX,1 / AND BX,3: the view, which clears CF.
   const auto view = static_cast<std::uint16_t>((High(_state.Data().playerShip.viewAngle) >> 1) & 3);
-  const std::uint8_t mount = _state.Data().constants.viewLaserMount[view];
+  const std::uint8_t mount = VIEW_LASER_MOUNT[view];
   // RCR AL,CL through that clear CF, a bit at a time as the 8088 does: CF is bit CL-1 of laserMountsFitted.
   std::uint8_t fitted = _state.Data().commander.laserMountsFitted;
   bool carry = false;
@@ -722,7 +723,7 @@ CrosshairTarget FindShipInCrosshairs(GameState& _state)
       // AND BX,3Eh / MOV AX,[BX+shipTargetRadius] / XCHG AH,AL / XOR DX,DX / DIV [DI+14h] / MOV BX,AX / ADD BX,2: the radius *
       // 256 / z, plus 2, against |x| * 256 / z and |y| * 256 / z.
       target.bx = static_cast<std::uint16_t>(type & (TYPE_MASK << 1));
-      const std::uint16_t radius = Swap(_state.Data().constants.shipTargetRadius[target.bx / 2]);
+      const std::uint16_t radius = Swap(SHIP_TARGET_RADIUS[target.bx / 2]);
       target.bx = Offset(DivideWord(radius, object.viewZ).quotient, 2);
       if (ScaledWithinRadius(object, &SpaceObject::viewX, target.bx) && ScaledWithinRadius(object, &SpaceObject::viewY, target.bx) &&
           object.viewZ < nearestZ)
@@ -987,7 +988,7 @@ void SpawnPlayerWreckage(GameState& _state)
     barrel.*VELOCITY[axis] = Low(velocity);
     SetCoordinate(barrel, axis, static_cast<std::uint16_t>(axisDrift << 2));
   }
-  InitCargoBarrel(_state, barrel);
+  InitCargoBarrel(barrel);
   const Angles heading = ConvertVectorToAngles(_state, GetObjectPosition(barrel));
   barrel.pitch = heading.first;
   barrel.yaw = heading.second;
@@ -1008,9 +1009,9 @@ std::optional<std::uint8_t> KillPlayer(GameState& _state)
   return StartPlayerDeathSound(_state);
 }
 
-void InitMissile(GameState& _state, SpaceObject& _slot)
+void InitMissile(SpaceObject& _slot)
 {
-  InitObjectFromTemplate(_state, _slot, MISSILE_TEMPLATE, 0);
+  InitObjectFromTemplate(_slot, MISSILE_TEMPLATE, 0);
   _slot.behaviorClass = MISSILE_CLASS;
 }
 
@@ -1055,7 +1056,7 @@ void LaunchPlayerMissile(GameState& _state, std::uint16_t _source, bool _backwar
   }
   SpaceObject& missile = _state.Slot(slot);
   CopyObject(_state, evicted ? _state.Slot(*evicted) : _state.ObjectAt(_source), missile, _backward);
-  InitMissile(_state, missile);
+  InitMissile(missile);
   // 100 along the player's nose: (0, 100, 0) turned by the player's angles, negated.
   (void)SetSinCos(_state, 0, Negate(_state.Data().playerShip.playerPitchAngle));
   (void)SetSinCos(_state, 1, Negate(_state.Data().playerShip.playerYawAngle));
@@ -1093,7 +1094,7 @@ std::optional<SlotIndex> LaunchShipFromObject(GameState& _state, const SpaceObje
   CopyObject(_state, _launcher, ship, _backward);
   if (_kind == MISSILE_LAUNCH)
   {
-    InitMissile(_state, ship);
+    InitMissile(ship);
     (void)MoveObject(_state, ship);
     (void)MoveObject(_state, ship);
     (void)MoveObject(_state, ship);
@@ -1101,7 +1102,7 @@ std::optional<SlotIndex> LaunchShipFromObject(GameState& _state, const SpaceObje
   }
   else
   {
-    InitThargon(_state, ship);
+    InitThargon(ship);
     (void)ComputeVelocity(_state, ship);
     (void)MoveObject(_state, ship);
     (void)MoveObject(_state, ship);

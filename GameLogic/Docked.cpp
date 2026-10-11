@@ -10,6 +10,7 @@
 #include "Market.h"
 #include "SaveLoad.h"
 #include "Scene.h"
+#include "SharedTables.h"
 #include "Ships.h"
 #include "Sound.h"
 #include "StartUp.h"
@@ -129,14 +130,11 @@ constexpr std::uint8_t MISSION_SUPERNOVA = 1;
 constexpr std::uint8_t MISSION_MASK_SHIP = 2;
 constexpr std::uint8_t STAGE_BRIEFED = 1;
 constexpr std::uint8_t STAGE_DEBRIEFED = 2;
-constexpr std::uint16_t SUPERNOVA_BRIEFING_LINES = 5;
 constexpr std::uint8_t REFUGEE_TONNES = 0x14;
 constexpr std::uint8_t REFUGEE_TONNES_LARGE_BAY = 0x23;
 constexpr std::uint16_t SUPERNOVA_DELAY_FRAMES = 0x190;
-constexpr std::uint16_t MASK_BRIEFING_LINES = 9;
 constexpr std::uint8_t MASK_SHIPS = 5;
 constexpr std::uint8_t MASK_SYSTEM_JUMPS = 2;
-constexpr std::uint16_t INVASION_BRIEFING_LINES = 0x0C;
 constexpr std::uint8_t REWARD_DIGIT_FULL_HOLD = 0x30; // '1000 Credits' when all 20 tonnes came
 constexpr std::uint16_t REWARD_FULL_HOLD_TENTHS = 0x2710;
 constexpr std::uint8_t REWARD_DIGIT_OTHERWISE = 0x34; // '1400 Credits'
@@ -196,9 +194,9 @@ std::string_view SkipCashSpaces(const GameState& _state, Hardware& _hardware, st
 }
 
 // _quantity as five digits into _text, up to four of their leading zeros blanked.
-void FormatQuantity(GameState& _state, std::uint16_t _quantity, std::span<Counted<std::uint8_t>> _text)
+void FormatQuantity(std::uint16_t _quantity, std::span<Counted<std::uint8_t>> _text)
 {
-  FormatDecimal5(_state, _quantity, _text);
+  FormatDecimal5(_quantity, _text);
   BlankLeadingZeros(_text, static_cast<std::uint8_t>(QUANTITY_DIGITS_BLANKED));
 }
 
@@ -302,8 +300,7 @@ std::uint16_t RunTitle(GameState& _state, Hardware& _hardware, bool _backward)
   bool backward = false;
   ClearMessageLine(_state, GameState::VIDEO_SEGMENT, backward);
   _state.Data().drawing.textPaperPattern = 0;
-  (void)DrawScreenString(_state, _state.TextAt(_state.Data().constants.eliteTitleText), WHITE_MASK, GameState::VIDEO_SEGMENT,
-                         TITLE_TEXT_CELL);
+  (void)DrawScreenString(_state, ELITE_TITLE_TEXT, WHITE_MASK, GameState::VIDEO_SEGMENT, TITLE_TEXT_CELL);
   SpaceObject& ship = _state.Slot(SlotIndex::Station);
   _state.Data().world.shipSlotCount = TITLE_SHIP_SLOTS;
   // XOR AX,AX, then the yaw, the roll, the low words of x and y, the high bytes of x and y as a word, and z's high byte.
@@ -322,14 +319,14 @@ std::uint16_t RunTitle(GameState& _state, Hardware& _hardware, bool _backward)
     // MOV BL,titleShipType / SHL BL,1 / XOR BH,BH: the type doubled indexes titleShipDistances, and INC BL makes it the type byte,
     // active. The ship stands at the type's own distance, turned a step on each axis: the roll, the yaw, then the pitch.
     const auto doubled = static_cast<std::uint8_t>(_state.Data().docked.titleShipType << 1);
-    const std::uint16_t distance = _state.Data().constants.titleShipDistances[doubled / 2];
+    const std::uint16_t distance = TITLE_SHIP_DISTANCES[doubled / 2];
     ship.type = static_cast<std::uint8_t>(doubled + 1);
     ship.z = distance;
     ship.roll = Offset(ship.roll, TITLE_ROLL_STEP);
     ship.yaw = Offset(ship.yaw, TITLE_YAW_STEP);
     ship.pitch = Offset(ship.pitch, TITLE_PITCH_STEP);
     _state.Data().drawing.textPaperPattern = 0;
-    (void)DrawViewString(_state, _state.TextAt(_state.Data().constants.pressAnyKeyText), PRESS_ANY_KEY_MASK, PRESS_ANY_KEY_PLACE);
+    (void)DrawViewString(_state, PRESS_ANY_KEY_TEXT, PRESS_ANY_KEY_MASK, PRESS_ANY_KEY_PLACE);
     (void)TransformAndDrawObjects(_state, _hardware, backward);
     FinishSpaceViewFrame(_state, _hardware);
     backward = false;
@@ -467,13 +464,13 @@ void FormatFuelLightYears(GameState& _state)
 {
   // MUL AH by 10, then DIV BL by 36, which cannot overflow: at most 2550/36.
   const auto tenths = static_cast<std::uint16_t>(_state.Data().commander.fuel * FUEL_TENTHS_PER_UNIT);
-  FormatDecimal5(_state, static_cast<std::uint8_t>(tenths / FUEL_UNITS_PER_TENTH), _state.BytesAt(FUEL_DIGITS, FUEL_DIGITS_BYTES));
+  FormatDecimal5(static_cast<std::uint8_t>(tenths / FUEL_UNITS_PER_TENTH), _state.BytesAt(FUEL_DIGITS, FUEL_DIGITS_BYTES));
   // The units and the tenths, the last two of the five digits, into the text either side of its point.
   _state.Data().docked.data83F7 = std::uint8_t{_state.Data().docked.data840A};
   _state.Data().docked.data83F9 = std::uint8_t{_state.Data().docked.data840B};
 }
 
-void DrawDockedFrameAt(GameState& _state, Hardware& _hardware, std::span<const Counted<std::uint8_t>> _attributes, bool _backward)
+void DrawDockedFrameAt(GameState& _state, Hardware& _hardware, std::uint8_t _screen, std::uint8_t _frame, bool _backward)
 {
   if ((_state.Data().drawing.screenLayout & TEXT_LAYOUT) == 0)
   {
@@ -481,12 +478,12 @@ void DrawDockedFrameAt(GameState& _state, Hardware& _hardware, std::span<const C
     SetTextMode(_hardware);
   }
   // The screen's attribute, and its background as the border.
-  const auto attribute = static_cast<std::uint8_t>(_attributes[0] & ATTRIBUTE_MASK);
+  const auto attribute = static_cast<std::uint8_t>(_screen & ATTRIBUTE_MASK);
   _state.Data().drawing.textAttribute = attribute;
   _hardware.SetColorSelect(static_cast<std::uint8_t>(attribute >> 4));
   ClearTextScreen(_state, _backward);
 
-  const std::uint8_t frame = _attributes[1];
+  const std::uint8_t frame = _frame;
   for (const std::uint16_t row : {FRAME_TOP_ROW, FRAME_TITLE_ROW, FRAME_BOTTOM_ROW})
   {
     DrawFrameRow(_state, GameState::VIDEO_SEGMENT, row, Join(frame, FRAME_ROW_CHARACTER), _backward);
@@ -497,6 +494,12 @@ void DrawDockedFrameAt(GameState& _state, Hardware& _hardware, std::span<const C
     const auto cell = static_cast<std::uint16_t>(corner.row * TEXT_ROW_BYTES + corner.column * 2);
     _state.SetVideoWord(cell, Join(frame, corner.character));
   }
+}
+
+std::string_view DrawDockedFrame(GameState& _state, Hardware& _hardware, std::string_view _descriptor, bool _backward)
+{
+  DrawDockedFrameAt(_state, _hardware, static_cast<std::uint8_t>(_descriptor[0]), static_cast<std::uint8_t>(_descriptor[1]), _backward);
+  return _descriptor.substr(2);
 }
 
 void DrawFrameSides(GameState& _state, std::uint16_t _segment, std::uint16_t _cell, std::uint16_t _rows, std::uint8_t _attribute)
@@ -551,13 +554,13 @@ void AwardArchangelTitle(GameState& _state)
 {
   for (std::uint16_t letter = 0; letter < RANK_LETTERS; ++letter)
   {
-    _state.Data().commander.commanderRankText[letter] = std::uint8_t{_state.Data().constants.archangelTitle[letter]};
+    _state.Data().commander.commanderRankText[letter] = std::uint8_t{ARCHANGEL_TITLE[letter]};
   }
 }
 
 ScreenKey ShowSellCargoScreen(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  DrawTradeScreenHeader(_state, _hardware, _state.Data().constants.sellCargoFrame, SELL_CARGO_HELP_LINES, _backward);
+  DrawTradeScreenHeader(_state, _hardware, SELL_CARGO_FRAME, SELL_CARGO_HELP_LINES, _backward);
   TradeRow row = FIRST_TRADE_ROW;
   for (;;)
   {
@@ -568,7 +571,7 @@ ScreenKey ShowSellCargoScreen(GameState& _state, Hardware& _hardware, bool _back
     _state.Data().docked.cargoRowPointer = static_cast<std::uint16_t>(product + 1);
     if (held != 0)
     {
-      FormatQuantity(_state, held, _state.Data().menus.quantityText);
+      FormatQuantity(held, _state.Data().menus.quantityText);
       const std::uint16_t quantity = PrintTextModeString(_state, _state.TextAt(_state.Data().menus.quantityText), Offset(price, 2));
       PrintUnit(_state, row, quantity);
     }
@@ -590,7 +593,7 @@ ScreenKey ShowSellCargoScreen(GameState& _state, Hardware& _hardware, bool _back
 ScreenKey ShowBuyCargoScreen(GameState& _state, Hardware& _hardware, bool _backward)
 {
   StartMarketRandom(_state);
-  DrawTradeScreenHeader(_state, _hardware, _state.Data().constants.buyCargoFrame, BUY_CARGO_HELP_LINES, _backward);
+  DrawTradeScreenHeader(_state, _hardware, BUY_CARGO_FRAME, BUY_CARGO_HELP_LINES, _backward);
   TradeRow row = FIRST_TRADE_ROW;
   for (;;)
   {
@@ -612,7 +615,7 @@ ScreenKey ShowBuyCargoScreen(GameState& _state, Hardware& _hardware, bool _backw
     // The quantity into the market's byte of the product's cargoHold entry, and cargoRowPointer on to the next product.
     if (onSale)
     {
-      FormatQuantity(_state, *onSale, _state.Data().menus.quantityText);
+      FormatQuantity(*onSale, _state.Data().menus.quantityText);
       const std::uint16_t quantity = PrintTextModeString(_state, _state.TextAt(_state.Data().menus.quantityText), Offset(price, 2));
       const std::uint16_t product = _state.Data().docked.cargoRowPointer;
       Hold(_state)[std::size_t{product} * 2 + 1] = *onSale;
@@ -675,9 +678,9 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
   // The last threshold is above any kill count (killCount stops at FEh), so the rating is one of the nine.
   const std::uint8_t kills = _state.Data().commander.killCount;
   std::uint16_t rating = 0;
-  while (kills >= _state.Data().constants.ratingThresholds[rating])
+  while (kills >= RATING_THRESHOLDS[rating])
   {
-    _hardware.LoopTurn(STATUS_RATING, {_state.OffsetOf(_state.Data().constants.ratingThresholds[rating]), rating});
+    _hardware.LoopTurn(STATUS_RATING, {static_cast<std::uint16_t>(OriginalOffset("ratingThresholds") + rating), rating});
     ++rating;
   }
   PrintTextModeString(_state, RATING_NAMES[rating], printed);
@@ -725,8 +728,9 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
           {
             break;
           }
-          _hardware.LoopTurn(STATUS_LASER_MOUNT,
-                             {Join(types, mounts), _state.OffsetOf(_state.Data().constants.laserMountNames[mountName]), mount, cell});
+          _hardware.LoopTurn(
+            STATUS_LASER_MOUNT,
+            {Join(types, mounts), static_cast<std::uint16_t>(OriginalOffset("laserMountNames") + 2 * mountName), mount, cell});
         }
         PrintTextModeString(_state, MOUNTS_CLOSE_TEXT, static_cast<std::uint16_t>(cell - 2));
       }
@@ -739,14 +743,14 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
       break;
     }
     _hardware.LoopTurn(STATUS_EQUIPMENT_ROW,
-                       {left, row, _state.OffsetOf(fitted[item]), _state.OffsetOf(_state.Data().constants.equipmentNames[item])});
+                       {left, row, _state.OffsetOf(fitted[item]), static_cast<std::uint16_t>(OriginalOffset("equipmentNames") + 2 * item)});
   }
   return WaitForScreenExitKey(_state, _hardware, SCAN_F9, al, _countIfNone);
 }
 
 ScreenKey ShowInventoryScreen(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _countIfNone)
 {
-  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, _state.Data().constants.inventoryFrame, _backward), TITLE_CELL);
+  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, INVENTORY_FRAME, _backward), TITLE_CELL);
   // The fuel text without the padding the status screen has: 'Fuel: ', cut by a NUL that becomes a space again, then
   // 'n.n Light Years'.
   FormatFuelLightYears(_state);
@@ -786,7 +790,7 @@ ScreenKey ShowInventoryScreen(GameState& _state, Hardware& _hardware, bool _back
       const std::string_view named = TextIn(name);
       const std::uint16_t nameEnd = PrintTextModeString(_state, named, row);
       name[named.size()] = SPACE;
-      FormatQuantity(_state, amount, quantityText);
+      FormatQuantity(amount, quantityText);
       const std::uint16_t quantity = PrintTextModeString(_state, TextIn(quantityText), Offset(nameEnd, 4));
       PrintTextModeString(_state, _state.TextAt(name[named.size()]), quantity);
       row = Offset(row, TEXT_ROW_BYTES);
@@ -805,11 +809,11 @@ ScreenKey ShowInventoryScreen(GameState& _state, Hardware& _hardware, bool _back
 void ShowMissionBriefing(GameState& _state, Hardware& _hardware, bool _backward)
 {
   _state.Data().commander.missionStage = STAGE_BRIEFED;
-  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, _state.Data().constants.emergencyFrame, _backward), TITLE_CELL);
+  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, EMERGENCY_FRAME, _backward), TITLE_CELL);
   const std::uint8_t mission = _state.Data().commander.missionNumber;
   if (mission == MISSION_SUPERNOVA)
   {
-    PrintTextLines(_state, _state.TextAt(_state.Data().constants.supernovaBriefingText), LINE_4, SUPERNOVA_BRIEFING_LINES);
+    PrintTextLines(_state, SUPERNOVA_BRIEFING_TEXT, LINE_4);
     // Y takes the refugees, N refuses; every other key goes back to the GetKey at 6E23, as an empty one does.
     std::uint8_t answer = 0;
     for (;;)
@@ -853,13 +857,13 @@ void ShowMissionBriefing(GameState& _state, Hardware& _hardware, bool _backward)
   }
   if (mission == MISSION_MASK_SHIP)
   {
-    PrintTextLines(_state, _state.TextAt(_state.Data().constants.maskBriefingText), LINE_4, MASK_BRIEFING_LINES);
+    PrintTextLines(_state, MASK_BRIEFING_TEXT, LINE_4);
     WaitForKeyPress(_state, _hardware);
     _state.Data().commander.maskMissionShipsLeft = MASK_SHIPS;
     _state.Data().commander.maskSystemJumps = MASK_SYSTEM_JUMPS;
     return;
   }
-  PrintTextLines(_state, _state.TextAt(_state.Data().constants.invasionBriefingText), LINE_4, INVASION_BRIEFING_LINES);
+  PrintTextLines(_state, INVASION_BRIEFING_TEXT, LINE_4);
   WaitForKeyPress(_state, _hardware);
   _state.Data().commander.thargoidInvasionActive = 1;
   _state.Data().commander.jumpedSinceBriefing = 0;
