@@ -13,7 +13,7 @@ namespace GameLogicTests
 namespace
 {
 
-using Commander = Elite::GameData::CommanderBlock;
+using Commander = Elite::CommanderState;
 
 // A product's cargoHold entry: the units held, then the units on sale.
 constexpr std::size_t HOLD_ENTRY_BYTES = 2;
@@ -30,7 +30,7 @@ void SetCredits(TwinRig& _rig, std::uint32_t _tenths)
   _rig.Both(
     [_tenths](Elite::Platform&, Elite::GameState& _state)
     {
-      Commander::CreditsTenths& credits = _state.Data().commanderBlock.creditsTenths;
+      Commander::CreditsTenths& credits = _state.Data().commander.creditsTenths;
       _state.SetWordOf(credits, static_cast<std::uint16_t>(_tenths));
       credits.data75F5 = static_cast<std::uint16_t>(_tenths >> 16);
     });
@@ -51,7 +51,7 @@ void SetCredits(TwinRig& _rig, std::uint32_t _tenths)
 void SetHold(TwinRig& _rig, std::size_t _index, std::uint8_t _value)
 {
   _rig.Both([_index, _value](Elite::Platform&, Elite::GameState& _state)
-            { _state.BytesFrom(_state.Data().commanderBlock.cargoHold, sizeof(Commander::CargoHold))[_index] = _value; });
+            { _state.BytesFrom(_state.Data().commander.cargoHold, sizeof(Commander::CargoHold))[_index] = _value; });
 }
 
 // B or S on the cargo menu, then the keys _typed names at "Quantity?", separated by spaces, and Return: Replay.h's
@@ -110,9 +110,9 @@ public:
     rig.Play(Trade("b", "2 0") + Trade("b", "1 2"));
     SetHold(rig, Held(16), 0);
     rig.Play(Trade("b", "5") + "key Down; wait 0.2\nkey Down; wait 0.2");
-    SetByte(rig, &Elite::GameData::keyboardPitchRate, 5);
+    SetByte(rig, &Elite::InputState::keyboardPitchRate, 5);
     rig.Play("wait 0.3");
-    SetByte(rig, &Elite::GameData::keyboardPitchRate, 0xFB);
+    SetByte(rig, &Elite::InputState::keyboardPitchRate, 0xFB);
     rig.Play("wait 0.3\ndigest gems\nkey F9; wait 0.5\ndigest left");
   }
 
@@ -147,10 +147,9 @@ public:
       [](Elite::Platform&, Elite::GameState& _state)
       {
         constexpr std::string_view NAME = "LA VE";
-        for (std::size_t index = 0; index < std::size(_state.Data().commanderBlock.currentSystemName); ++index)
+        for (std::size_t index = 0; index < std::size(_state.Data().commander.currentSystemName); ++index)
         {
-          _state.Data().commanderBlock.currentSystemName[index] =
-            index < NAME.size() ? static_cast<std::uint8_t>(NAME[index]) : std::uint8_t{0};
+          _state.Data().commander.currentSystemName[index] = index < NAME.size() ? static_cast<std::uint8_t>(NAME[index]) : std::uint8_t{0};
         }
       });
     rig.Play("key F8; wait 1\nkey F8; wait 0.2\nkey x; wait 0.2\nkey Home; wait 0.2\ndigest prices\nkey F9; wait 0.5\ndigest left");

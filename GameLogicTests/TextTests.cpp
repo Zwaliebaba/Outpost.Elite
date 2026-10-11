@@ -68,7 +68,7 @@ std::uint16_t SpawnAhead(TwinRig& _rig, Spawner _spawner, std::uint8_t _record, 
   for (int draws = 0;; ++draws)
   {
     // NextRandom's next result is the sum of the first two words of the state.
-    const auto next = static_cast<std::uint16_t>(state.Data().commanderBlock.randomState0 + state.Data().commanderBlock.randomState1);
+    const auto next = static_cast<std::uint16_t>(state.Data().commander.randomState0 + state.Data().commander.randomState1);
     if (PickedRecord(_spawner, next) == _record)
       break;
     Assert::IsTrue(draws < MOST_DRAWS, L"the spawner's record comes up");
@@ -132,7 +132,7 @@ std::uint16_t LaunchMissileAtPlayer(TwinRig& _rig, std::uint16_t _launcher)
     {
       name.clear();
       for (std::size_t index = 0; index < IDENTITY_CLASS_BYTES; ++index)
-        name += static_cast<char>(std::uint8_t{_state.Data().shipIdentityText[IDENTITY_CLASS_OFFSET + index]});
+        name += static_cast<char>(std::uint8_t{_state.Data().text.shipIdentityText[IDENTITY_CLASS_OFFSET + index]});
     });
   return name;
 }

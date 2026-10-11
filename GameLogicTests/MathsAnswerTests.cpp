@@ -161,15 +161,15 @@ void RandomNumbers(Elite::GameState& _state, std::vector<std::string>& _answers)
   {
     if (fromOnes)
     {
-      _state.Data().commanderBlock.randomState0 = 0xFFFF;
-      _state.Data().commanderBlock.randomState1 = 0xFFFF;
-      _state.Data().commanderBlock.randomState2 = 0xFFFF;
+      _state.Data().commander.randomState0 = 0xFFFF;
+      _state.Data().commander.randomState1 = 0xFFFF;
+      _state.Data().commander.randomState2 = 0xFFFF;
     }
     for (std::size_t step = 0; step < RANDOM_STEPS; ++step)
     {
-      const std::uint16_t a = _state.Data().commanderBlock.randomState0;
-      const std::uint16_t b = _state.Data().commanderBlock.randomState1;
-      const std::uint16_t c = _state.Data().commanderBlock.randomState2;
+      const std::uint16_t a = _state.Data().commander.randomState0;
+      const std::uint16_t b = _state.Data().commander.randomState1;
+      const std::uint16_t c = _state.Data().commander.randomState2;
       const std::uint16_t number = Elite::NextRandom(_state);
       _answers.push_back(std::format("NextRandom {:04x} {:04x} {:04x} = {:04x}", a, b, c, number));
     }

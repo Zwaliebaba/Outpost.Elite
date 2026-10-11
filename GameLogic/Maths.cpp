@@ -130,13 +130,13 @@ WordQuotient DivideSignedWord(std::uint32_t _dividend, std::uint16_t _divisor)
 
 std::uint16_t NextRandom(GameState& _state)
 {
-  const std::uint16_t a = _state.Data().commanderBlock.randomState0;
-  const std::uint16_t b = _state.Data().commanderBlock.randomState1;
-  const std::uint16_t c = _state.Data().commanderBlock.randomState2;
+  const std::uint16_t a = _state.Data().commander.randomState0;
+  const std::uint16_t b = _state.Data().commander.randomState1;
+  const std::uint16_t c = _state.Data().commander.randomState2;
   const auto sum = static_cast<std::uint16_t>(a + b);
-  _state.Data().commanderBlock.randomState1 = c;
-  _state.Data().commanderBlock.randomState0 = b;
-  _state.Data().commanderBlock.randomState2 = static_cast<std::uint16_t>(c + sum);
+  _state.Data().commander.randomState1 = c;
+  _state.Data().commander.randomState0 = b;
+  _state.Data().commander.randomState2 = static_cast<std::uint16_t>(c + sum);
   return sum;
 }
 
@@ -144,13 +144,13 @@ SinCos SinCosOf(const GameState& _state, std::uint16_t _angle)
 {
   const auto index = static_cast<std::uint16_t>(_angle & ANGLE_MASK);
   const auto cosineIndex = static_cast<std::uint16_t>((index + COSINE_OFFSET_BYTES / 2) & (SINE_WORDS - 1));
-  return SinCos{Signed(_state.Data().sineTable[index]), Signed(_state.Data().sineTable[cosineIndex])};
+  return SinCos{Signed(_state.Data().constants.sineTable[index]), Signed(_state.Data().constants.sineTable[cosineIndex])};
 }
 
 SinCos SetSinCos(GameState& _state, std::size_t _pair, std::uint16_t _angle)
 {
   const SinCos pair = SinCosOf(_state, _angle);
-  Counted<std::uint8_t>(&stored)[4] = _state.Data().rotationSinCos[_pair];
+  Counted<std::uint8_t>(&stored)[4] = _state.Data().maths.rotationSinCos[_pair];
   SetWordIn(stored, 0, Word(pair.sine));
   SetWordIn(stored, 2, Word(pair.cosine));
   return pair;
@@ -169,7 +169,7 @@ Pair RotateBySinCos(Pair _point, SinCos _by)
 
 Pair RotateByStoredSinCos(const GameState& _state, std::size_t _pair, Pair _point)
 {
-  const Counted<std::uint8_t>(&stored)[4] = _state.Data().rotationSinCos[_pair];
+  const Counted<std::uint8_t>(&stored)[4] = _state.Data().maths.rotationSinCos[_pair];
   return RotateBySinCos(_point, SinCos{Signed(WordIn(stored, 0)), Signed(WordIn(stored, 2))});
 }
 
@@ -216,7 +216,7 @@ std::uint16_t RatioArcTangent(GameState& _state, std::uint16_t _numerator, std::
   for (std::uint16_t steps = TANGENT_SEARCH_STEPS; steps != 0; --steps)
   {
     middle = static_cast<std::uint16_t>(((low + high) >> 1) & 0xFFFE);
-    const std::uint16_t tangent = _state.Data().tangentTable[middle >> 1];
+    const std::uint16_t tangent = _state.Data().constants.tangentTable[middle >> 1];
     if (tangent == ratio)
     {
       break;
@@ -286,9 +286,9 @@ bool ObjectWithinBox(const SpaceObject& _slot, std::uint16_t _halfSize)
 Vector RotatePitchYawRoll(GameState& _state, Vector _vector)
 {
   const Pair yz = RotateByStoredSinCos(_state, 0, Pair{_vector.y, _vector.z});
-  _state.Data().rotateScratch = Word(yz.first);
+  _state.Data().unused.rotateScratch = Word(yz.first);
   const Pair xz = RotateByStoredSinCos(_state, 1, Pair{_vector.x, yz.second});
-  _state.Data().rotateScratch = Word(xz.second);
+  _state.Data().unused.rotateScratch = Word(xz.second);
   const Pair xy = RotateByStoredSinCos(_state, 2, Pair{xz.first, yz.first});
   return Vector{xy.first, xy.second, xz.second};
 }
@@ -304,11 +304,11 @@ Vector RotateRollYawPitch(const GameState& _state, Vector _vector)
 Vector RotateBySinCos7210(GameState& _state, Vector _vector)
 {
   const Pair yz = RotateByStoredSinCos(_state, 7, Pair{_vector.y, _vector.z});
-  _state.Data().rotateScratch = Word(yz.second);
+  _state.Data().unused.rotateScratch = Word(yz.second);
   const Pair xy = RotateByStoredSinCos(_state, 2, Pair{_vector.x, yz.first});
-  _state.Data().rotateScratch = Word(xy.second);
+  _state.Data().unused.rotateScratch = Word(xy.second);
   const Pair xz = RotateByStoredSinCos(_state, 1, Pair{xy.first, yz.second});
-  _state.Data().rotateScratch = Word(xz.first);
+  _state.Data().unused.rotateScratch = Word(xz.first);
   const Pair rotatedYz = RotateByStoredSinCos(_state, 0, Pair{xy.second, xz.second});
   return Vector{xz.first, rotatedYz.first, rotatedYz.second};
 }

@@ -65,7 +65,8 @@ laserBeamColor	DS:2960	1	Combat	Combat	Combat
 systemSeed0	DS:2970	2	Galaxy	Flight,Galaxy	Galaxy	
 systemSeed1	DS:2972	2	Galaxy	Galaxy	Galaxy	
 systemSeed2	DS:2974	2	Galaxy	Galaxy	Galaxy	
-galaxySeeds	DS:2976	48	constant	Galaxy		
+galaxySeeds	DS:2976	48	constant	Galaxy		the first of members read as one text or span, which stay together
+gap29A6	DS:29A6	6	constant			a gap kept: the six bytes after galaxySeeds, which the ninth galaxy's seeds read past its end; stays beside galaxySeeds, read as one text or span with it
 distanceText	DS:29AC	28	Galaxy	Galaxy	Galaxy	
 blankChartLine	DS:29C8	28	constant	Galaxy		
 distanceDigits	DS:29E4	5	Galaxy	Galaxy	Galaxy	

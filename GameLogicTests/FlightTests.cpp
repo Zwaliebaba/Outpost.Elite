@@ -11,7 +11,7 @@ namespace GameLogicTests
 namespace
 {
 
-using Commander = Elite::GameData::CommanderBlock;
+using Commander = Elite::CommanderState;
 
 // A byte of the game's data set on the twin.
 template <typename Struct> void SetBoth(TwinRig& _rig, DataByte<Struct> _member, std::uint8_t _value)
@@ -36,10 +36,10 @@ public:
   {
     TwinRig rig("TwinGameOver");
     Launch(rig);
-    SetBoth(rig, &Elite::GameData::cheatEnabled, 1);
-    SetBoth(rig, &Elite::GameData::playerDead, 1);
+    SetBoth(rig, &Elite::StartUpState::cheatEnabled, 1);
+    SetBoth(rig, &Elite::PlayerShipState::playerDead, 1);
     rig.Play("wait 0.5");
-    SetBoth(rig, &Elite::GameData::cheatEnabled, 0);
+    SetBoth(rig, &Elite::StartUpState::cheatEnabled, 0);
     rig.Play("wait 5\ndigest game-over");
   }
 
@@ -61,7 +61,7 @@ public:
       ship.z = 0x2000;
       ship.flags = 2; // its blip drawn
     }
-    SetBoth(rig, &Elite::GameData::playerDead, 1);
+    SetBoth(rig, &Elite::PlayerShipState::playerDead, 1);
     rig.Play("wait 5\ndigest game-over");
   }
 
@@ -70,7 +70,7 @@ public:
   {
     TwinRig rig("TwinEscapePod");
     Launch(rig);
-    SetBoth(rig, &Elite::GameData::escapePodFrames, 3);
+    SetBoth(rig, &Elite::PlayerShipState::escapePodFrames, 3);
     rig.Play("wait 3\ndigest docked");
   }
 

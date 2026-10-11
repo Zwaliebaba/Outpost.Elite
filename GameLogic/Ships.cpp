@@ -233,7 +233,7 @@ void SpawnRandomTrader(GameState& _state, SpaceObject& _slot)
   if (police)
   {
     // Written as a word: the aggression, and a bounty of 0 above it.
-    _slot.aggression = std::uint8_t{_state.Data().commanderBlock.legalStatus};
+    _slot.aggression = std::uint8_t{_state.Data().commander.legalStatus};
     _slot.bounty = 0;
   }
 }
@@ -272,7 +272,7 @@ ReclaimedSlot ReclaimShipSlot(GameState& _state)
 {
   // SUB CL,3 / XOR CH,CH, then LOOP: a count of 0 runs 65,536 times.
   SlotIndex slot = SlotIndex::FirstShip;
-  const auto slots = static_cast<std::uint8_t>(_state.Data().objectSlotCount - FIRST_SHIP_SLOT);
+  const auto slots = static_cast<std::uint8_t>(_state.Data().flight.objectSlotCount - FIRST_SHIP_SLOT);
   for (std::uint32_t count = LoopCount(slots); count != 0; --count)
   {
     if ((_state.Slot(slot).flags & FLAG_BLIP_DRAWN) == 0)
@@ -338,14 +338,14 @@ void SpawnRandomWolf(GameState& _state, SpaceObject& _slot)
 {
   // MOV AL,5, or out of witch space XOR AH,AH / MOV BL,34h / DIV BL: the quotient of a random byte picks the record.
   std::uint8_t record = WITCH_SPACE_WOLF;
-  if (_state.Data().commanderBlock.witchspaceCountdown == 0)
+  if (_state.Data().commander.witchspaceCountdown == 0)
   {
     record = static_cast<std::uint8_t>(Low(NextRandom(_state)) / WOLF_CHOICE_DIVISOR);
   }
   SpawnFromRecord(_state, _slot, WOLF_TEMPLATES, record);
   _slot.behaviorClass = WOLF_CLASS;
   auto aggression = static_cast<std::uint8_t>(Low(NextRandom(_state)) & WOLF_AGGRESSION_MASK);
-  if (_state.Data().spawnGovernment == 0)
+  if (_state.Data().flight.spawnGovernment == 0)
   {
     aggression = static_cast<std::uint8_t>(aggression + ANARCHY_AGGRESSION);
   }
@@ -367,7 +367,7 @@ void InitObjectFromTemplate(GameState& _state, SpaceObject& _slot, std::size_t _
   _slot.aggression = 0;
   _slot.scanned = 1;
   // BX += AL*2, then BX += AL*8: the record _index of ten bytes on.
-  const Counted<std::uint8_t>(&record)[TEMPLATE_BYTES] = _state.Data().spawnTemplates[_first + _index];
+  const Counted<std::uint8_t>(&record)[TEMPLATE_BYTES] = _state.Data().constants.spawnTemplates[_first + _index];
   // STC / RCL AL,1: the type, active.
   _slot.type = static_cast<std::uint8_t>((record[0] << 1) | SpaceObject::ACTIVE);
   for (std::size_t field = 0; field < TEMPLATE_FIELDS.size(); ++field)
@@ -462,7 +462,7 @@ void FacePlayer(GameState& _state, SpaceObject& _slot)
 SlotSearch FindFreeShipSlot(GameState& _state)
 {
   SlotIndex slot = SlotIndex::FirstShip;
-  const auto slots = static_cast<std::uint8_t>(_state.Data().objectSlotCount - FIRST_SHIP_SLOT);
+  const auto slots = static_cast<std::uint8_t>(_state.Data().flight.objectSlotCount - FIRST_SHIP_SLOT);
   for (std::uint32_t count = LoopCount(slots); count != 0; --count)
   {
     if ((_state.Slot(slot).type & SpaceObject::ACTIVE) == 0)
@@ -479,8 +479,8 @@ void ClearAllObjects(GameState& _state, bool _backward)
   // MOV CH,shipSlotCount / XOR CL,CL / SHR CX,1 three times: 32 words a slot, cleared by REP STOSW into ES = DS.
   const std::uint16_t step = StringStep(_backward, 2);
   // Backwards, REP STOSW starts from the first slot's first word and runs down from there, as the original's does.
-  std::uint16_t at = _state.OffsetOf(_state.Data().shipSlots);
-  for (auto words = static_cast<std::uint16_t>(_state.Data().shipSlotCount << 5); words != 0; --words)
+  std::uint16_t at = _state.OffsetOf(_state.Data().world.shipSlots);
+  for (auto words = static_cast<std::uint16_t>(_state.Data().world.shipSlotCount << 5); words != 0; --words)
   {
     _state.SetWord(at, 0);
     at = Offset(at, step);
@@ -489,7 +489,7 @@ void ClearAllObjects(GameState& _state, bool _backward)
 
 SlotIndex FindDebrisSlot(GameState& _state)
 {
-  const std::uint8_t slots = _state.Data().debrisSlotCount;
+  const std::uint8_t slots = _state.Data().flight.debrisSlotCount;
   SlotIndex slot = SlotIndex::FirstDebris;
   for (std::uint32_t count = LoopCount(slots); count != 0; --count)
   {

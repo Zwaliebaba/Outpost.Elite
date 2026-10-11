@@ -112,14 +112,14 @@ template <typename Font>
                                      std::uint16_t _paper)
 {
   const auto glyph = static_cast<std::uint8_t>(_character - FIRST_GLYPH);
-  return InkOnPaper(FontWord(_state, _state.Data().screenFont, glyph, SCREEN_GLYPH_BYTES, _row), _ink, _paper);
+  return InkOnPaper(FontWord(_state, _state.Data().constants.screenFont, glyph, SCREEN_GLYPH_BYTES, _row), _ink, _paper);
 }
 
 // Row _row of the small letter _letter ('A' is 0), shifted right _shift pixels into a word of the space-view
 // buffer, in memory order: the font holds each row big-endian.
 [[nodiscard]] std::uint16_t SmallGlyphRow(const GameState& _state, std::uint8_t _letter, std::uint16_t _row, std::uint8_t _shift)
 {
-  const std::uint16_t shifted = ShiftLeft(FontWord(_state, _state.Data().smallFont, _letter, SMALL_GLYPH_BYTES, _row), _shift);
+  const std::uint16_t shifted = ShiftLeft(FontWord(_state, _state.Data().constants.smallFont, _letter, SMALL_GLYPH_BYTES, _row), _shift);
   return Swap(shifted);
 }
 
@@ -176,7 +176,7 @@ void RedrawTypedLine(GameState& _state, Hardware& _hardware, const TypedLine& _l
 // ReadTextLine's blink (0x76A3): 300 ticks to the next, the cursor flipped, and the line redrawn.
 void RestartInputBlink(GameState& _state, Hardware& _hardware, const TypedLine& _line, std::uint16_t _length)
 {
-  _state.Data().cursorBlinkTicks = CURSOR_BLINK_TICKS;
+  _state.Data().text.cursorBlinkTicks = CURSOR_BLINK_TICKS;
   ToggleInputCursor(_state);
   RedrawTypedLine(_state, _hardware, _line, _length);
 }
@@ -186,10 +186,10 @@ void RestartInputBlink(GameState& _state, Hardware& _hardware, const TypedLine& 
 // Returns whether it drew the message.
 bool ShowMessage(GameState& _state, bool _backwards)
 {
-  _state.Data().messageFramesBytes.messageDrawn = MESSAGE_DRAWN;
-  const Message message = _state.Data().messagePointer;
-  const bool shown = message == _state.Data().messageShown;
-  _state.Data().messageShown = message;
+  _state.Data().messages.messageFramesBytes.messageDrawn = MESSAGE_DRAWN;
+  const Message message = _state.Data().messages.messagePointer;
+  const bool shown = message == _state.Data().messages.messageShown;
+  _state.Data().messages.messageShown = message;
   if (shown)
   {
     return false;
@@ -206,7 +206,7 @@ constexpr std::size_t NUMBER_BYTES = 6;
 
 std::uint16_t DrawViewChar(GameState& _state, std::uint8_t _character, std::uint16_t _ink, std::uint16_t _at)
 {
-  const std::uint16_t paper = _state.Data().textPaperPattern;
+  const std::uint16_t paper = _state.Data().drawing.textPaperPattern;
   std::uint16_t address = _at;
   for (std::uint16_t line = 0; line < GLYPH_ROWS; ++line)
   {
@@ -236,7 +236,7 @@ std::uint16_t DrawScreenChar(GameState& _state, std::uint8_t _character, std::ui
   for (std::uint16_t line = 0; line < GLYPH_ROWS; ++line)
   {
     // The paper is read again for each row, as the original does.
-    const std::uint16_t row = GlyphRow(_state, _character, line, _ink, _state.Data().textPaperPattern);
+    const std::uint16_t row = GlyphRow(_state, _character, line, _ink, _state.Data().drawing.textPaperPattern);
     _state.SetFarWord(_segment, address, row);
     if (line + 1 < GLYPH_ROWS)
     {
@@ -261,7 +261,7 @@ std::uint16_t FormatDecimal5(GameState& _state, std::uint16_t _value, std::span<
 {
   std::uint16_t value = _value;
   std::size_t digit = 0;
-  for (const Counted<std::uint16_t>& divisorWord : _state.Data().decimalDivisors16)
+  for (const Counted<std::uint16_t>& divisorWord : _state.Data().constants.decimalDivisors16)
   {
     const std::uint16_t divisor = divisorWord;
     if (divisor == 1)
@@ -324,11 +324,11 @@ void DrawSmallViewString(GameState& _state, std::string_view _text, std::uint16_
 
 void FormatCredits(GameState& _state)
 {
-  GameData::CommanderBlock& commander = _state.Data().commanderBlock;
+  CommanderState& commander = _state.Data().commander;
   Counted<std::uint8_t>(&text)[sizeof(commander.creditBalanceText)] = commander.creditBalanceText;
   std::uint32_t value = _state.WordOf(commander.creditsTenths) | (std::uint32_t{commander.creditsTenths.data75F5} << 16);
   std::size_t digit = 0;
-  for (const Counted<std::uint8_t>(&divisorBytes)[4] : _state.Data().decimalDivisors32)
+  for (const Counted<std::uint8_t>(&divisorBytes)[4] : _state.Data().constants.decimalDivisors32)
   {
     const auto low = static_cast<std::uint16_t>(divisorBytes[0] | (divisorBytes[1] << 8));
     const auto high = static_cast<std::uint16_t>(divisorBytes[2] | (divisorBytes[3] << 8));
@@ -361,15 +361,15 @@ std::string_view MessageText(const GameState& _state, Message _message) noexcept
   switch (_message)
   {
   case Message::Bounty:
-    return _state.TextAt(_state.Data().bountyText);
+    return _state.TextAt(_state.Data().text.bountyText);
   case Message::ShipIdentity:
-    return _state.TextAt(_state.Data().shipIdentityText);
+    return _state.TextAt(_state.Data().text.shipIdentityText);
   case Message::ScoopedCargo:
-    return _state.TextAt(_state.Data().scoopedCargoText);
+    return _state.TextAt(_state.Data().equipment.scoopedCargoText);
   case Message::ArrivalGalaxy:
-    return _state.TextAt(_state.Data().arrivalGalaxyText);
+    return _state.TextAt(_state.Data().hyperspace.arrivalGalaxyText);
   case Message::HyperspaceCountdown:
-    return _state.TextAt(_state.Data().hyperspaceCountdownMessage);
+    return _state.TextAt(_state.Data().hyperspace.hyperspaceCountdownMessage);
   default:
     break;
   }
@@ -380,20 +380,20 @@ std::string_view MessageText(const GameState& _state, Message _message) noexcept
 void UpdateMessageLine(GameState& _state, bool _backwards)
 {
   UpdateWarnings(_state);
-  if (_state.Data().messageFramesBytes.messageDrawn != 0)
+  if (_state.Data().messages.messageFramesBytes.messageDrawn != 0)
   {
     // messageFrames is a byte here, though ShowBountyMessage writes it as a word.
-    const std::uint8_t frames = Low(_state.Data().messageFrames);
+    const std::uint8_t frames = Low(_state.Data().messages.messageFrames);
     if (frames != 0)
     {
-      _state.Data().messageFrames = WithLow(_state.Data().messageFrames, static_cast<std::uint8_t>(frames - 1));
+      _state.Data().messages.messageFrames = WithLow(_state.Data().messages.messageFrames, static_cast<std::uint8_t>(frames - 1));
       return;
     }
-    const std::uint16_t view = _state.Data().viewAngle;
-    _state.Data().messagePointer = view == 0           ? Message::FrontView
-                                   : view == VIEW_REAR ? Message::RearView
-                                   : view == VIEW_LEFT ? Message::LeftView
-                                                       : Message::RightView;
+    const std::uint16_t view = _state.Data().playerShip.viewAngle;
+    _state.Data().messages.messagePointer = view == 0           ? Message::FrontView
+                                            : view == VIEW_REAR ? Message::RearView
+                                            : view == VIEW_LEFT ? Message::LeftView
+                                                                : Message::RightView;
   }
   ShowMessage(_state, _backwards);
 }
@@ -414,15 +414,15 @@ void ClearMessageLine(GameState& _state, std::uint16_t _segment, bool _backwards
 void ShowBountyMessage(GameState& _state, std::uint16_t _tenths)
 {
   const std::span<Counted<std::uint8_t>> digits =
-    std::span<Counted<std::uint8_t>>(_state.Data().bountyText).subspan(BOUNTY_DIGITS_OFFSET, NUMBER_BYTES);
+    std::span<Counted<std::uint8_t>>(_state.Data().text.bountyText).subspan(BOUNTY_DIGITS_OFFSET, NUMBER_BYTES);
   FormatDecimal5(_state, _tenths, digits);
   BlankLeadingZeros(digits, TENTHS_BLANKS);
   // The tenths digit moves right, and the point takes its place, as one word.
   const std::uint8_t tenths = digits[4];
   digits[4] = '.';
   digits[5] = tenths;
-  _state.Data().messagePointer = Message::Bounty;
-  _state.Data().messageFrames = BOUNTY_FRAMES;
+  _state.Data().messages.messagePointer = Message::Bounty;
+  _state.Data().messages.messageFrames = BOUNTY_FRAMES;
 }
 
 void ShowShipIdentity(GameState& _state, std::uint8_t _type, std::uint8_t _class, const SpaceObject& _slot)
@@ -442,20 +442,20 @@ void ShowShipIdentity(GameState& _state, std::uint8_t _type, std::uint8_t _class
     shipClass = CLASS_POLICE;
   }
   // The class's name, then the type's, a byte at a time, the class's seven bytes of its eight.
-  const std::span<Counted<std::uint8_t>> identity(_state.Data().shipIdentityText);
-  const Counted<std::uint8_t>(&className)[8] = _state.Data().shipClassNames[shipClass];
+  const std::span<Counted<std::uint8_t>> identity(_state.Data().text.shipIdentityText);
+  const Counted<std::uint8_t>(&className)[8] = _state.Data().constants.shipClassNames[shipClass];
   for (std::size_t moved = 0; moved < CLASS_NAME_BYTES; ++moved)
   {
     identity[CLASS_TEXT_OFFSET + moved] = std::uint8_t{className[moved]};
   }
-  CopyNameInto(_state.Data().shipTypeNames[_type], identity.subspan(TYPE_TEXT_OFFSET, TYPE_NAME_BYTES));
-  _state.Data().messagePointer = Message::ShipIdentity;
-  _state.Data().messageFrames = IDENTITY_FRAMES;
+  CopyNameInto(_state.Data().constants.shipTypeNames[_type], identity.subspan(TYPE_TEXT_OFFSET, TYPE_NAME_BYTES));
+  _state.Data().messages.messagePointer = Message::ShipIdentity;
+  _state.Data().messages.messageFrames = IDENTITY_FRAMES;
 }
 
 std::uint16_t PrintTextModeString(GameState& _state, std::string_view _text, std::uint16_t _cell)
 {
-  const std::uint8_t attribute = _state.Data().textAttribute;
+  const std::uint8_t attribute = _state.Data().drawing.textAttribute;
   std::uint16_t cell = _cell;
   for (const char character : _text)
   {
@@ -488,9 +488,9 @@ void ClearDockedMessageLine(GameState& _state, std::uint16_t _segment)
 
 std::uint8_t SwapTextAttributeNibbles(GameState& _state)
 {
-  const std::uint8_t attribute = _state.Data().textAttribute;
+  const std::uint8_t attribute = _state.Data().drawing.textAttribute;
   const auto swapped = static_cast<std::uint8_t>((attribute >> 4) | (attribute << 4));
-  _state.Data().textAttribute = swapped;
+  _state.Data().drawing.textAttribute = swapped;
   return swapped;
 }
 
@@ -507,12 +507,12 @@ std::uint16_t PrintCountedTextLines(GameState& _state, const Counted<std::uint8_
 
 void FormatTenths(GameState& _state, std::uint16_t _tenths)
 {
-  const std::span<Counted<std::uint8_t>> digits = _state.BytesFrom(_state.Data().priceText, NUMBER_BYTES);
+  const std::span<Counted<std::uint8_t>> digits = _state.BytesFrom(_state.Data().menus.priceText, NUMBER_BYTES);
   FormatDecimal5(_state, _tenths, digits);
   BlankLeadingZeros(digits, TENTHS_BLANKS);
   // The tenths digit moves right, and the point takes its place, a byte at a time.
-  _state.Data().priceText.data8041 = std::uint8_t{_state.Data().priceText.data8040};
-  _state.Data().priceText.data8040 = '.';
+  _state.Data().menus.priceText.data8041 = std::uint8_t{_state.Data().menus.priceText.data8040};
+  _state.Data().menus.priceText.data8040 = '.';
 }
 
 std::uint16_t PrintTextLines(GameState& _state, std::span<const std::string_view> _lines, std::uint16_t _cell)
@@ -547,14 +547,14 @@ void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<Counted<std:
 {
   const TypedLine line{_buffer, _segment, _cell};
   ResetKeyboard(_state, _hardware);
-  _state.Data().textPaperPattern = 0;
-  _state.Data().inputCharsLeft = _most;
+  _state.Data().drawing.textPaperPattern = 0;
+  _state.Data().text.inputCharsLeft = _most;
   std::uint16_t length = 0;
   RestartInputBlink(_state, _hardware, line, length);
   for (;;)
   {
-    const auto blink = static_cast<std::uint16_t>(_state.Data().cursorBlinkTicks - 1);
-    _state.Data().cursorBlinkTicks = blink;
+    const auto blink = static_cast<std::uint16_t>(_state.Data().text.cursorBlinkTicks - 1);
+    _state.Data().text.cursorBlinkTicks = blink;
     if (blink == 0)
     {
       TypedLineTurn(_hardware, INPUT_RESTART_BLINK, length);
@@ -573,7 +573,7 @@ void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<Counted<std:
       TypedLineTurn(_hardware, INPUT_COUNT_BLINK, length);
       continue;
     }
-    std::uint8_t character = _state.Data().scanCodeToAscii[key.scanCode];
+    std::uint8_t character = _state.Data().constants.scanCodeToAscii[key.scanCode];
     if (character == NO_CHARACTER)
     {
       TypedLineTurn(_hardware, INPUT_COUNT_BLINK, length);
@@ -581,7 +581,7 @@ void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<Counted<std:
     }
     if (character == ENTER_KEY)
     {
-      if (_state.Data().inputCursorText[0] != CURSOR_HIDDEN)
+      if (_state.Data().text.inputCursorText[0] != CURSOR_HIDDEN)
       {
         ToggleInputCursor(_state);
         RedrawInputLine(_state, _buffer, length, _segment, _cell);
@@ -593,7 +593,7 @@ void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<Counted<std:
       if (length != 0)
       {
         --length;
-        _state.Data().inputCharsLeft = static_cast<std::uint8_t>(_state.Data().inputCharsLeft + 1);
+        _state.Data().text.inputCharsLeft = static_cast<std::uint8_t>(_state.Data().text.inputCharsLeft + 1);
         RedrawInputLine(_state, _buffer, length, _segment, _cell);
       }
       TypedLineTurn(_hardware, INPUT_COUNT_BLINK, length);
@@ -610,13 +610,13 @@ void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<Counted<std:
     }
     _buffer[length] = character;
     ++length;
-    const auto left = static_cast<std::uint8_t>(_state.Data().inputCharsLeft - 1);
-    _state.Data().inputCharsLeft = left;
+    const auto left = static_cast<std::uint8_t>(_state.Data().text.inputCharsLeft - 1);
+    _state.Data().text.inputCharsLeft = left;
     if ((left & 0x80) != 0)
     {
       // No room: the character is taken back.
       --length;
-      _state.Data().inputCharsLeft = static_cast<std::uint8_t>(left + 1);
+      _state.Data().text.inputCharsLeft = static_cast<std::uint8_t>(left + 1);
       TypedLineTurn(_hardware, INPUT_REDRAW, length);
     }
     RedrawTypedLine(_state, _hardware, line, length);
@@ -625,8 +625,8 @@ void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<Counted<std:
 
 void ToggleInputCursor(GameState& _state)
 {
-  Counted<std::uint8_t>& cursor = _state.Data().inputCursorText[0];
-  const std::uint8_t toggle = _state.Data().screenLayout == TEXT_LAYOUT ? CURSOR_TEXT_TOGGLE : CURSOR_GRAPHICS_TOGGLE;
+  Counted<std::uint8_t>& cursor = _state.Data().text.inputCursorText[0];
+  const std::uint8_t toggle = _state.Data().drawing.screenLayout == TEXT_LAYOUT ? CURSOR_TEXT_TOGGLE : CURSOR_GRAPHICS_TOGGLE;
   cursor = static_cast<std::uint8_t>(cursor ^ toggle);
 }
 
@@ -635,14 +635,14 @@ void RedrawInputLine(GameState& _state, std::span<Counted<std::uint8_t>> _buffer
 {
   _buffer[_length] = 0;
   const std::uint16_t next = PrintStringForLayout(_state, TextIn(_buffer), MESSAGE_INK, _segment, _cell);
-  (void)PrintStringForLayout(_state, _state.TextAt(_state.Data().inputCursorText), MESSAGE_INK, _segment, next);
+  (void)PrintStringForLayout(_state, _state.TextAt(_state.Data().text.inputCursorText), MESSAGE_INK, _segment, next);
 }
 
 std::uint16_t PrintStringForLayout(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _segment,
                                    std::uint16_t _cell)
 {
   // A tail jump to either printer.
-  if (_state.Data().screenLayout == TEXT_LAYOUT)
+  if (_state.Data().drawing.screenLayout == TEXT_LAYOUT)
   {
     return PrintTextModeString(_state, _text, _cell);
   }

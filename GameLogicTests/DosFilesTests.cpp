@@ -21,13 +21,13 @@ namespace
 {
 
 // The game's own places in the data segment: where it points the transfer area, keeps a file's name and a commander's bytes.
-constexpr auto AREA = static_cast<std::uint16_t>(GAME_DATA_OFFSET(diskTransferArea));
-constexpr auto NAME = static_cast<std::uint16_t>(GAME_DATA_OFFSET(commanderFileName));
-constexpr auto BLOCK = static_cast<std::uint16_t>(GAME_DATA_OFFSET(commanderBlock));
+constexpr auto AREA = static_cast<std::uint16_t>(Elite::OriginalOffset("diskTransferArea"));
+constexpr auto NAME = static_cast<std::uint16_t>(Elite::OriginalOffset("commanderFileName"));
+constexpr auto BLOCK = static_cast<std::uint16_t>(Elite::OriginalOffset("commanderBlock"));
 constexpr std::uint16_t BLOCK_BYTES = 208;
 // A second transfer area, for a search that is not the game's, and a place for a name of 130 bytes with no NUL in reach.
-constexpr auto OTHER_AREA = static_cast<std::uint16_t>(GAME_DATA_OFFSET(commanderFileList));
-constexpr auto LONG_NAME = static_cast<std::uint16_t>(GAME_DATA_OFFSET(commanderBlock));
+constexpr auto OTHER_AREA = static_cast<std::uint16_t>(Elite::OriginalOffset("commanderFileList"));
+constexpr auto LONG_NAME = static_cast<std::uint16_t>(Elite::OriginalOffset("commanderBlock"));
 constexpr std::size_t LONG_NAME_BYTES = 130;
 
 // The transfer area, in DOS's layout.
@@ -40,6 +40,10 @@ constexpr std::uint16_t AREA_DATE = 0x18;
 constexpr std::uint16_t AREA_SIZE = 0x1A;
 constexpr std::uint16_t AREA_NAME = 0x1E;
 constexpr std::uint16_t AREA_NAME_BYTES = 13;
+
+// A segment whose last 16 bytes are the game's memory's last, video memory's B800:3FF0-3FFF, past which nothing is the game's:
+// the state holds no bytes at the data segment's own end (D38).
+constexpr std::uint16_t LAST_SEGMENT = 0xAC00;
 
 // DOS's errors, as AX gives them.
 constexpr std::uint32_t FILE_NOT_FOUND = 0x02;
@@ -602,32 +606,33 @@ public:
     Assert::IsFalse(twin.Close(answer.value).failed);
   }
 
-  // A read and a write by linear address, as the emulated DOS made them: up to the end of the data segment, and, past it,
-  // refused, because the paragraphs after it are not the game's memory (D33). The game reads and writes inside its own.
+  // A read and a write by linear address, as the emulated DOS made them: up to the end of a segment that ends with the game's
+  // memory, and, past it, refused, because the paragraphs after it are not the game's memory (D33). The game reads and writes
+  // inside its own.
   TEST_METHOD(ReadAndWriteToASegmentsEnd)
   {
     DosRig twin("DosFilesLinear", START);
-    const std::uint16_t data = twin.Data();
+    const std::uint16_t segment = LAST_SEGMENT;
     std::string bytes;
     for (char character = 'A'; character < 'A' + 0x10; ++character)
     {
       bytes.push_back(character);
     }
-    twin.Put(data, 0xFFF0, bytes, false);
+    twin.Put(segment, 0xFFF0, bytes, false);
     const Elite::DosAnswer created = twin.Create(twin.Name("LINEAR.CDR"), 0);
-    const Elite::DosAnswer written = twin.Write(created.value, data, 0xFFF0, 0x10);
+    const Elite::DosAnswer written = twin.Write(created.value, segment, 0xFFF0, 0x10);
     Assert::IsTrue(!written.failed && written.value == 0x10, L"written to the segment's end");
-    Assert::ExpectException<std::out_of_range>([&] { (void)twin.Write(created.value, data, 0xFFF0, 0x20); }, L"and refused past it");
+    Assert::ExpectException<std::out_of_range>([&] { (void)twin.Write(created.value, segment, 0xFFF0, 0x20); }, L"and refused past it");
     Assert::IsFalse(twin.Close(created.value).failed);
     Assert::IsTrue(twin.StoredFiles().front().sizeBytes == 0x10, L"what was written, and nothing of the refused write");
 
-    twin.Put(data, 0xFFF0, std::string(0x10, '\0'), false);
+    twin.Put(segment, 0xFFF0, std::string(0x10, '\0'), false);
     Assert::IsFalse(twin.Open(NAME, 0).failed);
-    Assert::ExpectException<std::out_of_range>([&] { (void)twin.Read(5, data, 0xFFF0, 0x20); }, L"a read past it is refused");
-    Assert::IsTrue(twin.Text(data, 0xFFF0, 0x10) == std::string(0x10, '\0'), L"whole: nothing of it reaches memory");
-    const Elite::DosAnswer read = twin.Read(5, data, 0xFFF0, 0x10);
+    Assert::ExpectException<std::out_of_range>([&] { (void)twin.Read(5, segment, 0xFFF0, 0x20); }, L"a read past it is refused");
+    Assert::IsTrue(twin.Text(segment, 0xFFF0, 0x10) == std::string(0x10, '\0'), L"whole: nothing of it reaches memory");
+    const Elite::DosAnswer read = twin.Read(5, segment, 0xFFF0, 0x10);
     Assert::IsTrue(!read.failed && read.value == 0x10, L"read to the segment's end");
-    Assert::IsTrue(twin.Text(data, 0xFFF0, 0x10) == bytes, L"at the segment's end");
+    Assert::IsTrue(twin.Text(segment, 0xFFF0, 0x10) == bytes, L"at the segment's end");
     Assert::IsFalse(twin.Close(5).failed);
   }
 

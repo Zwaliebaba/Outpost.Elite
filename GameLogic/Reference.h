@@ -22,12 +22,6 @@ inline constexpr std::uint16_t D5_OFFSET = 0x25E4;
 inline constexpr std::uint16_t CODE_SEGMENT_BYTES = 0x8F40;
 inline constexpr std::uint16_t DATA_SEGMENT_PARAGRAPH = 0x08F4;
 
-// The stack segment, DS:AD60 (SS:0000) up to the initial SP of 03F8 and the rest of its paragraph. What
-// lies below SP there is whatever the last calls and interrupts left, so the game-state digest skips it,
-// and with it triangleEdgeMasks at its foot (DS:AD60-AD6F), which is constant.
-inline constexpr std::uint16_t STACK_FIRST_OFFSET = 0xAD60;
-inline constexpr std::uint16_t STACK_END_OFFSET = 0xB160;
-
 // Where DOSBox-X puts the PSP (measured from its trace), which the host copied so the two boot traces
 // compared register for register (ADR-003). Replays use it too: one load address for everything.
 inline constexpr std::uint16_t PSP_SEGMENT = 0x0813;
@@ -38,10 +32,12 @@ inline constexpr std::uint16_t PSP_PARAGRAPHS = 0x10;
 // The moment DOS's clock starts from: midnight on 1 January 1980, as on a PC/XT without a clock card.
 inline constexpr DosDateTime START_MOMENT = {1980, 1, 1, 0, 0, 0, 0};
 
-/// The reference's data segment as DOS's EXEC leaves it, from the load image (ReferenceImage.h) past its code segment: the D5
-/// byte written, and the words the image holds as addresses where the game's state holds a message or an index loaded as what
-/// they mean (D33, piece 3). The code segment's relocations change only its own words, which the game's state does not hold.
-/// Nothing if the D5 byte did not hold 00, as the file's does, or one of those words did not hold its address.
+/// The game's state as DOS's EXEC leaves the reference's data segment, GameData's bytes: each member the state holds from its
+/// 1987 offset in the load image (ReferenceImage.h) past its code segment, zeros past the image's end, at its place in GameData
+/// (DATA_PLACES, D38); the D5 byte written; and the words the image holds as addresses where the game's state holds a message
+/// or an index loaded as what they mean (D33, piece 3). The code segment's relocations change only its own words, which the
+/// game's state does not hold. Nothing if the D5 byte did not hold 00, as the file's does, or one of those words did not hold
+/// its address.
 [[nodiscard]] std::optional<std::vector<std::uint8_t>> ReferenceLoadImage();
 
 /// The first of _name found walking up from the working directory, and then from the repository this

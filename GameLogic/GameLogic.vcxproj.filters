@@ -81,8 +81,14 @@
     <ClInclude Include="Ai.h">
       <Filter>Ai</Filter>
     </ClInclude>
+    <ClInclude Include="AiState.h">
+      <Filter>Ai</Filter>
+    </ClInclude>
     <ClInclude Include="Arithmetic.h">
       <Filter>Native</Filter>
+    </ClInclude>
+    <ClInclude Include="AudioState.h">
+      <Filter>State</Filter>
     </ClInclude>
     <ClInclude Include="Bios.h">
       <Filter>Platform</Filter>
@@ -96,13 +102,31 @@
     <ClInclude Include="Combat.h">
       <Filter>Combat</Filter>
     </ClInclude>
+    <ClInclude Include="CombatState.h">
+      <Filter>Combat</Filter>
+    </ClInclude>
+    <ClInclude Include="CommanderState.h">
+      <Filter>State</Filter>
+    </ClInclude>
+    <ClInclude Include="ConstantState.h">
+      <Filter>State</Filter>
+    </ClInclude>
     <ClInclude Include="Counted.h">
+      <Filter>State</Filter>
+    </ClInclude>
+    <ClInclude Include="DataPlaces.h">
       <Filter>State</Filter>
     </ClInclude>
     <ClInclude Include="DirectoryFileStore.h">
       <Filter>Platform</Filter>
     </ClInclude>
+    <ClInclude Include="DiskState.h">
+      <Filter>State</Filter>
+    </ClInclude>
     <ClInclude Include="Docked.h">
+      <Filter>Docked</Filter>
+    </ClInclude>
+    <ClInclude Include="DockedState.h">
       <Filter>Docked</Filter>
     </ClInclude>
     <ClInclude Include="DockedTables.h">
@@ -111,10 +135,19 @@
     <ClInclude Include="Docking.h">
       <Filter>Docking</Filter>
     </ClInclude>
+    <ClInclude Include="DockingState.h">
+      <Filter>Docking</Filter>
+    </ClInclude>
     <ClInclude Include="DosFiles.h">
       <Filter>Platform</Filter>
     </ClInclude>
+    <ClInclude Include="DrawingState.h">
+      <Filter>State</Filter>
+    </ClInclude>
     <ClInclude Include="Equipment.h">
+      <Filter>Equipment</Filter>
+    </ClInclude>
+    <ClInclude Include="EquipmentState.h">
       <Filter>Equipment</Filter>
     </ClInclude>
     <ClInclude Include="EquipmentTables.h">
@@ -126,10 +159,19 @@
     <ClInclude Include="Flight.h">
       <Filter>Flight</Filter>
     </ClInclude>
+    <ClInclude Include="FlightState.h">
+      <Filter>Flight</Filter>
+    </ClInclude>
     <ClInclude Include="FlightTables.h">
       <Filter>Flight</Filter>
     </ClInclude>
+    <ClInclude Include="FlowState.h">
+      <Filter>State</Filter>
+    </ClInclude>
     <ClInclude Include="Galaxy.h">
+      <Filter>Galaxy</Filter>
+    </ClInclude>
+    <ClInclude Include="GalaxyState.h">
       <Filter>Galaxy</Filter>
     </ClInclude>
     <ClInclude Include="GalaxyTables.h">
@@ -156,7 +198,13 @@
     <ClInclude Include="Hyperspace.h">
       <Filter>Hyperspace</Filter>
     </ClInclude>
+    <ClInclude Include="HyperspaceState.h">
+      <Filter>Hyperspace</Filter>
+    </ClInclude>
     <ClInclude Include="Input.h">
+      <Filter>Input</Filter>
+    </ClInclude>
+    <ClInclude Include="InputState.h">
       <Filter>Input</Filter>
     </ClInclude>
     <ClInclude Include="InterruptController.h">
@@ -165,10 +213,19 @@
     <ClInclude Include="IntervalTimer.h">
       <Filter>Platform</Filter>
     </ClInclude>
+    <ClInclude Include="JumpState.h">
+      <Filter>State</Filter>
+    </ClInclude>
     <ClInclude Include="Keyboard.h">
       <Filter>Platform</Filter>
     </ClInclude>
+    <ClInclude Include="KeyboardState.h">
+      <Filter>State</Filter>
+    </ClInclude>
     <ClInclude Include="Market.h">
+      <Filter>Market</Filter>
+    </ClInclude>
+    <ClInclude Include="MarketState.h">
       <Filter>Market</Filter>
     </ClInclude>
     <ClInclude Include="MarketTables.h">
@@ -177,8 +234,17 @@
     <ClInclude Include="Maths.h">
       <Filter>Maths</Filter>
     </ClInclude>
+    <ClInclude Include="MathsState.h">
+      <Filter>Maths</Filter>
+    </ClInclude>
+    <ClInclude Include="MenusState.h">
+      <Filter>State</Filter>
+    </ClInclude>
     <ClInclude Include="Message.h">
       <Filter>Text</Filter>
+    </ClInclude>
+    <ClInclude Include="MessagesState.h">
+      <Filter>State</Filter>
     </ClInclude>
     <ClInclude Include="Mouse.h">
       <Filter>Platform</Filter>
@@ -188,9 +254,6 @@
     </ClInclude>
     <ClInclude Include="NativeRoutines.h">
       <Filter>Native</Filter>
-    </ClInclude>
-    <ClInclude Include="SpaceObject.h">
-      <Filter>State</Filter>
     </ClInclude>
     <ClInclude Include="Outcome.h">
       <Filter>Replay</Filter>
@@ -204,6 +267,9 @@
     <ClInclude Include="Platform.h">
       <Filter>Platform</Filter>
     </ClInclude>
+    <ClInclude Include="PlayerShipState.h">
+      <Filter>State</Filter>
+    </ClInclude>
     <ClInclude Include="Reference.h">
       <Filter>Reference</Filter>
     </ClInclude>
@@ -216,10 +282,16 @@
     <ClInclude Include="SaveLoad.h">
       <Filter>SaveLoad</Filter>
     </ClInclude>
+    <ClInclude Include="SaveLoadState.h">
+      <Filter>SaveLoad</Filter>
+    </ClInclude>
     <ClInclude Include="SaveLoadTables.h">
       <Filter>SaveLoad</Filter>
     </ClInclude>
     <ClInclude Include="Scene.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="SceneState.h">
       <Filter>Scene</Filter>
     </ClInclude>
     <ClInclude Include="SceneTables.h">
@@ -234,13 +306,22 @@
     <ClInclude Include="Sound.h">
       <Filter>Sound</Filter>
     </ClInclude>
+    <ClInclude Include="SoundState.h">
+      <Filter>Sound</Filter>
+    </ClInclude>
     <ClInclude Include="SoundTables.h">
       <Filter>Sound</Filter>
+    </ClInclude>
+    <ClInclude Include="SpaceObject.h">
+      <Filter>State</Filter>
     </ClInclude>
     <ClInclude Include="Speaker.h">
       <Filter>Platform</Filter>
     </ClInclude>
     <ClInclude Include="StartUp.h">
+      <Filter>StartUp</Filter>
+    </ClInclude>
+    <ClInclude Include="StartUpState.h">
       <Filter>StartUp</Filter>
     </ClInclude>
     <ClInclude Include="StateDigest.h">
@@ -249,17 +330,32 @@
     <ClInclude Include="Text.h">
       <Filter>Text</Filter>
     </ClInclude>
+    <ClInclude Include="TextState.h">
+      <Filter>Text</Filter>
+    </ClInclude>
     <ClInclude Include="TextTables.h">
       <Filter>Text</Filter>
     </ClInclude>
     <ClInclude Include="Timer.h">
       <Filter>Timer</Filter>
     </ClInclude>
+    <ClInclude Include="TimerState.h">
+      <Filter>Timer</Filter>
+    </ClInclude>
     <ClInclude Include="Timing.h">
       <Filter>Platform</Filter>
     </ClInclude>
+    <ClInclude Include="UnusedState.h">
+      <Filter>State</Filter>
+    </ClInclude>
     <ClInclude Include="Video.h">
       <Filter>Video</Filter>
+    </ClInclude>
+    <ClInclude Include="VideoState.h">
+      <Filter>Video</Filter>
+    </ClInclude>
+    <ClInclude Include="WorldState.h">
+      <Filter>State</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

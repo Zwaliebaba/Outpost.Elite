@@ -10,7 +10,7 @@ namespace GameLogicTests
 namespace
 {
 
-using Commander = Elite::GameData::CommanderBlock;
+using Commander = Elite::CommanderState;
 
 // A product's cargoHold entry: the units held, then the units on sale.
 constexpr std::size_t HOLD_ENTRY_BYTES = 2;
@@ -30,9 +30,8 @@ template <typename Struct> void SetBoth(TwinRig& _rig, DataByte<Struct> _member,
 // Sets the units of product _product held, the first byte of its cargoHold entry, to _value on the twin.
 void SetHeld(TwinRig& _rig, std::size_t _product, std::uint8_t _value)
 {
-  _rig.Both(
-    [_product, _value](Elite::Platform&, Elite::GameState& _state)
-    { _state.BytesFrom(_state.Data().commanderBlock.cargoHold, sizeof(Commander::CargoHold))[_product * HOLD_ENTRY_BYTES] = _value; });
+  _rig.Both([_product, _value](Elite::Platform&, Elite::GameState& _state)
+            { _state.BytesFrom(_state.Data().commander.cargoHold, sizeof(Commander::CargoHold))[_product * HOLD_ENTRY_BYTES] = _value; });
 }
 
 // The status screen again, then _steps.
@@ -63,7 +62,7 @@ void LoadCommander(TwinRig& _rig, std::string_view _source)
   _rig.Both(
     [&tenths](Elite::Platform&, Elite::GameState& _state)
     {
-      const Commander::CreditsTenths& credits = _state.Data().commanderBlock.creditsTenths;
+      const Commander::CreditsTenths& credits = _state.Data().commander.creditsTenths;
       tenths = _state.WordOf(credits) | (std::uint32_t{credits.data75F5} << 16);
     });
   return tenths;
@@ -112,7 +111,7 @@ public:
     TwinRig rig("TwinSupernova");
     rig.Play(TO_THE_DOCK);
     SetBoth(rig, &Commander::missionNumber, 1);
-    SetBoth(rig, &Elite::GameData::playerDocked, 1);
+    SetBoth(rig, &Elite::FlightState::playerDocked, 1);
     rig.Play(StatusAgain("digest briefing\nkey a; wait 0.2\nkey n; wait 0.2\ndigest refused\nkey space; wait 0.2"));
     rig.Play(StatusAgain("digest not-yet"));
     SetBoth(rig, &Commander::jumpedSinceBriefing, 1);
@@ -133,7 +132,7 @@ public:
     TwinRig rig("TwinMaskAndInvasion");
     rig.Play(TO_THE_DOCK);
     SetBoth(rig, &Commander::missionNumber, 2);
-    SetBoth(rig, &Elite::GameData::playerDocked, 1);
+    SetBoth(rig, &Elite::FlightState::playerDocked, 1);
     rig.Play(StatusAgain("digest mask-briefing\nkey space; wait 0.2"));
     rig.Play(StatusAgain("digest not-yet"));
     SetBoth(rig, &Commander::maskShipDestroyed, 1);

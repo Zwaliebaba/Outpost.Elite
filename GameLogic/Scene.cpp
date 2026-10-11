@@ -57,9 +57,9 @@ constexpr std::uint16_t OFF_SCREEN = 0x7FFF;    // what DrawVisibleFaces skips: 
 constexpr std::size_t POINT_BYTES = 4;
 constexpr std::size_t VERTEX_BYTES = 6;
 constexpr std::uint16_t VERTEX_Z = 4;
-// What a vertex program's six bits of vertex reach: 64 vertices from vertexBuffer's first, past the 42 the symbol table sizes it
-// for, into the bytes after it, as the original reads and writes them.
-constexpr std::size_t VERTEX_REACH = 64 * VERTEX_BYTES;
+// What a vertex program reaches: vertexBuffer's 42 vertices. Its six bits of vertex could name 64, past the buffer into the bytes
+// after it, which the state no longer holds beside it (D38); Tools/GenerateTables.py checks that no blueprint's does.
+constexpr std::size_t VERTEX_REACH = sizeof(SceneState::VertexBuffer);
 constexpr std::uint8_t VERTEX_INDEX_BITS = 0x3F;
 constexpr std::uint8_t VERTEX_OP_BITS = 0xC0;
 constexpr std::uint8_t VERTEX_OP_LOAD = 0x00;
@@ -128,22 +128,22 @@ constexpr std::size_t BOX_REFLECTION_SKIP = 0x12; // three vertices
 // starts at, where the original holds its address.
 [[nodiscard]] std::span<Counted<std::uint8_t>> Vertices(GameState& _state)
 {
-  return _state.BytesFrom(_state.Data().vertexBuffer, VERTEX_REACH);
+  return _state.BytesFrom(_state.Data().scene.vertexBuffer, VERTEX_REACH);
 }
 
 // The high byte of sineTable's word at byte _angle, which is even: a signed byte.
 [[nodiscard]] std::uint8_t SineHigh(const GameState& _state, std::uint16_t _angle)
 {
-  return High(_state.Data().sineTable[_angle >> 1]);
+  return High(_state.Data().constants.sineTable[_angle >> 1]);
 }
 
 // The handlers' rotations by the drawn object's angles: -roll into rotation pair 3, yaw into 4, and pitch with the
 // player's into 5 (CS:3781, CS:38C0).
 void SetDrawAngles(GameState& _state)
 {
-  (void)SetSinCos(_state, 3, Negate(_state.Data().drawRollAngle));
-  (void)SetSinCos(_state, 4, _state.Data().drawYawAngle);
-  (void)SetSinCos(_state, 5, static_cast<std::uint16_t>(_state.Data().drawPitchAngle + _state.Data().playerPitchAngle));
+  (void)SetSinCos(_state, 3, Negate(_state.Data().scene.drawRollAngle));
+  (void)SetSinCos(_state, 4, _state.Data().scene.drawYawAngle);
+  (void)SetSinCos(_state, 5, static_cast<std::uint16_t>(_state.Data().scene.drawPitchAngle + _state.Data().playerShip.playerPitchAngle));
 }
 
 [[nodiscard]] bool Negative(std::uint16_t _value) noexcept
@@ -201,7 +201,7 @@ void RotateVertices(GameState& _state, std::size_t _first, std::uint16_t _count,
 // the box's handler loads AX next (CS:3864), and both load them in ReflectVertexAboutCenter (CS:3740) before reading them.
 void RotateVerticesToView(GameState& _state, std::size_t _first, std::uint16_t _count)
 {
-  const std::uint16_t angle = _state.Data().viewAngle;
+  const std::uint16_t angle = _state.Data().playerShip.viewAngle;
   if (angle == 0)
   {
     return;
@@ -218,17 +218,17 @@ void RotateVerticesToView(GameState& _state, std::size_t _first, std::uint16_t _
   (void)RunVertexProgram(_state, _blueprint.vertexProgram, _accumulator);
   std::uint16_t count = 0;
   SetLow(count, _blueprint.projectedVertices);
-  _state.Data().projectedVertexCount = count;
+  _state.Data().scene.projectedVertexCount = count;
   ProjectVertices(_state);
   count = 0;
   // Fixed edges, then face edges: a count byte, then two bytes for each.
   SetLow(count, static_cast<std::uint8_t>(_blueprint.fixedEdges.size() / 2));
-  _state.Data().fixedEdgeCount = count;
+  _state.Data().unused.fixedEdgeCount = count;
   count = static_cast<std::uint16_t>(count << 1);
   // The original keeps the edge lists' addresses in fixedEdgeList and faceEdgeList for its edge routines; native code hands
   // them _blueprint, and nothing reads the two.
   SetLow(count, static_cast<std::uint8_t>(_blueprint.faceEdges.size() / 2));
-  _state.Data().faceEdgeCount = count;
+  _state.Data().unused.faceEdgeCount = count;
   count = static_cast<std::uint16_t>(count << 1);
   SetLow(count, _blueprint.faces);
   return DrawVisibleFaces(_state, _blueprint, count, _backward).backward;
@@ -273,7 +273,7 @@ constexpr std::uint16_t TRIANGLE_VERTEX_BYTES = 3;
   const ScreenPoint firstPoint{coordinate(first, 0), coordinate(first, 2)};
   const std::size_t second = vertex(1);
   const std::int16_t secondX = coordinate(second, 0);
-  _state.Data().faceTestScratch = static_cast<std::uint16_t>(secondX);
+  _state.Data().unused.faceTestScratch = static_cast<std::uint16_t>(secondX);
   const ScreenPoint secondPoint{secondX, coordinate(second, 2)};
   const std::size_t third = vertex(2);
   return Triangle{firstPoint, secondPoint, ScreenPoint{coordinate(third, 0), coordinate(third, 2)}};
@@ -303,7 +303,7 @@ struct WindingProducts
 [[nodiscard]] bool DrawFaceEdge(GameState& _state, const Blueprint& _blueprint, std::uint8_t _item)
 {
   const std::uint16_t edge = Join(_blueprint.faceEdges[_item + 1u], _blueprint.faceEdges[_item]);
-  _state.Data().drawColor = static_cast<std::uint8_t>(High(edge) & EDGE_COLOR_BITS);
+  _state.Data().drawing.drawColor = static_cast<std::uint8_t>(High(edge) & EDGE_COLOR_BITS);
   const auto vertices = static_cast<std::uint16_t>(edge & EDGE_VERTEX_BITS);
   const std::span<const Counted<std::uint8_t>> points = Vertices(_state);
   const std::size_t to = Low(vertices);
@@ -323,7 +323,8 @@ struct WindingProducts
 [[nodiscard]] std::uint16_t DrawFaceTriangle(GameState& _state, std::uint8_t _item, std::span<const std::uint8_t> _list,
                                              std::uint16_t _vertices, bool _backward)
 {
-  _state.Data().triangleFillPattern = WordIn(_state.BytesFrom(_state.Data().faceFillPatterns, std::size_t{_item} + 2), _item);
+  _state.Data().scene.triangleFillPattern =
+    WordIn(_state.BytesFrom(_state.Data().constants.faceFillPatterns, std::size_t{_item} + 2), _item);
   const Triangle triangle = LoadTriangle(_state, _list, _vertices, 1);
   const auto offScreen = [](ScreenPoint _point) { return static_cast<std::uint16_t>(_point.x) == OFF_SCREEN; };
   if (!offScreen(triangle.first) && !offScreen(triangle.second) && !offScreen(triangle.third))
@@ -384,16 +385,16 @@ struct WindingProducts
   const auto x = static_cast<std::uint16_t>(_view.x);
   const auto y = static_cast<std::uint16_t>(_view.y);
   const auto z = static_cast<std::uint16_t>(_view.z);
-  if (Negative(z) || z < _state.Data().nearClipZ)
+  if (Negative(z) || z < _state.Data().constants.nearClipZ)
   {
     return ViewTest::TooNear;
   }
   _slot.viewX = x;
-  _state.Data().drawCenterX = x;
+  _state.Data().scene.drawCenterX = x;
   _slot.viewY = y;
-  _state.Data().drawCenterY = y;
+  _state.Data().scene.drawCenterY = y;
   _slot.viewZ = z;
-  _state.Data().drawCenterZ = z;
+  _state.Data().scene.drawCenterZ = z;
   if (z < DoubledMagnitude(x))
   {
     return ViewTest::WideX;
@@ -424,7 +425,7 @@ struct WindingProducts
 // position, which comes back in the registers it went in.
 [[nodiscard]] Vector RotateToViewDirection(GameState& _state, Vector _view)
 {
-  const std::uint16_t viewAngle = _state.Data().viewAngle;
+  const std::uint16_t viewAngle = _state.Data().playerShip.viewAngle;
   if (viewAngle == 0)
   {
     return _view;
@@ -450,7 +451,7 @@ struct WindingProducts
   for (std::size_t axis = 0; axis < POSITION.size(); ++axis)
   {
     range.magnitudes[axis] = Magnitude(_slot.*POSITION[axis]);
-    if (range.magnitudes[axis] >= _state.Data().maxAxisDistance)
+    if (range.magnitudes[axis] >= _state.Data().constants.maxAxisDistance)
     {
       return range;
     }
@@ -458,7 +459,7 @@ struct WindingProducts
   for (std::size_t axis = 0; axis < POSITION.size(); ++axis)
   {
     range.squaredHigh = Offset(range.squaredHigh, static_cast<std::uint16_t>(UnsignedSquare(range.magnitudes[axis]) >> 16));
-    if (axis != 0 && range.squaredHigh >= _state.Data().maxDistanceSquaredHigh)
+    if (axis != 0 && range.squaredHigh >= _state.Data().constants.maxDistanceSquaredHigh)
     {
       return range;
     }
@@ -508,7 +509,7 @@ struct WindingProducts
   }
   const SlotIndex station = UpdateCompass(_state) ? SlotIndex::Station : _state.IndexOf(_slot);
   SpaceObject& target = _state.Slot(station);
-  if (_state.Data().compassTargetIsStation != 0 && target.depth < DISTANT_DEPTH)
+  if (_state.Data().flight.compassTargetIsStation != 0 && target.depth < DISTANT_DEPTH)
   {
     ClassifyStationPosition(_state, target);
   }
@@ -564,7 +565,7 @@ struct WindingProducts
 void DrawObjectAsDot(GameState& _state, SpaceObject& _slot, bool _backward)
 {
   const ScreenPoint at = ProjectToScreen(ViewPosition(_slot));
-  _state.Data().drawColor = DOT_COLOR;
+  _state.Data().drawing.drawColor = DOT_COLOR;
   DrawDisc(_state, DOT_RADIUS, static_cast<std::uint16_t>(at.x), static_cast<std::uint16_t>(at.y), _backward);
 }
 
@@ -596,12 +597,12 @@ void DrawObjectAsDot(GameState& _state, SpaceObject& _slot, bool _backward)
   // MOV BL,[DI] / AND BX,3Eh: the type, doubled, indexes blueprintTable. The sun and the planet, types 1Eh and 1Fh, past its
   // 30 entries, were drawn above.
   const Blueprint& blueprint = BLUEPRINTS[(_slot.type & SLOT_TYPE_BITS) >> 1];
-  _state.Data().drawPitchAngle = std::uint16_t{_slot.pitch};
-  _state.Data().drawYawAngle = std::uint16_t{_slot.yaw};
-  _state.Data().drawRollAngle = std::uint16_t{_slot.roll};
-  _state.Data().drawCenterX = std::uint16_t{_slot.viewX};
-  _state.Data().drawCenterY = std::uint16_t{_slot.viewY};
-  _state.Data().drawCenterZ = std::uint16_t{_slot.viewZ};
+  _state.Data().scene.drawPitchAngle = std::uint16_t{_slot.pitch};
+  _state.Data().scene.drawYawAngle = std::uint16_t{_slot.yaw};
+  _state.Data().scene.drawRollAngle = std::uint16_t{_slot.roll};
+  _state.Data().scene.drawCenterX = std::uint16_t{_slot.viewX};
+  _state.Data().scene.drawCenterY = std::uint16_t{_slot.viewY};
+  _state.Data().scene.drawCenterZ = std::uint16_t{_slot.viewZ};
   return RunBlueprintHandler(_state, blueprint, _backward);
 }
 
@@ -616,7 +617,7 @@ void DrawObjectAsDot(GameState& _state, SpaceObject& _slot, bool _backward)
   std::uint8_t farthestDepth = 0;
   std::uint16_t farthestZ = 0;
   SlotIndex slot = SlotIndex::Sun;
-  for (std::uint32_t count = LoopCount(_state.Data().shipSlotCount); count != 0; --count)
+  for (std::uint32_t count = LoopCount(_state.Data().world.shipSlotCount); count != 0; --count)
   {
     const SpaceObject& object = _state.Slot(slot);
     if ((object.type & SLOT_DRAWABLE) == SLOT_DRAWABLE && (object.flags & STATE_DRAWN) == 0)
@@ -674,7 +675,7 @@ void DrawSunOrPlanetDisc(GameState& _state, SpaceObject& _slot, std::uint16_t _r
   {
     return;
   }
-  _state.Data().drawColor = High(_slot.pitch); // the disc's colour
+  _state.Data().drawing.drawColor = High(_slot.pitch); // the disc's colour
   DrawDisc(_state, static_cast<std::uint16_t>(_radius << 1), x, row, _backward);
 }
 
@@ -691,26 +692,26 @@ struct SupernovaGlow
 // _backward), and the heat is FFh. None while the countdown runs, or when it is 0. _slot is the sun's slot, DI.
 [[nodiscard]] std::optional<SupernovaGlow> SupernovaHeat(GameState& _state, Hardware& _hardware, std::uint16_t _slot, bool _backward)
 {
-  if (_state.Data().commanderBlock.supernovaFrames == 0)
+  if (_state.Data().commander.supernovaFrames == 0)
   {
     return std::nullopt;
   }
-  _state.Data().commanderBlock.supernovaFrames = static_cast<std::uint16_t>(_state.Data().commanderBlock.supernovaFrames - 1);
-  if (_state.Data().commanderBlock.supernovaFrames != 0)
+  _state.Data().commander.supernovaFrames = static_cast<std::uint16_t>(_state.Data().commander.supernovaFrames - 1);
+  if (_state.Data().commander.supernovaFrames != 0)
   {
     return std::nullopt;
   }
-  _state.Data().commanderBlock.supernovaFrames = 1;
-  if (_state.Data().commanderBlock.supernovaHeat == 0)
+  _state.Data().commander.supernovaFrames = 1;
+  if (_state.Data().commander.supernovaHeat == 0)
   {
-    _state.Data().commanderBlock.supernovaHeat = std::uint8_t{_state.Data().cabinTemperature};
+    _state.Data().commander.supernovaHeat = std::uint8_t{_state.Data().playerShip.cabinTemperature};
   }
-  auto step = static_cast<std::uint8_t>(_state.Data().commanderBlock.supernovaHeat >> 2);
+  auto step = static_cast<std::uint8_t>(_state.Data().commander.supernovaHeat >> 2);
   if (step == 0)
   {
     step = 1;
   }
-  const unsigned sum = unsigned{step} + _state.Data().commanderBlock.supernovaHeat;
+  const unsigned sum = unsigned{step} + _state.Data().commander.supernovaHeat;
   SupernovaGlow glow{static_cast<std::uint8_t>(sum), _slot};
   if (sum > 0xFF)
   {
@@ -720,12 +721,12 @@ struct SupernovaGlow
     }
     // DetonateEnergyBomb's LOOP leaves DI past the ship slots, by the count it loads: objectSlotCount less 3, a byte, 0 for
     // 65,536.
-    const auto ships = static_cast<std::uint8_t>(_state.Data().objectSlotCount - BOMB_FIRST_SLOT);
+    const auto ships = static_cast<std::uint8_t>(_state.Data().flight.objectSlotCount - BOMB_FIRST_SLOT);
     DetonateEnergyBomb(_state, _hardware, _backward);
     glow.slot = static_cast<std::uint16_t>(GameState::SlotOffset(SlotIndex::FirstShip) + LoopCount(ships) * SpaceObject::BYTES);
     glow.heat = 0xFF;
   }
-  _state.Data().commanderBlock.supernovaHeat = Low(glow.heat);
+  _state.Data().commander.supernovaHeat = Low(glow.heat);
   return glow;
 }
 
@@ -754,35 +755,35 @@ struct SunDisc
     // MOV DX,64h / XOR AX,AX: DX:AX = 100 * 65536.
     disc.radius = ScaleByInverseDistance(_slot, std::uint32_t{SUN_SCALE} << 16);
   }
-  _state.Data().cabinTemperature = Low(disc.radius);
+  _state.Data().playerShip.cabinTemperature = Low(disc.radius);
   if ((High(_state.ObjectAt(disc.slot).viewZ) & 0x80) != 0)
   {
     return std::nullopt;
   }
-  _state.Data().sunFringeMask = FRINGE_SMALL;
+  _state.Data().drawing.sunFringeMask = FRINGE_SMALL;
   if (disc.radius < FRINGE_RADIUS_SMALL)
   {
     return disc;
   }
-  _state.Data().sunFringeMask = FRINGE_MEDIUM;
+  _state.Data().drawing.sunFringeMask = FRINGE_MEDIUM;
   if (disc.radius < FRINGE_RADIUS_LARGE)
   {
     return disc;
   }
-  _state.Data().sunFringeMask = FRINGE_LARGE;
+  _state.Data().drawing.sunFringeMask = FRINGE_LARGE;
   if (disc.radius < SCOOP_RADIUS)
   {
     return disc;
   }
-  if (_state.Data().commanderBlock.fuelScoopsFitted == 1)
+  if (_state.Data().commander.fuelScoopsFitted == 1)
   {
-    const unsigned fuel = unsigned{_state.Data().commanderBlock.fuel} + SCOOP_FUEL;
-    _state.Data().commanderBlock.fuel = static_cast<std::uint8_t>(fuel);
+    const unsigned fuel = unsigned{_state.Data().commander.fuel} + SCOOP_FUEL;
+    _state.Data().commander.fuel = static_cast<std::uint8_t>(fuel);
     if (fuel > 0xFF)
     {
-      _state.Data().commanderBlock.fuel = 0xFF;
-      _state.Data().messagePointer = Message::FuelScoopsActive;
-      _state.Data().messageFrames = SCOOP_MESSAGE_FRAMES;
+      _state.Data().commander.fuel = 0xFF;
+      _state.Data().messages.messagePointer = Message::FuelScoopsActive;
+      _state.Data().messages.messageFrames = SCOOP_MESSAGE_FRAMES;
     }
   }
   if (disc.radius >= FATAL_RADIUS)
@@ -805,7 +806,7 @@ struct SunDisc
 // StartPlayerDeathSound's STI, and one past a byte draws as FFh. Returns the disc's radius in front of the view.
 std::optional<std::uint16_t> SizePlanet(GameState& _state, Hardware& _hardware, SpaceObject& _slot)
 {
-  _state.Data().sunFringeMask = FRINGE_NONE;
+  _state.Data().drawing.sunFringeMask = FRINGE_NONE;
   // MOV DX,32h / XOR AX,AX: DX:AX = 50 * 65536.
   const std::uint16_t scaled = ScaleByInverseDistance(_slot, std::uint32_t{PLANET_SCALE} << 16);
   auto altitude = static_cast<std::uint8_t>(~Low(scaled));
@@ -814,7 +815,7 @@ std::optional<std::uint16_t> SizePlanet(GameState& _state, Hardware& _hardware, 
     altitude = ALTITUDE_LIMIT;
   }
   altitude = static_cast<std::uint8_t>(altitude << 1);
-  _state.Data().altitude = altitude;
+  _state.Data().playerShip.altitude = altitude;
   if ((High(_slot.viewZ) & 0x80) != 0)
   {
     return std::nullopt;
@@ -841,14 +842,14 @@ void ProjectVertices(GameState& _state)
 {
   // MOV CX,[projectedVertexCount] / AND CX,CX / JE, then LOOP: a count of the whole word, 0 none. SI walks the vertices and DI the
   // points they become, in place; PUSH SI / POP SI keep the caller's.
-  const std::uint16_t count = _state.Data().projectedVertexCount;
-  const std::span<Counted<std::uint8_t>> vertices = _state.BytesFrom(_state.Data().vertexBuffer, std::size_t{count} * VERTEX_BYTES);
+  const std::uint16_t count = _state.Data().scene.projectedVertexCount;
+  const std::span<Counted<std::uint8_t>> vertices = _state.BytesFrom(_state.Data().scene.vertexBuffer, std::size_t{count} * VERTEX_BYTES);
   std::size_t vertex = 0;
   std::size_t point = 0;
   for (std::uint16_t left = count; left != 0; --left)
   {
     const std::size_t z = vertex + VERTEX_Z;
-    if (static_cast<std::int16_t>(WordIn(vertices, z)) < static_cast<std::int16_t>(_state.Data().nearPlaneZ))
+    if (static_cast<std::int16_t>(WordIn(vertices, z)) < static_cast<std::int16_t>(_state.Data().constants.nearPlaneZ))
     {
       SetWordIn(vertices, point, NEAR_VERTEX_X);
     }
@@ -868,12 +869,12 @@ void ReflectVertexAboutCenter(GameState& _state, std::size_t _vertex, std::size_
 {
   const std::span<Counted<std::uint8_t>> vertices = Vertices(_state);
   std::array<std::uint16_t, 3> center{};
-  constexpr std::array<Counted<std::uint16_t> GameData::*, 3> CENTER = {&GameData::drawCenterX, &GameData::drawCenterY,
-                                                                        &GameData::drawCenterZ};
+  constexpr std::array<Counted<std::uint16_t> SceneState::*, 3> CENTER = {&SceneState::drawCenterX, &SceneState::drawCenterY,
+                                                                          &SceneState::drawCenterZ};
   for (std::size_t axis = 0; axis < CENTER.size(); ++axis)
   {
     const std::size_t bytes = 2 * axis;
-    center[axis] = _state.Data().*CENTER[axis];
+    center[axis] = _state.Data().scene.*CENTER[axis];
     SetWordIn(vertices, _reflection + bytes, static_cast<std::uint16_t>(center[axis] - WordIn(vertices, _vertex + bytes)));
     SetWordIn(vertices, _vertex + bytes, Offset(WordIn(vertices, _vertex + bytes), center[axis]));
   }
@@ -883,12 +884,12 @@ Vector OffsetVertexByCenter(GameState& _state, std::size_t _vertex)
 {
   const std::span<Counted<std::uint8_t>> vertices = Vertices(_state);
   std::array<std::uint16_t, 3> center{};
-  constexpr std::array<Counted<std::uint16_t> GameData::*, 3> CENTER = {&GameData::drawCenterX, &GameData::drawCenterY,
-                                                                        &GameData::drawCenterZ};
+  constexpr std::array<Counted<std::uint16_t> SceneState::*, 3> CENTER = {&SceneState::drawCenterX, &SceneState::drawCenterY,
+                                                                          &SceneState::drawCenterZ};
   for (std::size_t axis = 0; axis < CENTER.size(); ++axis)
   {
     const std::size_t bytes = 2 * axis;
-    center[axis] = _state.Data().*CENTER[axis];
+    center[axis] = _state.Data().scene.*CENTER[axis];
     SetWordIn(vertices, _vertex + bytes, Offset(WordIn(vertices, _vertex + bytes), center[axis]));
   }
   return Vector{static_cast<std::int16_t>(center[0]), static_cast<std::int16_t>(center[1]), static_cast<std::int16_t>(center[2])};
@@ -903,20 +904,20 @@ void BuildBoxCornerVertices(GameState& _state, std::uint16_t _extents)
   const std::uint16_t length = Negate(std::uint16_t{High(extents)});
   // boxCornerVertices, vertex 34 on, the box's corners.
   const std::span<Counted<std::uint8_t>> vertices = Vertices(_state);
-  const auto corners =
-    static_cast<std::size_t>(_state.OffsetOf(_state.Data().vertexBuffer.boxCornerVertices) - _state.OffsetOf(_state.Data().vertexBuffer));
+  const auto corners = static_cast<std::size_t>(_state.OffsetOf(_state.Data().scene.vertexBuffer.boxCornerVertices) -
+                                                _state.OffsetOf(_state.Data().scene.vertexBuffer));
   SetWordIn(vertices, corners + VERTEX_Z, length);
   SetWordIn(vertices, corners + VERTEX_BYTES + VERTEX_Z, length);
   SetWordIn(vertices, corners + 2 * VERTEX_BYTES + VERTEX_Z, length);
   // (p, q) by -roll, and its opposite, (-p, -q); then (p, -q).
   const Pair upper =
-    RotateByStoredSinCos(_state, 3, Pair{static_cast<std::int16_t>(_state.Data().boxHalfWidth), static_cast<std::int16_t>(height)});
+    RotateByStoredSinCos(_state, 3, Pair{static_cast<std::int16_t>(_state.Data().scene.boxHalfWidth), static_cast<std::int16_t>(height)});
   SetWordIn(vertices, corners, static_cast<std::uint16_t>(upper.first));
   SetWordIn(vertices, corners + 2, static_cast<std::uint16_t>(upper.second));
   SetWordIn(vertices, corners + 2 * VERTEX_BYTES, Negate(static_cast<std::uint16_t>(upper.first)));
   SetWordIn(vertices, corners + 2 * VERTEX_BYTES + 2, Negate(static_cast<std::uint16_t>(upper.second)));
-  const Pair lower =
-    RotateByStoredSinCos(_state, 3, Pair{static_cast<std::int16_t>(_state.Data().boxHalfWidth), static_cast<std::int16_t>(Negate(height))});
+  const Pair lower = RotateByStoredSinCos(
+    _state, 3, Pair{static_cast<std::int16_t>(_state.Data().scene.boxHalfWidth), static_cast<std::int16_t>(Negate(height))});
   SetWordIn(vertices, corners + VERTEX_BYTES, static_cast<std::uint16_t>(lower.first));
   SetWordIn(vertices, corners + VERTEX_BYTES + 2, static_cast<std::uint16_t>(lower.second));
   RotateVertices(_state, corners, BOX_CORNERS_ROTATED, 0, VERTEX_Z, 4);
@@ -962,7 +963,7 @@ void BuildDodoVertices(GameState& _state)
   // From the roll angle, in 72-degree steps: the sine and cosine high bytes of each, scaled to the two rings.
   // The angle a byte offset into sineTable, always even.
   const auto ringRadii = [&_state](std::uint16_t _angle) { return ScaleDodoRadii(static_cast<std::int8_t>(SineHigh(_state, _angle))); };
-  auto angle = static_cast<std::uint16_t>((_state.Data().drawRollAngle & ANGLE_BITS) << 1);
+  auto angle = static_cast<std::uint16_t>((_state.Data().scene.drawRollAngle & ANGLE_BITS) << 1);
   const std::span<Counted<std::uint8_t>> vertices = Vertices(_state);
   std::size_t vertex = 0;
   for (std::uint16_t left = DODO_RING_VERTICES; left != 0; --left)
@@ -1156,7 +1157,7 @@ void TransformShip(GameState& _state, SpaceObject& _slot)
   // MOV AX,[DI+4] / MOV BX,[DI+6] / MOV CX,[DI+8], then PUSH DI / POP DI round the transform and the scoop, which keep the slot.
   const Vector position{static_cast<std::int16_t>(_slot.x), static_cast<std::int16_t>(_slot.y), static_cast<std::int16_t>(_slot.z)};
   const Vector view = TransformToViewWithBlip(_state, _slot, position);
-  if (_state.Data().commanderBlock.fuelScoopsFitted == 1 && _state.Data().gameOverFrames == 0)
+  if (_state.Data().commander.fuelScoopsFitted == 1 && _state.Data().flight.gameOverFrames == 0)
   {
     // The scoop keeps AX, BX and CX, the view position, round its work.
     TryScoopObject(_state, _slot, view);
@@ -1170,7 +1171,7 @@ bool RunBlueprintHandler(GameState& _state, const Blueprint& _blueprint, bool _b
   // PUSH DI and the way back to RenderBlueprintBody (CS:3CF2), then the handler's word, BL into boxHalfWidth with BH 0, and JMP AX
   // to the handler with SI past them. The slot and the way back are the stack the handler returns through, which this unit
   // keeps itself.
-  _state.Data().boxHalfWidth = _blueprint.halfWidth;
+  _state.Data().scene.boxHalfWidth = _blueprint.halfWidth;
   if (_blueprint.shape == BlueprintShape::Box)
   {
     BuildBoxCornerVertices(_state, _blueprint.extents);
@@ -1186,13 +1187,13 @@ bool RunBlueprintHandler(GameState& _state, const Blueprint& _blueprint, bool _b
 
 bool TransformAndDrawObjects(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  (void)SetSinCos(_state, 0, _state.Data().playerPitchAngle);
-  (void)SetSinCos(_state, 1, _state.Data().playerYawAngle);
-  (void)SetSinCos(_state, 2, _state.Data().playerRollAngle);
+  (void)SetSinCos(_state, 0, _state.Data().playerShip.playerPitchAngle);
+  (void)SetSinCos(_state, 1, _state.Data().playerShip.playerYawAngle);
+  (void)SetSinCos(_state, 2, _state.Data().playerShip.playerRollAngle);
   // MOV CL,shipSlotCount / XOR CH,CH, then LOOP with PUSH CX / POP CX round each slot: a count of 0 classifies 65,536. DI steps on
   // from where each slot's classification leaves it.
   SlotIndex slot = SlotIndex::Sun;
-  for (std::uint32_t count = LoopCount(_state.Data().shipSlotCount); count != 0; --count)
+  for (std::uint32_t count = LoopCount(_state.Data().world.shipSlotCount); count != 0; --count)
   {
     slot = SlotAfter(ClassifyObject(_state, _state.Slot(slot)));
   }
@@ -1241,7 +1242,7 @@ void DrawDistantStation(GameState& _state, SpaceObject& _slot, bool _backward)
   const ScreenPoint at = ProjectToScreen(CompassPosition(_slot));
   const auto x = static_cast<std::uint16_t>(at.x);
   const auto row = static_cast<std::uint16_t>(at.y);
-  _state.Data().drawColor = STATION_COLOR;
+  _state.Data().drawing.drawColor = STATION_COLOR;
   const std::uint8_t depth = High(_slot.compassZ); // the station's depth
   if (depth < NEAR_STATION_DEPTH)
   {
@@ -1265,9 +1266,9 @@ void DrawDistantStation(GameState& _state, SpaceObject& _slot, bool _backward)
 
 void LoadPlayerAngles(GameState& _state)
 {
-  (void)SetSinCos(_state, 0, _state.Data().playerPitchAngle);
-  (void)SetSinCos(_state, 1, _state.Data().playerYawAngle);
-  (void)SetSinCos(_state, 2, _state.Data().playerRollAngle);
+  (void)SetSinCos(_state, 0, _state.Data().playerShip.playerPitchAngle);
+  (void)SetSinCos(_state, 1, _state.Data().playerShip.playerYawAngle);
+  (void)SetSinCos(_state, 2, _state.Data().playerShip.playerRollAngle);
 }
 
 ScreenPoint ProjectToScreen(Vector _view)

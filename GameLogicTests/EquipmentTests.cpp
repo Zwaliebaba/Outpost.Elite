@@ -14,7 +14,7 @@ namespace GameLogicTests
 namespace
 {
 
-using Commander = Elite::GameData::CommanderBlock;
+using Commander = Elite::CommanderState;
 
 // An object slot's type, in bits 1-5 of its first byte with the active bit; the flags a splinter and a barrel carry.
 constexpr std::uint8_t TYPE_SPLINTER = 0x0B;
@@ -33,7 +33,7 @@ void SetCredits(TwinRig& _rig, std::uint32_t _tenths)
   _rig.Both(
     [_tenths](Elite::Platform&, Elite::GameState& _state)
     {
-      Commander::CreditsTenths& credits = _state.Data().commanderBlock.creditsTenths;
+      Commander::CreditsTenths& credits = _state.Data().commander.creditsTenths;
       _state.SetWordOf(credits, static_cast<std::uint16_t>(_tenths));
       credits.data75F5 = static_cast<std::uint16_t>(_tenths >> 16);
     });
@@ -51,7 +51,7 @@ template <typename Struct> [[nodiscard]] std::uint8_t TwinByte(TwinRig& _rig, Da
 [[nodiscard]] Elite::Message TwinMessage(TwinRig& _rig)
 {
   Elite::Message message = Elite::Message::None;
-  _rig.Both([&message](Elite::Platform&, Elite::GameState& _state) { message = _state.Data().messagePointer; });
+  _rig.Both([&message](Elite::Platform&, Elite::GameState& _state) { message = _state.Data().messages.messagePointer; });
   return message;
 }
 
@@ -103,8 +103,7 @@ void MakeMineralSplinter(Elite::GameState& _state, Elite::SpaceObject& _slot)
   _slot.velocityY = HalveSigned(static_cast<std::uint8_t>((scatter >> 8) - FRAGMENT_SCATTER_CENTER));
   _slot.velocityZ = HalveSigned(static_cast<std::uint8_t>(((spin >> 3) & 0x1F) - FRAGMENT_SCATTER_CENTER));
   for (int draws = 0;
-       static_cast<std::uint16_t>(_state.Data().commanderBlock.randomState0 + _state.Data().commanderBlock.randomState1) >= MINERALS_ODDS;
-       ++draws)
+       static_cast<std::uint16_t>(_state.Data().commander.randomState0 + _state.Data().commander.randomState1) >= MINERALS_ODDS; ++draws)
   {
     Assert::IsTrue(draws < MOST_DRAWS, L"a draw that gives minerals");
     (void)Elite::NextRandom(_state);
@@ -218,9 +217,9 @@ public:
     SetByte(rig, &Commander::fuel, 100);
     // Too little for fuel, round the top, and the keys the menu ignores.
     rig.Play("key b; wait 0.2\nkey Up; wait 0.2\nkey F4; wait 0.2\nkey x; wait 0.2\nkey Home; wait 0.2");
-    SetByte(rig, &Elite::GameData::keyboardPitchRate, 5);
+    SetByte(rig, &Elite::InputState::keyboardPitchRate, 5);
     rig.Play("wait 0.3");
-    SetByte(rig, &Elite::GameData::keyboardPitchRate, 0xFB);
+    SetByte(rig, &Elite::InputState::keyboardPitchRate, 0xFB);
     rig.Play("wait 0.3\ndigest cursor\nkey F9; wait 0.5\ndigest left");
   }
 
@@ -233,14 +232,14 @@ public:
     SetCredits(rig, 1000000);
     rig.Play("key F4; wait 1\nkey Down; wait 0.2\nkey Down; wait 0.2\nkey Down; wait 0.2\nkey Down; wait 0.2\nkey Down; wait 0.2\n"
              "key b; wait 0.3\nkey space; wait 0.2\nkey Left; wait 0.2\nkey Right; wait 0.2\nkey Right; wait 0.2\nkey x; wait 0.2");
-    SetByte(rig, &Elite::GameData::keyboardRollRate, 5);
+    SetByte(rig, &Elite::InputState::keyboardRollRate, 5);
     rig.Play("wait 0.3");
-    SetByte(rig, &Elite::GameData::keyboardRollRate, 0xFB);
+    SetByte(rig, &Elite::InputState::keyboardRollRate, 0xFB);
     rig.Play("wait 0.3\nkey space; wait 0.3\ndigest fitted\nkey s; wait 0.3\nkey space; wait 0.2\nkey Left; wait 0.2\n"
              "key space; wait 0.2\nkey Right; wait 0.2\nkey Right; wait 0.2\nkey x; wait 0.2");
-    SetByte(rig, &Elite::GameData::keyboardRollRate, 5);
+    SetByte(rig, &Elite::InputState::keyboardRollRate, 5);
     rig.Play("wait 0.3");
-    SetByte(rig, &Elite::GameData::keyboardRollRate, 0xFB);
+    SetByte(rig, &Elite::InputState::keyboardRollRate, 0xFB);
     rig.Play("wait 0.3\nkey space; wait 0.3\ndigest removed");
   }
 
