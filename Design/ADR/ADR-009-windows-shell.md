@@ -1,6 +1,6 @@
 # ADR-009 — The Windows shell
 
-**Status:** accepted 2026-10-10, with the change that implements it: the `Engine` and `Outpost` projects that ADR-004 named ahead of time. It is the renderer decision AGENTS.md R12 leaves to the time the renderer is built, and it carries out D8 and the owner's ruling of 2026-10-10 that the shell is built here and run by the owner on Windows.
+**Status:** accepted 2026-10-10, with the change that implements it: the `Engine` and `Outpost` projects that ADR-004 named ahead of time. It is the renderer decision AGENTS.md R12 leaves to the time the renderer is built, and it carries out D8 and the owner's ruling of 2026-10-10 that the shell is built here and run by the owner on Windows. **Amended 2026-10-11 (D42):** the game starts in the borderless full-screen window, on the screen the window would have opened on; F11 returns it to the window.
 
 ## Context
 
@@ -68,7 +68,7 @@
 - **Only keys a replay can name are sent.** A key whose code `Elite::KeyNameOf` cannot name is neither sent nor recorded, so every session can be replayed.
 - **Focus.** Keys held when the window loses focus are released, so that no key stays down in the game's key-down table.
 - **Keys the shell keeps:**
-  - **F11** toggles a borderless full-screen window. The XT has no F11.
+  - **F11** toggles a borderless full-screen window, which the game starts in (D42). The XT has no F11.
   - **Alt+F4** closes the window.
   - **Alt and F10** do not open the window menu, because the game uses both.
 

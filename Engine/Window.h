@@ -21,7 +21,7 @@ struct KeyEvent
 
 /// The game's window: a resizable top-level window whose client area the Presenter draws into. It reports
 /// keys, including the ones Windows keeps for itself (Alt, F10), and releases every held key when it loses
-/// the focus, so nothing sticks down. F11 switches between a window and the whole screen.
+/// the focus, so nothing sticks down. F11 switches between a window and the whole screen, borderless.
 class Window
 {
 public:
@@ -30,8 +30,9 @@ public:
   Window& operator=(const Window&) = delete;
   ~Window();
 
-  /// Creates and shows the window with a client area of the given size. Returns false if Windows refuses.
-  [[nodiscard]] bool Create(HINSTANCE _instance, const wchar_t* _title, int _clientWidth, int _clientHeight);
+  /// Creates and shows the window with a client area of the given size, or, with _fullScreen, shows it over the whole of
+  /// the screen it would have opened on, borderless, F11 returning it to that size. Returns false if Windows refuses.
+  [[nodiscard]] bool Create(HINSTANCE _instance, const wchar_t* _title, int _clientWidth, int _clientHeight, bool _fullScreen);
 
   /// Handles every message waiting. Returns false once the window has been closed.
   [[nodiscard]] bool PumpMessages();

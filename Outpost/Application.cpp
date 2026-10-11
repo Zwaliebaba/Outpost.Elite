@@ -29,6 +29,7 @@ constexpr wchar_t TITLE[] = L"Outpost.Elite";
 constexpr std::uint32_t LOGICAL_WIDTH = 640;  // the CGA's 640 dots across...
 constexpr std::uint32_t LOGICAL_HEIGHT = 480; // ...shown at 4:3 (D8)
 constexpr int START_SCALE = 2;
+constexpr bool START_FULL_SCREEN = true; // borderless over the whole screen, F11 returning to a window START_SCALE times (D42)
 constexpr std::uint32_t SAMPLE_RATE = 44'100;
 constexpr std::uint64_t DIGEST_INTERVAL_MILLISECONDS = 10'000;
 constexpr std::uint64_t LONGEST_CATCH_UP_MILLISECONDS = 250;
@@ -105,7 +106,8 @@ int Application::Run(HINSTANCE _instance)
 {
   const ComScope com;
   Engine::Window window;
-  if (!window.Create(_instance, TITLE, static_cast<int>(LOGICAL_WIDTH) * START_SCALE, static_cast<int>(LOGICAL_HEIGHT) * START_SCALE))
+  if (!window.Create(_instance, TITLE, static_cast<int>(LOGICAL_WIDTH) * START_SCALE, static_cast<int>(LOGICAL_HEIGHT) * START_SCALE,
+                     START_FULL_SCREEN))
   {
     Fail(L"Windows would not create the game's window.");
     return 1;
