@@ -1,6 +1,6 @@
 # ADR-009 — The Windows shell
 
-**Status:** accepted 2026-10-10, with the change that implements it: the `Engine` and `Outpost` projects that ADR-004 named ahead of time. It is the renderer decision AGENTS.md R12 leaves to the time the renderer is built, and it carries out D8 and the owner's ruling of 2026-10-10 that the shell is built here and run by the owner on Windows. **Amended 2026-10-11 (D42):** the game starts in the borderless full-screen window, on the screen the window would have opened on; F11 returns it to the window. **Amended 2026-10-11:** the process is per-monitor DPI aware, version 2 (item 2), so that D46's whole-number scale holds at every display scale.
+**Status:** accepted 2026-10-10, with the change that implements it: the `Engine` and `Outpost` projects that ADR-004 named ahead of time. It is the renderer decision AGENTS.md R12 leaves to the time the renderer is built, and it carries out D8 and the owner's ruling of 2026-10-10 that the shell is built here and run by the owner on Windows. **Amended 2026-10-11 (D42):** the game starts in the borderless full-screen window, on the screen the window would have opened on; F11 returns it to the window. **Amended 2026-10-11 (D48):** the process is per-monitor DPI aware, version 2 (item 2), so that D46's whole-number scale holds at every display scale. This is D48's `PerMonitorV2`, done ahead of the rest of D48 in Phase 6.
 
 ## Context
 
@@ -31,7 +31,7 @@
 - **The texture.** Each frame `Cga::Render` makes the 640×200 grid of indices, `Application` turns it into 0x00RRGGBB through `CgaPalette`, and `Presenter` copies it through one upload buffer into a B8G8R8A8 texture.
 - **The fit.** A full-screen triangle draws the texture into a viewport that is the largest whole multiple of 640×480 that fits the window, centred. The rest of the window is cleared to the CGA's border colour. A window smaller than 640×480 gets the largest fit instead.
 - **The default window** is 1280×960, scale 2. A 1920×1080 display full-screen is also scale 2, and a 2560×1440 one is scale 3.
-- **Physical pixels, at every display scale.** `Outpost/Outpost.manifest` declares the process `PerMonitorV2`, so Windows reports the window, its client area and the screen in physical pixels and never stretches what the swap chain shows.
+- **Physical pixels, at every display scale** (D48). `Outpost/Outpost.manifest` declares the process `PerMonitorV2`, so Windows reports the window, its client area and the screen in physical pixels and never stretches what the swap chain shows.
   - **Why.** Windows tells a DPI-unaware process a smaller screen and has DWM stretch its window. At 125% on a 1920×1080 screen the game saw 1536×864, so it picked scale 1, and DWM stretched that ×1.25 into a blurred 800×600. That defeated D46.
   - **A manifest, not the API.** The mode is set before any code runs. MSBuild's `EnableDpiAwareness` offers per-monitor version 1 at most, so the manifest is a checked-in file, a `Manifest` item in `Outpost.vcxproj`, which the linker merges into the manifest it embeds.
   - **The window.** The 1280×960 client area is in physical pixels at every scale. Its frame is sized with `AdjustWindowRectExForDpi` at the window's DPI.
