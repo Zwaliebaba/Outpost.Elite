@@ -404,7 +404,9 @@ bool RecordDigests(std::string_view _text, const std::map<std::size_t, std::stri
       recorded += whole;
       continue;
     }
-    const std::string_view content = Trim(whole.substr(0, std::min(whole.find('#'), whole.size())));
+    // The line without its end, CRLF, LF or none on a last line, which is kept with the rest of the line after the digest.
+    const std::size_t ending = whole.ends_with("\r\n") ? 2 : whole.ends_with('\n') ? 1 : 0;
+    const std::string_view content = Trim(whole.substr(0, std::min(whole.find('#'), whole.size() - ending)));
     const std::vector<std::string_view> words = Words(content);
     if (words.size() != 3 || words.front() != "digest" || content.find(';') != std::string_view::npos)
     {

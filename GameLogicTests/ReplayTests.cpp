@@ -238,6 +238,26 @@ public:
     Assert::IsFalse(Elite::RecordCheckpoints(text, {{9, checkpoint}}, recorded, error), L"past the end");
   }
 
+  // Re-basing a corpus's digests (RecordDigests) writes each over the one its line holds, and keeps every other byte, each
+  // line's end and a comment after the digest included.
+  TEST_METHOD(RecordingADigestKeepsEveryOtherByte)
+  {
+    const std::string old(64, 'a');
+    const std::string digest(64, 'b');
+    const std::string text = "# a replay\r\nwait 3\r\ndigest boot " + old + "\r\npicture boot " + old + "\r\n\nkey F1; wait 1\n" +
+                             "digest flight " + old + "  # launched\n" + "digest last " + old;
+    std::string recorded;
+    std::string error;
+    Assert::IsTrue(Elite::RecordDigests(text, {{3, digest}, {7, digest}, {8, digest}}, recorded, error), L"records");
+    const std::string expected = "# a replay\r\nwait 3\r\ndigest boot " + digest + "\r\npicture boot " + old +
+                                 "\r\n\nkey F1; wait 1\ndigest flight " + digest + "  # launched\ndigest last " + digest;
+    Assert::AreEqual(expected.c_str(), recorded.c_str());
+
+    Assert::IsFalse(Elite::RecordDigests(text, {{2, digest}}, recorded, error), L"line 2 is a wait");
+    Assert::IsTrue(error.find("line 2") != std::string::npos, L"names the line");
+    Assert::IsFalse(Elite::RecordDigests(text, {{9, digest}}, recorded, error), L"past the end");
+  }
+
   // An end step (Replay.h) is the last that runs the machine, and the only one in which the program may end, as it must
   // there: only digests and shots, which look at what the program left, may follow it, in the same text or a later one.
   TEST_METHOD(AnEndStepIsTheLastThatRunsTheMachine)
