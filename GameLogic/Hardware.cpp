@@ -201,58 +201,6 @@ constexpr std::uint8_t TIME_OF_DAY_VECTOR = 0x1A;
 constexpr std::uint8_t READ_CLOCK = 0x00;
 constexpr std::uint8_t SET_CLOCK = 0x01;
 constexpr std::uint16_t DOS_FLUSH_AND_READ_LINE = 0x0C0A; // AH=0Ch, flush the buffer, then AL=0Ah, buffered input
-constexpr std::uint8_t DOS_SET_TRANSFER_AREA = 0x1A;
-constexpr std::uint8_t DOS_CREATE = 0x3C;
-constexpr std::uint8_t DOS_OPEN = 0x3D;
-constexpr std::uint8_t DOS_CLOSE = 0x3E;
-constexpr std::uint8_t DOS_READ = 0x3F;
-constexpr std::uint8_t DOS_WRITE = 0x40;
-constexpr std::uint8_t DOS_DELETE = 0x41;
-constexpr std::uint8_t DOS_ATTRIBUTES = 0x43;
-constexpr std::uint8_t GET_ATTRIBUTES = 0x00; // AL
-constexpr std::uint8_t SET_ATTRIBUTES = 0x01;
-constexpr std::uint8_t DOS_FIND_FIRST = 0x4E;
-constexpr std::uint8_t DOS_FIND_NEXT = 0x4F;
-
-// CF and AX, as a DOS file service leaves them.
-[[nodiscard]] DosAnswer Answer(const Machine::Registers& _left) noexcept
-{
-  return DosAnswer{(_left.flags & Machine::FLAG_CARRY) != 0, _left.ax};
-}
-
-// A DOS service on the file named, or the pattern given, at _segment:_name: AH=_function and DS:DX the name, then what
-// _setMore sets, the rest as the processor holds it.
-template <typename SetMore>
-[[nodiscard]] Machine::Registers CallDosOnName(Machine::Pc& _pc, std::uint8_t _function, std::uint16_t _segment, std::uint16_t _name,
-                                               SetMore _setMore)
-{
-  return CallService(_pc, DOS_VECTOR,
-                     [&](Machine::Registers& _regs)
-                     {
-                       SetHigh(_regs.ax, _function);
-                       _regs.ds = _segment;
-                       _regs.dx = _name;
-                       _setMore(_regs);
-                     });
-}
-
-// For a DOS service on a name that reads no other register.
-void SetNothingMore(Machine::Registers&) noexcept {}
-
-// Int 21h AH=_function on the file _handle, with _bytes at _segment:_buffer: a read or a write.
-[[nodiscard]] DosAnswer TransferFile(Machine::Pc& _pc, std::uint8_t _function, std::uint16_t _handle, std::uint16_t _segment,
-                                     std::uint16_t _buffer, std::uint16_t _bytes)
-{
-  return Answer(CallService(_pc, DOS_VECTOR,
-                            [=](Machine::Registers& _regs)
-                            {
-                              SetHigh(_regs.ax, _function);
-                              _regs.bx = _handle;
-                              _regs.cx = _bytes;
-                              _regs.ds = _segment;
-                              _regs.dx = _buffer;
-                            }));
-}
 
 } // namespace
 
@@ -342,78 +290,62 @@ void Hardware::ReadDosLine(std::uint16_t _segment, std::uint16_t _offset)
               });
 }
 
+// DOS's file services, native (D27): the platform's DosFiles. A stamp is DOS's time at the machine's clock, as the emulated
+// DOS's was.
+
 void Hardware::SetDiskTransferArea(std::uint16_t _segment, std::uint16_t _offset)
 {
-  CallService(m_pc, DOS_VECTOR,
-              [_segment, _offset](Machine::Registers& _regs)
-              {
-                SetHigh(_regs.ax, DOS_SET_TRANSFER_AREA);
-                _regs.ds = _segment;
-                _regs.dx = _offset;
-              });
+  m_platform.Files().SetTransferArea(_segment, _offset);
 }
 
 DosFileAttributes Hardware::ReadFileAttributes(std::uint16_t _segment, std::uint16_t _name)
 {
-  const Machine::Registers left =
-    CallDosOnName(m_pc, DOS_ATTRIBUTES, _segment, _name, [](Machine::Registers& _regs) { SetLow(_regs.ax, GET_ATTRIBUTES); });
-  return DosFileAttributes{Answer(left), left.cx};
+  return m_platform.Files().ReadAttributes(_segment, _name);
 }
 
 DosAnswer Hardware::SetFileAttributes(std::uint16_t _segment, std::uint16_t _name, std::uint16_t _attributes)
 {
-  return Answer(CallDosOnName(m_pc, DOS_ATTRIBUTES, _segment, _name,
-                              [_attributes](Machine::Registers& _regs)
-                              {
-                                SetLow(_regs.ax, SET_ATTRIBUTES);
-                                _regs.cx = _attributes;
-                              }));
+  return m_platform.Files().SetAttributes(_segment, _name, _attributes);
 }
 
 DosAnswer Hardware::CreateFile(std::uint16_t _segment, std::uint16_t _name, std::uint16_t _attributes)
 {
-  return Answer(CallDosOnName(m_pc, DOS_CREATE, _segment, _name, [_attributes](Machine::Registers& _regs) { _regs.cx = _attributes; }));
+  return m_platform.Files().Create(_segment, _name, _attributes, m_pc.Clock());
 }
 
 DosAnswer Hardware::OpenFile(std::uint16_t _segment, std::uint16_t _name, std::uint8_t _access)
 {
-  return Answer(CallDosOnName(m_pc, DOS_OPEN, _segment, _name, [_access](Machine::Registers& _regs) { SetLow(_regs.ax, _access); }));
+  return m_platform.Files().Open(_segment, _name, _access);
 }
 
 DosAnswer Hardware::ReadFile(std::uint16_t _handle, std::uint16_t _segment, std::uint16_t _buffer, std::uint16_t _bytes)
 {
-  return TransferFile(m_pc, DOS_READ, _handle, _segment, _buffer, _bytes);
+  return m_platform.Files().Read(_handle, _segment, _buffer, _bytes);
 }
 
 DosAnswer Hardware::WriteFile(std::uint16_t _handle, std::uint16_t _segment, std::uint16_t _buffer, std::uint16_t _bytes)
 {
-  return TransferFile(m_pc, DOS_WRITE, _handle, _segment, _buffer, _bytes);
+  return m_platform.Files().Write(_handle, _segment, _buffer, _bytes, m_pc.Clock());
 }
 
 DosAnswer Hardware::CloseFile(std::uint16_t _handle)
 {
-  return Answer(CallService(m_pc, DOS_VECTOR,
-                            [_handle](Machine::Registers& _regs)
-                            {
-                              SetHigh(_regs.ax, DOS_CLOSE);
-                              _regs.bx = _handle;
-                            }));
+  return m_platform.Files().Close(_handle);
 }
 
 DosAnswer Hardware::DeleteFile(std::uint16_t _segment, std::uint16_t _name)
 {
-  return Answer(CallDosOnName(m_pc, DOS_DELETE, _segment, _name, &SetNothingMore));
+  return m_platform.Files().Delete(_segment, _name);
 }
 
 DosAnswer Hardware::FindFirstFile(std::uint16_t _segment, std::uint16_t _pattern, std::uint16_t _attributes)
 {
-  return Answer(
-    CallDosOnName(m_pc, DOS_FIND_FIRST, _segment, _pattern, [_attributes](Machine::Registers& _regs) { _regs.cx = _attributes; }));
+  return m_platform.Files().FindFirst(_segment, _pattern, _attributes);
 }
 
 DosAnswer Hardware::FindNextFile()
 {
-  return Answer(CallService(m_pc, DOS_VECTOR, [](Machine::Registers& _regs) { SetHigh(_regs.ax, DOS_FIND_NEXT); }));
+  return m_platform.Files().FindNext();
 }
 
 // ── Docked, Galaxy, StartUp and Scene (level 5, group B3) ──

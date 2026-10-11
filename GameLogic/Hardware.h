@@ -2,6 +2,7 @@
 #pragma once
 
 #include "Pacing.h"
+#include "Platform.h"
 #include "Timing.h"
 
 #include <cstdint>
@@ -48,20 +49,6 @@ struct BiosClock
   std::uint8_t rolledOver; ///< AL: non-zero when midnight has passed since the clock was last read
 };
 
-/// What a DOS file service (int 21h) answers: CF, and AX.
-struct DosAnswer
-{
-  bool failed;         ///< CF: the service failed
-  std::uint16_t value; ///< AX: the error if it failed; otherwise a handle, a count of bytes, or AX as it went in
-};
-
-/// What DOS answers to int 21h AX=4300h: a DosAnswer, and the file's attributes in CX.
-struct DosFileAttributes
-{
-  DosAnswer answer;
-  std::uint16_t attributes; ///< CX: the attributes when the service did not fail, and CX as it went in when it did
-};
-
 // ── Start, GameLoop and RunFlight (level 5, group F) ──
 
 /// What DOS answers to int 21h AH=30h: its version.
@@ -85,13 +72,15 @@ struct DosTime
 /// vector. Each port operation is the original's own sequence of port accesses, in its order and at its width, so the emulated
 /// devices and paced time's wait detection see what they saw. Each service operation sets the registers the service reads,
 /// calls it as INT does (Pc::CallInterrupt), returns what it gives as a small typed result, and puts the processor's registers
-/// back as they were: it has no register effect of its own. Once the interpreter has gone (D7), the implementation becomes
-/// native devices and the routines do not change.
+/// back as they were: it has no register effect of its own. Phase 5 makes the implementation native devices one at a time, on
+/// the Platform beside the Pc (D27), and the routines do not change. DOS's file services are the first: those operations call
+/// no service, and answer from the platform's DosFiles.
 class Hardware
 {
 public:
-  explicit Hardware(Machine::Pc& _pc) noexcept
-    : m_pc(_pc)
+  Hardware(Machine::Pc& _pc, Platform& _platform) noexcept
+    : m_pc(_pc),
+      m_platform(_platform)
   {
   }
 
@@ -202,6 +191,8 @@ public:
   /// _segment:_offset, whose first byte is its size and whose second gets the count of characters read.
   void ReadDosLine(std::uint16_t _segment, std::uint16_t _offset);
 
+  // DOS's file services, int 21h: native, on the platform's DosFiles, which answers as the emulated DOS did.
+
   /// Int 21h AH=1Ah: DOS's disk transfer area, where find-first and find-next leave what they find, at _segment:_offset.
   void SetDiskTransferArea(std::uint16_t _segment, std::uint16_t _offset);
 
@@ -211,7 +202,8 @@ public:
   /// Int 21h AX=4301h, CX=_attributes: the attributes of the file named at _segment:_name set.
   DosAnswer SetFileAttributes(std::uint16_t _segment, std::uint16_t _name, std::uint16_t _attributes);
 
-  /// Int 21h AH=3Ch, CX=_attributes: the file named at _segment:_name created, or emptied; AX its handle.
+  /// Int 21h AH=3Ch, CX=_attributes: the file named at _segment:_name created, or emptied, and stamped with DOS's time at the
+  /// machine's clock; AX its handle.
   [[nodiscard]] DosAnswer CreateFile(std::uint16_t _segment, std::uint16_t _name, std::uint16_t _attributes);
 
   /// Int 21h AH=3Dh, AL=_access: the file named at _segment:_name opened, 0 to read, 1 to write, 2 both; AX its handle.
@@ -220,7 +212,8 @@ public:
   /// Int 21h AH=3Fh: up to _bytes from the file _handle into _segment:_buffer; AX the count read.
   [[nodiscard]] DosAnswer ReadFile(std::uint16_t _handle, std::uint16_t _segment, std::uint16_t _buffer, std::uint16_t _bytes);
 
-  /// Int 21h AH=40h: _bytes from _segment:_buffer written to the file _handle; AX the count written.
+  /// Int 21h AH=40h: _bytes from _segment:_buffer written to the file _handle, stamped with DOS's time at the machine's
+  /// clock; AX the count written.
   [[nodiscard]] DosAnswer WriteFile(std::uint16_t _handle, std::uint16_t _segment, std::uint16_t _buffer, std::uint16_t _bytes);
 
   /// Int 21h AH=3Eh: the file _handle closed.
@@ -253,6 +246,7 @@ public:
 
 private:
   Machine::Pc& m_pc;
+  Platform& m_platform;
 };
 
 } // namespace Elite

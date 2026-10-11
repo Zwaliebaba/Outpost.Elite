@@ -11,16 +11,17 @@ namespace Elite
 {
 
 /// The machine as a hooked entry sees it (ADR-010): the program's registers and stack, beside the game's memory and devices that
-/// the routine behind the entry takes. One is made for each call of an entry, around the Pc that runs the program and the
-/// GameState the host made for the whole run (Game). Only the entries the Dispatcher reaches have one (NativeRoutines.h): Start,
-/// which sets up the program's registers and stack, and the timer's and keyboard's interrupt handlers, which keep every register.
+/// the routine behind the entry takes. One is made for each call of an entry, around the Pc that runs the program, and the
+/// GameState and the native Platform the host made for the whole run (Game). Only the entries the Dispatcher reaches have one
+/// (NativeRoutines.h): Start, which sets up the program's registers and stack, and the timer's and keyboard's interrupt
+/// handlers, which keep every register.
 class Guest
 {
 public:
-  Guest(Machine::Pc& _pc, GameState& _state) noexcept
+  Guest(Machine::Pc& _pc, GameState& _state, Platform& _platform) noexcept
     : m_pc(_pc),
       m_state(_state),
-      m_hardware(_pc)
+      m_hardware(_pc, _platform)
   {
   }
 

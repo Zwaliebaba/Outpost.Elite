@@ -74,10 +74,26 @@ public:
     return m_game->Host();
   }
 
+  [[nodiscard]] const Machine::Pc& Host() const noexcept
+  {
+    return m_game->Host();
+  }
+
   /// The game's memory, which the PC maps.
   [[nodiscard]] Elite::GameState& State() noexcept
   {
     return m_game->State();
+  }
+
+  [[nodiscard]] const Elite::GameState& State() const noexcept
+  {
+    return m_game->State();
+  }
+
+  /// The native platform the game's devices are moving to (D27): DOS's file services among them.
+  [[nodiscard]] Elite::Platform& NativePlatform() noexcept
+  {
+    return m_game->NativePlatform();
   }
 
   [[nodiscard]] const Machine::LoadedProgram& Program() const noexcept
