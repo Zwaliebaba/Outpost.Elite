@@ -3,8 +3,12 @@
 // and run the tool again (D19).
 #pragma once
 
+#include "Counted.h"
+#include "SpaceObject.h"
+
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 
 // A member's offset in GameData, as a constant expression wherever this header is read. Clang reading the MSVC headers,
 // as clang-tidy does, gets vcruntime.h's offsetof, a reinterpret_cast that is not one, so under Clang it is the builtin
@@ -23,1568 +27,1569 @@ namespace Elite
 /// The reference's data segment as one struct (D19): every data, table and text row of the symbol
 /// table a member at its 1987 offset, packed, 64 KiB in all, which the GameState holds. A row inside
 /// another is a member of a struct nested for it, or, inside a word, of a union with it; bytes no row
-/// names are gaps named for their offset. Native code reads and writes these bytes through the
-/// GameState's accessors and DataOverlay.h's fields, never through references to these members, which
-/// are unaligned.
+/// names are gaps named for their offset; the ship slots are records (SpaceObject). Every byte and
+/// word is a Counted, of alignment 1, which counts its own changes in its GameState's change count:
+/// native code reads and writes members (`_state.Data().commanderBlock.fuel = fuel`), and passes one
+/// by reference to a helper that writes it.
 struct GameData
 {
-  std::uint8_t gap0000[64];
+  Counted<std::uint8_t> gap0000[64];
   /// the space view, rows 1-126 of a 256x128 2bpp buffer at DS:0000-1FFF (64 bytes a row); the drawing routines also write rows 0 and 12...
-  std::uint8_t spaceViewBuffer[8064];
-  std::uint8_t gap1FC0[64];
+  Counted<std::uint8_t> spaceViewBuffer[8064];
+  Counted<std::uint8_t> gap1FC0[64];
   /// 1 in the file; cleared at start-up unless the ROM at FC00:0016 reads Amstrad
-  std::uint8_t amstradPresent;
+  Counted<std::uint8_t> amstradPresent;
   /// Amstrad
-  std::uint8_t amstradSignature[7];
+  Counted<std::uint8_t> amstradSignature[7];
   /// the value last written to port 0x61; the timer handler toggles bit 1 for sound effects
-  std::uint8_t speakerPortImage;
+  Counted<std::uint8_t> speakerPortImage;
   /// what ShowDiscControlScreen asks Start to do, written at 0x7E90: 0 Exit to DOS (Start calls WipeProgram at 0x0072, then exits), 1 lo...
-  std::uint8_t diskOperation;
+  Counted<std::uint8_t> diskOperation;
   /// $-terminated, int 21h AH=09
-  std::uint8_t exitMessage[47];
+  Counted<std::uint8_t> exitMessage[47];
   /// $-terminated
-  std::uint8_t dosVersionMessage[42];
+  Counted<std::uint8_t> dosVersionMessage[42];
   /// ' cheat' with every byte XOR 0xAA
-  std::uint8_t cheatArgumentKey[6];
+  Counted<std::uint8_t> cheatArgumentKey[6];
   /// DS at entry; CheckCheatArgument reads the command tail from pspSegment:0080
-  std::uint16_t pspSegment;
+  Counted<std::uint16_t> pspSegment;
   /// 1 when the command tail is exactly ' cheat' (CheckCheatArgument compares PSP:80h with DS:2063 XOR AAh); RunFlight then ignores the...
-  std::uint8_t cheatEnabled;
+  Counted<std::uint8_t> cheatEnabled;
   /// set by CriticalErrorInterrupt (0x02F6) and PerformDiskRequest's error path (0x03A2), cleared by Start (0x0078) before each operation
-  std::uint8_t diskError;
+  Counted<std::uint8_t> diskError;
   /// DOS handle of the open commander or screenshot file
-  std::uint16_t fileHandle;
+  Counted<std::uint16_t> fileHandle;
   /// int 21h AH=1Ah buffer; find-first/next put the attribute at DS:2084 and the name at DS:208D
-  std::uint8_t diskTransferArea[43];
-  std::uint8_t gap209A[85];
+  Counted<std::uint8_t> diskTransferArea[43];
+  Counted<std::uint8_t> gap209A[85];
   /// *.cdr
-  std::uint8_t commanderFilePattern[6];
+  Counted<std::uint8_t> commanderFilePattern[6];
   /// file names without extension, NUL-terminated, written by PerformDiskRequest's catalogue
-  std::uint8_t commanderFileList[370];
+  Counted<std::uint8_t> commanderFileList[370];
   /// names in commanderFileList, capped at 40 (0x03E3)
-  std::uint8_t commanderFileCount;
+  Counted<std::uint8_t> commanderFileCount;
   /// write pointer into commanderFileList
-  std::uint16_t commanderFileListNext;
+  Counted<std::uint16_t> commanderFileListNext;
   /// port 0x61 at start-up, restored on exit
-  std::uint8_t savedSpeakerPort;
+  Counted<std::uint8_t> savedSpeakerPort;
   /// savedDivideVector's fields, DS:226B-226E.
   struct SavedDivideVector
   {
-    std::uint8_t gap226B[2];
+    Counted<std::uint8_t> gap226B[2];
     /// segment half of savedDivideVector
-    std::uint16_t data226D;
+    Counted<std::uint16_t> data226D;
   };
   /// BIOS int 0 vector
   SavedDivideVector savedDivideVector;
   /// savedKeyboardVector's fields, DS:226F-2272.
   struct SavedKeyboardVector
   {
-    std::uint8_t gap226F[2];
+    Counted<std::uint8_t> gap226F[2];
     /// segment half of savedKeyboardVector
-    std::uint16_t data2271;
+    Counted<std::uint16_t> data2271;
   };
   /// BIOS int 9 vector
   SavedKeyboardVector savedKeyboardVector;
   /// screenshotTextFileName's fields, DS:2273-227D.
   struct ScreenshotTextFileName
   {
-    std::uint8_t gap2273[5];
+    Counted<std::uint8_t> gap2273[5];
     /// the two digits in screenshotTextFileName
-    std::uint16_t screenshotTextFileDigits;
-    std::uint8_t gap227A[4];
+    Counted<std::uint16_t> screenshotTextFileDigits;
+    Counted<std::uint8_t> gap227A[4];
   };
   /// 'elite' + two digits + '.lo', for the text layout
   ScreenshotTextFileName screenshotTextFileName;
   /// screenshotGraphicsFileName's fields, DS:227E-2288.
   struct ScreenshotGraphicsFileName
   {
-    std::uint8_t gap227E[5];
+    Counted<std::uint8_t> gap227E[5];
     /// the two digits in screenshotGraphicsFileName
-    std::uint16_t screenshotGraphicsFileDigits;
-    std::uint8_t gap2285[4];
+    Counted<std::uint16_t> screenshotGraphicsFileDigits;
+    Counted<std::uint8_t> gap2285[4];
   };
   /// 'elite' + two digits + '.hi', for the graphics layouts
   ScreenshotGraphicsFileName screenshotGraphicsFileName;
   /// two ASCII digits, '00' in the file, incremented before each screenshot
-  std::uint16_t screenshotNumber;
+  Counted<std::uint16_t> screenshotNumber;
   /// 'DISC ERROR'
-  std::uint8_t diskErrorText[11];
-  std::uint8_t gap2296[384];
+  Counted<std::uint8_t> diskErrorText[11];
+  Counted<std::uint8_t> gap2296[384];
   /// pointer to the protection's strings and question table
-  std::uint16_t protectionDescriptor;
-  std::uint8_t gap2418[10];
+  Counted<std::uint16_t> protectionDescriptor;
+  Counted<std::uint8_t> gap2418[10];
   /// field +0x0A of the protection descriptor (DS:2418), 0xA5D0; read at 0x73AF. The one word below DS:4D70 that differs from ELITEL.EXE...
-  std::uint16_t protectionAnswerListPointer;
+  Counted<std::uint16_t> protectionAnswerListPointer;
   /// Program Protection
-  std::uint8_t protectionTitle[421];
+  Counted<std::uint8_t> protectionTitle[421];
   /// protectionInput's fields, DS:25C9-25E0.
   struct ProtectionInput
   {
-    std::uint8_t gap25C9[1];
-    std::uint8_t data25CA;
-    std::uint8_t gap25CB[22];
+    Counted<std::uint8_t> gap25C9[1];
+    Counted<std::uint8_t> data25CA;
+    Counted<std::uint8_t> gap25CB[22];
   };
   /// int 21h AH=0Ah buffer: capacity, count, then the typed word
   ProtectionInput protectionInput;
   /// question number while one is pending; 0xFF when none
-  std::uint8_t protectionQuestion;
+  Counted<std::uint8_t> protectionQuestion;
   /// 3 in the file
-  std::uint8_t protectionTriesLeft;
+  Counted<std::uint8_t> protectionTriesLeft;
   /// set by CheckProtectionAnswer; forced by the crack
-  std::uint8_t protectionAnswerCorrect;
+  Counted<std::uint8_t> protectionAnswerCorrect;
   /// 0 in the file; the D5 patch sets it to 1 at load
-  std::uint8_t protectionShown;
+  Counted<std::uint8_t> protectionShown;
   /// Amstrad only: ticks to the next chain to the BIOS int 8; reloaded with 55 or 18
-  std::uint8_t biosTimerChainCountdown;
-  std::uint8_t gap25E6[10];
+  Counted<std::uint8_t> biosTimerChainCountdown;
+  Counted<std::uint8_t> gap25E6[10];
   /// byte; laser mount number per view index (viewAngle/0x200): 1, 4, 2, 3 for front, left, rear, right
-  std::uint8_t viewLaserMount[4];
+  Counted<std::uint8_t> viewLaserMount[4];
   /// sprite: 16 rows of an AND word pair then an OR word pair; one 128-byte 16x16 sight per laser type, drawn by DrawLaserSights; ends a...
-  std::uint8_t laserSights[512];
+  Counted<std::uint8_t> laserSights[512];
   /// drawColor for stardust; 3 in the file
-  std::uint8_t stardustColor;
+  Counted<std::uint8_t> stardustColor;
   /// 6-byte particle; +0 x, +2 y (signed words, on screen while the high bytes are -0x20..0x1F and -0x10..0x0F), +4 byte 0x28-0x47 (the...
-  std::uint8_t stardust[30][6];
+  Counted<std::uint8_t> stardust[30][6];
   /// 6-byte particle; stardust+0xB4: start-of-frame copy for streaks; +5 is 1 for a particle respawned this frame
-  std::uint8_t stardustPrevious[30][6];
+  Counted<std::uint8_t> stardustPrevious[30][6];
   /// written by ComputeStardustShift; 4 at full playerSpeed
-  std::uint8_t stardustShift;
+  Counted<std::uint8_t> stardustShift;
   /// toggled each shot of a type 0 or 2 laser: left or right pair
-  std::uint8_t laserBeamSide;
+  Counted<std::uint8_t> laserBeamSide;
   /// XORed with 2 each shot of a type 3 laser
-  std::uint8_t laserBeamColorToggle;
+  Counted<std::uint8_t> laserBeamColorToggle;
   /// cycles through 1-3
-  std::uint8_t laserBeamColor;
-  std::uint8_t gap2961[15];
+  Counted<std::uint8_t> laserBeamColor;
+  Counted<std::uint8_t> gap2961[15];
   /// systemSeed0's two bytes, as the symbol table names them (DS:2970).
   struct SystemSeed0Bytes
   {
-    std::uint8_t gap2970[1];
+    Counted<std::uint8_t> gap2970[1];
     /// the system's y, 0-255; the charts plot y/2
-    std::uint8_t systemY;
+    Counted<std::uint8_t> systemY;
   };
   union
   {
     /// first word of the seeds of the system being generated; its high byte is systemY
-    std::uint16_t systemSeed0;
+    Counted<std::uint16_t> systemSeed0;
     SystemSeed0Bytes systemSeed0Bytes;
   };
   /// systemSeed1's two bytes, as the symbol table names them (DS:2972).
   struct SystemSeed1Bytes
   {
-    std::uint8_t gap2972[1];
+    Counted<std::uint8_t> gap2972[1];
     /// the system's x, 0-255
-    std::uint8_t systemX;
+    Counted<std::uint8_t> systemX;
   };
   union
   {
     /// low byte bits 3-5 are the government; high byte is systemX
-    std::uint16_t systemSeed1;
+    Counted<std::uint16_t> systemSeed1;
     SystemSeed1Bytes systemSeed1Bytes;
   };
   /// systemSeed2's two bytes, as the symbol table names them (DS:2974).
   struct SystemSeed2Bytes
   {
-    std::uint8_t gap2974[1];
+    Counted<std::uint8_t> gap2974[1];
     /// bits 0-4 pick the name digrams; species bits
-    std::uint8_t systemSeed2High;
+    Counted<std::uint8_t> systemSeed2High;
   };
   union
   {
     /// low byte bit 7 clear means human colonials; bit 0 adds 1 to the tech level
-    std::uint16_t systemSeed2;
+    Counted<std::uint16_t> systemSeed2;
     SystemSeed2Bytes systemSeed2Bytes;
   };
   /// 6-byte seed; system 0 of each galaxy; the first is 5A4A 0248 B753
-  std::uint8_t galaxySeeds[8][6];
-  std::uint8_t gap29A6[6];
+  Counted<std::uint8_t> galaxySeeds[8][6];
+  Counted<std::uint8_t> gap29A6[6];
   /// 'Distance: 100.0 Light Years'; ShowNearestSystemDistance patches the digits at +0x0A-0x0C and +0x0E
-  std::uint8_t distanceText[28];
+  Counted<std::uint8_t> distanceText[28];
   /// 27 spaces and a NUL; ClearChartTextLines prints it twice
-  std::uint8_t blankChartLine[28];
+  Counted<std::uint8_t> blankChartLine[28];
   /// distanceDigits's fields, DS:29E4-29E8.
   struct DistanceDigits
   {
-    std::uint8_t gap29E4[1];
-    std::uint8_t distanceHundredsDigit;
-    std::uint8_t distanceTensDigit;
-    std::uint8_t distanceUnitsDigit;
-    std::uint8_t distanceTenthsDigit;
+    Counted<std::uint8_t> gap29E4[1];
+    Counted<std::uint8_t> distanceHundredsDigit;
+    Counted<std::uint8_t> distanceTensDigit;
+    Counted<std::uint8_t> distanceUnitsDigit;
+    Counted<std::uint8_t> distanceTenthsDigit;
   };
   /// FormatDecimal5's five ASCII digits of selectedDistanceTenthsLy
   DistanceDigits distanceDigits;
   /// FindSystemByName's typed name, 8 characters and a terminator
-  std::uint8_t findInput[9];
+  Counted<std::uint8_t> findInput[9];
   /// the name as typed, for the error message
-  std::uint8_t findInputEcho[9];
+  Counted<std::uint8_t> findInputEcho[9];
   /// 12 spaces printed after a system name
-  std::uint8_t nameLinePadding[13];
+  Counted<std::uint8_t> nameLinePadding[13];
   /// 'FIND: Which System ?'
-  std::uint8_t findPrompt[21];
+  Counted<std::uint8_t> findPrompt[21];
   /// 2 characters; entry 0 is two spaces, which add nothing
-  std::uint8_t systemNameDigrams[32][2];
+  Counted<std::uint8_t> systemNameDigrams[32][2];
   /// 'SHORT RANGE CHART'
-  std::uint8_t shortRangeChartTitle[18];
+  Counted<std::uint8_t> shortRangeChartTitle[18];
   /// 'GALACTIC CHART ' then galacticChartNumber
-  std::uint8_t galacticChartTitle[15];
+  Counted<std::uint8_t> galacticChartTitle[15];
   /// '1' + galaxyNumber
-  std::uint8_t galacticChartNumber;
-  std::uint8_t gap2A7F[2];
+  Counted<std::uint8_t> galacticChartNumber;
+  Counted<std::uint8_t> gap2A7F[2];
   /// 'ERROR: '
-  std::uint8_t findErrorPrefix[8];
+  Counted<std::uint8_t> findErrorPrefix[8];
   /// ' not on map!'
-  std::uint8_t findErrorSuffix[13];
+  Counted<std::uint8_t> findErrorSuffix[13];
   /// items in chartItems: stars first, then labels added by AddChartLabel
-  std::uint8_t chartItemCount;
+  Counted<std::uint8_t> chartItemCount;
   /// address of the next free 8-byte item in chartItems
-  std::uint16_t chartItemEnd;
+  Counted<std::uint16_t> chartItemEnd;
   /// 8 bytes: x min, x max, row min, row max, word centre or text, byte size, byte is-label; the short-range chart's occupied rectangles...
-  std::uint8_t chartItems[32][8];
+  Counted<std::uint8_t> chartItems[32][8];
   /// next pending label in pendingChartLabels; AddChartLabel moves it past the name
-  std::uint16_t chartLabelCursor;
+  Counted<std::uint16_t> chartLabelCursor;
   /// records of word x range, word row range, NUL-terminated system name, written by ShowShortRangeChart
-  std::uint8_t pendingChartLabels[256];
+  Counted<std::uint8_t> pendingChartLabels[256];
   /// tries so far for the current label; NudgeChartLabel gives up at 35
-  std::uint8_t labelNudgeCount;
+  Counted<std::uint8_t> labelNudgeCount;
   /// counted down by PlaceChartLabels
-  std::uint8_t labelsLeftToPlace;
+  Counted<std::uint8_t> labelsLeftToPlace;
   /// HandleFlightFunctionKeys: a screen replaced the cockpit, so it must be restored
-  std::uint8_t flightScreenShown;
+  Counted<std::uint8_t> flightScreenShown;
   /// 'Nav-Comp Error... WITCH SPACE!'
-  std::uint8_t navCompErrorMessage[34];
+  Counted<std::uint8_t> navCompErrorMessage[34];
   /// word: low byte fill mask, high byte keep mask; indexed by x&3 for a span's first byte (FillSpan)
-  std::uint16_t spanLeftMasks[4];
+  Counted<std::uint16_t> spanLeftMasks[4];
   /// word: low byte fill mask, high byte keep mask; indexed by x&3 for a span's last byte (FillSpan)
-  std::uint16_t spanRightMasks[4];
+  Counted<std::uint16_t> spanRightMasks[4];
   /// 4 bytes, one per row; discs of radius 1-4 drawn by DrawSmallDisc
-  std::uint8_t smallDiscSprites[4][4];
+  Counted<std::uint8_t> smallDiscSprites[4][4];
   /// byte; 00 55 AA FF: colour 0-3 repeated across a byte's four pixels
-  std::uint8_t colorFillBytes[4];
+  Counted<std::uint8_t> colorFillBytes[4];
   /// colour 0-3 for the line and circle drawers (DrawDisc indexes the pattern bytes at DS:2CE0 with it); the title sets 2, ApplyEnemyLas...
-  std::uint8_t drawColor;
+  Counted<std::uint8_t> drawColor;
   /// colorFillBytes[drawColor], set by DrawDisc for FillSpan
-  std::uint8_t discFillByte;
+  Counted<std::uint8_t> discFillByte;
   /// DrawDisc's centre x
-  std::uint16_t discCenterX;
+  Counted<std::uint16_t> discCenterX;
   /// DrawDisc's radius/2: the rows above and below the centre
-  std::uint8_t discRadiusRows;
+  Counted<std::uint8_t> discRadiusRows;
   /// DrawDisc's row counter
-  std::uint8_t discRowsLeft;
+  Counted<std::uint8_t> discRowsLeft;
   /// fractional step through circleProfile per row (0x20000/rows)
-  std::uint16_t discProfileStepFraction;
+  Counted<std::uint16_t> discProfileStepFraction;
   /// whole-byte step through circleProfile per row
-  std::uint16_t discProfileStepWhole;
+  Counted<std::uint16_t> discProfileStepWhole;
   /// byte; 255*sqrt(1-(i/512)^2): a disc's half-width per row from the centre outwards
-  std::uint8_t circleProfile[513];
+  Counted<std::uint8_t> circleProfile[513];
   /// Fibonacci generator state with fringeRandomB: (a,b) becomes (b,a+b)
-  std::uint16_t fringeRandomA;
+  Counted<std::uint16_t> fringeRandomA;
   /// its high byte AND sunFringeMask is added to each half-width
-  std::uint16_t fringeRandomB;
+  Counted<std::uint16_t> fringeRandomB;
   /// read by DrawDisc as an AND mask on the disc fill: DrawSunOrPlanet sets 1/3/7 for the sun as its radius passes 0x28/0xB4, 0 for the...
-  std::uint8_t sunFringeMask;
+  Counted<std::uint8_t> sunFringeMask;
   /// 2 bytes: x, y at radius 127; points at 0, 11.25, 22.5 and 33.75 degrees for DrawCircle
-  std::uint8_t circleOctant[4][2];
+  Counted<std::uint8_t> circleOctant[4][2];
   /// circlePoints's fields, DS:2EFC-2F7B.
   struct CirclePoints
   {
-    std::uint8_t gap2EFC[2];
-    std::uint16_t data2EFE;
-    std::uint8_t gap2F00[124];
+    Counted<std::uint8_t> gap2EFC[2];
+    Counted<std::uint16_t> data2EFE;
+    Counted<std::uint8_t> gap2F00[124];
   };
   /// 2 words: x, y; DrawCircle's polygon
   CirclePoints circlePoints;
   /// FillTriangle: apex x (flat bottom), B.x (flat top) or top x (general)
-  std::uint8_t triangleEdgeStartX;
+  Counted<std::uint8_t> triangleEdgeStartX;
   /// FillTriangle: apex x, C.x, or top x
-  std::uint8_t triangleEdgeStartX2;
+  Counted<std::uint8_t> triangleEdgeStartX2;
   /// the lowest row, where DrawStackedSpans starts; FillClippedOneRow writes the row byte too
-  std::uint8_t triangleBottomRow;
-  std::uint8_t gap2F7F[1];
+  Counted<std::uint8_t> triangleBottomRow;
+  Counted<std::uint8_t> gap2F7F[1];
   /// rows from top to the lower vertex (flat) or to the middle vertex (general)
-  std::uint8_t triangleUpperRows;
+  Counted<std::uint8_t> triangleUpperRows;
   /// general triangle: rows from top to bottom
-  std::uint8_t triangleTotalRows;
+  Counted<std::uint8_t> triangleTotalRows;
   /// general triangle: middle vertex x
-  std::uint8_t triangleMiddleX;
+  Counted<std::uint8_t> triangleMiddleX;
   /// general triangle: bottom vertex x
-  std::uint8_t triangleBottomX;
+  Counted<std::uint8_t> triangleBottomX;
   /// written by DrawVisibleFaces (0x3B38) from faceFillPatterns, read by DrawStackedSpansFromRow (0x1CDD): low byte on even rows, high b...
-  std::uint16_t triangleFillPattern;
+  Counted<std::uint16_t> triangleFillPattern;
   /// FillClippedTriangle: first edge start x (apex, B.x or top)
-  std::uint16_t clippedEdgeStartX;
+  Counted<std::uint16_t> clippedEdgeStartX;
   /// FillClippedTriangle: second edge start x (apex, C.x or top)
-  std::uint16_t clippedEdgeStartX2;
+  Counted<std::uint16_t> clippedEdgeStartX2;
   /// rows to the lower (flat) or middle (general) vertex
-  std::uint16_t clippedUpperRows;
+  Counted<std::uint16_t> clippedUpperRows;
   /// general: rows top to bottom
-  std::uint16_t clippedTotalRows;
+  Counted<std::uint16_t> clippedTotalRows;
   /// first drawn row; 0x8000 = none yet
-  std::uint16_t clippedFirstRow;
+  Counted<std::uint16_t> clippedFirstRow;
   /// last drawn row; written, never read
-  std::uint16_t clippedLastRow;
+  Counted<std::uint16_t> clippedLastRow;
   /// 16.16 slope of edge A or the long edge, fraction word (second div)
-  std::uint16_t clippedSlopeAFraction;
+  Counted<std::uint16_t> clippedSlopeAFraction;
   /// its integer word (first div)
-  std::uint16_t clippedSlopeAWhole;
+  Counted<std::uint16_t> clippedSlopeAWhole;
   /// 16.16 slope of edge B or the short edge, fraction word
-  std::uint16_t clippedSlopeBFraction;
+  Counted<std::uint16_t> clippedSlopeBFraction;
   /// its integer word
-  std::uint16_t clippedSlopeBWhole;
+  Counted<std::uint16_t> clippedSlopeBWhole;
   /// general: middle vertex x
-  std::uint16_t clippedMiddleX;
+  Counted<std::uint16_t> clippedMiddleX;
   /// general: bottom vertex x
-  std::uint16_t clippedBottomX;
+  Counted<std::uint16_t> clippedBottomX;
   /// general: rows drawn, the span count for DrawStackedSpansFromRow
-  std::uint8_t clippedRowCount;
-  std::uint8_t gap2F9F[1];
+  Counted<std::uint8_t> clippedRowCount;
+  Counted<std::uint8_t> gap2F9F[1];
   /// word; 16384*sin(2*pi*i/2048), +-1; SetSinCos reads sin at i and cos at i+512 (and 0x7FF); BuildDodoVertices reads high bytes at DS:...
-  std::uint16_t sineTable[2048];
+  Counted<std::uint16_t> sineTable[2048];
   /// word; tan(i*45/256 degrees)*32768, binary-searched by RatioArcTangent
-  std::uint16_t tangentTable[256];
+  Counted<std::uint16_t> tangentTable[256];
   /// word sin, word cos; filled by the entries 2421/2426/242B/2430/2435/243B/2441/244D/2447 (one each), used by the rotations 2453..249D...
-  std::uint8_t rotationSinCos[9][4];
-  std::uint8_t gap41C4[10];
+  Counted<std::uint8_t> rotationSinCos[9][4];
+  Counted<std::uint8_t> gap41C4[10];
   /// 50 in the file; ProjectVertices marks vertices nearer than this with x=0x8000
-  std::uint16_t nearPlaneZ;
-  std::uint8_t gap41D0[32];
+  Counted<std::uint16_t> nearPlaneZ;
+  Counted<std::uint8_t> gap41D0[32];
   /// set to 1 when an ECM goes off: NPC (0x566E) or the player's E key with ecmFitted (0x82AD); read and cleared at 0x257D, which picks...
-  std::uint8_t ecmFired;
+  Counted<std::uint8_t> ecmFired;
   /// the sun's apparent radius from DrawSunOrPlanet; CheckTemperatureWarning at >= 0xE1
-  std::uint8_t cabinTemperature;
+  Counted<std::uint8_t> cabinTemperature;
   /// +5 per shot, saturating at FFh; the fire button does nothing at F0h or above
-  std::uint8_t laserTemperature;
+  Counted<std::uint8_t> laserTemperature;
   /// 2*min(127, 255 - planet radius) from DrawSunOrPlanet; 0xFF at launch (29D0); CheckAltitudeWarning below 0x32
-  std::uint8_t altitude;
+  Counted<std::uint8_t> altitude;
   /// drawn on the top dashboard bar (2614, cell 368Ch, the FORE-SHIELD row); ApplyEnemyLaserHit takes 15 off it
-  std::uint8_t foreShield;
+  Counted<std::uint8_t> foreShield;
   /// drawn on the AFT-SHIELD bar (2623, cell 37CCh)
-  std::uint8_t aftShield;
-  std::uint8_t gap41F6[2];
+  Counted<std::uint8_t> aftShield;
+  Counted<std::uint8_t> gap41F6[2];
   /// 0-3FFh; DrainEnergy, UseMaskingDevice and ApplyEnemyLaserHit take from it, below 0 sets playerDead; CheckEnergyWarning below 0x100;...
-  std::uint16_t playerEnergy;
+  Counted<std::uint16_t> playerEnergy;
   /// byte; the partial byte of a bar: 1, 2 or 3 pixels of colour 1 then colour 2 (entry 0 unused)
-  std::uint8_t barPartialBytes[4];
+  Counted<std::uint8_t> barPartialBytes[4];
   /// word; DrawSignedIndicator's 2-pixel marker at each pixel offset
-  std::uint16_t indicatorMarkers[4];
+  Counted<std::uint16_t> indicatorMarkers[4];
   /// word, one per scanline; drawn by DrawMissileIcons in the order +0, +4, +8, +2, +6 to match the CGA banks
-  std::uint16_t missileIcon[5];
+  Counted<std::uint16_t> missileIcon[5];
   /// word, one per scanline; an 8x8 disc, ANDed with the condition colour
-  std::uint16_t conditionLightBitmap[8];
+  Counted<std::uint16_t> conditionLightBitmap[8];
   /// 0 idle, 1 primed and looking for a target (T or I), 2 locked on missileTarget; also the colour index DrawMissileLockIndicator draws
-  std::uint8_t missileState;
+  Counted<std::uint8_t> missileState;
   /// 1 green, 3 yellow, 2 red, 0 flashing red; written by UpdateConditionColor
-  std::uint8_t conditionColor;
+  Counted<std::uint8_t> conditionColor;
   /// first of the 22 dashboard cache bytes DS:4222-4237 that InvalidateDashboard sets to 0x80
-  std::uint8_t missileCountShown;
+  Counted<std::uint8_t> missileCountShown;
   /// dashboard cache of missileState
-  std::uint8_t missileLockShown;
+  Counted<std::uint8_t> missileLockShown;
   /// byte; dashboard cache of energyBankFill
-  std::uint8_t energyBanksShown[4];
+  Counted<std::uint8_t> energyBanksShown[4];
   /// byte; per-bank fill computed by DrawEnergyBanks from playerEnergy, bottom bank last
-  std::uint8_t energyBankFill[4];
+  Counted<std::uint8_t> energyBankFill[4];
   /// dashboard cache
-  std::uint8_t rollRateShown;
+  Counted<std::uint8_t> rollRateShown;
   /// dashboard cache
-  std::uint8_t pitchRateShown;
+  Counted<std::uint8_t> pitchRateShown;
   /// dashboard cache
-  std::uint8_t altitudeShown;
+  Counted<std::uint8_t> altitudeShown;
   /// dashboard cache
-  std::uint8_t cabinTemperatureShown;
+  Counted<std::uint8_t> cabinTemperatureShown;
   /// dashboard cache
-  std::uint8_t fuelShown;
+  Counted<std::uint8_t> fuelShown;
   /// dashboard cache: 0x20 or 0x81
-  std::uint8_t ecmGlyphShown;
+  Counted<std::uint8_t> ecmGlyphShown;
   /// dashboard cache: 0x20 or 0x82
-  std::uint8_t safeZoneGlyphShown;
+  Counted<std::uint8_t> safeZoneGlyphShown;
   /// dashboard cache
-  std::uint8_t laserTemperatureShown;
+  Counted<std::uint8_t> laserTemperatureShown;
   /// compared but never written by UpdateDashboard, so the fore shield bar is redrawn every frame unless the shield is 0x80
-  std::uint8_t foreShieldShown;
+  Counted<std::uint8_t> foreShieldShown;
   /// compared but never written, as foreShieldShown
-  std::uint8_t aftShieldShown;
+  Counted<std::uint8_t> aftShieldShown;
   /// dashboard cache
-  std::uint8_t conditionColorShown;
+  Counted<std::uint8_t> conditionColorShown;
   /// dashboard cache
-  std::uint8_t speedShown;
+  Counted<std::uint8_t> speedShown;
   /// 'Equipment Loss due to Low Energy'
-  std::uint8_t equipmentLossMessage[40];
+  Counted<std::uint8_t> equipmentLossMessage[40];
   /// slot of the ship whose laser hit the player (51C3)
-  std::uint16_t playerHitBy;
+  Counted<std::uint16_t> playerHitBy;
   /// set to 2 or 1 by the enemy fire code (51C7, 51DA); ApplyEnemyLaserHit applies it and clears it
-  std::uint8_t playerHitPending;
+  Counted<std::uint8_t> playerHitPending;
   /// 1 after a successful dock (0x2C4F), 0 at 0x2A11; ShowCommanderStatusScreen debriefs only when it is 1
-  std::uint8_t playerDocked;
+  Counted<std::uint8_t> playerDocked;
   /// word; box half-size per object type for CheckCollisions: 275 for types 0-1 (stations), 100 for the rest
-  std::uint16_t collisionRanges[32];
+  Counted<std::uint16_t> collisionRanges[32];
   /// 5 points of 2 signed bytes; the tunnel's rectangles, smallest first, drawn by DrawTunnelRectangle
-  std::uint8_t tunnelRectangles[100];
+  Counted<std::uint8_t> tunnelRectangles[100];
   /// bit 0: inside the station's safe zone (UpdateSafeZone)
-  std::uint8_t safeZoneFlags;
+  Counted<std::uint8_t> safeZoneFlags;
   /// shooter's +3C; bit 7 picks the aft shield
-  std::uint8_t playerHitByDepth;
+  Counted<std::uint8_t> playerHitByDepth;
   /// 'Leaving Space Station'
-  std::uint8_t leavingStationMessage[22];
+  Counted<std::uint8_t> leavingStationMessage[22];
   /// 'Auto-Dock Sequence Initiated'
-  std::uint8_t autoDockMessage[29];
+  Counted<std::uint8_t> autoDockMessage[29];
   /// 36 (0x24) from SetUpLocalSpace: object slots then debris slots
-  std::uint8_t shipSlotCount;
+  Counted<std::uint8_t> shipSlotCount;
   /// currentGovernment on arrival (0x2B56), 0 in witch space (0x2A51); spawn limits and the station handler use it
-  std::uint8_t spawnGovernment;
+  Counted<std::uint8_t> spawnGovernment;
   /// SpawnPlayerWreckage: the player's nose direction times 40 (ComputeDeathDebrisVector), x
-  std::uint16_t wreckDriftX;
+  Counted<std::uint16_t> wreckDriftX;
   /// as wreckDriftX, y
-  std::uint16_t wreckDriftY;
+  Counted<std::uint16_t> wreckDriftY;
   /// as wreckDriftX, z
-  std::uint16_t wreckDriftZ;
+  Counted<std::uint16_t> wreckDriftZ;
   /// set when playerEnergy goes below 0 (DrainEnergy, ApplyEnemyLaserHit) or by KillPlayer; GameLoop then reruns the title
-  std::uint8_t playerDead;
-  std::uint8_t gap4346[10];
+  Counted<std::uint8_t> playerDead;
+  Counted<std::uint8_t> gap4346[10];
   /// 16-byte glyph; 8 rows of one word (8 pixels at 2 bpp), from character 0x20; DrawViewChar and DrawScreenChar; smallFont follows
-  std::uint8_t screenFont[99][16];
+  Counted<std::uint8_t> screenFont[99][16];
   /// 10-byte glyph; 'A'-'Z', 5 rows of one word, a 6-pixel letter; DrawSmallViewChar
-  std::uint8_t smallFont[26][10];
+  Counted<std::uint8_t> smallFont[26][10];
   /// pixel pattern behind each glyph in the graphics printer (3130: ink from BX where the glyph is set, this word where it is clear); 0...
-  std::uint16_t textPaperPattern;
+  Counted<std::uint16_t> textPaperPattern;
   /// dword; 1,000,000,000 down to 1; FormatCredits
-  std::uint8_t decimalDivisors32[10][4];
-  std::uint8_t gap4AAE[3];
+  Counted<std::uint8_t> decimalDivisors32[10][4];
+  Counted<std::uint8_t> gap4AAE[3];
   /// 3-byte; 1,000,000, 100,000, 10,000; only the unreached FormatDecimal7
-  std::uint8_t decimalDivisors24[3][3];
+  Counted<std::uint8_t> decimalDivisors24[3][3];
   /// word; 10,000 down to 1; FormatDecimal5 stops at the 1
-  std::uint16_t decimalDivisors16[5];
-  std::uint8_t gap4AC4[1];
+  Counted<std::uint16_t> decimalDivisors16[5];
+  Counted<std::uint8_t> gap4AC4[1];
   /// only the unreached FormatCounter24
-  std::uint8_t counter24Text[7];
-  std::uint8_t gap4ACC[12];
+  Counted<std::uint8_t> counter24Text[7];
+  Counted<std::uint8_t> gap4ACC[12];
   /// only the unreached AddToCounter24 and ResetCounter24
-  std::uint8_t counter24[3];
+  Counted<std::uint8_t> counter24[3];
   /// 'Front View', message-line default for viewAngle 0
-  std::uint8_t frontViewText[11];
+  Counted<std::uint8_t> frontViewText[11];
   /// 'Rear View', for 0x400
-  std::uint8_t rearViewText[10];
+  Counted<std::uint8_t> rearViewText[10];
   /// 'Left View', for 0x200
-  std::uint8_t leftViewText[10];
+  Counted<std::uint8_t> leftViewText[10];
   /// 'Right View', otherwise
-  std::uint8_t rightViewText[11];
+  Counted<std::uint8_t> rightViewText[11];
   /// pointer of the text on the message line now; UpdateMessageLine redraws only when messagePointer differs
-  std::uint16_t messageShown;
+  Counted<std::uint16_t> messageShown;
   /// text the message line should show; written with messageFrames by about 18 routines
-  std::uint16_t messagePointer;
+  Counted<std::uint16_t> messagePointer;
   /// messageFrames's two bytes, as the symbol table names them (DS:4B09).
   struct MessageFramesBytes
   {
-    std::uint8_t gap4B09[1];
+    Counted<std::uint8_t> gap4B09[1];
     /// 0 = a new message is waiting; UpdateMessageLine sets 0xFF
-    std::uint8_t messageDrawn;
+    Counted<std::uint8_t> messageDrawn;
   };
   union
   {
     /// frames left; posters write it as a word, which also zeroes messageDrawn
-    std::uint16_t messageFrames;
+    Counted<std::uint16_t> messageFrames;
     MessageFramesBytes messageFramesBytes;
   };
   /// 'BOUNTY:000000 Cr'; ShowBountyMessage writes the digits at DS:4B12
-  std::uint8_t bountyText[17];
+  Counted<std::uint8_t> bountyText[17];
   /// 'CLASS: 1234567 TYPE: 12345678901'; ShowShipIdentity fills the fields at DS:4B23 (7) and DS:4B31 (11)
-  std::uint8_t shipIdentityText[33];
+  Counted<std::uint8_t> shipIdentityText[33];
   /// 8-byte text; indexed by slot +0x33: None, Station, Attack, Debris, Trader, Wolf, Hunter, Debris, Simple, Hermit, Police
-  std::uint8_t shipClassNames[11][8];
+  Counted<std::uint8_t> shipClassNames[11][8];
   /// 12-byte text; indexed by type: Dodo, Coriolis, Boa, Anaconda, Cobra MkI, Astroid, Boulder, Thargon, Shuttle, Transporter, Worm, Spl...
-  std::uint8_t shipTypeNames[32][12];
+  Counted<std::uint8_t> shipTypeNames[32][12];
   /// code; CheckMissileWarning, CheckAltitudeWarning, CheckTemperatureWarning, CheckEnergyWarning; jmp [bx+0x4D15] at 0x36E3
-  std::uint16_t warningChecks[4];
+  Counted<std::uint16_t> warningChecks[4];
   /// text of the active warning
-  std::uint16_t warningMessage;
+  Counted<std::uint16_t> warningMessage;
   /// 20 when a warning is raised; counts down
-  std::uint8_t warningFrames;
+  Counted<std::uint8_t> warningFrames;
   /// last warning raised; the next search starts after it
-  std::uint8_t warningIndex;
+  Counted<std::uint8_t> warningIndex;
   /// pointer; DS:4D29 'INCOMING MISSILE!', 4D1B 'ALTITUDE LOW!', 4D29 'TEMPERATURE HIGH!', 4D3B 'ENERGY LOW!'
-  std::uint16_t warningTexts[4];
-  std::uint8_t gap4D29[71];
+  Counted<std::uint16_t> warningTexts[4];
+  Counted<std::uint8_t> gap4D29[71];
   /// blueprints's fields, DS:4D70-68C8.
   struct Blueprints
   {
-    std::uint8_t gap4D70[292];
+    Counted<std::uint8_t> gap4D70[292];
     /// type 1; 16 projected vertices, 28 face edges of which faces draw 0, 14 faces from DS:4F23 (count byte) with 22 triangle and 0 edg...
-    std::uint8_t coriolisBlueprint[288];
+    Counted<std::uint8_t> coriolisBlueprint[288];
     /// type 2; 13 projected vertices, 24 face edges of which faces draw 0, 13 faces from DS:5035 (count byte) with 22 triangle and 0 edg...
-    std::uint8_t boaBlueprint[270];
+    Counted<std::uint8_t> boaBlueprint[270];
     /// type 3; 15 projected vertices, 25 face edges of which faces draw 0, 12 faces from DS:5169 (count byte) with 26 triangle and 0 edg...
-    std::uint8_t anacondaBlueprint[320];
+    Counted<std::uint8_t> anacondaBlueprint[320];
     /// type 4; 11 projected vertices, 18 face edges of which faces draw 1, 10 faces from DS:5268 (count byte) with 14 triangle and 6 edg...
-    std::uint8_t cobraMk1Blueprint[205];
+    Counted<std::uint8_t> cobraMk1Blueprint[205];
     /// type 5; 9 projected vertices, 21 face edges of which faces draw 0, 14 faces from DS:532A (count byte) with 14 triangle and 0 edge...
-    std::uint8_t asteroidBlueprint[204];
+    Counted<std::uint8_t> asteroidBlueprint[204];
     /// type 6; 7 projected vertices, 15 face edges of which faces draw 0, 10 faces from DS:53E4 (count byte) with 10 triangle and 0 edge...
-    std::uint8_t boulderBlueprint[154];
+    Counted<std::uint8_t> boulderBlueprint[154];
     /// type 7; 12 projected vertices, 18 face edges of which faces draw 0, 8 faces from DS:5497 (count byte) with 20 triangle and 0 edge...
-    std::uint8_t thargonBlueprint[211];
+    Counted<std::uint8_t> thargonBlueprint[211];
     /// type 8; 19 projected vertices, 30 face edges of which faces draw 11, 13 faces from DS:5597 (count byte) with 14 triangle and 12 e...
-    std::uint8_t shuttleBlueprint[264];
+    Counted<std::uint8_t> shuttleBlueprint[264];
     /// type 9; 37 projected vertices, 46 face edges of which faces draw 19, 14 faces from DS:5729 (count byte) with 28 triangle and 20 e...
-    std::uint8_t transporterBlueprint[470];
+    Counted<std::uint8_t> transporterBlueprint[470];
     /// type 10; 10 projected vertices, 17 face edges of which faces draw 0, 8 faces from DS:5847 (count byte) with 16 triangle and 0 edg...
-    std::uint8_t wormBlueprint[194];
+    Counted<std::uint8_t> wormBlueprint[194];
     /// type 11; 4 projected vertices, 6 face edges of which faces draw 0, 4 faces from DS:58CB (count byte) with 4 triangle and 0 edge i...
-    std::uint8_t splinterBlueprint[68];
+    Counted<std::uint8_t> splinterBlueprint[68];
     /// type 12; 4 projected vertices, 4 face edges of which faces draw 0, 2 faces from DS:590B (count byte) with 4 triangle and 0 edge i...
-    std::uint8_t plateBlueprint[56];
+    Counted<std::uint8_t> plateBlueprint[56];
     /// type 13; 12 projected vertices, 17 face edges of which faces draw 2, 9 faces from DS:5993 (count byte) with 12 triangle and 2 edg...
-    std::uint8_t geckoBlueprint[198];
+    Counted<std::uint8_t> geckoBlueprint[198];
     /// type 14; 14 projected vertices, 19 face edges of which faces draw 5, 9 faces from DS:5A5A (count byte) with 10 triangle and 5 edg...
-    std::uint8_t morayBlueprint[194];
+    Counted<std::uint8_t> morayBlueprint[194];
     /// type 15; 18 projected vertices, 29 face edges of which faces draw 0, 13 faces from DS:5B43 (count byte) with 26 triangle and 0 ed...
-    std::uint8_t adderBlueprint[308];
+    Counted<std::uint8_t> adderBlueprint[308];
     /// type 16; 25 projected vertices, 28 face edges of which faces draw 16, 5 faces from DS:5CA3 (count byte) with 8 triangle and 16 ed...
-    std::uint8_t mambaBlueprint[264];
+    Counted<std::uint8_t> mambaBlueprint[264];
     /// type 17; 10 projected vertices, 15 face edges of which faces draw 0, 7 faces from DS:5D35 (count byte) with 16 triangle and 0 edg...
-    std::uint8_t barrelBlueprint[170];
+    Counted<std::uint8_t> barrelBlueprint[170];
     /// type 18; 16 projected vertices, 24 face edges of which faces draw 6, 10 faces from DS:5E16 (count byte) with 16 triangle and 6 ed...
-    std::uint8_t constrictorBlueprint[243];
+    Counted<std::uint8_t> constrictorBlueprint[243];
     /// type 19; 19 projected vertices, 27 face edges of which faces draw 16, 8 faces from DS:5F20 (count byte) with 10 triangle and 24 e...
-    std::uint8_t cougarBlueprint[252];
+    Counted<std::uint8_t> cougarBlueprint[252];
     /// type 20; 17 projected vertices, 24 face edges of which faces draw 8, 9 faces from DS:5FFA (count byte) with 26 triangle and 12 ed...
-    std::uint8_t missileBlueprint[274];
+    Counted<std::uint8_t> missileBlueprint[274];
     /// type 21; 4 projected vertices, 6 face edges of which faces draw 0, 4 faces from DS:60B2 (count byte) with 4 triangle and 0 edge i...
-    std::uint8_t escapePodBlueprint[64];
+    Counted<std::uint8_t> escapePodBlueprint[64];
     /// type 22; 20 projected vertices, 26 face edges of which faces draw 2, 10 faces from DS:616B (count byte) with 28 triangle and 2 ed...
-    std::uint8_t thargoidBlueprint[307];
+    Counted<std::uint8_t> thargoidBlueprint[307];
     /// type 23; 19 projected vertices, 27 face edges of which faces draw 3, 11 faces from DS:6299 (count byte) with 18 triangle and 3 ed...
-    std::uint8_t ferDeLanceBlueprint[267];
+    Counted<std::uint8_t> ferDeLanceBlueprint[267];
     /// type 24; 19 projected vertices, 28 face edges of which faces draw 5, 12 faces from DS:63AA (count byte) with 22 triangle and 8 ed...
-    std::uint8_t aspBlueprint[298];
+    Counted<std::uint8_t> aspBlueprint[298];
     /// type 25; 10 projected vertices, 15 face edges of which faces draw 0, 7 faces from DS:6486 (count byte) with 10 triangle and 0 edg...
-    std::uint8_t sidewinderBlueprint[144];
+    Counted<std::uint8_t> sidewinderBlueprint[144];
     /// type 26; 28 projected vertices, 40 face edges of which faces draw 15, 13 faces from DS:65B9 (count byte) with 20 triangle and 18...
-    std::uint8_t cobraMk3Blueprint[389];
+    Counted<std::uint8_t> cobraMk3Blueprint[389];
     /// type 27; 17 projected vertices, 21 face edges of which faces draw 4, 6 faces from DS:66C0 (count byte) with 10 triangle and 8 edg...
-    std::uint8_t kraitBlueprint[185];
+    Counted<std::uint8_t> kraitBlueprint[185];
     /// type 28; 15 projected vertices, 20 face edges of which faces draw 6, 7 faces from DS:6771 (count byte) with 14 triangle and 6 edg...
-    std::uint8_t viperBlueprint[195];
+    Counted<std::uint8_t> viperBlueprint[195];
     /// type 29; 11 projected vertices, 26 face edges of which faces draw 0, 17 faces from DS:683C (count byte) with 18 triangle and 0 ed...
-    std::uint8_t pythonBlueprint[253];
+    Counted<std::uint8_t> pythonBlueprint[253];
   };
   /// the 30 blueprints back to back, DS:4D70-68C8, type 0 (the Dodo: 12 faces, 38 triangle items, face count at DS:4DCB) first; blueprin...
   Blueprints blueprints;
   /// pointer; blueprint per ship type, indexed by byte0 & 0x3E (add bx,0x68C9 at 0x3E54); 0x4D70 for type 0, then 1-29 in order. The 30...
-  std::uint16_t blueprintTable[30];
-  std::uint8_t gap6905[43];
+  Counted<std::uint16_t> blueprintTable[30];
+  Counted<std::uint8_t> gap6905[43];
   /// shipSlots's fields, DS:6930-722F.
   struct ShipSlots
   {
-    std::uint8_t gap6930[64];
+    SpaceObject gap6930;
     /// slot 1: type 0x1F set up by SetUpLocalSpace; compass target when far
-    std::uint8_t planetSlot[64];
+    SpaceObject planetSlot;
     /// slot 2: Coriolis or Dodo (SetUpLocalSpace, by DS:75BA < 9); also holds the compass dot (+0x26..+0x28) and target position (+0x20....
-    std::uint8_t stationSlot[64];
+    SpaceObject stationSlot;
     /// slot 3; ship scans run objectSlotCount-3 slots from here
-    std::uint8_t firstShipSlot[1088];
+    SpaceObject firstShipSlot[17];
     /// slots 20-35, debrisSlotCount of them; FindDebrisSlot reuses the oldest (+0x2F); never get scanner blips
-    std::uint8_t debrisSlots[1024];
+    SpaceObject debrisSlots[16];
   };
   /// 36 64-byte records: slot 0 sun, 1 planet (planetSlot), 2 station (stationSlot), 3-19 ships (firstShipSlot), 20-35 debris (debrisSlots)
   ShipSlots shipSlots;
   /// vertexBuffer's fields, DS:7230-732B.
   struct VertexBuffer
   {
-    std::uint8_t gap7230[204];
+    Counted<std::uint8_t> gap7230[204];
     /// vertices 34-41 inside vertexBuffer, written by BuildBoxCornerVertices
-    std::uint8_t boxCornerVertices[48];
+    Counted<std::uint8_t> boxCornerVertices[48];
   };
   /// 6-byte x,y,z words; model vertices 0-41 in view space; ProjectVertices projects the first projectedVertexCount in place into 4-byte...
   VertexBuffer vertexBuffer;
-  std::uint8_t gap732C[4];
+  Counted<std::uint8_t> gap732C[4];
   /// DrawVisibleFaces keeps p1.x here (0x3ACB, 0x3B51) while BX indexes the vertices
-  std::uint16_t faceTestScratch;
+  Counted<std::uint16_t> faceTestScratch;
   /// byte; about sqrt(n) rounded, n=0-128 (n=57 and 73 hold 7 and 8); UpdateCompass reads n=65-98. Sits just past the 42 vertices, so a...
-  std::uint8_t sqrtTable[129];
+  Counted<std::uint8_t> sqrtTable[129];
   /// byte; 0x80, 0x20, 0x08, 0x02: a colour-2 pixel at each position in a CGA byte; XorDashboardPixel
-  std::uint8_t dashboardPixelMasks[4];
+  Counted<std::uint8_t> dashboardPixelMasks[4];
   /// written by RenderBlueprintBody (0x3D08); nothing reads it in ELITES and every blueprint's fixed-edge count is 0
-  std::uint16_t fixedEdgeList;
+  Counted<std::uint16_t> fixedEdgeList;
   /// written at 0x3D01, never read
-  std::uint16_t fixedEdgeCount;
+  Counted<std::uint16_t> fixedEdgeCount;
   /// written at 0x3D17; read by DrawVisibleFaces (0x3AF7): 2-byte edges, byte0 = vertexA*4 (its low 2 bits always 0, masked off), byte1...
-  std::uint16_t faceEdgeList;
+  Counted<std::uint16_t> faceEdgeList;
   /// written at 0x3D10, never read
-  std::uint16_t faceEdgeCount;
+  Counted<std::uint16_t> faceEdgeCount;
   /// read by ProjectVertices
-  std::uint16_t projectedVertexCount;
+  Counted<std::uint16_t> projectedVertexCount;
   /// blueprint byte +2 (RunBlueprintHandler); 15 to 200; BuildDodoVertices ignores it
-  std::uint16_t boxHalfWidth;
-  std::uint8_t gap73C3[6];
+  Counted<std::uint16_t> boxHalfWidth;
+  Counted<std::uint8_t> gap73C3[6];
   /// orientation angle, 800h per turn; with playerYawAngle sets the velocity direction (UpdatePlayerVelocity); re-derived after each pit...
-  std::uint16_t playerPitchAngle;
+  Counted<std::uint16_t> playerPitchAngle;
   /// orientation angle, 800h per turn; see playerPitchAngle
-  std::uint16_t playerYawAngle;
+  Counted<std::uint16_t> playerYawAngle;
   /// 800h per turn; the roll input is added to it directly; the docking computer matches it to the station's spin
-  std::uint16_t playerRollAngle;
+  Counted<std::uint16_t> playerRollAngle;
   /// object +0x0A for the blueprint handler (0x3E5A)
-  std::uint16_t drawPitchAngle;
+  Counted<std::uint16_t> drawPitchAngle;
   /// object +0x0C
-  std::uint16_t drawYawAngle;
+  Counted<std::uint16_t> drawYawAngle;
   /// object +0x0E
-  std::uint16_t drawRollAngle;
+  Counted<std::uint16_t> drawRollAngle;
   /// slots before the debris: 20 (SetUpLocalSpace), 1 in the file
-  std::uint8_t objectSlotCount;
+  Counted<std::uint8_t> objectSlotCount;
   /// 16
-  std::uint8_t debrisSlotCount;
+  Counted<std::uint8_t> debrisSlotCount;
   /// 100 in the file (ELITEL.EXE 10): ClassifyViewPosition does not draw an object whose view-space centre z is below it (0x3CA5)
-  std::uint16_t nearClipZ;
+  Counted<std::uint16_t> nearClipZ;
   /// 12000: CheckShipInRange
-  std::uint16_t maxAxisDistance;
+  Counted<std::uint16_t> maxAxisDistance;
   /// 2197 = 12000^2 >> 16: CheckShipInRange
-  std::uint16_t maxDistanceSquaredHigh;
+  Counted<std::uint16_t> maxDistanceSquaredHigh;
   /// view-space centre of the object being drawn; ReflectVertexAboutCenter and OffsetVertexByCenter
-  std::uint16_t drawCenterX;
-  std::uint16_t drawCenterY;
-  std::uint16_t drawCenterZ;
+  Counted<std::uint16_t> drawCenterX;
+  Counted<std::uint16_t> drawCenterY;
+  Counted<std::uint16_t> drawCenterZ;
   /// RotatePitchYawRoll and RotateBySinCos7210
-  std::uint16_t rotateScratch;
+  Counted<std::uint16_t> rotateScratch;
   /// 'SCOOP RETRIEVAL INACTIVE'
-  std::uint8_t scoopRetrievalInactiveText[25];
+  Counted<std::uint8_t> scoopRetrievalInactiveText[25];
   /// 'cargo item...', overwritten by the scooped product's name
-  std::uint8_t scoopedCargoText[14];
+  Counted<std::uint8_t> scoopedCargoText[14];
   /// 'FUEL SCOOPS ACTIVE'
-  std::uint8_t fuelScoopsActiveText[19];
+  Counted<std::uint8_t> fuelScoopsActiveText[19];
   /// 'CARGO BAY FULL SCOOPS INACTIVE'
-  std::uint8_t cargoBayFullText[33];
+  Counted<std::uint8_t> cargoBayFullText[33];
   /// 'Escape Pod Retrieved...Slaves!'
-  std::uint8_t escapePodRetrievedText[31];
+  Counted<std::uint8_t> escapePodRetrievedText[31];
   /// 'Precious Gems and Metals'
-  std::uint8_t preciousMetalsText[25];
+  Counted<std::uint8_t> preciousMetalsText[25];
   /// 'Metal Alloys'
-  std::uint8_t metalAlloysText[13];
+  Counted<std::uint8_t> metalAlloysText[13];
   /// TryScoopObject
-  std::uint8_t freeCargoTonnes;
-  std::uint8_t gap7486[23];
+  Counted<std::uint8_t> freeCargoTonnes;
+  Counted<std::uint8_t> gap7486[23];
   /// 'Alien Items'
-  std::uint8_t alienItemsText[12];
+  Counted<std::uint8_t> alienItemsText[12];
   /// 'Masking Device!'
-  std::uint8_t maskingDeviceText[16];
+  Counted<std::uint8_t> maskingDeviceText[16];
   /// word; low byte fills even buffer rows, high byte odd rows; read only at 0x3B34 (mov ax,[bx+0x74B9], BX=item byte & 0x7F, always eve...
-  std::uint16_t faceFillPatterns[16];
+  Counted<std::uint16_t> faceFillPatterns[16];
   /// UpdateCompass; TransformAndDrawObjects classifies the station only when 1
-  std::uint8_t compassTargetIsStation;
-  std::uint8_t gap74DA[6];
+  Counted<std::uint8_t> compassTargetIsStation;
+  Counted<std::uint8_t> gap74DA[6];
   /// 'Hyperspaced into System!'
-  std::uint8_t arrivalSystemText[25];
+  Counted<std::uint8_t> arrivalSystemText[25];
   /// 'Hyperspace Motors Engaged'
-  std::uint8_t hyperspaceEngagedText[26];
+  Counted<std::uint8_t> hyperspaceEngagedText[26];
   /// arrivalGalaxyText's fields, DS:7513-752C.
   struct ArrivalGalaxyText
   {
-    std::uint8_t gap7513[24];
+    Counted<std::uint8_t> gap7513[24];
     /// galaxyNumber + '1', written by GalacticJump into arrivalGalaxyText
-    std::uint8_t arrivalGalaxyDigit[1];
-    std::uint8_t gap752C[1];
+    Counted<std::uint8_t> arrivalGalaxyDigit[1];
+    Counted<std::uint8_t> gap752C[1];
   };
   /// 'Hyperspaced into galaxy ' and a digit at DS:752B
   ArrivalGalaxyText arrivalGalaxyText;
   /// 'Welcome to the 9th Galaxy!'
-  std::uint8_t ninthGalaxyText[27];
+  Counted<std::uint8_t> ninthGalaxyText[27];
   /// 'Hyperspaced into WITCH SPACE!'; never selected (see 0x4807)
-  std::uint8_t witchSpaceArrivalText[30];
+  Counted<std::uint8_t> witchSpaceArrivalText[30];
   /// selectedDistanceTenthsLy*36/10 (at least 1), set when H starts the countdown; taken from fuel on arrival (4720)
-  std::uint8_t hyperspaceFuelCost;
+  Counted<std::uint8_t> hyperspaceFuelCost;
   /// 208: length of commanderBlock, the size read and written at 0x0340 and 0x036D
-  std::uint16_t commanderFileBytes;
+  Counted<std::uint16_t> commanderFileBytes;
   /// 25 in the file; length of a system record copy
-  std::uint16_t systemRecordBytes;
+  Counted<std::uint16_t> systemRecordBytes;
   /// commanderBlock's fields, DS:756B-763A.
   struct CommanderBlock
   {
-    std::uint8_t gap756B[15];
+    Counted<std::uint8_t> gap756B[15];
     /// frame bytes 0x0F 0x0D then "COMMANDER " (ShowCommanderStatusScreen)
-    std::uint8_t commanderTitle[2];
+    Counted<std::uint8_t> commanderTitle[2];
     /// 'COMMANDER', the rank inside commanderTitle (DS:757A, frame bytes first); AwardArchangelTitle overwrites it
-    std::uint8_t commanderRankText[9];
-    std::uint8_t gap7585[2];
+    Counted<std::uint8_t> commanderRankText[9];
+    Counted<std::uint8_t> gap7585[2];
     /// cash as text, " 100.0 Credits", written by FormatCredits
-    std::uint8_t creditBalanceText[19];
-    std::uint8_t gap759A[1];
+    Counted<std::uint8_t> creditBalanceText[19];
+    Counted<std::uint8_t> gap759A[1];
     /// with randomState1-2 three words stepped by NextRandom (a,b,c -> b,c,c+a+b); ShowBuyCargoScreen copies all three to marketRandomState
-    std::uint16_t randomState0;
-    std::uint16_t randomState1;
-    std::uint16_t randomState2;
+    Counted<std::uint16_t> randomState0;
+    Counted<std::uint16_t> randomState1;
+    Counted<std::uint16_t> randomState2;
     /// 0-7, index into galaxySeeds
-    std::uint8_t galaxyNumber;
+    Counted<std::uint8_t> galaxyNumber;
     /// 0x14 (Lave) in the file
-    std::uint8_t currentSystemX;
+    Counted<std::uint8_t> currentSystemX;
     /// the current system's y/2; 0x56 (Lave) in the file
-    std::uint8_t currentSystemChartY;
-    std::uint8_t chartCursorX;
+    Counted<std::uint8_t> currentSystemChartY;
+    Counted<std::uint8_t> chartCursorX;
     /// 0-0x7F
-    std::uint8_t chartCursorY;
+    Counted<std::uint8_t> chartCursorY;
     /// the short-range chart's cursor kept between visits
-    std::uint8_t shortRangeCursorX;
-    std::uint8_t shortRangeCursorY;
+    Counted<std::uint8_t> shortRangeCursorX;
+    Counted<std::uint8_t> shortRangeCursorY;
     /// the galactic chart's cursor kept between visits
-    std::uint8_t galacticCursorX;
-    std::uint8_t galacticCursorY;
+    Counted<std::uint8_t> galacticCursorX;
+    Counted<std::uint8_t> galacticCursorY;
     /// 0 galactic chart, 1 short-range
-    std::uint8_t chartIsShortRange;
+    Counted<std::uint8_t> chartIsShortRange;
     /// start of the current system's 25-byte record DS:75AB-71F3, laid out like the selected one from DS:75C4: name (9), name length (+9...
-    std::uint8_t currentSystemName[9];
-    std::uint8_t gap75B4[1];
+    Counted<std::uint8_t> currentSystemName[9];
+    Counted<std::uint8_t> gap75B4[1];
     /// 7 (Lave) in the file; DS:75AB-71F3 is the current system's record, laid out as the selected one at DS:75C4
-    std::uint8_t currentSystemIndex;
-    std::uint8_t gap75B6[2];
+    Counted<std::uint8_t> currentSystemIndex;
+    Counted<std::uint8_t> gap75B6[2];
     /// 0-7, names DS:7CBD; equipment and market prices, ship spawn tables (0x4A86)
-    std::uint8_t currentGovernment;
+    Counted<std::uint8_t> currentGovernment;
     /// 0-7, names DS:7C0C; equipment and market prices
-    std::uint8_t currentEconomy;
+    Counted<std::uint8_t> currentEconomy;
     /// 0-based; equipment for sale has tech byte < this+2; market prices use min(this,9); 9+ makes the station a Dodo (0x2ADE)
-    std::uint8_t currentTechLevel;
-    std::uint8_t gap75BB[1];
-    std::uint8_t data75BC;
-    std::uint8_t gap75BD[2];
-    std::uint8_t data75BF;
-    std::uint8_t gap75C0[4];
+    Counted<std::uint8_t> currentTechLevel;
+    Counted<std::uint8_t> gap75BB[1];
+    Counted<std::uint8_t> data75BC;
+    Counted<std::uint8_t> gap75BD[2];
+    Counted<std::uint8_t> data75BF;
+    Counted<std::uint8_t> gap75C0[4];
     /// selectedSystemName's fields, DS:75C4-75CB.
     struct SelectedSystemName
     {
-      std::uint8_t gap75C4[4];
+      Counted<std::uint8_t> gap75C4[4];
       /// characters 5-6 of selectedSystemName; GenerateSystemName blanks them
-      std::uint16_t data75C8;
+      Counted<std::uint16_t> data75C8;
       /// characters 7-8 of selectedSystemName; GenerateSystemName blanks them
-      std::uint16_t data75CA;
+      Counted<std::uint16_t> data75CA;
     };
     /// start of the selected (hyperspace target) system's record, filled by SelectSystemAtCursor and rebuilt at every WaitForScreenExitK...
     SelectedSystemName selectedSystemName;
-    std::uint8_t gap75CC[1];
+    Counted<std::uint8_t> gap75CC[1];
     /// written by GenerateSystemName; TerminateSelectedSystemName puts the NUL here
-    std::uint8_t selectedSystemNameLength;
+    Counted<std::uint8_t> selectedSystemNameLength;
     /// 0-255 in the galaxy
-    std::uint8_t selectedSystemIndex;
+    Counted<std::uint8_t> selectedSystemIndex;
     /// printed as nnn.n Light Years; 0 = none selected (No System Selected), 47h or more = out of range; compared with fuel*10/36 by H
-    std::uint16_t selectedDistanceTenthsLy;
+    Counted<std::uint16_t> selectedDistanceTenthsLy;
     /// index into DS:7CBD names (Anarchy ... Corporate State)
-    std::uint8_t selectedGovernment;
+    Counted<std::uint8_t> selectedGovernment;
     /// index into DS:7C0C names (Poor Agricultural ... Rich Industrial)
-    std::uint8_t selectedEconomy;
+    Counted<std::uint8_t> selectedEconomy;
     /// shown +1
-    std::uint8_t selectedTechLevel;
+    Counted<std::uint8_t> selectedTechLevel;
     /// tenths of a billion
-    std::uint8_t selectedPopulationTenthsBillion;
+    Counted<std::uint8_t> selectedPopulationTenthsBillion;
     /// 0xFF = Human Colonials; otherwise size adjective index (DS:7D9E)
-    std::uint8_t selectedSpeciesAdjective1;
+    Counted<std::uint8_t> selectedSpeciesAdjective1;
     /// index into DS:7DC5
-    std::uint8_t selectedSpeciesAdjective2;
+    Counted<std::uint8_t> selectedSpeciesAdjective2;
     /// index into DS:7E01
-    std::uint8_t selectedSpeciesAdjective3;
+    Counted<std::uint8_t> selectedSpeciesAdjective3;
     /// index into DS:7E3D (Rodents ... Insects)
-    std::uint8_t selectedSpeciesType;
+    Counted<std::uint8_t> selectedSpeciesType;
     /// millions of credits
-    std::uint16_t selectedProductivityMillionCredits;
+    Counted<std::uint16_t> selectedProductivityMillionCredits;
     /// shown in km
-    std::uint16_t selectedRadiusKm;
+    Counted<std::uint16_t> selectedRadiusKm;
     /// with descriptionSeed1 (DS:75DF) stepped by NextDescriptionRandom; set by SelectSystemAtCursor (0x1284)
-    std::uint16_t descriptionSeed0;
+    Counted<std::uint16_t> descriptionSeed0;
     /// descriptionSeed0 XOR systemSeed2
-    std::uint16_t descriptionSeed1;
-    std::uint8_t gap75E1[1];
+    Counted<std::uint16_t> descriptionSeed1;
+    Counted<std::uint8_t> gap75E1[1];
     /// 255 = full; light years = value/36 (255 shows 7.0); equipment item 1
-    std::uint8_t fuel;
+    Counted<std::uint8_t> fuel;
     /// equipment item 2, at most 4
-    std::uint8_t missileCount;
+    Counted<std::uint8_t> missileCount;
     /// item 3; hold 35 t instead of 20
-    std::uint8_t largeCargoBayFitted;
+    Counted<std::uint8_t> largeCargoBayFitted;
     /// item 4 (by the order of DS:7EC4 and DS:84D2)
-    std::uint8_t ecmFitted;
+    Counted<std::uint8_t> ecmFitted;
     /// item 5; one per mount fitted
-    std::uint8_t pulseLaserCount;
+    Counted<std::uint8_t> pulseLaserCount;
     /// item 6
-    std::uint8_t beamLaserCount;
+    Counted<std::uint8_t> beamLaserCount;
     /// item 7; needed before mining lasers
-    std::uint8_t fuelScoopsFitted;
+    Counted<std::uint8_t> fuelScoopsFitted;
     /// item 8
-    std::uint8_t escapePodFitted;
+    Counted<std::uint8_t> escapePodFitted;
     /// item 9
-    std::uint8_t energyBombFitted;
+    Counted<std::uint8_t> energyBombFitted;
     /// item 10
-    std::uint8_t energyUnitFitted;
+    Counted<std::uint8_t> energyUnitFitted;
     /// item 11
-    std::uint8_t dockingComputerFitted;
+    Counted<std::uint8_t> dockingComputerFitted;
     /// item 12; cleared at 0x4802
-    std::uint8_t galacticHyperdriveFitted;
+    Counted<std::uint8_t> galacticHyperdriveFitted;
     /// item 13; one more rock may spawn while it is 1 (0x4AB2)
-    std::uint8_t miningLaserCount;
+    Counted<std::uint8_t> miningLaserCount;
     /// item 14
-    std::uint8_t militaryLaserCount;
+    Counted<std::uint8_t> militaryLaserCount;
     /// mission 2 reward, 'N' in flight (0x836F)
-    std::uint8_t maskingDeviceFitted;
+    Counted<std::uint8_t> maskingDeviceFitted;
     /// bits 0-3: fore, aft, right, left hold a laser
-    std::uint8_t laserMountsFitted;
+    Counted<std::uint8_t> laserMountsFitted;
     /// 2 bits per mount, mount 0 lowest: 0 pulse, 1 beam, 2 mining, 3 military
-    std::uint8_t laserMountTypes;
+    Counted<std::uint8_t> laserMountTypes;
     /// creditsTenths's fields, DS:75F3-75F6.
     struct CreditsTenths
     {
-      std::uint8_t gap75F3[2];
-      std::uint16_t data75F5;
+      Counted<std::uint8_t> gap75F3[2];
+      Counted<std::uint16_t> data75F5;
     };
     /// 32-bit cash in tenths of a credit, low word first
     CreditsTenths creditsTenths;
     /// 0 clean, 1-39 offender, 40+ fugitive (DS:842A); saturates at 255; -5 per jump (0x4727)
-    std::uint8_t legalStatus;
+    Counted<std::uint8_t> legalStatus;
     /// incremented by CreditKill for kills with a bounty, saturates at 254; rating = first DS:8457 threshold above it; enemy missiles ne...
-    std::uint8_t killCount;
+    Counted<std::uint8_t> killCount;
     /// JAMESON
-    std::uint8_t defaultCommanderName[9];
+    Counted<std::uint8_t> defaultCommanderName[9];
     /// cargoHold's fields, DS:7602-7625.
     struct CargoHold
     {
-      std::uint8_t gap7602[6];
+      Counted<std::uint8_t> gap7602[6];
       /// product 3; escape pods
-      std::uint8_t cargoSlavesTonnes;
-      std::uint8_t gap7609[11];
+      Counted<std::uint8_t> cargoSlavesTonnes;
+      Counted<std::uint8_t> gap7609[11];
       /// product 9
-      std::uint8_t cargoAlloysTonnes;
-      std::uint8_t gap7615[5];
+      Counted<std::uint8_t> cargoAlloysTonnes;
+      Counted<std::uint8_t> gap7615[5];
       /// product 12
-      std::uint8_t cargoMineralsTonnes;
-      std::uint8_t gap761B[1];
+      Counted<std::uint8_t> cargoMineralsTonnes;
+      Counted<std::uint8_t> gap761B[1];
       /// product 13; capped at 0xFA when scooped
-      std::uint8_t cargoGoldKg;
-      std::uint8_t gap761D[1];
+      Counted<std::uint8_t> cargoGoldKg;
+      Counted<std::uint8_t> gap761D[1];
       /// product 14
-      std::uint8_t cargoPlatinumKg;
-      std::uint8_t gap761F[1];
+      Counted<std::uint8_t> cargoPlatinumKg;
+      Counted<std::uint8_t> gap761F[1];
       /// product 15
-      std::uint8_t cargoGemStonesGrams;
-      std::uint8_t gap7621[1];
+      Counted<std::uint8_t> cargoGemStonesGrams;
+      Counted<std::uint8_t> gap7621[1];
       /// product 16; Thargons
-      std::uint8_t cargoAlienItemsTonnes;
-      std::uint8_t gap7623[1];
+      Counted<std::uint8_t> cargoAlienItemsTonnes;
+      Counted<std::uint8_t> gap7623[1];
       /// mission 1 refugees aboard (20 or 35), shown as "Refugees" by ShowInventoryScreen
-      std::uint8_t refugeesTonnes;
+      Counted<std::uint8_t> refugeesTonnes;
       /// tonnes in the hold (gold, platinum and gems excluded); capacity 20, 35 with the extension
-      std::uint8_t cargoUsedTonnes;
+      Counted<std::uint8_t> cargoUsedTonnes;
     };
     /// byte pair; per commodity: units held, units on sale here; entry 17 is refugeesTonnes/cargoUsedTonnes
     CargoHold cargoHold;
     /// 0 after an arrival (0x4754); ShowBuyCargoScreen then rolls the quantities on sale and sets 1
-    std::uint8_t marketQuantitiesSet;
+    Counted<std::uint8_t> marketQuantitiesSet;
     /// jumps counted by UpdateMissionSchedule
-    std::uint8_t missionJumpCount;
+    Counted<std::uint8_t> missionJumpCount;
     /// 0 none, 1 supernova refugees, 2 masking device, 3 Thargoid invasion; set at 0x499B, cleared by ShowMissionDebriefing
-    std::uint8_t missionNumber;
-    std::uint8_t data7629;
+    Counted<std::uint8_t> missionNumber;
+    Counted<std::uint8_t> data7629;
     /// nonzero in witch space: 100 on entry (0x4917), lowered by Thargoid kills (0x8C03); the status screen shows WITCH SPACE
-    std::uint8_t witchspaceCountdown;
+    Counted<std::uint8_t> witchspaceCountdown;
     /// frames before a fuel leak starts; 50 set on arrival in missions 1 and 3
-    std::uint8_t fuelLeakDelayFrames;
+    Counted<std::uint8_t> fuelLeakDelayFrames;
     /// 51 when a leak starts; frames of leak left
-    std::uint8_t fuelLeakFrames;
+    Counted<std::uint8_t> fuelLeakFrames;
     /// set when the ship carrying the masking device is destroyed
-    std::uint8_t maskShipDestroyed;
+    Counted<std::uint8_t> maskShipDestroyed;
     /// set by TryScoopObject (0x447A); mission 2 debrief fits the cloaking device
-    std::uint8_t maskingDeviceRecovered;
+    Counted<std::uint8_t> maskingDeviceRecovered;
     /// 5 at the mission 2 briefing; decremented by TallyMaskMissionKill; mask spawning runs while nonzero
-    std::uint8_t maskMissionShipsLeft;
+    Counted<std::uint8_t> maskMissionShipsLeft;
     /// mission 3: set by ShowMissionBriefing; ships may fire in the safe zone, docking is refused (0x2C32), missiles damage the station;...
-    std::uint8_t thargoidInvasionActive;
+    Counted<std::uint8_t> thargoidInvasionActive;
     /// set at 0x5589 and 0x8B46
-    std::uint8_t invadedStationDestroyed;
+    Counted<std::uint8_t> invadedStationDestroyed;
     /// mission 3 reward, 'L' in flight (0x8385) toggles DS:AC0E
-    std::uint8_t antiEcmEmulatorFitted;
+    Counted<std::uint8_t> antiEcmEmulatorFitted;
     /// 0 until supernovaFrames runs out; then starts from cabinTemperature and grows by max(1, h/4) a frame, killing on overflow (0x3F68...
-    std::uint8_t supernovaHeat;
+    Counted<std::uint8_t> supernovaHeat;
     /// 400 after the supernova briefing (0x6E77); counts down at 0x3F5E and stays 1; cleared on arrival
-    std::uint16_t supernovaFrames;
+    Counted<std::uint16_t> supernovaFrames;
     /// 0 not briefed, 1 briefed, 2 debriefing on screen
-    std::uint8_t missionStage;
+    Counted<std::uint8_t> missionStage;
     /// set on every hyperspace arrival (0x47E1), cleared at a briefing; mission 1 completes only after a jump
-    std::uint8_t jumpedSinceBriefing;
+    Counted<std::uint8_t> jumpedSinceBriefing;
     /// set at 0x4968; mission 2 debrief "Running away from the mask ship..."
-    std::uint8_t fledMaskShip;
+    Counted<std::uint8_t> fledMaskShip;
     /// 2 at the mission 2 briefing; -1 per arrival; 1 means the mask ship's system
-    std::uint8_t maskSystemJumps;
+    Counted<std::uint8_t> maskSystemJumps;
     /// selectedSystemIndex latched when the countdown starts
-    std::uint8_t hyperspaceTargetIndex;
+    Counted<std::uint8_t> hyperspaceTargetIndex;
   };
   /// the commander file image (int 21h AH=3Fh/40h from here)
   CommanderBlock commanderBlock;
-  std::uint8_t gap763B[1];
+  Counted<std::uint8_t> gap763B[1];
   /// copy of commanderBlock taken by SaveStartupCommander
-  std::uint8_t startupCommander[208];
-  std::uint8_t gap770C[304];
+  Counted<std::uint8_t> startupCommander[208];
+  Counted<std::uint8_t> gap770C[304];
   /// 3 bytes; delay frames, radius, colour per ring; copied to hyperspaceRings by ResetHyperspaceRings
-  std::uint8_t hyperspaceRingStart[10][3];
+  Counted<std::uint8_t> hyperspaceRingStart[10][3];
   /// 3 bytes; working copy animated by DrawHyperspaceRings
-  std::uint8_t hyperspaceRings[10][3];
+  Counted<std::uint8_t> hyperspaceRings[10][3];
   /// 'FUEL LEAK!'
-  std::uint8_t fuelLeakText[11];
+  Counted<std::uint8_t> fuelLeakText[11];
   /// 'ARCHANGEL', ended by the forceMisjump byte
-  std::uint8_t archangelTitle[9];
+  Counted<std::uint8_t> archangelTitle[9];
   /// set by ReadScanCode when W (11h) is pressed while Alt is held; on hyperspace arrival (478C) it forces EnterWitchSpace, which puts t...
-  std::uint8_t forceMisjump;
+  Counted<std::uint8_t> forceMisjump;
   /// selectedSystemName latched when the countdown starts
-  std::uint8_t hyperspaceTargetRecord[25];
-  std::uint8_t gap78A6[234];
+  Counted<std::uint8_t> hyperspaceTargetRecord[25];
+  Counted<std::uint8_t> gap78A6[234];
   /// code; call [bx+0x7990] at 0x4A41, index byte +33: SkipInertObjectAi, UpdateStationAi, UpdateMissileAi, UpdateDriftingObjectAi, Upda...
-  std::uint16_t behaviorHandlers[8];
+  Counted<std::uint16_t> behaviorHandlers[8];
   /// active objects of class other than 7 this frame; spawning needs < 10
-  std::uint8_t activeObjectCount;
+  Counted<std::uint8_t> activeObjectCount;
   /// behaviorClassCounts's fields, DS:79A1-79A8.
   struct BehaviorClassCounts
   {
-    std::uint8_t gap79A1[3];
+    Counted<std::uint8_t> gap79A1[3];
     /// behaviorClassCounts[3]: class 3 ('Debris'/'Simple' drifters)
-    std::uint8_t drifterCount;
+    Counted<std::uint8_t> drifterCount;
     /// behaviorClassCounts[4]: class 4 ('Trader')
-    std::uint8_t traderCount;
+    Counted<std::uint8_t> traderCount;
     /// behaviorClassCounts[5]: class 5 ('Wolf'); also gates mask and invasion spawns
-    std::uint8_t wolfCount;
+    Counted<std::uint8_t> wolfCount;
     /// behaviorClassCounts[6]: class 6 ('Hunter')
-    std::uint8_t hunterCount;
-    std::uint8_t gap79A8[1];
+    Counted<std::uint8_t> hunterCount;
+    Counted<std::uint8_t> gap79A8[1];
   };
   /// byte; active objects per class 0-7, recounted each frame by UpdateObjectsAndSpawn
   BehaviorClassCounts behaviorClassCounts;
   /// 10-byte record; type, speed, turn rate, bounty, missiles, cargo, fragments, energy, +3F, range high byte; read by InitObjectFromTem...
-  std::uint8_t spawnTemplates[31][10];
+  Counted<std::uint8_t> spawnTemplates[31][10];
   /// spawnLimitsByGovernment's fields, DS:7ADF-7AFE.
   struct SpawnLimitsByGovernment
   {
-    std::uint8_t gap7ADF[1];
+    Counted<std::uint8_t> gap7ADF[1];
     /// column of spawnLimitsByGovernment: max class 4
-    std::uint8_t traderLimitColumn;
+    Counted<std::uint8_t> traderLimitColumn;
     /// column of spawnLimitsByGovernment: max class 6
-    std::uint8_t hunterLimitColumn;
+    Counted<std::uint8_t> hunterLimitColumn;
     /// column of spawnLimitsByGovernment: max class 5
-    std::uint8_t wolfLimitColumn;
-    std::uint8_t gap7AE3[28];
+    Counted<std::uint8_t> wolfLimitColumn;
+    Counted<std::uint8_t> gap7AE3[28];
   };
   /// 4 bytes; max objects of class 3, 4, 6, 5, indexed by spawnGovernment x 4
   SpawnLimitsByGovernment spawnLimitsByGovernment;
   /// spawnGovernment x 4, set by UpdateObjectsAndSpawn
-  std::uint16_t spawnLimitOffset;
+  Counted<std::uint16_t> spawnLimitOffset;
   /// NPC ECM: 20 from the station or a fleeing trader, 30 from a Thargoid; counted down only by UpdateStationAi, which removes all missi...
-  std::uint8_t npcEcmFrames;
+  Counted<std::uint8_t> npcEcmFrames;
   /// set by UpdateMissileAi; CheckMissileWarning clears it
-  std::uint8_t incomingMissileAlert;
+  Counted<std::uint8_t> incomingMissileAlert;
   /// mask ship slot kept while its escorts are placed
-  std::uint16_t maskShipSlot;
-  std::uint8_t gap7B05[1];
+  Counted<std::uint16_t> maskShipSlot;
+  Counted<std::uint8_t> gap7B05[1];
   /// 1 while ExplodeObject explodes a station: 10 extra debris steps
-  std::uint8_t explodingStation;
+  Counted<std::uint8_t> explodingStation;
   /// currentGovernment x 8, set by UpdateObjectsAndSpawn
-  std::uint16_t spawnOddsOffset;
+  Counted<std::uint16_t> spawnOddsOffset;
   /// spawnOddsByGovernment's fields, DS:7B09-7B48.
   struct SpawnOddsByGovernment
   {
-    std::uint8_t gap7B09[2];
+    Counted<std::uint8_t> gap7B09[2];
     /// column of spawnOddsByGovernment: class 4
-    std::uint16_t traderOddsColumn;
+    Counted<std::uint16_t> traderOddsColumn;
     /// column of spawnOddsByGovernment: class 6
-    std::uint16_t hunterOddsColumn;
+    Counted<std::uint16_t> hunterOddsColumn;
     /// column of spawnOddsByGovernment: class 5
-    std::uint16_t wolfOddsColumn;
-    std::uint8_t gap7B11[56];
+    Counted<std::uint16_t> wolfOddsColumn;
+    Counted<std::uint8_t> gap7B11[56];
   };
   /// 4 words; spawn chance per frame out of 65536 for class 3, 4, 6, 5, indexed by currentGovernment x 8
   SpawnOddsByGovernment spawnOddsByGovernment;
-  std::uint8_t gap7B49[7];
+  Counted<std::uint8_t> gap7B49[7];
   /// Release:1? 1-10-87
-  std::uint8_t versionString[19];
+  Counted<std::uint8_t> versionString[19];
   /// frame bytes, then "SELL CARGO"
-  std::uint8_t sellCargoFrame[13];
+  Counted<std::uint8_t> sellCargoFrame[13];
   /// frame bytes, then "BUY CARGO"
-  std::uint8_t buyCargoFrame[12];
+  Counted<std::uint8_t> buyCargoFrame[12];
   /// frame bytes, then "EQUIP SHIP"
-  std::uint8_t equipShipFrame[13];
+  Counted<std::uint8_t> equipShipFrame[13];
   /// frame bytes, then "DATA ON "
-  std::uint8_t systemDataFrame[11];
+  Counted<std::uint8_t> systemDataFrame[11];
   /// frame bytes, then " MARKET PRICES"
-  std::uint8_t marketPricesFrame[17];
+  Counted<std::uint8_t> marketPricesFrame[17];
   /// frame bytes, then "DISC/CONTROL"
-  std::uint8_t discControlFrame[15];
+  Counted<std::uint8_t> discControlFrame[15];
   /// frame bytes, then "INVENTORY"
-  std::uint8_t inventoryFrame[12];
+  Counted<std::uint8_t> inventoryFrame[12];
   /// frame bytes, then "EMERGENCY"
-  std::uint8_t emergencyFrame[76];
+  Counted<std::uint8_t> emergencyFrame[76];
   /// pointer; Poor Agricultural ... Rich Industrial
-  std::uint16_t economyNames[8];
-  std::uint8_t gap7C1C[161];
+  Counted<std::uint16_t> economyNames[8];
+  Counted<std::uint8_t> gap7C1C[161];
   /// pointer; Anarchy ... Corporate State
-  std::uint16_t governmentNames[8];
-  std::uint8_t gap7CCD[123];
-  std::uint8_t data7D48;
-  std::uint8_t data7D49;
-  std::uint8_t gap7D4A[84];
+  Counted<std::uint16_t> governmentNames[8];
+  Counted<std::uint8_t> gap7CCD[123];
+  Counted<std::uint8_t> data7D48;
+  Counted<std::uint8_t> data7D49;
+  Counted<std::uint8_t> gap7D4A[84];
   /// pointer; indexed by selectedSpeciesAdjective1: Large, Fierce, Small, then empty
-  std::uint16_t speciesSizeNames[8];
-  std::uint8_t gap7DAE[23];
+  Counted<std::uint16_t> speciesSizeNames[8];
+  Counted<std::uint8_t> gap7DAE[23];
   /// pointer; indexed by selectedSpeciesAdjective2: Green, Red, Yellow, Blue, Black, Harmless, empty
-  std::uint16_t speciesColorNames[8];
-  std::uint8_t gap7DD5[44];
+  Counted<std::uint16_t> speciesColorNames[8];
+  Counted<std::uint8_t> gap7DD5[44];
   /// pointer; indexed by selectedSpeciesAdjective3: Slimy, Bug-Eyed, Horned, Bony, Fat, Furry, empty
-  std::uint16_t speciesTraitNames[8];
-  std::uint8_t gap7E11[44];
+  Counted<std::uint16_t> speciesTraitNames[8];
+  Counted<std::uint8_t> gap7E11[44];
   /// pointer; indexed by selectedSpeciesType: Rodents) ... Insects)
-  std::uint16_t speciesTypeNames[8];
-  std::uint8_t gap7E4D[86];
-  std::uint8_t data7EA3;
-  std::uint8_t gap7EA4[23];
-  std::uint8_t data7EBB;
-  std::uint8_t gap7EBC[8];
+  Counted<std::uint16_t> speciesTypeNames[8];
+  Counted<std::uint8_t> gap7E4D[86];
+  Counted<std::uint8_t> data7EA3;
+  Counted<std::uint8_t> gap7EA4[23];
+  Counted<std::uint8_t> data7EBB;
+  Counted<std::uint8_t> gap7EBC[8];
   /// record; count byte, then per item: tech byte, NUL-terminated name, govFactor, econFactor (signed bytes), base price word in tenths...
-  std::uint8_t equipmentList[376];
+  Counted<std::uint8_t> equipmentList[376];
   /// priceText's fields, DS:803C-8042.
   struct PriceText
   {
-    std::uint8_t gap803C[4];
-    std::uint8_t data8040;
-    std::uint8_t data8041;
-    std::uint8_t gap8042[1];
+    Counted<std::uint8_t> gap803C[4];
+    Counted<std::uint8_t> data8040;
+    Counted<std::uint8_t> data8041;
+    Counted<std::uint8_t> gap8042[1];
   };
   /// FormatTenths output, "nnnn.n"
   PriceText priceText;
   /// count byte (6), then the Equip Ship help lines and column header
-  std::uint8_t equipHelpText[375];
+  Counted<std::uint8_t> equipHelpText[375];
   /// pointer; Pulse, Beam, Mining, Military
-  std::uint16_t laserTypeNames[4];
-  std::uint8_t gap81C2[50];
+  Counted<std::uint16_t> laserTypeNames[4];
+  Counted<std::uint8_t> gap81C2[50];
   /// pointer; Fore, "Aft," "Right," "Left,"
-  std::uint16_t laserMountNames[4];
-  std::uint8_t gap81FC[29];
+  Counted<std::uint16_t> laserMountNames[4];
+  Counted<std::uint8_t> gap81FC[29];
   /// the price ComputeResalePrice reads
-  std::uint16_t resalePriceInput;
-  std::uint8_t gap821B[15];
+  Counted<std::uint16_t> resalePriceInput;
+  Counted<std::uint8_t> gap821B[15];
   /// rows in the current cursor menu (17 for cargo, the listed equipment)
-  std::uint8_t menuRowCount;
+  Counted<std::uint8_t> menuRowCount;
   /// text-memory address of the first row's first attribute byte
-  std::uint16_t menuFirstRowAttr;
+  Counted<std::uint16_t> menuFirstRowAttr;
   /// 1-based; also the item index SelectLaserType tests
-  std::uint8_t menuSelectedRow;
+  Counted<std::uint8_t> menuSelectedRow;
   /// 0 fore, 1 aft, 2 right, 3 left
-  std::uint8_t selectedLaserMount;
-  std::uint8_t gap822F[12];
+  Counted<std::uint8_t> selectedLaserMount;
+  Counted<std::uint8_t> gap822F[12];
   /// screenPrices's fields, DS:823B-827E.
   struct ScreenPrices
   {
-    std::uint8_t gap823B[4];
-    std::uint16_t data823F;
-    std::uint8_t gap8241[4];
-    std::uint16_t data8245;
-    std::uint8_t gap8247[56];
+    Counted<std::uint8_t> gap823B[4];
+    Counted<std::uint16_t> data823F;
+    Counted<std::uint8_t> gap8241[4];
+    Counted<std::uint16_t> data8245;
+    Counted<std::uint8_t> gap8247[56];
   };
   /// word pair; cargo rows from 0: buy price, sell price; equipment rows from index 1: price, resale price; tenths of credits
   ScreenPrices screenPrices;
-  std::uint8_t gap827F[376];
-  std::uint8_t data83F7;
-  std::uint8_t gap83F8[1];
-  std::uint8_t data83F9;
-  std::uint8_t gap83FA[16];
-  std::uint8_t data840A;
-  std::uint8_t data840B;
-  std::uint8_t gap840C[30];
+  Counted<std::uint8_t> gap827F[376];
+  Counted<std::uint8_t> data83F7;
+  Counted<std::uint8_t> gap83F8[1];
+  Counted<std::uint8_t> data83F9;
+  Counted<std::uint8_t> gap83FA[16];
+  Counted<std::uint8_t> data840A;
+  Counted<std::uint8_t> data840B;
+  Counted<std::uint8_t> gap840C[30];
   /// pointer; Clean, Offender, Fugitive
-  std::uint16_t legalStatusNames[3];
-  std::uint8_t gap8430[39];
+  Counted<std::uint16_t> legalStatusNames[3];
+  Counted<std::uint8_t> gap8430[39];
   /// byte; 2, 4, 9, 20, 35, 90, 155, 230, 255 against killCount
-  std::uint8_t ratingThresholds[9];
+  Counted<std::uint8_t> ratingThresholds[9];
   /// pointer; Harmless ... Elite
-  std::uint16_t ratingNames[9];
-  std::uint8_t gap8472[96];
+  Counted<std::uint16_t> ratingNames[9];
+  Counted<std::uint8_t> gap8472[96];
   /// pointer; status-screen names for DS:75E3..75EF
-  std::uint16_t equipmentNames[13];
-  std::uint8_t gap84EC[9];
-  std::uint8_t data84F5;
-  std::uint8_t gap84F6[179];
+  Counted<std::uint16_t> equipmentNames[13];
+  Counted<std::uint8_t> gap84EC[9];
+  Counted<std::uint8_t> data84F5;
+  Counted<std::uint8_t> gap84F6[179];
   /// count byte (6), then the Disc/Control menu lines
-  std::uint8_t discMenuText[199];
+  Counted<std::uint8_t> discMenuText[199];
   /// pointer; indexed by inputDevice: Keyboard, Joystick, Mouse; ShowControlDevice prints it
-  std::uint16_t inputDeviceNames[3];
-  std::uint8_t gap8676[20];
+  Counted<std::uint16_t> inputDeviceNames[3];
+  Counted<std::uint8_t> gap8676[20];
   /// '12345678.CDR' template; load, save and delete use it
-  std::uint8_t commanderFileName[13];
-  std::uint8_t gap8697[66];
+  Counted<std::uint8_t> commanderFileName[13];
+  Counted<std::uint8_t> gap8697[66];
   /// pointer; LOADED:, SAVED:, DELETED:, CATALOGUED, by diskOperation 1-4
-  std::uint16_t diskOperationNames[4];
-  std::uint8_t gap86E1[341];
+  Counted<std::uint16_t> diskOperationNames[4];
+  Counted<std::uint8_t> gap86E1[341];
   /// 1 after Esc, J, A: the Amstrad joystick, whose moves arrive as scan codes 0x77-0x7C; ReadSteering tests it at 0x7607
-  std::uint8_t joystickIsAmstrad;
+  Counted<std::uint8_t> joystickIsAmstrad;
   /// 0 keyboard, 1 joystick, 2 mouse (names DS:8670)
-  std::uint8_t inputDevice;
-  std::uint8_t gap8838[21];
+  Counted<std::uint8_t> inputDevice;
+  Counted<std::uint8_t> gap8838[21];
   /// set when a scan code 0x77-0x7C arrives during Amstrad joystick detection
-  std::uint8_t amstradJoystickMoved;
-  std::uint8_t gap884E[21];
+  Counted<std::uint8_t> amstradJoystickMoved;
+  Counted<std::uint8_t> gap884E[21];
   /// text; 17-byte rows: name, unit (t, kg, g); the 18th is Refugees
-  std::uint8_t productNames[312];
+  Counted<std::uint8_t> productNames[312];
   /// word; [commodity*16 + economy*2], factor/256
-  std::uint16_t economyPriceFactors[136];
+  Counted<std::uint16_t> economyPriceFactors[136];
   /// word; [commodity*16 + government*2], factor/256
-  std::uint16_t governmentPriceFactors[136];
+  Counted<std::uint16_t> governmentPriceFactors[136];
   /// word
-  std::uint16_t productBasePrices[17];
+  Counted<std::uint16_t> productBasePrices[17];
   /// productTradeRecords's fields, DS:8BDD-8C0F.
   struct ProductTradeRecords
   {
-    std::uint8_t gap8BDD[2];
-    std::uint8_t data8BDF;
-    std::uint8_t gap8BE0[48];
+    Counted<std::uint8_t> gap8BDD[2];
+    Counted<std::uint8_t> data8BDF;
+    Counted<std::uint8_t> gap8BE0[48];
   };
   /// 3 bytes; price adjust, tech-level factor (both 0 in the file), legal penalty on sale (1 for slaves, narcotics, firearms)
   ProductTradeRecords productTradeRecords;
-  std::uint16_t data8C10;
-  std::uint16_t data8C12;
-  std::uint16_t data8C14;
+  Counted<std::uint16_t> data8C10;
+  Counted<std::uint16_t> data8C12;
+  Counted<std::uint16_t> data8C14;
   /// walks cargoHold while the trade screens draw
-  std::uint16_t cargoRowPointer;
+  Counted<std::uint16_t> cargoRowPointer;
   /// number text for the trade screens and the typed quantity
-  std::uint8_t quantityText[6];
+  Counted<std::uint8_t> quantityText[6];
   /// marketRandomState's fields, DS:8C1E-8C23.
   struct MarketRandomState
   {
-    std::uint8_t gap8C1E[2];
-    std::uint16_t data8C20;
-    std::uint16_t data8C22;
+    Counted<std::uint8_t> gap8C1E[2];
+    Counted<std::uint16_t> data8C20;
+    Counted<std::uint16_t> data8C22;
   };
   /// copy of randomState0 stepped by NextMarketRandom
   MarketRandomState marketRandomState;
   /// 0 sell screen (F2), 1 buy screen (F3); RunCargoTradeMenu ignores the screen's own F-key (0x3C+this), B on the sell screen and S on...
-  std::uint8_t tradeScreenIsBuy;
-  std::uint8_t gap8C25[521];
+  Counted<std::uint8_t> tradeScreenIsBuy;
+  Counted<std::uint8_t> gap8C25[521];
   /// 0 pulse, 1 beam, 2 mining, 3 military
-  std::uint8_t selectedLaserType;
+  Counted<std::uint8_t> selectedLaserType;
   /// currentTechLevel clamped to 9
-  std::uint8_t marketTechLevel;
-  std::uint8_t gap8E30[12];
+  Counted<std::uint8_t> marketTechLevel;
+  Counted<std::uint8_t> gap8E30[12];
   /// 5 lines ending "Will you help us (Y/N)?"
-  std::uint8_t supernovaBriefingText[503];
+  Counted<std::uint8_t> supernovaBriefingText[503];
   /// frame bytes, then "TASK COMPLETE - CONGRATULATIONS!"
-  std::uint8_t taskCompleteFrame[75];
+  Counted<std::uint8_t> taskCompleteFrame[75];
   /// '0' or '4' patched into "Please accept 1000 Credits!"
-  std::uint8_t refugeeRewardDigit;
-  std::uint8_t gap907F[41];
+  Counted<std::uint8_t> refugeeRewardDigit;
+  Counted<std::uint8_t> gap907F[41];
   /// 9 lines on the invisible masking device
-  std::uint8_t maskBriefingText[729];
+  Counted<std::uint8_t> maskBriefingText[729];
   /// 12 lines on the Thargoid-invaded system
-  std::uint8_t invasionBriefingText[312];
+  Counted<std::uint8_t> invasionBriefingText[312];
   /// 14 lines: anti-ECM device on 'L', title Archangel
-  std::uint8_t invasionDebriefText[416];
+  Counted<std::uint8_t> invasionDebriefText[416];
   /// control codes 5 and 6
-  std::uint8_t descriptionCapitalize;
+  Counted<std::uint8_t> descriptionCapitalize;
   /// code 6, phrase 0x92, "is ", phrase 0x93, code 4, "."
-  std::uint8_t descriptionTemplate[9];
+  Counted<std::uint8_t> descriptionTemplate[9];
   /// expanded description
-  std::uint8_t descriptionBuffer[256];
+  Counted<std::uint8_t> descriptionBuffer[256];
   /// code; jmp [bx] at 0x7029 for codes 1-6: InsertSystemName, InsertSystemAdjective, InsertRandomName, BackspaceDescription, StartCapit...
-  std::uint16_t textControlCodes[6];
+  Counted<std::uint16_t> textControlCodes[6];
   /// pointer; for bytes 0x80-0xA6; each points at 5 string pointers. Follows textControlCodes' 6 code entries
-  std::uint16_t descriptionPhraseLists[39];
-  std::uint8_t gap97BD[2138];
+  Counted<std::uint16_t> descriptionPhraseLists[39];
+  Counted<std::uint8_t> gap97BD[2138];
   /// system or random name for codes 1-3
-  std::uint8_t descriptionNameBuffer[13];
+  Counted<std::uint8_t> descriptionNameBuffer[13];
   /// ian
-  std::uint8_t adjectiveSuffix[5];
-  std::uint8_t gapA029[7];
+  Counted<std::uint8_t> adjectiveSuffix[5];
+  Counted<std::uint8_t> gapA029[7];
   /// keyDown's fields, DS:A030-A0AF.
   struct KeyDown
   {
-    std::uint8_t gapA030[1];
+    Counted<std::uint8_t> gapA030[1];
     /// keyDown entry for scan code 01h: pauses the game in flight (ProcessFlightKeys 813D)
-    std::uint8_t keyDownEsc;
-    std::uint8_t gapA032[14];
+    Counted<std::uint8_t> keyDownEsc;
+    Counted<std::uint8_t> gapA032[14];
     /// keyDown entry for scan code 10h: pitch -1 (ReadKeyboardSteering)
-    std::uint8_t keyDownQ;
-    std::uint8_t gapA041[1];
+    Counted<std::uint8_t> keyDownQ;
+    Counted<std::uint8_t> gapA041[1];
     /// keyDown entry for scan code 12h: ECM (ProcessFlightKeys 829F)
-    std::uint8_t keyDownE;
-    std::uint8_t gapA043[1];
+    Counted<std::uint8_t> keyDownE;
+    Counted<std::uint8_t> gapA043[1];
     /// keyDown entry for scan code 14h: primes a missile (8171)
-    std::uint8_t keyDownT;
-    std::uint8_t gapA045[1];
+    Counted<std::uint8_t> keyDownT;
+    Counted<std::uint8_t> gapA045[1];
     /// keyDown entry for scan code 16h: unarms the missile (81FB)
-    std::uint8_t keyDownU;
+    Counted<std::uint8_t> keyDownU;
     /// keyDown entry for scan code 17h: ID indicator: identifies the ship in the sights (82FE)
-    std::uint8_t keyDownI;
+    Counted<std::uint8_t> keyDownI;
     /// keyDown entry for scan code 18h: roll -1 (ReadKeyboardSteering)
-    std::uint8_t keyDownO;
+    Counted<std::uint8_t> keyDownO;
     /// keyDown entry for scan code 19h: roll +1 (ReadKeyboardSteering)
-    std::uint8_t keyDownP;
-    std::uint8_t gapA04A[3];
+    Counted<std::uint8_t> keyDownP;
+    Counted<std::uint8_t> gapA04A[3];
     /// keyDown entry for scan code 1Dh: with Esc, a freeze without the pause menu (8149)
-    std::uint8_t keyDownCtrl;
+    Counted<std::uint8_t> keyDownCtrl;
     /// keyDown entry for scan code 1Eh: pitch +1 (ReadKeyboardSteering)
-    std::uint8_t keyDownA;
-    std::uint8_t gapA04F[3];
+    Counted<std::uint8_t> keyDownA;
+    Counted<std::uint8_t> gapA04F[3];
     /// keyDown entry for scan code 22h: arms the galactic hyperdrive (802E)
-    std::uint8_t keyDownG;
+    Counted<std::uint8_t> keyDownG;
     /// keyDown entry for scan code 23h: hyperspace (805E)
-    std::uint8_t keyDownH;
+    Counted<std::uint8_t> keyDownH;
     /// keyDown entry for scan code 24h: jump drive (8133)
-    std::uint8_t keyDownJ;
-    std::uint8_t gapA055[1];
+    Counted<std::uint8_t> keyDownJ;
+    Counted<std::uint8_t> gapA055[1];
     /// keyDown entry for scan code 26h: anti-ECM emulator while held (837E)
-    std::uint8_t keyDownL;
-    std::uint8_t gapA057[3];
+    Counted<std::uint8_t> keyDownL;
+    Counted<std::uint8_t> gapA057[3];
     /// keyDown entry for scan code 2Ah: makes ReadScanCode OR 80h into the buffered code
-    std::uint8_t keyDownLeftShift;
-    std::uint8_t gapA05B[3];
+    Counted<std::uint8_t> keyDownLeftShift;
+    Counted<std::uint8_t> gapA05B[3];
     /// keyDown entry for scan code 2Eh: launches the escape capsule (82DC)
-    std::uint8_t keyDownC;
-    std::uint8_t gapA05F[1];
+    Counted<std::uint8_t> keyDownC;
+    Counted<std::uint8_t> gapA05F[1];
     /// keyDown entry for scan code 30h: energy bomb (82C6)
-    std::uint8_t keyDownB;
+    Counted<std::uint8_t> keyDownB;
     /// keyDown entry for scan code 31h: masking device while held (8368)
-    std::uint8_t keyDownN;
+    Counted<std::uint8_t> keyDownN;
     /// keyDown entry for scan code 32h: launches a locked missile (8222)
-    std::uint8_t keyDownM;
+    Counted<std::uint8_t> keyDownM;
     /// keyDown entry for scan code 33h: playerSpeed -4 (84B2)
-    std::uint8_t keyDownComma;
+    Counted<std::uint8_t> keyDownComma;
     /// keyDown entry for scan code 34h: playerSpeed +4 (849E)
-    std::uint8_t keyDownPeriod;
-    std::uint8_t gapA065[1];
+    Counted<std::uint8_t> keyDownPeriod;
+    Counted<std::uint8_t> gapA065[1];
     /// keyDown entry for scan code 36h: makes ReadScanCode OR 80h into the buffered code
-    std::uint8_t keyDownRightShift;
+    Counted<std::uint8_t> keyDownRightShift;
     /// keyDown entry for scan code 37h: with Alt, the screen dump (GetKey, PollScreenDumpKey); scan code 37h is */PrtSc
-    std::uint8_t keyDownPrintScreen;
+    Counted<std::uint8_t> keyDownPrintScreen;
     /// keyDown entry for scan code 38h: with PrtSc the screen dump; with W the mis-jump latch
-    std::uint8_t keyDownAlt;
+    Counted<std::uint8_t> keyDownAlt;
     /// keyDown entry for scan code 39h: fire on the keyboard (ReadFireButton); the pause screen clears it on resume
-    std::uint8_t keyDownSpace;
-    std::uint8_t gapA06A[14];
+    Counted<std::uint8_t> keyDownSpace;
+    Counted<std::uint8_t> gapA06A[14];
     /// keyDown entry for scan code 48h: pitch -1 (ReadKeyboardSteering)
-    std::uint8_t keyDownUp;
-    std::uint8_t gapA079[2];
+    Counted<std::uint8_t> keyDownUp;
+    Counted<std::uint8_t> gapA079[2];
     /// keyDown entry for scan code 4Bh: roll -1 (ReadKeyboardSteering)
-    std::uint8_t keyDownLeft;
-    std::uint8_t gapA07C[1];
+    Counted<std::uint8_t> keyDownLeft;
+    Counted<std::uint8_t> gapA07C[1];
     /// keyDown entry for scan code 4Dh: roll +1 (ReadKeyboardSteering)
-    std::uint8_t keyDownRight;
-    std::uint8_t gapA07E[2];
+    Counted<std::uint8_t> keyDownRight;
+    Counted<std::uint8_t> gapA07E[2];
     /// keyDown entry for scan code 50h: pitch +1 (ReadKeyboardSteering)
-    std::uint8_t keyDownDown;
-    std::uint8_t gapA081[38];
+    Counted<std::uint8_t> keyDownDown;
+    Counted<std::uint8_t> gapA081[38];
     /// keyDown entry for scan code 77h: Amstrad joystick fire, key code 77h (ReadFireButton)
-    std::uint8_t keyDownAmstradFire1;
+    Counted<std::uint8_t> keyDownAmstradFire1;
     /// keyDown entry for scan code 78h: Amstrad joystick fire, key code 78h (ReadFireButton)
-    std::uint8_t keyDownAmstradFire2;
+    Counted<std::uint8_t> keyDownAmstradFire2;
     /// keyDown entry for scan code 79h: Amstrad joystick, key code 79h: roll +1 (ReadJoystickSteering)
-    std::uint8_t keyDownAmstradRight;
+    Counted<std::uint8_t> keyDownAmstradRight;
     /// keyDown entry for scan code 7Ah: Amstrad joystick, key code 7Ah: roll -1
-    std::uint8_t keyDownAmstradLeft;
+    Counted<std::uint8_t> keyDownAmstradLeft;
     /// keyDown entry for scan code 7Bh: Amstrad joystick, key code 7Bh: pitch +1
-    std::uint8_t keyDownAmstradDown;
+    Counted<std::uint8_t> keyDownAmstradDown;
     /// keyDown entry for scan code 7Ch: Amstrad joystick, key code 7Ch: pitch -1
-    std::uint8_t keyDownAmstradUp;
+    Counted<std::uint8_t> keyDownAmstradUp;
     /// keyDown entry for scan code 7Dh: Amstrad mouse button, key code 7Dh (bit 1 of mouseButtons)
-    std::uint8_t keyDownAmstradMouseRight;
+    Counted<std::uint8_t> keyDownAmstradMouseRight;
     /// keyDown entry for scan code 7Eh: Amstrad mouse button, key code 7Eh (bit 0 of mouseButtons, the fire latch)
-    std::uint8_t keyDownAmstradMouseLeft;
-    std::uint8_t gapA0AF[1];
+    Counted<std::uint8_t> keyDownAmstradMouseLeft;
+    Counted<std::uint8_t> gapA0AF[1];
   };
   /// 1 while the key is held, indexed by the scan code itself (entry 0 unused; the map's 'scan code - 1' misses the inc ah at 7452); wri...
   KeyDown keyDown;
   /// ring buffer of make codes, written by ReadScanCode
-  std::uint8_t keyBuffer[16];
+  Counted<std::uint8_t> keyBuffer[16];
   /// next write address in keyBuffer
-  std::uint16_t keyBufferWrite;
+  Counted<std::uint16_t> keyBufferWrite;
   /// next read address in keyBuffer; GetKey advances it, ResetKeyboard resets it to DS:A0B0
-  std::uint16_t keyBufferRead;
+  Counted<std::uint16_t> keyBufferRead;
   /// keys waiting in keyBuffer; ReadScanCode drops a key when it reaches 16
-  std::uint8_t keyBufferCount;
+  Counted<std::uint8_t> keyBufferCount;
   /// set to 1 by ReadScanCode on an Esc make code; no instruction reads it
-  std::uint8_t escKeyLatch;
+  Counted<std::uint8_t> escKeyLatch;
   /// set to 1 by ReadScanCode on every make code, cleared by the title (7DB3); no instruction reads it
-  std::uint8_t anyKeyLatch;
+  Counted<std::uint8_t> anyKeyLatch;
   /// incremented by TimerTick; reset by RateLimit
-  std::uint16_t timerTicks;
+  Counted<std::uint16_t> timerTicks;
   /// gates RateLimit
-  std::uint8_t rateLimitEnabled;
+  Counted<std::uint8_t> rateLimitEnabled;
   /// cursor glyph, a space and a zero: printed after the text by RedrawInputLine; ToggleInputCursor flips the first byte
-  std::uint8_t inputCursorText[3];
+  Counted<std::uint8_t> inputCursorText[3];
   /// ReadTextLine's countdown, 300 timer ticks per cursor toggle
-  std::uint16_t cursorBlinkTicks;
+  Counted<std::uint16_t> cursorBlinkTicks;
   /// characters ReadTextLine may still accept
-  std::uint8_t inputCharsLeft;
+  Counted<std::uint8_t> inputCharsLeft;
   /// button bits from int 33h AX=5 (or the Amstrad key codes 7Dh/7Eh), written by ReadMouseSteering; no instruction reads it
-  std::uint8_t mouseButtons;
+  Counted<std::uint8_t> mouseButtons;
   /// byte; ASCII for scan codes 00h-53h (FFh = ignore, 0Dh Enter, 00h Backspace), upper-case letters; used by ReadTextLine
-  std::uint8_t scanCodeToAscii[84];
+  Counted<std::uint8_t> scanCodeToAscii[84];
   /// last frame's roll direction (-1, 0, +1; 7Fh in the file); ReadKeyboardSteering
-  std::uint8_t keyboardLastRollKey;
+  Counted<std::uint8_t> keyboardLastRollKey;
   /// last frame's pitch direction (7Fh in the file)
-  std::uint8_t keyboardLastPitchKey;
+  Counted<std::uint8_t> keyboardLastPitchKey;
   /// grows by 1 a frame while the same roll key is held, inside +-23; reset to 0 on any change
-  std::uint8_t keyboardRollRamp;
+  Counted<std::uint8_t> keyboardRollRamp;
   /// as keyboardRollRamp, for pitch
-  std::uint8_t keyboardPitchRamp;
+  Counted<std::uint8_t> keyboardPitchRamp;
   /// as keyboardLastRollKey, for the Amstrad joystick key codes (ReadJoystickSteering)
-  std::uint8_t amstradStickLastRoll;
+  Counted<std::uint8_t> amstradStickLastRoll;
   /// as keyboardLastPitchKey, for the Amstrad joystick
-  std::uint8_t amstradStickLastPitch;
+  Counted<std::uint8_t> amstradStickLastPitch;
   /// as keyboardRollRamp, for the Amstrad joystick
-  std::uint8_t amstradStickRollRamp;
+  Counted<std::uint8_t> amstradStickRollRamp;
   /// as keyboardPitchRamp, for the Amstrad joystick
-  std::uint8_t amstradStickPitchRamp;
+  Counted<std::uint8_t> amstradStickPitchRamp;
   /// port 201h as last read by ReadJoystickAxes; no instruction reads it back
-  std::uint8_t joystickPortByte;
+  Counted<std::uint8_t> joystickPortByte;
   /// set to 1 by IBM joystick button A1 (ReadJoystickAxes) or the left mouse button (ReadMouseSteering); never cleared or read
-  std::uint8_t fireLatch;
+  Counted<std::uint8_t> fireLatch;
   /// ReadJoystickAxes' X count with the stick centred, taken at selection (67BA); ReadJoystickSteering scales against it
-  std::uint16_t joystickCenterX;
+  Counted<std::uint16_t> joystickCenterX;
   /// as joystickCenterX, for Y
-  std::uint16_t joystickCenterY;
+  Counted<std::uint16_t> joystickCenterY;
   /// rollRate's two bytes, as the symbol table names them (DS:A133).
   struct RollRateBytes
   {
-    std::uint8_t gapA133[1];
+    Counted<std::uint8_t> gapA133[1];
     /// signed -23..+23: the input code adds to it with clamping (0x7A09); drawn on the DC row (y=161); written with rollRate as one word...
-    std::uint8_t pitchRate;
+    Counted<std::uint8_t> pitchRate;
   };
   union
   {
     /// signed -23..+23: the input code adds to it with clamping (0x79F9) and the steering code stores it (0x84CC, 0x86DF and later); dra...
-    std::uint16_t rollRate;
+    Counted<std::uint16_t> rollRate;
     RollRateBytes rollRateBytes;
   };
   /// counts down from 70 (StartBeep); speaker bit 1 = bit 0 of the count, so 500 Hz for 70 ms
-  std::uint8_t beepTicks;
+  Counted<std::uint8_t> beepTicks;
   /// counts down from 70 (StartLowBeep); speaker bit 1 = bit 1 of the count, 250 Hz
-  std::uint8_t lowBeepTicks;
+  Counted<std::uint8_t> lowBeepTicks;
   /// cleared when the docking computer is cancelled, refused or out of range (29FC, 83EA, 8423, 8BB6); no instruction reads it
-  std::uint8_t dataA137;
+  Counted<std::uint8_t> dataA137;
   /// incremented every tick; bit 9 drives a blink at 0x2914
-  std::uint16_t millisecondCounter;
+  Counted<std::uint16_t> millisecondCounter;
   /// incremented every tick; compared with minimumFrameMs and cleared by PresentSpaceView
-  std::uint8_t msSinceFrame;
+  Counted<std::uint8_t> msSinceFrame;
   /// sweep that toggles the speaker (ToggleSpeaker); started by 0x7B71
-  std::uint8_t toneSweepActive;
-  std::uint8_t sirenCountdown;
-  std::uint8_t sirenStage;
+  Counted<std::uint8_t> toneSweepActive;
+  Counted<std::uint8_t> sirenCountdown;
+  Counted<std::uint8_t> sirenStage;
   /// speaker toggled every 15 ticks (33 Hz); only the uncalled 0x7B16 sets it
-  std::uint8_t humEnabled;
-  std::uint8_t humCountdownTicks;
+  Counted<std::uint8_t> humEnabled;
+  Counted<std::uint8_t> humCountdownTicks;
   /// sweep that plays noiseSource samples (EmitNoiseSample); started by 0x7AC3, 0x7AFC, 0x7B09
-  std::uint8_t noiseSweepActive;
-  std::uint8_t sirenHalfTick;
+  Counted<std::uint8_t> noiseSweepActive;
+  Counted<std::uint8_t> sirenHalfTick;
   /// one noise sample every tick; only the uncalled 0x7B65 sets it
-  std::uint8_t continuousNoise;
+  Counted<std::uint8_t> continuousNoise;
   /// noise samples left, one every 5 ticks; only the uncalled 0x7B45 sets it (50)
-  std::uint8_t slowNoiseCount;
-  std::uint8_t slowNoiseDivider;
+  Counted<std::uint8_t> slowNoiseCount;
+  Counted<std::uint8_t> slowNoiseDivider;
   /// samples per step; falls by sweepStepShrink each step
-  std::uint8_t sweepStepLength;
+  Counted<std::uint8_t> sweepStepLength;
   /// 2: 250 Hz, then 1: 500 Hz, 300 ticks each; only the uncalled 0x7B22 sets it
-  std::uint8_t twoToneStage;
-  std::uint16_t twoToneTicks;
+  Counted<std::uint8_t> twoToneStage;
+  Counted<std::uint16_t> twoToneTicks;
   /// ticks to the next sample
-  std::uint8_t sweepTickCounter;
+  Counted<std::uint8_t> sweepTickCounter;
   /// samples left in this step
-  std::uint8_t sweepStepCounter;
+  Counted<std::uint8_t> sweepStepCounter;
   /// ticks between samples; +1 a step, the sweep ends at 7
-  std::uint8_t sweepPeriodTicks;
+  Counted<std::uint8_t> sweepPeriodTicks;
   /// 2-8 by effect
-  std::uint8_t sweepStepShrink;
+  Counted<std::uint8_t> sweepStepShrink;
   /// one noise sample a tick while nonzero; 100 from 0x7B96
-  std::uint8_t noiseBurstTicks;
+  Counted<std::uint8_t> noiseBurstTicks;
   /// 0-0x3FF into noiseSource, advanced by EmitNoiseSample
-  std::uint16_t noiseSourceIndex;
+  Counted<std::uint16_t> noiseSourceIndex;
   /// acts every other tick: 125 Hz for 100 actions, then 250 Hz and 125 Hz alternating (150 and 75 actions) until stopped; only the unca...
-  std::uint8_t sirenEnabled;
+  Counted<std::uint8_t> sirenEnabled;
   /// silent tail of the current note
-  std::uint16_t noteGapTicks;
-  std::uint16_t noteTicksLeft;
+  Counted<std::uint16_t> noteGapTicks;
+  Counted<std::uint16_t> noteTicksLeft;
   /// when 1, TimerTick plays the tune at musicPointer on PIT channel 2
-  std::uint8_t musicPlaying;
+  Counted<std::uint8_t> musicPlaying;
   /// next note; 0x47 restarts at DS:A1B4
-  std::uint16_t musicPointer;
+  Counted<std::uint16_t> musicPointer;
   /// word; PIT channel 2 divisors, index = note-12 (8609 = 138.6 Hz ... 640)
-  std::uint16_t notePeriods[46];
+  Counted<std::uint16_t> notePeriods[46];
   /// word; note words for TimerTickMusic, started by StartMusic
-  std::uint8_t titleTune[1024];
+  Counted<std::uint8_t> titleTune[1024];
   /// integrated roll for the keyboard and the Amstrad joystick, +-23; ReadSteering stores AX here (word with keyboardPitchRate)
-  std::uint8_t keyboardRollRate;
+  Counted<std::uint8_t> keyboardRollRate;
   /// integrated pitch, as keyboardRollRate
-  std::uint8_t keyboardPitchRate;
+  Counted<std::uint8_t> keyboardPitchRate;
   /// set by ReadScanCode when D (20h) is released while inFlight; ProcessFlightKeys then toggles the docking computer if fitted; cleared...
-  std::uint8_t dockingKeyReleased;
-  std::uint8_t gapA5B7[537];
+  Counted<std::uint8_t> dockingKeyReleased;
+  Counted<std::uint8_t> gapA5B7[537];
   /// FFh in the file; 0 cockpit (ShowCockpitScreen), 1 chart frame (DrawChartFrame), 2 text mode (DrawDockedFrame); also selects the tex...
-  std::uint8_t screenLayout;
+  Counted<std::uint8_t> screenLayout;
   /// CGA text attribute for PrintTextModeString; DrawDockedFrame sets it from the frame's first byte
-  std::uint8_t textAttribute;
-  std::uint8_t gapA7D2[1];
+  Counted<std::uint8_t> textAttribute;
+  Counted<std::uint8_t> gapA7D2[1];
   /// word cell offset, byte CP437 character; the docked frame's corners and tees: C9h at 0, BBh at 4Eh, CCh at A0h, B9h at EEh, C8h at 7...
-  std::uint8_t frameCorners[6][3];
-  std::uint8_t gapA7E5[11];
+  Counted<std::uint8_t> frameCorners[6][3];
+  Counted<std::uint8_t> gapA7E5[11];
   /// 1 while RunFlight's loop owns the screen (GameLoop), 0 on the title and docked screens and while HandleFlightFunctionKeys runs a sc...
-  std::uint8_t inFlight;
+  Counted<std::uint8_t> inFlight;
   /// set when laser kind 2 (Mining, names at DS:81C2) hits type 5 (0x8AEC); fragments get slower, live 60 frames longer, and may carry m...
-  std::uint8_t miningLaserOnAsteroid;
+  Counted<std::uint8_t> miningLaserOnAsteroid;
   /// 80 when the capsule launches (2F14); TickEscapePod counts it down and ends RunFlight; also suppresses enemy fire; while non-zero Ki...
-  std::uint8_t escapePodFrames;
+  Counted<std::uint8_t> escapePodFrames;
   /// set when H is pressed inside the galactic drive window; CompleteHyperspaceJump then makes a galactic jump
-  std::uint8_t galacticJumpPending;
+  Counted<std::uint8_t> galacticJumpPending;
   /// 'ID Indicator Activated'
-  std::uint8_t idIndicatorMessage[49];
+  Counted<std::uint8_t> idIndicatorMessage[49];
   /// 40 when G arms the galactic drive; H within that window starts a galactic jump
-  std::uint8_t galacticDriveReadyFrames;
+  Counted<std::uint8_t> galacticDriveReadyFrames;
   /// 'Galactic Drive Motor Ready'
-  std::uint8_t galacticDriveReadyMessage[27];
+  Counted<std::uint8_t> galacticDriveReadyMessage[27];
   /// 'Prepare to Hyperspace...' followed by hyperspaceCountdownDigits
-  std::uint8_t hyperspaceCountdownMessage[24];
+  Counted<std::uint8_t> hyperspaceCountdownMessage[24];
   /// two ASCII digits at the end of hyperspaceCountdownMessage, written by ShowHyperspaceCountdown
-  std::uint16_t hyperspaceCountdownDigits;
-  std::uint8_t gapA85B[1];
+  Counted<std::uint16_t> hyperspaceCountdownDigits;
+  Counted<std::uint8_t> gapA85B[1];
   /// 10 when the countdown starts, -1 every 10 frames; arrival at 0
-  std::uint8_t hyperspaceCountdown;
+  Counted<std::uint8_t> hyperspaceCountdown;
   /// frames left in the current countdown step (10)
-  std::uint8_t hyperspaceCountdownFrames;
+  Counted<std::uint8_t> hyperspaceCountdownFrames;
   /// 'System Outside Hyperspace Range!'
-  std::uint8_t outOfRangeMessage[33];
+  Counted<std::uint8_t> outOfRangeMessage[33];
   /// 'Hyperspace System not Selected!'
-  std::uint8_t noSystemSelectedMessage[32];
+  Counted<std::uint8_t> noSystemSelectedMessage[32];
   /// 'Not Enough Fuel to Hyperspace'
-  std::uint8_t notEnoughFuelMessage[30];
+  Counted<std::uint8_t> notEnoughFuelMessage[30];
   /// 'Nav-Comp now repaired!'
-  std::uint8_t navCompRepairedMessage[23];
+  Counted<std::uint8_t> navCompRepairedMessage[23];
   /// 'Hyperspace Drive is Being Jammed!'
-  std::uint8_t hyperspaceJammedMessage[34];
+  Counted<std::uint8_t> hyperspaceJammedMessage[34];
   /// 1 while the docking computer flies the ship (UpdatePlayerMotion calls RunDockingComputer)
-  std::uint8_t dockingComputerOn;
+  Counted<std::uint8_t> dockingComputerOn;
   /// RunDockingComputer's steering, AL=roll, AH=pitch
-  std::uint16_t dockingComputerSteering;
+  Counted<std::uint16_t> dockingComputerSteering;
   /// RunDockingComputer's state, 0-11
-  std::uint8_t dockingComputerState;
-  std::uint8_t gapA8FA[3];
+  Counted<std::uint8_t> dockingComputerState;
+  Counted<std::uint8_t> gapA8FA[3];
   /// 1 after 0x7E90; makes RunTitleAndDocked reopen ShowDiscControlScreen to show the result; cleared when an F-key leaves it
-  std::uint8_t resumeAtDiskMenu;
+  Counted<std::uint8_t> resumeAtDiskMenu;
   /// 1 once the title has run; cleared on death (GameLoop) and by Abort on the pause screen, so the title runs again
-  std::uint8_t titleShown;
-  std::uint8_t gapA8FF[103];
+  Counted<std::uint8_t> titleShown;
+  Counted<std::uint8_t> gapA8FF[103];
   /// 'Press any key to start game' (title)
-  std::uint8_t pressAnyKeyText[28];
+  Counted<std::uint8_t> pressAnyKeyText[28];
   /// '---- E L I T E ----'
-  std::uint8_t eliteTitleText[45];
+  Counted<std::uint8_t> eliteTitleText[45];
   /// negated new pitch angle while UpdatePlayerMotion re-derives the orientation
-  std::uint16_t pitchAngleScratch;
+  Counted<std::uint16_t> pitchAngleScratch;
   /// negated new yaw angle, as pitchAngleScratch
-  std::uint16_t yawAngleScratch;
+  Counted<std::uint16_t> yawAngleScratch;
   /// per-frame displacement subtracted from every object by MoveObjectsByVelocity
-  std::uint16_t playerVelocityX;
+  Counted<std::uint16_t> playerVelocityX;
   /// see playerVelocityX
-  std::uint16_t playerVelocityY;
+  Counted<std::uint16_t> playerVelocityY;
   /// see playerVelocityX
-  std::uint16_t playerVelocityZ;
+  Counted<std::uint16_t> playerVelocityZ;
   /// 4-48 in steps of 4 (. and ,), 0 while the docking computer stops the ship; the jump drive needs 48
-  std::uint16_t playerSpeed;
+  Counted<std::uint16_t> playerSpeed;
   /// 1 makes UpdatePlayerVelocity recompute the velocity
-  std::uint8_t velocityDirty;
+  Counted<std::uint8_t> velocityDirty;
   /// angle RunDockingComputer is turning to
-  std::uint16_t dockingTargetAngle;
+  Counted<std::uint16_t> dockingTargetAngle;
   /// each alignment phase of RunDockingComputer runs twice
-  std::uint8_t dockingAlignPasses;
+  Counted<std::uint8_t> dockingAlignPasses;
   /// 'E.C.M. Active Now'
-  std::uint8_t ecmActiveMessage[18];
+  Counted<std::uint8_t> ecmActiveMessage[18];
   /// 'Docking Computer Disengaged'
-  std::uint8_t dockingComputerOffMessage[28];
+  Counted<std::uint8_t> dockingComputerOffMessage[28];
   /// 'Docking Computer Locked On'
-  std::uint8_t dockingComputerOnMessage[27];
+  Counted<std::uint8_t> dockingComputerOnMessage[27];
   /// 'Station not in Lock-on Range'
-  std::uint8_t stationOutOfRangeMessage[61];
+  Counted<std::uint8_t> stationOutOfRangeMessage[61];
   /// 'Jump Drive Engaged'
-  std::uint8_t jumpDriveEngagedMessage[19];
+  Counted<std::uint8_t> jumpDriveEngagedMessage[19];
   /// 'Jump Drive is Mass-Locked'
-  std::uint8_t jumpDriveMassLockedMessage[26];
+  Counted<std::uint8_t> jumpDriveMassLockedMessage[26];
   /// 'Jump Drive is Velocity-Locked'
-  std::uint8_t jumpDriveVelocityLockedMessage[30];
+  Counted<std::uint8_t> jumpDriveVelocityLockedMessage[30];
   /// 'Game Paused'
-  std::uint8_t gamePausedMessage[12];
+  Counted<std::uint8_t> gamePausedMessage[12];
   /// 'Missile Launched'
-  std::uint8_t missileLaunchedMessage[17];
+  Counted<std::uint8_t> missileLaunchedMessage[17];
   /// 'Missile Locked-on Target!'
-  std::uint8_t missileLockedMessage[26];
+  Counted<std::uint8_t> missileLockedMessage[26];
   /// 'Missile Primed'
-  std::uint8_t missilePrimedMessage[15];
+  Counted<std::uint8_t> missilePrimedMessage[15];
   /// 'Missile Unarmed'
-  std::uint8_t missileUnarmedMessage[16];
+  Counted<std::uint8_t> missileUnarmedMessage[16];
   /// 1 for one frame after J: UpdatePlayerVelocity multiplies the playerSpeed by 32
-  std::uint8_t jumpDriveEngaged;
+  Counted<std::uint8_t> jumpDriveEngaged;
   /// F1 0, F2 400h, F3 200h, F4 600h (800h per turn); 0 front, 0x200 left, 0x400 rear, 0x600 right; RotateToViewDirection
-  std::uint16_t viewAngle;
+  Counted<std::uint16_t> viewAngle;
   /// set by the docking computer's final approach; F1-F4 are ignored while 1
-  std::uint8_t viewLocked;
+  Counted<std::uint8_t> viewLocked;
   /// slot the missile is locked on
-  std::uint16_t missileTarget;
+  Counted<std::uint16_t> missileTarget;
   /// laser type (0-3) for this view, from GetViewLaser; damage is type + 1; set at 0x8297 when fire is pressed; DrawLaserBeams picks its...
-  std::uint8_t firingLaserType;
+  Counted<std::uint8_t> firingLaserType;
   /// 1 for the frame the laser fires; ResolveLaserFire clears it
-  std::uint8_t laserFiring;
+  Counted<std::uint8_t> laserFiring;
   /// word; per ship type ([di] & 3Eh), the size FindShipInCrosshairs tests against; 30 used, the last two 0
-  std::uint16_t shipTargetRadius[32];
+  Counted<std::uint16_t> shipTargetRadius[32];
   /// toggled on each frame a type-0 laser is fired; that type fires only on alternate frames
-  std::uint8_t laserAlternateFrame;
+  Counted<std::uint8_t> laserAlternateFrame;
   /// 1 after I until the ship in the sights is identified
-  std::uint8_t shipIdRequested;
+  Counted<std::uint8_t> shipIdRequested;
   /// 40 at death; RunFlight keeps running frames until it reaches 0
-  std::uint8_t gameOverFrames;
+  Counted<std::uint8_t> gameOverFrames;
   /// 'GAME OVER!'
-  std::uint8_t gameOverMessage[11];
+  Counted<std::uint8_t> gameOverMessage[11];
   /// word buffer offset, then zero-terminated text; the pause screen's lines: SPACE..Restart Game, A......Abort Game, R Keyboard Recentr...
-  std::uint8_t pauseMenuText[195];
+  Counted<std::uint8_t> pauseMenuText[195];
   /// frameRateKeyLabel's fields, DS:ABFF-AC01.
   struct FrameRateKeyLabel
   {
-    std::uint8_t gapABFF[1];
-    std::uint8_t dataAC00;
-    std::uint8_t dataAC01;
+    Counted<std::uint8_t> gapABFF[1];
+    Counted<std::uint8_t> dataAC00;
+    Counted<std::uint8_t> dataAC01;
   };
   /// the '8) ' of '(F8) ' at the end of the pause menu's frame-rate line; rewritten by F1-F10
   FrameRateKeyLabel frameRateKeyLabel;
-  std::uint8_t gapAC02[1];
+  Counted<std::uint8_t> gapAC02[1];
   /// pause option R, 'Keyboard Recentre', 1 in the file: a key against the current rate zeroes it first. First of five (value, letter) r...
-  std::uint8_t keyboardRecenter;
-  std::uint8_t gapAC04[1];
+  Counted<std::uint8_t> keyboardRecenter;
+  Counted<std::uint8_t> gapAC04[1];
   /// pause option D, 'Keyboard Damping', 1 in the file: an idle axis decays 3 a frame toward 0
-  std::uint8_t keyboardDamping;
-  std::uint8_t gapAC06[1];
+  Counted<std::uint8_t> keyboardDamping;
+  Counted<std::uint8_t> gapAC06[1];
   /// pause option Y, 'Reverse Y control', 0 in the file: negates pitch (ApplyReverseControls)
-  std::uint8_t reverseYControl;
-  std::uint8_t gapAC08[1];
+  Counted<std::uint8_t> reverseYControl;
+  Counted<std::uint8_t> gapAC08[1];
   /// pause option B, 'Reverse X and Y', 0 in the file: negates roll and pitch
-  std::uint8_t reverseXAndY;
-  std::uint8_t gapAC0A[1];
+  Counted<std::uint8_t> reverseXAndY;
+  Counted<std::uint8_t> gapAC0A[1];
   /// pause option S, 'Sound Toggle', 1 in the file; TimerTick does nothing more when it is 0
-  std::uint8_t soundEnabled;
-  std::uint8_t gapAC0C[1];
+  Counted<std::uint8_t> soundEnabled;
+  Counted<std::uint8_t> gapAC0C[1];
   /// colour-select value UpdateDamageFlash writes each frame: 9 (bright blue) while the masking device runs, else 0 (cleared at 4A4C); e...
-  std::uint8_t maskingBackgroundColor;
+  Counted<std::uint8_t> maskingBackgroundColor;
   /// toggled by 'L' (0x8379, 0x838C) when antiEcmEmulatorFitted; at 1 the station starts no ECM
-  std::uint8_t antiEcmActive;
+  Counted<std::uint8_t> antiEcmActive;
   /// TimerTick plays nothing while it is 1
-  std::uint8_t gamePaused;
+  Counted<std::uint8_t> gamePaused;
   /// nine zero-terminated lines: Game Copyright:- Bell & Braben, Code Copyright:- Realtime Games Software Ltd, Written by:- Andy Onions,...
-  std::uint8_t creditsScreenText[164];
+  Counted<std::uint8_t> creditsScreenText[164];
   /// ship type shown on the title (1Ah in the file), F9/F10 step it through 2-29
-  std::uint8_t titleShipType;
+  Counted<std::uint8_t> titleShipType;
   /// word; title display distance per ship type
-  std::uint16_t titleShipDistances[30];
+  Counted<std::uint16_t> titleShipDistances[30];
   /// byte; 200, 125, 100, 83, 67, 56, 50, 40, 30, 1 ms, chosen with F1-F10 on the pause screen
-  std::uint8_t frameTimeChoices[10];
+  Counted<std::uint8_t> frameTimeChoices[10];
   /// 50 in the file, which is F7's choice, though the label in the file reads (F8) (40 ms); the shortest a frame may take
-  std::uint8_t minimumFrameMs;
+  Counted<std::uint8_t> minimumFrameMs;
   /// set on a 500/65536 chance at launch (Missile Jammed... Can't Launch!); M then fails until reset at 2A33
-  std::uint8_t missileJammed;
+  Counted<std::uint8_t> missileJammed;
   /// 'Missile Jammed... Can't Launch!'
-  std::uint8_t missileJammedMessage[32];
+  Counted<std::uint8_t> missileJammedMessage[32];
   /// 'Missile Target Destroyed'
-  std::uint8_t missileTargetDestroyedMessage[25];
+  Counted<std::uint8_t> missileTargetDestroyedMessage[25];
   /// 'Docking Permission Denied!'
-  std::uint8_t dockingDeniedMessage[42];
+  Counted<std::uint8_t> dockingDeniedMessage[42];
   /// word; a copy of spanLeftMasks and spanRightMasks at the bottom of the stack segment (SS:0000 = DS:AD60; the MZ header's SS is 13CAh...
-  std::uint16_t triangleEdgeMasks[8];
-  std::uint8_t gapAD70[1008];
+  Counted<std::uint16_t> triangleEdgeMasks[8];
+  Counted<std::uint8_t> gapAD70[1008];
   /// the cockpit and dashboard as a mode 4 screen (two 8000-byte banks); ShowCockpitScreen copies it from segment 140Ah. Above the stack...
-  std::uint8_t cockpitImage[16000];
-  std::uint8_t gapEFE0[4128];
+  Counted<std::uint8_t> cockpitImage[16000];
+  Counted<std::uint8_t> gapEFE0[4128];
 };
 
 #pragma pack(pop)
@@ -2432,5 +2437,6 @@ static_assert(sizeof(GameData::KeyDown) == 128);
 static_assert(sizeof(GameData::RollRateBytes) == 2);
 static_assert(sizeof(GameData::FrameRateKeyLabel) == 3);
 static_assert(sizeof(GameData) == 0x10000);
+static_assert(std::is_trivially_copyable_v<GameData> && std::is_standard_layout_v<GameData>);
 
 } // namespace Elite

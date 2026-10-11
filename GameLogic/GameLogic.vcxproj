@@ -79,6 +79,7 @@
     <ClInclude Include="Cga.h" />
     <ClInclude Include="CgaFont.h" />
     <ClInclude Include="Combat.h" />
+    <ClInclude Include="Counted.h" />
     <ClInclude Include="DataField.h" />
     <ClInclude Include="DataOverlay.h" />
     <ClInclude Include="DirectoryFileStore.h" />
@@ -119,6 +120,7 @@
     <ClInclude Include="Sha256.h" />
     <ClInclude Include="Ships.h" />
     <ClInclude Include="Sound.h" />
+    <ClInclude Include="SpaceObject.h" />
     <ClInclude Include="Speaker.h" />
     <ClInclude Include="StartUp.h" />
     <ClInclude Include="StateDigest.h" />

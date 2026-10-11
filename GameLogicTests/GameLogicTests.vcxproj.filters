@@ -89,6 +89,9 @@
     <ClCompile Include="CorpusTests.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
+    <ClCompile Include="CountedTests.cpp">
+      <Filter>Replay</Filter>
+    </ClCompile>
     <ClCompile Include="DockedTests.cpp">
       <Filter>Docked</Filter>
     </ClCompile>

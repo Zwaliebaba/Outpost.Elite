@@ -2,12 +2,15 @@
 #pragma once
 
 #include "Cga.h"
+#include "Counted.h"
 #include "DataField.h"
 #include "GameData.h"
 #include "Reference.h"
+#include "SpaceObject.h"
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <span>
 
 namespace Elite
@@ -15,9 +18,10 @@ namespace Elite
 
 class Game;
 
-/// The game's memory (ADR-012, D19): the reference's data segment as its struct (GameData), by name (DataOverlay.h) or by
-/// offset; the code segment's image, which the original keeps data and patches in; and the CGA's video memory. It owns all
-/// three, and it has no registers: a routine that takes a GameState takes its inputs as parameters and gives its results back.
+/// The game's memory (ADR-012, D19): the reference's data segment as its struct (GameData), by member (Data()), by name
+/// (DataOverlay.h) or by offset; the code segment's image, which the original keeps data and patches in; and the CGA's video
+/// memory. It owns all three, and it has no registers: a routine that takes a GameState takes its inputs as parameters and gives
+/// its results back.
 ///
 /// The host makes one for the whole run, inside a Game, which loads the reference into it (Game::Load) at the segments DOS
 /// would have put it at, so that the original's far addresses, segment and offset, still name its bytes: the code segment
@@ -25,16 +29,20 @@ class Game;
 /// address to one of the three; an address outside them is not the game's memory, and throws std::out_of_range. The vector
 /// table, the BIOS's data area and the PSP are not here: they are the platform's (Platform, Hardware).
 ///
-/// Every write goes through one path that counts a byte whose value it changes (ChangeCount), as the emulated PC's memory did
-/// until D33: paced time compares the count at each turn of a loop, and a turn that changed nothing idles (ADR-015). A read
-/// changes nothing and counts nothing.
+/// Every write counts in one change count (ChangeCount) when it changes what it writes, as the emulated PC's memory did until
+/// D33: paced time compares the count at each turn of a loop, and a turn that changed nothing idles (ADR-015). A member of
+/// GameData counts its own writes (Counted): the data segment is in a block of its own, aligned to COUNTED_BLOCK_ALIGNMENT,
+/// with the count first, where a member finds it from its own address. The accessors by offset count each byte whose value
+/// they change. A read changes nothing and counts nothing.
 class GameState
 {
 public:
   /// The CGA's video memory, which the reference writes directly.
   static constexpr std::uint16_t VIDEO_SEGMENT = 0xB800;
 
-  GameState() noexcept = default;
+  /// Allocates the data segment's block, zeroed, with a count of 0. The block is on the heap, so a GameState can be anywhere,
+  /// on the stack too.
+  GameState();
   GameState(const GameState&) = delete;
   GameState& operator=(const GameState&) = delete;
 
@@ -46,6 +54,36 @@ public:
   [[nodiscard]] std::uint16_t DataSegment() const noexcept
   {
     return m_dataSegment;
+  }
+
+  /// The data segment by member: `_state.Data().commanderBlock.fuel`. Every member counts its own changes (Counted).
+  [[nodiscard]] GameData& Data() noexcept
+  {
+    return m_block->data;
+  }
+
+  [[nodiscard]] const GameData& Data() const noexcept
+  {
+    return m_block->data;
+  }
+
+  /// The object record at DS:_offset, where the original's SI or DI points: one of shipSlots' 36 slots, or wherever else it
+  /// reads 64 bytes as one. A record that would run past the data segment's end, which the original would wrap at 64 KiB,
+  /// throws std::out_of_range.
+  [[nodiscard]] SpaceObject& ObjectAt(std::uint16_t _offset)
+  {
+    return *reinterpret_cast<SpaceObject*>(&DataStorage()[ObjectOffset(_offset)]);
+  }
+
+  [[nodiscard]] const SpaceObject& ObjectAt(std::uint16_t _offset) const
+  {
+    return *reinterpret_cast<const SpaceObject*>(&DataBytes()[ObjectOffset(_offset)]);
+  }
+
+  /// The offset in the data segment of _object, a record ObjectAt gave: what the original holds in SI or DI for it.
+  [[nodiscard]] std::uint16_t OffsetOf(const SpaceObject& _object) const noexcept
+  {
+    return static_cast<std::uint16_t>(reinterpret_cast<const std::uint8_t*>(&_object) - DataBytes().data());
   }
 
   [[nodiscard]] std::uint8_t Get(DataField<std::uint8_t> _field) const noexcept
@@ -167,7 +205,7 @@ public:
   /// The data segment's 64 KiB, GameData's bytes: what the digest hashes, but for the stack (StateDigest.h).
   [[nodiscard]] std::span<const std::uint8_t, sizeof(GameData)> DataBytes() const noexcept
   {
-    return std::span<const std::uint8_t, sizeof(GameData)>(reinterpret_cast<const std::uint8_t*>(&m_data), sizeof(GameData));
+    return std::span<const std::uint8_t, sizeof(GameData)>(reinterpret_cast<const std::uint8_t*>(&m_block->data), sizeof(GameData));
   }
 
   /// The CGA's 16 KiB of video memory.
@@ -187,7 +225,7 @@ public:
   /// that is working (ADR-015).
   [[nodiscard]] std::uint64_t ChangeCount() const noexcept
   {
-    return m_changes;
+    return m_block->changes;
   }
 
   /// The 20-bit address of _segment:_offset.
@@ -210,8 +248,37 @@ private:
 
   [[nodiscard]] std::span<std::uint8_t, sizeof(GameData)> DataStorage() noexcept
   {
-    return std::span<std::uint8_t, sizeof(GameData)>(reinterpret_cast<std::uint8_t*>(&m_data), sizeof(GameData));
+    return std::span<std::uint8_t, sizeof(GameData)>(reinterpret_cast<std::uint8_t*>(&m_block->data), sizeof(GameData));
   }
+
+  /// _offset, when a record there ends inside the data segment; otherwise throws std::out_of_range.
+  [[nodiscard]] static std::uint16_t ObjectOffset(std::uint16_t _offset)
+  {
+    if (_offset > sizeof(GameData) - sizeof(SpaceObject))
+    {
+      RefuseObject();
+    }
+    return _offset;
+  }
+
+  /// Throws the std::out_of_range of an object record past the data segment's end.
+  [[noreturn]] static void RefuseObject();
+
+  /// The data segment and its change count, in storage aligned to COUNTED_BLOCK_ALIGNMENT, so that a member of GameData finds
+  /// the count by rounding its own address down (ChangeCountAt).
+  struct Block
+  {
+    std::uint64_t changes;
+    GameData data;
+  };
+
+  static_assert(sizeof(Block) <= COUNTED_BLOCK_ALIGNMENT, "a member's address rounded down must find its own block's start");
+
+  /// Frees a Block from its aligned storage.
+  struct FreeBlock
+  {
+    void operator()(Block* _block) const noexcept;
+  };
 
   enum class Region : std::uint8_t
   {
@@ -287,16 +354,15 @@ private:
     if (_byte != _value)
     {
       _byte = _value;
-      ++m_changes;
+      ++m_block->changes;
     }
   }
 
-  GameData m_data{};
+  std::unique_ptr<Block, FreeBlock> m_block;
   std::array<std::uint8_t, CODE_SEGMENT_BYTES> m_code{};
   std::array<std::uint8_t, Cga::VIDEO_MEMORY_BYTES> m_video{};
   std::uint16_t m_codeSegment = 0;
   std::uint16_t m_dataSegment = 0;
-  std::uint64_t m_changes = 0;
 };
 
 /// ADD byte,_value / JAE / MOV byte,0FFh on _field: the sum written, and FFh over it on a carry. Those are two writes, as the

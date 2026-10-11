@@ -16,13 +16,17 @@ contract column gives:
   text                 DataBlock<bytes> with a size, else DataAt
 
 The same rows make `Elite::GameData`, the data segment as one packed struct of exactly 64 KiB that the
-GameState holds (D19), every row a member at its offset:
+GameState holds (D19), every row a member at its offset. Each byte and word is a `Counted` (Counted.h),
+which counts its own changes, so that native code writes members directly (D33's piece 3):
 
-  data, 1 byte         std::uint8_t
-  data, 2 bytes        std::uint16_t
-  table of words       std::uint16_t[entries], for an element of "word", "pointer" or "code"
-  table, other         std::uint8_t[entries][element bytes], or std::uint8_t[entries] for bytes
-  anything else        std::uint8_t[bytes]
+  data, 1 byte         Counted<std::uint8_t>
+  data, 2 bytes        Counted<std::uint16_t>
+  table of words       Counted<std::uint16_t>[entries], for an element of "word", "pointer" or "code"
+  table, other         Counted<std::uint8_t>[entries][element bytes], or Counted<std::uint8_t>[entries] for bytes
+  anything else        Counted<std::uint8_t>[bytes]
+
+A container in RECORDS holds records of a type written by hand, which the symbol table does not describe
+field by field: each of its rows, and each gap in it, is a run of whole records of that type.
 
 A row with no size, or a table whose element this tool cannot size, runs to the next row, or to the
 end of the row it lies in. A row that lies inside another is its child:
@@ -33,8 +37,8 @@ end of the row it lies in. A row that lies inside another is its child:
 
 Bytes no row names become byte arrays named for their offset, `gapXXXX`. A row that starts inside
 another and ends past it is an error. Every member's offset is checked by a static_assert, and so is
-every struct's size; DataOverlay.h checks each of its fields against its member in GameData, so the
-two cannot drift.
+every struct's size, and that GameData is trivially copyable and standard-layout; DataOverlay.h checks
+each of its fields against its member in GameData, so the two cannot drift.
 
 The headers are generated, never edited: change the symbol table and run this again. With --check it
 writes nothing and fails if a header in the tree is not what it would write. Standard library only.
@@ -56,6 +60,11 @@ GAME_DATA = ROOT / "GameLogic" / "GameData.h"
 IDENTIFIER = re.compile(r"[a-z][A-Za-z0-9]*")
 SEGMENT_BYTES = 0x10000
 FIELD_BYTES = {"word": 2, "byte": 1}
+BYTE = "Counted<std::uint8_t>"
+WORD = "Counted<std::uint16_t>"
+# Containers of records native code reads by field: the container, the record's type, its header and its size. The slots'
+# fields are not rows of the symbol table, which holds one row per address; SpaceObject.h names them, at their offsets.
+RECORDS = {"shipSlots": ("SpaceObject", "SpaceObject.h", 64)}
 
 
 def record_bytes(_text: str) -> int | None:
@@ -281,23 +290,38 @@ def declaration(_member: Member) -> str:
   """The declaration of a member that has no children."""
   row = _member.row
   if row is None:
-    return f"std::uint8_t {_member.name}[{_member.size}];"
+    return f"{BYTE} {_member.name}[{_member.size}];"
   if row["kind"] == "data" and _member.size in (1, 2):
-    return f"{'std::uint8_t' if _member.size == 1 else 'std::uint16_t'} {_member.name};"
+    return f"{BYTE if _member.size == 1 else WORD} {_member.name};"
   if row["kind"] == "table" and byte_size(row) is not None:
     element = element_bytes(row["contract"])
     entries = int(row["size"])
     if is_word_element(row["contract"]):
-      return f"std::uint16_t {_member.name}[{entries}];"
+      return f"{WORD} {_member.name}[{entries}];"
     if element == 1:
-      return f"std::uint8_t {_member.name}[{entries}];"
-    return f"std::uint8_t {_member.name}[{entries}][{element}];"
-  return f"std::uint8_t {_member.name}[{_member.size}];"
+      return f"{BYTE} {_member.name}[{entries}];"
+    return f"{BYTE} {_member.name}[{entries}][{element}];"
+  return f"{BYTE} {_member.name}[{_member.size}];"
 
 
-def emit_members(_members: list[Member], _indent: str, _out: list[str]) -> None:
+def record_declaration(_member: Member, _container: Member) -> str:
+  """The declaration of a run of whole records in a container of RECORDS: one record, or an array of them."""
+  record, _, record_bytes = RECORDS[_container.name]
+  if (_member.offset - _container.offset) % record_bytes != 0 or _member.size % record_bytes != 0 or _member.children:
+    sys.exit(f"GenerateOverlay: {_member.name} at DS:{_member.offset:04X} ({_member.size} bytes) is not whole records of "
+             f"{record} in {_container.name}")
+  count = _member.size // record_bytes
+  return f"{record} {_member.name};" if count == 1 else f"{record} {_member.name}[{count}];"
+
+
+def emit_members(_members: list[Member], _indent: str, _out: list[str], _container: Member | None = None) -> None:
   for member in _members:
     note = comment(member.row, COLUMN_LIMIT - len(_indent) - 4) if member.row is not None else ""
+    if _container is not None:
+      if note:
+        _out.append(f"{_indent}/// {note}")
+      _out.append(f"{_indent}{record_declaration(member, _container)}")
+      continue
     if not member.children:
       if note:
         _out.append(f"{_indent}/// {note}")
@@ -314,14 +338,14 @@ def emit_members(_members: list[Member], _indent: str, _out: list[str]) -> None:
       _out.append(f"{_indent}{{")
       if note:
         _out.append(f"{inner}/// {comment(member.row, COLUMN_LIMIT - len(inner) - 4)}")
-      _out.append(f"{inner}std::uint16_t {member.name};")
+      _out.append(f"{inner}{WORD} {member.name};")
       _out.append(f"{inner}{type_name(member)}Bytes {member.name}Bytes;")
       _out.append(f"{_indent}}};")
       continue
     _out.append(f"{_indent}/// {member.name}'s fields, DS:{member.offset:04X}-{member.end - 1:04X}.")
     _out.append(f"{_indent}struct {type_name(member)}")
     _out.append(f"{_indent}{{")
-    emit_members(member.children, inner, _out)
+    emit_members(member.children, inner, _out, member if member.name in RECORDS else None)
     _out.append(f"{_indent}}};")
     if note:
       _out.append(f"{_indent}/// {note}")
@@ -352,14 +376,18 @@ def offset_paths(_members: list[Member]) -> list[tuple[str, int]]:
 
 
 def generate_game_data(_members: list[Member]) -> str:
+  headers = sorted({header for _, header, _ in RECORDS.values()} | {"Counted.h"})
   out = [
     "// GameLogic/GameData.h",
     "// Generated by Tools/GenerateOverlay.py from Design/Symbols.tsv. Do not edit: change the symbol table",
     "// and run the tool again (D19).",
     "#pragma once",
     "",
+    *[f'#include "{header}"' for header in headers],
+    "",
     "#include <cstddef>",
     "#include <cstdint>",
+    "#include <type_traits>",
     "",
     "// A member's offset in GameData, as a constant expression wherever this header is read. Clang reading the MSVC headers,",
     "// as clang-tidy does, gets vcruntime.h's offsetof, a reinterpret_cast that is not one, so under Clang it is the builtin",
@@ -378,9 +406,10 @@ def generate_game_data(_members: list[Member]) -> str:
     "/// The reference's data segment as one struct (D19): every data, table and text row of the symbol",
     "/// table a member at its 1987 offset, packed, 64 KiB in all, which the GameState holds. A row inside",
     "/// another is a member of a struct nested for it, or, inside a word, of a union with it; bytes no row",
-    "/// names are gaps named for their offset. Native code reads and writes these bytes through the",
-    "/// GameState's accessors and DataOverlay.h's fields, never through references to these members, which",
-    "/// are unaligned.",
+    "/// names are gaps named for their offset; the ship slots are records (SpaceObject). Every byte and",
+    "/// word is a Counted, of alignment 1, which counts its own changes in its GameState's change count:",
+    "/// native code reads and writes members (`_state.Data().commanderBlock.fuel = fuel`), and passes one",
+    "/// by reference to a helper that writes it.",
     "struct GameData",
     "{",
   ]
@@ -398,6 +427,7 @@ def generate_game_data(_members: list[Member]) -> str:
     out.append(f"static_assert(sizeof({name}) == {size});")
   out += [
     f"static_assert(sizeof(GameData) == 0x{SEGMENT_BYTES:X});",
+    "static_assert(std::is_trivially_copyable_v<GameData> && std::is_standard_layout_v<GameData>);",
     "",
     "} // namespace Elite",
     "",
