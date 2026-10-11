@@ -12,9 +12,9 @@ test class or a single test's method, matched on the test's fully qualified name
 takes every test the groups do not name, so a class added or renamed still runs. A group that runs no
 test fails, which is how a group left naming a renamed class is found. The groups are a balance of measured times, not a rule: moving a class
 between them changes how long CI takes, never what it runs. Each shard writes TestResults/<shard>.trx,
-and its counts are read back from it, with what its tests wrote to their log (Logger::WriteMessage):
-the guard's reports of pictures and outcomes that differ from those recorded (D33), which fail nothing,
-are printed after the shard's output, and under GitHub Actions each difference is also a warning.
+and its counts are read back from it, with what its tests wrote to their log (Logger::WriteMessage),
+which is printed after the shard's output; under GitHub Actions a line that reports a difference is
+also a warning.
 
 Exit status: 0 every shard passed, 1 a shard failed, 2 usage or environment error (no suite, a suite
 not built, no vstest).
@@ -33,16 +33,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# The groups, by the classes' times measured on 2026-10-10 after D7 deleted the interpreter and the comparisons:
-# GameLogicTests' 47 tests and MachineTests' 131, each test timed by a stand-in test host, in one process, from a g++
-# -O0 build (Debug, as CI builds) and a g++ -O2 one. The replay corpus, one test, is 14.8 s of the Debug 28.3 s
-# (2.3 s of the Release 4.4 s), and every other class together is 13.5 s (2.2 s), the twins most of it; MachineTests,
-# whose classes D33 moved into GameLogicTests or deleted with the emulated PC, was 0.4 s (0.1 s). No shard can be
-# shorter than the corpus, so two shards, the corpus and the rest, are as even as the classes allow, and keep both of a
-# private repository's two vCPUs busy to the end; each test is one thread.
-GROUPS = [
-  ("corpus", ["CorpusTests"]),
-]
+# The groups, a balance of the classes' measured times. There are none since D57 deleted the replay corpus's test and the
+# twins (ADR-028), which were most of the suite's time and gave the corpus a shard of its own: what is left runs as the one
+# shard that takes every test.
+GROUPS: list[tuple[str, list[str]]] = []
 REST = "rest"
 RESULTS = "TestResults"
 
@@ -82,7 +76,8 @@ def shard_filters() -> list[tuple[str, str]]:
 
 
 def command(_vstest: str, _suites: list[Path], _name: str, _filter: str) -> list[str]:
-  return [_vstest, *(str(suite) for suite in _suites), "/Platform:x64", f"/TestCaseFilter:{_filter}",
+  """The shard's vstest command. An empty _filter, the rest's when there are no groups, runs every test."""
+  return [_vstest, *(str(suite) for suite in _suites), "/Platform:x64", *([f"/TestCaseFilter:{_filter}"] if _filter else []),
           f"/Logger:trx;LogFileName={_name}.trx", f"/ResultsDirectory:{RESULTS}"]
 
 

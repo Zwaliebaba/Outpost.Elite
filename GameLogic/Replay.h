@@ -93,15 +93,16 @@ struct Step
 /// _text, a replay, with the checkpoint of each digest step in _checkpoints, by the line the step is on, written after that
 /// line: a picture line, then an outcome line. The picture and outcome lines that followed it before are replaced; every
 /// other line is kept, byte for byte, and a new line ends as the digest's line does. This is how the corpus's pictures and
-/// outcomes are recorded (CorpusTests), only from runs that met every state digest. Returns false, with _error naming the
-/// line, if a digest step in _checkpoints is not alone on its line or no digest step is on it.
+/// outcomes were recorded, only from runs that met every state digest, until D57 retired the corpus's test (ADR-028).
+/// Returns false, with _error naming the line, if a digest step in _checkpoints is not alone on its line or no digest step
+/// is on it.
 [[nodiscard]] bool RecordCheckpoints(std::string_view _text, const std::map<std::size_t, Checkpoint>& _checkpoints, std::string& _recorded,
                                      std::string& _error);
 
 /// _text, a replay, with the state digest of each digest step in _digests, by the line the step is on, written over the one
-/// that line holds; every other byte is kept. This is how the corpus's digests are re-based when a change moves them
-/// (D33, piece 3), only from runs whose data segment differs from the one before the change in nothing but the fields it
-/// converted (Tests/GameLogicTests/StateDumps.h). Returns false, with _error naming the line, if a line in _digests is not a digest
+/// that line holds; every other byte is kept. This is how the corpus's digests were re-based when a change moved them
+/// (D33, piece 3), only from runs whose data segment differed from the one before the change in nothing but the fields it
+/// converted. Returns false, with _error naming the line, if a line in _digests is not a digest
 /// step alone on its line with the digest it expects, or is past the replay's end.
 [[nodiscard]] bool RecordDigests(std::string_view _text, const std::map<std::size_t, std::string>& _digests, std::string& _recorded,
                                  std::string& _error);

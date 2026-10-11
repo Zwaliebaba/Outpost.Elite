@@ -637,9 +637,8 @@ def generate_data_places(_groups: list[Group], _members: list[Member]) -> str:
     "",
   ]
   out += wrap("Every top-level member of the 1987 data segment, and every gap of it the game uses, in their 1987 order, and where "
-              "each is now: what the reference's image loads by (ReferenceLoadImage), what the GameState finds the original's "
-              "addresses by, and what the state digests' re-base checks member by member (Tests/GameLogicTests/StateDumps.h). The gaps "
-              "it does not list are not in the state, and nor is a constant with no place: the original's addresses there are "
+              "each is now: what the reference's image loads by (ReferenceLoadImage), and what the GameState finds the original's "
+              "addresses by. The gaps it does not list are not in the state, and nor is a constant with no place: the original's addresses there are "
               "the reference's image's.", "///")
   out += [f"inline constexpr std::array<DataPlace, {len(rows)}> DATA_PLACES = {{{{", *rows, "}};", ""]
   out += [

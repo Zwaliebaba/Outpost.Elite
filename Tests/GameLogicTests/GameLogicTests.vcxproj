@@ -84,34 +84,23 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="AnswerFile.h" />
-    <ClInclude Include="GuardReport.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="PlatformRig.h" />
     <ClInclude Include="ReferenceRig.h" />
-    <ClInclude Include="StateDumps.h" />
-    <ClInclude Include="TwinRig.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="AiTests.cpp" />
     <ClCompile Include="BiosTests.cpp" />
     <ClCompile Include="CgaFontTests.cpp" />
     <ClCompile Include="CgaTests.cpp" />
-    <ClCompile Include="CorpusTests.cpp" />
     <ClCompile Include="CountedTests.cpp" />
-    <ClCompile Include="DockedTests.cpp" />
     <ClCompile Include="DosFilesTests.cpp" />
-    <ClCompile Include="EquipmentTests.cpp" />
-    <ClCompile Include="FlightTests.cpp" />
     <ClCompile Include="GalaxyAnswerTests.cpp" />
     <ClCompile Include="GalaxyTests.cpp" />
     <ClCompile Include="GamePortTests.cpp" />
-    <ClCompile Include="HyperspaceTests.cpp" />
-    <ClCompile Include="InputTests.cpp" />
     <ClCompile Include="InterruptControllerTests.cpp" />
     <ClCompile Include="IntervalTimerTests.cpp" />
     <ClCompile Include="KeyboardTests.cpp" />
     <ClCompile Include="MarketAnswerTests.cpp" />
-    <ClCompile Include="MarketTests.cpp" />
     <ClCompile Include="MathsAnswerTests.cpp" />
     <ClCompile Include="MouseTests.cpp" />
     <ClCompile Include="OutcomeTests.cpp" />
@@ -119,21 +108,13 @@
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="PlatformTests.cpp" />
-    <ClCompile Include="ReferenceImageTests.cpp" />
     <ClCompile Include="ReplayTests.cpp" />
-    <ClCompile Include="SaveLoadTests.cpp" />
     <ClCompile Include="Sha256Tests.cpp" />
     <ClCompile Include="SpeakerTests.cpp" />
-    <ClCompile Include="StartUpTests.cpp" />
     <ClCompile Include="StateDigestTests.cpp" />
-    <ClCompile Include="TextTests.cpp" />
-    <ClCompile Include="TwinRigTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="GalaxyAnswers.txt" />
-    <None Include="KnownAnswers.txt" />
-    <None Include="KnownOutcomes.txt" />
-    <None Include="KnownPictures.txt" />
     <None Include="MarketAnswers.txt" />
     <None Include="MathsAnswers.txt" />
   </ItemGroup>

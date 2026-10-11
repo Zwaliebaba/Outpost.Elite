@@ -10,7 +10,7 @@
 | 3 — Replace routines with C++ | Exit met 2026-10-10 | ADR-010 |
 | 4 — Detach | Closed 2026-10-10 | ADR-011 to ADR-019 |
 | 5 — The native platform and the natural layout | Pieces 1 and 2 done. Piece 3: changes 1, 2, 3a and 3b done; change 3c remains. Piece 4 moved to Phase 6 (D52). | ADR-020 to ADR-026 |
-| 6 — The new game | Ruled (D39, D44–D55), not started. Done ahead of it: D41 (ADR-027) and D42 (ADR-009). D43 goes with change 3c. | — |
+| 6 — The new game | Ruled (D39, D44–D55), not started. Done ahead of it: D41 (ADR-027), and D42 and D48's PerMonitorV2 (ADR-009). D43 goes with change 3c. | — |
 
 **Play-tests.** The owner played the build with D19 and D3 (`472a6b8`) and reported it good; played main at `7242663`, with the platform swap and change 1, and reported that it works perfectly; and played the game after D7 and reported that it works as designed.
 
@@ -330,6 +330,7 @@ After D44, no replay reaches the docked screens. Their rules are functions with 
 | D54 | Who designs what the canvas does not show: the message line, the ECM's E, the other views, the disc menu, the laser mount, the pause screen, the missions and the error states | The owner draws them first. | **The owner draws them first** (2026-10-11), before the code that needs them. Phase 6 lists them. |
 | D55 | D39's scope: the ruling names the HUD, and §5 applied Bahnschrift to every canvas screen | Every canvas screen. | **Every canvas screen** (2026-10-11): Bahnschrift with tabular figures on the HUD and on the docked screens. Extends D39. |
 | D56 | The plan's status paragraph, 925 words, against §2.4's aim that the plan stays short | A status table. | **A status table** (2026-10-11): the paragraph becomes a table of the phases; the detail is in §5, §8 and the ADRs. |
+| D57 | Whether the tests still hold the port to `ELITES.EXE`, now that `3eeaca6` fits the docking computer at the start and 38 tests fail on it (raised by the owner) | Keep each scenario's own checks, and drop only the comparisons with `ELITES.EXE`. | **Delete the 38 failing tests** (2026-10-11): matching `ELITES.EXE` is no longer needed. The image's hash test, the 36 twins and the corpus test go, with the twins' answers, pictures and outcomes. The subsystems' answers stay. ADR-028 records it. Amends D20, D25, D33 and D35. |
 
 ## 9. ADRs this plan produces
 
@@ -362,6 +363,7 @@ After D44, no replay reaches the docked screens. Their rules are functions with 
 | [ADR-025](ADR/ADR-025-addresses-become-what-they-mean.md) | Stored addresses become what they mean, and the code segment leaves the game's memory (D33, piece 3 change 2) | Phase 5 — written |
 | [ADR-026](ADR/ADR-026-the-data-segment-distributed.md) | The data segment distributed: groups of state, and constants out of it (D38, piece 3 change 3a) | Phase 5 — written |
 | [ADR-027](ADR/ADR-027-the-short-range-chart-capped.md) | The short-range chart capped to its buffers, the first change on purpose (D41) | Phase 5 — written |
+| [ADR-028](ADR/ADR-028-the-match-to-elites-exe-retired.md) | The tests no longer hold the port to `ELITES.EXE` (D57) | Phase 5 — written |
 | — | Change 3c: the last members by name, and a loaded commander clamped (D43) | Phase 5, piece 3 — to write |
 | — | The renderer: device, frames in flight, targets, the 2D layer, text and the resolution policy (D47, D48, D55) | Phase 6, piece 1 — to write |
 | — | The space view: the snapshot, interpolation, the field of view, ships, planets and sky (D45, D49, D50) | Phase 6, pieces 2 and 3 — to write |

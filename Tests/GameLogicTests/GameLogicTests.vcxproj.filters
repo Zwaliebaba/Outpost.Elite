@@ -4,9 +4,6 @@
     <Filter Include="Galaxy">
       <UniqueIdentifier>{B77FFEC9-7450-50BB-8F03-717940D096D3}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Hyperspace">
-      <UniqueIdentifier>{2465F5AE-D8CE-5D39-BBAB-ECD299DDDF0D}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Maths">
       <UniqueIdentifier>{DD981103-DBA9-5EDA-AED2-CD2ADC4C9DDC}</UniqueIdentifier>
     </Filter>
@@ -16,38 +13,11 @@
     <Filter Include="Build">
       <UniqueIdentifier>{A38D8D19-E84C-5174-93B5-6D72C91EA9D8}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Reference">
-      <UniqueIdentifier>{98BAB53F-CAFD-5D25-B0C4-62546FD2EEA2}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Replay">
       <UniqueIdentifier>{4FA17651-43F5-57B9-8147-888A2272841C}</UniqueIdentifier>
     </Filter>
     <Filter Include="Rigs">
       <UniqueIdentifier>{DF447284-EDA8-587E-83FB-9FC68DF62CE6}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Equipment">
-      <UniqueIdentifier>{678F3192-9712-5927-AD32-64A4E6413C09}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Input">
-      <UniqueIdentifier>{F492B550-0A02-59D8-AE88-A18C3F4B347B}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="StartUp">
-      <UniqueIdentifier>{C1408AF3-FF90-53E3-8BC0-CBD3C71A0EB6}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Text">
-      <UniqueIdentifier>{BD8E5B46-DE28-51D3-90F9-DACF2F377D36}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Ai">
-      <UniqueIdentifier>{6B9ABE2E-9006-5C03-9E05-5121D202DE00}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Flight">
-      <UniqueIdentifier>{B4D92709-259D-5C8F-BBFF-8CBB010A7723}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Docked">
-      <UniqueIdentifier>{5C7DC198-E3EA-5855-912E-EBC3CAE831AC}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="SaveLoad">
-      <UniqueIdentifier>{C58A71FB-9CFD-5D0E-ACF3-B65DE4C3B974}</UniqueIdentifier>
     </Filter>
     <Filter Include="Platform">
       <UniqueIdentifier>{AC6C6F81-CE5D-5D84-8439-B62E5CD60598}</UniqueIdentifier>
@@ -55,9 +25,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AnswerFile.h">
-      <Filter>Rigs</Filter>
-    </ClInclude>
-    <ClInclude Include="GuardReport.h">
       <Filter>Rigs</Filter>
     </ClInclude>
     <ClInclude Include="pch.h">
@@ -69,17 +36,8 @@
     <ClInclude Include="ReferenceRig.h">
       <Filter>Rigs</Filter>
     </ClInclude>
-    <ClInclude Include="StateDumps.h">
-      <Filter>Rigs</Filter>
-    </ClInclude>
-    <ClInclude Include="TwinRig.h">
-      <Filter>Rigs</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="AiTests.cpp">
-      <Filter>Ai</Filter>
-    </ClCompile>
     <ClCompile Include="BiosTests.cpp">
       <Filter>Platform</Filter>
     </ClCompile>
@@ -89,23 +47,11 @@
     <ClCompile Include="CgaTests.cpp">
       <Filter>Platform</Filter>
     </ClCompile>
-    <ClCompile Include="CorpusTests.cpp">
-      <Filter>Replay</Filter>
-    </ClCompile>
     <ClCompile Include="CountedTests.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
-    <ClCompile Include="DockedTests.cpp">
-      <Filter>Docked</Filter>
-    </ClCompile>
     <ClCompile Include="DosFilesTests.cpp">
       <Filter>Platform</Filter>
-    </ClCompile>
-    <ClCompile Include="EquipmentTests.cpp">
-      <Filter>Equipment</Filter>
-    </ClCompile>
-    <ClCompile Include="FlightTests.cpp">
-      <Filter>Flight</Filter>
     </ClCompile>
     <ClCompile Include="GalaxyAnswerTests.cpp">
       <Filter>Galaxy</Filter>
@@ -115,12 +61,6 @@
     </ClCompile>
     <ClCompile Include="GamePortTests.cpp">
       <Filter>Platform</Filter>
-    </ClCompile>
-    <ClCompile Include="HyperspaceTests.cpp">
-      <Filter>Hyperspace</Filter>
-    </ClCompile>
-    <ClCompile Include="InputTests.cpp">
-      <Filter>Input</Filter>
     </ClCompile>
     <ClCompile Include="InterruptControllerTests.cpp">
       <Filter>Platform</Filter>
@@ -132,9 +72,6 @@
       <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="MarketAnswerTests.cpp">
-      <Filter>Market</Filter>
-    </ClCompile>
-    <ClCompile Include="MarketTests.cpp">
       <Filter>Market</Filter>
     </ClCompile>
     <ClCompile Include="MathsAnswerTests.cpp">
@@ -152,14 +89,8 @@
     <ClCompile Include="PlatformTests.cpp">
       <Filter>Platform</Filter>
     </ClCompile>
-    <ClCompile Include="ReferenceImageTests.cpp">
-      <Filter>Reference</Filter>
-    </ClCompile>
     <ClCompile Include="ReplayTests.cpp">
       <Filter>Replay</Filter>
-    </ClCompile>
-    <ClCompile Include="SaveLoadTests.cpp">
-      <Filter>SaveLoad</Filter>
     </ClCompile>
     <ClCompile Include="Sha256Tests.cpp">
       <Filter>Replay</Filter>
@@ -167,31 +98,13 @@
     <ClCompile Include="SpeakerTests.cpp">
       <Filter>Platform</Filter>
     </ClCompile>
-    <ClCompile Include="StartUpTests.cpp">
-      <Filter>StartUp</Filter>
-    </ClCompile>
     <ClCompile Include="StateDigestTests.cpp">
       <Filter>Replay</Filter>
-    </ClCompile>
-    <ClCompile Include="TextTests.cpp">
-      <Filter>Text</Filter>
-    </ClCompile>
-    <ClCompile Include="TwinRigTests.cpp">
-      <Filter>Rigs</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="GalaxyAnswers.txt">
       <Filter>Galaxy</Filter>
-    </None>
-    <None Include="KnownAnswers.txt">
-      <Filter>Rigs</Filter>
-    </None>
-    <None Include="KnownOutcomes.txt">
-      <Filter>Rigs</Filter>
-    </None>
-    <None Include="KnownPictures.txt">
-      <Filter>Rigs</Filter>
     </None>
     <None Include="MarketAnswers.txt">
       <Filter>Market</Filter>
