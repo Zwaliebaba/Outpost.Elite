@@ -7,6 +7,6 @@
   </Folder>
   <Project Path="Engine/Engine.vcxproj" Id="508b8537-8f4c-5a84-b7cc-b165f9c8b082" />
   <Project Path="GameLogic/GameLogic.vcxproj" Id="092fb942-d1c6-56a9-bd38-795b1f453d7f" />
-  <Project Path="ReplayRunner/ReplayRunner.vcxproj" Id="49a53673-c844-539f-b2a7-0030aec3a3ad" />
   <Project Path="Outpost/Outpost.vcxproj" Id="552728ec-715f-5fac-828b-01455a84b4ae" />
+  <Project Path="ReplayRunner/ReplayRunner.vcxproj" Id="49a53673-c844-539f-b2a7-0030aec3a3ad" />
 </Solution>

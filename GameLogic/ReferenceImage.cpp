@@ -9099,7 +9099,7 @@ const std::array<std::uint8_t, REFERENCE_IMAGE_BYTES> REFERENCE_IMAGE = {
   0x00,                                           // DS:75E9 escapePodFitted
   0x00,                                           // DS:75EA energyBombFitted
   0x00,                                           // DS:75EB energyUnitFitted
-  0x00,                                           // DS:75EC dockingComputerFitted
+  0x01,                                           // DS:75EC dockingComputerFitted  ZWAAL : CHEAT
   0x00,                                           // DS:75ED galacticHyperdriveFitted
   0x00,                                           // DS:75EE miningLaserCount
   0x00,                                           // DS:75EF militaryLaserCount
