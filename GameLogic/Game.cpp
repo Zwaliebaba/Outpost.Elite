@@ -15,7 +15,7 @@ Game::Game(FileStore& _files, const Platform::Desc& _desc)
 bool Game::Load(std::uint16_t _pspSegment)
 {
   const auto loadSegment = static_cast<std::uint16_t>(_pspSegment + PSP_PARAGRAPHS);
-  const std::optional<std::vector<std::uint8_t>> image = ReferenceLoadImage(loadSegment);
+  const std::optional<std::vector<std::uint8_t>> image = ReferenceLoadImage();
   if (!image)
   {
     return false;

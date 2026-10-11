@@ -38,7 +38,6 @@ inline constexpr std::uint16_t SLOT_FLAGS = 0x1E;     ///< bit 0 hostile, 1 blip
 inline constexpr std::uint16_t SLOT_THARGONS = 0x1F;  ///< Thargons a Thargoid has left to launch
 inline constexpr std::uint16_t SLOT_SPIN_ROLL = 0x26; ///< a fragment's spin, added to the roll and the pitch each frame
 inline constexpr std::uint16_t SLOT_SPIN_PITCH = 0x27;
-inline constexpr std::uint16_t SLOT_TARGET = 0x29; ///< word: a missile's target, a hunter's pack mate
 inline constexpr std::uint16_t SLOT_ENERGY = 0x2B;
 inline constexpr std::uint16_t SLOT_CARGO = 0x2C;
 inline constexpr std::uint16_t SLOT_FRAGMENTS = 0x2D;
@@ -52,7 +51,6 @@ inline constexpr std::uint16_t SLOT_SCANNED = 0x34;
 inline constexpr std::uint16_t SLOT_JINK_FRAMES = 0x35; ///< frames to the next evasive jink
 inline constexpr std::uint16_t SLOT_JINK_PITCH = 0x36;  ///< words: the jink added to the wanted heading
 inline constexpr std::uint16_t SLOT_JINK_YAW = 0x38;
-inline constexpr std::uint16_t SLOT_OWNER = 0x3A;       ///< word: a Thargon's mother; 1 for a police Viper
 inline constexpr std::uint16_t SLOT_VIEW_Z_HIGH = 0x3C; ///< the high byte of the camera-frame z: bit 7 set behind
 inline constexpr std::uint16_t SLOT_DETAIL = 0x3F;      ///< the level-of-detail threshold, from the template
 
@@ -75,14 +73,14 @@ inline constexpr std::uint8_t TYPE_PLANET = 0x1F;
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
-// A slot that a routine reads or writes by its fields is a SpaceObject; one it searches for, copies or clears whole is the
-// offset in the data segment the original holds in SI or DI (GameState::ObjectAt gives the record there).
+// A slot that a routine reads, writes, copies or clears is a SpaceObject; one it searches for is its number, a SlotIndex
+// (GameState::Slot gives the record), where the original holds its offset in SI or DI.
 
 /// Where a search of the object slots stopped.
 struct SlotSearch
 {
-  bool found;         ///< a slot was found
-  std::uint16_t slot; ///< its offset; when none was, the offset past the last one looked at, where the original leaves SI
+  bool found;     ///< a slot was found
+  SlotIndex slot; ///< it; when none was, the slot past the last one looked at, where the original leaves SI
 };
 
 /// What IsObjectNear finds of a slot.
@@ -122,7 +120,7 @@ struct Velocity
 /// The slot ReclaimShipSlot found.
 struct ReclaimedSlot
 {
-  std::uint16_t slot;                       ///< its offset, which the original leaves in SI
+  SlotIndex slot;                           ///< it, which the original leaves in SI
   bool evicted;                             ///< every ship slot had a blip, so this one was removed to make room
   std::optional<DashboardPixel> erasedBlip; ///< then, what RemoveObject erased of its blip
 };
@@ -131,8 +129,8 @@ struct ReclaimedSlot
 /// 2 z) of _slot, the low word, then the high byte. Not an entry: the idiom several routines share.
 void AddToCoordinate(SpaceObject& _slot, int _axis, std::int16_t _value);
 
-/// ClearObjectSlot (CS:2FD8): the 64 bytes of the slot at _slot zeroed, byte by byte.
-void ClearObjectSlot(GameState& _state, std::uint16_t _slot);
+/// ClearObjectSlot (CS:2FD8): the 64 bytes of _slot zeroed, byte by byte.
+void ClearObjectSlot(GameState& _state, SpaceObject& _slot);
 
 /// IsObjectNear (CS:3B9A): whether each 24-bit coordinate of _slot fits a signed word; when one does not, EraseScannerBlip.
 NearTest IsObjectNear(GameState& _state, SpaceObject& _slot);
@@ -194,9 +192,10 @@ void SpawnRandomHunter(GameState& _state, SpaceObject& _slot);
 /// below 40h, 20h more in an anarchy, its velocity set, and a Thargoid given 2 to 5 Thargons.
 void SpawnRandomWolf(GameState& _state, SpaceObject& _slot);
 
-/// InitObjectFromTemplate (CS:4E1B): _slot from the 10-byte record _index of the table at _table: its state, flags and
+/// InitObjectFromTemplate (CS:4E1B): _slot from the 10-byte record _index of spawnTemplates from _first, the first of a group of
+/// them, which the original holds the address of in BX: its state, flags and
 /// aggression cleared, its scanned byte 1, its type active, then the record's nine fields.
-void InitObjectFromTemplate(GameState& _state, SpaceObject& _slot, std::uint16_t _table, std::uint8_t _index);
+void InitObjectFromTemplate(GameState& _state, SpaceObject& _slot, std::size_t _first, std::uint8_t _index);
 
 /// PlaceAtSpawnPoint (CS:4E75): _slot placed at a random point 10000 out, by rotation pairs 7 and 6: (a scatter of +-1023,
 /// 10000) turned by pair 7, then (another scatter, what that left of the 10000) by pair 6. Its y, x and z, in that order.
@@ -239,11 +238,11 @@ ReclaimedSlot ReclaimShipSlot(GameState& _state);
 void ClearAllObjects(GameState& _state, bool _backward);
 
 /// FindDebrisSlot (CS:52EC): the first inactive debris slot, or, when every one is active, the oldest, the last of equals.
-[[nodiscard]] std::uint16_t FindDebrisSlot(GameState& _state);
+[[nodiscard]] SlotIndex FindDebrisSlot(GameState& _state);
 
-/// CopyObject (CS:5320): the 64 bytes at _source copied to _destination a word at a time as REP MOVSW does, backwards when
-/// _backward (the direction flag) is set.
-void CopyObject(GameState& _state, std::uint16_t _source, std::uint16_t _destination, bool _backward);
+/// CopyObject (CS:5320): _source's 64 bytes copied over _destination's a word at a time as REP MOVSW does, backwards when
+/// _backward (the direction flag) is set. The two are slots, or the source a record like one (LaunchPlayerMissile).
+void CopyObject(GameState& _state, const SpaceObject& _source, SpaceObject& _destination, bool _backward);
 
 /// UpdateDebrisAi (CS:5330): a fragment's frame: its lifetime counted down, and at 0 its active bit cleared; otherwise its age
 /// counted up, its spin bytes, sign-extended, added to its roll and then its pitch, and MoveObject. Returns what MoveObject

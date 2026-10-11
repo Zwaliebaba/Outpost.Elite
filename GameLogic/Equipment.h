@@ -35,10 +35,9 @@ struct Scoop
 /// object cannot be scooped.
 Scoop TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view);
 
-/// PayForEquipmentItem (CS:65A3): menuSelectedRow's price off creditsTenths (SubtractCredits): fuel's by the tank's emptiness,
-/// by a divide whose trap saves _bx, its caller's BX, with the row in BL. Returns whether the credits were enough, and are now
-/// less the price.
-[[nodiscard]] bool PayForEquipmentItem(GameState& _state, std::uint16_t _bx);
+/// PayForEquipmentItem (CS:65A3): menuSelectedRow's price off creditsTenths (SubtractCredits): fuel's by the tank's emptiness.
+/// Returns whether the credits were enough, and are now less the price.
+[[nodiscard]] bool PayForEquipmentItem(GameState& _state);
 
 /// LaunchEscapePod (CS:2F0F): an abandoned Cobra in a free ship slot, or one ReclaimShipSlot makes, the player turned away
 /// at speed 20 and moved 12 frames, the escape pod and the cargo hold gone.
@@ -54,8 +53,8 @@ void LaunchEscapePod(GameState& _state);
 ScreenKey ShowEquipShipScreen(GameState& _state, Hardware& _hardware, bool _backward);
 
 /// RunEquipShipMenu (CS:6111), with OpenEquipMessage, ShowEquipMessage, ReportNotEnoughCredits and the buying and selling it
-/// runs into as one unit (ADR-012 item 14): the equipment menu from the row whose first attribute byte is at B800:_firstRow,
-/// the cursor moved by the steering and the arrow keys, and B and S to buy and sell, each with its message. Returns Esc or the
+/// runs into as one unit (ADR-012 item 14): the equipment menu from row _firstRow of the text page (menuFirstRowAttr), the
+/// cursor moved by the steering and the arrow keys, and B and S to buy and sell, each with its message. Returns Esc or the
 /// F-key, other than F4, that ends it. Waits for keys as a rule (ADR-015).
 ScreenKey RunEquipShipMenu(GameState& _state, Hardware& _hardware, std::uint16_t _firstRow);
 
@@ -68,31 +67,35 @@ void ChooseMountToRemoveLaser(GameState& _state, Hardware& _hardware);
 
 /// DrawLaserMountMenu (CS:6367): the mount header, each of the four mounts' laser or "Free" on the line after it, and
 /// FORE's box highlighted; selectedLaserMount = 0. Returns where the last mount's text ends.
-PrintedText DrawLaserMountMenu(GameState& _state);
+std::uint16_t DrawLaserMountMenu(GameState& _state);
 
 /// RedrawEquipHelpText (CS:653F): the equipment screen's help lines again, over the mount menu, and textAttribute put
 /// back to the menu's.
-PrintedLines RedrawEquipHelpText(GameState& _state);
+std::uint16_t RedrawEquipHelpText(GameState& _state);
 
 /// PaintLaserMountBox (CS:6564): textAttribute over the 8x3 cells of the mount box whose first attribute byte is at
 /// B800:_box.
 void PaintLaserMountBox(GameState& _state, std::uint16_t _box);
 
 /// ClearEquipmentSellPrice (CS:6946): "-" in menuSelectedRow's resale column, once the last of an item is sold.
-PrintedText ClearEquipmentSellPrice(GameState& _state);
+std::uint16_t ClearEquipmentSellPrice(GameState& _state);
 
 /// ShowEquipmentSellPrice (CS:6972): menuSelectedRow's resale price computed by ComputeResalePrice, stored after its
 /// price in screenPrices, and printed in its row's resale column.
-PrintedText ShowEquipmentSellPrice(GameState& _state);
+std::uint16_t ShowEquipmentSellPrice(GameState& _state);
 
 // What the menus that wait share, at each one's own addresses: no hook, and no entry.
 
 /// Where the menu's cursor is, after StartMenu or a move.
 struct MenuCursor
 {
-  std::uint16_t row;   ///< the selected row's first attribute byte on the text page
-  PrintedText credits; ///< where PrintCreditsOnMessageLine stopped on the way
+  std::uint16_t row;     ///< the selected row's first attribute byte on the text page
+  std::uint16_t credits; ///< the cell after the credits PrintCreditsOnMessageLine printed on the way
 };
+
+/// The offset on the text page of the menu's first row's highlighted attribute, from the row menuFirstRowAttr holds, where
+/// the original holds that offset.
+[[nodiscard]] std::uint16_t MenuFirstRowCell(const GameState& _state) noexcept;
 
 /// The menus' start: the credits on the message line, then row 1 selected and highlighted from menuFirstRowAttr.
 MenuCursor StartMenu(GameState& _state);

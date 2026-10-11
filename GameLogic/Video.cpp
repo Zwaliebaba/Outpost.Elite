@@ -29,8 +29,6 @@ constexpr std::uint16_t CGA_BANK_WORDS = 0xFA0; // 8000 bytes: one bank of mode 
 constexpr std::uint16_t CGA_ODD_BANK = 0x2000;  // the odd lines' bank
 constexpr std::uint16_t TEXT_CELLS = 1000;      // 40x25
 constexpr std::uint8_t SPACE = 0x20;
-// The cockpit image's segment, relative to the load segment (DS:B160, cockpitImage).
-constexpr std::uint16_t COCKPIT_PARAGRAPH = 0x140A;
 
 // screenLayout: 0 the cockpit, 1 the chart frame; bit 1 set while in text mode.
 constexpr std::uint8_t CHART_LAYOUT = 1;
@@ -56,33 +54,12 @@ constexpr std::uint8_t TEXT_MODE = 1;             // BIOS mode 1: 40x25 colour t
 constexpr std::uint8_t CURSOR_OFF_PAGE = 0x0E;    // the cursor address's high byte, past the 40x25 page
 constexpr std::uint8_t VIDEO_ON_BLINK_OFF = 0x08; // the mode control register: attribute bit 7 a bright background
 
-// triangleStepOpcodes (CS:1CF3), after FillTriangle's RET: SUB AX,SI; SUB BX,DI; ADD AX,SI; ADD BX,DI.
-constexpr std::uint16_t SUB_AX_SI = 0x1CF3;
-constexpr std::uint16_t SUB_BX_DI = 0x1CF5;
-constexpr std::uint16_t ADD_AX_SI = 0x1CF7;
-constexpr std::uint16_t ADD_BX_DI = 0x1CF9;
-// The step instructions FillTriangle rewrites from them.
-constexpr std::uint16_t STEP_EDGE_A = 0x1CC9;
-constexpr std::uint16_t STEP_EDGE_B = 0x1CCB;
-constexpr std::uint16_t STEP_LONG_EDGE_UPPER = 0x1E20;
-constexpr std::uint16_t STEP_SHORT_EDGE_UPPER = 0x1E22;
-constexpr std::uint16_t STEP_SHORT_EDGE_LOWER = 0x1E54;
-constexpr std::uint16_t STEP_LONG_EDGE_LOWER = 0x1E61;
-
-// clippedTriangleStepOpcodes (CS:1FF8): ADD SI,[m]; ADC AX,[m]; ADD DI,[m]; ADC BX,[m], then the
-// SUB/SBB forms. Only each opcode and ModRM word is copied, at the site and 4 bytes on.
-constexpr std::uint16_t ADD_TO_EDGE_A = 0x1FF8;
-constexpr std::uint16_t ADD_TO_EDGE_B = 0x2000;
-constexpr std::uint16_t SUBTRACT_FROM_EDGE_A = 0x2008;
-constexpr std::uint16_t SUBTRACT_FROM_EDGE_B = 0x2010;
-constexpr std::uint16_t CARRY_STEP_BYTES = 4;
-// The step sites FillClippedTriangle rewrites from them.
-constexpr std::uint16_t STEP_CLIPPED_EDGE_A = 0x1FC8;
-constexpr std::uint16_t STEP_CLIPPED_EDGE_B = 0x1FD0;
-constexpr std::uint16_t STEP_CLIPPED_UPPER_A = 0x2200;
-constexpr std::uint16_t STEP_CLIPPED_UPPER_B = 0x2208;
-constexpr std::uint16_t STEP_CLIPPED_LOWER_B = 0x224E;
-constexpr std::uint16_t STEP_CLIPPED_LOWER_A = 0x22AE;
+// The triangle fillers choose each edge's step, ADD or SUB, by rewriting the step instructions in their own code from tables of
+// opcodes after them (triangleStepOpcodes, CS:1CF3, and clippedTriangleStepOpcodes, CS:1FF8). Native code holds the choice with the
+// edge instead, and the code segment is not the game's memory. One rewrite reaches a picture: FillClippedGeneral's last moves
+// clippedTriangleStepOpcodes' SBB BX,[m] (CS:2014), its opcode and ModRM byte, through SI, the long edge's fraction, and leaves
+// it there.
+constexpr std::uint16_t SBB_BX_OPCODES = 0x1E1B;
 // clippedFirstRow and clippedLastRow before a row is drawn.
 constexpr std::uint16_t NO_ROW = 0x8000;
 // Row 64 * row, in AL after DrawStackedSpans shifts it: bit 6 is the row's lowest bit.
@@ -123,6 +100,7 @@ constexpr std::uint16_t SMALL_DISC_ROWS = 4;
 constexpr std::uint8_t CLIP_SPRITE_LEFT = 0x55;  // only the sprite's right byte is drawn
 constexpr std::uint8_t CLIP_SPRITE_RIGHT = 0xAA; // only its left byte is drawn
 constexpr std::uint16_t CIRCLE_CHORDS = 32;
+constexpr std::size_t CIRCLE_POINT_BYTES = 4;
 
 // XCHG AH,AL.
 [[nodiscard]] constexpr std::uint16_t SwapBytes(std::uint16_t _word) noexcept
@@ -161,10 +139,11 @@ constexpr std::uint16_t CIRCLE_CHORDS = 32;
   return static_cast<std::uint8_t>((_byte >> count) | (_byte << ((8u - count) & 7u)));
 }
 
-// MOV BX,colorFillBytes / ADD BL,[drawColor]: the ADD carries nothing into BH.
-[[nodiscard]] std::uint16_t ColorFillByteOffset(std::uint8_t _color) noexcept
+// MOV BX,colorFillBytes / ADD BL,[drawColor]: the ADD carries nothing into BH, so a colour past the page's end would wrap to its
+// start. The offset the original reads.
+[[nodiscard]] std::uint16_t ColorFillByteOffset(const GameState& _state, std::uint8_t _color) noexcept
 {
-  const std::uint16_t table = DS.colorFillBytes.offset;
+  const std::uint16_t table = _state.OffsetOf(_state.Data().colorFillBytes);
   return Join(High(table), static_cast<std::uint8_t>(Low(table) + _color));
 }
 
@@ -428,9 +407,9 @@ bool DrawHalvedRows(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromDo
 
 // MoveEndpointToEdge (CS:1691): the first end (CX, AX) onto the edge at 0 along the line to the second (DX, BX): MOV SI,DX, then
 // unless an end is on the edge already, SUB AX,BX / SUB CX,DX / NEG DX / IMUL DX / IDIV CX / ADD AX,BX / MOV CX,0 / MOV DX,SI. The
-// divide saves BX, the second end's other coordinate, when it overflows. The moved end inside 0-255 counts off BP, DEC BP setting
-// ZF once none is outside; outside it, the ends stay as they now are (LeaveEndpoints).
-[[nodiscard]] ClipStep MoveEndpointToEdge(GameState& _state, ClipLine _line)
+// moved end inside 0-255 counts off BP, DEC BP setting ZF once none is outside; outside it, the ends stay as they now are
+// (LeaveEndpoints).
+[[nodiscard]] ClipStep MoveEndpointToEdge(ClipLine _line)
 {
   if (_line.secondCut == 0 || _line.firstCut == 0)
   {
@@ -439,7 +418,7 @@ bool DrawHalvedRows(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromDo
   const auto along = static_cast<std::uint16_t>(_line.firstAlong - _line.secondAlong);
   const auto cut = static_cast<std::uint16_t>(_line.firstCut - _line.secondCut);
   const auto product = static_cast<std::uint32_t>(std::int32_t{Signed(along)} * Signed(Negate(_line.secondCut)));
-  const std::uint16_t moved = DivideSignedWord(_state, product, cut, _line.secondAlong).quotient;
+  const std::uint16_t moved = DivideSignedWord(product, cut).quotient;
   _line.firstAlong = static_cast<std::uint16_t>(moved + _line.secondAlong);
   _line.firstCut = 0;
   if (High(_line.firstAlong) != 0)
@@ -451,11 +430,11 @@ bool DrawHalvedRows(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromDo
 }
 
 // SwapThenCutLine (CS:168E): XCHG CX,DX / XCHG BX,AX, then MoveEndpointToEdge: the second end moved, the ends left swapped.
-[[nodiscard]] ClipStep SwapThenCutLine(GameState& _state, ClipLine _line)
+[[nodiscard]] ClipStep SwapThenCutLine(ClipLine _line)
 {
   std::swap(_line.firstCut, _line.secondCut);
   std::swap(_line.firstAlong, _line.secondAlong);
-  return MoveEndpointToEdge(_state, _line);
+  return MoveEndpointToEdge(_line);
 }
 
 // XCHG CX,AX / XCHG DX,BX: the other axis cut.
@@ -476,12 +455,11 @@ bool DrawHalvedRows(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromDo
 
 // ---- Discs ----
 
-// CS:18F2-1924: the half-width of a disc's row, the profile byte at DS:_profile scaled by discRadiusRows and
-// rounded, plus the fringe while sunFringeMask is set. The DX the fringe leaves is dead: DiscRowSpan's first
-// instruction loads DX.
-[[nodiscard]] std::uint16_t DiscHalfWidth(GameState& _state, std::uint16_t _profile)
+// CS:18F2-1924: the half-width of a disc's row, byte _profile of circleProfile scaled by discRadiusRows and rounded, plus the
+// fringe while sunFringeMask is set. The DX the fringe leaves is dead: DiscRowSpan's first instruction loads DX.
+[[nodiscard]] std::uint16_t DiscHalfWidth(GameState& _state, std::size_t _profile)
 {
-  auto profile = static_cast<std::uint8_t>(_state.Byte(_profile) + 1);
+  auto profile = static_cast<std::uint8_t>(_state.BytesFrom(_state.Data().circleProfile, _profile + 1)[_profile] + 1);
   if (profile == 0)
   {
     --profile; // INC AL that stops at FFh
@@ -538,8 +516,8 @@ struct DiscRowEdges
   return edges;
 }
 
-// CS:18EE: the row _upperRow (2*row, moving up) alone, from the profile byte at DS:_profile, while it is on the buffer.
-void DrawDiscUpperRow(GameState& _state, std::uint16_t _profile, std::uint16_t _upperRow, bool _backward)
+// CS:18EE: the row _upperRow (2*row, moving up) alone, from byte _profile of circleProfile, while it is on the buffer.
+void DrawDiscUpperRow(GameState& _state, std::size_t _profile, std::uint16_t _upperRow, bool _backward)
 {
   if (High(_upperRow) != 0)
   {
@@ -554,7 +532,7 @@ void DrawDiscUpperRow(GameState& _state, std::uint16_t _profile, std::uint16_t _
 
 // CS:187B: the rows _lowerRow (moving down) and _upperRow (moving up), as 2*row, one half-width for both; the upper while it
 // is on the buffer.
-void DrawDiscRowPair(GameState& _state, std::uint16_t _profile, std::uint16_t _lowerRow, std::uint16_t _upperRow, bool _backward)
+void DrawDiscRowPair(GameState& _state, std::size_t _profile, std::uint16_t _lowerRow, std::uint16_t _upperRow, bool _backward)
 {
   const DiscRowEdges edges = DiscRowSpan(_state, DiscHalfWidth(_state, _profile));
   if (!edges.visible)
@@ -572,12 +550,12 @@ void DrawDiscRowPair(GameState& _state, std::uint16_t _profile, std::uint16_t _l
 // time at the left and right edges and a row at a time at the top and bottom.
 struct SmallDiscPlace
 {
-  std::uint16_t x;      // the sprite's left x: the centre's less half the radius, 4 on when that is left of the buffer
-  std::uint16_t row;    // its top row likewise, 0 once clipped at the top
-  std::uint16_t sprite; // its first byte to draw in smallDiscSprites
-  std::uint8_t rows;    // the rows to draw, 4 less those off the top or the bottom
-  std::uint8_t clip;    // a bit pair a row: bit 0 when only the sprite's right byte is drawn, bit 1 when only its left
-  bool onBuffer;        // false when the sprite is wholly off the buffer, and nothing is drawn
+  std::uint16_t x;    // the sprite's left x: the centre's less half the radius, 4 on when that is left of the buffer
+  std::uint16_t row;  // its top row likewise, 0 once clipped at the top
+  std::size_t sprite; // its first byte to draw in smallDiscSprites
+  std::uint8_t rows;  // the rows to draw, 4 less those off the top or the bottom
+  std::uint8_t clip;  // a bit pair a row: bit 0 when only the sprite's right byte is drawn, bit 1 when only its left
+  bool onBuffer;      // false when the sprite is wholly off the buffer, and nothing is drawn
 };
 
 // CS:194B-19AA: where the sprite of a disc of radius _radius goes for the centre (_centerX, _centerRow).
@@ -589,7 +567,7 @@ struct SmallDiscPlace
   const auto half = static_cast<std::uint16_t>(radius >> 1);
   SmallDiscPlace place{static_cast<std::uint16_t>(static_cast<std::uint16_t>(_centerX) - half),
                        static_cast<std::uint16_t>(static_cast<std::uint16_t>(_centerRow) - half),
-                       Offset(DS.smallDiscSprites.offset, static_cast<std::uint8_t>((radius - 1) << 2)),
+                       std::size_t{static_cast<std::uint8_t>((radius - 1) << 2)},
                        SMALL_DISC_ROWS,
                        0,
                        false};
@@ -620,9 +598,10 @@ struct SmallDiscPlace
     {
       return place;
     }
-    // The rows above the buffer are skipped: AND clears CF, so CMC / ADC adds one more. XOR CL,CL starts at row 0.
+    // The rows above the buffer are skipped: AND clears CF, so CMC / ADC adds one more, to the sprite's low byte, which the 16
+    // bytes of smallDiscSprites never carry out of. XOR CL,CL starts at row 0.
     place.rows = Low(place.row);
-    place.sprite = WithLow(place.sprite, static_cast<std::uint8_t>(Low(place.sprite) + (~Low(place.row) & 3) + 1));
+    place.sprite += static_cast<std::size_t>((~Low(place.row) & 3) + 1);
     place.row = 0;
   }
   else
@@ -645,15 +624,16 @@ struct SmallDiscPlace
 void DrawSmallDisc(GameState& _state, const SmallDiscPlace& _place)
 {
   std::uint16_t at = static_cast<std::uint16_t>(Join(Low(_place.row), Low(_place.x)) >> 2);
-  std::uint16_t sprite = _place.sprite;
+  const std::span<const Counted<std::uint8_t>> sprite = _state.BytesFrom(_state.Data().smallDiscSprites, _place.sprite + _place.rows);
+  std::size_t row = _place.sprite;
   std::uint8_t clip = _place.clip;
   // The sprite's shift into its first byte, 2 bits a pixel.
   const auto shift = static_cast<std::uint8_t>((Low(_place.x) & 3) << 1);
   const std::uint8_t fill = _state.Data().discFillByte;
   for (std::uint8_t rows = _place.rows; rows != 0; --rows)
   {
-    const auto bits = static_cast<std::uint16_t>(Join(_state.Byte(sprite), 0) >> shift);
-    sprite = Offset(sprite, 1);
+    const auto bits = static_cast<std::uint16_t>(Join(sprite[row], 0) >> shift);
+    ++row;
     const bool rightOnly = (clip & 1) != 0;
     clip = RotateRight(clip, 1);
     if (rightOnly)
@@ -684,15 +664,6 @@ void DrawSmallDisc(GameState& _state, const SmallDiscPlace& _place)
 }
 
 // ---- Triangles ----
-
-// MOV transfer,CS:[_source] / MOV CS:[_site],transfer: a step instruction rewritten from the opcodes
-// kept after the routine's RET. Returns the word moved, which the original leaves in the transfer register.
-std::uint16_t PatchStep(GameState& _state, std::uint16_t _source, std::uint16_t _site)
-{
-  const std::uint16_t opcodes = _state.CodeWord(_source);
-  _state.SetCodeWord(_site, opcodes);
-  return opcodes;
-}
 
 // MOV BP,DX / AND BP,3 / SHL BP,1, then MOV AX,[BP] for a span's left end or [BP+8] for its right: triangleEdgeMasks' word for
 // an end at x = _x, its fill bits in the low byte and the bits it keeps in the high. BP addresses the stack segment, and
@@ -741,8 +712,8 @@ struct OnScreenCorner
   std::uint8_t row;
 };
 
-// An edge of the on-screen walk: x as 8.8, in AX or BX, its slope, in SI or DI, and whether the step patched in at its site is
-// SUB rather than ADD.
+// An edge of the on-screen walk: x as 8.8, in AX or BX, its slope, in SI or DI, and whether the step the original patches in at
+// its site is SUB rather than ADD.
 struct WalkEdge
 {
   std::uint16_t x;
@@ -788,8 +759,8 @@ struct ByteRun
   return _to < _from ? ByteRun{Negate8(difference), true} : ByteRun{difference, false};
 }
 
-// TraceTwoEdges (CS:1CBE): the spans of _rows rows pushed, edges A and B stepped after each by the steps patched in at
-// CS:1CC9 and CS:1CCB, then DrawStackedSpans. LOOP counts the rows from CX, the rows + 1.
+// TraceTwoEdges (CS:1CBE): the spans of _rows rows pushed, edges A and B stepped after each by the steps the original patches
+// in at CS:1CC9 and CS:1CCB, then DrawStackedSpans. LOOP counts the rows from CX, the rows + 1.
 void TraceTwoEdges(GameState& _state, WalkEdge _a, WalkEdge _b, std::uint8_t _rows, bool _backward)
 {
   TriangleSpans spans;
@@ -812,17 +783,9 @@ void FillFlatBottomTriangle(GameState& _state, OnScreenCorner _a, OnScreenCorner
   const auto rows = static_cast<std::uint8_t>(_c.row - _a.row);
   _state.Data().triangleUpperRows = rows;
   const ByteRun runA = RunBetween(_a.x, _c.x);
-  if (runA.backward)
-  {
-    (void)PatchStep(_state, SUB_AX_SI, STEP_EDGE_A);
-  }
   WalkEdge a{0, EdgeSlope(runA.magnitude, rows), runA.backward};
   // MOV BH,AL / MOV AX,BX / SUB AL,AH: B's x less A's.
   const ByteRun runB = RunBetween(_a.x, _b.x);
-  if (runB.backward)
-  {
-    (void)PatchStep(_state, SUB_BX_DI, STEP_EDGE_B);
-  }
   WalkEdge b{0, EdgeSlope(runB.magnitude, rows), runB.backward};
   a.x = Join(_state.Data().triangleEdgeStartX, 0);
   b.x = Join(_state.Data().triangleEdgeStartX2, 0);
@@ -838,18 +801,10 @@ void FillFlatTopTriangle(GameState& _state, OnScreenCorner _a, OnScreenCorner _b
   _state.Data().triangleUpperRows = static_cast<std::uint8_t>(_a.row - _c.row);
   // MOV BH,AL / SUB AL,CL: A's x less C's.
   const ByteRun runA = RunBetween(_c.x, _a.x);
-  if (runA.backward)
-  {
-    (void)PatchStep(_state, SUB_AX_SI, STEP_EDGE_A);
-  }
   const std::uint8_t rows = _state.Data().triangleUpperRows;
   WalkEdge a{0, EdgeSlope(runA.magnitude, rows), runA.backward};
   // MOV AX,BX / SUB AH,AL: A's x less B's, then XOR AL,AL / XOR DX,DX / DIV CX.
   const ByteRun runB = RunBetween(_b.x, _a.x);
-  if (runB.backward)
-  {
-    (void)PatchStep(_state, SUB_BX_DI, STEP_EDGE_B);
-  }
   WalkEdge b{0, EdgeSlope(runB.magnitude, rows), runB.backward};
   a.x = Join(_state.Data().triangleEdgeStartX2, 0);
   b.x = Join(_state.Data().triangleEdgeStartX, 0);
@@ -887,13 +842,9 @@ void FillOneRowTriangle(GameState& _state, OnScreenCorner _a, OnScreenCorner _b,
 }
 
 // FillGeneralTriangle (CS:1D82): A on top, B the middle row, C the bottom; the long edge A-C in AX by SI, the short edges A-B and
-// then B-C in BX by DI, each step patched in at the upper and the lower walk's sites.
+// then B-C in BX by DI, each step one the original patches in at the upper and the lower walk's sites.
 void FillGeneralTriangle(GameState& _state, OnScreenCorner _a, OnScreenCorner _b, OnScreenCorner _c, bool _backward)
 {
-  const std::uint16_t addLong = PatchStep(_state, ADD_AX_SI, STEP_LONG_EDGE_UPPER);
-  _state.SetCodeWord(STEP_LONG_EDGE_LOWER, addLong);
-  const std::uint16_t addShort = PatchStep(_state, ADD_BX_DI, STEP_SHORT_EDGE_UPPER);
-  _state.SetCodeWord(STEP_SHORT_EDGE_LOWER, addShort);
   if (!(_b.row < _c.row))
   {
     std::swap(_b, _c);
@@ -906,18 +857,9 @@ void FillGeneralTriangle(GameState& _state, OnScreenCorner _a, OnScreenCorner _b
   _state.Data().triangleEdgeStartX = _a.x;
   _state.Data().triangleEdgeStartX2 = _a.x;
   const ByteRun runLong = RunBetween(_a.x, _c.x);
-  if (runLong.backward)
-  {
-    const std::uint16_t subtractLong = PatchStep(_state, SUB_AX_SI, STEP_LONG_EDGE_UPPER);
-    _state.SetCodeWord(STEP_LONG_EDGE_LOWER, subtractLong);
-  }
   WalkEdge longEdge{0, EdgeSlope(runLong.magnitude, _state.Data().triangleTotalRows), runLong.backward};
   // MOV BH,AL / MOV AX,BX / SUB AL,AH: B's x less A's.
   const ByteRun runUpper = RunBetween(_a.x, _b.x);
-  if (runUpper.backward)
-  {
-    (void)PatchStep(_state, SUB_BX_DI, STEP_SHORT_EDGE_UPPER);
-  }
   const std::uint8_t upperRows = _state.Data().triangleUpperRows;
   WalkEdge shortEdge{0, EdgeSlope(runUpper.magnitude, upperRows), runUpper.backward};
   longEdge.x = Join(_state.Data().triangleEdgeStartX, 0);
@@ -935,10 +877,6 @@ void FillGeneralTriangle(GameState& _state, OnScreenCorner _a, OnScreenCorner _b
   // the long edge.
   rows = static_cast<std::uint8_t>(_state.Data().triangleTotalRows - _state.Data().triangleUpperRows);
   const ByteRun runLower = RunBetween(_state.Data().triangleMiddleX, _state.Data().triangleBottomX);
-  if (runLower.backward)
-  {
-    (void)PatchStep(_state, SUB_BX_DI, STEP_SHORT_EDGE_LOWER);
-  }
   shortEdge = WalkEdge{Join(_state.Data().triangleMiddleX, 0), EdgeSlope(runLower.magnitude, Low(rows)), runLower.backward};
   // TraceLowerEdges (CS:1E54): the short edge steps before each span is pushed, the long edge after.
   do
@@ -950,12 +888,10 @@ void FillGeneralTriangle(GameState& _state, OnScreenCorner _a, OnScreenCorner _b
   DrawStackedSpans(_state, spans, _backward);
 }
 
-// FillOnScreenTriangle (CS:1C12): A, B and C wholly on the buffer, sorted by row into the four cases by exchanges, with edge A's
-// and edge B's steps patched to their ADD forms first. MOV DX,DS / MOV ES,DX before them.
+// FillOnScreenTriangle (CS:1C12): A, B and C wholly on the buffer, sorted by row into the four cases by exchanges, which the
+// original starts with edge A's and edge B's steps patched to their ADD forms. MOV DX,DS / MOV ES,DX before them.
 void FillOnScreenTriangle(GameState& _state, OnScreenCorner _a, OnScreenCorner _b, OnScreenCorner _c, bool _backward)
 {
-  (void)PatchStep(_state, ADD_AX_SI, STEP_EDGE_A);
-  (void)PatchStep(_state, ADD_BX_DI, STEP_EDGE_B);
   if (_a.row == _b.row)
   {
     // CMP AH,CH / XCHG CX,AX, then JE or JAE on the compare.
@@ -1000,14 +936,6 @@ void FillOnScreenTriangle(GameState& _state, OnScreenCorner _a, OnScreenCorner _
 }
 
 // ---- Clipped triangles ----
-
-// The step pair at _site (ADD/ADC or SUB/SBB) rewritten from the pair at _source, a word at the site and a word 4 bytes on.
-// Returns the second word moved, which the original leaves in the transfer register.
-std::uint16_t PatchClippedStep(GameState& _state, std::uint16_t _source, std::uint16_t _site)
-{
-  (void)PatchStep(_state, _source, _site);
-  return PatchStep(_state, static_cast<std::uint16_t>(_source + CARRY_STEP_BYTES), static_cast<std::uint16_t>(_site + CARRY_STEP_BYTES));
-}
 
 // A 16.16 edge of the clipped walk: x's whole part, signed, and its fraction: edge A in AX and SI, edge B in BX and DI.
 struct ClippedEdge
@@ -1161,16 +1089,8 @@ void FillClippedFlatBottom(GameState& _state, ScreenPoint _a, ScreenPoint _b, Sc
   const auto rows = static_cast<std::uint16_t>(static_cast<std::uint16_t>(_c.y) - static_cast<std::uint16_t>(_a.y));
   _state.Data().clippedUpperRows = rows;
   const WordRun runA = RunBetween(_a.x, _c.x, false);
-  if (runA.backward)
-  {
-    (void)PatchClippedStep(_state, SUBTRACT_FROM_EDGE_A, STEP_CLIPPED_EDGE_A);
-  }
   ClippedSlope(runA.magnitude, rows, _state.Data().clippedSlopeAWhole, _state.Data().clippedSlopeAFraction);
   const WordRun runB = RunBetween(_a.x, _b.x, false);
-  if (runB.backward)
-  {
-    (void)PatchClippedStep(_state, SUBTRACT_FROM_EDGE_B, STEP_CLIPPED_EDGE_B);
-  }
   ClippedSlope(runB.magnitude, rows, _state.Data().clippedSlopeBWhole, _state.Data().clippedSlopeBFraction);
   const ClippedEdge a{Signed(_state.Data().clippedEdgeStartX), 0};
   const ClippedEdge b{Signed(_state.Data().clippedEdgeStartX2), 0};
@@ -1187,16 +1107,8 @@ void FillClippedFlatTop(GameState& _state, ScreenPoint _a, ScreenPoint _b, Scree
   const auto rows = static_cast<std::uint16_t>(static_cast<std::uint16_t>(_a.y) - static_cast<std::uint16_t>(_c.y));
   _state.Data().clippedUpperRows = rows;
   const WordRun runA = RunBetween(_c.x, _a.x, false);
-  if (runA.backward)
-  {
-    (void)PatchClippedStep(_state, SUBTRACT_FROM_EDGE_A, STEP_CLIPPED_EDGE_A);
-  }
   ClippedSlope(runA.magnitude, rows, _state.Data().clippedSlopeAWhole, _state.Data().clippedSlopeAFraction);
   const WordRun runB = RunBetween(_b.x, _a.x, false);
-  if (runB.backward)
-  {
-    (void)PatchClippedStep(_state, SUBTRACT_FROM_EDGE_B, STEP_CLIPPED_EDGE_B);
-  }
   ClippedSlope(runB.magnitude, rows, _state.Data().clippedSlopeBWhole, _state.Data().clippedSlopeBFraction);
   const ClippedEdge a{Signed(_state.Data().clippedEdgeStartX2), 0};
   const ClippedEdge b{Signed(_state.Data().clippedEdgeStartX), 0};
@@ -1236,20 +1148,10 @@ void FillClippedOneRow(GameState& _state, ScreenPoint _a, ScreenPoint _b, Screen
 }
 
 // FillClippedGeneral (CS:20C2): A on top, B the middle row, C the bottom; the long edge A-C in AX:SI, the short edges in BX:DI,
-// every row from A's walked and counted in clippedRowCount, each step patched in at the upper and the lower walk's sites.
+// every row from A's walked and counted in clippedRowCount, each step one the original patches in at the upper and the lower
+// walk's sites.
 void FillClippedGeneral(GameState& _state, ScreenPoint _a, ScreenPoint _b, ScreenPoint _c, bool _backward)
 {
-  // The ADD/ADC forms through SI, to both walks' sites.
-  for (const std::uint16_t word : {std::uint16_t{0}, CARRY_STEP_BYTES})
-  {
-    const std::uint16_t addA = PatchStep(_state, Offset(ADD_TO_EDGE_A, word), Offset(STEP_CLIPPED_UPPER_A, word));
-    _state.SetCodeWord(Offset(STEP_CLIPPED_LOWER_A, word), addA);
-  }
-  for (const std::uint16_t word : {std::uint16_t{0}, CARRY_STEP_BYTES})
-  {
-    const std::uint16_t addB = PatchStep(_state, Offset(ADD_TO_EDGE_B, word), Offset(STEP_CLIPPED_UPPER_B, word));
-    _state.SetCodeWord(Offset(STEP_CLIPPED_LOWER_B, word), addB);
-  }
   if (!(_b.y < _c.y))
   {
     std::swap(_b, _c);
@@ -1263,21 +1165,9 @@ void FillClippedGeneral(GameState& _state, ScreenPoint _a, ScreenPoint _b, Scree
   _state.Data().clippedEdgeStartX = static_cast<std::uint16_t>(_a.x);
   _state.Data().clippedEdgeStartX2 = static_cast<std::uint16_t>(_a.x);
   const WordRun runLong = RunBetween(_a.x, _c.x, true);
-  if (runLong.backward)
-  {
-    for (const std::uint16_t word : {std::uint16_t{0}, CARRY_STEP_BYTES})
-    {
-      const std::uint16_t subtractA = PatchStep(_state, Offset(SUBTRACT_FROM_EDGE_A, word), Offset(STEP_CLIPPED_UPPER_A, word));
-      _state.SetCodeWord(Offset(STEP_CLIPPED_LOWER_A, word), subtractA);
-    }
-  }
   // PUSH AX / POP AX round the long edge's slope keep A's x.
   ClippedSlope(runLong.magnitude, _state.Data().clippedTotalRows, _state.Data().clippedSlopeAWhole, _state.Data().clippedSlopeAFraction);
   const WordRun runUpper = RunBetween(_a.x, _b.x, true);
-  if (runUpper.backward)
-  {
-    (void)PatchClippedStep(_state, SUBTRACT_FROM_EDGE_B, STEP_CLIPPED_UPPER_B);
-  }
   const std::uint16_t upperRows = _state.Data().clippedUpperRows;
   ClippedSlope(runUpper.magnitude, upperRows, _state.Data().clippedSlopeBWhole, _state.Data().clippedSlopeBFraction);
   ClippedEdge longEdge{Signed(_state.Data().clippedEdgeStartX), 0};
@@ -1303,13 +1193,14 @@ void FillClippedGeneral(GameState& _state, ScreenPoint _a, ScreenPoint _b, Scree
   } while (--rows != 0);
   if (walking)
   {
-    // StartClippedLowerEdge (CS:2213): the short edge restarts from B's x, its fraction carrying on. The SUB/SBB form goes to its
-    // sites through SI, which leaves the long edge's fraction the second word moved. PUSH AX / POP AX keep the long edge's x.
+    // StartClippedLowerEdge (CS:2213): the short edge restarts from B's x, its fraction carrying on. The original patches the
+    // SUB/SBB form in through SI, which leaves the long edge's fraction the second word moved. PUSH AX / POP AX keep the long
+    // edge's x.
     rows = static_cast<std::uint16_t>(_state.Data().clippedTotalRows - _state.Data().clippedUpperRows);
     const WordRun runLower = RunBetween(Signed(_state.Data().clippedMiddleX), Signed(_state.Data().clippedBottomX), true);
     if (runLower.backward)
     {
-      longEdge.fraction = PatchClippedStep(_state, SUBTRACT_FROM_EDGE_B, STEP_CLIPPED_LOWER_B);
+      longEdge.fraction = SBB_BX_OPCODES;
     }
     ClippedSlope(runLower.magnitude, rows, _state.Data().clippedSlopeBWhole, _state.Data().clippedSlopeBFraction);
     shortEdge.whole = Signed(_state.Data().clippedMiddleX);
@@ -1412,7 +1303,7 @@ ScreenChange MakeGraphicsScreen(GameState& _state, Hardware& _hardware, std::uin
 
 void SaveScreenshot(GameState& _state, Hardware& _hardware)
 {
-  RestoreDivideAndKeyboardInterrupts(_state, _hardware);
+  RestoreDivideAndKeyboardInterrupts(_hardware);
   (void)RestoreTimerInterrupt(_state, _hardware);
   _state.Data().diskError = 0;
   // The game's own critical-error handler on int 24h round the write, and the handler that was there put back after it.
@@ -1430,7 +1321,7 @@ void SaveScreenshot(GameState& _state, Hardware& _hardware)
 
 void WriteScreenshotFile(GameState& _state, Hardware& _hardware)
 {
-  _hardware.SetDiskTransferArea(_state.DataSegment(), DS.diskTransferArea.offset);
+  _hardware.SetDiskTransferArea(_state.DataSegment(), _state.OffsetOf(_state.Data().diskTransferArea));
   // The two digits, the second counting fastest: '00', '01' ... '99', '00'.
   std::uint16_t digits = _state.Data().screenshotNumber;
   SetHigh(digits, static_cast<std::uint8_t>(High(digits) + 1));
@@ -1446,9 +1337,10 @@ void WriteScreenshotFile(GameState& _state, Hardware& _hardware)
   _state.Data().screenshotNumber = digits;
   _state.Data().screenshotTextFileName.screenshotTextFileDigits = digits;
   _state.Data().screenshotGraphicsFileName.screenshotGraphicsFileDigits = digits;
-  // eliteNN.lo for the text page, eliteNN.hi for the graphics screen.
-  const std::uint16_t name =
-    (_state.Data().screenLayout & TEXT_LAYOUT_BIT) != 0 ? DS.screenshotTextFileName.offset : DS.screenshotGraphicsFileName.offset;
+  // eliteNN.lo for the text page, eliteNN.hi for the graphics screen: DS:DX the name.
+  const std::uint16_t name = (_state.Data().screenLayout & TEXT_LAYOUT_BIT) != 0
+                               ? _state.OffsetOf(_state.Data().screenshotTextFileName)
+                               : _state.OffsetOf(_state.Data().screenshotGraphicsFileName);
   const DosAnswer created = _hardware.CreateFile(_state.DataSegment(), name, 0);
   if (created.failed)
   {
@@ -1494,8 +1386,8 @@ void PresentSpaceView(GameState& _state, Hardware& _hardware, bool _backward)
   }
   _state.Data().msSinceFrame = 0;
   WaitRetraceThenDelay(_hardware);
-  (void)CopyLinePairs(_state, _hardware, SPACE_VIEW_COPY_LOOP, DS.spaceViewBuffer.offset, SPACE_VIEW_SCREEN_OFFSET, SPACE_VIEW_LINE_PAIRS,
-                      _backward);
+  (void)CopyLinePairs(_state, _hardware, SPACE_VIEW_COPY_LOOP, _state.OffsetOf(_state.Data().spaceViewBuffer), SPACE_VIEW_SCREEN_OFFSET,
+                      SPACE_VIEW_LINE_PAIRS, _backward);
 }
 
 void CopyChartBufferToScreen(GameState& _state, Hardware& _hardware, std::uint8_t _bandsSkipped, bool _backward)
@@ -1521,7 +1413,7 @@ void PlotPixel(GameState& _state, std::uint8_t _x, std::uint8_t _row)
 {
   // The pixel's two bits in the colour's fill byte, kept from the byte at row * 64 + x / 4 by the AND, set by the OR.
   const std::uint8_t pixel = RotateRight(LEFT_PIXEL_MASK, static_cast<unsigned>((_x & 3) << 1));
-  const auto color = static_cast<std::uint8_t>(pixel & _state.Byte(ColorFillByteOffset(_state.Data().drawColor)));
+  const auto color = static_cast<std::uint8_t>(pixel & _state.Byte(ColorFillByteOffset(_state, _state.Data().drawColor)));
   Plot(_state, static_cast<std::uint16_t>(Join(_row, _x) >> 2), static_cast<std::uint8_t>(~pixel), color);
 }
 
@@ -1542,7 +1434,7 @@ bool DrawClippedLine(GameState& _state, std::uint16_t _fromX, std::uint16_t _fro
     return draw(line);
   }
   // x below 0, then the row below 0, each through ClipLineToLowEdge.
-  ClipStep step = ClipLineToLowEdge(_state, line);
+  ClipStep step = ClipLineToLowEdge(line);
   if (step.allInside)
   {
     return draw(step.line);
@@ -1551,7 +1443,7 @@ bool DrawClippedLine(GameState& _state, std::uint16_t _fromX, std::uint16_t _fro
   {
     return false;
   }
-  step = ClipLineToLowEdge(_state, Transpose(step.line));
+  step = ClipLineToLowEdge(Transpose(step.line));
   line = Transpose(step.line);
   if (step.allInside)
   {
@@ -1563,7 +1455,7 @@ bool DrawClippedLine(GameState& _state, std::uint16_t _fromX, std::uint16_t _fro
   }
   // x beyond 255, then the row, each through ClipLineToHighEdge with 0FFh taken off the cut coordinates and put back.
   constexpr std::uint16_t HIGH_EDGE = 0xFF;
-  step = ClipLineToHighEdge(_state, ShiftCut(line, Negate(HIGH_EDGE)));
+  step = ClipLineToHighEdge(ShiftCut(line, Negate(HIGH_EDGE)));
   if (!step.draw)
   {
     return false;
@@ -1573,7 +1465,7 @@ bool DrawClippedLine(GameState& _state, std::uint16_t _fromX, std::uint16_t _fro
   {
     return draw(line);
   }
-  step = ClipLineToHighEdge(_state, ShiftCut(Transpose(line), Negate(HIGH_EDGE)));
+  step = ClipLineToHighEdge(ShiftCut(Transpose(line), Negate(HIGH_EDGE)));
   if (!step.draw || !step.allInside)
   {
     return false;
@@ -1581,14 +1473,14 @@ bool DrawClippedLine(GameState& _state, std::uint16_t _fromX, std::uint16_t _fro
   return draw(Transpose(ShiftCut(step.line, HIGH_EDGE)));
 }
 
-ClipStep ClipLineToLowEdge(GameState& _state, ClipLine _line)
+ClipStep ClipLineToLowEdge(ClipLine _line)
 {
   // AND CH,CH / JS, then AND DH,DH / JNS.
   if (Negative(_line.firstCut))
   {
     if (!Negative(_line.secondCut))
     {
-      return MoveEndpointToEdge(_state, _line);
+      return MoveEndpointToEdge(_line);
     }
     // Both below the edge: CLC, with ZF clear from AND DH,DH.
     return ClipStep{_line, false, false};
@@ -1597,24 +1489,24 @@ ClipStep ClipLineToLowEdge(GameState& _state, ClipLine _line)
   {
     return LeaveEndpoints(_line);
   }
-  return SwapThenCutLine(_state, _line);
+  return SwapThenCutLine(_line);
 }
 
-ClipStep ClipLineToHighEdge(GameState& _state, ClipLine _line)
+ClipStep ClipLineToHighEdge(ClipLine _line)
 {
   // AND DH,DH / JS, then AND CH,CH / JNS or JS.
   if (Negative(_line.secondCut))
   {
     if (!Negative(_line.firstCut))
     {
-      return MoveEndpointToEdge(_state, _line);
+      return MoveEndpointToEdge(_line);
     }
     // Both inside: STC, with ZF clear from AND CH,CH.
     return ClipStep{_line, true, false};
   }
   if (Negative(_line.firstCut))
   {
-    return SwapThenCutLine(_state, _line);
+    return SwapThenCutLine(_line);
   }
   // Both beyond 255: CLC, with ZF from AND CH,CH.
   return ClipStep{_line, false, High(_line.firstCut) == 0};
@@ -1645,7 +1537,7 @@ bool DrawLine(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromRow, std
   }
   line.bh = line.al;
   line.di = static_cast<std::uint16_t>(Join(row, x) >> 2);
-  line.al = _state.Byte(ColorFillByteOffset(_state.Data().drawColor));
+  line.al = _state.Byte(ColorFillByteOffset(_state, _state.Data().drawColor));
   line.ah = line.al;
   // DL the pixel's color in place, DH the mask that keeps the rest of its byte.
   const auto shift = static_cast<std::uint8_t>((x & 3) << 1);
@@ -1697,14 +1589,14 @@ void DrawDisc(GameState& _state, std::uint16_t _radius, std::uint16_t _centerX, 
   // The step through circleProfile a row, 20000h/rows as 8.8 (FFFFh for 2 rows, which would overflow), by XCHG AH,AL: the
   // fraction's low byte keeps the quotient's high byte, and the whole part is that byte alone.
   constexpr std::uint32_t PROFILE_BYTES_8_8 = 0x20000;
-  const std::uint16_t perRow = rows == 2 ? std::uint16_t{0xFFFF} : DivideWord(_state, PROFILE_BYTES_8_8, rows, rows).quotient;
+  const std::uint16_t perRow = rows == 2 ? std::uint16_t{0xFFFF} : DivideWord(PROFILE_BYTES_8_8, rows).quotient;
   const std::uint16_t step = SwapBytes(perRow);
   _state.Data().discProfileStepFraction = step;
   _state.Data().discProfileStepWhole = Low(step);
   // CX walks down from the centre row and BX up, both as 2*row; the centre row is drawn once. BP holds the fraction and SI the
   // profile byte.
   std::uint16_t fraction = 0;
-  std::uint16_t profile = DS.circleProfile.offset;
+  std::size_t profile = 0;
   auto lowerRow = static_cast<std::uint16_t>(_centerRow << 1);
   std::uint16_t upperRow = lowerRow;
   DrawDiscUpperRow(_state, profile, upperRow, _backward);
@@ -1712,7 +1604,7 @@ void DrawDisc(GameState& _state, std::uint16_t _radius, std::uint16_t _centerX, 
   {
     const std::uint32_t sum = std::uint32_t{fraction} + _state.Data().discProfileStepFraction;
     fraction = static_cast<std::uint16_t>(sum);
-    profile = static_cast<std::uint16_t>(profile + _state.Data().discProfileStepWhole + (sum >> 16));
+    profile += _state.Data().discProfileStepWhole + (sum >> 16);
     upperRow = static_cast<std::uint16_t>(upperRow - 2);
     lowerRow = static_cast<std::uint16_t>(lowerRow + 2);
     const auto rowsLeft = static_cast<std::uint8_t>(_state.Data().discRowsLeft - 1);
@@ -1769,64 +1661,68 @@ std::uint16_t FillSpan(GameState& _state, std::uint8_t _left, std::uint8_t _righ
 
 bool DrawCircle(GameState& _state, std::uint8_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow)
 {
+  // circlePoints: 32 points of four bytes, x and row words; each loop holds a point as the byte it starts at.
+  const std::span<Counted<std::uint8_t>> points =
+    _state.BytesFrom(_state.Data().circlePoints, std::size_t{CIRCLE_CHORDS} * CIRCLE_POINT_BYTES);
   // PUSH CX / PUSH DX keep the centre. The first octant, circleOctant's eight bytes scaled by the radius / 128 (MUL BL / SHL AX,1 /
   // MOV AL,AH), a byte of 0 staying 0, as four points of words.
-  std::uint16_t point = DS.circlePoints.offset;
-  for (std::uint16_t octantByte = 0; octantByte != 8; ++octantByte)
+  const std::span<const Counted<std::uint8_t>> octant = _state.BytesFrom(_state.Data().circleOctant, 8);
+  std::size_t point = 0;
+  for (std::size_t octantByte = 0; octantByte != 8; ++octantByte)
   {
-    const std::uint8_t unit = _state.Byte(Offset(DS.circleOctant.offset, octantByte));
+    const std::uint8_t unit = octant[octantByte];
     const std::uint8_t scaled = unit == 0 ? std::uint8_t{0} : High(static_cast<std::uint16_t>((unit * _radius) << 1));
-    _state.SetWord(point, scaled);
-    point = Offset(point, 2);
+    SetWordIn(points, point, scaled);
+    point += 2;
   }
   // The second octant mirrors the first across the diagonal, from its last point back.
-  std::uint16_t from = DS.circlePoints.offset;
-  std::uint16_t to = DS.circlePoints.At(7);
-  for (std::uint16_t points = 4; points != 0; --points)
+  std::size_t from = 0;
+  std::size_t to = 7 * CIRCLE_POINT_BYTES;
+  for (std::uint16_t left = 4; left != 0; --left)
   {
-    _state.SetWord(Offset(to, 2), _state.Word(from));
-    _state.SetWord(to, _state.Word(Offset(from, 2)));
-    from = Offset(from, 4);
-    to = static_cast<std::uint16_t>(to - 4);
+    SetWordIn(points, to + 2, WordIn(points, from));
+    SetWordIn(points, to, WordIn(points, from + 2));
+    from += CIRCLE_POINT_BYTES;
+    to -= CIRCLE_POINT_BYTES;
   }
   // The next quarter turns the first by 90 degrees, and the half after that by 180.
-  from = DS.circlePoints.offset;
-  to = DS.circlePoints.At(8);
-  for (std::uint16_t points = 8; points != 0; --points)
+  from = 0;
+  to = 8 * CIRCLE_POINT_BYTES;
+  for (std::uint16_t left = 8; left != 0; --left)
   {
-    _state.SetWord(Offset(to, 2), _state.Word(from));
-    _state.SetWord(to, Negate(_state.Word(Offset(from, 2))));
-    from = Offset(from, 4);
-    to = Offset(to, 4);
+    SetWordIn(points, to + 2, WordIn(points, from));
+    SetWordIn(points, to, Negate(WordIn(points, from + 2)));
+    from += CIRCLE_POINT_BYTES;
+    to += CIRCLE_POINT_BYTES;
   }
-  from = DS.circlePoints.offset;
-  to = DS.circlePoints.At(16);
-  for (std::uint16_t points = 16; points != 0; --points)
+  from = 0;
+  to = 16 * CIRCLE_POINT_BYTES;
+  for (std::uint16_t left = 16; left != 0; --left)
   {
-    _state.SetWord(to, Negate(_state.Word(from)));
-    _state.SetWord(Offset(to, 2), Negate(_state.Word(Offset(from, 2))));
-    from = Offset(from, 4);
-    to = Offset(to, 4);
+    SetWordIn(points, to, Negate(WordIn(points, from)));
+    SetWordIn(points, to + 2, Negate(WordIn(points, from + 2)));
+    from += CIRCLE_POINT_BYTES;
+    to += CIRCLE_POINT_BYTES;
   }
   // POP BX / POP AX: every point moved to the centre.
-  point = DS.circlePoints.offset;
-  for (std::uint16_t points = CIRCLE_CHORDS; points != 0; --points)
+  point = 0;
+  for (std::uint16_t left = CIRCLE_CHORDS; left != 0; --left)
   {
-    _state.SetWord(point, Offset(_state.Word(point), _centerX));
-    _state.SetWord(Offset(point, 2), Offset(_state.Word(Offset(point, 2)), _centerRow));
-    point = Offset(point, 4);
+    SetWordIn(points, point, Offset(WordIn(points, point), _centerX));
+    SetWordIn(points, point + 2, Offset(WordIn(points, point + 2), _centerRow));
+    point += CIRCLE_POINT_BYTES;
   }
   // The chord from the last point to the first, then each to the next, x and row each.
-  const std::uint16_t last = DS.circlePoints.At(CIRCLE_CHORDS - 1);
-  bool filled = DrawClippedLine(_state, _state.Word(last), _state.Word(Offset(last, 2)), _state.Word(DS.circlePoints.offset),
-                                _state.Data().circlePoints.data2EFE);
-  point = DS.circlePoints.offset;
+  const std::size_t last = (CIRCLE_CHORDS - 1) * CIRCLE_POINT_BYTES;
+  bool filled =
+    DrawClippedLine(_state, WordIn(points, last), WordIn(points, last + 2), WordIn(points, 0), _state.Data().circlePoints.data2EFE);
+  point = 0;
   for (std::uint16_t chords = CIRCLE_CHORDS - 1; chords != 0; --chords)
   {
-    const bool chordFilled = DrawClippedLine(_state, _state.Word(Offset(point, 4)), _state.Word(Offset(point, 6)), _state.Word(point),
-                                             _state.Word(Offset(point, 2)));
+    const bool chordFilled =
+      DrawClippedLine(_state, WordIn(points, point + 4), WordIn(points, point + 6), WordIn(points, point), WordIn(points, point + 2));
     filled = filled || chordFilled;
-    point = Offset(point, 4);
+    point += CIRCLE_POINT_BYTES;
   }
   return filled;
 }
@@ -1918,13 +1814,11 @@ bool FillClippedTriangle(GameState& _state, Triangle _doubled, bool _backward)
     return false;
   }
   // PrepareClippedTriangle (CS:1E9D): SAR DX, BP and DI: the rows halved, keeping their signs. MOV SI,DS / MOV ES,SI, then the
-  // ADD/ADC forms of both edges' steps through SI.
+  // ADD/ADC forms of both edges' steps, which the original patches in through SI.
   const auto halved = [](ScreenPoint _point) { return ScreenPoint{_point.x, static_cast<std::int16_t>(_point.y >> 1)}; };
   ScreenPoint a = halved(_doubled.first);
   ScreenPoint b = halved(_doubled.second);
   ScreenPoint c = halved(_doubled.third);
-  (void)PatchClippedStep(_state, ADD_TO_EDGE_A, STEP_CLIPPED_EDGE_A);
-  (void)PatchClippedStep(_state, ADD_TO_EDGE_B, STEP_CLIPPED_EDGE_B);
   // Sorted by row into the four cases by exchanges, A and B, then A and C, as signed words.
   if (a.y == b.y)
   {
@@ -1986,11 +1880,17 @@ ScreenChange ShowCockpitScreen(GameState& _state, Hardware& _hardware, bool _bac
   }
   const ScreenChange change = MakeGraphicsScreen(_state, _hardware, layout, _backward);
   _state.Data().screenLayout = 0;
-  // PUSH DS / MOV DS,<cockpitImage's segment>, then from its start both banks, after CLD: the even lines' 8000 bytes and the odd
-  // lines' after them.
-  const auto cockpit = static_cast<std::uint16_t>(_state.CodeSegment() + COCKPIT_PARAGRAPH);
-  const StringOffsets even = RepeatMoveWords(_state, cockpit, 0, GameState::VIDEO_SEGMENT, 0, CGA_BANK_WORDS, StringStep(false, 2));
-  (void)RepeatMoveWords(_state, cockpit, even.source, GameState::VIDEO_SEGMENT, CGA_ODD_BANK, CGA_BANK_WORDS, StringStep(false, 2));
+  // PUSH DS / MOV DS,<cockpitImage's segment>, then from its start both banks, after CLD (REP MOVSW): the even lines' 8000 bytes
+  // and the odd lines' after them.
+  const std::span<const Counted<std::uint8_t>> cockpit(_state.Data().cockpitImage);
+  for (std::uint16_t word = 0; word < CGA_BANK_WORDS; ++word)
+  {
+    _state.SetVideoWord(static_cast<std::uint16_t>(word * 2), WordIn(cockpit, std::size_t{word} * 2));
+  }
+  for (std::uint16_t word = 0; word < CGA_BANK_WORDS; ++word)
+  {
+    _state.SetVideoWord(static_cast<std::uint16_t>(CGA_ODD_BANK + word * 2), WordIn(cockpit, (std::size_t{CGA_BANK_WORDS} + word) * 2));
+  }
   return change;
 }
 

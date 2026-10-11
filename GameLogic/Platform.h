@@ -283,9 +283,6 @@ public:
 
   [[nodiscard]] bool InterruptsEnabled() const noexcept;
 
-  /// The direction flag: what the code an interrupt handler interrupted left, and DOS leaves clear for the program's start.
-  [[nodiscard]] bool Backward() const noexcept;
-
   /// One turn of a loop that can wait, ending where the original's backward jump is (ADR-015). _signature stands for the
   /// original's registers there: the loop's address and the values it carries from one turn to the next. A turn with the same
   /// signature as the last that changed no byte and wrote no port idles to the next device event. Then the run ends there if
@@ -333,6 +330,13 @@ public:
 
   /// Interrupt _vector's entry set to _handler, each byte that changes counted.
   void SetInterruptVector(std::uint8_t _vector, FarAddress _handler) noexcept;
+
+  /// Interrupt _vector's entry as the BIOS and DOS set it at power-on, whatever it holds now: the handler a program that
+  /// installs its own puts back when it is done.
+  [[nodiscard]] FarAddress PowerOnInterruptVector(std::uint8_t _vector) const noexcept
+  {
+    return m_powerOnVectors[_vector];
+  }
 
   /// The byte of the BIOS's ROM, F000:0000-FFFF, at _address: the IRET at F000:FD00 + n that each vector the BIOS does not
   /// serve names, the mouse driver's entry at F000:E060 (a NOP and an IRET), the model byte FFh at F000:FFFE, and zero
@@ -400,6 +404,7 @@ private:
   DosFiles m_files;
 
   std::array<FarAddress, 256> m_vectors{};
+  std::array<FarAddress, 256> m_powerOnVectors{};
   std::uint64_t m_vectorChanges = 0;
   std::uint64_t m_portWrites = 0;
   std::uint16_t m_flags;

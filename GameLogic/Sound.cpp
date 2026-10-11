@@ -4,6 +4,7 @@
 
 #include "Arithmetic.h"
 #include "DataOverlay.h"
+#include "SoundTables.h"
 
 namespace Elite
 {
@@ -15,8 +16,7 @@ constexpr std::uint8_t SPEAKER_GATE_AND_DATA = 0x03; // port 61h bits 0 and 1
 constexpr std::uint8_t SPEAKER_DATA = 0x02;          // port 61h bit 1
 constexpr std::uint8_t INAUDIBLE_DIVISOR = 2;
 
-// noiseSource: the code bytes at CS:07D0, read as data, 1024 of them.
-constexpr std::uint16_t NOISE_SOURCE_OFFSET = 0x07D0;
+// noiseSourceIndex runs round NOISE_SOURCE's 1024 bytes (SoundTables.h).
 constexpr std::uint16_t NOISE_SOURCE_MASK = 0x3FF;
 
 constexpr std::uint8_t BEEP_TICKS = 70;
@@ -55,7 +55,7 @@ void StartMusic(GameState& _state, Hardware& _hardware)
   _hardware.SetSystemControl(static_cast<std::uint8_t>(_state.Data().speakerPortImage | SPEAKER_GATE_AND_DATA));
   _state.Data().noteTicksLeft = 0;
   _state.Data().noteGapTicks = 0;
-  _state.Set(DS.musicPointer, DS.titleTune.offset);
+  _state.Data().musicPointer = 0;
   _state.Data().musicPlaying = 1;
 }
 
@@ -101,7 +101,7 @@ void StopSoundEffects(GameState& _state)
 std::uint8_t EmitNoiseSample(GameState& _state, Hardware& _hardware)
 {
   const auto index = static_cast<std::uint16_t>((_state.Data().noiseSourceIndex + 1) & NOISE_SOURCE_MASK);
-  const std::uint8_t sample = _state.CodeByte(static_cast<std::uint16_t>(NOISE_SOURCE_OFFSET + index));
+  const std::uint8_t sample = NOISE_SOURCE[index];
   _state.Data().noiseSourceIndex = index;
   const auto image = static_cast<std::uint8_t>(_state.Data().speakerPortImage & ~SPEAKER_DATA);
   _state.Data().speakerPortImage = image;

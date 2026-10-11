@@ -7,6 +7,7 @@
 #include "DataOverlay.h"
 #include "Equipment.h"
 #include "Maths.h"
+#include "SceneTables.h"
 #include "Video.h"
 
 #include <initializer_list>
@@ -22,20 +23,13 @@ namespace
 // objectSlotCount less these.
 constexpr std::uint8_t BOMB_FIRST_SLOT = 3;
 
-// The blueprint handlers, as a blueprint's first word names them, and the bytes before the rest of a blueprint: that word and the
-// half-width byte.
-constexpr std::uint16_t BUILD_BOX_CORNER_VERTICES = 0x377A;
-constexpr std::uint16_t BUILD_DODO_VERTICES = 0x38BF;
-constexpr std::uint16_t BLUEPRINT_HANDLER_BYTES = 3;
-
-// The instruction after each divide, where DivideOverflowInterrupt looks for its opcode. ProjectVertices'
-// divides take a memory operand, so the handler reads their ModRM byte 74h and saturates only AL.
-constexpr std::uint16_t VERTEX_X_DIVIDE_RETURN = 0x236C;
-constexpr std::uint16_t VERTEX_Y_DIVIDE_RETURN = 0x2395;
-constexpr std::uint16_t DISC_Y_DIVIDE_RETURN = 0x4044;
-constexpr std::uint16_t DISC_X_DIVIDE_RETURN = 0x4064;
-constexpr std::uint16_t SCREEN_X_DIVIDE_RETURN = 0x8D4B;
-constexpr std::uint16_t SCREEN_Y_DIVIDE_RETURN = 0x8D56;
+// What DivideOverflowInterrupt makes of each divide here, by the byte two before the instruction after it. ProjectVertices'
+// divides, DIV [SI+4] (returning to CS:236C and CS:2395), take a memory operand, so the handler reads their ModRM byte 74h and
+// saturates only AL; ProjectDiscCoordinate's DIV [DI+14h] (CS:4044, CS:4064) has ModRM byte 75h, and ProjectToScreen's DIV CX
+// (CS:8D4B, CS:8D56) a word divide's opcode.
+constexpr DivideTrap VERTEX_DIVIDE_TRAP = DivideTrap::LowByte;
+constexpr DivideTrap DISC_DIVIDE_TRAP = DivideTrap::Word;
+constexpr DivideTrap SCREEN_DIVIDE_TRAP = DivideTrap::Word;
 
 // Byte 0 of a slot, with Ships.h's SLOT_ACTIVE.
 constexpr std::uint8_t SLOT_TYPE_BITS = 0x3E;
@@ -61,9 +55,12 @@ constexpr std::uint16_t SCREEN_RIGHT = 0xFF;
 constexpr std::uint16_t SCREEN_BOTTOM = 0x7F;
 constexpr std::uint16_t NEAR_VERTEX_X = 0x8000; // ProjectVertices' mark for a vertex behind nearPlaneZ
 constexpr std::uint16_t OFF_SCREEN = 0x7FFF;    // what DrawVisibleFaces skips: the divide trap's saturation
-constexpr std::uint16_t POINT_BYTES = 4;
-constexpr std::uint16_t VERTEX_BYTES = 6;
+constexpr std::size_t POINT_BYTES = 4;
+constexpr std::size_t VERTEX_BYTES = 6;
 constexpr std::uint16_t VERTEX_Z = 4;
+// What a vertex program's six bits of vertex reach: 64 vertices from vertexBuffer's first, past the 42 the symbol table sizes it
+// for, into the bytes after it, as the original reads and writes them.
+constexpr std::size_t VERTEX_REACH = 64 * VERTEX_BYTES;
 constexpr std::uint8_t VERTEX_INDEX_BITS = 0x3F;
 constexpr std::uint8_t VERTEX_OP_BITS = 0xC0;
 constexpr std::uint8_t VERTEX_OP_LOAD = 0x00;
@@ -103,7 +100,6 @@ constexpr std::uint8_t STATION_DEPTH_SMALLEST = 4;
 // The blueprint handlers' vertices: the angle tables' words, a 2048-entry turn, and the vertices written.
 constexpr std::uint16_t ANGLE_BITS = 0x7FF;
 constexpr std::uint16_t SINE_BYTE_BITS = 0xFFF;
-constexpr std::uint16_t SINE_HIGH_BYTES = 0x2FA1; // sineTable's high bytes, a signed byte each
 constexpr std::uint16_t QUARTER_TURN_BYTES = 0x400;
 constexpr std::uint16_t DODO_RING_STEP_BYTES = 0x734; // 72 degrees on, from the cosine back to a sine
 constexpr std::uint16_t DODO_SLOT_START_BYTES = 0x1FC;
@@ -118,15 +114,29 @@ constexpr std::uint16_t DODO_NEAR_RING_Z = 0xC4;
 constexpr std::uint16_t DODO_FAR_RING_Z = 0x2E;
 constexpr std::uint16_t DODO_SLOT_Z = 0xFF3C;
 constexpr std::uint16_t DODO_SLOT_OPPOSITE = 0x0C; // the slot's corner two vertices on, reflected
-constexpr std::uint16_t DODO_REFLECTED = 0x7284;   // vertex 14
+constexpr std::size_t DODO_REFLECTED = 14 * VERTEX_BYTES;
 constexpr std::uint16_t BOX_CORNERS_ROTATED = 3;
 constexpr std::uint16_t BOX_FOURTH_CORNER = 0x12;
-constexpr std::uint16_t BOX_SECOND_CORNER = 0x7302;  // vertex 35
-constexpr std::uint16_t BOX_FIFTH_CORNER = 0x7314;   // vertex 38
-constexpr std::uint16_t BOX_SEVENTH_CORNER = 0x7320; // vertex 40
-constexpr std::uint16_t BOX_EIGHTH_CORNER = 0x7326;  // vertex 41
-constexpr std::uint16_t BOX_REFLECTION_STEP = 0x18;  // four vertices
-constexpr std::uint16_t BOX_REFLECTION_SKIP = 0x12;  // three vertices
+constexpr std::size_t BOX_SECOND_CORNER = 35 * VERTEX_BYTES;
+constexpr std::size_t BOX_FIFTH_CORNER = 38 * VERTEX_BYTES;
+constexpr std::size_t BOX_SEVENTH_CORNER = 40 * VERTEX_BYTES;
+constexpr std::size_t BOX_EIGHTH_CORNER = 41 * VERTEX_BYTES;
+constexpr std::size_t BOX_REFLECTION_STEP = 0x18; // four vertices
+constexpr std::size_t BOX_REFLECTION_SKIP = 0x12; // three vertices
+
+// The vertices from vertexBuffer's first byte, as far as a vertex program reaches (VERTEX_REACH): a vertex is six bytes, x, y and
+// z words, and ProjectVertices makes the first ones points of four, x and y, in place. Each routine holds a vertex as the byte it
+// starts at, where the original holds its address.
+[[nodiscard]] std::span<Counted<std::uint8_t>> Vertices(GameState& _state)
+{
+  return _state.BytesFrom(_state.Data().vertexBuffer, VERTEX_REACH);
+}
+
+// The high byte of sineTable's word at byte _angle, which is even: a signed byte.
+[[nodiscard]] std::uint8_t SineHigh(const GameState& _state, std::uint16_t _angle)
+{
+  return High(_state.Data().sineTable[_angle >> 1]);
+}
 
 // The handlers' rotations by the drawn object's angles: -roll into rotation pair 3, yaw into 4, and pitch with the
 // player's into 5 (CS:3781, CS:38C0).
@@ -171,25 +181,26 @@ void SetDrawAngles(GameState& _state)
 // A rotation loop of the blueprint handlers: _count vertices from _first, the coordinates at byte offsets _a and _b of each
 // rotated by rotation pair _pair (RotateBySinCosN) and written back, the first, then the second. Nothing reads what the loop
 // leaves in the registers: SI past the vertices, CX = 0, AX and BX the last vertex's.
-void RotateVertices(GameState& _state, std::uint16_t _first, std::uint16_t _count, std::uint16_t _a, std::uint16_t _b, std::size_t _pair)
+void RotateVertices(GameState& _state, std::size_t _first, std::uint16_t _count, std::uint16_t _a, std::uint16_t _b, std::size_t _pair)
 {
-  std::uint16_t vertex = _first;
+  const std::span<Counted<std::uint8_t>> vertices = Vertices(_state);
+  std::size_t vertex = _first;
   for (std::uint16_t left = _count; left != 0; --left)
   {
-    const std::uint16_t first = Offset(vertex, _a);
-    const std::uint16_t second = Offset(vertex, _b);
+    const std::size_t first = vertex + _a;
+    const std::size_t second = vertex + _b;
     const Pair rotated = RotateByStoredSinCos(
-      _state, _pair, Pair{static_cast<std::int16_t>(_state.Word(first)), static_cast<std::int16_t>(_state.Word(second))});
-    _state.SetWord(first, static_cast<std::uint16_t>(rotated.first));
-    _state.SetWord(second, static_cast<std::uint16_t>(rotated.second));
-    vertex = Offset(vertex, VERTEX_BYTES);
+      _state, _pair, Pair{static_cast<std::int16_t>(WordIn(vertices, first)), static_cast<std::int16_t>(WordIn(vertices, second))});
+    SetWordIn(vertices, first, static_cast<std::uint16_t>(rotated.first));
+    SetWordIn(vertices, second, static_cast<std::uint16_t>(rotated.second));
+    vertex += VERTEX_BYTES;
   }
 }
 
 // The handlers' last rotation, by the view direction when it is not ahead (CS:383A, CS:39CF): -viewAngle into rotation
 // pair 8, and the x and z of _count vertices from _first turned by it. Nothing reads what the original leaves in AX and BX:
 // the box's handler loads AX next (CS:3864), and both load them in ReflectVertexAboutCenter (CS:3740) before reading them.
-void RotateVerticesToView(GameState& _state, std::uint16_t _first, std::uint16_t _count)
+void RotateVerticesToView(GameState& _state, std::size_t _first, std::uint16_t _count)
 {
   const std::uint16_t angle = _state.Data().viewAngle;
   if (angle == 0)
@@ -200,36 +211,28 @@ void RotateVerticesToView(GameState& _state, std::uint16_t _first, std::uint16_t
   RotateVertices(_state, _first, _count, 0, VERTEX_Z, 8);
 }
 
-// RenderBlueprint (CS:3CF2-3D20), what RenderBlueprintBody does with the blueprint body at _body: the vertex program from
-// _accumulator, the projection, the edge lists and the faces. Each count is a byte loaded into CL and stored with all of CX,
-// whose CH the LOOPs before it leave 0, or the edge count's doubling. Returns the direction flag as DrawVisibleFaces leaves it.
-[[nodiscard]] bool RenderBlueprint(GameState& _state, std::uint16_t _body, Vector _accumulator, bool _backward)
+// RenderBlueprint (CS:3CF2-3D20), what RenderBlueprintBody does with _blueprint's body: the vertex program from _accumulator, the
+// projection, the edge lists and the faces. Each count is a byte loaded into CL and stored with all of CX, whose CH the LOOPs
+// before it leave 0, or the edge count's doubling. Returns the direction flag as DrawVisibleFaces leaves it.
+[[nodiscard]] bool RenderBlueprint(GameState& _state, const Blueprint& _blueprint, Vector _accumulator, bool _backward)
 {
-  const VertexProgramEnd program = RunVertexProgram(_state, _body, _accumulator);
-  std::uint16_t at = program.next;
+  (void)RunVertexProgram(_state, _blueprint.vertexProgram, _accumulator);
   std::uint16_t count = 0;
-  SetLow(count, _state.Byte(at));
+  SetLow(count, _blueprint.projectedVertices);
   _state.Data().projectedVertexCount = count;
-  at = Offset(at, 1);
-  // ProjectVertices' divides save BX, the accumulator's y, which RunVertexProgram leaves there.
-  ProjectVertices(_state, High(static_cast<std::uint16_t>(program.accumulator.y)));
+  ProjectVertices(_state);
   count = 0;
   // Fixed edges, then face edges: a count byte, then two bytes for each.
-  SetLow(count, _state.Byte(at));
+  SetLow(count, static_cast<std::uint8_t>(_blueprint.fixedEdges.size() / 2));
   _state.Data().fixedEdgeCount = count;
   count = static_cast<std::uint16_t>(count << 1);
-  at = Offset(at, 1);
-  _state.Set(DS.fixedEdgeList, at);
-  at = Offset(at, count);
-  SetLow(count, _state.Byte(at));
+  // The original keeps the edge lists' addresses in fixedEdgeList and faceEdgeList for its edge routines; native code hands
+  // them _blueprint, and nothing reads the two.
+  SetLow(count, static_cast<std::uint8_t>(_blueprint.faceEdges.size() / 2));
   _state.Data().faceEdgeCount = count;
   count = static_cast<std::uint16_t>(count << 1);
-  at = Offset(at, 1);
-  _state.Set(DS.faceEdgeList, at);
-  at = Offset(at, count);
-  SetLow(count, _state.Byte(at));
-  at = Offset(at, 1);
-  return DrawVisibleFaces(_state, at, count, _backward).backward;
+  SetLow(count, _blueprint.faces);
+  return DrawVisibleFaces(_state, _blueprint, count, _backward).backward;
 }
 
 // CWD / MOV DL,AH / MOV AH,AL / XOR AL,AL: DX:AX = _magnitude * 256, what ProjectVertices and DrawSunOrPlanetDisc divide. DH is
@@ -239,16 +242,13 @@ void RotateVerticesToView(GameState& _state, std::uint16_t _first, std::uint16_t
   return (std::uint32_t{Negative(_magnitude) ? HIGH_BYTE_ONES : HIGH_BYTE_ZERO} << 24) | (std::uint32_t{_magnitude} << 8);
 }
 
-// One coordinate of a vertex (CS:2356, CS:237E): 256|_value| over the z at DS:_z, by DIV [SI+4], plus one when the quotient is
-// below twice the remainder (SHL DX,1 / CMP AX,DX / ADC AX,0), with _value's sign put back. A divide that overflows saves BX,
-// _trapHigh over the sign BL holds, 1 for a negative _value.
-[[nodiscard]] std::uint16_t ProjectVertexCoordinate(GameState& _state, std::uint16_t _value, std::uint16_t _z, std::uint16_t _returnOffset,
-                                                    std::uint8_t _trapHigh)
+// One coordinate of a vertex (CS:2356, CS:237E): 256|_value| over _z, the vertex's z, by DIV [SI+4], plus one when the quotient
+// is below twice the remainder (SHL DX,1 / CMP AX,DX / ADC AX,0), with _value's sign put back.
+[[nodiscard]] std::uint16_t ProjectVertexCoordinate(std::uint16_t _value, std::uint16_t _z)
 {
   const bool negative = Negative(_value);
   const std::uint16_t magnitude = negative ? Negate(_value) : _value;
-  const WordQuotient divided = DivideUnsigned(_state, ScaledDividend(magnitude), _state.Word(_z), _returnOffset,
-                                              Join(_trapHigh, negative ? std::uint8_t{1} : std::uint8_t{0}));
+  const WordQuotient divided = DivideUnsigned(ScaledDividend(magnitude), _z, VERTEX_DIVIDE_TRAP);
   std::uint16_t coordinate = divided.quotient;
   if (coordinate < static_cast<std::uint16_t>(divided.remainder << 1))
   {
@@ -260,21 +260,23 @@ void RotateVerticesToView(GameState& _state, std::uint16_t _first, std::uint16_t
 // The bytes LoadTriangle takes, one a vertex.
 constexpr std::uint16_t TRIANGLE_VERTEX_BYTES = 3;
 
-// The three vertex bytes at _indices, each shifted left by _shift, as a byte, into an offset in vertexBuffer, and the points
-// there. The second's x goes through faceTestScratch, written before its y is read, as the original keeps it there.
-[[nodiscard]] Triangle LoadTriangle(GameState& _state, std::uint16_t _indices, std::uint8_t _shift)
+// The three vertex bytes at _indices of a face list, each shifted left by _shift, as a byte, into the byte of vertexBuffer a
+// point starts at, and the points there. The second's x goes through faceTestScratch, written before its y is read, as the
+// original keeps it there.
+[[nodiscard]] Triangle LoadTriangle(GameState& _state, std::span<const std::uint8_t> _list, std::uint16_t _indices, std::uint8_t _shift)
 {
-  const auto vertex = [&_state, _indices, _shift](std::uint16_t _which)
-  { return Offset(DS.vertexBuffer.offset, static_cast<std::uint8_t>(_state.Byte(Offset(_indices, _which)) << _shift)); };
-  const auto coordinate = [&_state](std::uint16_t _vertex, std::uint16_t _bytes)
-  { return static_cast<std::int16_t>(_state.Word(Offset(_vertex, _bytes))); };
-  const std::uint16_t first = vertex(0);
+  const std::span<const Counted<std::uint8_t>> points = Vertices(_state);
+  const auto vertex = [_list, _indices, _shift](std::uint16_t _which)
+  { return std::size_t{static_cast<std::uint8_t>(_list[Offset(_indices, _which)] << _shift)}; };
+  const auto coordinate = [points](std::size_t _vertex, std::size_t _bytes)
+  { return static_cast<std::int16_t>(WordIn(points, _vertex + _bytes)); };
+  const std::size_t first = vertex(0);
   const ScreenPoint firstPoint{coordinate(first, 0), coordinate(first, 2)};
-  const std::uint16_t second = vertex(1);
+  const std::size_t second = vertex(1);
   const std::int16_t secondX = coordinate(second, 0);
   _state.Data().faceTestScratch = static_cast<std::uint16_t>(secondX);
   const ScreenPoint secondPoint{secondX, coordinate(second, 2)};
-  const std::uint16_t third = vertex(2);
+  const std::size_t third = vertex(2);
   return Triangle{firstPoint, secondPoint, ScreenPoint{coordinate(third, 0), coordinate(third, 2)}};
 }
 
@@ -295,32 +297,35 @@ struct WindingProducts
                          product(difference(_triangle.first.y, _triangle.second.y), difference(_triangle.third.x, _triangle.second.x))};
 }
 
-// An edge item (CS:3AF3): _item, the edge's offset in faceEdgeList; the edge's colour from its high byte's low bits, then
-// DrawClippedLine from its second vertex to its first, unless either's x is 7FFFh, the trap's saturation. PUSH SI / POP SI round
-// the line keep the list. Returns what DrawClippedLine returns: whether DrawLine filled, and cleared the direction flag.
-[[nodiscard]] bool DrawFaceEdge(GameState& _state, std::uint8_t _item)
+// An edge item (CS:3AF3): _item, the edge's offset in _blueprint's face edges, which the original's faceEdgeList points at; the edge's colour from
+// its high byte's low bits, then DrawClippedLine from its second vertex to its first, unless either's x is 7FFFh, the trap's
+// saturation. PUSH SI / POP SI round the line keep the list. Returns what DrawClippedLine returns: whether DrawLine filled, and
+// cleared the direction flag.
+[[nodiscard]] bool DrawFaceEdge(GameState& _state, const Blueprint& _blueprint, std::uint8_t _item)
 {
-  const std::uint16_t edge = _state.Word(Offset(_state.Get(DS.faceEdgeList), _item));
+  const std::uint16_t edge = Join(_blueprint.faceEdges[_item + 1u], _blueprint.faceEdges[_item]);
   _state.Data().drawColor = static_cast<std::uint8_t>(High(edge) & EDGE_COLOR_BITS);
   const auto vertices = static_cast<std::uint16_t>(edge & EDGE_VERTEX_BITS);
-  const std::uint16_t to = Offset(DS.vertexBuffer.offset, Low(vertices));
-  const std::uint16_t from = Offset(DS.vertexBuffer.offset, High(vertices));
-  const std::uint16_t toX = _state.Word(to);
-  const std::uint16_t fromX = _state.Word(from);
+  const std::span<const Counted<std::uint8_t>> points = Vertices(_state);
+  const std::size_t to = Low(vertices);
+  const std::size_t from = High(vertices);
+  const std::uint16_t toX = WordIn(points, to);
+  const std::uint16_t fromX = WordIn(points, from);
   if (toX == OFF_SCREEN || fromX == OFF_SCREEN)
   {
     return false;
   }
-  return DrawClippedLine(_state, fromX, _state.Word(Offset(from, 2)), toX, _state.Word(Offset(to, 2)));
+  return DrawClippedLine(_state, fromX, WordIn(points, from + 2), toX, WordIn(points, to + 2));
 }
 
 // A triangle item (CS:3B30): _item, the offset of its pattern in faceFillPatterns, into triangleFillPattern, then the three
-// vertex bytes at _vertices: FillTriangle unless a corner's x is 7FFFh. PUSH SI / POP SI round it keep the list. Returns the
-// offset past the vertex bytes.
-[[nodiscard]] std::uint16_t DrawFaceTriangle(GameState& _state, std::uint8_t _item, std::uint16_t _vertices, bool _backward)
+// vertex bytes at _vertices of _list: FillTriangle unless a corner's x is 7FFFh. PUSH SI / POP SI round it keep the list. Returns
+// the offset past the vertex bytes.
+[[nodiscard]] std::uint16_t DrawFaceTriangle(GameState& _state, std::uint8_t _item, std::span<const std::uint8_t> _list,
+                                             std::uint16_t _vertices, bool _backward)
 {
-  _state.Data().triangleFillPattern = _state.Word(Offset(DS.faceFillPatterns.offset, _item));
-  const Triangle triangle = LoadTriangle(_state, _vertices, 1);
+  _state.Data().triangleFillPattern = WordIn(_state.BytesFrom(_state.Data().faceFillPatterns, std::size_t{_item} + 2), _item);
+  const Triangle triangle = LoadTriangle(_state, _list, _vertices, 1);
   const auto offScreen = [](ScreenPoint _point) { return static_cast<std::uint16_t>(_point.x) == OFF_SCREEN; };
   if (!offScreen(triangle.first) && !offScreen(triangle.second) && !offScreen(triangle.third))
   {
@@ -329,22 +334,23 @@ struct WindingProducts
   return Offset(_vertices, TRIANGLE_VERTEX_BYTES);
 }
 
-// A facing face's items (CS:3AE8): a count byte into CL, CH 0, then the items, an edge's one byte counted off by LOOP and a
-// triangle's four by SUB CX,4 / JE, which ends only on 0. Returns the offset past them, and the direction flag as the edges'
-// DrawLine leave it.
-[[nodiscard]] FacesEnd DrawFaceItems(GameState& _state, std::uint16_t _items, bool _backward)
+// A facing face's items (CS:3AE8), at _items in _blueprint's face list: a count byte into CL, CH 0, then the items, an edge's one
+// byte counted off by LOOP and a triangle's four by SUB CX,4 / JE, which ends only on 0. Returns the offset in the list past them,
+// and the direction flag as the edges' DrawLine leave it.
+[[nodiscard]] FacesEnd DrawFaceItems(GameState& _state, const Blueprint& _blueprint, std::uint16_t _items, bool _backward)
 {
+  const std::span<const std::uint8_t> list = _blueprint.faceList;
   FacesEnd end{Offset(_items, 1), _backward};
-  std::uint16_t left = _state.Byte(_items);
+  std::uint16_t left = list[_items];
   for (;;)
   {
-    const std::uint8_t item = _state.Byte(end.next);
+    const std::uint8_t item = list[end.next];
     end.next = Offset(end.next, 1);
     // SHL BL,1 / JB, then SHR BL,1: bit 7 says a triangle, and the rest is the offset.
     const auto offset = static_cast<std::uint8_t>(item & ~FACE_TRIANGLE);
     if ((item & FACE_TRIANGLE) == 0)
     {
-      if (DrawFaceEdge(_state, offset))
+      if (DrawFaceEdge(_state, _blueprint, offset))
       {
         end.backward = false;
       }
@@ -355,7 +361,7 @@ struct WindingProducts
     }
     else
     {
-      end.next = DrawFaceTriangle(_state, offset, end.next, end.backward);
+      end.next = DrawFaceTriangle(_state, offset, list, end.next, end.backward);
       left = static_cast<std::uint16_t>(left - TRIANGLE_ITEM_BYTES);
       if (left == 0)
       {
@@ -470,12 +476,12 @@ struct WindingProducts
 // TransformShip), and the station classified at its compass position (ClassifyStationPosition) when UpdateCompass has made it the
 // compass's target and its depth is below 2. Returns the slot DI holds after it, from which the pass steps on: UpdateCompass,
 // once it runs, leaves DI at stationSlot; every other callee keeps it.
-[[nodiscard]] std::uint16_t ClassifyObject(GameState& _state, SpaceObject& _slot)
+[[nodiscard]] SlotIndex ClassifyObject(GameState& _state, SpaceObject& _slot)
 {
   _slot.flags = static_cast<std::uint8_t>(_slot.flags & ~STATE_DRAWN);
   if ((_slot.type & SLOT_ACTIVE) == 0)
   {
-    return _state.OffsetOf(_slot);
+    return _state.IndexOf(_slot);
   }
   _slot.type = static_cast<std::uint8_t>(_slot.type & SLOT_KEEP_BITS);
   if (_slot.framesAway != 0 && (_slot.flags & STATE_BLIP_SHOWN) == 0)
@@ -485,13 +491,13 @@ struct WindingProducts
     if (_slot.framesAway == 0)
     {
       (void)RemoveObject(_state, _slot);
-      return _state.OffsetOf(_slot);
+      return _state.IndexOf(_slot);
     }
   }
   if (IsSunOrPlanet(_slot))
   {
     TransformSunOrPlanet(_state, _slot);
-    return _state.OffsetOf(_slot);
+    return _state.IndexOf(_slot);
   }
   if (!IsStation(_slot).station)
   {
@@ -499,10 +505,10 @@ struct WindingProducts
     {
       TransformShip(_state, _slot);
     }
-    return _state.OffsetOf(_slot);
+    return _state.IndexOf(_slot);
   }
-  const std::uint16_t station = UpdateCompass(_state) ? DS.stationSlot.offset : _state.OffsetOf(_slot);
-  SpaceObject& target = _state.ObjectAt(station);
+  const SlotIndex station = UpdateCompass(_state) ? SlotIndex::Station : _state.IndexOf(_slot);
+  SpaceObject& target = _state.Slot(station);
   if (_state.Data().compassTargetIsStation != 0 && target.depth < DISTANT_DEPTH)
   {
     (void)ClassifyStationPosition(_state, target);
@@ -558,7 +564,7 @@ struct WindingProducts
 // POP DI round it keep the slot.
 void DrawObjectAsDot(GameState& _state, SpaceObject& _slot, bool _backward)
 {
-  const ScreenPoint at = ProjectToScreen(_state, ViewPosition(_slot));
+  const ScreenPoint at = ProjectToScreen(ViewPosition(_slot));
   _state.Data().drawColor = DOT_COLOR;
   DrawDisc(_state, DOT_RADIUS, static_cast<std::uint16_t>(at.x), static_cast<std::uint16_t>(at.y), _backward);
 }
@@ -588,8 +594,9 @@ void DrawObjectAsDot(GameState& _state, SpaceObject& _slot, bool _backward)
     DrawObjectAsDot(_state, _slot, _backward);
     return _backward;
   }
-  // MOV BL,[DI] / AND BX,3Eh: the type, doubled, indexes blueprintTable.
-  const std::uint16_t blueprint = _state.Word(Offset(static_cast<std::uint16_t>(_slot.type & SLOT_TYPE_BITS), DS.blueprintTable.offset));
+  // MOV BL,[DI] / AND BX,3Eh: the type, doubled, indexes blueprintTable. The sun and the planet, types 1Eh and 1Fh, past its
+  // 30 entries, were drawn above.
+  const Blueprint& blueprint = BLUEPRINTS[(_slot.type & SLOT_TYPE_BITS) >> 1];
   _state.Data().drawPitchAngle = std::uint16_t{_slot.pitch};
   _state.Data().drawYawAngle = std::uint16_t{_slot.yaw};
   _state.Data().drawRollAngle = std::uint16_t{_slot.roll};
@@ -606,13 +613,13 @@ void DrawObjectAsDot(GameState& _state, SpaceObject& _slot, bool _backward)
 [[nodiscard]] std::optional<bool> DrawFarthestObject(GameState& _state, Hardware& _hardware, bool _backward)
 {
   // DX the slot found, FFFFh none; AH its depth and BP its z, from 0.
-  std::optional<std::uint16_t> farthest;
+  std::optional<SlotIndex> farthest;
   std::uint8_t farthestDepth = 0;
   std::uint16_t farthestZ = 0;
-  std::uint16_t slot = DS.shipSlots.offset;
+  SlotIndex slot = SlotIndex::Sun;
   for (std::uint32_t count = LoopCount(_state.Data().shipSlotCount); count != 0; --count)
   {
-    const SpaceObject& object = _state.ObjectAt(slot);
+    const SpaceObject& object = _state.Slot(slot);
     if ((object.type & SLOT_DRAWABLE) == SLOT_DRAWABLE && (object.flags & STATE_DRAWN) == 0)
     {
       const std::uint8_t depth = object.depth;
@@ -623,25 +630,24 @@ void DrawObjectAsDot(GameState& _state, SpaceObject& _slot, bool _backward)
         farthest = slot;
       }
     }
-    slot = Offset(slot, SLOT_BYTES);
+    slot = SlotAfter(slot);
   }
   if (!farthest)
   {
     return std::nullopt;
   }
-  SpaceObject& object = _state.ObjectAt(*farthest);
+  SpaceObject& object = _state.Slot(*farthest);
   object.flags = static_cast<std::uint8_t>(object.flags | STATE_DRAWN);
   return DrawObject(_state, _hardware, object, _backward);
 }
 
 // One coordinate of the sun's or planet's centre (CS:4030, CS:404E): 256|_value| over _slot's view z, by DIV [DI+14h], rounded
-// down, with _value's sign put back. A divide that overflows saves BX, _radius.
-[[nodiscard]] std::uint16_t ProjectDiscCoordinate(GameState& _state, SpaceObject& _slot, std::uint16_t _value, std::uint16_t _returnOffset,
-                                                  std::uint16_t _radius)
+// down, with _value's sign put back.
+[[nodiscard]] std::uint16_t ProjectDiscCoordinate(const SpaceObject& _slot, std::uint16_t _value)
 {
   const bool negative = Negative(_value);
   const std::uint16_t magnitude = negative ? Negate(_value) : _value;
-  const std::uint16_t coordinate = DivideUnsigned(_state, ScaledDividend(magnitude), _slot.viewZ, _returnOffset, _radius).quotient;
+  const std::uint16_t coordinate = DivideUnsigned(ScaledDividend(magnitude), _slot.viewZ, DISC_DIVIDE_TRAP).quotient;
   return negative ? Negate(coordinate) : coordinate;
 }
 
@@ -663,8 +669,8 @@ void DrawObjectAsDot(GameState& _state, SpaceObject& _slot, bool _backward)
 // when the disc's whole box is on the 256x128 view: DrawDisc with twice the radius.
 void DrawSunOrPlanetDisc(GameState& _state, SpaceObject& _slot, std::uint16_t _radius, bool _backward)
 {
-  const auto row = Offset(ProjectDiscCoordinate(_state, _slot, _slot.viewY, DISC_Y_DIVIDE_RETURN, _radius), SCREEN_CENTER_Y);
-  const auto x = Offset(ProjectDiscCoordinate(_state, _slot, _slot.viewX, DISC_X_DIVIDE_RETURN, _radius), SCREEN_CENTER_X);
+  const auto row = Offset(ProjectDiscCoordinate(_slot, _slot.viewY), SCREEN_CENTER_Y);
+  const auto x = Offset(ProjectDiscCoordinate(_slot, _slot.viewX), SCREEN_CENTER_X);
   if (!DiscWithin(x, _radius, SCREEN_RIGHT) || !DiscWithin(row, _radius, SCREEN_BOTTOM))
   {
     return;
@@ -717,7 +723,7 @@ struct SupernovaGlow
     // 65,536.
     const auto ships = static_cast<std::uint8_t>(_state.Data().objectSlotCount - BOMB_FIRST_SLOT);
     (void)DetonateEnergyBomb(_state, _hardware, _backward);
-    glow.slot = static_cast<std::uint16_t>(DS.firstShipSlot.offset + LoopCount(ships) * SpaceObject::BYTES);
+    glow.slot = static_cast<std::uint16_t>(GameState::SlotOffset(SlotIndex::FirstShip) + LoopCount(ships) * SpaceObject::BYTES);
     glow.heat = 0xFF;
   }
   _state.Data().commanderBlock.supernovaHeat = Low(glow.heat);
@@ -747,7 +753,7 @@ struct SunDisc
   else
   {
     // MOV DX,64h / XOR AX,AX: DX:AX = 100 * 65536.
-    disc.radius = ScaleByInverseDistance(_state, _slot, std::uint32_t{SUN_SCALE} << 16);
+    disc.radius = ScaleByInverseDistance(_slot, std::uint32_t{SUN_SCALE} << 16);
   }
   _state.Data().cabinTemperature = Low(disc.radius);
   if ((High(_state.ObjectAt(disc.slot).viewZ) & 0x80) != 0)
@@ -776,7 +782,7 @@ struct SunDisc
     if (fuel > 0xFF)
     {
       _state.Data().commanderBlock.fuel = 0xFF;
-      _state.Set(DS.messagePointer, DS.fuelScoopsActiveText.offset);
+      _state.Data().messagePointer = Message::FuelScoopsActive;
       _state.Data().messageFrames = SCOOP_MESSAGE_FRAMES;
     }
   }
@@ -802,7 +808,7 @@ std::optional<std::uint16_t> SizePlanet(GameState& _state, Hardware& _hardware, 
 {
   _state.Data().sunFringeMask = FRINGE_NONE;
   // MOV DX,32h / XOR AX,AX: DX:AX = 50 * 65536.
-  const std::uint16_t scaled = ScaleByInverseDistance(_state, _slot, std::uint32_t{PLANET_SCALE} << 16);
+  const std::uint16_t scaled = ScaleByInverseDistance(_slot, std::uint32_t{PLANET_SCALE} << 16);
   auto altitude = static_cast<std::uint8_t>(~Low(scaled));
   if (altitude > ALTITUDE_LIMIT)
   {
@@ -832,83 +838,89 @@ std::optional<std::uint16_t> SizePlanet(GameState& _state, Hardware& _hardware, 
 
 } // namespace
 
-void ProjectVertices(GameState& _state, std::uint8_t _trapHigh)
+void ProjectVertices(GameState& _state)
 {
   // MOV CX,[projectedVertexCount] / AND CX,CX / JE, then LOOP: a count of the whole word, 0 none. SI walks the vertices and DI the
   // points they become, in place; PUSH SI / POP SI keep the caller's.
   const std::uint16_t count = _state.Data().projectedVertexCount;
-  std::uint16_t vertex = DS.vertexBuffer.offset;
-  std::uint16_t point = vertex;
+  const std::span<Counted<std::uint8_t>> vertices = _state.BytesFrom(_state.Data().vertexBuffer, std::size_t{count} * VERTEX_BYTES);
+  std::size_t vertex = 0;
+  std::size_t point = 0;
   for (std::uint16_t left = count; left != 0; --left)
   {
-    const auto z = Offset(vertex, VERTEX_Z);
-    if (static_cast<std::int16_t>(_state.Word(z)) < static_cast<std::int16_t>(_state.Data().nearPlaneZ))
+    const std::size_t z = vertex + VERTEX_Z;
+    if (static_cast<std::int16_t>(WordIn(vertices, z)) < static_cast<std::int16_t>(_state.Data().nearPlaneZ))
     {
-      _state.SetWord(point, NEAR_VERTEX_X);
+      SetWordIn(vertices, point, NEAR_VERTEX_X);
     }
     else
     {
-      const std::uint16_t x = ProjectVertexCoordinate(_state, _state.Word(vertex), z, VERTEX_X_DIVIDE_RETURN, _trapHigh);
-      _state.SetWord(point, Offset(x, SCREEN_CENTER_X));
-      const std::uint16_t y = ProjectVertexCoordinate(_state, _state.Word(Offset(vertex, 2)), z, VERTEX_Y_DIVIDE_RETURN, _trapHigh);
-      _state.SetWord(Offset(point, 2), Offset(y, SCREEN_CENTER_Y));
+      const std::uint16_t x = ProjectVertexCoordinate(WordIn(vertices, vertex), WordIn(vertices, z));
+      SetWordIn(vertices, point, Offset(x, SCREEN_CENTER_X));
+      const std::uint16_t y = ProjectVertexCoordinate(WordIn(vertices, vertex + 2), WordIn(vertices, z));
+      SetWordIn(vertices, point + 2, Offset(y, SCREEN_CENTER_Y));
     }
-    point = Offset(point, POINT_BYTES);
-    vertex = Offset(vertex, VERTEX_BYTES);
+    point += POINT_BYTES;
+    vertex += VERTEX_BYTES;
   }
 }
 
-Vector ReflectVertexAboutCenter(GameState& _state, std::uint16_t _vertex, std::uint16_t _reflection)
+Vector ReflectVertexAboutCenter(GameState& _state, std::size_t _vertex, std::size_t _reflection)
 {
+  const std::span<Counted<std::uint8_t>> vertices = Vertices(_state);
   std::array<std::uint16_t, 3> center{};
   constexpr std::array<Counted<std::uint16_t> GameData::*, 3> CENTER = {&GameData::drawCenterX, &GameData::drawCenterY,
                                                                         &GameData::drawCenterZ};
   for (std::size_t axis = 0; axis < CENTER.size(); ++axis)
   {
-    const auto bytes = static_cast<std::uint16_t>(2 * axis);
+    const std::size_t bytes = 2 * axis;
     center[axis] = _state.Data().*CENTER[axis];
-    _state.SetWord(Offset(_reflection, bytes), static_cast<std::uint16_t>(center[axis] - _state.Word(Offset(_vertex, bytes))));
-    _state.SetWord(Offset(_vertex, bytes), Offset(_state.Word(Offset(_vertex, bytes)), center[axis]));
+    SetWordIn(vertices, _reflection + bytes, static_cast<std::uint16_t>(center[axis] - WordIn(vertices, _vertex + bytes)));
+    SetWordIn(vertices, _vertex + bytes, Offset(WordIn(vertices, _vertex + bytes), center[axis]));
   }
   return Vector{static_cast<std::int16_t>(center[0]), static_cast<std::int16_t>(center[1]), static_cast<std::int16_t>(center[2])};
 }
 
-Vector OffsetVertexByCenter(GameState& _state, std::uint16_t _vertex)
+Vector OffsetVertexByCenter(GameState& _state, std::size_t _vertex)
 {
+  const std::span<Counted<std::uint8_t>> vertices = Vertices(_state);
   std::array<std::uint16_t, 3> center{};
   constexpr std::array<Counted<std::uint16_t> GameData::*, 3> CENTER = {&GameData::drawCenterX, &GameData::drawCenterY,
                                                                         &GameData::drawCenterZ};
   for (std::size_t axis = 0; axis < CENTER.size(); ++axis)
   {
-    const auto bytes = static_cast<std::uint16_t>(2 * axis);
+    const std::size_t bytes = 2 * axis;
     center[axis] = _state.Data().*CENTER[axis];
-    _state.SetWord(Offset(_vertex, bytes), Offset(_state.Word(Offset(_vertex, bytes)), center[axis]));
+    SetWordIn(vertices, _vertex + bytes, Offset(WordIn(vertices, _vertex + bytes), center[axis]));
   }
   return Vector{static_cast<std::int16_t>(center[0]), static_cast<std::int16_t>(center[1]), static_cast<std::int16_t>(center[2])};
 }
 
-std::uint16_t BuildBoxCornerVertices(GameState& _state, std::uint16_t _extents)
+void BuildBoxCornerVertices(GameState& _state, std::uint16_t _extents)
 {
-  const std::uint16_t extents = _state.Word(_extents);
+  const std::uint16_t extents = _extents;
   SetDrawAngles(_state);
   // q, the half-height, from the low byte; h, the half-length, from the high, negated; p is boxHalfWidth.
   const std::uint16_t height = Low(extents);
   const std::uint16_t length = Negate(std::uint16_t{High(extents)});
-  const std::uint16_t corners = DS.boxCornerVertices.offset;
-  _state.SetWord(Offset(corners, VERTEX_Z), length);
-  _state.SetWord(Offset(corners, VERTEX_BYTES + VERTEX_Z), length);
-  _state.SetWord(Offset(corners, 2 * VERTEX_BYTES + VERTEX_Z), length);
+  // boxCornerVertices, vertex 34 on, the box's corners.
+  const std::span<Counted<std::uint8_t>> vertices = Vertices(_state);
+  const auto corners =
+    static_cast<std::size_t>(_state.OffsetOf(_state.Data().vertexBuffer.boxCornerVertices) - _state.OffsetOf(_state.Data().vertexBuffer));
+  SetWordIn(vertices, corners + VERTEX_Z, length);
+  SetWordIn(vertices, corners + VERTEX_BYTES + VERTEX_Z, length);
+  SetWordIn(vertices, corners + 2 * VERTEX_BYTES + VERTEX_Z, length);
   // (p, q) by -roll, and its opposite, (-p, -q); then (p, -q).
   const Pair upper =
     RotateByStoredSinCos(_state, 3, Pair{static_cast<std::int16_t>(_state.Data().boxHalfWidth), static_cast<std::int16_t>(height)});
-  _state.SetWord(corners, static_cast<std::uint16_t>(upper.first));
-  _state.SetWord(Offset(corners, 2), static_cast<std::uint16_t>(upper.second));
-  _state.SetWord(Offset(corners, 2 * VERTEX_BYTES), Negate(static_cast<std::uint16_t>(upper.first)));
-  _state.SetWord(Offset(corners, 2 * VERTEX_BYTES + 2), Negate(static_cast<std::uint16_t>(upper.second)));
+  SetWordIn(vertices, corners, static_cast<std::uint16_t>(upper.first));
+  SetWordIn(vertices, corners + 2, static_cast<std::uint16_t>(upper.second));
+  SetWordIn(vertices, corners + 2 * VERTEX_BYTES, Negate(static_cast<std::uint16_t>(upper.first)));
+  SetWordIn(vertices, corners + 2 * VERTEX_BYTES + 2, Negate(static_cast<std::uint16_t>(upper.second)));
   const Pair lower =
     RotateByStoredSinCos(_state, 3, Pair{static_cast<std::int16_t>(_state.Data().boxHalfWidth), static_cast<std::int16_t>(Negate(height))});
-  _state.SetWord(Offset(corners, VERTEX_BYTES), static_cast<std::uint16_t>(lower.first));
-  _state.SetWord(Offset(corners, VERTEX_BYTES + 2), static_cast<std::uint16_t>(lower.second));
+  SetWordIn(vertices, corners + VERTEX_BYTES, static_cast<std::uint16_t>(lower.first));
+  SetWordIn(vertices, corners + VERTEX_BYTES + 2, static_cast<std::uint16_t>(lower.second));
   RotateVertices(_state, corners, BOX_CORNERS_ROTATED, 0, VERTEX_Z, 4);
   RotateVertices(_state, corners, BOX_CORNERS_ROTATED, 2, VERTEX_Z, 5);
   RotateVertices(_state, corners, BOX_CORNERS_ROTATED, 0, VERTEX_Z, 1);
@@ -917,95 +929,95 @@ std::uint16_t BuildBoxCornerVertices(GameState& _state, std::uint16_t _extents)
 
   // The fourth corner completes the parallelogram, v2 - v1 + v0; the fifth and eighth are the second and third
   // again, and four reflections through the centre make the far face.
-  for (std::uint16_t word = corners; word != Offset(corners, 2 * BOX_CORNERS_ROTATED); word = Offset(word, 2))
+  for (std::size_t word = corners; word != corners + std::size_t{2} * BOX_CORNERS_ROTATED; word += 2)
   {
-    _state.SetWord(Offset(word, BOX_FOURTH_CORNER),
-                   static_cast<std::uint16_t>(_state.Word(Offset(word, 2 * VERTEX_BYTES)) - _state.Word(Offset(word, VERTEX_BYTES)) +
-                                              _state.Word(word)));
+    SetWordIn(vertices, word + BOX_FOURTH_CORNER,
+              static_cast<std::uint16_t>(WordIn(vertices, word + 2 * VERTEX_BYTES) - WordIn(vertices, word + VERTEX_BYTES) +
+                                         WordIn(vertices, word)));
   }
-  std::uint16_t source = BOX_SECOND_CORNER;
-  for (const std::uint16_t copy : {BOX_FIFTH_CORNER, BOX_EIGHTH_CORNER})
+  std::size_t source = BOX_SECOND_CORNER;
+  for (const std::size_t copy : {BOX_FIFTH_CORNER, BOX_EIGHTH_CORNER})
   {
-    for (std::uint16_t word = 0; word != 2 * BOX_CORNERS_ROTATED; word = Offset(word, 2))
+    for (std::size_t word = 0; word != std::size_t{2} * BOX_CORNERS_ROTATED; word += 2)
     {
-      _state.SetWord(Offset(copy, word), _state.Word(source));
-      source = Offset(source, 2);
+      SetWordIn(vertices, copy + word, WordIn(vertices, source));
+      source += 2;
     }
   }
-  std::uint16_t vertex = corners;
-  std::uint16_t reflection = BOX_SEVENTH_CORNER;
+  std::size_t vertex = corners;
+  std::size_t reflection = BOX_SEVENTH_CORNER;
   (void)ReflectVertexAboutCenter(_state, vertex, reflection);
-  vertex = Offset(vertex, BOX_REFLECTION_STEP);
-  reflection = static_cast<std::uint16_t>(reflection - BOX_REFLECTION_STEP);
+  vertex += BOX_REFLECTION_STEP;
+  reflection -= BOX_REFLECTION_STEP;
   (void)ReflectVertexAboutCenter(_state, vertex, reflection);
-  vertex = Offset(vertex, BOX_REFLECTION_SKIP);
-  reflection = static_cast<std::uint16_t>(reflection - VERTEX_BYTES);
+  vertex += BOX_REFLECTION_SKIP;
+  reflection -= VERTEX_BYTES;
   (void)ReflectVertexAboutCenter(_state, vertex, reflection);
-  vertex = static_cast<std::uint16_t>(vertex - BOX_REFLECTION_STEP);
-  reflection = Offset(reflection, BOX_REFLECTION_STEP);
+  vertex -= BOX_REFLECTION_STEP;
+  reflection += BOX_REFLECTION_STEP;
   (void)ReflectVertexAboutCenter(_state, vertex, reflection);
-  return Offset(_extents, 2);
 }
 
 Vector BuildDodoVertices(GameState& _state)
 {
   SetDrawAngles(_state);
   // From the roll angle, in 72-degree steps: the sine and cosine high bytes of each, scaled to the two rings.
-  const auto ringRadii = [&_state](std::uint16_t _angle)
-  { return ScaleDodoRadii(static_cast<std::int8_t>(_state.Byte(Offset(_angle, SINE_HIGH_BYTES)))); };
+  // The angle a byte offset into sineTable, always even.
+  const auto ringRadii = [&_state](std::uint16_t _angle) { return ScaleDodoRadii(static_cast<std::int8_t>(SineHigh(_state, _angle))); };
   auto angle = static_cast<std::uint16_t>((_state.Data().drawRollAngle & ANGLE_BITS) << 1);
-  std::uint16_t vertex = DS.vertexBuffer.offset;
+  const std::span<Counted<std::uint8_t>> vertices = Vertices(_state);
+  std::size_t vertex = 0;
   for (std::uint16_t left = DODO_RING_VERTICES; left != 0; --left)
   {
     const DodoRadii sine = ringRadii(angle);
-    _state.SetWord(vertex, static_cast<std::uint16_t>(sine.inner));
-    _state.SetWord(Offset(vertex, DODO_OUTER_RING), static_cast<std::uint16_t>(sine.outer));
-    _state.SetWord(Offset(vertex, VERTEX_Z), DODO_NEAR_RING_Z);
-    _state.SetWord(Offset(vertex, DODO_OUTER_RING + VERTEX_Z), DODO_FAR_RING_Z);
+    SetWordIn(vertices, vertex, static_cast<std::uint16_t>(sine.inner));
+    SetWordIn(vertices, vertex + DODO_OUTER_RING, static_cast<std::uint16_t>(sine.outer));
+    SetWordIn(vertices, vertex + VERTEX_Z, DODO_NEAR_RING_Z);
+    SetWordIn(vertices, vertex + DODO_OUTER_RING + VERTEX_Z, DODO_FAR_RING_Z);
     angle = static_cast<std::uint16_t>((angle - QUARTER_TURN_BYTES) & SINE_BYTE_BITS);
     const DodoRadii cosine = ringRadii(angle);
-    _state.SetWord(Offset(vertex, 2), static_cast<std::uint16_t>(cosine.inner));
-    _state.SetWord(Offset(vertex, DODO_OUTER_RING + 2), static_cast<std::uint16_t>(cosine.outer));
+    SetWordIn(vertices, vertex + 2, static_cast<std::uint16_t>(cosine.inner));
+    SetWordIn(vertices, vertex + DODO_OUTER_RING + 2, static_cast<std::uint16_t>(cosine.outer));
     angle = static_cast<std::uint16_t>((angle + DODO_RING_STEP_BYTES) & SINE_BYTE_BITS);
-    vertex = Offset(vertex, VERTEX_BYTES);
+    vertex += VERTEX_BYTES;
   }
   // The slot: two corners at half the high bytes, and their opposites.
-  const auto slotHalf = [&_state](std::uint16_t _angle) { return Sar(SignExtend(_state.Byte(Offset(_angle, SINE_HIGH_BYTES))), 1); };
-  vertex = Offset(vertex, DODO_OUTER_RING);
+  const auto slotHalf = [&_state](std::uint16_t _angle) { return Sar(SignExtend(SineHigh(_state, _angle)), 1); };
+  vertex += DODO_OUTER_RING;
   angle = static_cast<std::uint16_t>((angle + DODO_SLOT_START_BYTES) & SINE_BYTE_BITS);
   for (std::uint16_t left = DODO_SLOT_VERTICES; left != 0; --left)
   {
     const std::uint16_t x = slotHalf(angle);
-    _state.SetWord(vertex, x);
-    _state.SetWord(Offset(vertex, DODO_SLOT_OPPOSITE), Negate(x));
-    _state.SetWord(Offset(vertex, VERTEX_Z), DODO_SLOT_Z);
-    _state.SetWord(Offset(vertex, DODO_SLOT_OPPOSITE + VERTEX_Z), DODO_SLOT_Z);
+    SetWordIn(vertices, vertex, x);
+    SetWordIn(vertices, vertex + DODO_SLOT_OPPOSITE, Negate(x));
+    SetWordIn(vertices, vertex + VERTEX_Z, DODO_SLOT_Z);
+    SetWordIn(vertices, vertex + DODO_SLOT_OPPOSITE + VERTEX_Z, DODO_SLOT_Z);
     angle = static_cast<std::uint16_t>((angle - QUARTER_TURN_BYTES) & SINE_BYTE_BITS);
     const std::uint16_t y = slotHalf(angle);
-    _state.SetWord(Offset(vertex, 2), y);
-    _state.SetWord(Offset(vertex, DODO_SLOT_OPPOSITE + 2), Negate(y));
+    SetWordIn(vertices, vertex + 2, y);
+    SetWordIn(vertices, vertex + DODO_SLOT_OPPOSITE + 2, Negate(y));
     angle = static_cast<std::uint16_t>((angle + HALF_TURN_BYTES) & SINE_BYTE_BITS);
-    vertex = Offset(vertex, VERTEX_BYTES);
+    vertex += VERTEX_BYTES;
   }
-  RotateVertices(_state, DS.vertexBuffer.offset, DODO_ROTATED_VERTICES, 0, VERTEX_Z, 4);
-  RotateVertices(_state, DS.vertexBuffer.offset, DODO_ROTATED_VERTICES, 2, VERTEX_Z, 5);
-  RotateVertices(_state, DS.vertexBuffer.offset, DODO_ROTATED_VERTICES, 0, VERTEX_Z, 1);
-  RotateVertices(_state, DS.vertexBuffer.offset, DODO_ROTATED_VERTICES, 0, 2, 2);
-  RotateVerticesToView(_state, DS.vertexBuffer.offset, DODO_ROTATED_VERTICES);
+  RotateVertices(_state, 0, DODO_ROTATED_VERTICES, 0, VERTEX_Z, 4);
+  RotateVertices(_state, 0, DODO_ROTATED_VERTICES, 2, VERTEX_Z, 5);
+  RotateVertices(_state, 0, DODO_ROTATED_VERTICES, 0, VERTEX_Z, 1);
+  RotateVertices(_state, 0, DODO_ROTATED_VERTICES, 0, 2, 2);
+  RotateVerticesToView(_state, 0, DODO_ROTATED_VERTICES);
   // The first ten reflected through the centre, and the slot's four moved to it.
-  vertex = DS.vertexBuffer.offset;
-  std::uint16_t reflection = DODO_REFLECTED;
+  vertex = 0;
+  std::size_t reflection = DODO_REFLECTED;
   for (std::uint16_t left = DODO_REFLECTED_VERTICES; left != 0; --left)
   {
     (void)ReflectVertexAboutCenter(_state, vertex, reflection);
-    vertex = Offset(vertex, VERTEX_BYTES);
-    reflection = Offset(reflection, VERTEX_BYTES);
+    vertex += VERTEX_BYTES;
+    reflection += VERTEX_BYTES;
   }
   Vector center{};
   for (std::uint16_t left = DODO_SLOT_CORNERS; left != 0; --left)
   {
     center = OffsetVertexByCenter(_state, vertex);
-    vertex = Offset(vertex, VERTEX_BYTES);
+    vertex += VERTEX_BYTES;
   }
   return center;
 }
@@ -1032,21 +1044,18 @@ DodoRadii ScaleDodoRadii(std::int8_t _value)
   return DodoRadii{static_cast<std::int16_t>(inner), static_cast<std::int16_t>(outer)};
 }
 
-VertexProgramEnd RunVertexProgram(GameState& _state, std::uint16_t _program, Vector _accumulator)
+Vector RunVertexProgram(GameState& _state, std::span<const std::uint8_t> _program, Vector _accumulator)
 {
   auto x = static_cast<std::uint16_t>(_accumulator.x);
   auto y = static_cast<std::uint16_t>(_accumulator.y);
   auto z = static_cast<std::uint16_t>(_accumulator.z);
-  const std::uint8_t ops = _state.Byte(_program);
-  std::uint16_t next = Offset(_program, 1);
-  for (std::uint16_t left = ops; left != 0; --left)
+  const std::span<Counted<std::uint8_t>> vertices = Vertices(_state);
+  for (const std::uint8_t op : _program)
   {
-    const std::uint8_t op = _state.Byte(next);
-    next = Offset(next, 1);
-    const std::uint16_t vertex = DS.vertexBuffer.At(op & VERTEX_INDEX_BITS);
-    const std::uint16_t vertexX = _state.Word(vertex);
-    const std::uint16_t vertexY = _state.Word(Offset(vertex, 2));
-    const std::uint16_t vertexZ = _state.Word(Offset(vertex, 4));
+    const std::size_t vertex = std::size_t{static_cast<std::uint8_t>(op & VERTEX_INDEX_BITS)} * VERTEX_BYTES;
+    const std::uint16_t vertexX = WordIn(vertices, vertex);
+    const std::uint16_t vertexY = WordIn(vertices, vertex + 2);
+    const std::uint16_t vertexZ = WordIn(vertices, vertex + 4);
     switch (static_cast<std::uint8_t>(op & VERTEX_OP_BITS))
     {
     case VERTEX_OP_LOAD:
@@ -1055,9 +1064,9 @@ VertexProgramEnd RunVertexProgram(GameState& _state, std::uint16_t _program, Vec
       z = vertexZ;
       break;
     case VERTEX_OP_STORE:
-      _state.SetWord(vertex, x);
-      _state.SetWord(Offset(vertex, 2), y);
-      _state.SetWord(Offset(vertex, 4), z);
+      SetWordIn(vertices, vertex, x);
+      SetWordIn(vertices, vertex + 2, y);
+      SetWordIn(vertices, vertex + 4, z);
       break;
     case VERTEX_OP_AVERAGE:
     {
@@ -1075,7 +1084,7 @@ VertexProgramEnd RunVertexProgram(GameState& _state, std::uint16_t _program, Vec
       break;
     }
   }
-  return VertexProgramEnd{next, Vector{static_cast<std::int16_t>(x), static_cast<std::int16_t>(y), static_cast<std::int16_t>(z)}};
+  return Vector{static_cast<std::int16_t>(x), static_cast<std::int16_t>(y), static_cast<std::int16_t>(z)};
 }
 
 bool TriangleWindingSign(Triangle _triangle)
@@ -1086,9 +1095,9 @@ bool TriangleWindingSign(Triangle _triangle)
   return Negative(sign);
 }
 
-FacesEnd DrawVisibleFaces(GameState& _state, std::uint16_t _list, std::uint16_t _faces, bool _backward)
+FacesEnd DrawVisibleFaces(GameState& _state, const Blueprint& _blueprint, std::uint16_t _faces, bool _backward)
 {
-  FacesEnd end{_list, _backward};
+  FacesEnd end{0, _backward};
   if (_faces == 0)
   {
     return end;
@@ -1097,16 +1106,16 @@ FacesEnd DrawVisibleFaces(GameState& _state, std::uint16_t _list, std::uint16_t 
   std::uint16_t faces = _faces;
   do
   {
-    const Triangle facing = LoadTriangle(_state, end.next, 0);
+    const Triangle facing = LoadTriangle(_state, _blueprint.faceList, end.next, 0);
     end.next = Offset(end.next, TRIANGLE_VERTEX_BYTES);
     if (TriangleWindingSign(facing))
     {
-      end = DrawFaceItems(_state, end.next, end.backward);
+      end = DrawFaceItems(_state, _blueprint, end.next, end.backward);
     }
     else
     {
       // SkipHiddenFace (CS:3B8D): MOV CL,[SI] / STC / ADC SI,CX, CH 0: past the count byte and the items.
-      end.next = Offset(end.next, Offset(_state.Byte(end.next), 1));
+      end.next = Offset(end.next, Offset(_blueprint.faceList[end.next], 1));
     }
   } while (Loop(faces));
   return end;
@@ -1160,26 +1169,23 @@ void TransformShip(GameState& _state, SpaceObject& _slot)
   (void)ClassifyViewPosition(_state, _slot, view);
 }
 
-bool RunBlueprintHandler(GameState& _state, std::uint16_t _blueprint, bool _backward)
+bool RunBlueprintHandler(GameState& _state, const Blueprint& _blueprint, bool _backward)
 {
   // PUSH DI and the way back to RenderBlueprintBody (CS:3CF2), then the handler's word, BL into boxHalfWidth with BH 0, and JMP AX
   // to the handler with SI past them. The slot and the way back are the stack the handler returns through, which this unit
   // keeps itself.
-  const std::uint16_t handler = _state.Word(_blueprint);
-  _state.Data().boxHalfWidth = _state.Byte(Offset(_blueprint, 2));
-  std::uint16_t body = Offset(_blueprint, BLUEPRINT_HANDLER_BYTES);
-  // Every blueprint's handler is one of these two; the blueprints are never written.
-  if (handler == BUILD_BOX_CORNER_VERTICES)
+  _state.Data().boxHalfWidth = _blueprint.halfWidth;
+  if (_blueprint.shape == BlueprintShape::Box)
   {
-    body = BuildBoxCornerVertices(_state, body);
+    BuildBoxCornerVertices(_state, _blueprint.extents);
   }
-  else if (handler == BUILD_DODO_VERTICES)
+  else
   {
     (void)BuildDodoVertices(_state);
   }
   // Every blueprint's vertex program begins by loading a vertex into the accumulator, so what the handler leaves in BP, BX and
   // DX is never read.
-  return RenderBlueprint(_state, body, Vector{}, _backward);
+  return RenderBlueprint(_state, _blueprint, Vector{}, _backward);
 }
 
 bool TransformAndDrawObjects(GameState& _state, Hardware& _hardware, bool _backward)
@@ -1189,10 +1195,10 @@ bool TransformAndDrawObjects(GameState& _state, Hardware& _hardware, bool _backw
   (void)SetSinCos(_state, 2, _state.Data().playerRollAngle);
   // MOV CL,shipSlotCount / XOR CH,CH, then LOOP with PUSH CX / POP CX round each slot: a count of 0 classifies 65,536. DI steps on
   // from where each slot's classification leaves it.
-  std::uint16_t slot = DS.shipSlots.offset;
+  SlotIndex slot = SlotIndex::Sun;
   for (std::uint32_t count = LoopCount(_state.Data().shipSlotCount); count != 0; --count)
   {
-    slot = Offset(ClassifyObject(_state, _state.ObjectAt(slot)), SLOT_BYTES);
+    slot = SlotAfter(ClassifyObject(_state, _state.Slot(slot)));
   }
   bool backward = _backward;
   while (const std::optional<bool> drawn = DrawFarthestObject(_state, _hardware, backward))
@@ -1236,7 +1242,7 @@ void DrawSunOrPlanet(GameState& _state, Hardware& _hardware, SpaceObject& _slot,
 
 void DrawDistantStation(GameState& _state, SpaceObject& _slot, bool _backward)
 {
-  const ScreenPoint at = ProjectToScreen(_state, CompassPosition(_slot));
+  const ScreenPoint at = ProjectToScreen(CompassPosition(_slot));
   const auto x = static_cast<std::uint16_t>(at.x);
   const auto row = static_cast<std::uint16_t>(at.y);
   _state.Data().drawColor = STATION_COLOR;
@@ -1268,7 +1274,7 @@ SinCos LoadPlayerAngles(GameState& _state)
   return SetSinCos(_state, 2, _state.Data().playerRollAngle);
 }
 
-ScreenPoint ProjectToScreen(GameState& _state, Vector _view)
+ScreenPoint ProjectToScreen(Vector _view)
 {
   // AND / JNS / NEG: the magnitudes, BP bit 1 for a negative x and bit 0 for a negative y.
   const bool negativeX = _view.x < 0;
@@ -1276,10 +1282,9 @@ ScreenPoint ProjectToScreen(GameState& _state, Vector _view)
   const std::uint16_t x = negativeX ? Negate(static_cast<std::uint16_t>(_view.x)) : static_cast<std::uint16_t>(_view.x);
   const std::uint16_t y = negativeY ? Negate(static_cast<std::uint16_t>(_view.y)) : static_cast<std::uint16_t>(_view.y);
   const auto z = static_cast<std::uint16_t>(_view.z);
-  // XOR DH,DH / MOV DL,AH / MOV AH,AL / XOR AL,AL, then DIV CX: x first, with BX = |y| for the trap; XCHG BX,AX, then y, with BX
-  // the first quotient.
-  const std::uint16_t across = DivideUnsigned(_state, std::uint32_t{x} << 8, z, SCREEN_X_DIVIDE_RETURN, y).quotient;
-  const std::uint16_t down = DivideUnsigned(_state, std::uint32_t{y} << 8, z, SCREEN_Y_DIVIDE_RETURN, across).quotient;
+  // XOR DH,DH / MOV DL,AH / MOV AH,AL / XOR AL,AL, then DIV CX: x first; XCHG BX,AX, then y.
+  const std::uint16_t across = DivideUnsigned(std::uint32_t{x} << 8, z, SCREEN_DIVIDE_TRAP).quotient;
+  const std::uint16_t down = DivideUnsigned(std::uint32_t{y} << 8, z, SCREEN_DIVIDE_TRAP).quotient;
   return ScreenPoint{static_cast<std::int16_t>(Offset(negativeX ? Negate(across) : across, SCREEN_CENTER_X)),
                      static_cast<std::int16_t>(Offset(negativeY ? Negate(down) : down, SCREEN_CENTER_Y))};
 }

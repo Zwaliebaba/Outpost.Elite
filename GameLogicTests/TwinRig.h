@@ -2,6 +2,7 @@
 #pragma once
 
 #include "AnswerFile.h"
+#include "StateDumps.h"
 #include "GuardReport.h"
 #include "ReferenceRig.h"
 #include "Replay.h"
@@ -90,7 +91,10 @@ private:
 /// KNOWN_PICTURES_FILE and KNOWN_OUTCOMES_FILE (GuardReport). A picture, or a timing outcome, that differs is reported: it
 /// is written to the test's log with both values. An outcome of the player's progress that differs fails, and so does a
 /// picture or outcomes not recorded. While the guard is recorded (RecordingGuard), a twin keeps its pictures and outcomes
-/// instead and writes them when it is done, only if every state digest it gave met its known answer.
+/// instead and writes them when it is done, only if every state digest it gave met its known answer. While the data segment
+/// is dumped or the digests re-based (StateDumps), each answer's data segment is dumped or held to the dump before the
+/// change instead of its digest to the known answer; a re-base fails on any picture or outcome that differs, and the twin
+/// writes its digests as its known answers when it is done.
 class TwinRig
 {
 public:
@@ -115,10 +119,22 @@ public:
 
   /// A twin that is done, and threw nothing, so that every state digest it gave met its known answer: while the guard is
   /// recorded it writes its pictures and outcomes, replacing the ones it had; otherwise it writes its summary to the test's
-  /// log.
+  /// log. While the digests are re-based, every one it gave met the re-base's gate, and it writes them as its known answers.
   ~TwinRig()
   {
     if (std::uncaught_exceptions() > m_exceptions)
+    {
+      return;
+    }
+    try
+    {
+      if (StateDumps::Run().Mode() == DigestMode::Rebase &&
+          !TwinAnswers::Record(KNOWN_ANSWERS_FILE, TwinAnswers::Shape::Sha256, m_name, m_digestsGiven))
+      {
+        GuardReport::Log(Widen(m_name) + L": its re-based digests could not be written");
+      }
+    }
+    catch (...)
     {
       return;
     }
@@ -236,7 +252,13 @@ private:
   {
     using Microsoft::VisualStudio::CppUnitTestFramework::Assert;
     ++m_digests;
-    m_answers.Check(m_name, m_digests, _checkpoint.digest, _what + L": the digest");
+    const StateDumps& dumps = StateDumps::Run();
+    dumps.Point(m_rig.State(), "twins", m_name, m_digests);
+    if (dumps.Mode() == DigestMode::Check)
+    {
+      m_answers.Check(m_name, m_digests, _checkpoint.digest, _what + L": the digest");
+    }
+    m_digestsGiven.push_back(_checkpoint.digest);
     if (m_recording)
     {
       m_recordedPictures.push_back(_checkpoint.picture);
@@ -263,6 +285,10 @@ private:
     {
       Assert::Fail(failure.c_str());
     }
+    if (dumps.Mode() == DigestMode::Rebase && (*picture != _checkpoint.picture || *outcomes != _checkpoint.outcomes))
+    {
+      Assert::Fail((point + L": the picture or the outcomes differ, and a re-base needs every one as recorded").c_str());
+    }
   }
 
   [[nodiscard]] static std::wstring Widen(std::string_view _text)
@@ -279,6 +305,7 @@ private:
   int m_exceptions = 0;                        // std::uncaught_exceptions() when the twin was made
   std::vector<std::string> m_recordedPictures; // while recording, the pictures by ordinal from 1
   std::vector<std::string> m_recordedOutcomes; // while recording, the outcomes by ordinal from 1
+  std::vector<std::string> m_digestsGiven;     // the state digests, by ordinal from 1, which a re-base records
   std::size_t m_digests = 0;                   // the twin's digests so far, the last one's ordinal
   ReferenceRig m_rig;
   Elite::ReplayPlayer m_player;

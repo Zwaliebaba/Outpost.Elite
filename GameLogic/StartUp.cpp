@@ -32,13 +32,6 @@ constexpr std::uint8_t KEYBOARD_VECTOR = 0x09;
 constexpr std::uint8_t CHEAT_KEY = 0xAA;
 constexpr std::uint8_t CHEAT_ARGUMENT_BYTES = 6; // ' cheat'
 
-constexpr std::uint8_t VIDEO_MODE_TEXT_40 = 0x00; // 40x25 text, the colour burst off
-constexpr std::uint8_t CGA_VERTICAL_RETRACE = 0x08;
-constexpr std::uint8_t QUESTION_MASK = 0x3F; // 64 questions
-constexpr std::uint16_t QUESTION_KEY = 0x6161;
-constexpr std::uint8_t UPPER_CASE_MASK = 0xDF;
-constexpr std::uint8_t NO_QUESTION = 0xFF;
-
 constexpr std::uint16_t NEW_GAME_ENERGY = 0x3FF;
 constexpr std::uint8_t FULL_SHIELD = 0xFF;
 constexpr std::uint8_t NEW_GAME_CABIN_TEMPERATURE = 0x0C;
@@ -52,8 +45,6 @@ constexpr std::uint16_t CRITICAL_ERROR_INTERRUPT = 0x02F0;
 constexpr std::uint16_t RESTART_PLAY = 0x003B;
 constexpr std::uint16_t GAME_LOOP = 0x7D30;
 constexpr std::uint16_t EXIT_KEY_DRAIN = 0x00B9;
-constexpr std::uint16_t RETRACE_POLL = 0x04C1;
-constexpr std::uint16_t UPPER_CASE_LOOP = 0x0529;
 constexpr std::uint16_t CREDITS_LINE = 0x8F0E;
 constexpr std::uint16_t CREDITS_WAIT = 0x8F2B;
 
@@ -62,9 +53,6 @@ constexpr std::uint16_t AMSTRAD_ROM_SEGMENT = 0xFC00;
 constexpr std::uint16_t AMSTRAD_ROM_SIGNATURE = 0x0016;
 constexpr std::uint16_t AMSTRAD_SIGNATURE_BYTES = 7;
 constexpr std::uint8_t VIDEO_MODE_TEXT_80 = 0x02; // 80x25 text
-// WipeProgram: the code segment from just past it to the end of the program.
-constexpr std::uint16_t WIPE_FIRST = 0x0564;
-constexpr std::uint16_t WIPE_END = 0x8F31;
 
 constexpr std::uint16_t CREDITS_FIRST_LINE = 0x202;
 constexpr std::uint16_t CREDITS_LINES = 9;
@@ -93,7 +81,7 @@ std::uint16_t MoveBytes(GameState& _state, std::uint16_t _sourceSegment, std::ui
 void ExitToDos(GameState& _state, Hardware& _hardware)
 {
   _hardware.SetVideoMode(VIDEO_MODE_TEXT_80);
-  _hardware.PrintDosString(_state.DataSegment(), DS.exitMessage.offset);
+  _hardware.PrintDosString(_state.DataSegment(), _state.OffsetOf(_state.Data().exitMessage));
   // At the jump back the original holds in AX the key int 16h took out, and the next turn reads no register before it writes
   // it but DX, the message, which does not change. Every turn takes a key, a change paced time sees, so no turn idles.
   while (_hardware.PeekBiosKey().has_value())
@@ -107,13 +95,8 @@ void ExitToDos(GameState& _state, Hardware& _hardware)
 
 void InstallDivideAndKeyboardInterrupts(GameState& _state, Hardware& _hardware)
 {
-  // The BIOS's int 0 and int 9 kept in the data segment, offset then segment.
-  const FarAddress divide = _hardware.InterruptVector(DIVIDE_VECTOR);
-  const FarAddress keyboard = _hardware.InterruptVector(KEYBOARD_VECTOR);
-  _state.SetWord(DS.savedDivideVector.offset, divide.offset);
-  _state.Set(DS.data226D, divide.segment);
-  _state.SetWord(DS.savedKeyboardVector.offset, keyboard.offset);
-  _state.Set(DS.data2271, keyboard.segment);
+  // The original keeps the BIOS's int 0 and int 9 in savedDivideVector and savedKeyboardVector to put back; native code puts
+  // back the BIOS's own (RestoreDivideAndKeyboardInterrupts).
   // With interrupts off, the game's own handlers installed, and int 8's segment written again.
   _hardware.DisableInterrupts();
   const std::uint16_t code = _state.CodeSegment();
@@ -124,12 +107,12 @@ void InstallDivideAndKeyboardInterrupts(GameState& _state, Hardware& _hardware)
   ResetKeyboard(_state, _hardware);
 }
 
-void RestoreDivideAndKeyboardInterrupts(GameState& _state, Hardware& _hardware)
+void RestoreDivideAndKeyboardInterrupts(Hardware& _hardware)
 {
-  // With interrupts off, the BIOS's int 9 and int 0 put back from what InstallDivideAndKeyboardInterrupts kept.
+  // With interrupts off, the BIOS's int 9 and int 0 put back.
   _hardware.DisableInterrupts();
-  _hardware.SetInterruptVector(KEYBOARD_VECTOR, FarAddress{_state.Get(DS.data2271), _state.Word(DS.savedKeyboardVector.offset)});
-  _hardware.SetInterruptVector(DIVIDE_VECTOR, FarAddress{_state.Get(DS.data226D), _state.Word(DS.savedDivideVector.offset)});
+  _hardware.SetInterruptVector(KEYBOARD_VECTOR, _hardware.BiosInterruptVector(KEYBOARD_VECTOR));
+  _hardware.SetInterruptVector(DIVIDE_VECTOR, _hardware.BiosInterruptVector(DIVIDE_VECTOR));
   _hardware.EnableInterrupts();
 }
 
@@ -145,7 +128,7 @@ void CheckCheatArgument(GameState& _state, const Hardware& _hardware)
   }
   for (std::uint16_t at = 0; at < CHEAT_ARGUMENT_BYTES; ++at)
   {
-    const auto expected = static_cast<std::uint8_t>(_state.Byte(Offset(DS.cheatArgumentKey.offset, at)) ^ CHEAT_KEY);
+    const auto expected = static_cast<std::uint8_t>(_state.Data().cheatArgumentKey[at] ^ CHEAT_KEY);
     if (static_cast<std::uint8_t>(tail[at]) != expected)
     {
       return;
@@ -154,71 +137,12 @@ void CheckCheatArgument(GameState& _state, const Hardware& _hardware)
   _state.Data().cheatEnabled = 1;
 }
 
-void CopyProtection(GameState& _state, Hardware& _hardware)
-{
-  if (_state.Data().protectionShown != 0)
-  {
-    return;
-  }
-  _state.Data().protectionShown = 1;
-  _hardware.SetVideoMode(VIDEO_MODE_TEXT_40);
-  const std::uint16_t descriptor = _state.Get(DS.protectionDescriptor);
-  _hardware.PrintDosString(_state.DataSegment(), _state.Word(descriptor));
-
-  // The question depends on how long the random generator runs before a vertical retrace. At the jump back the original
-  // holds the status it read, masked, in AL; the next turn reads no register before it writes it but DX, the port.
-  for (;;)
-  {
-    static_cast<void>(NextRandom(_state));
-    const auto retrace = static_cast<std::uint8_t>(_hardware.CgaStatus() & CGA_VERTICAL_RETRACE);
-    if (retrace != 0)
-    {
-      break;
-    }
-    _hardware.LoopTurn(RETRACE_POLL, {retrace});
-  }
-  const auto index = static_cast<std::uint8_t>(Low(NextRandom(_state)) & QUESTION_MASK);
-  const auto question = static_cast<std::uint8_t>(index + 1);
-  _state.Data().protectionQuestion = question;
-
-  // The question's three words (page, line, word), each XORed with its number in both bytes and 6161h, into the prompt.
-  const auto words = static_cast<std::uint16_t>(_state.Word(Offset(descriptor, 8)) + static_cast<std::uint8_t>(index * 3) * 2);
-  const auto key = static_cast<std::uint16_t>(Join(question, question) ^ QUESTION_KEY);
-  for (std::uint16_t field = 0; field < 3; ++field)
-  {
-    const auto word = static_cast<std::uint16_t>(key ^ _state.Word(Offset(words, static_cast<std::uint16_t>(field * 2))));
-    _state.SetWord(_state.Word(Offset(descriptor, static_cast<std::uint16_t>(2 + field * 2))), word);
-  }
-  _hardware.PrintDosString(_state.DataSegment(), _state.Word(Offset(descriptor, 2)));
-
-  // The answer typed, upper-cased in place: LOOP back with DI at the character done and CX the count left, which the next
-  // turn reads.
-  _hardware.ReadDosLine(_state.DataSegment(), DS.protectionInput.offset);
-  std::uint16_t at = DS.data25CA.offset;
-  const std::uint8_t typed = _state.Byte(at);
-  if (typed != 0)
-  {
-    for (std::uint16_t left = typed;;)
-    {
-      at = Offset(at, 1);
-      _state.SetByte(at, static_cast<std::uint8_t>(_state.Byte(at) & UPPER_CASE_MASK));
-      if (--left == 0)
-      {
-        break;
-      }
-      _hardware.LoopTurn(UPPER_CASE_LOOP, {at, left});
-    }
-  }
-  WaitForTimerTick(_state, _hardware);
-  _state.Data().protectionAnswerCorrect = 1;
-  _state.Data().protectionQuestion = NO_QUESTION;
-}
-
 void StartNewGame(GameState& _state, bool _backward)
 {
   // REP MOVSB from DS to ES = DS.
   const std::uint16_t data = _state.DataSegment();
-  MoveBytes(_state, data, DS.startupCommander.offset, data, DS.commanderBlock.offset, _state.Data().commanderFileBytes, _backward);
+  MoveBytes(_state, data, _state.OffsetOf(_state.Data().startupCommander), data, _state.OffsetOf(_state.Data().commanderBlock),
+            _state.Data().commanderFileBytes, _backward);
   _state.Data().commanderBlock.witchspaceCountdown = 0;
   _state.Data().playerEnergy = NEW_GAME_ENERGY;
   _state.Data().foreShield = FULL_SHIELD;
@@ -249,12 +173,12 @@ void StartNewGame(GameState& _state, bool _backward)
 
 void Start(GameState& _state, Hardware& _hardware, std::uint16_t _psp, std::uint16_t _countIfNone, bool _backward)
 {
-  _state.Set(DS.pspSegment, _psp);
+  // The original keeps _psp in pspSegment to read its command tail from; the platform gives the tail (CheckCheatArgument).
   // MOV AX,DS / MOV AH,30h: AL goes in as the PSP's low byte.
   if (_hardware.ReadDosVersion(Low(_psp)).major == 0)
   {
     // DOS 1 reports no major version, and is not enough.
-    _hardware.PrintDosString(_state.DataSegment(), DS.dosVersionMessage.offset);
+    _hardware.PrintDosString(_state.DataSegment(), _state.OffsetOf(_state.Data().dosVersionMessage));
     ExitToDos(_state, _hardware);
     return;
   }
@@ -264,8 +188,7 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _psp, std::uint
   std::uint16_t bytesLeft = AMSTRAD_SIGNATURE_BYTES;
   for (std::uint16_t at = 0; bytesLeft != 0;)
   {
-    const bool same =
-      _state.Byte(Offset(DS.amstradSignature.offset, at)) == _hardware.RomByte(AMSTRAD_ROM_SEGMENT, Offset(AMSTRAD_ROM_SIGNATURE, at));
+    const bool same = _state.Data().amstradSignature[at] == _hardware.RomByte(AMSTRAD_ROM_SEGMENT, Offset(AMSTRAD_ROM_SIGNATURE, at));
     ++at;
     --bytesLeft;
     if (!same)
@@ -288,7 +211,7 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _psp, std::uint
     (void)_hardware.ReadDosTime();
     (void)_hardware.ReadDosTime();
     InstallTimerInterrupt(_state, _hardware);
-    CopyProtection(_state, _hardware);
+    // CopyProtection (CS:04A3) came here: it does nothing once protectionShown is set, as the D5 byte sets it (ADR-001).
     InstallDivideAndKeyboardInterrupts(_state, _hardware);
     CheckCheatArgument(_state, _hardware);
     const GameLoopExit loopExit = GameLoop(_state, _hardware, countIfNone, backward);
@@ -296,12 +219,12 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _psp, std::uint
     backward = loopExit.backward;
 
     // HandleDiskRequest (CS:0065): GameLoop comes back only for diskOperation, 0 to leave.
-    RestoreDivideAndKeyboardInterrupts(_state, _hardware);
+    RestoreDivideAndKeyboardInterrupts(_hardware);
     const BiosClock clock = RestoreTimerInterrupt(_state, _hardware);
     const std::uint8_t request = _state.Data().diskOperation;
     if (request == 0)
     {
-      WipeProgram(_state, _hardware, backward);
+      WipeProgram(_hardware);
       ExitToDos(_state, _hardware);
       return;
     }
@@ -317,18 +240,9 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _psp, std::uint
   }
 }
 
-void WipeProgram(GameState& _state, Hardware& _hardware, bool _backward)
+void WipeProgram(Hardware& _hardware)
 {
   _hardware.DisableInterrupts();
-  // REP STOSB of AL, the code segment's low byte, CX = 8F31h - 0564h times from DI = 0564h.
-  const std::uint8_t fill = Low(_state.CodeSegment());
-  const auto step = static_cast<std::uint16_t>(_backward ? 0xFFFF : 1);
-  std::uint16_t at = WIPE_FIRST;
-  for (auto left = static_cast<std::uint16_t>(WIPE_END - WIPE_FIRST); left != 0; --left)
-  {
-    _state.SetCodeByte(at, fill);
-    at = Offset(at, step);
-  }
 }
 
 GameLoopExit GameLoop(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward)
@@ -365,18 +279,19 @@ void ShowCredits(GameState& _state, Hardware& _hardware, bool _backward)
   ClearDrawBuffer(_state, _backward);
   // Each line from SI, one past the last line's NUL, at DI, a row of characters below the last line's start. The original pushes
   // and pops the count and the place round the print; its LOOP's turns carry the count, the text and the place.
-  std::uint16_t text = DS.creditsScreenText.offset;
+  std::string_view text = _state.TextAt(_state.Data().creditsScreenText);
   std::uint16_t place = CREDITS_FIRST_LINE;
   for (std::uint16_t linesLeft = CREDITS_LINES;;)
   {
     _state.Data().textPaperPattern = 0;
-    text = Offset(DrawViewString(_state, text, WHITE_MASK, place).end, 1);
+    (void)DrawViewString(_state, text, WHITE_MASK, place);
+    text = _state.TextAfter(text);
     place = Offset(place, CREDITS_LINE_STEP);
     if (--linesLeft == 0)
     {
       break;
     }
-    _hardware.LoopTurn(CREDITS_LINE, {linesLeft, text, place});
+    _hardware.LoopTurn(CREDITS_LINE, {linesLeft, _state.OffsetOf(*text.data()), place});
   }
   FinishSpaceViewFrame(_state, _hardware);
   // WaitForTimerTick keeps every register; the LOOP's turns carry the ticks left.
@@ -395,10 +310,10 @@ void ShowCredits(GameState& _state, Hardware& _hardware, bool _backward)
 
 void StartEntry(Guest& _guest)
 {
-  // DOS leaves the PSP's segment in DS, which the original saves in pspSegment, and BP and the direction flag as Start takes
-  // them. Its first instructions push the far return to PSP:0000, where DOS's INT 20h ends the program, for its RETF to take
+  // DOS leaves the PSP's segment in DS, which the original saves in pspSegment, BP as Start takes it, and the direction flag
+  // clear. Its first instructions push the far return to PSP:0000, where DOS's INT 20h ends the program, for its RETF to take
   // once Start returns; on the platform the program ends when Start returns.
-  Start(_guest.State(), _guest.Devices(), _guest.PspSegment(), Guest::EntryBasePointer(), _guest.Backward());
+  Start(_guest.State(), _guest.Devices(), _guest.PspSegment(), Guest::EntryBasePointer(), false);
 }
 
 namespace

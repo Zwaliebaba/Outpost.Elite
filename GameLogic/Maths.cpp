@@ -13,17 +13,10 @@ namespace Elite
 namespace
 {
 
-// DivideOverflowInterrupt's scratch words in the code segment, which it writes before anything else.
-constexpr std::uint16_t DIVIDE_SAVED_BX_OFFSET = 0x02A1;
-constexpr std::uint16_t DIVIDE_SAVED_DS_OFFSET = 0x02A3;
-// What it leaves in AX after a word divide overflows: the positive maximum (plan §7.1).
+// What DivideOverflowInterrupt leaves in AX after a word divide overflows: the positive maximum (plan §7.1).
 constexpr std::uint16_t DIVIDE_OVERFLOW_WORD = 0x7FFF;
 // What it leaves in AL after a byte divide overflows.
 constexpr std::uint8_t DIVIDE_OVERFLOW_BYTE = 0x7F;
-// The bits of the word at a return address that say DIV or IDIV: F6/F7 with reg 6 or 7.
-constexpr std::uint16_t DIVIDE_OPCODE_MASK = 0x30FE;
-constexpr std::uint16_t DIVIDE_OPCODE = 0x30F6;
-constexpr std::uint16_t REGISTER_DIVIDE_BYTES = 2;
 
 constexpr std::uint16_t ANGLE_MASK = 0x7FF;       // 2048 to a turn
 constexpr std::uint16_t QUARTER_TURN = 0x200;     // in 2048ths
@@ -38,8 +31,8 @@ constexpr std::uint16_t TANGENT_TOP_BYTES = 0x1FE;
 constexpr std::uint32_t MASK_24_BITS = 0xFFFFFF;
 constexpr std::uint32_t SIGN_24_BITS = 0x800000;
 constexpr std::uint16_t SCALED_POSITION_LIMIT = 0x24B8; // GetPositionScaleShift's ceiling
-// ScaleByInverseDistance's divide, and the instruction after it.
-constexpr std::uint16_t SCALE_DIVIDE_RETURN = 0x40E2;
+// ScaleByInverseDistance's divide, DIV BX at CS:40E0, a word divide's opcode.
+constexpr DivideTrap SCALE_DIVIDE_TRAP = DivideTrap::Word;
 constexpr std::uint16_t SCALE_LIMIT = 0xFF;
 
 // imul, then shl ax,1 / rcl dx,1 / shl ax,1 / adc dx,0: the high word of 2ab, rounded on the bit below.
@@ -75,27 +68,6 @@ constexpr std::uint16_t SCALE_LIMIT = 0xFF;
   return (_value & SIGN_24_BITS) != 0 ? (0u - _value) & MASK_24_BITS : _value;
 }
 
-// What DivideOverflowInterrupt does first, whatever the divide: BX and DS kept in the code segment.
-void SaveDivideRegisters(GameState& _state, std::uint16_t _bx, std::uint16_t _ds)
-{
-  _state.SetCodeWord(DIVIDE_SAVED_BX_OFFSET, _bx);
-  _state.SetCodeWord(DIVIDE_SAVED_DS_OFFSET, _ds);
-}
-
-// DivideOverflowInterrupt after its saves, for a divide whose return address is _segment:_offset: AX as it leaves AX = _ax, by
-// the opcode before the offset it resumes at.
-[[nodiscard]] std::uint16_t SaturateDivide(const GameState& _state, std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _ax)
-{
-  std::uint16_t resume = _offset;
-  if ((_state.FarWord(_segment, _offset) & DIVIDE_OPCODE_MASK) == DIVIDE_OPCODE)
-  {
-    resume = static_cast<std::uint16_t>(resume + REGISTER_DIVIDE_BYTES);
-  }
-  // Two bytes back: the opcode of a register divide, but the ModRM byte of a memory one.
-  const std::uint8_t opcode = _state.FarByte(_segment, static_cast<std::uint16_t>(resume - REGISTER_DIVIDE_BYTES));
-  return (opcode & 1) != 0 ? DIVIDE_OVERFLOW_WORD : WithLow(_ax, DIVIDE_OVERFLOW_BYTE);
-}
-
 [[nodiscard]] std::uint16_t Word(std::int16_t _value) noexcept
 {
   return static_cast<std::uint16_t>(_value);
@@ -110,47 +82,40 @@ void SaveDivideRegisters(GameState& _state, std::uint16_t _bx, std::uint16_t _ds
 
 // ── The routines ──
 
-std::uint16_t DivideOverflowInterrupt(GameState& _state, std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _ax,
-                                      std::uint16_t _bx)
+std::uint16_t DivideOverflowInterrupt(DivideTrap _trap, std::uint16_t _ax)
 {
-  SaveDivideRegisters(_state, _bx, _state.DataSegment());
-  return SaturateDivide(_state, _segment, _offset, _ax);
+  return _trap == DivideTrap::Word ? DIVIDE_OVERFLOW_WORD : WithLow(_ax, DIVIDE_OVERFLOW_BYTE);
 }
 
-WordQuotient DivideUnsigned(GameState& _state, std::uint32_t _dividend, std::uint16_t _divisor, std::uint16_t _returnOffset,
-                            std::uint16_t _bx)
+WordQuotient DivideUnsigned(std::uint32_t _dividend, std::uint16_t _divisor, DivideTrap _trap)
 {
   if (_divisor == 0 || _dividend / _divisor > 0xFFFF)
   {
-    const std::uint16_t ax =
-      DivideOverflowInterrupt(_state, _state.CodeSegment(), _returnOffset, static_cast<std::uint16_t>(_dividend), _bx);
-    return WordQuotient{ax, static_cast<std::uint16_t>(_dividend >> 16)};
+    return WordQuotient{DivideOverflowInterrupt(_trap, static_cast<std::uint16_t>(_dividend)), static_cast<std::uint16_t>(_dividend >> 16)};
   }
   return WordQuotient{static_cast<std::uint16_t>(_dividend / _divisor), static_cast<std::uint16_t>(_dividend % _divisor)};
 }
 
-ByteQuotient DivideByte(GameState& _state, std::uint16_t _dividend, std::uint8_t _divisor, std::uint16_t _bx)
+ByteQuotient DivideByte(std::uint16_t _dividend, std::uint8_t _divisor)
 {
   if (High(_dividend) >= _divisor)
   {
-    SaveDivideRegisters(_state, _bx, _state.DataSegment());
     return ByteQuotient{DIVIDE_OVERFLOW_BYTE, High(_dividend)};
   }
   return ByteQuotient{static_cast<std::uint8_t>(_dividend / _divisor), static_cast<std::uint8_t>(_dividend % _divisor)};
 }
 
-WordQuotient DivideWord(GameState& _state, std::uint32_t _dividend, std::uint16_t _divisor, std::uint16_t _bx)
+WordQuotient DivideWord(std::uint32_t _dividend, std::uint16_t _divisor)
 {
   const auto high = static_cast<std::uint16_t>(_dividend >> 16);
   if (high >= _divisor)
   {
-    SaveDivideRegisters(_state, _bx, _state.DataSegment());
     return WordQuotient{DIVIDE_OVERFLOW_WORD, high};
   }
   return WordQuotient{static_cast<std::uint16_t>(_dividend / _divisor), static_cast<std::uint16_t>(_dividend % _divisor)};
 }
 
-WordQuotient DivideSignedWord(GameState& _state, std::uint32_t _dividend, std::uint16_t _divisor, std::uint16_t _bx)
+WordQuotient DivideSignedWord(std::uint32_t _dividend, std::uint16_t _divisor)
 {
   const bool dividendNegative = (_dividend & 0x80000000u) != 0;
   const bool divisorNegative = SignWord(_divisor) != 0;
@@ -159,7 +124,6 @@ WordQuotient DivideSignedWord(GameState& _state, std::uint32_t _dividend, std::u
   const std::uint32_t quotient = (dividendMagnitude >> 16) >= divisorMagnitude ? 0x8000u : dividendMagnitude / divisorMagnitude;
   if ((quotient & 0x8000u) != 0)
   {
-    SaveDivideRegisters(_state, _bx, _state.DataSegment());
     return WordQuotient{DIVIDE_OVERFLOW_WORD, static_cast<std::uint16_t>(_dividend >> 16)};
   }
   const std::uint32_t remainder = dividendMagnitude % divisorMagnitude;
@@ -189,9 +153,9 @@ SinCos SinCosOf(const GameState& _state, std::uint16_t _angle)
 SinCos SetSinCos(GameState& _state, std::size_t _pair, std::uint16_t _angle)
 {
   const SinCos pair = SinCosOf(_state, _angle);
-  const std::uint16_t at = DS.rotationSinCos.At(_pair);
-  _state.SetWord(at, Word(pair.sine));
-  _state.SetWord(static_cast<std::uint16_t>(at + 2), Word(pair.cosine));
+  Counted<std::uint8_t>(&stored)[4] = _state.Data().rotationSinCos[_pair];
+  SetWordIn(stored, 0, Word(pair.sine));
+  SetWordIn(stored, 2, Word(pair.cosine));
   return pair;
 }
 
@@ -208,8 +172,8 @@ Pair RotateBySinCos(Pair _point, SinCos _by)
 
 Pair RotateByStoredSinCos(const GameState& _state, std::size_t _pair, Pair _point)
 {
-  const std::uint16_t at = DS.rotationSinCos.At(_pair);
-  return RotateBySinCos(_point, SinCos{Signed(_state.Word(at)), Signed(_state.Word(static_cast<std::uint16_t>(at + 2)))});
+  const Counted<std::uint8_t>(&stored)[4] = _state.Data().rotationSinCos[_pair];
+  return RotateBySinCos(_point, SinCos{Signed(WordIn(stored, 0)), Signed(WordIn(stored, 2))});
 }
 
 std::uint16_t ArcTangent2(GameState& _state, std::int16_t _a, std::int16_t _b)
@@ -240,7 +204,6 @@ std::uint16_t RatioArcTangent(GameState& _state, std::uint16_t _numerator, std::
   const std::uint32_t dividend = std::uint32_t{_numerator} << 15;
   if (_denominator == 0 || dividend / _denominator > 0xFFFF)
   {
-    SaveDivideRegisters(_state, _denominator, _state.DataSegment());
     return EIGHTH_TURN;
   }
   const auto ratio = static_cast<std::uint16_t>(dividend / _denominator);
@@ -256,7 +219,7 @@ std::uint16_t RatioArcTangent(GameState& _state, std::uint16_t _numerator, std::
   for (std::uint16_t steps = TANGENT_SEARCH_STEPS; steps != 0; --steps)
   {
     middle = static_cast<std::uint16_t>(((low + high) >> 1) & 0xFFFE);
-    const std::uint16_t tangent = _state.Word(static_cast<std::uint16_t>(DS.tangentTable.offset + middle));
+    const std::uint16_t tangent = _state.Data().tangentTable[middle >> 1];
     if (tangent == ratio)
     {
       break;
@@ -353,7 +316,7 @@ Vector RotateBySinCos7210(GameState& _state, Vector _vector)
   return Vector{xz.first, rotatedYz.first, rotatedYz.second};
 }
 
-std::uint16_t ScaleByInverseDistance(GameState& _state, const SpaceObject& _slot, std::uint32_t _value)
+std::uint16_t ScaleByInverseDistance(const SpaceObject& _slot, std::uint32_t _value)
 {
   const std::uint32_t sum = Square(_slot.viewX) + Square(_slot.viewY) + Square(_slot.viewZ);
   // One more than the root of the high word, counted in the divisor's high byte: a count of 256 wraps to 0.
@@ -377,8 +340,7 @@ std::uint16_t ScaleByInverseDistance(GameState& _state, const SpaceObject& _slot
   std::uint16_t scaled = 0;
   if (divisor == 0 || dividend / divisor > 0xFFFF)
   {
-    SaveDivideRegisters(_state, divisor, _state.DataSegment());
-    scaled = SaturateDivide(_state, _state.CodeSegment(), SCALE_DIVIDE_RETURN, static_cast<std::uint16_t>(dividend));
+    scaled = DivideOverflowInterrupt(SCALE_DIVIDE_TRAP, static_cast<std::uint16_t>(dividend));
   }
   else
   {

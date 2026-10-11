@@ -6,6 +6,7 @@
 #include "DataOverlay.h"
 #include "Docked.h"
 #include "Input.h"
+#include "SaveLoadTables.h"
 #include "Text.h"
 
 namespace Elite
@@ -39,23 +40,7 @@ constexpr std::uint16_t NEXT_NAME_CHARACTER = 0x688C;
 constexpr std::uint16_t APPEND_EXTENSION = 0x68C4;
 
 // Its texts, NUL-terminated. Two of them run on into a second line, which the menu prints with INC SI.
-constexpr std::uint16_t RETRY_TEXT = 0x86B0;            // "ERROR: Retry (Y/N)?"
-constexpr std::uint16_t BLANK_STATUS_TEXT = 0x86C4;     // 20 spaces
-constexpr std::uint16_t EXIT_QUESTION_TEXT = 0x869C;    // "Are you sure (Y/N)?"
-constexpr std::uint16_t DEVICE_TEXT = 0x8667;           // "DEVICE: "
-constexpr std::uint16_t FILE_NAME_PROMPT_TEXT = 0x8676; // "FILENAME?"
-constexpr std::uint16_t COMMANDER_EXTENSION = 0x8697;   // ".CDR"
-constexpr std::uint16_t CATALOGUE_OK_TEXT = 0x8708;     // "OK"
-constexpr std::uint16_t NO_MOUSE_TEXT = 0x870B;         // "ERROR: No Mouse!"
-constexpr std::uint16_t MOUSE_HELP_TEXT = 0x8720;       // two lines
-constexpr std::uint16_t NO_JOYSTICK_TEXT = 0x875F;      // "ERROR: No Joystick!"
-constexpr std::uint16_t JOYSTICK_HELP_TEXT = 0x8774;    // two lines
-constexpr std::uint16_t JOYSTICK_TITLE_TEXT = 0x87BA;   // "Joystick Detection"
-constexpr std::uint16_t MOVE_JOYSTICK_TEXT = 0x87CF;
-constexpr std::uint16_t CENTER_JOYSTICK_TEXT = 0x87F0;
-constexpr std::uint16_t BLANK_LINE_TEXT = 0x8811;      // 36 spaces
-constexpr std::uint16_t JOYSTICK_TYPE_TEXT = 0x8838;   // "I..IBM  A..Amstrad ?"
-constexpr std::uint16_t FILE_NAME_ERROR_TEXT = 0x884E; // "FILENAME ERROR"
+constexpr std::uint16_t COMMANDER_EXTENSION = 0x8697; // ".CDR"
 
 // Where it prints on the 40-column text page, 80 bytes a row.
 constexpr std::uint16_t TITLE_POSITION = 0x0054;
@@ -132,7 +117,8 @@ void CloseAndFail(GameState& _state, Hardware& _hardware, std::uint16_t _error)
 void LoadCommanderFile(GameState& _state, Hardware& _hardware)
 {
   const std::uint16_t data = _state.DataSegment();
-  const DosFileAttributes attributes = _hardware.ReadFileAttributes(data, DS.commanderFileName.offset);
+  const std::uint16_t name = _state.OffsetOf(_state.Data().commanderFileName);
+  const DosFileAttributes attributes = _hardware.ReadFileAttributes(data, name);
   if (attributes.answer.failed)
   {
     Fail(_state, attributes.answer.value);
@@ -143,14 +129,15 @@ void LoadCommanderFile(GameState& _state, Hardware& _hardware)
     _state.Data().diskError = 1;
     return;
   }
-  const DosAnswer opened = _hardware.OpenFile(data, DS.commanderFileName.offset, READ_ACCESS);
+  const DosAnswer opened = _hardware.OpenFile(data, name, READ_ACCESS);
   if (opened.failed)
   {
     Fail(_state, opened.value);
     return;
   }
   _state.Data().fileHandle = opened.value;
-  const DosAnswer read = _hardware.ReadFile(_state.Data().fileHandle, data, DS.commanderBlock.offset, _state.Data().commanderFileBytes);
+  const DosAnswer read =
+    _hardware.ReadFile(_state.Data().fileHandle, data, _state.OffsetOf(_state.Data().commanderBlock), _state.Data().commanderFileBytes);
   if (read.failed)
   {
     CloseAndFail(_state, _hardware, read.value);
@@ -167,14 +154,16 @@ void LoadCommanderFile(GameState& _state, Hardware& _hardware)
 void SaveCommanderFile(GameState& _state, Hardware& _hardware)
 {
   const std::uint16_t data = _state.DataSegment();
-  const DosAnswer created = _hardware.CreateFile(data, DS.commanderFileName.offset, NO_ATTRIBUTES);
+  const std::uint16_t name = _state.OffsetOf(_state.Data().commanderFileName);
+  const DosAnswer created = _hardware.CreateFile(data, name, NO_ATTRIBUTES);
   if (created.failed)
   {
     Fail(_state, created.value);
     return;
   }
   _state.Data().fileHandle = created.value;
-  const DosAnswer written = _hardware.WriteFile(_state.Data().fileHandle, data, DS.commanderBlock.offset, _state.Data().commanderFileBytes);
+  const DosAnswer written =
+    _hardware.WriteFile(_state.Data().fileHandle, data, _state.OffsetOf(_state.Data().commanderBlock), _state.Data().commanderFileBytes);
   if (written.failed)
   {
     CloseAndFail(_state, _hardware, written.value);
@@ -186,7 +175,7 @@ void SaveCommanderFile(GameState& _state, Hardware& _hardware)
     Fail(_state, closed.value);
     return;
   }
-  const DosAnswer cleared = _hardware.SetFileAttributes(data, DS.commanderFileName.offset, NO_ATTRIBUTES);
+  const DosAnswer cleared = _hardware.SetFileAttributes(data, name, NO_ATTRIBUTES);
   if (cleared.failed)
   {
     Fail(_state, cleared.value);
@@ -198,22 +187,24 @@ void SaveCommanderFile(GameState& _state, Hardware& _hardware)
 void ListCommanderFiles(GameState& _state, Hardware& _hardware, std::uint16_t _attributes)
 {
   _state.Data().commanderFileCount = 0;
-  _state.Set(DS.commanderFileListNext, DS.commanderFileList.offset);
-  DosAnswer found = _hardware.FindFirstFile(_state.DataSegment(), DS.commanderFilePattern.offset, _attributes);
+  _state.Data().commanderFileListNext = 0;
+  DosAnswer found = _hardware.FindFirstFile(_state.DataSegment(), _state.OffsetOf(_state.Data().commanderFilePattern), _attributes);
   while (!found.failed)
   {
     if (_state.Data().diskTransferArea[FOUND_ATTRIBUTE] == 0)
     {
-      std::uint16_t from = DS.diskTransferArea.At(FOUND_NAME);
-      std::uint16_t to = _state.Get(DS.commanderFileListNext);
-      for (std::uint8_t character = _state.Byte(from); character != '.'; character = _state.Byte(from))
+      // The name the search found, up to its '.', at the index in commanderFileList that commanderFileListNext holds.
+      const std::span<const Counted<std::uint8_t>> foundName =
+        std::span<const Counted<std::uint8_t>>(_state.Data().diskTransferArea).subspan(FOUND_NAME);
+      const std::span<Counted<std::uint8_t>> list(_state.Data().commanderFileList);
+      std::size_t to = _state.Data().commanderFileListNext;
+      for (std::size_t from = 0; foundName[from] != '.'; ++from)
       {
-        from = Offset(from, 1);
-        _state.SetByte(to, character);
-        to = Offset(to, 1);
+        list[to] = std::uint8_t{foundName[from]};
+        ++to;
       }
-      _state.SetByte(to, 0);
-      _state.Set(DS.commanderFileListNext, Offset(to, 1));
+      list[to] = 0;
+      _state.Data().commanderFileListNext = static_cast<std::uint16_t>(to + 1);
       const auto count = static_cast<std::uint8_t>(_state.Data().commanderFileCount + 1);
       _state.Data().commanderFileCount = count;
       if (count == MOST_COMMANDER_FILES)
@@ -229,7 +220,7 @@ void ListCommanderFiles(GameState& _state, Hardware& _hardware, std::uint16_t _a
 // DeleteCommanderFile (0x03F2).
 void DeleteCommanderFile(GameState& _state, Hardware& _hardware)
 {
-  const DosAnswer deleted = _hardware.DeleteFile(_state.DataSegment(), DS.commanderFileName.offset);
+  const DosAnswer deleted = _hardware.DeleteFile(_state.DataSegment(), _state.OffsetOf(_state.Data().commanderFileName));
   if (deleted.failed)
   {
     Fail(_state, deleted.value);
@@ -238,8 +229,8 @@ void DeleteCommanderFile(GameState& _state, Hardware& _hardware)
 
 // ---- The disc menu ----
 
-// MOV SI,_text / MOV DI,_position / CALL PrintTextModeString: the text at DS:_text at B800:_position.
-PrintedText PrintAt(GameState& _state, std::uint16_t _text, std::uint16_t _position)
+// MOV SI,_text / MOV DI,_position / CALL PrintTextModeString: _text at B800:_position. Returns the cell after its last.
+std::uint16_t PrintAt(GameState& _state, std::string_view _text, std::uint16_t _position)
 {
   return PrintTextModeString(_state, _text, _position);
 }
@@ -274,7 +265,7 @@ std::uint8_t WaitForEitherKey(GameState& _state, Hardware& _hardware, std::uint1
 }
 
 // The two help rows blanked (CS:6664 and CS:671F). Returns where the second blank stops.
-PrintedText BlankHelpRows(GameState& _state)
+std::uint16_t BlankHelpRows(GameState& _state)
 {
   PrintAt(_state, BLANK_LINE_TEXT, HELP_POSITION);
   return PrintAt(_state, BLANK_LINE_TEXT, SECOND_HELP_POSITION);
@@ -291,33 +282,33 @@ DiscMenuExit LeaveGameLoopForDisk(GameState& _state, std::uint8_t _operation)
   return DiscMenuExit{true, 0, 0};
 }
 
-// Where ShowControlDevice reads the input device's name from, in inputDeviceNames.
-[[nodiscard]] std::uint16_t InputDeviceName(const GameState& _state)
+// The input device's name, which ShowControlDevice reads from inputDeviceNames: the disc menu sets inputDevice to 0, 1 or 2.
+[[nodiscard]] std::string_view InputDeviceName(const GameState& _state)
 {
-  return static_cast<std::uint16_t>((_state.Data().inputDevice << 1) + DS.inputDeviceNames.offset);
+  return INPUT_DEVICE_NAMES[_state.Data().inputDevice];
 }
 
 // ShowControlDevice (CS:6705): "DEVICE:" and the input device's name, and the help rows blanked. Returns where the second
 // blank stops.
-PrintedText ShowControlDevice(GameState& _state)
+std::uint16_t ShowControlDevice(GameState& _state)
 {
-  const PrintedText label = PrintAt(_state, DEVICE_TEXT, STATUS_POSITION);
-  PrintAt(_state, _state.Word(InputDeviceName(_state)), label.nextCell);
+  const std::uint16_t label = PrintAt(_state, DEVICE_TEXT, STATUS_POSITION);
+  PrintTextModeString(_state, InputDeviceName(_state), label);
   return BlankHelpRows(_state);
 }
 
 // The joystick could not be read (CS:67C4), or the Amstrad's never moved: the error, and the help's two lines, or only its
 // first for the Amstrad's. Returns where the last print stops.
-PrintedText ShowNoJoystick(GameState& _state)
+std::uint16_t ShowNoJoystick(GameState& _state)
 {
   PrintAt(_state, NO_JOYSTICK_TEXT, STATUS_POSITION);
-  const PrintedText help = PrintAt(_state, JOYSTICK_HELP_TEXT, HELP_POSITION);
+  const std::uint16_t help = PrintAt(_state, JOYSTICK_HELP_LINES[0], HELP_POSITION);
   if (_state.Data().joystickIsAmstrad == 1)
   {
     return help;
   }
   // INC SI: the second line starts after the first's NUL.
-  return PrintAt(_state, Offset(help.end, 1), SECOND_HELP_POSITION);
+  return PrintAt(_state, JOYSTICK_HELP_LINES[1], SECOND_HELP_POSITION);
 }
 
 // J (CS:6743): which joystick, then the Amstrad's moves or the IBM's centre. True when it is selected, and the menu goes on at
@@ -434,8 +425,8 @@ DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _sh
         continue;
       }
       PrintAt(_state, NO_MOUSE_TEXT, STATUS_POSITION);
-      const PrintedText help = PrintAt(_state, MOUSE_HELP_TEXT, HELP_POSITION);
-      PrintAt(_state, Offset(help.end, 1), SECOND_HELP_POSITION); // INC SI: the second line
+      PrintAt(_state, MOUSE_HELP_LINES[0], HELP_POSITION);
+      PrintAt(_state, MOUSE_HELP_LINES[1], SECOND_HELP_POSITION); // INC SI: the second line
       _hardware.LoopTurn(DISC_CONTROL_KEY_LOOP, {});
       al = 0;
       continue;
@@ -456,7 +447,7 @@ DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _sh
     }
     if (scan == SCAN_V)
     {
-      PrintAt(_state, DS.versionString.offset, HELP_POSITION);
+      PrintAt(_state, _state.TextAt(_state.Data().versionString), HELP_POSITION);
       _hardware.LoopTurn(DISC_CONTROL_KEY_LOOP, {});
       al = 0;
       continue;
@@ -476,48 +467,43 @@ DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _sh
 std::uint8_t ShowDiskResult(GameState& _state, Hardware& _hardware)
 {
   PrintAt(_state, BLANK_STATUS_TEXT, STATUS_POSITION);
-  // BL = diskOperation - 1, BH = 0, doubled: the operation's name in diskOperationNames.
-  const auto name =
-    static_cast<std::uint16_t>((static_cast<std::uint8_t>(_state.Data().diskOperation - 1) << 1) + DS.diskOperationNames.offset);
-  const PrintedText result = PrintAt(_state, _state.Word(name), STATUS_POSITION);
+  // BL = diskOperation - 1, BH = 0, doubled: the operation's name in diskOperationNames. Only operations 1-4 come back to the
+  // disc menu: 0 leaves the game.
+  const std::uint16_t result =
+    PrintTextModeString(_state, DISK_OPERATION_NAMES[static_cast<std::uint8_t>(_state.Data().diskOperation - 1)], STATUS_POSITION);
   if (_state.Data().diskOperation == CATALOGUE_COMMANDERS)
   {
-    PrintAt(_state, CATALOGUE_OK_TEXT, result.nextCell);
+    PrintAt(_state, CATALOGUE_OK_TEXT, result);
     PrintCommanderCatalogue(_state);
     return 0;
   }
   // The name without its extension: a NUL over its '.', which each turn of the search, carrying SI, looks for.
-  std::uint16_t letter = DS.commanderFileName.offset;
-  for (;;)
+  const std::span<Counted<std::uint8_t>> name(_state.Data().commanderFileName);
+  std::size_t letter = 1;
+  for (; name[letter] != '.'; ++letter)
   {
-    letter = Offset(letter, 1);
-    if (_state.Byte(letter) == '.')
-    {
-      break;
-    }
-    _hardware.LoopTurn(FIND_NAME_EXTENSION, {letter});
+    _hardware.LoopTurn(FIND_NAME_EXTENSION, {_state.OffsetOf(name[letter])});
   }
-  _state.SetByte(letter, 0);
-  PrintAt(_state, DS.commanderFileName.offset, result.nextCell);
+  name[letter] = 0;
+  PrintAt(_state, TextIn(name), result);
   if (_state.Data().diskOperation != LOAD_COMMANDER)
   {
     return 0;
   }
   // Its eight bytes copied to defaultCommanderName, the LOOP's turns carrying both places and the count.
-  std::uint16_t from = DS.commanderFileName.offset;
-  std::uint16_t to = DS.defaultCommanderName.offset;
+  const std::span<Counted<std::uint8_t>> commander(_state.Data().commanderBlock.defaultCommanderName);
+  std::size_t from = 0;
   std::uint8_t copied = 0;
   for (std::uint16_t left = MOST_NAME_CHARACTERS;;)
   {
-    copied = _state.Byte(from);
-    _state.SetByte(to, copied);
-    from = Offset(from, 1);
-    to = Offset(to, 1);
+    copied = name[from];
+    commander[from] = copied;
+    ++from;
     if (--left == 0)
     {
       return copied;
     }
-    _hardware.LoopTurn(COPY_LOADED_NAME, {from, to, left});
+    _hardware.LoopTurn(COPY_LOADED_NAME, {_state.OffsetOf(name[from]), _state.OffsetOf(commander[from]), left});
   }
 }
 
@@ -531,7 +517,7 @@ std::uint8_t ShowDiskResult(GameState& _state, Hardware& _hardware)
 
 void PerformDiskRequest(GameState& _state, Hardware& _hardware, std::uint8_t _request, std::uint16_t _attributes)
 {
-  _hardware.SetDiskTransferArea(_state.DataSegment(), DS.diskTransferArea.offset);
+  _hardware.SetDiskTransferArea(_state.DataSegment(), _state.OffsetOf(_state.Data().diskTransferArea));
   // DEC AL until it reaches 0: 1 load, 2 save, 3 delete.
   switch (_request)
   {
@@ -554,8 +540,8 @@ void SaveStartupCommander(GameState& _state, bool _backward)
 {
   // REP MOVSB within the data segment, a byte at a time.
   const auto step = static_cast<std::uint16_t>(_backward ? 0xFFFF : 1);
-  std::uint16_t from = DS.commanderBlock.offset;
-  std::uint16_t to = DS.startupCommander.offset;
+  std::uint16_t from = _state.OffsetOf(_state.Data().commanderBlock);
+  std::uint16_t to = _state.OffsetOf(_state.Data().startupCommander);
   for (std::uint16_t left = _state.Data().commanderFileBytes; left != 0; --left)
   {
     _state.SetByte(to, _state.Byte(from));
@@ -569,16 +555,15 @@ void ShowDiskError(GameState& _state)
   _state.Data().diskError = 0;
   if ((_state.Data().screenLayout & TEXT_LAYOUT_BIT) == 0)
   {
-    DrawScreenString(_state, DS.diskErrorText.offset, ERROR_INK, GameState::VIDEO_SEGMENT, GRAPHICS_ERROR_POSITION);
+    DrawScreenString(_state, _state.TextAt(_state.Data().diskErrorText), ERROR_INK, GameState::VIDEO_SEGMENT, GRAPHICS_ERROR_POSITION);
     return;
   }
   // The characters alone, over the text page's attributes.
-  std::uint16_t from = DS.diskErrorText.offset;
+  const std::span<const Counted<std::uint8_t>> error = _state.BytesFrom(_state.Data().diskErrorText, DISK_ERROR_CHARACTERS);
   std::uint16_t to = TEXT_ERROR_POSITION;
-  for (std::uint16_t left = DISK_ERROR_CHARACTERS; left != 0; --left)
+  for (const Counted<std::uint8_t>& character : error)
   {
-    _state.SetVideoByte(to, _state.Byte(from));
-    from = Offset(from, 1);
+    _state.SetVideoByte(to, character);
     to = Offset(to, 2);
   }
 }
@@ -587,8 +572,8 @@ DiscMenuExit ShowDiscControlScreen(GameState& _state, Hardware& _hardware, bool 
 {
   if (_state.Data().resumeAtDiskMenu == 0)
   {
-    PrintAt(_state, DrawDockedFrame(_state, _hardware, DS.discControlFrame.offset, _backward), TITLE_POSITION);
-    PrintCountedTextLines(_state, DS.discMenuText.offset, MENU_POSITION);
+    PrintAt(_state, DrawDockedFrame(_state, _hardware, _state.Data().discControlFrame, _backward), TITLE_POSITION);
+    PrintCountedTextLines(_state, _state.Data().discMenuText[0], MENU_POSITION);
     return RunDiscControlKeys(_state, _hardware, true, 0);
   }
   // Back from Start's disk work.
@@ -610,19 +595,20 @@ DiscMenuExit ShowDiscControlScreen(GameState& _state, Hardware& _hardware, bool 
 bool PromptCommanderFileName(GameState& _state, Hardware& _hardware)
 {
   PrintAt(_state, FILE_NAME_PROMPT_TEXT, STATUS_POSITION);
-  (void)ReadTextLine(_state, _hardware, DS.commanderFileName.offset, MOST_NAME_CHARACTERS, GameState::VIDEO_SEGMENT, NAME_POSITION);
+  const std::span<Counted<std::uint8_t>> name(_state.Data().commanderFileName);
+  (void)ReadTextLine(_state, _hardware, name, MOST_NAME_CHARACTERS, GameState::VIDEO_SEGMENT, NAME_POSITION);
   // A letter, then letters and digits, folded to upper case, each turn of the check carrying its place.
-  std::uint16_t letter = DS.commanderFileName.offset;
-  auto character = static_cast<std::uint8_t>(_state.Byte(letter) & LOWER_CASE_BIT_CLEAR);
-  if (_state.Byte(letter) == 0 || character < 'A' || character > 'Z')
+  std::size_t letter = 0;
+  auto character = static_cast<std::uint8_t>(name[letter] & LOWER_CASE_BIT_CLEAR);
+  if (name[letter] == 0 || character < 'A' || character > 'Z')
   {
     return false;
   }
-  _state.SetByte(letter, character);
+  name[letter] = character;
   for (;;)
   {
-    letter = Offset(letter, 1);
-    character = _state.Byte(letter);
+    ++letter;
+    character = name[letter];
     if (character == 0)
     {
       break;
@@ -635,22 +621,22 @@ bool PromptCommanderFileName(GameState& _state, Hardware& _hardware)
     {
       return false;
     }
-    _state.SetByte(letter, character);
-    _hardware.LoopTurn(NEXT_NAME_CHARACTER, {letter});
+    name[letter] = character;
+    _hardware.LoopTurn(NEXT_NAME_CHARACTER, {_state.OffsetOf(name[letter])});
   }
-  // ".CDR" and its NUL after the name, the LOOP's turns carrying both places and the count.
-  std::uint16_t extension = COMMANDER_EXTENSION;
-  for (std::uint16_t left = EXTENSION_BYTES;;)
+  // ".CDR" and its NUL after the name, the LOOP's turns carrying both places, SI and DI, and the count.
+  const std::span<const Counted<std::uint8_t>> extension = _state.BytesAt(COMMANDER_EXTENSION, EXTENSION_BYTES);
+  for (std::size_t from = 0, left = EXTENSION_BYTES;;)
   {
-    const std::uint8_t byte = _state.Byte(extension);
-    extension = Offset(extension, 1);
-    _state.SetByte(letter, byte);
-    letter = Offset(letter, 1);
+    name[letter] = std::uint8_t{extension[from]};
+    ++from;
+    ++letter;
     if (--left == 0)
     {
       return true;
     }
-    _hardware.LoopTurn(APPEND_EXTENSION, {extension, letter, left});
+    _hardware.LoopTurn(APPEND_EXTENSION,
+                       {_state.OffsetOf(extension[from]), _state.OffsetOf(name[letter]), static_cast<std::uint16_t>(left)});
   }
 }
 
@@ -662,14 +648,15 @@ void PrintCommanderCatalogue(GameState& _state)
   }
   // Name n at row n mod 10, column n / 10, 9 cells apart: CBW and DIV DL by 10, which cannot overflow, as ListCommanderFiles
   // lists at most 40.
-  std::uint16_t name = DS.commanderFileList.offset;
+  std::string_view name = _state.TextAt(_state.Data().commanderFileList);
   const std::uint8_t count = _state.Data().commanderFileCount;
   for (std::uint8_t index = 0; index < count; ++index)
   {
     const auto column = static_cast<std::uint16_t>(index / CATALOGUE_ROWS);
     const auto row = static_cast<std::uint16_t>(index % CATALOGUE_ROWS);
     const auto cell = static_cast<std::uint16_t>(CATALOGUE_POSITION + column * CATALOGUE_COLUMN_BYTES + row * TEXT_ROW_BYTES);
-    name = Offset(PrintAt(_state, name, cell).end, 1);
+    PrintAt(_state, name, cell);
+    name = _state.TextAfter(name);
   }
 }
 

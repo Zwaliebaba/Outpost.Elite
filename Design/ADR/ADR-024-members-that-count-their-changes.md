@@ -1,6 +1,6 @@
 # ADR-024 — The game's state as members on the 1987 layout, with fields that count their own changes (D33)
 
-**Status:** accepted 2026-10-11, with the change that implements it: `Counted`, the record `SpaceObject`, `GameData` generated from them, and native code converted from `DataOverlay.h`'s `Get`/`Set` to member syntax. It is the first of the natural layout's three changes, piece 3 of D33's route ([Reverse-Engineering-Plan.md §5](../Reverse-Engineering-Plan.md#phase-5--beyond-the-original-outside-this-plan)). It settles the choice ADR-015 item 5 left open.
+**Status:** accepted 2026-10-11, with the change that implements it: `Counted`, the record `SpaceObject`, `GameData` generated from them, and native code converted from `DataOverlay.h`'s `Get`/`Set` to member syntax. It is the first of the natural layout's three changes, piece 3 of D33's route ([Reverse-Engineering-Plan.md §5](../Reverse-Engineering-Plan.md#phase-5--beyond-the-original-outside-this-plan)). It settles the choice ADR-015 item 5 left open. The owner played main at `7242663`, with it, and reported that it works perfectly (2026-10-11).
 
 ## Context
 

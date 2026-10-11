@@ -62,9 +62,9 @@ struct DashboardPixel
   std::uint8_t mask;
 };
 
-/// GetPreviousDustScreenPosition (CS:08A1): where the particle at DS:_particle was in the drawing buffer last frame,
-/// from its entry in stardustPrevious, when it was on screen then.
-[[nodiscard]] std::optional<DustScreenPosition> GetPreviousDustScreenPosition(const GameState& _state, std::uint16_t _particle);
+/// GetPreviousDustScreenPosition (CS:08A1): where particle _particle, an index of stardust, was in the drawing buffer last
+/// frame, from its entry in stardustPrevious, when it was on screen then.
+[[nodiscard]] std::optional<DustScreenPosition> GetPreviousDustScreenPosition(const GameState& _state, std::size_t _particle);
 
 /// ComputeDustStripMask (CS:08B9): 2^n - 1 just covering |_step| / 2, the strip a respawned particle lands in.
 [[nodiscard]] std::uint16_t ComputeDustStripMask(std::int16_t _step);
@@ -73,10 +73,10 @@ struct DashboardPixel
 /// the edge it moves away from, in the strip ComputeDustStripMask gives for _step.
 void ShiftStardustSideways(GameState& _state, std::int16_t _step);
 
-/// RespawnDustAtSideEdge (CS:08F2): the particle at DS:_particle born again, its lifetime and its copy's at random
+/// RespawnDustAtSideEdge (CS:08F2): particle _particle born again, its lifetime and its copy's at random
 /// and the copy marked new, at a random y on the edge a sideways _step moves away from, its x in the strip
 /// _stripMask covers. Returns where.
-[[nodiscard]] DustPosition RespawnDustAtSideEdge(GameState& _state, std::uint16_t _particle, std::int16_t _step, std::uint16_t _stripMask);
+[[nodiscard]] DustPosition RespawnDustAtSideEdge(GameState& _state, std::size_t _particle, std::int16_t _step, std::uint16_t _stripMask);
 
 /// RollStardust (CS:0927): every particle turned by rotationSinCos[7].
 void RollStardust(GameState& _state);
@@ -86,11 +86,11 @@ void ShiftStardustVertically(GameState& _state, std::int16_t _step);
 
 /// RespawnDustAtVerticalEdge (CS:0969): RespawnDustAtSideEdge for a vertical _step: a random x, and y in the strip on
 /// the edge the step moves away from.
-[[nodiscard]] DustPosition RespawnDustAtVerticalEdge(GameState& _state, std::uint16_t _particle, std::int16_t _step,
+[[nodiscard]] DustPosition RespawnDustAtVerticalEdge(GameState& _state, std::size_t _particle, std::int16_t _step,
                                                      std::uint16_t _stripMask);
 
-/// RespawnDustAnywhere (CS:09A3): the particle at DS:_particle born again anywhere on screen.
-[[nodiscard]] DustPosition RespawnDustAnywhere(GameState& _state, std::uint16_t _particle);
+/// RespawnDustAnywhere (CS:09A3): particle _particle born again anywhere on screen.
+[[nodiscard]] DustPosition RespawnDustAnywhere(GameState& _state, std::size_t _particle);
 
 /// IsDustOnScreen (CS:09D6): whether the high byte of x is in -20h..1Fh and that of y in -10h..0Fh.
 [[nodiscard]] bool IsDustOnScreen(DustPosition _position);
@@ -102,15 +102,14 @@ void ShiftStardustVertically(GameState& _state, std::int16_t _step);
 /// ScaleDustStep (CS:0A06): _position shifted right by stardustShift, the step a particle moves this frame.
 [[nodiscard]] DustStep ScaleDustStep(const GameState& _state, DustPosition _position);
 
-/// LoadDustPosition (CS:0A13): the position of the particle at DS:_particle, an entry of stardust.
-[[nodiscard]] DustPosition LoadDustPosition(const GameState& _state, std::uint16_t _particle);
+/// LoadDustPosition (CS:0A13): the position of particle _particle, an index of stardust.
+[[nodiscard]] DustPosition LoadDustPosition(const GameState& _state, std::size_t _particle);
 
-/// StoreDustPosition (CS:0A19): the particle at DS:_particle moved to _position.
-void StoreDustPosition(GameState& _state, std::uint16_t _particle, DustPosition _position);
+/// StoreDustPosition (CS:0A19): particle _particle moved to _position.
+void StoreDustPosition(GameState& _state, std::size_t _particle, DustPosition _position);
 
-/// StorePreviousDustPosition (CS:0A1F): the particle's entry in stardustPrevious, 0xB4 bytes on, set to
-/// _position.
-void StorePreviousDustPosition(GameState& _state, std::uint16_t _particle, DustPosition _position);
+/// StorePreviousDustPosition (CS:0A1F): the particle's entry in stardustPrevious, which follows stardust, set to _position.
+void StorePreviousDustPosition(GameState& _state, std::size_t _particle, DustPosition _position);
 
 /// DustToScreen (CS:0A28): where _position is in the drawing buffer.
 [[nodiscard]] DustScreenPosition DustToScreen(DustPosition _position);
@@ -127,14 +126,12 @@ void SaveStardustPositions(GameState& _state);
 /// UpdateStardust (CS:068F): the 30 stardust particles moved and drawn for viewAngle, once a frame, in stardustColor; streaks
 /// from where they were while the jump drive is engaged (SaveStardustPositions first). The front and rear views shift them by
 /// the pitch, roll them by the roll and move them by the speed (ComputeStardustShift), the rear inwards with lifetimes; the side
-/// views shift them sideways by the speed (UpdateSideStardust). _bx is the BX it is called with, which reaches
-/// ComputeStardustShift's divide when neither the pitch nor the roll has turned the dust. Returns whether a DrawLine filled bytes
-/// with REP STOSB.
-bool UpdateStardust(GameState& _state, std::uint16_t _bx);
+/// views shift them sideways by the speed (UpdateSideStardust). Returns whether a DrawLine filled bytes with REP STOSB.
+bool UpdateStardust(GameState& _state);
 
 /// ComputeStardustShift (CS:0887): stardustShift = (34h - playerSpeed) / 12 + 4, one less while jumpDriveEngaged, and returned.
-/// A speed above 34h, which the game never sets, divides into the game's trap, which saves BX: _bh over 12.
-std::uint8_t ComputeStardustShift(GameState& _state, std::uint8_t _bh);
+/// A speed above 34h, which the game never sets, divides into the game's trap.
+std::uint8_t ComputeStardustShift(GameState& _state);
 
 /// RestoreFlightScreen (CS:15CF): the cockpit back after a function key's screen (ShowCockpitScreen, its copies backwards when
 /// _backward), every gauge marked stale (InvalidateDashboard), a beep, and messageShown cleared. Returns what ShowCockpitScreen

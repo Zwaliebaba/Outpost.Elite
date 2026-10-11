@@ -35,10 +35,6 @@ constexpr std::uint16_t FIRST_FRAME_WAIT = 0x2DB8;
 constexpr std::uint16_t LAST_TUNNEL_FRAME = 0x2DC9;
 constexpr std::uint16_t LAST_FRAME_WAIT = 0x2DE7;
 constexpr std::uint16_t LAST_RECTANGLES = 0x2DEE;
-// The BX PlayStationTunnel calls UpdateStardust with is what TransformAndDrawObjects leaves there, which MoveObjectsByVelocity
-// keeps. It reaches nothing but ComputeStardustShift's divide trap, which only a speed above 34h reaches, and no speed the game
-// sets is above 30h (TOP_SPEED, MOST_SPEED): 0 stands in for it.
-constexpr std::uint16_t STARDUST_BX = 0;
 
 // The station's slot, whose fields SLOT_X, SLOT_Y, SLOT_Z and SLOT_FLAGS name (Ships.h).
 constexpr std::uint8_t STATION_SHOT = 0x01; // in the slot's flags: docking is refused
@@ -113,16 +109,24 @@ std::uint16_t Store(GameState& _state, std::uint16_t _segment, std::uint16_t _of
   return at;
 }
 
+// Rectangle _rectangle of tunnelRectangles, its five points of two signed bytes, x and y. The original holds the rectangle's
+// address in SI; the one past the last is the bytes after them.
+[[nodiscard]] std::span<Counted<std::uint8_t>> TunnelRectangle(GameState& _state, std::size_t _rectangle)
+{
+  return _state.BytesFrom(_state.Data().tunnelRectangles, (_rectangle + 1) * TUNNEL_RECTANGLE_BYTES)
+    .subspan(_rectangle * TUNNEL_RECTANGLE_BYTES);
+}
+
 // Where DrawTunnelRectangles stopped.
 struct TunnelDrawn
 {
-  std::uint16_t next; // past the last rectangle drawn, where the original leaves SI
-  bool filled;        // a DrawLine filled bytes with REP STOSB
+  std::size_t next; // past the last rectangle drawn, where the original leaves SI
+  bool filled;      // a DrawLine filled bytes with REP STOSB
 };
 
 // _count of tunnelRectangles from _first, each by DrawTunnelRectangle in the tunnel's colour, and the LOOP back to CS:_loop
 // (2DA1, 2DEE), which carries the count and the next rectangle (ADR-015).
-TunnelDrawn DrawTunnelRectangles(GameState& _state, Hardware& _hardware, std::uint16_t _first, std::uint16_t _count, std::uint16_t _loop)
+TunnelDrawn DrawTunnelRectangles(GameState& _state, Hardware& _hardware, std::size_t _first, std::uint16_t _count, std::uint16_t _loop)
 {
   TunnelDrawn drawn{_first, false};
   std::uint16_t count = _count;
@@ -130,12 +134,12 @@ TunnelDrawn DrawTunnelRectangles(GameState& _state, Hardware& _hardware, std::ui
   {
     _state.Data().drawColor = TUNNEL_COLOR;
     drawn.filled = DrawTunnelRectangle(_state, drawn.next) || drawn.filled;
-    drawn.next = Offset(drawn.next, TUNNEL_RECTANGLE_BYTES);
+    ++drawn.next;
     if (--count == 0)
     {
       return drawn;
     }
-    _hardware.LoopTurn(_loop, {count, drawn.next});
+    _hardware.LoopTurn(_loop, {count, _state.OffsetOf(TunnelRectangle(_state, drawn.next)[0])});
   }
 }
 
@@ -155,19 +159,19 @@ void WaitTimerTicks(GameState& _state, Hardware& _hardware, std::uint16_t _ticks
   }
 }
 
-// _text posted for 25 frames. Returns its offset, which the original leaves in AX (mov ax, _text).
-[[nodiscard]] std::uint16_t PostDockingMessage(GameState& _state, DataAt _text)
+// _message posted for 25 frames. Returns it, which the original leaves in AX as its text's address (mov ax, text).
+[[nodiscard]] Message PostDockingMessage(GameState& _state, Message _message)
 {
-  _state.Set(DS.messagePointer, _text.offset);
+  _state.Data().messagePointer = _message;
   _state.Data().messageFrames = DOCKING_MESSAGE_FRAMES;
-  return _text.offset;
+  return _message;
 }
 
 // The station's position, z moved out to the approach point when _approach: what the original loads into AX, BX
 // and CX, with DI the station's slot.
 [[nodiscard]] Vector LoadStationPosition(GameState& _state, bool _approach)
 {
-  const SpaceObject& station = _state.ObjectAt(DS.stationSlot.offset);
+  const SpaceObject& station = _state.Slot(SlotIndex::Station);
   const std::uint16_t z = station.z;
   return Vector{static_cast<std::int16_t>(station.x), static_cast<std::int16_t>(station.y),
                 static_cast<std::int16_t>(_approach ? Offset(z, APPROACH_DISTANCE) : z)};
@@ -283,35 +287,16 @@ void PitchToTarget(GameState& _state, bool _approach, std::uint16_t _tolerance, 
   _state.Data().velocityDirty = 1;
 }
 
-// CWD / IDIV BX: _coordinate over _frames, the frames left; with no frame left it divides by 0 into the game's trap, which saves
-// BX, _frames.
-[[nodiscard]] std::uint16_t VelocityOver(GameState& _state, std::uint16_t _coordinate, std::uint16_t _frames)
+// CWD / IDIV BX: _coordinate over _frames, the frames left; with no frame left it divides by 0 into the game's trap.
+[[nodiscard]] std::uint16_t VelocityOver(std::uint16_t _coordinate, std::uint16_t _frames)
 {
   const auto dividend = static_cast<std::uint32_t>(static_cast<std::int32_t>(static_cast<std::int16_t>(_coordinate)));
-  return DivideSignedWord(_state, dividend, _frames, _frames).quotient;
-}
-
-// What VectorLength leaves in BX: the last odd number its root subtracted, twice the root of the top 16 bits of _vector's squared
-// length, plus 1.
-[[nodiscard]] std::uint16_t VectorLengthOddLeftover(Vector _vector, std::uint16_t _length)
-{
-  const auto square = [](std::int16_t _value) { return static_cast<std::uint32_t>(std::int32_t{_value} * _value); };
-  const std::uint32_t sum = square(_vector.x) + square(_vector.y) + square(_vector.z);
-  unsigned shift = 0;
-  if ((sum >> 24) != 0)
-  {
-    shift = 8;
-  }
-  else if ((sum >> 16) != 0)
-  {
-    shift = 4;
-  }
-  return static_cast<std::uint16_t>(((_length >> shift) << 1) + 1);
+  return DivideSignedWord(dividend, _frames).quotient;
 }
 
 // State 4 (CS:8762): fly straight to the approach point, faster while 350 or more away (SpeedUp, SlowDown), at the velocity
 // that gets there in the frames left, the distance over the speed: XOR DX,DX / DIV playerSpeed, a speed of 0 dividing into the
-// game's trap, which saves the BX VectorLength left. On the last frame there, the ship stops on it and goes on to state 5.
+// game's trap. On the last frame there, the ship stops on it and goes on to state 5.
 // MoveObjectsByVelocity moves the world either way.
 void FlyToApproachPoint(GameState& _state)
 {
@@ -326,8 +311,7 @@ void FlyToApproachPoint(GameState& _state)
   {
     SlowDown(_state);
   }
-  const std::uint16_t frames =
-    DivideWord(_state, distance, _state.Data().playerSpeed, VectorLengthOddLeftover(approach, distance)).quotient;
+  const std::uint16_t frames = DivideWord(distance, _state.Data().playerSpeed).quotient;
   if (frames == 1)
   {
     _state.Data().playerSpeed = 0;
@@ -341,9 +325,9 @@ void FlyToApproachPoint(GameState& _state)
     return;
   }
   // MOV AX,[DI+axis] (and ADD AX,7D0h for z), then the divide, for x, y and z.
-  _state.Data().playerVelocityX = VelocityOver(_state, static_cast<std::uint16_t>(approach.x), frames);
-  _state.Data().playerVelocityY = VelocityOver(_state, static_cast<std::uint16_t>(approach.y), frames);
-  _state.Data().playerVelocityZ = VelocityOver(_state, static_cast<std::uint16_t>(approach.z), frames);
+  _state.Data().playerVelocityX = VelocityOver(static_cast<std::uint16_t>(approach.x), frames);
+  _state.Data().playerVelocityY = VelocityOver(static_cast<std::uint16_t>(approach.y), frames);
+  _state.Data().playerVelocityZ = VelocityOver(static_cast<std::uint16_t>(approach.z), frames);
   MoveObjectsByVelocity(_state);
 }
 
@@ -351,7 +335,7 @@ void FlyToApproachPoint(GameState& _state)
 // matched next.
 void CloseIn(GameState& _state)
 {
-  const std::uint16_t distance = Negate(_state.ObjectAt(DS.stationSlot.offset).z);
+  const std::uint16_t distance = Negate(_state.Slot(SlotIndex::Station).z);
   if (distance < STOP_CLOSING_DISTANCE)
   {
     _state.Data().dockingComputerState = MATCH_SPIN;
@@ -381,7 +365,7 @@ void CloseIn(GameState& _state)
 // The station's spin angle plus _turn, negated for a Dodo (IsStation's CF) (CS:8980, CS:89B9, CS:89EA).
 [[nodiscard]] std::uint16_t LoadStationSpin(GameState& _state, std::uint16_t _turn)
 {
-  const SpaceObject& station = _state.ObjectAt(DS.stationSlot.offset);
+  const SpaceObject& station = _state.Slot(SlotIndex::Station);
   const auto spin = Offset(station.roll, _turn);
   return IsStation(station).dodo ? Negate(spin) : spin;
 }
@@ -416,16 +400,17 @@ void RollWithSpin(GameState& _state, std::uint16_t _turn)
 
 } // namespace
 
-bool DrawTunnelRectangle(GameState& _state, std::uint16_t _points)
+bool DrawTunnelRectangle(GameState& _state, std::size_t _rectangle)
 {
+  const std::span<const Counted<std::uint8_t>> points = TunnelRectangle(_state, _rectangle);
   bool filled = false;
-  std::uint16_t point = _points;
+  std::size_t point = 0;
   for (std::uint16_t edge = 0; edge < TUNNEL_EDGES; ++edge)
   {
-    const std::uint16_t from = FromCenter(_state.Word(point));
-    const std::uint16_t to = FromCenter(_state.Word(Offset(point, 2)));
+    const std::uint16_t from = FromCenter(WordIn(points, point));
+    const std::uint16_t to = FromCenter(WordIn(points, point + 2));
     filled = DrawLine(_state, Low(from), High(from), Low(to), High(to)) || filled;
-    point = Offset(point, 2);
+    point += 2;
   }
   return filled;
 }
@@ -463,13 +448,14 @@ bool CheckDockingAlignment(const GameState& _state, const SpaceObject& _station,
   return AngleWithinTolerance(roll, static_cast<std::uint16_t>((spin + HALF_TURN) & ANGLE_MASK), _tolerance);
 }
 
-void MaskOutsideTunnel(GameState& _state, std::uint16_t _rectangle, bool _backwards)
+void MaskOutsideTunnel(GameState& _state, std::size_t _rectangle, bool _backwards)
 {
   // The margins: x/4 bytes either side, and the rows above and below the rectangle, in the space-view buffer at DS:0000,
   // through ES = DS.
   const std::uint16_t segment = _state.DataSegment();
-  const auto sideBytes = static_cast<std::uint16_t>(static_cast<std::uint8_t>(_state.Byte(_rectangle) + VIEW_CENTER_X) >> 2);
-  const std::uint8_t top = _state.Byte(Offset(_rectangle, 1));
+  const std::span<const Counted<std::uint8_t>> corner = TunnelRectangle(_state, _rectangle);
+  const auto sideBytes = static_cast<std::uint16_t>(static_cast<std::uint8_t>(corner[0] + VIEW_CENTER_X) >> 2);
+  const std::uint8_t top = corner[1];
   const auto rows = static_cast<std::uint16_t>(static_cast<std::uint8_t>(Negate(top) << 1));
   const auto marginWords = static_cast<std::uint16_t>(static_cast<std::uint8_t>(top + VIEW_CENTER_ROW) << 5);
   // The rows above, then the sides of each row of the rectangle, forwards or, as the direction flag says, down; DEC BX
@@ -495,8 +481,7 @@ void MaskOutsideTunnel(GameState& _state, std::uint16_t _rectangle, bool _backwa
 void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
 {
   // MOV AX,leavingStationMessage, or autoDockMessage when docked, for one frame.
-  const std::uint16_t message = _state.Data().playerDocked != 0 ? DS.autoDockMessage.offset : DS.leavingStationMessage.offset;
-  _state.Set(DS.messagePointer, message);
+  _state.Data().messagePointer = _state.Data().playerDocked != 0 ? Message::AutoDock : Message::LeavingStation;
   _state.Data().messageFrames = 1;
   (void)UpdateMessageLine(_state, _backward);
   UpdateDashboard(_state);
@@ -512,18 +497,18 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
     {
       backward = TransformAndDrawObjects(_state, _hardware, backward);
       MoveObjectsByVelocity(_state);
-      if (UpdateStardust(_state, STARDUST_BX))
+      if (UpdateStardust(_state))
       {
         backward = false;
       }
-      MaskOutsideTunnel(_state, DS.tunnelRectangles.offset, backward);
+      MaskOutsideTunnel(_state, 0, backward);
       backward = false;
     }
     else
     {
       WaitTimerTicks(_state, _hardware, DOCKED_FIRST_TICKS, DOCKED_FIRST_WAIT);
     }
-    if (DrawTunnelRectangles(_state, _hardware, DS.tunnelRectangles.offset, frame, FIRST_RECTANGLES).filled)
+    if (DrawTunnelRectangles(_state, _hardware, 0, frame, FIRST_RECTANGLES).filled)
     {
       backward = false;
     }
@@ -541,13 +526,13 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
 
   // The last ten draw ten rectangles less one each frame, from one further along each time: CX and SI, pushed twice round the
   // frame, which the turns carry.
-  std::uint16_t first = DS.tunnelRectangles.offset;
+  std::size_t first = 0;
   for (std::uint16_t frames = TUNNEL_FRAMES;;)
   {
     if (_state.Data().playerDocked == 0)
     {
       backward = TransformAndDrawObjects(_state, _hardware, backward);
-      if (UpdateStardust(_state, STARDUST_BX))
+      if (UpdateStardust(_state))
       {
         backward = false;
       }
@@ -565,16 +550,16 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
     }
     FinishSpaceViewFrame(_state, _hardware);
     backward = false;
-    first = Offset(first, TUNNEL_RECTANGLE_BYTES);
+    ++first;
     if (--frames == 0)
     {
       return;
     }
-    _hardware.LoopTurn(LAST_TUNNEL_FRAME, {frames, first});
+    _hardware.LoopTurn(LAST_TUNNEL_FRAME, {frames, _state.OffsetOf(TunnelRectangle(_state, first)[0])});
   }
 }
 
-std::uint16_t ToggleDockingComputer(GameState& _state, Hardware& _hardware)
+Message ToggleDockingComputer(GameState& _state, Hardware& _hardware)
 {
   _state.Data().dockingKeyReleased = 0;
   if (_state.Data().dockingComputerOn == 1)
@@ -588,26 +573,26 @@ std::uint16_t ToggleDockingComputer(GameState& _state, Hardware& _hardware)
       _state.Data().velocityDirty = 1;
     }
     StartLowBeep(_state);
-    return PostDockingMessage(_state, DS.dockingComputerOffMessage);
+    return PostDockingMessage(_state, Message::DockingComputerOff);
   }
   if (!InSafeZone(_state).inside)
   {
     _state.Data().dataA137 = 0;
     StartLowBeep(_state);
-    return PostDockingMessage(_state, DS.stationOutOfRangeMessage);
+    return PostDockingMessage(_state, Message::StationOutOfRange);
   }
-  if ((_state.ObjectAt(DS.stationSlot.offset).flags & STATION_SHOT) != 0)
+  if ((_state.Slot(SlotIndex::Station).flags & STATION_SHOT) != 0)
   {
     _state.Data().dataA137 = 0;
     StartLowBeep(_state);
-    return PostDockingMessage(_state, DS.dockingDeniedMessage);
+    return PostDockingMessage(_state, Message::DockingDenied);
   }
   _state.Data().dockingComputerSteering = 0;
   _state.Data().dockingComputerState = SLOW_TO_STOP;
   _state.Data().dockingComputerOn = 1;
   StartMusic(_state, _hardware);
   StartBeep(_state);
-  return PostDockingMessage(_state, DS.dockingComputerOnMessage);
+  return PostDockingMessage(_state, Message::DockingComputerOn);
 }
 
 void RunDockingComputer(GameState& _state)

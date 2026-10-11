@@ -57,8 +57,8 @@ struct VectorToObject
 /// What CountOtherHuntersOnScanner counts.
 struct HunterCount
 {
-  std::uint8_t count;                ///< as a byte, wrapping
-  std::optional<std::uint16_t> last; ///< the last slot counted, if any
+  std::uint8_t count;            ///< as a byte, wrapping
+  std::optional<SlotIndex> last; ///< the last slot counted, if any
 };
 
 /// ScaleSpawnOdds (CS:4C0E): _odds multiplied by 32 (shifted left 5) while jumpDriveEngaged is 1.
@@ -68,9 +68,9 @@ struct HunterCount
 /// device (+1Eh bit 5).
 [[nodiscard]] SlotSearch IsMaskShipPresent(GameState& _state);
 
-/// PlaceEscortNear (CS:4C38): _escort given the first 16 bytes of the leader at _leader, byte by byte, then moved a random
-/// -1024..1023 on each axis.
-void PlaceEscortNear(GameState& _state, SpaceObject& _escort, std::uint16_t _leader);
+/// PlaceEscortNear (CS:4C38): _escort given the first 16 bytes of _leader, byte by byte, then moved a random -1024..1023 on
+/// each axis.
+void PlaceEscortNear(GameState& _state, SpaceObject& _escort, const SpaceObject& _leader);
 
 /// TurnTowardAngles (CS:514B): _slot's pitch, then its yaw, turned toward _wanted by at most its turn rate (ClampTurnStep).
 Turn TurnTowardAngles(SpaceObject& _slot, Angles _wanted);
@@ -81,7 +81,7 @@ Turn TurnTowardAngles(SpaceObject& _slot, Angles _wanted);
 
 /// CountOtherHuntersOnScanner (CS:548F): the class-6 ships among objectSlotCount slots from shipSlots with their blips drawn,
 /// other than the one at _slot.
-[[nodiscard]] HunterCount CountOtherHuntersOnScanner(GameState& _state, std::uint16_t _slot);
+[[nodiscard]] HunterCount CountOtherHuntersOnScanner(GameState& _state, const SpaceObject& _slot);
 
 /// GetVectorToObject (CS:54B4): (_object's position - _slot's) / 4, each coordinate quartered first, and whether it is within
 /// _halfSize / 4 on every axis (VectorWithinBox).

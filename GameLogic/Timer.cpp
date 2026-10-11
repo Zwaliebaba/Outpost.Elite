@@ -15,9 +15,6 @@ namespace
 
 constexpr std::uint16_t TIMER_INTERRUPT = 0x0215;
 
-// The BIOS's int 8 vector, which InstallTimerInterrupt keeps in the code segment (savedTimerVector).
-constexpr std::uint16_t SAVED_TIMER_OFFSET = 0x025A;
-constexpr std::uint16_t SAVED_TIMER_SEGMENT = 0x025C;
 constexpr std::uint8_t TIMER_VECTOR = 0x08;
 
 constexpr std::uint8_t PIT_CHANNEL0_SQUARE_WAVE = 0x36; // channel 0, both bytes, mode 3
@@ -28,7 +25,6 @@ constexpr std::uint32_t TICKS_PER_DAY = 0x1800B0;
 constexpr std::uint8_t SPEAKER_BITS = 0x03; // gate and data, cleared at start-up
 constexpr std::uint8_t SPEAKER_DATA = 0x02;
 
-constexpr std::uint8_t NO_QUESTION = 0xFF;
 constexpr std::uint8_t HUM_TICKS = 0x0F;
 constexpr std::uint8_t SWEEP_LAST_PERIOD = 7;
 constexpr std::uint8_t SLOW_NOISE_TICKS = 5;
@@ -43,9 +39,6 @@ constexpr std::uint8_t TUNE_REST = 'F';
 constexpr std::uint8_t NOTE_TICKS_PER_BEAT = 0x24;
 constexpr std::uint8_t NOTE_BASE = 0x0C;    // notePeriods starts an octave up
 constexpr std::uint16_t REST_PERIOD = 0x32; // inaudible
-
-constexpr std::uint16_t DECODED_ANSWER = 0xA5B7; // a length byte and the decoded answer, past dockingKeyReleased
-constexpr std::uint8_t ANSWER_KEY = 0x61;
 
 // Where WaitForTimerTick's loop jumps back to: the compare.
 constexpr std::uint16_t TIMER_TICK_COMPARE = 0x7776;
@@ -76,58 +69,6 @@ void ToggleSpeakerData(GameState& _state, Hardware& _hardware)
   OutSpeaker(_state, _hardware, static_cast<std::uint8_t>(_state.Data().speakerPortImage ^ SPEAKER_DATA));
 }
 
-// CheckProtectionAnswer (0x739A): decodes the expected answer to the pending question into DS:A5B7 and compares the
-// typed one with it, by REPE CMPSB, backwards when _backward (the direction flag set).
-void CheckProtectionAnswer(GameState& _state, bool _backward)
-{
-  const std::uint8_t typed = _state.Data().protectionInput.data25CA;
-  if (typed == 0)
-  {
-    return;
-  }
-  const std::uint16_t descriptor = _state.Get(DS.protectionDescriptor);
-  std::uint16_t answer = _state.Word(static_cast<std::uint16_t>(descriptor + 0x0A));
-  const std::uint8_t question = _state.Data().protectionQuestion;
-  // The answers are length-prefixed, one after another: skip to the question's.
-  for (auto left = static_cast<std::uint8_t>(question - 1); left != 0; --left)
-  {
-    answer = static_cast<std::uint16_t>(answer + static_cast<std::uint8_t>(_state.Byte(answer) + 1));
-  }
-  const std::uint8_t length = _state.Byte(answer);
-  if (length != typed)
-  {
-    return;
-  }
-  ++answer;
-  std::uint16_t decoded = DECODED_ANSWER;
-  _state.SetByte(decoded++, length);
-  std::uint8_t key = 1;
-  for (std::uint8_t left = length; left != 0; --left)
-  {
-    const auto plain = static_cast<std::uint8_t>(_state.Byte(answer++) ^ question ^ key ^ ANSWER_KEY);
-    ++key;
-    _state.SetByte(decoded++, plain);
-  }
-  // REPE CMPSB of the decoded answer (DS:SI) with the typed one (ES:DI, ES=DS).
-  std::uint16_t expected = DECODED_ANSWER + 1;
-  auto given = static_cast<std::uint16_t>(DS.protectionInput.offset + 2);
-  bool equal = false;
-  for (std::uint8_t left = _state.Byte(DECODED_ANSWER); left != 0; --left)
-  {
-    equal = _state.Byte(expected) == _state.Byte(given);
-    expected = static_cast<std::uint16_t>(_backward ? expected - 1 : expected + 1);
-    given = static_cast<std::uint16_t>(_backward ? given - 1 : given + 1);
-    if (!equal)
-    {
-      break;
-    }
-  }
-  if (equal)
-  {
-    _state.Data().protectionAnswerCorrect = 1;
-  }
-}
-
 // TimerTickMusic (0x72FF): titleTune's notes, each a byte (negative: no gap after it, 'F' a rest, 'G' the end) and a
 // length in beats. A note change (0x7372) sets the PIT's channel 2 to its period.
 void TickMusic(GameState& _state, Hardware& _hardware)
@@ -152,19 +93,20 @@ void TickMusic(GameState& _state, Hardware& _hardware)
     return;
   }
 
-  std::uint16_t pointer = _state.Get(DS.musicPointer);
-  const std::uint16_t entry = _state.Word(pointer);
-  const std::uint8_t note = Low(entry);
-  const std::uint8_t beats = High(entry);
+  // musicPointer is the index of the tune's next entry, two bytes each, where the original holds its address. The tune's last
+  // entry restarts it.
+  const std::uint16_t next = _state.Data().musicPointer;
+  const std::size_t entry = std::size_t{next} * 2;
+  const std::uint8_t note = _state.Data().titleTune[entry];
+  const std::uint8_t beats = _state.Data().titleTune[entry + 1];
   const auto ticks = static_cast<std::uint16_t>(NOTE_TICKS_PER_BEAT * beats);
   if (note == TUNE_RESTART)
   {
-    _state.Set(DS.musicPointer, DS.titleTune.offset);
+    _state.Data().musicPointer = 0;
   }
   else
   {
-    pointer = static_cast<std::uint16_t>(pointer + 2);
-    _state.Set(DS.musicPointer, pointer);
+    _state.Data().musicPointer = static_cast<std::uint16_t>(next + 1);
     if (note != TUNE_REST)
     {
       std::uint8_t pitch = note;
@@ -331,10 +273,12 @@ void TickSoundEffects(GameState& _state, Hardware& _hardware)
 
 // TimerInterrupt's chain to the BIOS (0x0255): a far jump, through savedTimerVector, to the BIOS's handler for the tick, with
 // the interrupt's frame in place, so that the BIOS's IRET ends the interrupt. Here the handler is run to its IRET, which comes
-// back to this routine, and TimerInterrupt's own IRET takes the frame.
-void ChainToBiosTimer(const GameState& _state, Hardware& _hardware)
+// back to this routine, and TimerInterrupt's own IRET takes the frame. savedTimerVector, in the code segment, holds what
+// InstallTimerInterrupt found on int 8, the BIOS's own handler: native code chains to that.
+void ChainToBiosTimer(Hardware& _hardware)
 {
-  _hardware.RunBiosTimerTick(_state.CodeWord(SAVED_TIMER_SEGMENT), _state.CodeWord(SAVED_TIMER_OFFSET));
+  const FarAddress bios = _hardware.BiosInterruptVector(TIMER_VECTOR);
+  _hardware.RunBiosTimerTick(bios.segment, bios.offset);
 }
 
 } // namespace
@@ -347,10 +291,8 @@ void InstallTimerInterrupt(GameState& _state, Hardware& _hardware)
   const auto image = static_cast<std::uint8_t>(speaker & ~SPEAKER_BITS);
   _state.Data().speakerPortImage = image;
   _hardware.SetSystemControl(image);
-  // The BIOS's handler kept, and the game's own installed in its place.
-  const FarAddress bios = _hardware.InterruptVector(TIMER_VECTOR);
-  _state.SetCodeWord(SAVED_TIMER_OFFSET, bios.offset);
-  _state.SetCodeWord(SAVED_TIMER_SEGMENT, bios.segment);
+  // The game's own handler installed in place of the BIOS's, which the original keeps in savedTimerVector and native code takes
+  // from the BIOS (ChainToBiosTimer, RestoreTimerInterrupt).
   _hardware.SetInterruptVector(TIMER_VECTOR, FarAddress{_state.CodeSegment(), TIMER_INTERRUPT});
   _hardware.EnableInterrupts();
 }
@@ -358,8 +300,8 @@ void InstallTimerInterrupt(GameState& _state, Hardware& _hardware)
 BiosClock RestoreTimerInterrupt(GameState& _state, Hardware& _hardware)
 {
   _hardware.DisableInterrupts();
-  // The BIOS's handler put back, from what InstallTimerInterrupt kept.
-  _hardware.SetInterruptVector(TIMER_VECTOR, FarAddress{_state.CodeWord(SAVED_TIMER_SEGMENT), _state.CodeWord(SAVED_TIMER_OFFSET)});
+  // The BIOS's handler put back, as InstallTimerInterrupt found it.
+  _hardware.SetInterruptVector(TIMER_VECTOR, _hardware.BiosInterruptVector(TIMER_VECTOR));
   _hardware.SetSystemControl(_state.Data().savedSpeakerPort);
   std::uint8_t mode = PIT_CHANNEL0_SQUARE_WAVE;
   std::uint16_t divisor = 0;
@@ -389,11 +331,11 @@ std::uint16_t ClockLessADayHigh(const BiosClock& _clock) noexcept
   return static_cast<std::uint16_t>((_clock.ticks - TICKS_PER_DAY) >> 16);
 }
 
-void TimerInterrupt(GameState& _state, Hardware& _hardware, bool _backward)
+void TimerInterrupt(GameState& _state, Hardware& _hardware)
 {
   // PUSH AX / PUSH DS / PUSH ES, and their POPs before the IRET or the chain: what it loads into them, the data segment, B800h
   // and the end of the interrupt's 20h, goes no further.
-  TimerTick(_state, _hardware, _backward);
+  TimerTick(_state, _hardware);
   _hardware.EndOfInterrupt();
   if (_state.Data().amstradPresent != 1)
   {
@@ -406,19 +348,16 @@ void TimerInterrupt(GameState& _state, Hardware& _hardware, bool _backward)
     return;
   }
   _state.Data().biosTimerChainCountdown = mouse ? BIOS_CHAIN_TICKS_WITH_MOUSE : BIOS_CHAIN_TICKS;
-  ChainToBiosTimer(_state, _hardware);
+  ChainToBiosTimer(_hardware);
 }
 
-void TimerTick(GameState& _state, Hardware& _hardware, bool _backward)
+void TimerTick(GameState& _state, Hardware& _hardware)
 {
   _state.Data().millisecondCounter = static_cast<std::uint16_t>(_state.Data().millisecondCounter + 1);
   _state.Data().timerTicks = static_cast<std::uint16_t>(_state.Data().timerTicks + 1);
   _state.Data().msSinceFrame = static_cast<std::uint8_t>(_state.Data().msSinceFrame + 1);
-  if (_state.Data().protectionQuestion != NO_QUESTION)
-  {
-    CheckProtectionAnswer(_state, _backward);
-    return;
-  }
+  // The original checks the copy protection's answer here while a question is pending (CheckProtectionAnswer, CS:739A), and
+  // none is: protectionQuestion stays FFh, since the D5 byte keeps the protection from asking one (ADR-001).
   if (_state.Data().soundEnabled == 0 || _state.Data().gamePaused == 1)
   {
     return;
@@ -447,7 +386,7 @@ void WaitForTimerTick(GameState& _state, Hardware& _hardware)
 void TimerInterruptEntry(Guest& _guest)
 {
   // AX, DS and ES pushed round what it loads into them, and popped: every register is kept, and the IRET takes the flags.
-  TimerInterrupt(_guest.State(), _guest.Devices(), _guest.Backward());
+  TimerInterrupt(_guest.State(), _guest.Devices());
 }
 
 namespace

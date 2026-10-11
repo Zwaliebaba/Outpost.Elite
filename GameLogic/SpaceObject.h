@@ -18,6 +18,40 @@
 namespace Elite
 {
 
+/// A slot of shipSlots by its number, where the original holds its offset, DS:6930 + 64 times the number, in SI or DI or in a
+/// word of its state (D33, piece 3): 0 the sun, 1 the planet, 2 the station, 3-19 the ships and 20-35 the debris. A search that
+/// finds none leaves the number past the last slot it looked at.
+///
+/// A slot stored in the game's state (missileTarget, playerHitBy, maskShipSlot, and a record's target and owner) may instead hold
+/// one of the values below, which the original stores as the offsets 0 and 1, where no slot is. They are the sun's and the
+/// planet's numbers, which none of those fields ever holds: no missile is aimed at the sun or the planet, no pack mate, mother or
+/// attacker is either, and no search for a ship returns them. So a slot cleared to 0 still means what the original's does.
+enum class SlotIndex : std::uint16_t
+{
+  Sun = 0,
+  Planet = 1,
+  Station = 2,
+  FirstShip = 3,
+  FirstDebris = 20,
+  End = 36, ///< past the last slot
+
+  Player = 0, ///< a target of 0: the player
+  None = 0,   ///< an owner of 0: no mother, and not the police
+  Police = 1, ///< an owner of 1: a police Viper
+};
+
+/// _slot's number.
+[[nodiscard]] constexpr std::uint16_t Number(SlotIndex _slot) noexcept
+{
+  return static_cast<std::uint16_t>(_slot);
+}
+
+/// The slot _count numbers on from _slot, as the original's SI or DI steps on by 40h a slot.
+[[nodiscard]] constexpr SlotIndex SlotAfter(SlotIndex _slot, std::uint16_t _count = 1) noexcept
+{
+  return static_cast<SlotIndex>(Number(_slot) + _count);
+}
+
 /// One of the 36 records of 64 bytes in shipSlots (DS:6930) that hold the objects in space (ADR-012): slot 0 the sun, 1 the
 /// planet, 2 the station, 3-19 the ships and 20-35 the debris. Each field is at its 1987 offset, a byte or a word as the
 /// original reads it, and counts its own changes (Counted). The GameState gives the record at an offset the original holds in
@@ -83,7 +117,7 @@ struct SpaceObject
     Counted<std::uint8_t> spinPitch;
   };
   Counted<std::uint8_t> blipZ;
-  Counted<std::uint16_t> target; ///< +29: a missile's target, a hunter's pack mate: a slot's offset
+  Counted<SlotIndex> target; ///< +29: a missile's target, a hunter's pack mate; SlotIndex::Player for the player
   Counted<std::uint8_t> energy;
   union
   {
@@ -105,7 +139,7 @@ struct SpaceObject
   Counted<std::uint8_t> jinkFrames; ///< +35: frames to the next evasive jink
   Counted<std::uint16_t> jinkPitch; ///< +36: the jink added to the wanted heading
   Counted<std::uint16_t> jinkYaw;
-  Counted<std::uint16_t> owner;      ///< +3A: a Thargon's mother: a slot's offset; 1 for a police Viper
+  Counted<SlotIndex> owner;          ///< +3A: a Thargon's mother; SlotIndex::Police for a police Viper, SlotIndex::None for neither
   Counted<std::uint8_t> cameraZHigh; ///< +3C: the high byte of the camera-frame z: bit 7 set behind
   Counted<std::uint8_t> depth;       ///< +3D: the drawing order; for the sun and planet, their scale shift again
   Counted<std::uint8_t> size;

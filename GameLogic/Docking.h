@@ -29,25 +29,25 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward);
 /// the frame is in dockingComputerSteering and rollRate, cleared first.
 void RunDockingComputer(GameState& _state);
 
-/// DrawTunnelRectangle (CS:1AA0): the four edges between the five points at DS:_points, x and y signed bytes about the view's
-/// centre, by DrawLine in drawColor. Returns whether any DrawLine filled bytes with REP STOSB.
-bool DrawTunnelRectangle(GameState& _state, std::uint16_t _points);
+/// DrawTunnelRectangle (CS:1AA0): the four edges between the five points of rectangle _rectangle of tunnelRectangles, x and y
+/// signed bytes about the view's centre, by DrawLine in drawColor. Returns whether any DrawLine filled bytes with REP STOSB.
+bool DrawTunnelRectangle(GameState& _state, std::size_t _rectangle);
 
 /// CheckDockingAlignment (CS:2D0F): whether the player's angles are within _tolerance of those that dock with the
 /// station in _station: pitch near 0 with yaw near a half turn, or the other way round, and roll near the station's
 /// spin or half a turn from it.
 [[nodiscard]] bool CheckDockingAlignment(const GameState& _state, const SpaceObject& _station, std::uint16_t _tolerance);
 
-/// MaskOutsideTunnel (CS:2E0A): zeroes the space-view buffer outside the centred rectangle whose top-left corner is at
-/// DS:_rectangle: the rows above it and its left margins each forwards or, _backwards, down (the direction flag it is
-/// called with), then the rows below it and its right margins from the end of the buffer down.
-void MaskOutsideTunnel(GameState& _state, std::uint16_t _rectangle, bool _backwards);
+/// MaskOutsideTunnel (CS:2E0A): zeroes the space-view buffer outside the centred rectangle whose top-left corner is the first
+/// point of rectangle _rectangle of tunnelRectangles: the rows above it and its left margins each forwards or, _backwards, down
+/// (the direction flag it is called with), then the rows below it and its right margins from the end of the buffer down.
+void MaskOutsideTunnel(GameState& _state, std::size_t _rectangle, bool _backwards);
 
 /// ToggleDockingComputer (CS:83B2): D, released: dockingKeyReleased cleared, and the docking computer off (all sound stopped,
 /// the view unlocked, a stopped ship given speed 4, the low beep), or on (state 0, the music and the beep) when inside the
 /// station's safe zone and the station has not been shot; refused with the low beep otherwise. Returns the message it posts for
 /// 25 frames.
-std::uint16_t ToggleDockingComputer(GameState& _state, Hardware& _hardware);
+Message ToggleDockingComputer(GameState& _state, Hardware& _hardware);
 
 /// CancelDockingComputer (CS:8BAA): the docking computer off, if it is on: dataA137 cleared, the view unlocked and all sound
 /// stopped (StopAllSound).

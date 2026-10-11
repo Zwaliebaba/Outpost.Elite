@@ -20,12 +20,9 @@ constexpr std::uint8_t KEYBOARD_ACKNOWLEDGE = 0x80;        // port 61h bit 7, th
 
 constexpr std::uint8_t VIDEO_VECTOR = 0x10;
 constexpr std::uint8_t BIOS_KEYBOARD_VECTOR = 0x16;
-constexpr std::uint8_t DOS_VECTOR = 0x21;
 constexpr std::uint8_t MOUSE_VECTOR = 0x33;
 constexpr std::uint8_t VIDEO_SET_MODE = 0x00;
 constexpr std::uint8_t BIOS_READ_KEY = 0x00;
-constexpr std::uint8_t DOS_READ_LINE = 0x0C;
-constexpr std::uint8_t DOS_BUFFERED_INPUT = 0x0A;
 constexpr std::uint16_t MOUSE_RESET = 0x0000;
 constexpr std::uint16_t MOUSE_BUTTON_PRESSES = 0x0005;
 
@@ -239,11 +236,6 @@ void Hardware::RunBiosTimerTick(std::uint16_t _segment, std::uint16_t _offset)
   m_platform.CallHandler(FarAddress{_segment, _offset});
 }
 
-void Hardware::ReadDosLine(std::uint16_t /*_segment*/, std::uint16_t /*_offset*/)
-{
-  m_platform.Refuse(FaultKind::WouldBlock, DOS_VECTOR, DOS_READ_LINE, DOS_BUFFERED_INPUT);
-}
-
 // DOS's file services, native (D27): the platform's DosFiles. A stamp is DOS's time at the platform's clock, as the emulated
 // DOS's was.
 
@@ -332,6 +324,11 @@ FarAddress Hardware::InterruptVector(std::uint8_t _vector)
 void Hardware::SetInterruptVector(std::uint8_t _vector, FarAddress _handler)
 {
   m_platform.SetInterruptVector(_vector, _handler);
+}
+
+FarAddress Hardware::BiosInterruptVector(std::uint8_t _vector) const noexcept
+{
+  return m_platform.PowerOnInterruptVector(_vector);
 }
 
 std::uint8_t Hardware::RomByte(std::uint16_t _segment, std::uint16_t _offset)

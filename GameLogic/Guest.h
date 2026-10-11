@@ -37,12 +37,6 @@ public:
     return m_hardware;
   }
 
-  /// The direction flag: what the code an interrupt handler interrupted left, and what DOS leaves for the program's start.
-  [[nodiscard]] bool Backward() const noexcept
-  {
-    return m_platform.Backward();
-  }
-
   /// The segment of the program's PSP: what DOS leaves in DS for the program's start.
   [[nodiscard]] std::uint16_t PspSegment() const noexcept
   {

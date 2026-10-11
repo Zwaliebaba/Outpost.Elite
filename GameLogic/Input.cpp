@@ -63,7 +63,14 @@ constexpr std::uint8_t ESC_CODE = 0x01;
 constexpr std::uint8_t W_CODE = 0x11;
 constexpr std::uint8_t D_CODE = 0x20;
 constexpr std::uint8_t KEY_BUFFER_CODES = 0x10;
+constexpr std::uint16_t KEY_BUFFER_WRAP = 0x0F; // keyBuffer is a ring of 16: an index past its last is its first
 constexpr std::size_t KEY_DOWN_WORDS = 0x40;
+
+// keyDown's 128 bytes, a byte a scan code: 1 while its key is held.
+[[nodiscard]] std::span<Counted<std::uint8_t>> KeyDown(GameState& _state)
+{
+  return _state.BytesFrom(_state.Data().keyDown, KEY_DOWN_WORDS * 2);
+}
 
 constexpr std::uint8_t KEYBOARD_DEVICE = 0;
 constexpr std::uint8_t JOYSTICK_DEVICE = 1;
@@ -196,10 +203,9 @@ Steering ReadAmstradStick(GameState& _state)
   return Steering{_state.Data().amstradStickRollRamp, Negate(_state.Data().amstradStickPitchRamp)};
 }
 
-// One axis of ReadJoystickSteering: (_count - centre) * 256 / centre by a DIV that can overflow into the game's trap, which
-// saves _xCount, the X count ReadJoystickSteering holds in BX throughout; halved and saturated at 127, over 8, less a dead zone of
-// 4, with the sign put back.
-[[nodiscard]] std::uint8_t StickAxis(GameState& _state, std::uint16_t _count, const Counted<std::uint16_t>& _center, std::uint16_t _xCount)
+// One axis of ReadJoystickSteering: (_count - centre) * 256 / centre by a DIV that can overflow into the game's trap; halved and
+// saturated at 127, over 8, less a dead zone of 4, with the sign put back.
+[[nodiscard]] std::uint8_t StickAxis(std::uint16_t _count, const Counted<std::uint16_t>& _center)
 {
   auto difference = static_cast<std::uint16_t>(_count - _center);
   const bool negative = (difference & 0x8000) != 0;
@@ -209,7 +215,7 @@ Steering ReadAmstradStick(GameState& _state)
   }
   // XOR DH,DH / MOV DL,AH / MOV AH,AL / XOR AL,AL: DX:AX = the difference * 256.
   const std::uint32_t dividend = std::uint32_t{difference} << 8;
-  const auto halved = static_cast<std::uint16_t>(DivideWord(_state, dividend, _center, _xCount).quotient >> 1);
+  const auto halved = static_cast<std::uint16_t>(DivideWord(dividend, _center).quotient >> 1);
   const std::uint8_t saturated = halved >= STICK_STEP_LIMIT ? MOST_STICK_STEP : Low(halved);
   const auto step = static_cast<std::uint8_t>(saturated >> 3);
   const std::uint8_t value = step >= STICK_DEAD_ZONE ? static_cast<std::uint8_t>(step - STICK_DEAD_ZONE) : std::uint8_t{0};
@@ -315,10 +321,9 @@ KeyPress GetKey(GameState& _state, Hardware& _hardware)
   const std::uint8_t count = _state.Data().keyBufferCount;
   if (count != 0)
   {
-    const std::uint16_t read = _state.Get(DS.keyBufferRead);
-    const std::uint8_t code = _state.Byte(read);
-    const auto next = static_cast<std::uint16_t>(read + 1);
-    _state.Set(DS.keyBufferRead, (next & 0x0F) == 0 ? DS.keyBuffer.offset : next);
+    const std::uint16_t read = _state.Data().keyBufferRead;
+    const std::uint8_t code = _state.Data().keyBuffer[read];
+    _state.Data().keyBufferRead = static_cast<std::uint16_t>((read + 1) & KEY_BUFFER_WRAP);
     _state.Data().keyBufferCount = static_cast<std::uint8_t>(count - 1);
     key = KeyPress{true, static_cast<std::uint8_t>(code & ~SHIFT_BIT), (code & SHIFT_BIT) != 0, false};
   }
@@ -332,11 +337,11 @@ void ResetKeyboard(GameState& _state, Hardware& _hardware)
   _hardware.DisableInterrupts();
   for (std::size_t word = 0; word < KEY_DOWN_WORDS; ++word)
   {
-    _state.SetWord(DS.keyDown.At(word * 2), 0);
+    SetWordIn(KeyDown(_state), word * 2, 0);
   }
   _state.Data().keyBufferCount = 0;
-  _state.Set(DS.keyBufferWrite, DS.keyBuffer.offset);
-  _state.Set(DS.keyBufferRead, DS.keyBuffer.offset);
+  _state.Data().keyBufferWrite = 0;
+  _state.Data().keyBufferRead = 0;
   _state.Data().rollRate = 0;
   _hardware.EnableInterrupts();
 }
@@ -350,7 +355,7 @@ void ReadScanCode(GameState& _state, Hardware& _hardware)
     if ((scan & BREAK_BIT) != 0)
     {
       const auto code = static_cast<std::uint8_t>(scan & ~BREAK_BIT);
-      _state.SetByte(DS.keyDown.At(code), 0);
+      KeyDown(_state)[code] = 0;
       if (code == D_CODE && _state.Data().inFlight == 1)
       {
         _state.Data().dockingKeyReleased = 1;
@@ -367,7 +372,7 @@ void ReadScanCode(GameState& _state, Hardware& _hardware)
       {
         _state.Data().forceMisjump = 1;
       }
-      _state.SetByte(DS.keyDown.At(scan), 1);
+      KeyDown(_state)[scan] = 1;
       std::uint8_t code = scan;
       if (_state.Data().keyDown.keyDownLeftShift == 1 || _state.Data().keyDown.keyDownRightShift == 1)
       {
@@ -376,10 +381,9 @@ void ReadScanCode(GameState& _state, Hardware& _hardware)
       const std::uint8_t count = _state.Data().keyBufferCount;
       if (count != KEY_BUFFER_CODES)
       {
-        const std::uint16_t write = _state.Get(DS.keyBufferWrite);
-        _state.SetByte(write, code);
-        const auto next = static_cast<std::uint16_t>(write + 1);
-        _state.Set(DS.keyBufferWrite, (next & 0x0F) == 0 ? DS.keyBuffer.offset : next);
+        const std::uint16_t write = _state.Data().keyBufferWrite;
+        _state.Data().keyBuffer[write] = code;
+        _state.Data().keyBufferWrite = static_cast<std::uint16_t>((write + 1) & KEY_BUFFER_WRAP);
         _state.Data().keyBufferCount = static_cast<std::uint8_t>(count + 1);
       }
     }
@@ -524,8 +528,8 @@ Steering ReadJoystickSteering(GameState& _state, Hardware& _hardware, std::uint8
   {
     return Steering{0, 0};
   }
-  const std::uint8_t roll = StickAxis(_state, axes.x, _state.Data().joystickCenterX, axes.x);
-  const std::uint8_t pitch = StickAxis(_state, axes.y, _state.Data().joystickCenterY, axes.x);
+  const std::uint8_t roll = StickAxis(axes.x, _state.Data().joystickCenterX);
+  const std::uint8_t pitch = StickAxis(axes.y, _state.Data().joystickCenterY);
   // ClampJoystickSteering (7A3C): the roll, then the pitch negated.
   return Steering{ClampRate(roll), ClampRate(Negate(pitch))};
 }

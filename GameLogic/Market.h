@@ -26,7 +26,7 @@ struct Quantity
 {
   std::uint16_t value;   ///< each digit added to ten times the low byte of what came before it
   bool valid;            ///< a number, with nothing but spaces around it, and at most 250
-  std::uint16_t end;     ///< one past the last character it read
+  std::size_t end;       ///< the index of the character after the last it read
   std::uint8_t lastRead; ///< that character, less '0' where it was read as a digit
 };
 
@@ -72,12 +72,13 @@ void StartMarketRandom(GameState& _state);
 /// no part in it.
 [[nodiscard]] std::optional<std::uint8_t> RollQuantityOnSale(GameState& _state);
 
-/// ParseQuantity (CS:6A99): the decimal number at DS:_text, spaces around it allowed.
-[[nodiscard]] Quantity ParseQuantity(const GameState& _state, std::uint16_t _text);
+/// ParseQuantity (CS:6A99): the decimal number in _text, a buffer typed into, spaces around it allowed. The buffer holds a NUL
+/// after what was typed, where the reading stops.
+[[nodiscard]] Quantity ParseQuantity(std::span<const Counted<std::uint8_t>> _text);
 
 /// PrintCargoQuantity (CS:6AD9): _quantity, or "-" for 0, in the quantity column of menuSelectedRow's row, in its
-/// attribute, and textAttribute put back.
-PrintedText PrintCargoQuantity(GameState& _state, std::uint16_t _quantity);
+/// attribute, and textAttribute put back. Returns the cell after its last character.
+std::uint16_t PrintCargoQuantity(GameState& _state, std::uint16_t _quantity);
 
 /// AddContrabandPenalty (CS:6DC1): menuSelectedRow's legal penalty onto legalStatus, unless the sum, in 8 bits,
 /// is 0. Returns that sum.

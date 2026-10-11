@@ -22,7 +22,7 @@ namespace
 // Int 33h, the mouse driver's vector.
 constexpr std::uint8_t MOUSE_VECTOR = 0x33;
 
-// The last byte of keyBuffer: the write address wraps after it.
+// keyBuffer is a ring of 16 codes: the write index wraps after its last.
 constexpr std::uint16_t KEY_BUFFER_WRAP_MASK = 0x000F;
 
 // Alt and PrtSc held for a moment: GetKey saves a screenshot while both are down. PrtSc also types '*' at a prompt.
@@ -35,11 +35,10 @@ constexpr std::string_view QUICK_SCREENSHOT_KEYS = "down Alt_L; down KP_Multiply
 // the Amstrad joystick's 77h-7Ch.
 void QueueScanCode(Elite::GameState& _state, std::uint8_t _code)
 {
-  const std::uint16_t write = _state.Word(Elite::DS.keyBufferWrite.offset);
-  _state.SetByte(write, _code);
-  const auto next = static_cast<std::uint16_t>(write + 1);
-  _state.SetWord(Elite::DS.keyBufferWrite.offset, (next & KEY_BUFFER_WRAP_MASK) == 0 ? Elite::DS.keyBuffer.offset : next);
-  _state.SetByte(Elite::DS.keyBufferCount.offset, static_cast<std::uint8_t>(_state.Byte(Elite::DS.keyBufferCount.offset) + 1));
+  const std::uint16_t write = _state.Data().keyBufferWrite;
+  _state.Data().keyBuffer[write] = _code;
+  _state.Data().keyBufferWrite = static_cast<std::uint16_t>((write + 1) & KEY_BUFFER_WRAP_MASK);
+  _state.Data().keyBufferCount = static_cast<std::uint8_t>(_state.Data().keyBufferCount + 1);
 }
 
 // A file in DOS's directory: its name, and the SHA-256 of its bytes in lowercase hex, or DIRECTORY for a directory.
@@ -101,10 +100,12 @@ void PlayEveryDiscMenuPath(TwinRig& _rig)
 {
   _rig.Play("key space; wait 3.3\nkey Escape; wait 0.1\nkey c; wait 0.1\ndigest no-names");
   _rig.Play("key v; wait 0.05\nkey q; wait 0.05\nkey Next; wait 0.05\nkey m; wait 0.05\ndigest no-mouse");
-  // A mouse driver: int 33h pointing at code that is not an IRET, the program's first byte.
+  // A mouse driver: int 33h pointing at a byte that is not an IRET, the first of the farewell DOS prints, which nothing writes.
+  // The code segment, where the original's first byte was, is not the game's memory (D33, piece 3).
   const Elite::FarAddress mouse = _rig.Host().InterruptVector(MOUSE_VECTOR);
-  _rig.Both([](Elite::Platform& _platform, Elite::GameState& _state)
-            { _platform.SetInterruptVector(MOUSE_VECTOR, Elite::FarAddress{_state.CodeSegment(), 0}); });
+  _rig.Both(
+    [](Elite::Platform& _platform, Elite::GameState& _state)
+    { _platform.SetInterruptVector(MOUSE_VECTOR, Elite::FarAddress{_state.DataSegment(), _state.OffsetOf(_state.Data().exitMessage)}); });
   _rig.Play("key m; wait 0.05\ndigest mouse\nkey k; wait 0.05");
   _rig.Both([mouse](Elite::Platform& _platform, Elite::GameState&) { _platform.SetInterruptVector(MOUSE_VECTOR, mouse); });
   // The IBM stick, with nothing in the port and then with a stick in it.

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "Counted.h"
+#include "Message.h"
 #include "SpaceObject.h"
 
 #include <cstddef>
@@ -447,7 +448,7 @@ struct GameData
   /// 'Equipment Loss due to Low Energy'
   Counted<std::uint8_t> equipmentLossMessage[40];
   /// slot of the ship whose laser hit the player (51C3)
-  Counted<std::uint16_t> playerHitBy;
+  Counted<SlotIndex> playerHitBy;
   /// set to 2 or 1 by the enemy fire code (51C7, 51DA); ApplyEnemyLaserHit applies it and clears it
   Counted<std::uint8_t> playerHitPending;
   /// 1 after a successful dock (0x2C4F), 0 at 0x2A11; ShowCommanderStatusScreen debriefs only when it is 1
@@ -505,9 +506,9 @@ struct GameData
   /// 'Right View', otherwise
   Counted<std::uint8_t> rightViewText[11];
   /// pointer of the text on the message line now; UpdateMessageLine redraws only when messagePointer differs
-  Counted<std::uint16_t> messageShown;
+  Counted<Message> messageShown;
   /// text the message line should show; written with messageFrames by about 18 routines
-  Counted<std::uint16_t> messagePointer;
+  Counted<Message> messagePointer;
   /// messageFrames's two bytes, as the symbol table names them (DS:4B09).
   struct MessageFramesBytes
   {
@@ -535,7 +536,7 @@ struct GameData
   /// code; CheckMissileWarning, CheckAltitudeWarning, CheckTemperatureWarning, CheckEnergyWarning; jmp [bx+0x4D15] at 0x36E3
   Counted<std::uint16_t> warningChecks[4];
   /// text of the active warning
-  Counted<std::uint16_t> warningMessage;
+  Counted<Message> warningMessage;
   /// 20 when a warning is raised; counts down
   Counted<std::uint8_t> warningFrames;
   /// last warning raised; the next search starts after it
@@ -1038,7 +1039,7 @@ struct GameData
   /// set by UpdateMissileAi; CheckMissileWarning clears it
   Counted<std::uint8_t> incomingMissileAlert;
   /// mask ship slot kept while its escorts are placed
-  Counted<std::uint16_t> maskShipSlot;
+  Counted<SlotIndex> maskShipSlot;
   Counted<std::uint8_t> gap7B05[1];
   /// 1 while ExplodeObject explodes a station: 10 extra debris steps
   Counted<std::uint8_t> explodingStation;
@@ -1605,7 +1606,7 @@ struct GameData
   /// set by the docking computer's final approach; F1-F4 are ignored while 1
   Counted<std::uint8_t> viewLocked;
   /// slot the missile is locked on
-  Counted<std::uint16_t> missileTarget;
+  Counted<SlotIndex> missileTarget;
   /// laser type (0-3) for this view, from GetViewLaser; damage is type + 1; set at 0x8297 when fire is pressed; DrawLaserBeams picks its...
   Counted<std::uint8_t> firingLaserType;
   /// 1 for the frame the laser fires; ResolveLaserFire clears it

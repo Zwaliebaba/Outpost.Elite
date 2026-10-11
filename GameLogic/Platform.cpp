@@ -15,11 +15,10 @@ namespace Elite
 namespace
 {
 
-// The bits of the 8088's FLAGS that the platform keeps: the interrupt flag and the direction flag. The rest of FLAGS is the
-// processor's, and there is none.
+// The bits of the 8088's FLAGS that the platform keeps: the trap and interrupt flags. The rest of FLAGS is the processor's, and
+// there is none; native code passes the direction flag itself (_backward).
 constexpr std::uint16_t FLAG_TRAP = 0x0100;
 constexpr std::uint16_t FLAG_INTERRUPT = 0x0200;
-constexpr std::uint16_t FLAG_DIRECTION = 0x0400;
 // DOS starts a program with FLAGS F202h: interrupts on and the direction flag clear (ADR-006 item 4).
 constexpr std::uint16_t ENTRY_FLAGS = 0xF202;
 
@@ -133,6 +132,7 @@ Platform::Platform(GameState& _state, FileStore& _files, const Desc& _desc)
   {
     m_vectors[VECTOR_MOUSE] = FarAddress{ROM_SEGMENT, MOUSE_DRIVER_OFFSET};
   }
+  m_powerOnVectors = m_vectors;
   // The BIOS's two hardware handlers are native, and run whenever the program has put the BIOS's vectors back and an
   // interrupt falls due (ADR-011 item 3).
   Hook(FarAddress{ROM_SEGMENT, TIMER_HANDLER_OFFSET}, "BiosTimerHandler", [this] { RunBiosTimerHandler(); });
@@ -323,11 +323,6 @@ void Platform::DisableInterrupts() noexcept
 bool Platform::InterruptsEnabled() const noexcept
 {
   return (m_flags & FLAG_INTERRUPT) != 0;
-}
-
-bool Platform::Backward() const noexcept
-{
-  return (m_flags & FLAG_DIRECTION) != 0;
 }
 
 void Platform::TakeDueInterrupts()

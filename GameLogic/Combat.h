@@ -47,7 +47,7 @@ struct Detonation
 /// What FindShipInCrosshairs finds.
 struct CrosshairTarget
 {
-  std::optional<std::uint16_t> slot; ///< the nearest drawn object over the view's centre, if there is one
+  std::optional<SlotIndex> slot; ///< the nearest drawn object over the view's centre, if there is one
   /// What the original leaves in BX: BL the type byte of the last slot it looked at, BH what the last slot it tested left there,
   /// which is all of BX when that was the last slot. ExplodeObject's barrel count saves it, should its divide trap.
   std::uint16_t bx;
@@ -141,7 +141,7 @@ void LaunchPlayerMissile(GameState& _state, std::uint16_t _source, bool _backwar
 /// _kind names and moved clear of it: 14h a missile at the player, moved three times, and 7 a Thargon whose mother is _launcher,
 /// moved twice. Returns the slot, or nothing when no slot is free or _kind is neither. The original's 15h, an escape pod, and 5, a
 /// Krait, which no caller passes, went with InitEscapePod and InitKraitHunter (D22).
-std::optional<std::uint16_t> LaunchShipFromObject(GameState& _state, const SpaceObject& _launcher, std::uint8_t _kind, bool _backward);
+std::optional<SlotIndex> LaunchShipFromObject(GameState& _state, const SpaceObject& _launcher, std::uint8_t _kind, bool _backward);
 
 /// TryLaunchMissileAtPlayer (CS:543A): _slot launches a missile at the player (LaunchShipFromObject, the copy backwards when
 /// _backward) when it may: once the player has three kills, while it is hostile, does not hold its fire (CheckSafeZoneHoldFire),
@@ -176,7 +176,7 @@ bool ResolveLaserFire(GameState& _state, Hardware& _hardware, bool _backward);
 
 /// CheckMissileTargetDestroyed (CS:8B8B): when a missile is locked on the slot at _slot, its message and the missile unlocked.
 /// Returns whether it was.
-bool CheckMissileTargetDestroyed(GameState& _state, std::uint16_t _slot);
+bool CheckMissileTargetDestroyed(GameState& _state, const SpaceObject& _slot);
 
 /// CreditKill (CS:8BC6): the kill of _slot paid for, or held against the player's legal status. A bounty of 0 pays nothing;
 /// any other counts a kill in killCount, the INC written and then FEh over FFh; FFh pays 500 for a Thargoid and otherwise is a

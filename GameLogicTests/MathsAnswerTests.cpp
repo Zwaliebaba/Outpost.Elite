@@ -21,9 +21,6 @@ using Elite::DS;
 /// The maths' known answers, from the repository's root. The file's header documents its format and states the count.
 constexpr std::string_view MATHS_ANSWERS_FILE = "GameLogicTests/MathsAnswers.txt";
 
-// The BX a divide's trap saves, which no answer reads.
-constexpr std::uint16_t TRAP_BX = 0x5A5A;
-
 // Pairs of inputs, as aggregates: a std::pair's converting constructor would narrow each literal inside <utility>.
 struct UnsignedDivide
 {
@@ -49,9 +46,21 @@ constexpr auto SIGNED_DIVIDENDS =
                                 0xC0004000, 0xC0008000, 0x7FFFFFFF, 0x80000000, 0x12345678, 0xEDCBA988});
 constexpr auto SIGNED_DIVISORS =
   std::to_array<std::uint16_t>({0x0000, 0x0001, 0xFFFF, 0x0002, 0xFFFE, 0x0100, 0x7FFF, 0x8000, 0x8001, 0x1234});
-// The instruction after each divide DivideUnsigned serves: ProjectVertices' two, whose memory operand the trap misreads,
-// ProjectDiscCoordinate's two, ScaleByInverseDistance's and ProjectToScreen's two.
-constexpr auto DIVIDE_RETURNS = std::to_array<std::uint16_t>({0x236C, 0x2395, 0x4044, 0x4064, 0x40E2, 0x8D4B, 0x8D56});
+// The instruction after each divide DivideUnsigned serves, by which each answer names it, and what the trap makes of the divide
+// there: ProjectVertices' two, whose memory operand the trap misreads, ProjectDiscCoordinate's two, ScaleByInverseDistance's and
+// ProjectToScreen's two.
+struct DivideReturn
+{
+  std::uint16_t offset;
+  Elite::DivideTrap trap;
+};
+constexpr auto DIVIDE_RETURNS = std::to_array<DivideReturn>({{0x236C, Elite::DivideTrap::LowByte},
+                                                             {0x2395, Elite::DivideTrap::LowByte},
+                                                             {0x4044, Elite::DivideTrap::Word},
+                                                             {0x4064, Elite::DivideTrap::Word},
+                                                             {0x40E2, Elite::DivideTrap::Word},
+                                                             {0x8D4B, Elite::DivideTrap::Word},
+                                                             {0x8D56, Elite::DivideTrap::Word}});
 constexpr auto UNSIGNED_DIVIDES =
   std::to_array<UnsignedDivide>({{0x00012345, 0x0010}, {0x0000FFFF, 0x0001}, {0x00100000, 0x0010}, {0x00000001, 0x0000}});
 
@@ -110,13 +119,13 @@ constexpr std::size_t MATHS_ANSWERS = BYTE_DIVIDENDS.size() * BYTE_DIVISORS.size
 }
 
 // The divides, through the game's trap where the quotient does not fit.
-void Divides(Elite::GameState& _state, std::vector<std::string>& _answers)
+void Divides(std::vector<std::string>& _answers)
 {
   for (const std::uint16_t dividend : BYTE_DIVIDENDS)
   {
     for (const std::uint8_t divisor : BYTE_DIVISORS)
     {
-      const Elite::ByteQuotient result = Elite::DivideByte(_state, dividend, divisor, TRAP_BX);
+      const Elite::ByteQuotient result = Elite::DivideByte(dividend, divisor);
       _answers.push_back(std::format("DivideByte {:04x} {:02x} = {:02x} {:02x}", dividend, divisor, result.quotient, result.remainder));
     }
   }
@@ -124,7 +133,7 @@ void Divides(Elite::GameState& _state, std::vector<std::string>& _answers)
   {
     for (const std::uint16_t divisor : WORD_DIVISORS)
     {
-      const Elite::WordQuotient result = Elite::DivideWord(_state, dividend, divisor, TRAP_BX);
+      const Elite::WordQuotient result = Elite::DivideWord(dividend, divisor);
       _answers.push_back(std::format("DivideWord {:08x} {:04x} = {:04x} {:04x}", dividend, divisor, result.quotient, result.remainder));
     }
   }
@@ -132,17 +141,17 @@ void Divides(Elite::GameState& _state, std::vector<std::string>& _answers)
   {
     for (const std::uint16_t divisor : SIGNED_DIVISORS)
     {
-      const Elite::WordQuotient result = Elite::DivideSignedWord(_state, dividend, divisor, TRAP_BX);
+      const Elite::WordQuotient result = Elite::DivideSignedWord(dividend, divisor);
       _answers.push_back(
         std::format("DivideSignedWord {:08x} {:04x} = {:04x} {:04x}", dividend, divisor, result.quotient, result.remainder));
     }
   }
-  for (const std::uint16_t returnOffset : DIVIDE_RETURNS)
+  for (const DivideReturn& divideReturn : DIVIDE_RETURNS)
   {
     for (const auto& [dividend, divisor] : UNSIGNED_DIVIDES)
     {
-      const Elite::WordQuotient result = Elite::DivideUnsigned(_state, dividend, divisor, returnOffset, TRAP_BX);
-      _answers.push_back(std::format("DivideUnsigned {:08x} {:04x} at {:04x} = {:04x} {:04x}", dividend, divisor, returnOffset,
+      const Elite::WordQuotient result = Elite::DivideUnsigned(dividend, divisor, divideReturn.trap);
+      _answers.push_back(std::format("DivideUnsigned {:08x} {:04x} at {:04x} = {:04x} {:04x}", dividend, divisor, divideReturn.offset,
                                      result.quotient, result.remainder));
     }
   }
@@ -269,7 +278,7 @@ public:
     ReferenceRig rig("MathsAnswers");
     Elite::GameState& state = rig.State();
     std::vector<std::string> answers;
-    Divides(state, answers);
+    Divides(answers);
     RandomNumbers(state, answers);
     Rotations(state, answers);
     ArcTangents(state, answers);

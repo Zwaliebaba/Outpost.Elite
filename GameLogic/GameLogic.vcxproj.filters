@@ -111,6 +111,9 @@
     <ClInclude Include="Docked.h">
       <Filter>Docked</Filter>
     </ClInclude>
+    <ClInclude Include="DockedTables.h">
+      <Filter>Docked</Filter>
+    </ClInclude>
     <ClInclude Include="Docking.h">
       <Filter>Docking</Filter>
     </ClInclude>
@@ -120,13 +123,22 @@
     <ClInclude Include="Equipment.h">
       <Filter>Equipment</Filter>
     </ClInclude>
+    <ClInclude Include="EquipmentTables.h">
+      <Filter>Equipment</Filter>
+    </ClInclude>
     <ClInclude Include="FileStore.h">
       <Filter>Platform</Filter>
     </ClInclude>
     <ClInclude Include="Flight.h">
       <Filter>Flight</Filter>
     </ClInclude>
+    <ClInclude Include="FlightTables.h">
+      <Filter>Flight</Filter>
+    </ClInclude>
     <ClInclude Include="Galaxy.h">
+      <Filter>Galaxy</Filter>
+    </ClInclude>
+    <ClInclude Include="GalaxyTables.h">
       <Filter>Galaxy</Filter>
     </ClInclude>
     <ClInclude Include="Game.h">
@@ -165,8 +177,14 @@
     <ClInclude Include="Market.h">
       <Filter>Market</Filter>
     </ClInclude>
+    <ClInclude Include="MarketTables.h">
+      <Filter>Market</Filter>
+    </ClInclude>
     <ClInclude Include="Maths.h">
       <Filter>Maths</Filter>
+    </ClInclude>
+    <ClInclude Include="Message.h">
+      <Filter>Text</Filter>
     </ClInclude>
     <ClInclude Include="Mouse.h">
       <Filter>Platform</Filter>
@@ -204,7 +222,13 @@
     <ClInclude Include="SaveLoad.h">
       <Filter>SaveLoad</Filter>
     </ClInclude>
+    <ClInclude Include="SaveLoadTables.h">
+      <Filter>SaveLoad</Filter>
+    </ClInclude>
     <ClInclude Include="Scene.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="SceneTables.h">
       <Filter>Scene</Filter>
     </ClInclude>
     <ClInclude Include="ServiceFault.h">
@@ -219,6 +243,9 @@
     <ClInclude Include="Sound.h">
       <Filter>Sound</Filter>
     </ClInclude>
+    <ClInclude Include="SoundTables.h">
+      <Filter>Sound</Filter>
+    </ClInclude>
     <ClInclude Include="Speaker.h">
       <Filter>Platform</Filter>
     </ClInclude>
@@ -229,6 +256,9 @@
       <Filter>Replay</Filter>
     </ClInclude>
     <ClInclude Include="Text.h">
+      <Filter>Text</Filter>
+    </ClInclude>
+    <ClInclude Include="TextTables.h">
       <Filter>Text</Filter>
     </ClInclude>
     <ClInclude Include="Timer.h">

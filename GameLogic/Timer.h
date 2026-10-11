@@ -20,13 +20,12 @@ namespace Elite
 // ── The routines de-assembled (ADR-012), on the GameState and the devices (ADR-014) ──
 
 /// TimerInterrupt (CS:0215): int 8's handler, without the IRET: TimerTick, then the end of the interrupt; on the Amstrad, every
-/// 18th tick, or every 55th with its mouse driver's rate, the BIOS's handler too (biosTimerChainCountdown). _backward is the
-/// direction flag the interrupted code left.
-void TimerInterrupt(GameState& _state, Hardware& _hardware, bool _backward);
+/// 18th tick, or every 55th with its mouse driver's rate, the BIOS's handler too (biosTimerChainCountdown).
+void TimerInterrupt(GameState& _state, Hardware& _hardware);
 
-/// InstallTimerInterrupt (CS:00C6): the PIT at about 1 kHz, port 61h saved and the speaker's gate and data cleared, the
-/// BIOS's int 8 handler kept in the code segment (savedTimerVector) and TimerInterrupt installed on int 8, and interrupts
-/// enabled.
+/// InstallTimerInterrupt (CS:00C6): the PIT at about 1 kHz, port 61h saved and the speaker's gate and data cleared,
+/// TimerInterrupt installed on int 8 in place of the BIOS's handler, which the original keeps in its code segment
+/// (savedTimerVector) and native code takes from the BIOS, and interrupts enabled.
 void InstallTimerInterrupt(GameState& _state, Hardware& _hardware);
 
 /// RestoreTimerInterrupt (CS:016B): with interrupts off, the BIOS's handler put back on int 8, port 61h
@@ -41,9 +40,8 @@ BiosClock RestoreTimerInterrupt(GameState& _state, Hardware& _hardware);
 /// WaitForTimerTick (CS:7772): until timerTicks changes, at most one tick. Waits as a rule (ADR-015).
 void WaitForTimerTick(GameState& _state, Hardware& _hardware);
 
-/// TimerTick (CS:7150): one tick's counters, the protection's answer check, and the sound. _backward is the direction
-/// flag the interrupted code left, which the answer check compares with.
-void TimerTick(GameState& _state, Hardware& _hardware, bool _backward);
+/// TimerTick (CS:7150): one tick's counters and the sound.
+void TimerTick(GameState& _state, Hardware& _hardware);
 
 // ── The entry of the timer's interrupt handler ──
 

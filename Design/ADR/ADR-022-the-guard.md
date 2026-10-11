@@ -1,6 +1,6 @@
 # ADR-022 — The guard: pictures, outcomes and subsystem answers (D33)
 
-**Status:** accepted 2026-10-11, with the change that implements it: picture and outcome lines in every replay and beside every known answer, `Elite::OutcomeValue`, and known answers for the galaxies, the markets and the maths. It is the first piece of D33's route, D29's guard brought forward, with D33's amendment that the pictures and the timing outcomes are reported rather than gated ([Reverse-Engineering-Plan.md §5](../Reverse-Engineering-Plan.md#phase-5--beyond-the-original-outside-this-plan)).
+**Status:** accepted 2026-10-11, with the change that implements it: picture and outcome lines in every replay and beside every known answer, `Elite::OutcomeValue`, and known answers for the galaxies, the markets and the maths. It is the first piece of D33's route, D29's guard brought forward, with D33's amendment that the pictures and the timing outcomes are reported rather than gated ([Reverse-Engineering-Plan.md §5](../Reverse-Engineering-Plan.md#phase-5--beyond-the-original-outside-this-plan)). Item 6's re-base is done by [ADR-025](ADR-025-addresses-become-what-they-mean.md) for the converted words.
 
 ## Context
 

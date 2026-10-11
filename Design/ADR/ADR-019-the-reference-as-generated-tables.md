@@ -1,6 +1,6 @@
 # ADR-019 — The reference's image as generated tables (D3, D23)
 
-**Status:** accepted 2026-10-10, with the change that implements it: `Tools/GenerateReference.py`, the generated `GameLogic/ReferenceImage.h` and `.cpp`, `ExeLoader` split into parsing and placing, and every host loading the generated image. It records the last change D23 ends Phase 4 with ([Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner)).
+**Status:** accepted 2026-10-10, with the change that implements it: `Tools/GenerateReference.py`, the generated `GameLogic/ReferenceImage.h` and `.cpp`, `ExeLoader` split into parsing and placing, and every host loading the generated image. It records the last change D23 ends Phase 4 with ([Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner)). **Amended 2026-10-11 by [ADR-025](ADR-025-addresses-become-what-they-mean.md):** `Tools/GenerateReference.py` is deleted; `ReferenceImage.cpp` is checked-in source, and `Tools/GenerateTables.py` generates typed tables from it per subsystem.
 
 ## Context
 

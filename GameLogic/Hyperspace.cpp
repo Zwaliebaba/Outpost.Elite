@@ -55,7 +55,6 @@ constexpr std::uint16_t ARRIVAL_OFFSET_LEAST = 0x200;
 constexpr std::uint16_t ANGLE_MASK = 0x7FF;
 
 constexpr std::uint16_t HYPERSPACE_RING_WORDS = 15;
-constexpr std::uint16_t HYPERSPACE_RING_COUNT = 10;
 constexpr std::uint16_t HYPERSPACE_RING_BYTES = 3;
 constexpr std::uint8_t HYPERSPACE_RING_LARGEST = 0x96;
 constexpr std::uint8_t HYPERSPACE_RING_SMALLEST_DRAWN = 0x14;
@@ -113,7 +112,8 @@ void GalacticJump(GameState& _state, std::uint16_t _countIfNone)
       _state.Data().commanderBlock.galaxyNumber = 0;
     }
   }
-  _state.SetByte(DS.arrivalGalaxyDigit.offset, static_cast<std::uint8_t>(_state.Data().commanderBlock.galaxyNumber + GALAXY_DIGIT_ONE));
+  _state.Data().arrivalGalaxyText.arrivalGalaxyDigit[0] =
+    static_cast<std::uint8_t>(_state.Data().commanderBlock.galaxyNumber + GALAXY_DIGIT_ONE);
   // AND AL,3Fh / ADD AL,60h, and AND AH,1Fh / ADD AH,30h: a random point about the middle of the chart.
   const std::uint16_t random = NextRandom(_state);
   _state.Data().commanderBlock.chartCursorX = static_cast<std::uint8_t>((Low(random) & 0x3F) + 0x60);
@@ -125,22 +125,22 @@ void GalacticJump(GameState& _state, std::uint16_t _countIfNone)
   SelectSystemAtCursor(_state, Negate(index));
 }
 
-// The arrival's message, and a fuel leak armed for missions 1 and 3 at their stages. Returns the message, which the
-// original leaves in SI.
-[[nodiscard]] std::uint16_t PostArrival(GameState& _state)
+// The arrival's message, and a fuel leak armed for missions 1 and 3 at their stages. Returns the message, whose text's
+// address the original leaves in SI.
+[[nodiscard]] Message PostArrival(GameState& _state)
 {
-  std::uint16_t message = DS.arrivalSystemText.offset;
+  Message message = Message::ArrivalSystem;
   if (_state.Data().galacticJumpPending != 0)
   {
-    message = _state.Data().commanderBlock.galaxyNumber == NINTH_GALAXY ? DS.ninthGalaxyText.offset : DS.arrivalGalaxyText.offset;
+    message = _state.Data().commanderBlock.galaxyNumber == NINTH_GALAXY ? Message::NinthGalaxy : Message::ArrivalGalaxy;
     _state.Data().commanderBlock.legalStatus = 0;
     _state.Data().commanderBlock.galacticHyperdriveFitted = 0;
   }
   if (_state.Data().commanderBlock.witchspaceCountdown == 1)
   {
-    message = DS.witchSpaceArrivalText.offset;
+    message = Message::WitchSpaceArrival;
   }
-  _state.Set(DS.messagePointer, message);
+  _state.Data().messagePointer = message;
   _state.Data().messageFrames = ARRIVAL_MESSAGE_FRAMES;
   _state.Data().galacticJumpPending = 0;
   if (_state.Data().commanderBlock.witchspaceCountdown == 1)
@@ -156,12 +156,13 @@ void GalacticJump(GameState& _state, std::uint16_t _countIfNone)
   return message;
 }
 
-// add [_low], low byte of _value; adc [_high], high byte.
-void AddCarried(GameState& _state, std::uint16_t _low, std::uint16_t _high, std::uint16_t _value)
+// add [_low], low byte of _value; adc [_high], high byte: _value added to the top 16 bits of a coordinate, _low's high byte
+// and _high.
+void AddCarried(Counted<std::uint16_t>& _low, Counted<std::uint8_t>& _high, std::uint16_t _value)
 {
-  const auto sum = static_cast<unsigned>(_state.Byte(_low) + Low(_value));
-  _state.SetByte(_low, static_cast<std::uint8_t>(sum));
-  _state.SetByte(_high, static_cast<std::uint8_t>(_state.Byte(_high) + High(_value) + (sum >> 8)));
+  const auto sum = static_cast<unsigned>(High(_low) + Low(_value));
+  _low = WithHigh(_low, static_cast<std::uint8_t>(sum));
+  _high = static_cast<std::uint8_t>(_high + High(_value) + (sum >> 8));
 }
 
 } // namespace
@@ -179,19 +180,18 @@ ScreenChange ArriveInSystem(GameState& _state, Hardware& _hardware, bool _backwa
   const std::uint16_t xOffset = RandomArrivalOffset(_state);
   // XCHG CX,AX / CWD / XCHG CX,AX: DL is z's sign, which carries into its top byte; DH counts the three slots.
   const std::uint8_t zTop = (zOffset & 0x8000) != 0 ? std::uint8_t{0xFF} : std::uint8_t{0};
-  std::uint16_t slot = DS.shipSlots.offset;
+  SlotIndex index = SlotIndex::Sun;
   for (std::uint8_t slots = ARRIVAL_SLOTS; slots != 0; --slots)
   {
-    AddCarried(_state, static_cast<std::uint16_t>(slot + 5), static_cast<std::uint16_t>(slot + 1), xOffset);
-    AddCarried(_state, static_cast<std::uint16_t>(slot + 7), static_cast<std::uint16_t>(slot + 2), yOffset);
-    const auto z = static_cast<std::uint16_t>(slot + 8);
-    const std::uint32_t sum = std::uint32_t{_state.Word(z)} + zOffset;
-    _state.SetWord(z, static_cast<std::uint16_t>(sum));
-    const auto top = static_cast<std::uint16_t>(slot + 3);
-    _state.SetByte(top, static_cast<std::uint8_t>(_state.Byte(top) + zTop + (sum >> 16)));
-    slot = static_cast<std::uint16_t>(slot + SLOT_BYTES);
+    SpaceObject& slot = _state.Slot(index);
+    AddCarried(slot.x, slot.xHigh, xOffset);
+    AddCarried(slot.y, slot.yHigh, yOffset);
+    const std::uint32_t sum = std::uint32_t{slot.z} + zOffset;
+    slot.z = static_cast<std::uint16_t>(sum);
+    slot.zHigh = static_cast<std::uint8_t>(slot.zHigh + zTop + (sum >> 16));
+    index = SlotAfter(index);
   }
-  const Angles toStation = ComputeAnglesToObject(_state, _state.ObjectAt(DS.stationSlot.offset));
+  const Angles toStation = ComputeAnglesToObject(_state, _state.Slot(SlotIndex::Station));
   _state.Data().playerPitchAngle = toStation.first;
   _state.Data().playerYawAngle = toStation.second;
   _state.Data().playerRollAngle = static_cast<std::uint16_t>(NextRandom(_state) & ANGLE_MASK);
@@ -205,12 +205,12 @@ MassLock IsMassLocked(GameState& _state)
   {
     return lock;
   }
-  lock.sun = IsObjectNear(_state, _state.ObjectAt(DS.shipSlots.offset));
+  lock.sun = IsObjectNear(_state, _state.Slot(SlotIndex::Sun));
   if (lock.sun->nearby)
   {
     return lock;
   }
-  lock.planet = IsObjectNear(_state, _state.ObjectAt(Offset(DS.shipSlots.offset, SpaceObject::BYTES)));
+  lock.planet = IsObjectNear(_state, _state.Slot(SlotIndex::Planet));
   if (lock.planet->nearby)
   {
     return lock;
@@ -218,7 +218,7 @@ MassLock IsMassLocked(GameState& _state)
   // Any ship on the scanner but the rocks, barrels and splinters: MOV CL,objectSlotCount / XOR CH,CH / SUB CL,3 / JG, else RET
   // with the SUB's borrow.
   const std::uint8_t slots = _state.Data().objectSlotCount;
-  ShipScan scan{DS.firstShipSlot.offset, static_cast<std::uint8_t>(slots - FIRST_SHIP_SLOT_INDEX)};
+  ShipScan scan{SlotIndex::FirstShip, static_cast<std::uint8_t>(slots - FIRST_SHIP_SLOT_INDEX)};
   if (static_cast<std::int8_t>(slots) <= FIRST_SHIP_SLOT_INDEX)
   {
     lock.locked = slots < FIRST_SHIP_SLOT_INDEX;
@@ -227,7 +227,7 @@ MassLock IsMassLocked(GameState& _state)
   }
   do
   {
-    const SpaceObject& ship = _state.ObjectAt(scan.slot);
+    const SpaceObject& ship = _state.Slot(scan.slot);
     const auto type = static_cast<std::uint8_t>((ship.type >> 1) & SHIP_TYPE_MASK);
     const bool unlocking = std::find(UNLOCKING_TYPES.begin(), UNLOCKING_TYPES.end(), type) != UNLOCKING_TYPES.end();
     if ((ship.type & SpaceObject::ACTIVE) != 0 && !unlocking && (ship.flags & FLAG_BLIP_DRAWN) != 0)
@@ -235,7 +235,7 @@ MassLock IsMassLocked(GameState& _state)
       lock.ships = scan;
       return lock;
     }
-    scan.slot = Offset(scan.slot, SpaceObject::BYTES);
+    scan.slot = SlotAfter(scan.slot);
   } while (--scan.slotsLeft != 0);
   lock.locked = false;
   lock.ships = scan;
@@ -245,7 +245,7 @@ MassLock IsMassLocked(GameState& _state)
 void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward)
 {
   (void)EraseCompassAndBlips(_state);
-  _state.Set(DS.messagePointer, DS.hyperspaceEngagedText.offset);
+  _state.Data().messagePointer = Message::HyperspaceEngaged;
   _state.Data().messageFrames = ENGAGED_MESSAGE_FRAMES;
   if (_state.Data().galacticJumpPending == 1)
   {
@@ -269,19 +269,20 @@ void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_
   // 65,536. Each turn carries the count, SI and DI.
   _state.Data().commanderBlock.selectedDistanceTenthsLy = 0;
   const bool galactic = _state.Data().galacticJumpPending == 1;
-  std::uint16_t from = galactic ? DS.selectedSystemName.offset : DS.hyperspaceTargetRecord.offset;
-  std::uint16_t to = DS.currentSystemName.offset;
-  std::uint16_t bytes = _state.Data().systemRecordBytes;
-  for (;;)
+  const std::uint32_t bytes = LoopCount(_state.Data().systemRecordBytes);
+  const std::span<const Counted<std::uint8_t>> from = galactic ? _state.BytesFrom(_state.Data().commanderBlock.selectedSystemName, bytes)
+                                                               : _state.BytesFrom(_state.Data().hyperspaceTargetRecord, bytes);
+  const std::span<Counted<std::uint8_t>> to = _state.BytesFrom(_state.Data().commanderBlock.currentSystemName, bytes);
+  for (std::uint32_t copied = 0;;)
   {
-    _state.SetByte(to, _state.Byte(from));
-    from = Offset(from, 1);
-    to = Offset(to, 1);
-    if (--bytes == 0)
+    to[copied] = std::uint8_t{from[copied]};
+    ++copied;
+    if (copied == bytes)
     {
       break;
     }
-    _hardware.LoopTurn(DESTINATION_COPY_LOOP, {bytes, from, to});
+    _hardware.LoopTurn(DESTINATION_COPY_LOOP,
+                       {static_cast<std::uint16_t>(bytes - copied), _state.OffsetOf(from[copied]), _state.OffsetOf(to[copied])});
   }
   _state.Data().commanderBlock.marketQuantitiesSet = 0;
   GameData::CommanderBlock& commander = _state.Data().commanderBlock;
@@ -336,10 +337,10 @@ void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_
 
 void ResetHyperspaceRings(GameState& _state, bool _backward)
 {
-  // REP MOVSW within the data segment, a word at a time.
+  // REP MOVSW within the data segment, a word at a time, SI and DI from the tables' starts, forwards or, _backward, down.
   const auto step = static_cast<std::uint16_t>(_backward ? 0xFFFE : 2);
-  std::uint16_t from = DS.hyperspaceRingStart.offset;
-  std::uint16_t to = DS.hyperspaceRings.offset;
+  std::uint16_t from = _state.OffsetOf(_state.Data().hyperspaceRingStart);
+  std::uint16_t to = _state.OffsetOf(_state.Data().hyperspaceRings);
   for (std::uint16_t word = 0; word < HYPERSPACE_RING_WORDS; ++word)
   {
     _state.SetWord(to, _state.Word(from));
@@ -353,30 +354,28 @@ bool DrawHyperspaceRings(GameState& _state)
   // LOOP over the ten rings, three bytes each: the delay, the radius and the colour. PUSH CX and PUSH SI keep the count and
   // the ring round DrawCircle.
   bool filled = false;
-  std::uint16_t ring = DS.hyperspaceRings.offset;
-  for (std::uint16_t rings = HYPERSPACE_RING_COUNT; rings != 0; --rings)
+  for (Counted<std::uint8_t>(&ring)[HYPERSPACE_RING_BYTES] : _state.Data().hyperspaceRings)
   {
-    const std::uint8_t delay = _state.Byte(ring);
+    const std::uint8_t delay = ring[0];
     if (delay != 0)
     {
-      _state.SetByte(ring, static_cast<std::uint8_t>(delay - 1));
+      ring[0] = static_cast<std::uint8_t>(delay - 1);
     }
-    else if (const std::uint8_t radius = _state.Byte(Offset(ring, 1)); radius < HYPERSPACE_RING_LARGEST)
+    else if (const std::uint8_t radius = ring[1]; radius < HYPERSPACE_RING_LARGEST)
     {
       // Grows by an eighth, at least 1, and is drawn from 20 on in its colour about the space view's centre.
       const auto eighth = static_cast<std::uint8_t>(radius >> 3);
       const auto grown = static_cast<std::uint8_t>(radius + (eighth == 0 ? 1 : eighth));
-      _state.SetByte(Offset(ring, 1), grown);
+      ring[1] = grown;
       if (grown >= HYPERSPACE_RING_SMALLEST_DRAWN)
       {
-        _state.Data().drawColor = _state.Byte(Offset(ring, 2));
+        _state.Data().drawColor = std::uint8_t{ring[2]};
         if (DrawCircle(_state, grown, SPACE_VIEW_CENTER_X, SPACE_VIEW_CENTER_ROW))
         {
           filled = true;
         }
       }
     }
-    ring = Offset(ring, HYPERSPACE_RING_BYTES);
   }
   return filled;
 }
@@ -452,10 +451,11 @@ void LatchHyperspaceTarget(GameState& _state)
   _state.Data().commanderBlock.hyperspaceTargetIndex = std::uint8_t{_state.Data().commanderBlock.selectedSystemIndex};
   // LOOP: a count of 0 copies 65536 bytes.
   const std::uint32_t bytes = LoopCount(_state.Data().systemRecordBytes);
+  const std::span<const Counted<std::uint8_t>> from = _state.BytesFrom(_state.Data().commanderBlock.selectedSystemName, bytes);
+  const std::span<Counted<std::uint8_t>> to = _state.BytesFrom(_state.Data().hyperspaceTargetRecord, bytes);
   for (std::uint32_t copied = 0; copied < bytes; ++copied)
   {
-    const auto at = static_cast<std::uint16_t>(copied);
-    _state.SetByte(Offset(DS.hyperspaceTargetRecord.offset, at), _state.Byte(Offset(DS.selectedSystemName.offset, at)));
+    to[copied] = std::uint8_t{from[copied]};
   }
 }
 
@@ -492,9 +492,9 @@ void ShowHyperspaceCountdown(GameState& _state)
   // Two characters: "10", or a space and the digit.
   _state.Data().hyperspaceCountdownDigits =
     countdown == COUNTDOWN_TEN ? MakeWord('1', '0') : MakeWord(' ', static_cast<std::uint8_t>(countdown + '0'));
-  _state.Set(DS.messagePointer, DS.hyperspaceCountdownMessage.offset);
+  _state.Data().messagePointer = Message::HyperspaceCountdown;
   _state.Data().messageFrames = COUNTDOWN_MESSAGE_FRAMES;
-  _state.Set(DS.messageShown, 0);
+  _state.Data().messageShown = Message::None;
 }
 
 } // namespace Elite

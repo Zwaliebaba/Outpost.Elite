@@ -151,11 +151,6 @@ public:
   /// far jump with the interrupt's frame in place (Platform::CallHandler).
   void RunBiosTimerTick(std::uint16_t _segment, std::uint16_t _offset);
 
-  /// Int 21h AX=0C0Ah: DOS empties its keyboard buffer and reads a line typed at the keyboard into the buffer at
-  /// _segment:_offset. It would wait for ever, because the ROM's int 9 handler discards every key, so it is refused, and the
-  /// run stops: the copy protection, its only caller, is closed by the D5 byte.
-  void ReadDosLine(std::uint16_t _segment, std::uint16_t _offset);
-
   // DOS's file services, int 21h: native, on the platform's DosFiles, which answers as the emulated DOS did.
 
   /// Int 21h AH=1Ah: DOS's disk transfer area, where find-first and find-next leave what they find, at _segment:_offset.
@@ -216,6 +211,12 @@ public:
 
   /// Interrupt _vector's entry set to _handler: how the game installs its own handlers and puts the BIOS's back.
   void SetInterruptVector(std::uint8_t _vector, FarAddress _handler);
+
+  /// Interrupt _vector's entry as the BIOS set it at power-on (Platform::PowerOnInterruptVector): the handler the game puts
+  /// back when it leaves, where the original puts back the entry it kept in its own memory before it installed its own (D33,
+  /// piece 3). The game's handlers are the only ones it replaces, and it puts each back before it installs it again, so the
+  /// entry it kept was always this one.
+  [[nodiscard]] FarAddress BiosInterruptVector(std::uint8_t _vector) const noexcept;
 
   /// The byte of the BIOS's ROM at _segment:_offset (Platform::RomByte): where the game looks for an Amstrad's name, and
   /// where a vector the BIOS serves points.

@@ -18,7 +18,7 @@ namespace
 // The commodities of cargoHold: entry 17, the last, holds refugeesTonnes and cargoUsedTonnes instead.
 constexpr std::size_t COMMODITIES = 17;
 // The slots of shipSlots: the sun and planet, the station, the ships and the debris.
-constexpr std::size_t SHIP_SLOTS = DS.shipSlots.SIZE_BYTES / SpaceObject::BYTES;
+constexpr auto SHIP_SLOTS = static_cast<std::size_t>(SlotIndex::End);
 constexpr char FIRST_PRINTABLE = '!';
 constexpr char LAST_PRINTABLE = '~';
 
@@ -33,7 +33,7 @@ constexpr char LAST_PRINTABLE = '~';
   std::string cargo;
   for (std::size_t commodity = 0; commodity < COMMODITIES; ++commodity)
   {
-    cargo += (commodity == 0 ? "" : ",") + Number(_state.Byte(DS.cargoHold.At(commodity)));
+    cargo += (commodity == 0 ? "" : ",") + Number(_state.BytesFrom(_state.Data().commanderBlock.cargoHold, COMMODITIES * 2)[commodity * 2]);
   }
   return cargo;
 }
@@ -42,7 +42,7 @@ constexpr char LAST_PRINTABLE = '~';
 [[nodiscard]] std::string Title(const GameState& _state)
 {
   std::string title;
-  for (std::size_t index = 0; index < DS.commanderRankText.SIZE_BYTES; ++index)
+  for (std::size_t index = 0; index < std::size(_state.Data().commanderBlock.commanderRankText); ++index)
   {
     const auto character = static_cast<char>(_state.Data().commanderBlock.commanderRankText[index]);
     if (character < FIRST_PRINTABLE || character > LAST_PRINTABLE || character == '%' || character == '=')
@@ -64,7 +64,7 @@ constexpr char LAST_PRINTABLE = '~';
   std::uint32_t inUse = 0;
   for (std::size_t slot = 0; slot < slots; ++slot)
   {
-    const std::uint8_t type = _state.ObjectAt(DS.shipSlots.At(slot * SpaceObject::BYTES)).type;
+    const std::uint8_t type = _state.Slot(SlotAfter(SlotIndex::Sun, static_cast<std::uint16_t>(slot))).type;
     inUse += (type & SpaceObject::ACTIVE) != 0 ? 1 : 0;
   }
   return Number(inUse);
@@ -139,8 +139,12 @@ std::optional<std::string> OutcomeValue(const GameState& _state, std::string_vie
     {"docked", [](const GameState& _game) { return Number(_game.Data().playerDocked); }},
     {"inFlight", [](const GameState& _game) { return Number(_game.Data().inFlight); }},
     {"dead", [](const GameState& _game) { return Number(_game.Data().playerDead); }},
-    {"creditsTenths", [](const GameState& _game)
-     { return Number(_game.Word(DS.creditsTenths.offset) | (std::uint32_t{_game.Data().commanderBlock.creditsTenths.data75F5} << 16)); }},
+    {"creditsTenths",
+     [](const GameState& _game)
+     {
+       const GameData::CommanderBlock& commander = _game.Data().commanderBlock;
+       return Number(_game.WordOf(commander.creditsTenths) | (std::uint32_t{commander.creditsTenths.data75F5} << 16));
+     }},
     {"legalStatus", [](const GameState& _game) { return Number(_game.Data().commanderBlock.legalStatus); }},
     {"kills", [](const GameState& _game) { return Number(_game.Data().commanderBlock.killCount); }},
     {"title", &Title},
