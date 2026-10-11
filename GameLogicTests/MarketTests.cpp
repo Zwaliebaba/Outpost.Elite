@@ -144,7 +144,8 @@ public:
         constexpr std::string_view NAME = "LA VE";
         for (std::size_t index = 0; index < DS.currentSystemName.SIZE_BYTES; ++index)
         {
-          _state.SetByte(DS.currentSystemName.At(index), index < NAME.size() ? static_cast<std::uint8_t>(NAME[index]) : std::uint8_t{0});
+          _state.Data().commanderBlock.currentSystemName[index] =
+            index < NAME.size() ? static_cast<std::uint8_t>(NAME[index]) : std::uint8_t{0};
         }
       });
     rig.Play("key F8; wait 1\nkey F8; wait 0.2\nkey x; wait 0.2\nkey Home; wait 0.2\ndigest prices\nkey F9; wait 0.5\ndigest left");

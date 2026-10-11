@@ -366,14 +366,14 @@ private:
 };
 
 /// ADD byte,_value / JAE / MOV byte,0FFh on _field: the sum written, and FFh over it on a carry. Those are two writes, as the
-/// original's ADD and MOV are, so paced time's change count sees both (ADR-015).
-inline void AddSaturating(GameState& _state, DataField<std::uint8_t> _field, std::uint8_t _value)
+/// original's ADD and MOV are, each counted when it changes the byte (ADR-015).
+inline void AddSaturating(Counted<std::uint8_t>& _field, std::uint8_t _value)
 {
-  const unsigned sum = _state.Get(_field) + unsigned{_value};
-  _state.Set(_field, static_cast<std::uint8_t>(sum));
+  const unsigned sum = _field + unsigned{_value};
+  _field = static_cast<std::uint8_t>(sum);
   if (sum > 0xFF)
   {
-    _state.Set(_field, 0xFF);
+    _field = 0xFF;
   }
 }
 

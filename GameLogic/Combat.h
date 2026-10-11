@@ -4,7 +4,7 @@
 #include "Flight.h"
 #include "GameState.h"
 #include "Hardware.h"
-#include "ObjectSlot.h"
+#include "SpaceObject.h"
 
 #include <cstdint>
 #include <optional>
@@ -109,7 +109,7 @@ void SpawnPlayerWreckage(GameState& _state);
 std::optional<std::uint8_t> KillPlayer(GameState& _state);
 
 /// InitMissile (CS:4C8C): _slot made a missile (spawnTemplates entry 0), class 2.
-void InitMissile(GameState& _state, ObjectSlot _slot);
+void InitMissile(GameState& _state, SpaceObject& _slot);
 
 /// RemoveAllMissiles (CS:4F9F): every active missile among objectSlotCount slots from shipSlots removed (RemoveObject). Returns
 /// the last pixel of the last scanner blip that erased, if it erased one.
@@ -120,17 +120,17 @@ std::optional<DashboardPixel> RemoveAllMissiles(GameState& _state);
 /// ship slots: one for a ship that carries the device, else a random byte / (255 / (cargo + 1) + 1). _bx is the BX it is called
 /// with, which the barrel count's first divide saves when a cargo of FFh makes it divide by 0. Returns what it leaves in DI, BX
 /// and DX.
-Explosion ExplodeObject(GameState& _state, Hardware& _hardware, ObjectSlot _object, bool _backward, std::uint16_t _bx);
+Explosion ExplodeObject(GameState& _state, Hardware& _hardware, SpaceObject& _object, bool _backward, std::uint16_t _bx);
 
 /// TallyMaskMissionKill (CS:50FE): while maskMissionShipsLeft is not 0, an Asp at _slot with the mission's bounty counts it down,
 /// and one that carries the device sets maskShipDestroyed.
-void TallyMaskMissionKill(GameState& _state, const ObjectSlot& _slot);
+void TallyMaskMissionKill(GameState& _state, const SpaceObject& _slot);
 
 /// TryFireLaserAtPlayer (CS:518B): _slot fires at the player when it may: its blip drawn, a random byte below its aggression, not
 /// holding fire (CheckSafeZoneHoldFire) and nothing blocking it; each shot calms it by 5 down to 20. With _pitchError and
 /// _yawError, the magnitudes TurnTowardAngles leaves, within 200 the player is grazed by it, and within 70, the slot's camera-z
 /// high byte below 70 too, hit squarely.
-void TryFireLaserAtPlayer(GameState& _state, ObjectSlot _slot, std::uint16_t _pitchError, std::uint16_t _yawError);
+void TryFireLaserAtPlayer(GameState& _state, SpaceObject& _slot, std::uint16_t _pitchError, std::uint16_t _yawError);
 
 /// LaunchPlayerMissile (CS:5242): the 64 bytes at _source copied (CopyObject, backwards when _backward) into a ship slot, free
 /// or reclaimed, and made a missile (InitMissile) 100 along the player's nose, locked on missileTarget, aimed at where that is,
@@ -141,16 +141,16 @@ void LaunchPlayerMissile(GameState& _state, std::uint16_t _source, bool _backwar
 /// _kind names and moved clear of it: 14h a missile at the player, moved three times, and 7 a Thargon whose mother is _launcher,
 /// moved twice. Returns the slot, or nothing when no slot is free or _kind is neither. The original's 15h, an escape pod, and 5, a
 /// Krait, which no caller passes, went with InitEscapePod and InitKraitHunter (D22).
-std::optional<std::uint16_t> LaunchShipFromObject(GameState& _state, const ObjectSlot& _launcher, std::uint8_t _kind, bool _backward);
+std::optional<std::uint16_t> LaunchShipFromObject(GameState& _state, const SpaceObject& _launcher, std::uint8_t _kind, bool _backward);
 
 /// TryLaunchMissileAtPlayer (CS:543A): _slot launches a missile at the player (LaunchShipFromObject, the copy backwards when
 /// _backward) when it may: once the player has three kills, while it is hostile, does not hold its fire (CheckSafeZoneHoldFire),
 /// has missiles and nothing blocks firing, at odds of _odds in 65536; one launched is one missile fewer.
-void TryLaunchMissileAtPlayer(GameState& _state, ObjectSlot _slot, std::uint16_t _odds, bool _backward);
+void TryLaunchMissileAtPlayer(GameState& _state, SpaceObject& _slot, std::uint16_t _odds, bool _backward);
 
 /// TryLaunchThargon (CS:5471): a Thargoid at _slot with Thargons left launches one (LaunchShipFromObject, the copy backwards
 /// when _backward), at odds of 300 in 65536; one launched is one Thargon fewer.
-void TryLaunchThargon(GameState& _state, ObjectSlot _slot, bool _backward);
+void TryLaunchThargon(GameState& _state, SpaceObject& _slot, bool _backward);
 
 /// UpdateMissileAi (CS:54F2): class 2: the missile at _missile spins, and flies at its target, or at the player, raising the
 /// alert; when its target is gone it explodes. Within C8h of it on every axis it explodes (ExplodeObject) on it: the player
@@ -158,7 +158,7 @@ void TryLaunchThargon(GameState& _state, ObjectSlot _slot, bool _backward);
 /// explodes at the last; a ship is credited (CreditKill) and explodes unless indestructible. _backward is the direction flag the
 /// explosions copy by; _bx and _dx the BX and DX it is called with, which an explosion passes on. Returns what it leaves in DI
 /// and DX.
-MissileFlight UpdateMissileAi(GameState& _state, Hardware& _hardware, ObjectSlot _missile, bool _backward, std::uint16_t _bx,
+MissileFlight UpdateMissileAi(GameState& _state, Hardware& _hardware, SpaceObject& _missile, bool _backward, std::uint16_t _bx,
                               std::uint16_t _dx);
 
 /// FindShipInCrosshairs (CS:8A46): the nearest of objectSlotCount - 2 slots from stationSlot that is active, drawn this frame,
@@ -184,10 +184,10 @@ bool CheckMissileTargetDestroyed(GameState& _state, std::uint16_t _slot);
 /// then FFh over it on a carry. A bounty paid goes through ShowBountyMessage and AddCredits, and while a mis-jump's countdown
 /// runs, the kill of a Thargon or a Thargoid counts it down by 5 or 35, to 1 at the least, where the Nav-Comp's repair is
 /// announced.
-KillCredit CreditKill(GameState& _state, ObjectSlot _slot);
+KillCredit CreditKill(GameState& _state, SpaceObject& _slot);
 
 /// Routine8C51 (CS:8C51): whether _slot is a Thargon or a Thargoid, and whether a Thargoid.
-[[nodiscard]] ThargoidTest Routine8C51(const ObjectSlot& _slot);
+[[nodiscard]] ThargoidTest Routine8C51(const SpaceObject& _slot);
 
 /// ApplyEnemyLaserHit (CS:8C8E): a pending hit on the player (playerHitPending): StartPlayerHitSound and its STI; when the attacker
 /// at playerHitBy was drawn this frame, its beam in colour 3 from where it is on screen (ProjectToScreen) to a random point on an

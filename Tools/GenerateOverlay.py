@@ -176,7 +176,9 @@ def generate(_rows: list[dict[str, str]], _members: list["Member"]) -> str:
     "{",
     "",
     "/// The reference's data segment by name (plan §3, ADR-010): one field for every data, table and text",
-    "/// row of the symbol table, at its offset. Native code reads and writes through Guest with these.",
+    "/// row of the symbol table, at its offset. Native code reads and writes GameData's members (D33); it",
+    "/// names a field here for its offset: an address it stores, a table of addresses, or bytes it reaches",
+    "/// by offset.",
     "struct DataOverlay",
     "{",
   ]

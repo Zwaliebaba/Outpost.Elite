@@ -5,7 +5,7 @@
 #include "GameState.h"
 #include "Hardware.h"
 #include "Maths.h"
-#include "ObjectSlot.h"
+#include "SpaceObject.h"
 #include "Ships.h"
 
 #include <cstdint>
@@ -31,7 +31,7 @@ void UpdateObjectsAndSpawn(GameState& _state, Hardware& _hardware, bool _backwar
 /// when _backward); then it answers missiles aimed at it, or at the police in the safe zone, with its ECM. _dx is the DX it is
 /// called with. Returns DX as the original leaves it, of which UpdateObjectsAndSpawn's next handler can take DL for its range's
 /// box: _dx, 1C2h once it found the station near, ComputeVelocity's once it launched, or the last pixel of the last blip it erased.
-std::uint16_t UpdateStationAi(GameState& _state, ObjectSlot _station, bool _backward, std::uint16_t _dx);
+std::uint16_t UpdateStationAi(GameState& _state, SpaceObject& _station, bool _backward, std::uint16_t _dx);
 
 /// ClampTurnStep's step and the error it was taken from.
 struct TurnStep
@@ -70,14 +70,14 @@ struct HunterCount
 
 /// PlaceEscortNear (CS:4C38): _escort given the first 16 bytes of the leader at _leader, byte by byte, then moved a random
 /// -1024..1023 on each axis.
-void PlaceEscortNear(GameState& _state, ObjectSlot _escort, std::uint16_t _leader);
+void PlaceEscortNear(GameState& _state, SpaceObject& _escort, std::uint16_t _leader);
 
 /// TurnTowardAngles (CS:514B): _slot's pitch, then its yaw, turned toward _wanted by at most its turn rate (ClampTurnStep).
-Turn TurnTowardAngles(ObjectSlot _slot, Angles _wanted);
+Turn TurnTowardAngles(SpaceObject& _slot, Angles _wanted);
 
 /// ClampTurnStep (CS:5166): the step from angle _current toward angle _wanted within _slot's turn rate. The error is
 /// (_wanted & 7FFh) - (_current & 7FFh), not wrapped at 2048, so a turn across 0 goes the long way.
-[[nodiscard]] TurnStep ClampTurnStep(const ObjectSlot& _slot, std::uint16_t _wanted, std::uint16_t _current);
+[[nodiscard]] TurnStep ClampTurnStep(const SpaceObject& _slot, std::uint16_t _wanted, std::uint16_t _current);
 
 /// CountOtherHuntersOnScanner (CS:548F): the class-6 ships among objectSlotCount slots from shipSlots with their blips drawn,
 /// other than the one at _slot.
@@ -85,28 +85,28 @@ Turn TurnTowardAngles(ObjectSlot _slot, Angles _wanted);
 
 /// GetVectorToObject (CS:54B4): (_object's position - _slot's) / 4, each coordinate quartered first, and whether it is within
 /// _halfSize / 4 on every axis (VectorWithinBox).
-[[nodiscard]] VectorToObject GetVectorToObject(const ObjectSlot& _slot, const ObjectSlot& _object, std::uint16_t _halfSize);
+[[nodiscard]] VectorToObject GetVectorToObject(const SpaceObject& _slot, const SpaceObject& _object, std::uint16_t _halfSize);
 
 /// UpdateDriftingObjectAi (CS:5681): class 3: _slot moved (MoveObject), and a rock (IsDebrisType) tumbled: 37h added to its
 /// pitch and FFDFh to its roll when bit 1 of its type byte is set, the other way round when it is clear. Returns what MoveObject
 /// did.
-MovedObject UpdateDriftingObjectAi(GameState& _state, ObjectSlot _slot);
+MovedObject UpdateDriftingObjectAi(GameState& _state, SpaceObject& _slot);
 
 /// UpdateTraderOrPoliceAi (CS:569C): class 4: traders and the police at _slot: deciding, attacking, fleeing with jinks, breaking
 /// off; rocks only spin. _rangeLow is DL, the low byte of the box a ship breaking off measures its range by; _backward the
 /// direction flag a launch's CopyObject runs by. Every path ends with MoveObject: returns what it did.
-MovedObject UpdateTraderOrPoliceAi(GameState& _state, ObjectSlot _slot, std::uint8_t _rangeLow, bool _backward);
+MovedObject UpdateTraderOrPoliceAi(GameState& _state, SpaceObject& _slot, std::uint8_t _rangeLow, bool _backward);
 
 /// UpdateWolfAi (CS:57E8): class 5: attack passes at the player, a Thargoid launching Thargons and setting off its ECM now and
 /// then; _rangeLow and _backward as UpdateTraderOrPoliceAi's, for turning away. Returns what its MoveObject did.
-MovedObject UpdateWolfAi(GameState& _state, ObjectSlot _slot, std::uint8_t _rangeLow, bool _backward);
+MovedObject UpdateWolfAi(GameState& _state, SpaceObject& _slot, std::uint8_t _rangeLow, bool _backward);
 
 /// UpdateHunterAi (CS:58DE): class 6: pack hunting; _rangeLow and _backward as UpdateTraderOrPoliceAi's, for evading. Returns
 /// what its MoveObject did.
-MovedObject UpdateHunterAi(GameState& _state, ObjectSlot _slot, std::uint8_t _rangeLow, bool _backward);
+MovedObject UpdateHunterAi(GameState& _state, SpaceObject& _slot, std::uint8_t _rangeLow, bool _backward);
 
 /// CheckSafeZoneHoldFire (CS:5A10): whether _slot must hold its fire: while the player is in the station's safe zone
 /// (InSafeZone), unless a Thargoid invasion is on or _slot is a police Viper.
-[[nodiscard]] bool CheckSafeZoneHoldFire(const GameState& _state, const ObjectSlot& _slot);
+[[nodiscard]] bool CheckSafeZoneHoldFire(const GameState& _state, const SpaceObject& _slot);
 
 } // namespace Elite

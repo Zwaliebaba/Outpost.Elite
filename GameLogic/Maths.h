@@ -2,7 +2,7 @@
 #pragma once
 
 #include "GameState.h"
-#include "ObjectSlot.h"
+#include "SpaceObject.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -132,7 +132,7 @@ SinCos SetSinCos(GameState& _state, std::size_t _pair, std::uint16_t _angle);
 [[nodiscard]] bool VectorWithinBox(Vector _vector, std::uint16_t _halfSize);
 
 /// ObjectWithinBox (CS:2F65): VectorWithinBox on the low words of _slot's position.
-[[nodiscard]] bool ObjectWithinBox(const ObjectSlot& _slot, std::uint16_t _halfSize);
+[[nodiscard]] bool ObjectWithinBox(const SpaceObject& _slot, std::uint16_t _halfSize);
 
 /// RotatePitchYawRoll (CS:3EAC): (y, z) by rotationSinCos[0], (x, z) by [1], (x, y) by [2]. It keeps the
 /// rotated y, then z, in rotateScratch on the way, as the original does.
@@ -147,20 +147,20 @@ SinCos SetSinCos(GameState& _state, std::size_t _pair, std::uint16_t _angle);
 
 /// ScaleByInverseDistance (CS:40A4): _value shifted right by _slot's disc scale, over 256 times one more
 /// than the square root of the high word of the view position's squared length, at most 255.
-[[nodiscard]] std::uint16_t ScaleByInverseDistance(GameState& _state, const ObjectSlot& _slot, std::uint32_t _value);
+[[nodiscard]] std::uint16_t ScaleByInverseDistance(GameState& _state, const SpaceObject& _slot, std::uint32_t _value);
 
 /// ShiftRight24 (CS:4326): the 24-bit _value shifted arithmetically right _count times, in 24 bits.
 [[nodiscard]] std::uint32_t ShiftRight24(std::uint32_t _value, std::uint8_t _count);
 
 /// GetPositionScaleShift (CS:4333): the shift for _slot's position.
-[[nodiscard]] PositionScale GetPositionScaleShift(const ObjectSlot& _slot);
+[[nodiscard]] PositionScale GetPositionScaleShift(const SpaceObject& _slot);
 
 /// ScalePositionDown (CS:439E): _slot's 24-bit coordinates shifted right by _shift, their low words.
-[[nodiscard]] Vector ScalePositionDown(const ObjectSlot& _slot, std::uint8_t _shift);
+[[nodiscard]] Vector ScalePositionDown(const SpaceObject& _slot, std::uint8_t _shift);
 
 /// ComputeAnglesToObject (CS:4ECF): the two angles of the direction of _slot's position, by ArcTangent2 and
 /// rotationSinCos[6], which it sets.
-[[nodiscard]] Angles ComputeAnglesToObject(GameState& _state, const ObjectSlot& _slot);
+[[nodiscard]] Angles ComputeAnglesToObject(GameState& _state, const SpaceObject& _slot);
 
 /// ConvertVectorToAngles (CS:4F08): the two angles, negated, of the direction _vector / 4, by ArcTangent2
 /// and rotationSinCos[8], which it sets.

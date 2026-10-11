@@ -3,7 +3,7 @@
 
 #include "GameState.h"
 #include "Hardware.h"
-#include "ObjectSlot.h"
+#include "SpaceObject.h"
 
 #include <cstdint>
 
@@ -36,7 +36,7 @@ bool DrawTunnelRectangle(GameState& _state, std::uint16_t _points);
 /// CheckDockingAlignment (CS:2D0F): whether the player's angles are within _tolerance of those that dock with the
 /// station in _station: pitch near 0 with yaw near a half turn, or the other way round, and roll near the station's
 /// spin or half a turn from it.
-[[nodiscard]] bool CheckDockingAlignment(const GameState& _state, const ObjectSlot& _station, std::uint16_t _tolerance);
+[[nodiscard]] bool CheckDockingAlignment(const GameState& _state, const SpaceObject& _station, std::uint16_t _tolerance);
 
 /// MaskOutsideTunnel (CS:2E0A): zeroes the space-view buffer outside the centred rectangle whose top-left corner is at
 /// DS:_rectangle: the rows above it and its left margins each forwards or, _backwards, down (the direction flag it is

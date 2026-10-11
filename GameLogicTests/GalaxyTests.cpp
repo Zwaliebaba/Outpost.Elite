@@ -91,7 +91,7 @@ public:
     PokeBoth(rig, DS.chartCursorY, static_cast<std::uint8_t>(LEESTI.y / 2));
     rig.Play("key F7; wait 0.5\ndigest data");
     rig.Both([](Elite::Platform&, Elite::GameState& _state)
-             { Assert::AreEqual(std::uint8_t{'1'}, _state.Byte(DS.data7D48.offset), L"two digits"); });
+             { Assert::AreEqual(std::uint8_t{'1'}, std::uint8_t{_state.Data().data7D48}, L"two digits"); });
     rig.Play("key F7; wait 0.1; key a; wait 0.1; key Escape; wait 0.3\ndigest closed");
   }
 };

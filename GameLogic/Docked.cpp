@@ -234,9 +234,9 @@ void DrawTradeScreenHeader(GameState& _state, Hardware& _hardware, std::uint16_t
   PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, _frame, _backward), TITLE_CELL);
   const PrintedText help = PrintTextModeString(_state, _help, LINE_3);
   PrintTextModeString(_state, Offset(help.end, 1), LINE_4); // INC SI: the second line, after the first's NUL
-  _state.Set(DS.textAttribute, HEADER_ATTRIBUTE);
+  _state.Data().textAttribute = HEADER_ATTRIBUTE;
   PrintTextModeString(_state, TRADE_HEADER_TEXT, LINE_5);
-  _state.Set(DS.textAttribute, ROW_ATTRIBUTE);
+  _state.Data().textAttribute = ROW_ATTRIBUTE;
   ComputeMarketPrices(_state);
   _state.Set(DS.cargoRowPointer, DS.cargoHold.offset);
 }
@@ -286,42 +286,43 @@ std::uint16_t RunTitle(GameState& _state, Hardware& _hardware, bool _backward)
 {
   ClearAllObjects(_state, _backward);
   StartMusic(_state, _hardware);
-  _state.Set(DS.laserMountsFitted, 0);
-  _state.Set(DS.playerPitchAngle, 0);
-  _state.Set(DS.playerYawAngle, 0);
-  _state.Set(DS.playerRollAngle, 0);
-  _state.Set(DS.viewAngle, 0);
-  _state.Set(DS.anyKeyLatch, 0);
-  _state.Set(DS.screenLayout, TITLE_LAYOUT);
+  _state.Data().commanderBlock.laserMountsFitted = 0;
+  _state.Data().playerPitchAngle = 0;
+  _state.Data().playerYawAngle = 0;
+  _state.Data().playerRollAngle = 0;
+  _state.Data().viewAngle = 0;
+  _state.Data().anyKeyLatch = 0;
+  _state.Data().screenLayout = TITLE_LAYOUT;
   (void)ShowCockpitScreen(_state, _hardware, _backward);
   bool backward = false;
   ClearMessageLine(_state, GameState::VIDEO_SEGMENT, backward);
-  _state.Set(DS.textPaperPattern, 0);
+  _state.Data().textPaperPattern = 0;
   (void)DrawScreenString(_state, DS.eliteTitleText.offset, WHITE_MASK, GameState::VIDEO_SEGMENT, TITLE_TEXT_CELL);
-  ObjectSlot ship(_state, DS.stationSlot.offset);
-  _state.Set(DS.shipSlotCount, TITLE_SHIP_SLOTS);
+  SpaceObject& ship = _state.ObjectAt(DS.stationSlot.offset);
+  _state.Data().shipSlotCount = TITLE_SHIP_SLOTS;
   // XOR AX,AX, then the yaw, the roll, the low words of x and y, the high bytes of x and y as a word, and z's high byte.
-  ship.Set(SlotWord::Yaw, 0);
-  ship.Set(SlotWord::Roll, 0);
-  ship.Set(SlotWord::X, 0);
-  ship.Set(SlotWord::Y, 0);
-  ship.Set(SlotWord::XYHigh, 0);
-  ship.Set(SlotByte::ZHigh, 0);
+  ship.yaw = 0;
+  ship.roll = 0;
+  ship.x = 0;
+  ship.y = 0;
+  ship.xHigh = 0; // xHigh and yHigh, written as a word
+  ship.yHigh = 0;
+  ship.zHigh = 0;
   for (;;)
   {
-    _state.Set(DS.drawColor, TITLE_PLANET_COLOR);
+    _state.Data().drawColor = TITLE_PLANET_COLOR;
     DrawTitlePlanet(_state, TITLE_PLANET_RADIUS, TITLE_PLANET_X, TITLE_PLANET_Y, backward);
-    ship.Set(SlotByte::Flags, TITLE_SHIP_FLAGS);
+    ship.flags = TITLE_SHIP_FLAGS;
     // MOV BL,titleShipType / SHL BL,1 / XOR BH,BH: the type doubled indexes titleShipDistances, and INC BL makes it the type byte,
     // active. The ship stands at the type's own distance, turned a step on each axis: the roll, the yaw, then the pitch.
-    const auto doubled = static_cast<std::uint8_t>(_state.Get(DS.titleShipType) << 1);
+    const auto doubled = static_cast<std::uint8_t>(_state.Data().titleShipType << 1);
     const std::uint16_t distance = _state.Word(Offset(DS.titleShipDistances.offset, doubled));
-    ship.Set(SlotByte::Type, static_cast<std::uint8_t>(doubled + 1));
-    ship.Set(SlotWord::Z, distance);
-    ship.Set(SlotWord::Roll, Offset(ship.Get(SlotWord::Roll), TITLE_ROLL_STEP));
-    ship.Set(SlotWord::Yaw, Offset(ship.Get(SlotWord::Yaw), TITLE_YAW_STEP));
-    ship.Set(SlotWord::Pitch, Offset(ship.Get(SlotWord::Pitch), TITLE_PITCH_STEP));
-    _state.Set(DS.textPaperPattern, 0);
+    ship.type = static_cast<std::uint8_t>(doubled + 1);
+    ship.z = distance;
+    ship.roll = Offset(ship.roll, TITLE_ROLL_STEP);
+    ship.yaw = Offset(ship.yaw, TITLE_YAW_STEP);
+    ship.pitch = Offset(ship.pitch, TITLE_PITCH_STEP);
+    _state.Data().textPaperPattern = 0;
     (void)DrawViewString(_state, DS.pressAnyKeyText.offset, PRESS_ANY_KEY_MASK, PRESS_ANY_KEY_PLACE);
     (void)TransformAndDrawObjects(_state, _hardware, backward);
     FinishSpaceViewFrame(_state, _hardware);
@@ -330,18 +331,18 @@ std::uint16_t RunTitle(GameState& _state, Hardware& _hardware, bool _backward)
     {
       if (key.scanCode == SCAN_F9)
       {
-        _state.Set(DS.titleShipType, static_cast<std::uint8_t>(_state.Get(DS.titleShipType) - 1));
-        if (_state.Get(DS.titleShipType) < TITLE_FIRST_SHIP_TYPE)
+        _state.Data().titleShipType = static_cast<std::uint8_t>(_state.Data().titleShipType - 1);
+        if (_state.Data().titleShipType < TITLE_FIRST_SHIP_TYPE)
         {
-          _state.Set(DS.titleShipType, TITLE_LAST_SHIP_TYPE);
+          _state.Data().titleShipType = TITLE_LAST_SHIP_TYPE;
         }
       }
       else if (key.scanCode == SCAN_F10)
       {
-        _state.Set(DS.titleShipType, static_cast<std::uint8_t>(_state.Get(DS.titleShipType) + 1));
-        if (_state.Get(DS.titleShipType) == TITLE_LAST_SHIP_TYPE + 1)
+        _state.Data().titleShipType = static_cast<std::uint8_t>(_state.Data().titleShipType + 1);
+        if (_state.Data().titleShipType == TITLE_LAST_SHIP_TYPE + 1)
         {
-          _state.Set(DS.titleShipType, TITLE_FIRST_SHIP_TYPE);
+          _state.Data().titleShipType = TITLE_FIRST_SHIP_TYPE;
         }
       }
       else
@@ -354,7 +355,7 @@ std::uint16_t RunTitle(GameState& _state, Hardware& _hardware, bool _backward)
   StopAllSound(_state, _hardware);
   ShowCredits(_state, _hardware, backward);
   StartNewGame(_state, backward);
-  _state.Set(DS.titleShown, 1);
+  _state.Data().titleShown = 1;
   // The credits' FinishSpaceViewFrame leaves BP, which StartNewGame keeps.
   return PRESENT_SPACE_VIEW_BP;
 }
@@ -460,23 +461,23 @@ PrintedText PrintCreditsOnMessageLine(GameState& _state)
 void FormatFuelLightYears(GameState& _state)
 {
   // MUL AH by 10, then DIV BL by 36, which cannot overflow: at most 2550/36.
-  const auto tenths = static_cast<std::uint16_t>(_state.Get(DS.fuel) * FUEL_TENTHS_PER_UNIT);
+  const auto tenths = static_cast<std::uint16_t>(_state.Data().commanderBlock.fuel * FUEL_TENTHS_PER_UNIT);
   FormatDecimal5(_state, static_cast<std::uint8_t>(tenths / FUEL_UNITS_PER_TENTH), FUEL_DIGITS);
   // The units and the tenths, the last two of the five digits, into the text either side of its point.
-  _state.Set(DS.data83F7, _state.Get(DS.data840A));
-  _state.Set(DS.data83F9, _state.Get(DS.data840B));
+  _state.Data().data83F7 = std::uint8_t{_state.Data().data840A};
+  _state.Data().data83F9 = std::uint8_t{_state.Data().data840B};
 }
 
 std::uint16_t DrawDockedFrame(GameState& _state, Hardware& _hardware, std::uint16_t _descriptor, bool _backward)
 {
-  if ((_state.Get(DS.screenLayout) & TEXT_LAYOUT) == 0)
+  if ((_state.Data().screenLayout & TEXT_LAYOUT) == 0)
   {
-    _state.Set(DS.screenLayout, TEXT_LAYOUT);
+    _state.Data().screenLayout = TEXT_LAYOUT;
     SetTextMode(_hardware);
   }
   // The screen's attribute, and its background as the border.
   const auto attribute = static_cast<std::uint8_t>(_state.Byte(_descriptor) & ATTRIBUTE_MASK);
-  _state.Set(DS.textAttribute, attribute);
+  _state.Data().textAttribute = attribute;
   _hardware.SetColorSelect(static_cast<std::uint8_t>(attribute >> 4));
   ClearTextScreen(_state, _backward);
 
@@ -548,7 +549,7 @@ void AwardArchangelTitle(GameState& _state)
 {
   for (std::uint16_t letter = 0; letter < RANK_LETTERS; ++letter)
   {
-    _state.SetByte(DS.commanderRankText.At(letter), _state.Byte(DS.archangelTitle.At(letter)));
+    _state.Data().commanderBlock.commanderRankText[letter] = std::uint8_t{_state.Data().archangelTitle[letter]};
   }
 }
 
@@ -580,7 +581,7 @@ ScreenKey ShowSellCargoScreen(GameState& _state, Hardware& _hardware, bool _back
     }
     _hardware.LoopTurn(SELL_CARGO_ROW, {row.left, row.name, row.cell, row.prices});
   }
-  _state.Set(DS.tradeScreenIsBuy, 0);
+  _state.Data().tradeScreenIsBuy = 0;
   return RunCargoTradeMenu(_state, _hardware);
 }
 
@@ -593,7 +594,7 @@ ScreenKey ShowBuyCargoScreen(GameState& _state, Hardware& _hardware, bool _backw
   {
     const PrintedText price = PrintNameAndPrice(_state, row, BUY_PRICE);
     std::optional<std::uint8_t> onSale;
-    if (_state.Get(DS.marketQuantitiesSet) == 0)
+    if (_state.Data().commanderBlock.marketQuantitiesSet == 0)
     {
       // The quantity on sale, the first time after an arrival.
       onSale = RollQuantityOnSale(_state);
@@ -632,20 +633,20 @@ ScreenKey ShowBuyCargoScreen(GameState& _state, Hardware& _hardware, bool _backw
     }
     _hardware.LoopTurn(BUY_CARGO_ROW, {row.left, row.name, row.cell, row.prices});
   }
-  _state.Set(DS.tradeScreenIsBuy, 1);
-  _state.Set(DS.marketQuantitiesSet, 1);
+  _state.Data().tradeScreenIsBuy = 1;
+  _state.Data().commanderBlock.marketQuantitiesSet = 1;
   return RunCargoTradeMenu(_state, _hardware);
 }
 
 ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _countIfNone)
 {
-  if (_state.Get(DS.inFlight) != 1 && _state.Get(DS.missionNumber) != 0)
+  if (_state.Data().inFlight != 1 && _state.Data().commanderBlock.missionNumber != 0)
   {
-    if (_state.Get(DS.missionStage) == 0)
+    if (_state.Data().commanderBlock.missionStage == 0)
     {
       ShowMissionBriefing(_state, _hardware, _backward);
     }
-    else if (_state.Get(DS.missionStage) == STAGE_BRIEFED && _state.Get(DS.playerDocked) == 1)
+    else if (_state.Data().commanderBlock.missionStage == STAGE_BRIEFED && _state.Data().playerDocked == 1)
     {
       ShowMissionDebriefing(_state, _hardware, _backward);
     }
@@ -653,8 +654,8 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
   const PrintedText title =
     PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, DS.commanderTitle.offset, _backward), TITLE_CELL);
   PrintTextModeString(_state, DS.defaultCommanderName.offset, title.nextCell);
-  _state.Set(DS.textAttribute, STATUS_ATTRIBUTE);
-  const bool inWitchSpace = _state.Get(DS.witchspaceCountdown) != 0;
+  _state.Data().textAttribute = STATUS_ATTRIBUTE;
+  const bool inWitchSpace = _state.Data().commanderBlock.witchspaceCountdown != 0;
   PrintedText printed = PrintTextModeString(_state, SYSTEM_LABEL_TEXT, LINE_3);
   PrintTextModeString(_state, inWitchSpace ? WITCH_SPACE_TEXT : DS.currentSystemName.offset, printed.nextCell);
   printed = PrintTextModeString(_state, HYPERSYSTEM_LABEL_TEXT, LINE_4);
@@ -664,12 +665,12 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
   printed = PrintTextModeString(_state, CASH_LABEL_TEXT, LINE_6);
   PrintTextModeString(_state, SkipCashSpaces(_state, _hardware, STATUS_CASH_SPACE), printed.nextCell);
   printed = PrintTextModeString(_state, LEGAL_STATUS_LABEL_TEXT, LINE_7);
-  const std::uint8_t legal = _state.Get(DS.legalStatus);
+  const std::uint8_t legal = _state.Data().commanderBlock.legalStatus;
   const std::uint16_t standing = legal < LEGAL_STATUS_OFFENDER ? 0 : legal < LEGAL_STATUS_FUGITIVE ? 1 : 2;
   PrintTextModeString(_state, _state.Word(DS.legalStatusNames.At(standing)), printed.nextCell);
   printed = PrintTextModeString(_state, RATING_LABEL_TEXT, LINE_8);
   // The rating: the first threshold above the kill count, each turn of the search carrying the threshold's place and the rating.
-  const std::uint8_t kills = _state.Get(DS.killCount);
+  const std::uint8_t kills = _state.Data().commanderBlock.killCount;
   std::uint16_t threshold = static_cast<std::uint16_t>(DS.ratingThresholds.offset - 1);
   std::uint16_t rating = 0xFFFF;
   for (;;)
@@ -683,19 +684,19 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
     _hardware.LoopTurn(STATUS_RATING, {threshold, rating});
   }
   PrintTextModeString(_state, _state.Word(DS.ratingNames.At(rating)), printed.nextCell);
-  _state.Set(DS.textAttribute, EQUIPMENT_HEADING_ATTRIBUTE);
+  _state.Data().textAttribute = EQUIPMENT_HEADING_ATTRIBUTE;
   PrintTextModeString(_state, EQUIPMENT_HEADING_TEXT, LINE_9);
-  _state.Set(DS.textAttribute, STATUS_ATTRIBUTE);
+  _state.Data().textAttribute = STATUS_ATTRIBUTE;
   // AL keeps the missiles' digit until a row prints, whose NUL then leaves 0 there.
-  auto al = static_cast<std::uint8_t>(_state.Get(DS.missileCount) + DIGIT_ZERO);
-  _state.Set(DS.data84F5, al);
+  auto al = static_cast<std::uint8_t>(_state.Data().commanderBlock.missileCount + DIGIT_ZERO);
+  _state.Data().data84F5 = al;
 
   // One row for each item fitted, and after a laser the mounts it is fitted to. Each turn carries the count, the row's place,
   // the item's count and its name's pointer.
   std::uint16_t row = LINE_10;
   std::uint16_t fitted = DS.missileCount.offset;
   std::uint16_t name = DS.equipmentNames.offset;
-  _state.Set(DS.menuSelectedRow, FIRST_EQUIPMENT_MENU_ROW);
+  _state.Data().menuSelectedRow = FIRST_EQUIPMENT_MENU_ROW;
   for (std::uint16_t left = EQUIPMENT_ROWS;;)
   {
     if (_state.Byte(fitted) != 0)
@@ -707,14 +708,14 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
         printed = PrintTextModeString(_state, MOUNTS_OPEN_TEXT, printed.nextCell);
         // Each mount with this type of laser, from laserMountsFitted in DL and laserMountTypes in DH, which each turn carries
         // with the mount name's pointer, the count and where the next name prints.
-        std::uint8_t mounts = _state.Get(DS.laserMountsFitted);
-        std::uint8_t types = _state.Get(DS.laserMountTypes);
+        std::uint8_t mounts = _state.Data().commanderBlock.laserMountsFitted;
+        std::uint8_t types = _state.Data().commanderBlock.laserMountTypes;
         std::uint16_t mountName = DS.laserMountNames.offset;
         for (std::uint16_t mount = LASER_MOUNTS;;)
         {
           const bool on = (mounts & 1) != 0;
           mounts = static_cast<std::uint8_t>(mounts >> 1);
-          if (on && (types & LASER_MOUNT_TYPE_MASK) == _state.Get(DS.selectedLaserType))
+          if (on && (types & LASER_MOUNT_TYPE_MASK) == _state.Data().selectedLaserType)
           {
             printed = PrintTextModeString(_state, _state.Word(mountName), printed.nextCell);
           }
@@ -732,7 +733,7 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
     }
     fitted = Offset(fitted, 1);
     name = Offset(name, 2);
-    _state.Set(DS.menuSelectedRow, static_cast<std::uint8_t>(_state.Get(DS.menuSelectedRow) + 1));
+    _state.Data().menuSelectedRow = static_cast<std::uint8_t>(_state.Data().menuSelectedRow + 1);
     if (--left == 0)
     {
       break;
@@ -793,9 +794,9 @@ ScreenKey ShowInventoryScreen(GameState& _state, Hardware& _hardware, bool _back
 
 void ShowMissionBriefing(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  _state.Set(DS.missionStage, STAGE_BRIEFED);
+  _state.Data().commanderBlock.missionStage = STAGE_BRIEFED;
   PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, DS.emergencyFrame.offset, _backward), TITLE_CELL);
-  const std::uint8_t mission = _state.Get(DS.missionNumber);
+  const std::uint8_t mission = _state.Data().commanderBlock.missionNumber;
   if (mission == MISSION_SUPERNOVA)
   {
     PrintTextLines(_state, DS.supernovaBriefingText.offset, LINE_4, SUPERNOVA_BRIEFING_LINES);
@@ -826,109 +827,109 @@ void ShowMissionBriefing(GameState& _state, Hardware& _hardware, bool _backward)
         }
         _hardware.LoopTurn(EVACUATE_CARGO, {held, left});
       }
-      _state.Set(DS.cargoUsedTonnes, REFUGEE_TONNES);
-      if (_state.Get(DS.largeCargoBayFitted) == 1)
+      _state.Data().commanderBlock.cargoHold.cargoUsedTonnes = REFUGEE_TONNES;
+      if (_state.Data().commanderBlock.largeCargoBayFitted == 1)
       {
-        _state.Set(DS.cargoUsedTonnes, REFUGEE_TONNES_LARGE_BAY);
+        _state.Data().commanderBlock.cargoHold.cargoUsedTonnes = REFUGEE_TONNES_LARGE_BAY;
       }
-      _state.Set(DS.refugeesTonnes, _state.Get(DS.cargoUsedTonnes));
+      _state.Data().commanderBlock.cargoHold.refugeesTonnes = std::uint8_t{_state.Data().commanderBlock.cargoHold.cargoUsedTonnes};
       reply = SUPERNOVA_ACCEPTED_TEXT;
     }
     PrintTextLines(_state, reply, LINE_10, SUPERNOVA_ANSWER_LINES);
     (void)WaitForKeyPress(_state, _hardware);
-    _state.Set(DS.supernovaFrames, SUPERNOVA_DELAY_FRAMES);
-    _state.Set(DS.jumpedSinceBriefing, 0);
+    _state.Data().commanderBlock.supernovaFrames = SUPERNOVA_DELAY_FRAMES;
+    _state.Data().commanderBlock.jumpedSinceBriefing = 0;
     return;
   }
   if (mission == MISSION_MASK_SHIP)
   {
     PrintTextLines(_state, DS.maskBriefingText.offset, LINE_4, MASK_BRIEFING_LINES);
     (void)WaitForKeyPress(_state, _hardware);
-    _state.Set(DS.maskMissionShipsLeft, MASK_SHIPS);
-    _state.Set(DS.maskSystemJumps, MASK_SYSTEM_JUMPS);
+    _state.Data().commanderBlock.maskMissionShipsLeft = MASK_SHIPS;
+    _state.Data().commanderBlock.maskSystemJumps = MASK_SYSTEM_JUMPS;
     return;
   }
   PrintTextLines(_state, DS.invasionBriefingText.offset, LINE_4, INVASION_BRIEFING_LINES);
   (void)WaitForKeyPress(_state, _hardware);
-  _state.Set(DS.thargoidInvasionActive, 1);
-  _state.Set(DS.jumpedSinceBriefing, 0);
+  _state.Data().commanderBlock.thargoidInvasionActive = 1;
+  _state.Data().commanderBlock.jumpedSinceBriefing = 0;
 }
 
 void ShowMissionDebriefing(GameState& _state, Hardware& _hardware, bool _backward)
 {
   // Not yet: the mask ship is still about, or the supernova's refugees have not been taken away.
-  if (_state.Get(DS.missionNumber) == MISSION_MASK_SHIP
-        ? _state.Get(DS.maskShipDestroyed) != 1
-        : _state.Get(DS.missionNumber) == MISSION_SUPERNOVA && _state.Get(DS.jumpedSinceBriefing) != 1)
+  if (_state.Data().commanderBlock.missionNumber == MISSION_MASK_SHIP
+        ? _state.Data().commanderBlock.maskShipDestroyed != 1
+        : _state.Data().commanderBlock.missionNumber == MISSION_SUPERNOVA && _state.Data().commanderBlock.jumpedSinceBriefing != 1)
   {
     return;
   }
   PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, DS.taskCompleteFrame.offset, _backward), TITLE_CELL);
-  _state.Set(DS.missionStage, STAGE_DEBRIEFED);
-  const std::uint8_t mission = _state.Get(DS.missionNumber);
+  _state.Data().commanderBlock.missionStage = STAGE_DEBRIEFED;
+  const std::uint8_t mission = _state.Data().commanderBlock.missionNumber;
   if (mission == MISSION_SUPERNOVA)
   {
-    const bool fullHold = _state.Get(DS.refugeesTonnes) == REFUGEE_TONNES;
-    _state.Set(DS.refugeeRewardDigit, fullHold ? REWARD_DIGIT_FULL_HOLD : REWARD_DIGIT_OTHERWISE);
-    _state.Set(DS.refugeesTonnes, 0);
-    _state.Set(DS.cargoUsedTonnes, 0);
+    const bool fullHold = _state.Data().commanderBlock.cargoHold.refugeesTonnes == REFUGEE_TONNES;
+    _state.Data().refugeeRewardDigit = fullHold ? REWARD_DIGIT_FULL_HOLD : REWARD_DIGIT_OTHERWISE;
+    _state.Data().commanderBlock.cargoHold.refugeesTonnes = 0;
+    _state.Data().commanderBlock.cargoHold.cargoUsedTonnes = 0;
     AddCredits(_state, fullHold ? REWARD_FULL_HOLD_TENTHS : REWARD_OTHERWISE_TENTHS);
     PrintTextLines(_state, SUPERNOVA_DEBRIEFING_TEXT, LINE_4, SUPERNOVA_DEBRIEFING_LINES);
     (void)WaitForKeyPress(_state, _hardware);
-    _state.Set(DS.missionNumber, 0);
-    _state.Set(DS.missionStage, 0);
+    _state.Data().commanderBlock.missionNumber = 0;
+    _state.Data().commanderBlock.missionStage = 0;
     return;
   }
   if (mission == MISSION_MASK_SHIP)
   {
     std::uint16_t text = MASK_DESTROYED_TEXT;
     std::uint16_t lines = MASK_DESTROYED_LINES;
-    if (_state.Get(DS.maskingDeviceRecovered) == 1)
+    if (_state.Data().commanderBlock.maskingDeviceRecovered == 1)
     {
-      _state.Set(DS.maskingDeviceFitted, 1);
+      _state.Data().commanderBlock.maskingDeviceFitted = 1;
       text = MASK_RECOVERED_TEXT;
       lines = MASK_RECOVERED_LINES;
       _hardware.LoopTurn(MASK_DEBRIEFING_TEXT, {}); // the JMP back to the print the other two run on into
     }
-    else if (_state.Get(DS.fledMaskShip) == 1)
+    else if (_state.Data().commanderBlock.fledMaskShip == 1)
     {
       text = MASK_FLED_TEXT;
       lines = MASK_FLED_LINES;
     }
     PrintTextLines(_state, text, LINE_4, lines);
     (void)WaitForKeyPress(_state, _hardware);
-    _state.Set(DS.maskMissionShipsLeft, 0);
-    _state.Set(DS.maskShipDestroyed, 0);
-    _state.Set(DS.missionNumber, 0);
-    _state.Set(DS.maskingDeviceRecovered, 0);
-    _state.Set(DS.maskSystemJumps, 0);
-    _state.Set(DS.fledMaskShip, 0);
-    _state.Set(DS.missionStage, 0);
+    _state.Data().commanderBlock.maskMissionShipsLeft = 0;
+    _state.Data().commanderBlock.maskShipDestroyed = 0;
+    _state.Data().commanderBlock.missionNumber = 0;
+    _state.Data().commanderBlock.maskingDeviceRecovered = 0;
+    _state.Data().commanderBlock.maskSystemJumps = 0;
+    _state.Data().commanderBlock.fledMaskShip = 0;
+    _state.Data().commanderBlock.missionStage = 0;
     return;
   }
   PrintTextLines(_state, DS.invasionDebriefText.offset, LINE_4, INVASION_DEBRIEFING_LINES);
   (void)WaitForKeyPress(_state, _hardware);
   AwardArchangelTitle(_state);
-  _state.Set(DS.antiEcmEmulatorFitted, 1);
-  _state.Set(DS.missionNumber, 0);
-  _state.Set(DS.missionStage, 0);
-  _state.Set(DS.invadedStationDestroyed, 0);
-  _state.Set(DS.thargoidInvasionActive, 0);
-  _state.Set(DS.missionStage, 0);
+  _state.Data().commanderBlock.antiEcmEmulatorFitted = 1;
+  _state.Data().commanderBlock.missionNumber = 0;
+  _state.Data().commanderBlock.missionStage = 0;
+  _state.Data().commanderBlock.invadedStationDestroyed = 0;
+  _state.Data().commanderBlock.thargoidInvasionActive = 0;
+  _state.Data().commanderBlock.missionStage = 0;
 }
 
 DockedExit RunTitleAndDocked(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward)
 {
   std::uint16_t countIfNone = _countIfNone;
   bool backward = _backward;
-  if (_state.Get(DS.titleShown) != 1)
+  if (_state.Data().titleShown != 1)
   {
     countIfNone = RunTitle(_state, _hardware, _backward);
     backward = false;
   }
   // JMP into DockedKeyDispatch: back from a disk request, at the disc menu (CS:0BAC); otherwise at the status screen (CS:0B96). The
   // jumps back carry BP, which the status screen reads, as the dispatch's own turns do.
-  if (_state.Get(DS.resumeAtDiskMenu) == 1)
+  if (_state.Data().resumeAtDiskMenu == 1)
   {
     _hardware.LoopTurn(DOCKED_DISK_MENU_ENTRY, {countIfNone});
     return DispatchDockedKeys(_state, _hardware, SCAN_ESCAPE, countIfNone, backward);

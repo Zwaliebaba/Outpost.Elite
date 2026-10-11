@@ -88,7 +88,7 @@ constexpr std::uint8_t MOUSE_LEFT_AND_RIGHT = 0x03;
 // register but ES around the call, so that a screenshot leaves only ES, on the CGA's memory.
 bool SaveScreenshotIfAsked(GameState& _state, Hardware& _hardware)
 {
-  if (_state.Get(DS.keyDownPrintScreen) != 1 || _state.Get(DS.keyDownAlt) != 1)
+  if (_state.Data().keyDown.keyDownPrintScreen != 1 || _state.Data().keyDown.keyDownAlt != 1)
   {
     return false;
   }
@@ -98,20 +98,20 @@ bool SaveScreenshotIfAsked(GameState& _state, Hardware& _hardware)
 
 // Whether IntegrateRate tests _input against the rate at _rate for a reversal: XOR BL,[rate], which leaves BL the key
 // XOR the rate.
-[[nodiscard]] bool TestsReversal(const GameState& _state, std::uint8_t _input, DataField<std::uint8_t> _rate)
+[[nodiscard]] bool TestsReversal(const GameState& _state, std::uint8_t _input, const Counted<std::uint8_t>& _rate)
 {
-  return _input != 0 && _state.Get(DS.keyboardRecenter) == 1 && _state.Get(_rate) != 0;
+  return _input != 0 && _state.Data().keyboardRecenter == 1 && _rate != 0;
 }
 
 // One axis of ApplyKeyboardRates (0x7543): a new key adds to the rate, within +-23, or with keyboardRecenter snaps
 // an opposite rate to 0, which it stores at once; no key lets keyboardDamping take up to 3 off it.
-[[nodiscard]] std::uint8_t IntegrateRate(GameState& _state, std::uint8_t _input, DataField<std::uint8_t> _rate)
+[[nodiscard]] std::uint8_t IntegrateRate(GameState& _state, std::uint8_t _input, Counted<std::uint8_t>& _rate)
 {
-  const std::uint8_t rate = _state.Get(_rate);
+  const std::uint8_t rate = _rate;
   if (_input == 0)
   {
     std::uint8_t value = rate;
-    if (_state.Get(DS.keyboardDamping) != 1 || value == 0)
+    if (_state.Data().keyboardDamping != 1 || value == 0)
     {
       return value;
     }
@@ -124,7 +124,7 @@ bool SaveScreenshotIfAsked(GameState& _state, Hardware& _hardware)
   }
   if (TestsReversal(_state, _input, _rate) && ((_input ^ rate) & 0x80) != 0)
   {
-    _state.Set(_rate, 0);
+    _rate = 0;
     return 0;
   }
   const auto value = static_cast<std::int8_t>(_input + rate);
@@ -143,26 +143,29 @@ bool SaveScreenshotIfAsked(GameState& _state, Hardware& _hardware)
 // word. Returns the rates.
 Steering ApplyKeyboardRates(GameState& _state, Steering _keys)
 {
-  const Steering rates{IntegrateRate(_state, _keys.roll, DS.keyboardRollRate), IntegrateRate(_state, _keys.pitch, DS.keyboardPitchRate)};
-  _state.SetWord(DS.keyboardRollRate.offset, Join(rates.pitch, rates.roll));
+  const Steering rates{IntegrateRate(_state, _keys.roll, _state.Data().keyboardRollRate),
+                       IntegrateRate(_state, _keys.pitch, _state.Data().keyboardPitchRate)};
+  // Written as one word, the roll's byte and then the pitch's.
+  _state.Data().keyboardRollRate = rates.roll;
+  _state.Data().keyboardPitchRate = rates.pitch;
   return rates;
 }
 
 // One axis of ReadKeyboardSteering: the ramp grows while the same key is held, inside +-23, and restarts on a change.
-void RampAxis(GameState& _state, std::uint8_t _key, DataField<std::uint8_t> _lastKey, DataField<std::uint8_t> _ramp)
+void RampAxis(std::uint8_t _key, Counted<std::uint8_t>& _lastKey, Counted<std::uint8_t>& _ramp)
 {
-  const bool held = _key == _state.Get(_lastKey);
-  _state.Set(_lastKey, _key);
+  const bool held = _key == _lastKey;
+  _lastKey = _key;
   if (!held)
   {
-    _state.Set(_ramp, 0);
+    _ramp = 0;
     return;
   }
-  const auto value = static_cast<std::uint8_t>(_key + _state.Get(_ramp));
+  const auto value = static_cast<std::uint8_t>(_key + _ramp);
   const auto signedValue = static_cast<std::int8_t>(value);
   if (signedValue > -MOST_RATE - 1 && signedValue < MOST_RATE + 1)
   {
-    _state.Set(_ramp, value);
+    _ramp = value;
   }
 }
 
@@ -172,33 +175,33 @@ Steering ReadAmstradStick(GameState& _state)
 {
   std::uint8_t roll = 0;
   std::uint8_t pitch = 0;
-  if (_state.Get(DS.keyDownAmstradUp) == 1)
+  if (_state.Data().keyDown.keyDownAmstradUp == 1)
   {
     --pitch;
   }
-  if (_state.Get(DS.keyDownAmstradDown) == 1)
+  if (_state.Data().keyDown.keyDownAmstradDown == 1)
   {
     ++pitch;
   }
-  if (_state.Get(DS.keyDownAmstradLeft) == 1)
+  if (_state.Data().keyDown.keyDownAmstradLeft == 1)
   {
     --roll;
   }
-  if (_state.Get(DS.keyDownAmstradRight) == 1)
+  if (_state.Data().keyDown.keyDownAmstradRight == 1)
   {
     ++roll;
   }
-  RampAxis(_state, roll, DS.amstradStickLastRoll, DS.amstradStickRollRamp);
-  RampAxis(_state, pitch, DS.amstradStickLastPitch, DS.amstradStickPitchRamp);
-  return Steering{_state.Get(DS.amstradStickRollRamp), Negate(_state.Get(DS.amstradStickPitchRamp))};
+  RampAxis(roll, _state.Data().amstradStickLastRoll, _state.Data().amstradStickRollRamp);
+  RampAxis(pitch, _state.Data().amstradStickLastPitch, _state.Data().amstradStickPitchRamp);
+  return Steering{_state.Data().amstradStickRollRamp, Negate(_state.Data().amstradStickPitchRamp)};
 }
 
 // One axis of ReadJoystickSteering: (_count - centre) * 256 / centre by a DIV that can overflow into the game's trap, which
 // saves _xCount, the X count ReadJoystickSteering holds in BX throughout; halved and saturated at 127, over 8, less a dead zone of
 // 4, with the sign put back.
-[[nodiscard]] std::uint8_t StickAxis(GameState& _state, std::uint16_t _count, DataField<std::uint16_t> _center, std::uint16_t _xCount)
+[[nodiscard]] std::uint8_t StickAxis(GameState& _state, std::uint16_t _count, const Counted<std::uint16_t>& _center, std::uint16_t _xCount)
 {
-  auto difference = static_cast<std::uint16_t>(_count - _state.Get(_center));
+  auto difference = static_cast<std::uint16_t>(_count - _center);
   const bool negative = (difference & 0x8000) != 0;
   if (negative)
   {
@@ -206,7 +209,7 @@ Steering ReadAmstradStick(GameState& _state)
   }
   // XOR DH,DH / MOV DL,AH / MOV AH,AL / XOR AL,AL: DX:AX = the difference * 256.
   const std::uint32_t dividend = std::uint32_t{difference} << 8;
-  const auto halved = static_cast<std::uint16_t>(DivideWord(_state, dividend, _state.Get(_center), _xCount).quotient >> 1);
+  const auto halved = static_cast<std::uint16_t>(DivideWord(_state, dividend, _center, _xCount).quotient >> 1);
   const std::uint8_t saturated = halved >= STICK_STEP_LIMIT ? MOST_STICK_STEP : Low(halved);
   const auto step = static_cast<std::uint8_t>(saturated >> 3);
   const std::uint8_t value = step >= STICK_DEAD_ZONE ? static_cast<std::uint8_t>(step - STICK_DEAD_ZONE) : std::uint8_t{0};
@@ -292,7 +295,7 @@ KeyPress WaitForKeyPress(GameState& _state, Hardware& _hardware)
 
 Steering ReadSteering(GameState& _state, Hardware& _hardware, std::uint8_t _trigger)
 {
-  const std::uint8_t device = _state.Get(DS.inputDevice);
+  const std::uint8_t device = _state.Data().inputDevice;
   if (device == KEYBOARD_DEVICE)
   {
     return ApplyKeyboardRates(_state, ReadKeyboardSteering(_state));
@@ -300,7 +303,7 @@ Steering ReadSteering(GameState& _state, Hardware& _hardware, std::uint8_t _trig
   if (device == JOYSTICK_DEVICE)
   {
     const Steering stick = ReadJoystickSteering(_state, _hardware, _trigger);
-    return _state.Get(DS.joystickIsAmstrad) == 1 ? ApplyKeyboardRates(_state, stick) : stick;
+    return _state.Data().joystickIsAmstrad == 1 ? ApplyKeyboardRates(_state, stick) : stick;
   }
   return ReadMouseSteering(_state, _hardware);
 }
@@ -309,14 +312,14 @@ KeyPress GetKey(GameState& _state, Hardware& _hardware)
 {
   _hardware.DisableInterrupts();
   KeyPress key{false, 0, false, false};
-  const std::uint8_t count = _state.Get(DS.keyBufferCount);
+  const std::uint8_t count = _state.Data().keyBufferCount;
   if (count != 0)
   {
     const std::uint16_t read = _state.Get(DS.keyBufferRead);
     const std::uint8_t code = _state.Byte(read);
     const auto next = static_cast<std::uint16_t>(read + 1);
     _state.Set(DS.keyBufferRead, (next & 0x0F) == 0 ? DS.keyBuffer.offset : next);
-    _state.Set(DS.keyBufferCount, static_cast<std::uint8_t>(count - 1));
+    _state.Data().keyBufferCount = static_cast<std::uint8_t>(count - 1);
     key = KeyPress{true, static_cast<std::uint8_t>(code & ~SHIFT_BIT), (code & SHIFT_BIT) != 0, false};
   }
   _hardware.EnableInterrupts();
@@ -331,10 +334,10 @@ void ResetKeyboard(GameState& _state, Hardware& _hardware)
   {
     _state.SetWord(DS.keyDown.At(word * 2), 0);
   }
-  _state.Set(DS.keyBufferCount, 0);
+  _state.Data().keyBufferCount = 0;
   _state.Set(DS.keyBufferWrite, DS.keyBuffer.offset);
   _state.Set(DS.keyBufferRead, DS.keyBuffer.offset);
-  _state.Set(DS.rollRate, 0);
+  _state.Data().rollRate = 0;
   _hardware.EnableInterrupts();
 }
 
@@ -348,36 +351,36 @@ void ReadScanCode(GameState& _state, Hardware& _hardware)
     {
       const auto code = static_cast<std::uint8_t>(scan & ~BREAK_BIT);
       _state.SetByte(DS.keyDown.At(code), 0);
-      if (code == D_CODE && _state.Get(DS.inFlight) == 1)
+      if (code == D_CODE && _state.Data().inFlight == 1)
       {
-        _state.Set(DS.dockingKeyReleased, 1);
+        _state.Data().dockingKeyReleased = 1;
       }
     }
     else
     {
-      _state.Set(DS.anyKeyLatch, 1);
+      _state.Data().anyKeyLatch = 1;
       if (scan == ESC_CODE)
       {
-        _state.Set(DS.escKeyLatch, 1);
+        _state.Data().escKeyLatch = 1;
       }
-      if (scan == W_CODE && _state.Get(DS.keyDownAlt) == 1)
+      if (scan == W_CODE && _state.Data().keyDown.keyDownAlt == 1)
       {
-        _state.Set(DS.forceMisjump, 1);
+        _state.Data().forceMisjump = 1;
       }
       _state.SetByte(DS.keyDown.At(scan), 1);
       std::uint8_t code = scan;
-      if (_state.Get(DS.keyDownLeftShift) == 1 || _state.Get(DS.keyDownRightShift) == 1)
+      if (_state.Data().keyDown.keyDownLeftShift == 1 || _state.Data().keyDown.keyDownRightShift == 1)
       {
         code |= SHIFT_BIT;
       }
-      const std::uint8_t count = _state.Get(DS.keyBufferCount);
+      const std::uint8_t count = _state.Data().keyBufferCount;
       if (count != KEY_BUFFER_CODES)
       {
         const std::uint16_t write = _state.Get(DS.keyBufferWrite);
         _state.SetByte(write, code);
         const auto next = static_cast<std::uint16_t>(write + 1);
         _state.Set(DS.keyBufferWrite, (next & 0x0F) == 0 ? DS.keyBuffer.offset : next);
-        _state.Set(DS.keyBufferCount, static_cast<std::uint8_t>(count + 1));
+        _state.Data().keyBufferCount = static_cast<std::uint8_t>(count + 1);
       }
     }
   }
@@ -386,24 +389,25 @@ void ReadScanCode(GameState& _state, Hardware& _hardware)
 
 bool ReadFireButton(const GameState& _state, Hardware& _hardware)
 {
-  const std::uint8_t device = _state.Get(DS.inputDevice);
+  const std::uint8_t device = _state.Data().inputDevice;
   if (device == KEYBOARD_DEVICE)
   {
-    return Pressed(_state.Get(DS.keyDownSpace));
+    return Pressed(_state.Data().keyDown.keyDownSpace);
   }
   if (device == JOYSTICK_DEVICE)
   {
-    if (_state.Get(DS.joystickIsAmstrad) == 1)
+    if (_state.Data().joystickIsAmstrad == 1)
     {
-      return Pressed(static_cast<std::uint8_t>(_state.Get(DS.keyDownAmstradFire1) | _state.Get(DS.keyDownAmstradFire2)));
+      return Pressed(static_cast<std::uint8_t>(_state.Data().keyDown.keyDownAmstradFire1 | _state.Data().keyDown.keyDownAmstradFire2));
     }
     // Each button shifted left into CF and inverted, bit 5 and then bit 4: pressed reads 0.
     const std::uint8_t buttons = _hardware.GamePortButtons();
     return (buttons & STICK_BUTTON_A) == 0 || (buttons & STICK_BUTTON_B) == 0;
   }
-  if (_state.Get(DS.amstradPresent) == 1)
+  if (_state.Data().amstradPresent == 1)
   {
-    return Pressed(static_cast<std::uint8_t>(_state.Get(DS.keyDownAmstradMouseRight) | _state.Get(DS.keyDownAmstradMouseLeft)));
+    return Pressed(
+      static_cast<std::uint8_t>(_state.Data().keyDown.keyDownAmstradMouseRight | _state.Data().keyDown.keyDownAmstradMouseLeft));
   }
   // SHR AL,1 twice: the left button, then the right.
   return (Low(_hardware.ReadMousePresses(MOUSE_RIGHT_BUTTON).buttons) & MOUSE_LEFT_AND_RIGHT) != 0;
@@ -493,12 +497,12 @@ StickAxes ReadJoystickAxes(GameState& _state, Hardware& _hardware, std::uint8_t 
   x = static_cast<std::uint16_t>(x - AXIS_COUNT_START);
   _hardware.CountInstructionCycles(BEFORE_LAST_READ_CYCLES);
   const std::uint8_t port = _hardware.GamePortButtons();
-  _state.Set(DS.joystickPortByte, port);
+  _state.Data().joystickPortByte = port;
   // Bit 4, the stick's first button, low while pressed.
   _hardware.CountInstructionCycles(IN_CYCLES + STORE_CYCLES + AND_CYCLES);
   if ((port & STICK_BUTTON_B) == 0)
   {
-    _state.Set(DS.fireLatch, 1);
+    _state.Data().fireLatch = 1;
     _hardware.CountInstructionCycles(NOT_TAKEN_CYCLES + LATCH_CYCLES);
   }
   else
@@ -511,7 +515,7 @@ StickAxes ReadJoystickAxes(GameState& _state, Hardware& _hardware, std::uint8_t 
 
 Steering ReadJoystickSteering(GameState& _state, Hardware& _hardware, std::uint8_t _trigger)
 {
-  if (_state.Get(DS.joystickIsAmstrad) == 1)
+  if (_state.Data().joystickIsAmstrad == 1)
   {
     return ReadAmstradStick(_state);
   }
@@ -520,8 +524,8 @@ Steering ReadJoystickSteering(GameState& _state, Hardware& _hardware, std::uint8
   {
     return Steering{0, 0};
   }
-  const std::uint8_t roll = StickAxis(_state, axes.x, DS.joystickCenterX, axes.x);
-  const std::uint8_t pitch = StickAxis(_state, axes.y, DS.joystickCenterY, axes.x);
+  const std::uint8_t roll = StickAxis(_state, axes.x, _state.Data().joystickCenterX, axes.x);
+  const std::uint8_t pitch = StickAxis(_state, axes.y, _state.Data().joystickCenterY, axes.x);
   // ClampJoystickSteering (7A3C): the roll, then the pitch negated.
   return Steering{ClampRate(roll), ClampRate(Negate(pitch))};
 }
@@ -530,27 +534,26 @@ Steering ReadKeyboardSteering(GameState& _state)
 {
   std::uint8_t roll = 0;
   std::uint8_t pitch = 0;
-  const auto held = [&_state](DataField<std::uint8_t> _first, DataField<std::uint8_t> _second)
-  { return (_state.Get(_first) | _state.Get(_second)) != 0; };
-  if (held(DS.keyDownUp, DS.keyDownQ))
+  const auto held = [](const Counted<std::uint8_t>& _first, const Counted<std::uint8_t>& _second) { return (_first | _second) != 0; };
+  if (held(_state.Data().keyDown.keyDownUp, _state.Data().keyDown.keyDownQ))
   {
     --pitch;
   }
-  if (held(DS.keyDownDown, DS.keyDownA))
+  if (held(_state.Data().keyDown.keyDownDown, _state.Data().keyDown.keyDownA))
   {
     ++pitch;
   }
-  if (held(DS.keyDownLeft, DS.keyDownO))
+  if (held(_state.Data().keyDown.keyDownLeft, _state.Data().keyDown.keyDownO))
   {
     --roll;
   }
-  if (held(DS.keyDownRight, DS.keyDownP))
+  if (held(_state.Data().keyDown.keyDownRight, _state.Data().keyDown.keyDownP))
   {
     ++roll;
   }
-  RampAxis(_state, roll, DS.keyboardLastRollKey, DS.keyboardRollRamp);
-  RampAxis(_state, pitch, DS.keyboardLastPitchKey, DS.keyboardPitchRamp);
-  return Steering{_state.Get(DS.keyboardRollRamp), Negate(_state.Get(DS.keyboardPitchRamp))};
+  RampAxis(roll, _state.Data().keyboardLastRollKey, _state.Data().keyboardRollRamp);
+  RampAxis(pitch, _state.Data().keyboardLastPitchKey, _state.Data().keyboardPitchRamp);
+  return Steering{_state.Data().keyboardRollRamp, Negate(_state.Data().keyboardPitchRamp)};
 }
 
 Steering ReadMouseSteering(GameState& _state, Hardware& _hardware)
@@ -559,21 +562,22 @@ Steering ReadMouseSteering(GameState& _state, Hardware& _hardware)
   const std::uint8_t rollStep = MouseAxis(motion.acrossMickeys);
   const std::uint8_t pitchStep = MouseAxis(motion.downMickeys);
   std::uint8_t buttons = 0;
-  if (_state.Get(DS.amstradPresent) == 1)
+  if (_state.Data().amstradPresent == 1)
   {
-    buttons = static_cast<std::uint8_t>((_state.Get(DS.keyDownAmstradMouseRight) << 1) | _state.Get(DS.keyDownAmstradMouseLeft));
+    buttons =
+      static_cast<std::uint8_t>((_state.Data().keyDown.keyDownAmstradMouseRight << 1) | _state.Data().keyDown.keyDownAmstradMouseLeft);
   }
   else
   {
     buttons = Low(_hardware.ReadMousePresses(MOUSE_RIGHT_BUTTON).buttons);
   }
-  _state.Set(DS.mouseButtons, buttons);
+  _state.Data().mouseButtons = buttons;
   if ((buttons & 1) != 0)
   {
-    _state.Set(DS.fireLatch, 1);
+    _state.Data().fireLatch = 1;
   }
   // NEG AH / SAR AL,1 / SAR AH,1: half of each step, the pitch negated, added to the rates the last frame left.
-  return Steering{MouseRate(rollStep, _state.Byte(DS.rollRate.offset)), MouseRate(Negate(pitchStep), _state.Get(DS.pitchRate))};
+  return Steering{MouseRate(rollStep, Low(_state.Data().rollRate)), MouseRate(Negate(pitchStep), _state.Data().rollRateBytes.pitchRate)};
 }
 
 bool PollScreenDumpKey(GameState& _state, Hardware& _hardware)
@@ -583,7 +587,7 @@ bool PollScreenDumpKey(GameState& _state, Hardware& _hardware)
 
 void ResetMouseIfSelected(const GameState& _state, Hardware& _hardware)
 {
-  if (_state.Get(DS.inputDevice) != MOUSE_DEVICE)
+  if (_state.Data().inputDevice != MOUSE_DEVICE)
   {
     return;
   }
@@ -594,11 +598,11 @@ void ResetMouseIfSelected(const GameState& _state, Hardware& _hardware)
 Steering ApplyReverseControls(const GameState& _state, Steering _steering)
 {
   Steering steering = _steering;
-  if (_state.Get(DS.reverseYControl) == 1)
+  if (_state.Data().reverseYControl == 1)
   {
     steering.pitch = Negate(steering.pitch);
   }
-  if (_state.Get(DS.reverseXAndY) == 1)
+  if (_state.Data().reverseXAndY == 1)
   {
     steering.roll = Negate(steering.roll);
     steering.pitch = Negate(steering.pitch);

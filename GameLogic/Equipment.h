@@ -33,7 +33,7 @@ struct Scoop
 /// the scoop's box: a barrel's random product or its masking device, a splinter's alloys or precious metals, an escape pod's
 /// slaves, a Thargon's alien items, each removed (RemoveObject) with its message, or the message that the hold is full or the
 /// object cannot be scooped.
-Scoop TryScoopObject(GameState& _state, ObjectSlot _slot, const Vector& _view);
+Scoop TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view);
 
 /// PayForEquipmentItem (CS:65A3): menuSelectedRow's price off creditsTenths (SubtractCredits): fuel's by the tank's emptiness,
 /// by a divide whose trap saves _bx, its caller's BX, with the row in BL. Returns whether the credits were enough, and are now

@@ -106,7 +106,6 @@
     <ClInclude Include="Mouse.h" />
     <ClInclude Include="NativeEntry.h" />
     <ClInclude Include="NativeRoutines.h" />
-    <ClInclude Include="ObjectSlot.h" />
     <ClInclude Include="Outcome.h" />
     <ClInclude Include="Pacing.h" />
     <ClInclude Include="pch.h" />

@@ -128,7 +128,7 @@ TunnelDrawn DrawTunnelRectangles(GameState& _state, Hardware& _hardware, std::ui
   std::uint16_t count = _count;
   for (;;)
   {
-    _state.Set(DS.drawColor, TUNNEL_COLOR);
+    _state.Data().drawColor = TUNNEL_COLOR;
     drawn.filled = DrawTunnelRectangle(_state, drawn.next) || drawn.filled;
     drawn.next = Offset(drawn.next, TUNNEL_RECTANGLE_BYTES);
     if (--count == 0)
@@ -159,7 +159,7 @@ void WaitTimerTicks(GameState& _state, Hardware& _hardware, std::uint16_t _ticks
 [[nodiscard]] std::uint16_t PostDockingMessage(GameState& _state, DataAt _text)
 {
   _state.Set(DS.messagePointer, _text.offset);
-  _state.Set(DS.messageFrames, DOCKING_MESSAGE_FRAMES);
+  _state.Data().messageFrames = DOCKING_MESSAGE_FRAMES;
   return _text.offset;
 }
 
@@ -167,38 +167,38 @@ void WaitTimerTicks(GameState& _state, Hardware& _hardware, std::uint16_t _ticks
 // and CX, with DI the station's slot.
 [[nodiscard]] Vector LoadStationPosition(GameState& _state, bool _approach)
 {
-  const ObjectSlot station(_state, DS.stationSlot.offset);
-  const std::uint16_t z = station.Get(SlotWord::Z);
-  return Vector{static_cast<std::int16_t>(station.Get(SlotWord::X)), static_cast<std::int16_t>(station.Get(SlotWord::Y)),
+  const SpaceObject& station = _state.ObjectAt(DS.stationSlot.offset);
+  const std::uint16_t z = station.z;
+  return Vector{static_cast<std::int16_t>(station.x), static_cast<std::int16_t>(station.y),
                 static_cast<std::int16_t>(_approach ? Offset(z, APPROACH_DISTANCE) : z)};
 }
 
 // dockingComputerSteering and rollRate both _steering.
 void Steer(GameState& _state, std::uint16_t _steering)
 {
-  _state.Set(DS.dockingComputerSteering, _steering);
-  _state.Set(DS.rollRate, _steering);
+  _state.Data().dockingComputerSteering = _steering;
+  _state.Data().rollRate = _steering;
 }
 
 // playerSpeed up by 4, and then held at 48: ADD and a MOV over it.
 void SpeedUp(GameState& _state)
 {
-  const auto speed = static_cast<std::uint16_t>(_state.Get(DS.playerSpeed) + SPEED_STEP);
-  _state.Set(DS.playerSpeed, speed);
+  const auto speed = static_cast<std::uint16_t>(_state.Data().playerSpeed + SPEED_STEP);
+  _state.Data().playerSpeed = speed;
   if (speed > MOST_SPEED)
   {
-    _state.Set(DS.playerSpeed, MOST_SPEED);
+    _state.Data().playerSpeed = MOST_SPEED;
   }
 }
 
 // playerSpeed down by 4, and 4 again where that reaches 0: SUB and a MOV over it.
 void SlowDown(GameState& _state)
 {
-  const auto speed = static_cast<std::uint16_t>(_state.Get(DS.playerSpeed) - SPEED_STEP);
-  _state.Set(DS.playerSpeed, speed);
+  const auto speed = static_cast<std::uint16_t>(_state.Data().playerSpeed - SPEED_STEP);
+  _state.Data().playerSpeed = speed;
   if (speed == 0)
   {
-    _state.Set(DS.playerSpeed, LEAST_SPEED);
+    _state.Data().playerSpeed = LEAST_SPEED;
   }
 }
 
@@ -225,9 +225,9 @@ void AimRoll(GameState& _state, bool _approach, std::uint8_t _next)
   {
     roll = Offset(roll, HALF_TURN);
   }
-  roll = static_cast<std::uint16_t>(Offset(roll, _state.Get(DS.playerRollAngle)) & ANGLE_MASK);
-  _state.Set(DS.dockingTargetAngle, roll);
-  _state.Set(DS.dockingComputerState, _next);
+  roll = static_cast<std::uint16_t>(Offset(roll, _state.Data().playerRollAngle) & ANGLE_MASK);
+  _state.Data().dockingTargetAngle = roll;
+  _state.Data().dockingComputerState = _next;
 }
 
 // An 11-bit angle sign-extended to 16 bits, as AngleWithinTolerance leaves its second.
@@ -241,16 +241,16 @@ void AimRoll(GameState& _state, bool _approach, std::uint8_t _next)
 // state _next.
 void RollToTarget(GameState& _state, std::uint8_t _next)
 {
-  const std::uint16_t target = _state.Get(DS.dockingTargetAngle);
-  if (AngleWithinTolerance(_state.Get(DS.playerRollAngle), target, ROLL_TOLERANCE))
+  const std::uint16_t target = _state.Data().dockingTargetAngle;
+  if (AngleWithinTolerance(_state.Data().playerRollAngle, target, ROLL_TOLERANCE))
   {
-    _state.Set(DS.playerRollAngle, SignExtendAngle(target));
-    _state.Set(DS.dockingComputerState, _next);
-    _state.Set(DS.dockingComputerSteering, 0);
-    _state.Set(DS.rollRate, 0);
+    _state.Data().playerRollAngle = SignExtendAngle(target);
+    _state.Data().dockingComputerState = _next;
+    _state.Data().dockingComputerSteering = 0;
+    _state.Data().rollRate = 0;
     return;
   }
-  const auto turn = static_cast<std::uint16_t>(_state.Get(DS.dockingTargetAngle) - _state.Get(DS.playerRollAngle));
+  const auto turn = static_cast<std::uint16_t>(_state.Data().dockingTargetAngle - _state.Data().playerRollAngle);
   Steer(_state, Join(0, (turn & ANGLE_SIGN) != 0 ? Negate(ROLL_STEP) : ROLL_STEP));
 }
 
@@ -272,15 +272,15 @@ void PitchToTarget(GameState& _state, bool _approach, std::uint16_t _tolerance, 
   }
   // SAR AX,1 / MOV AH,AL / XOR AL,AL: half the angle, its low byte in the high byte.
   Steer(_state, Join(Low(Sar(angle, 1)), 0));
-  if (_state.Get(DS.dockingAlignPasses) != 1)
+  if (_state.Data().dockingAlignPasses != 1)
   {
-    _state.Set(DS.dockingAlignPasses, static_cast<std::uint8_t>(_state.Get(DS.dockingAlignPasses) + 1));
-    _state.Set(DS.dockingComputerState, _again);
+    _state.Data().dockingAlignPasses = static_cast<std::uint8_t>(_state.Data().dockingAlignPasses + 1);
+    _state.Data().dockingComputerState = _again;
     return;
   }
-  _state.Set(DS.dockingComputerState, _next);
-  _state.Set(DS.playerSpeed, LEAST_SPEED);
-  _state.Set(DS.velocityDirty, 1);
+  _state.Data().dockingComputerState = _next;
+  _state.Data().playerSpeed = LEAST_SPEED;
+  _state.Data().velocityDirty = 1;
 }
 
 // CWD / IDIV BX: _coordinate over _frames, the frames left; with no frame left it divides by 0 into the game's trap, which saves
@@ -327,23 +327,23 @@ void FlyToApproachPoint(GameState& _state)
     SlowDown(_state);
   }
   const std::uint16_t frames =
-    DivideWord(_state, distance, _state.Get(DS.playerSpeed), VectorLengthOddLeftover(approach, distance)).quotient;
+    DivideWord(_state, distance, _state.Data().playerSpeed, VectorLengthOddLeftover(approach, distance)).quotient;
   if (frames == 1)
   {
-    _state.Set(DS.playerSpeed, 0);
-    _state.Set(DS.velocityDirty, 1);
-    _state.Set(DS.playerVelocityX, static_cast<std::uint16_t>(approach.x));
-    _state.Set(DS.playerVelocityY, static_cast<std::uint16_t>(approach.y));
-    _state.Set(DS.playerVelocityZ, static_cast<std::uint16_t>(approach.z));
+    _state.Data().playerSpeed = 0;
+    _state.Data().velocityDirty = 1;
+    _state.Data().playerVelocityX = static_cast<std::uint16_t>(approach.x);
+    _state.Data().playerVelocityY = static_cast<std::uint16_t>(approach.y);
+    _state.Data().playerVelocityZ = static_cast<std::uint16_t>(approach.z);
     MoveObjectsByVelocity(_state);
-    _state.Set(DS.dockingComputerState, AIM_ROLL_AT_STATION);
-    _state.Set(DS.dockingAlignPasses, 0);
+    _state.Data().dockingComputerState = AIM_ROLL_AT_STATION;
+    _state.Data().dockingAlignPasses = 0;
     return;
   }
   // MOV AX,[DI+axis] (and ADD AX,7D0h for z), then the divide, for x, y and z.
-  _state.Set(DS.playerVelocityX, VelocityOver(_state, static_cast<std::uint16_t>(approach.x), frames));
-  _state.Set(DS.playerVelocityY, VelocityOver(_state, static_cast<std::uint16_t>(approach.y), frames));
-  _state.Set(DS.playerVelocityZ, VelocityOver(_state, static_cast<std::uint16_t>(approach.z), frames));
+  _state.Data().playerVelocityX = VelocityOver(_state, static_cast<std::uint16_t>(approach.x), frames);
+  _state.Data().playerVelocityY = VelocityOver(_state, static_cast<std::uint16_t>(approach.y), frames);
+  _state.Data().playerVelocityZ = VelocityOver(_state, static_cast<std::uint16_t>(approach.z), frames);
   MoveObjectsByVelocity(_state);
 }
 
@@ -351,16 +351,16 @@ void FlyToApproachPoint(GameState& _state)
 // matched next.
 void CloseIn(GameState& _state)
 {
-  const std::uint16_t distance = Negate(ObjectSlot(_state, DS.stationSlot.offset).Get(SlotWord::Z));
+  const std::uint16_t distance = Negate(_state.ObjectAt(DS.stationSlot.offset).z);
   if (distance < STOP_CLOSING_DISTANCE)
   {
-    _state.Set(DS.dockingComputerState, MATCH_SPIN);
-    if (_state.Get(DS.viewAngle) != 0)
+    _state.Data().dockingComputerState = MATCH_SPIN;
+    if (_state.Data().viewAngle != 0)
     {
-      _state.Set(DS.viewAngle, 0);
+      _state.Data().viewAngle = 0;
     }
     (void)ResetStardust(_state);
-    _state.Set(DS.viewLocked, 1);
+    _state.Data().viewLocked = 1;
     return;
   }
   if (distance < CLOSE_SLOWLY_DISTANCE)
@@ -371,18 +371,18 @@ void CloseIn(GameState& _state)
   {
     SpeedUp(_state);
   }
-  _state.Set(DS.playerVelocityX, 0);
-  _state.Set(DS.playerVelocityY, 0);
-  _state.Set(DS.playerVelocityZ, Negate(_state.Get(DS.playerSpeed)));
+  _state.Data().playerVelocityX = 0;
+  _state.Data().playerVelocityY = 0;
+  _state.Data().playerVelocityZ = Negate(_state.Data().playerSpeed);
   MoveObjectsByVelocity(_state);
-  _state.Set(DS.velocityDirty, 1);
+  _state.Data().velocityDirty = 1;
 }
 
 // The station's spin angle plus _turn, negated for a Dodo (IsStation's CF) (CS:8980, CS:89B9, CS:89EA).
 [[nodiscard]] std::uint16_t LoadStationSpin(GameState& _state, std::uint16_t _turn)
 {
-  const ObjectSlot station(_state, DS.stationSlot.offset);
-  const auto spin = Offset(station.Get(SlotWord::Roll), _turn);
+  const SpaceObject& station = _state.ObjectAt(DS.stationSlot.offset);
+  const auto spin = Offset(station.roll, _turn);
   return IsStation(station).dodo ? Negate(spin) : spin;
 }
 
@@ -392,15 +392,15 @@ void MatchSpin(GameState& _state)
 {
   MoveObjectsByVelocity(_state);
   const std::uint16_t spin = LoadStationSpin(_state, 0);
-  const std::uint16_t roll = _state.Get(DS.playerRollAngle);
+  const std::uint16_t roll = _state.Data().playerRollAngle;
   if (AngleWithinTolerance(spin, roll, SPIN_TOLERANCE))
   {
-    _state.Set(DS.dockingComputerState, ROLL_WITH_SPIN);
+    _state.Data().dockingComputerState = ROLL_WITH_SPIN;
   }
   else if (AngleWithinTolerance(spin, Offset(roll, HALF_TURN), SPIN_TOLERANCE))
   {
     // ADD CX,400h on the roll the first test left sign-extended in CX, which the second masks off again.
-    _state.Set(DS.dockingComputerState, ROLL_WITH_SPIN_TURNED);
+    _state.Data().dockingComputerState = ROLL_WITH_SPIN_TURNED;
   }
 }
 
@@ -410,7 +410,7 @@ void RollWithSpin(GameState& _state, std::uint16_t _turn)
 {
   MoveObjectsByVelocity(_state);
   const auto spin = static_cast<std::uint16_t>(LoadStationSpin(_state, _turn) & ANGLE_MASK);
-  const auto roll = static_cast<std::uint16_t>(_state.Get(DS.playerRollAngle) & ANGLE_MASK);
+  const auto roll = static_cast<std::uint16_t>(_state.Data().playerRollAngle & ANGLE_MASK);
   Steer(_state, Negate(Low(Sar(static_cast<std::uint16_t>(spin - roll), 1))));
 }
 
@@ -430,10 +430,10 @@ bool DrawTunnelRectangle(GameState& _state, std::uint16_t _points)
   return filled;
 }
 
-bool CheckDockingAlignment(const GameState& _state, const ObjectSlot& _station, std::uint16_t _tolerance)
+bool CheckDockingAlignment(const GameState& _state, const SpaceObject& _station, std::uint16_t _tolerance)
 {
   // Pitch near 0 wants yaw near a half turn, and pitch near a half turn wants yaw near 0.
-  const std::uint16_t pitch = _state.Get(DS.playerPitchAngle);
+  const std::uint16_t pitch = _state.Data().playerPitchAngle;
   std::uint16_t yaw = HALF_TURN;
   if (!AngleWithinTolerance(pitch, 0, _tolerance))
   {
@@ -443,15 +443,15 @@ bool CheckDockingAlignment(const GameState& _state, const ObjectSlot& _station, 
     }
     yaw = 0;
   }
-  if (!AngleWithinTolerance(_state.Get(DS.playerYawAngle), yaw, _tolerance))
+  if (!AngleWithinTolerance(_state.Data().playerYawAngle, yaw, _tolerance))
   {
     return false;
   }
 
   // Roll near the station's spin, negated for ship type 0, or half a turn from it.
-  const std::uint16_t roll = _state.Get(DS.playerRollAngle);
-  std::uint16_t spin = _station.Get(SlotWord::Roll);
-  if (((_station.Get(SlotByte::Type) >> 1) & SHIP_TYPE_MASK) == 0)
+  const std::uint16_t roll = _state.Data().playerRollAngle;
+  std::uint16_t spin = _station.roll;
+  if (((_station.type >> 1) & SHIP_TYPE_MASK) == 0)
   {
     spin = Negate(spin);
   }
@@ -495,9 +495,9 @@ void MaskOutsideTunnel(GameState& _state, std::uint16_t _rectangle, bool _backwa
 void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
 {
   // MOV AX,leavingStationMessage, or autoDockMessage when docked, for one frame.
-  const std::uint16_t message = _state.Get(DS.playerDocked) != 0 ? DS.autoDockMessage.offset : DS.leavingStationMessage.offset;
+  const std::uint16_t message = _state.Data().playerDocked != 0 ? DS.autoDockMessage.offset : DS.leavingStationMessage.offset;
   _state.Set(DS.messagePointer, message);
-  _state.Set(DS.messageFrames, 1);
+  _state.Data().messageFrames = 1;
   (void)UpdateMessageLine(_state, _backward);
   UpdateDashboard(_state);
 
@@ -508,7 +508,7 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
   bool backward = _backward;
   for (std::uint16_t frame = 1;;)
   {
-    if (_state.Get(DS.playerDocked) == 0)
+    if (_state.Data().playerDocked == 0)
     {
       backward = TransformAndDrawObjects(_state, _hardware, backward);
       MoveObjectsByVelocity(_state);
@@ -544,7 +544,7 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
   std::uint16_t first = DS.tunnelRectangles.offset;
   for (std::uint16_t frames = TUNNEL_FRAMES;;)
   {
-    if (_state.Get(DS.playerDocked) == 0)
+    if (_state.Data().playerDocked == 0)
     {
       backward = TransformAndDrawObjects(_state, _hardware, backward);
       if (UpdateStardust(_state, STARDUST_BX))
@@ -576,35 +576,35 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
 
 std::uint16_t ToggleDockingComputer(GameState& _state, Hardware& _hardware)
 {
-  _state.Set(DS.dockingKeyReleased, 0);
-  if (_state.Get(DS.dockingComputerOn) == 1)
+  _state.Data().dockingKeyReleased = 0;
+  if (_state.Data().dockingComputerOn == 1)
   {
     StopAllSound(_state, _hardware);
-    _state.Set(DS.dockingComputerOn, 0);
-    _state.Set(DS.viewLocked, 0);
-    if (_state.Get(DS.playerSpeed) == 0)
+    _state.Data().dockingComputerOn = 0;
+    _state.Data().viewLocked = 0;
+    if (_state.Data().playerSpeed == 0)
     {
-      _state.Set(DS.playerSpeed, LEAST_SPEED);
-      _state.Set(DS.velocityDirty, 1);
+      _state.Data().playerSpeed = LEAST_SPEED;
+      _state.Data().velocityDirty = 1;
     }
     StartLowBeep(_state);
     return PostDockingMessage(_state, DS.dockingComputerOffMessage);
   }
   if (!InSafeZone(_state).inside)
   {
-    _state.Set(DS.dataA137, 0);
+    _state.Data().dataA137 = 0;
     StartLowBeep(_state);
     return PostDockingMessage(_state, DS.stationOutOfRangeMessage);
   }
-  if ((ObjectSlot(_state, DS.stationSlot.offset).Get(SlotByte::Flags) & STATION_SHOT) != 0)
+  if ((_state.ObjectAt(DS.stationSlot.offset).flags & STATION_SHOT) != 0)
   {
-    _state.Set(DS.dataA137, 0);
+    _state.Data().dataA137 = 0;
     StartLowBeep(_state);
     return PostDockingMessage(_state, DS.dockingDeniedMessage);
   }
-  _state.Set(DS.dockingComputerSteering, 0);
-  _state.Set(DS.dockingComputerState, SLOW_TO_STOP);
-  _state.Set(DS.dockingComputerOn, 1);
+  _state.Data().dockingComputerSteering = 0;
+  _state.Data().dockingComputerState = SLOW_TO_STOP;
+  _state.Data().dockingComputerOn = 1;
   StartMusic(_state, _hardware);
   StartBeep(_state);
   return PostDockingMessage(_state, DS.dockingComputerOnMessage);
@@ -613,19 +613,19 @@ std::uint16_t ToggleDockingComputer(GameState& _state, Hardware& _hardware)
 void RunDockingComputer(GameState& _state)
 {
   Steer(_state, 0);
-  const std::uint8_t state = _state.Get(DS.dockingComputerState);
+  const std::uint8_t state = _state.Data().dockingComputerState;
   switch (state)
   {
   case SLOW_TO_STOP:
     // SUB WORD playerSpeed,4 while it is not 0, then on to state 1.
-    if (_state.Get(DS.playerSpeed) != 0)
+    if (_state.Data().playerSpeed != 0)
     {
-      _state.Set(DS.playerSpeed, static_cast<std::uint16_t>(_state.Get(DS.playerSpeed) - SPEED_STEP));
-      _state.Set(DS.velocityDirty, 1);
+      _state.Data().playerSpeed = static_cast<std::uint16_t>(_state.Data().playerSpeed - SPEED_STEP);
+      _state.Data().velocityDirty = 1;
       break;
     }
-    _state.Set(DS.dockingComputerState, AIM_ROLL_AT_APPROACH);
-    _state.Set(DS.dockingAlignPasses, 0);
+    _state.Data().dockingComputerState = AIM_ROLL_AT_APPROACH;
+    _state.Data().dockingAlignPasses = 0;
     break;
   case AIM_ROLL_AT_APPROACH:
     AimRoll(_state, true, ROLL_TO_APPROACH);
@@ -665,13 +665,13 @@ void RunDockingComputer(GameState& _state)
 
 void CancelDockingComputer(GameState& _state, Hardware& _hardware)
 {
-  if (_state.Get(DS.dockingComputerOn) != 1)
+  if (_state.Data().dockingComputerOn != 1)
   {
     return;
   }
-  _state.Set(DS.dockingComputerOn, 0);
-  _state.Set(DS.dataA137, 0);
-  _state.Set(DS.viewLocked, 0);
+  _state.Data().dockingComputerOn = 0;
+  _state.Data().dataA137 = 0;
+  _state.Data().viewLocked = 0;
   // PUSH AX / POP AX round it: StopAllSound's AX does not come out.
   StopAllSound(_state, _hardware);
 }

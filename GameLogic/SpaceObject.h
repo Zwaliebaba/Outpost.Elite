@@ -131,6 +131,10 @@ private:
   }
 };
 
+/// A byte field of the record, or a word field, for a routine that takes the field it works on: `_slot.*_field`.
+using ObjectByte = Counted<std::uint8_t> SpaceObject::*;
+using ObjectWord = Counted<std::uint16_t> SpaceObject::*;
+
 static_assert(sizeof(SpaceObject) == SpaceObject::BYTES);
 static_assert(std::is_trivially_copyable_v<SpaceObject> && std::is_standard_layout_v<SpaceObject>);
 static_assert(SPACE_OBJECT_OFFSET(type) == 0x00);

@@ -51,43 +51,43 @@ constexpr std::uint8_t ANSWER_KEY = 0x61;
 constexpr std::uint16_t TIMER_TICK_COMPARE = 0x7776;
 
 // The byte at _field less one, stored back: DEC BYTE PTR. Returns what it leaves.
-std::uint8_t Decrement(GameState& _state, DataField<std::uint8_t> _field)
+std::uint8_t Decrement(Counted<std::uint8_t>& _field)
 {
-  const auto value = static_cast<std::uint8_t>(_state.Get(_field) - 1);
-  _state.Set(_field, value);
+  const auto value = static_cast<std::uint8_t>(_field - 1);
+  _field = value;
   return value;
 }
 
 // _image to speakerPortImage and to port 61h.
 void OutSpeaker(GameState& _state, Hardware& _hardware, std::uint8_t _image)
 {
-  _state.Set(DS.speakerPortImage, _image);
+  _state.Data().speakerPortImage = _image;
   _hardware.SetSystemControl(_image);
 }
 
 // A beep's square wave: bit 1 of _bit replaces the speaker's data bit.
 void SetSpeakerData(GameState& _state, Hardware& _hardware, std::uint8_t _bit)
 {
-  OutSpeaker(_state, _hardware, static_cast<std::uint8_t>((_state.Get(DS.speakerPortImage) & ~SPEAKER_DATA) | _bit));
+  OutSpeaker(_state, _hardware, static_cast<std::uint8_t>((_state.Data().speakerPortImage & ~SPEAKER_DATA) | _bit));
 }
 
 void ToggleSpeakerData(GameState& _state, Hardware& _hardware)
 {
-  OutSpeaker(_state, _hardware, static_cast<std::uint8_t>(_state.Get(DS.speakerPortImage) ^ SPEAKER_DATA));
+  OutSpeaker(_state, _hardware, static_cast<std::uint8_t>(_state.Data().speakerPortImage ^ SPEAKER_DATA));
 }
 
 // CheckProtectionAnswer (0x739A): decodes the expected answer to the pending question into DS:A5B7 and compares the
 // typed one with it, by REPE CMPSB, backwards when _backward (the direction flag set).
 void CheckProtectionAnswer(GameState& _state, bool _backward)
 {
-  const std::uint8_t typed = _state.Get(DS.data25CA);
+  const std::uint8_t typed = _state.Data().protectionInput.data25CA;
   if (typed == 0)
   {
     return;
   }
   const std::uint16_t descriptor = _state.Get(DS.protectionDescriptor);
   std::uint16_t answer = _state.Word(static_cast<std::uint16_t>(descriptor + 0x0A));
-  const std::uint8_t question = _state.Get(DS.protectionQuestion);
+  const std::uint8_t question = _state.Data().protectionQuestion;
   // The answers are length-prefixed, one after another: skip to the question's.
   for (auto left = static_cast<std::uint8_t>(question - 1); left != 0; --left)
   {
@@ -124,7 +124,7 @@ void CheckProtectionAnswer(GameState& _state, bool _backward)
   }
   if (equal)
   {
-    _state.Set(DS.protectionAnswerCorrect, 1);
+    _state.Data().protectionAnswerCorrect = 1;
   }
 }
 
@@ -132,22 +132,22 @@ void CheckProtectionAnswer(GameState& _state, bool _backward)
 // length in beats. A note change (0x7372) sets the PIT's channel 2 to its period.
 void TickMusic(GameState& _state, Hardware& _hardware)
 {
-  const std::uint16_t ticksLeft = _state.Get(DS.noteTicksLeft);
+  const std::uint16_t ticksLeft = _state.Data().noteTicksLeft;
   if (ticksLeft != 0)
   {
-    _state.Set(DS.noteTicksLeft, static_cast<std::uint16_t>(ticksLeft - 1));
+    _state.Data().noteTicksLeft = static_cast<std::uint16_t>(ticksLeft - 1);
     if (ticksLeft != 1)
     {
       return;
     }
     // The note is over: its gap, if it has one, as a rest.
-    const std::uint16_t gapTicks = _state.Get(DS.noteGapTicks);
+    const std::uint16_t gapTicks = _state.Data().noteGapTicks;
     if (gapTicks == 0)
     {
       return;
     }
-    _state.Set(DS.noteGapTicks, 0);
-    _state.Set(DS.noteTicksLeft, gapTicks);
+    _state.Data().noteGapTicks = 0;
+    _state.Data().noteTicksLeft = gapTicks;
     _hardware.SetToneDivisor(REST_PERIOD);
     return;
   }
@@ -171,24 +171,24 @@ void TickMusic(GameState& _state, Hardware& _hardware)
       std::uint16_t sounding = ticks;
       if ((note & 0x80) != 0)
       {
-        _state.Set(DS.noteGapTicks, 0);
+        _state.Data().noteGapTicks = 0;
         pitch = static_cast<std::uint8_t>(0u - note);
       }
       else
       {
         // An eighth of the note is a gap.
         const auto gap = static_cast<std::uint16_t>(ticks >> 3);
-        _state.Set(DS.noteGapTicks, gap);
+        _state.Data().noteGapTicks = gap;
         sounding = static_cast<std::uint16_t>(ticks - gap);
       }
-      _state.Set(DS.noteTicksLeft, sounding);
+      _state.Data().noteTicksLeft = sounding;
       const auto index = static_cast<std::uint8_t>(pitch - NOTE_BASE);
-      _hardware.SetToneDivisor(_state.Word(DS.notePeriods.At(index)));
+      _hardware.SetToneDivisor(_state.Data().notePeriods[index]);
       return;
     }
   }
-  _state.Set(DS.noteGapTicks, 0);
-  _state.Set(DS.noteTicksLeft, ticks);
+  _state.Data().noteGapTicks = 0;
+  _state.Data().noteTicksLeft = ticks;
   _hardware.SetToneDivisor(REST_PERIOD);
 }
 
@@ -198,51 +198,51 @@ using SweepSample = std::uint8_t (*)(GameState&, Hardware&);
 
 // The noise and tone sweeps (0x7215, 0x7289): every sweepPeriodTicks ticks one sample, by _sample; every
 // sweepStepLength samples a longer period and a shorter step, until the period reaches 7.
-void TickSweep(GameState& _state, Hardware& _hardware, SweepSample _sample, DataField<std::uint8_t> _active)
+void TickSweep(GameState& _state, Hardware& _hardware, SweepSample _sample, Counted<std::uint8_t>& _active)
 {
-  if (Decrement(_state, DS.sweepTickCounter) != 0)
+  if (Decrement(_state.Data().sweepTickCounter) != 0)
   {
     return;
   }
-  _state.Set(DS.sweepTickCounter, _state.Get(DS.sweepPeriodTicks));
+  _state.Data().sweepTickCounter = std::uint8_t{_state.Data().sweepPeriodTicks};
   _sample(_state, _hardware);
-  if (Decrement(_state, DS.sweepStepCounter) != 0)
+  if (Decrement(_state.Data().sweepStepCounter) != 0)
   {
     return;
   }
-  _state.Set(DS.sweepStepCounter, _state.Get(DS.sweepStepLength));
-  const auto period = static_cast<std::uint8_t>(_state.Get(DS.sweepPeriodTicks) + 1);
-  _state.Set(DS.sweepPeriodTicks, period);
-  _state.Set(DS.sweepStepLength, static_cast<std::uint8_t>(_state.Get(DS.sweepStepLength) - _state.Get(DS.sweepStepShrink)));
+  _state.Data().sweepStepCounter = std::uint8_t{_state.Data().sweepStepLength};
+  const auto period = static_cast<std::uint8_t>(_state.Data().sweepPeriodTicks + 1);
+  _state.Data().sweepPeriodTicks = period;
+  _state.Data().sweepStepLength = static_cast<std::uint8_t>(_state.Data().sweepStepLength - _state.Data().sweepStepShrink);
   if (period == SWEEP_LAST_PERIOD)
   {
-    _state.Set(_active, 0);
+    _active = 0;
   }
 }
 
 // The siren (0x72C3): every other tick, a square wave of sirenCountdown's bit 0 or, in stage 1, of every tick.
 void TickSiren(GameState& _state, Hardware& _hardware)
 {
-  const auto half = static_cast<std::uint8_t>(_state.Get(DS.sirenHalfTick) ^ 1);
-  _state.Set(DS.sirenHalfTick, half);
+  const auto half = static_cast<std::uint8_t>(_state.Data().sirenHalfTick ^ 1);
+  _state.Data().sirenHalfTick = half;
   if (half != 0)
   {
     return;
   }
-  const std::uint8_t countdown = Decrement(_state, DS.sirenCountdown);
+  const std::uint8_t countdown = Decrement(_state.Data().sirenCountdown);
   if (countdown == 0)
   {
-    const std::uint8_t stage = Decrement(_state, DS.sirenStage);
-    _state.Set(DS.sirenCountdown, SIREN_TICKS);
+    const std::uint8_t stage = Decrement(_state.Data().sirenStage);
+    _state.Data().sirenCountdown = SIREN_TICKS;
     if (stage == 0)
     {
-      _state.Set(DS.sirenStage, SIREN_FIRST_STAGE);
+      _state.Data().sirenStage = SIREN_FIRST_STAGE;
       return;
     }
-    _state.Set(DS.sirenCountdown, static_cast<std::uint8_t>(SIREN_TICKS << 1));
+    _state.Data().sirenCountdown = static_cast<std::uint8_t>(SIREN_TICKS << 1);
     return;
   }
-  if (_state.Get(DS.sirenStage) == 1 || (countdown & 1) == 0)
+  if (_state.Data().sirenStage == 1 || (countdown & 1) == 0)
   {
     ToggleSpeakerData(_state, _hardware);
   }
@@ -251,15 +251,15 @@ void TickSiren(GameState& _state, Hardware& _hardware)
 // The two-tone (0x725E): twoToneTicks of a square wave on every tick in stage 1, every other tick otherwise.
 void TickTwoTone(GameState& _state, Hardware& _hardware)
 {
-  const auto ticks = static_cast<std::uint16_t>(_state.Get(DS.twoToneTicks) - 1);
-  _state.Set(DS.twoToneTicks, ticks);
+  const auto ticks = static_cast<std::uint16_t>(_state.Data().twoToneTicks - 1);
+  _state.Data().twoToneTicks = ticks;
   if (ticks == 0)
   {
-    Decrement(_state, DS.twoToneStage);
-    _state.Set(DS.twoToneTicks, TWO_TONE_TICKS);
+    Decrement(_state.Data().twoToneStage);
+    _state.Data().twoToneTicks = TWO_TONE_TICKS;
     return;
   }
-  if (_state.Get(DS.twoToneStage) == 1 || (ticks & 1) == 0)
+  if (_state.Data().twoToneStage == 1 || (ticks & 1) == 0)
   {
     ToggleSpeakerData(_state, _hardware);
   }
@@ -268,62 +268,62 @@ void TickTwoTone(GameState& _state, Hardware& _hardware)
 // TimerTickSoundEffects (0x717F): the beeps, then the one effect of highest priority.
 void TickSoundEffects(GameState& _state, Hardware& _hardware)
 {
-  if (_state.Get(DS.beepTicks) != 0)
+  if (_state.Data().beepTicks != 0)
   {
-    SetSpeakerData(_state, _hardware, static_cast<std::uint8_t>((Decrement(_state, DS.beepTicks) << 1) & SPEAKER_DATA));
+    SetSpeakerData(_state, _hardware, static_cast<std::uint8_t>((Decrement(_state.Data().beepTicks) << 1) & SPEAKER_DATA));
   }
-  if (_state.Get(DS.lowBeepTicks) != 0)
+  if (_state.Data().lowBeepTicks != 0)
   {
-    SetSpeakerData(_state, _hardware, static_cast<std::uint8_t>(Decrement(_state, DS.lowBeepTicks) & SPEAKER_DATA));
+    SetSpeakerData(_state, _hardware, static_cast<std::uint8_t>(Decrement(_state.Data().lowBeepTicks) & SPEAKER_DATA));
   }
-  if (_state.Get(DS.sirenEnabled) == 1)
+  if (_state.Data().sirenEnabled == 1)
   {
     TickSiren(_state, _hardware);
     return;
   }
-  if (_state.Get(DS.noiseSweepActive) == 1)
+  if (_state.Data().noiseSweepActive == 1)
   {
-    TickSweep(_state, _hardware, &EmitNoiseSample, DS.noiseSweepActive);
+    TickSweep(_state, _hardware, &EmitNoiseSample, _state.Data().noiseSweepActive);
     return;
   }
-  if (_state.Get(DS.noiseBurstTicks) != 0)
+  if (_state.Data().noiseBurstTicks != 0)
   {
-    Decrement(_state, DS.noiseBurstTicks);
+    Decrement(_state.Data().noiseBurstTicks);
     EmitNoiseSample(_state, _hardware);
     return;
   }
-  if (_state.Get(DS.toneSweepActive) == 1)
+  if (_state.Data().toneSweepActive == 1)
   {
-    TickSweep(_state, _hardware, &ToggleSpeaker, DS.toneSweepActive);
+    TickSweep(_state, _hardware, &ToggleSpeaker, _state.Data().toneSweepActive);
     return;
   }
-  if (_state.Get(DS.twoToneStage) != 0)
+  if (_state.Data().twoToneStage != 0)
   {
     TickTwoTone(_state, _hardware);
     return;
   }
-  if (_state.Get(DS.slowNoiseCount) != 0)
+  if (_state.Data().slowNoiseCount != 0)
   {
-    if (Decrement(_state, DS.slowNoiseDivider) != 0)
+    if (Decrement(_state.Data().slowNoiseDivider) != 0)
     {
       return;
     }
-    _state.Set(DS.slowNoiseDivider, SLOW_NOISE_TICKS);
-    Decrement(_state, DS.slowNoiseCount);
+    _state.Data().slowNoiseDivider = SLOW_NOISE_TICKS;
+    Decrement(_state.Data().slowNoiseCount);
     EmitNoiseSample(_state, _hardware);
     return;
   }
-  if (_state.Get(DS.humEnabled) == 1)
+  if (_state.Data().humEnabled == 1)
   {
-    if (Decrement(_state, DS.humCountdownTicks) != 0)
+    if (Decrement(_state.Data().humCountdownTicks) != 0)
     {
       return;
     }
-    _state.Set(DS.humCountdownTicks, HUM_TICKS);
+    _state.Data().humCountdownTicks = HUM_TICKS;
     ToggleSpeakerData(_state, _hardware);
     return;
   }
-  if (_state.Get(DS.continuousNoise) == 1)
+  if (_state.Data().continuousNoise == 1)
   {
     EmitNoiseSample(_state, _hardware);
   }
@@ -343,9 +343,9 @@ void InstallTimerInterrupt(GameState& _state, Hardware& _hardware)
 {
   _hardware.SetTickDivisor(PIT_CHANNEL0_SQUARE_WAVE, TICK_DIVISOR);
   const std::uint8_t speaker = _hardware.SystemControl();
-  _state.Set(DS.savedSpeakerPort, speaker);
+  _state.Data().savedSpeakerPort = speaker;
   const auto image = static_cast<std::uint8_t>(speaker & ~SPEAKER_BITS);
-  _state.Set(DS.speakerPortImage, image);
+  _state.Data().speakerPortImage = image;
   _hardware.SetSystemControl(image);
   // The BIOS's handler kept, and the game's own installed in its place.
   const FarAddress bios = _hardware.InterruptVector(TIMER_VECTOR);
@@ -360,10 +360,10 @@ BiosClock RestoreTimerInterrupt(GameState& _state, Hardware& _hardware)
   _hardware.DisableInterrupts();
   // The BIOS's handler put back, from what InstallTimerInterrupt kept.
   _hardware.SetInterruptVector(TIMER_VECTOR, FarAddress{_state.CodeWord(SAVED_TIMER_SEGMENT), _state.CodeWord(SAVED_TIMER_OFFSET)});
-  _hardware.SetSystemControl(_state.Get(DS.savedSpeakerPort));
+  _hardware.SetSystemControl(_state.Data().savedSpeakerPort);
   std::uint8_t mode = PIT_CHANNEL0_SQUARE_WAVE;
   std::uint16_t divisor = 0;
-  if (_state.Get(DS.amstradPresent) == 1)
+  if (_state.Data().amstradPresent == 1)
   {
     // The Amstrad's mouse driver keeps its own rate.
     mode = PIT_CHANNEL0_RATE;
@@ -395,35 +395,35 @@ void TimerInterrupt(GameState& _state, Hardware& _hardware, bool _backward)
   // and the end of the interrupt's 20h, goes no further.
   TimerTick(_state, _hardware, _backward);
   _hardware.EndOfInterrupt();
-  if (_state.Get(DS.amstradPresent) != 1)
+  if (_state.Data().amstradPresent != 1)
   {
     return;
   }
   // The Amstrad's BIOS clock still needs its 18.2 Hz: every 18th tick, or every 55th with the mouse driver's rate.
   const bool mouse = IsMouseDriverInstalled(_hardware).installed;
-  if (Decrement(_state, DS.biosTimerChainCountdown) != 0)
+  if (Decrement(_state.Data().biosTimerChainCountdown) != 0)
   {
     return;
   }
-  _state.Set(DS.biosTimerChainCountdown, mouse ? BIOS_CHAIN_TICKS_WITH_MOUSE : BIOS_CHAIN_TICKS);
+  _state.Data().biosTimerChainCountdown = mouse ? BIOS_CHAIN_TICKS_WITH_MOUSE : BIOS_CHAIN_TICKS;
   ChainToBiosTimer(_state, _hardware);
 }
 
 void TimerTick(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  _state.Set(DS.millisecondCounter, static_cast<std::uint16_t>(_state.Get(DS.millisecondCounter) + 1));
-  _state.Set(DS.timerTicks, static_cast<std::uint16_t>(_state.Get(DS.timerTicks) + 1));
-  _state.Set(DS.msSinceFrame, static_cast<std::uint8_t>(_state.Get(DS.msSinceFrame) + 1));
-  if (_state.Get(DS.protectionQuestion) != NO_QUESTION)
+  _state.Data().millisecondCounter = static_cast<std::uint16_t>(_state.Data().millisecondCounter + 1);
+  _state.Data().timerTicks = static_cast<std::uint16_t>(_state.Data().timerTicks + 1);
+  _state.Data().msSinceFrame = static_cast<std::uint8_t>(_state.Data().msSinceFrame + 1);
+  if (_state.Data().protectionQuestion != NO_QUESTION)
   {
     CheckProtectionAnswer(_state, _backward);
     return;
   }
-  if (_state.Get(DS.soundEnabled) == 0 || _state.Get(DS.gamePaused) == 1)
+  if (_state.Data().soundEnabled == 0 || _state.Data().gamePaused == 1)
   {
     return;
   }
-  if (_state.Get(DS.musicPlaying) == 1)
+  if (_state.Data().musicPlaying == 1)
   {
     TickMusic(_state, _hardware);
     return;
@@ -435,8 +435,8 @@ void WaitForTimerTick(GameState& _state, Hardware& _hardware)
 {
   // PUSH AX, MOV AX,[timerTicks], then the compare at 7776 and JE back to it, and POP AX: the loop carries in AX the
   // tick it started at. The stack the PUSH used is not state the game reads, nor the digest (ADR-008 item 5).
-  const std::uint16_t ticks = _state.Get(DS.timerTicks);
-  while (ticks == _state.Get(DS.timerTicks))
+  const std::uint16_t ticks = _state.Data().timerTicks;
+  while (ticks == _state.Data().timerTicks)
   {
     _hardware.LoopTurn(TIMER_TICK_COMPARE, {ticks});
   }

@@ -177,9 +177,6 @@
     <ClInclude Include="NativeRoutines.h">
       <Filter>Native</Filter>
     </ClInclude>
-    <ClInclude Include="ObjectSlot.h">
-      <Filter>State</Filter>
-    </ClInclude>
     <ClInclude Include="SpaceObject.h">
       <Filter>State</Filter>
     </ClInclude>

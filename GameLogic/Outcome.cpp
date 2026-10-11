@@ -4,7 +4,7 @@
 
 #include "DataOverlay.h"
 #include "GameState.h"
-#include "ObjectSlot.h"
+#include "SpaceObject.h"
 
 #include <algorithm>
 #include <format>
@@ -18,7 +18,7 @@ namespace
 // The commodities of cargoHold: entry 17, the last, holds refugeesTonnes and cargoUsedTonnes instead.
 constexpr std::size_t COMMODITIES = 17;
 // The slots of shipSlots: the sun and planet, the station, the ships and the debris.
-constexpr std::size_t SHIP_SLOTS = DS.shipSlots.SIZE_BYTES / ObjectSlot::BYTES;
+constexpr std::size_t SHIP_SLOTS = DS.shipSlots.SIZE_BYTES / SpaceObject::BYTES;
 constexpr char FIRST_PRINTABLE = '!';
 constexpr char LAST_PRINTABLE = '~';
 
@@ -44,7 +44,7 @@ constexpr char LAST_PRINTABLE = '~';
   std::string title;
   for (std::size_t index = 0; index < DS.commanderRankText.SIZE_BYTES; ++index)
   {
-    const auto character = static_cast<char>(_state.Byte(DS.commanderRankText.At(index)));
+    const auto character = static_cast<char>(_state.Data().commanderBlock.commanderRankText[index]);
     if (character < FIRST_PRINTABLE || character > LAST_PRINTABLE || character == '%' || character == '=')
     {
       title += std::format("%{:02X}", static_cast<std::uint8_t>(character));
@@ -60,12 +60,12 @@ constexpr char LAST_PRINTABLE = '~';
 // The slots of the first shipSlotCount, as the game walks them (UpdateObjectsAndSpawn), whose type byte says they are active.
 [[nodiscard]] std::string ShipSlotsInUse(const GameState& _state)
 {
-  const std::size_t slots = std::min<std::size_t>(_state.Get(DS.shipSlotCount), SHIP_SLOTS);
+  const std::size_t slots = std::min<std::size_t>(_state.Data().shipSlotCount, SHIP_SLOTS);
   std::uint32_t inUse = 0;
   for (std::size_t slot = 0; slot < slots; ++slot)
   {
-    const std::uint8_t type = _state.Byte(DS.shipSlots.At(slot * ObjectSlot::BYTES + static_cast<std::size_t>(SlotByte::Type)));
-    inUse += (type & ObjectSlot::ACTIVE) != 0 ? 1 : 0;
+    const std::uint8_t type = _state.ObjectAt(DS.shipSlots.At(slot * SpaceObject::BYTES)).type;
+    inUse += (type & SpaceObject::ACTIVE) != 0 ? 1 : 0;
   }
   return Number(inUse);
 }
@@ -133,60 +133,60 @@ std::optional<std::string> OutcomeValue(const GameState& _state, std::string_vie
     Reader read;
   };
   static constexpr auto SOURCES = std::to_array<Source>({
-    {"galaxy", [](const GameState& _game) { return Number(_game.Get(DS.galaxyNumber)); }},
-    {"system", [](const GameState& _game) { return Number(_game.Get(DS.currentSystemIndex)); }},
-    {"witchSpace", [](const GameState& _game) { return Number(_game.Get(DS.witchspaceCountdown)); }},
-    {"docked", [](const GameState& _game) { return Number(_game.Get(DS.playerDocked)); }},
-    {"inFlight", [](const GameState& _game) { return Number(_game.Get(DS.inFlight)); }},
-    {"dead", [](const GameState& _game) { return Number(_game.Get(DS.playerDead)); }},
-    {"creditsTenths",
-     [](const GameState& _game) { return Number(_game.Word(DS.creditsTenths.offset) | (std::uint32_t{_game.Get(DS.data75F5)} << 16)); }},
-    {"legalStatus", [](const GameState& _game) { return Number(_game.Get(DS.legalStatus)); }},
-    {"kills", [](const GameState& _game) { return Number(_game.Get(DS.killCount)); }},
+    {"galaxy", [](const GameState& _game) { return Number(_game.Data().commanderBlock.galaxyNumber); }},
+    {"system", [](const GameState& _game) { return Number(_game.Data().commanderBlock.currentSystemIndex); }},
+    {"witchSpace", [](const GameState& _game) { return Number(_game.Data().commanderBlock.witchspaceCountdown); }},
+    {"docked", [](const GameState& _game) { return Number(_game.Data().playerDocked); }},
+    {"inFlight", [](const GameState& _game) { return Number(_game.Data().inFlight); }},
+    {"dead", [](const GameState& _game) { return Number(_game.Data().playerDead); }},
+    {"creditsTenths", [](const GameState& _game)
+     { return Number(_game.Word(DS.creditsTenths.offset) | (std::uint32_t{_game.Data().commanderBlock.creditsTenths.data75F5} << 16)); }},
+    {"legalStatus", [](const GameState& _game) { return Number(_game.Data().commanderBlock.legalStatus); }},
+    {"kills", [](const GameState& _game) { return Number(_game.Data().commanderBlock.killCount); }},
     {"title", &Title},
     {"cargo", &Cargo},
-    {"refugeesTonnes", [](const GameState& _game) { return Number(_game.Get(DS.refugeesTonnes)); }},
-    {"missiles", [](const GameState& _game) { return Number(_game.Get(DS.missileCount)); }},
-    {"largeCargoBay", [](const GameState& _game) { return Number(_game.Get(DS.largeCargoBayFitted)); }},
-    {"ecm", [](const GameState& _game) { return Number(_game.Get(DS.ecmFitted)); }},
-    {"fuelScoops", [](const GameState& _game) { return Number(_game.Get(DS.fuelScoopsFitted)); }},
-    {"escapePod", [](const GameState& _game) { return Number(_game.Get(DS.escapePodFitted)); }},
-    {"energyBomb", [](const GameState& _game) { return Number(_game.Get(DS.energyBombFitted)); }},
-    {"energyUnit", [](const GameState& _game) { return Number(_game.Get(DS.energyUnitFitted)); }},
-    {"dockingComputer", [](const GameState& _game) { return Number(_game.Get(DS.dockingComputerFitted)); }},
-    {"galacticHyperdrive", [](const GameState& _game) { return Number(_game.Get(DS.galacticHyperdriveFitted)); }},
-    {"maskingDevice", [](const GameState& _game) { return Number(_game.Get(DS.maskingDeviceFitted)); }},
-    {"antiEcm", [](const GameState& _game) { return Number(_game.Get(DS.antiEcmEmulatorFitted)); }},
-    {"pulseLasers", [](const GameState& _game) { return Number(_game.Get(DS.pulseLaserCount)); }},
-    {"beamLasers", [](const GameState& _game) { return Number(_game.Get(DS.beamLaserCount)); }},
-    {"miningLasers", [](const GameState& _game) { return Number(_game.Get(DS.miningLaserCount)); }},
-    {"militaryLasers", [](const GameState& _game) { return Number(_game.Get(DS.militaryLaserCount)); }},
-    {"laserMounts", [](const GameState& _game) { return Number(_game.Get(DS.laserMountsFitted)); }},
-    {"laserTypes", [](const GameState& _game) { return Number(_game.Get(DS.laserMountTypes)); }},
-    {"mission", [](const GameState& _game) { return Number(_game.Get(DS.missionNumber)); }},
-    {"missionStage", [](const GameState& _game) { return Number(_game.Get(DS.missionStage)); }},
-    {"missionJumps", [](const GameState& _game) { return Number(_game.Get(DS.missionJumpCount)); }},
-    {"jumpedSinceBriefing", [](const GameState& _game) { return Number(_game.Get(DS.jumpedSinceBriefing)); }},
-    {"maskShipsLeft", [](const GameState& _game) { return Number(_game.Get(DS.maskMissionShipsLeft)); }},
-    {"maskShipDestroyed", [](const GameState& _game) { return Number(_game.Get(DS.maskShipDestroyed)); }},
-    {"maskingDeviceRecovered", [](const GameState& _game) { return Number(_game.Get(DS.maskingDeviceRecovered)); }},
-    {"fledMaskShip", [](const GameState& _game) { return Number(_game.Get(DS.fledMaskShip)); }},
-    {"maskSystemJumps", [](const GameState& _game) { return Number(_game.Get(DS.maskSystemJumps)); }},
-    {"invasion", [](const GameState& _game) { return Number(_game.Get(DS.thargoidInvasionActive)); }},
-    {"invadedStationDestroyed", [](const GameState& _game) { return Number(_game.Get(DS.invadedStationDestroyed)); }},
-    {"energy", [](const GameState& _game) { return Number(_game.Get(DS.playerEnergy)); }},
-    {"foreShield", [](const GameState& _game) { return Number(_game.Get(DS.foreShield)); }},
-    {"aftShield", [](const GameState& _game) { return Number(_game.Get(DS.aftShield)); }},
-    {"speed", [](const GameState& _game) { return Number(_game.Get(DS.playerSpeed)); }},
-    {"fuel", [](const GameState& _game) { return Number(_game.Get(DS.fuel)); }},
+    {"refugeesTonnes", [](const GameState& _game) { return Number(_game.Data().commanderBlock.cargoHold.refugeesTonnes); }},
+    {"missiles", [](const GameState& _game) { return Number(_game.Data().commanderBlock.missileCount); }},
+    {"largeCargoBay", [](const GameState& _game) { return Number(_game.Data().commanderBlock.largeCargoBayFitted); }},
+    {"ecm", [](const GameState& _game) { return Number(_game.Data().commanderBlock.ecmFitted); }},
+    {"fuelScoops", [](const GameState& _game) { return Number(_game.Data().commanderBlock.fuelScoopsFitted); }},
+    {"escapePod", [](const GameState& _game) { return Number(_game.Data().commanderBlock.escapePodFitted); }},
+    {"energyBomb", [](const GameState& _game) { return Number(_game.Data().commanderBlock.energyBombFitted); }},
+    {"energyUnit", [](const GameState& _game) { return Number(_game.Data().commanderBlock.energyUnitFitted); }},
+    {"dockingComputer", [](const GameState& _game) { return Number(_game.Data().commanderBlock.dockingComputerFitted); }},
+    {"galacticHyperdrive", [](const GameState& _game) { return Number(_game.Data().commanderBlock.galacticHyperdriveFitted); }},
+    {"maskingDevice", [](const GameState& _game) { return Number(_game.Data().commanderBlock.maskingDeviceFitted); }},
+    {"antiEcm", [](const GameState& _game) { return Number(_game.Data().commanderBlock.antiEcmEmulatorFitted); }},
+    {"pulseLasers", [](const GameState& _game) { return Number(_game.Data().commanderBlock.pulseLaserCount); }},
+    {"beamLasers", [](const GameState& _game) { return Number(_game.Data().commanderBlock.beamLaserCount); }},
+    {"miningLasers", [](const GameState& _game) { return Number(_game.Data().commanderBlock.miningLaserCount); }},
+    {"militaryLasers", [](const GameState& _game) { return Number(_game.Data().commanderBlock.militaryLaserCount); }},
+    {"laserMounts", [](const GameState& _game) { return Number(_game.Data().commanderBlock.laserMountsFitted); }},
+    {"laserTypes", [](const GameState& _game) { return Number(_game.Data().commanderBlock.laserMountTypes); }},
+    {"mission", [](const GameState& _game) { return Number(_game.Data().commanderBlock.missionNumber); }},
+    {"missionStage", [](const GameState& _game) { return Number(_game.Data().commanderBlock.missionStage); }},
+    {"missionJumps", [](const GameState& _game) { return Number(_game.Data().commanderBlock.missionJumpCount); }},
+    {"jumpedSinceBriefing", [](const GameState& _game) { return Number(_game.Data().commanderBlock.jumpedSinceBriefing); }},
+    {"maskShipsLeft", [](const GameState& _game) { return Number(_game.Data().commanderBlock.maskMissionShipsLeft); }},
+    {"maskShipDestroyed", [](const GameState& _game) { return Number(_game.Data().commanderBlock.maskShipDestroyed); }},
+    {"maskingDeviceRecovered", [](const GameState& _game) { return Number(_game.Data().commanderBlock.maskingDeviceRecovered); }},
+    {"fledMaskShip", [](const GameState& _game) { return Number(_game.Data().commanderBlock.fledMaskShip); }},
+    {"maskSystemJumps", [](const GameState& _game) { return Number(_game.Data().commanderBlock.maskSystemJumps); }},
+    {"invasion", [](const GameState& _game) { return Number(_game.Data().commanderBlock.thargoidInvasionActive); }},
+    {"invadedStationDestroyed", [](const GameState& _game) { return Number(_game.Data().commanderBlock.invadedStationDestroyed); }},
+    {"energy", [](const GameState& _game) { return Number(_game.Data().playerEnergy); }},
+    {"foreShield", [](const GameState& _game) { return Number(_game.Data().foreShield); }},
+    {"aftShield", [](const GameState& _game) { return Number(_game.Data().aftShield); }},
+    {"speed", [](const GameState& _game) { return Number(_game.Data().playerSpeed); }},
+    {"fuel", [](const GameState& _game) { return Number(_game.Data().commanderBlock.fuel); }},
     {"shipSlotsInUse", &ShipSlotsInUse},
-    {"cabinTemperature", [](const GameState& _game) { return Number(_game.Get(DS.cabinTemperature)); }},
-    {"laserTemperature", [](const GameState& _game) { return Number(_game.Get(DS.laserTemperature)); }},
-    {"altitude", [](const GameState& _game) { return Number(_game.Get(DS.altitude)); }},
-    {"fuelLeakDelayFrames", [](const GameState& _game) { return Number(_game.Get(DS.fuelLeakDelayFrames)); }},
-    {"fuelLeakFrames", [](const GameState& _game) { return Number(_game.Get(DS.fuelLeakFrames)); }},
-    {"supernovaFrames", [](const GameState& _game) { return Number(_game.Get(DS.supernovaFrames)); }},
-    {"supernovaHeat", [](const GameState& _game) { return Number(_game.Get(DS.supernovaHeat)); }},
+    {"cabinTemperature", [](const GameState& _game) { return Number(_game.Data().cabinTemperature); }},
+    {"laserTemperature", [](const GameState& _game) { return Number(_game.Data().laserTemperature); }},
+    {"altitude", [](const GameState& _game) { return Number(_game.Data().altitude); }},
+    {"fuelLeakDelayFrames", [](const GameState& _game) { return Number(_game.Data().commanderBlock.fuelLeakDelayFrames); }},
+    {"fuelLeakFrames", [](const GameState& _game) { return Number(_game.Data().commanderBlock.fuelLeakFrames); }},
+    {"supernovaFrames", [](const GameState& _game) { return Number(_game.Data().commanderBlock.supernovaFrames); }},
+    {"supernovaHeat", [](const GameState& _game) { return Number(_game.Data().commanderBlock.supernovaHeat); }},
   });
   static_assert(
     []

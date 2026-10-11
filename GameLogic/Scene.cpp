@@ -132,9 +132,9 @@ constexpr std::uint16_t BOX_REFLECTION_SKIP = 0x12;  // three vertices
 // player's into 5 (CS:3781, CS:38C0).
 void SetDrawAngles(GameState& _state)
 {
-  (void)SetSinCos(_state, 3, Negate(_state.Get(DS.drawRollAngle)));
-  (void)SetSinCos(_state, 4, _state.Get(DS.drawYawAngle));
-  (void)SetSinCos(_state, 5, static_cast<std::uint16_t>(_state.Get(DS.drawPitchAngle) + _state.Get(DS.playerPitchAngle)));
+  (void)SetSinCos(_state, 3, Negate(_state.Data().drawRollAngle));
+  (void)SetSinCos(_state, 4, _state.Data().drawYawAngle);
+  (void)SetSinCos(_state, 5, static_cast<std::uint16_t>(_state.Data().drawPitchAngle + _state.Data().playerPitchAngle));
 }
 
 [[nodiscard]] bool Negative(std::uint16_t _value) noexcept
@@ -191,7 +191,7 @@ void RotateVertices(GameState& _state, std::uint16_t _first, std::uint16_t _coun
 // the box's handler loads AX next (CS:3864), and both load them in ReflectVertexAboutCenter (CS:3740) before reading them.
 void RotateVerticesToView(GameState& _state, std::uint16_t _first, std::uint16_t _count)
 {
-  const std::uint16_t angle = _state.Get(DS.viewAngle);
+  const std::uint16_t angle = _state.Data().viewAngle;
   if (angle == 0)
   {
     return;
@@ -209,20 +209,20 @@ void RotateVerticesToView(GameState& _state, std::uint16_t _first, std::uint16_t
   std::uint16_t at = program.next;
   std::uint16_t count = 0;
   SetLow(count, _state.Byte(at));
-  _state.Set(DS.projectedVertexCount, count);
+  _state.Data().projectedVertexCount = count;
   at = Offset(at, 1);
   // ProjectVertices' divides save BX, the accumulator's y, which RunVertexProgram leaves there.
   ProjectVertices(_state, High(static_cast<std::uint16_t>(program.accumulator.y)));
   count = 0;
   // Fixed edges, then face edges: a count byte, then two bytes for each.
   SetLow(count, _state.Byte(at));
-  _state.Set(DS.fixedEdgeCount, count);
+  _state.Data().fixedEdgeCount = count;
   count = static_cast<std::uint16_t>(count << 1);
   at = Offset(at, 1);
   _state.Set(DS.fixedEdgeList, at);
   at = Offset(at, count);
   SetLow(count, _state.Byte(at));
-  _state.Set(DS.faceEdgeCount, count);
+  _state.Data().faceEdgeCount = count;
   count = static_cast<std::uint16_t>(count << 1);
   at = Offset(at, 1);
   _state.Set(DS.faceEdgeList, at);
@@ -272,7 +272,7 @@ constexpr std::uint16_t TRIANGLE_VERTEX_BYTES = 3;
   const ScreenPoint firstPoint{coordinate(first, 0), coordinate(first, 2)};
   const std::uint16_t second = vertex(1);
   const std::int16_t secondX = coordinate(second, 0);
-  _state.Set(DS.faceTestScratch, static_cast<std::uint16_t>(secondX));
+  _state.Data().faceTestScratch = static_cast<std::uint16_t>(secondX);
   const ScreenPoint secondPoint{secondX, coordinate(second, 2)};
   const std::uint16_t third = vertex(2);
   return Triangle{firstPoint, secondPoint, ScreenPoint{coordinate(third, 0), coordinate(third, 2)}};
@@ -301,7 +301,7 @@ struct WindingProducts
 [[nodiscard]] bool DrawFaceEdge(GameState& _state, std::uint8_t _item)
 {
   const std::uint16_t edge = _state.Word(Offset(_state.Get(DS.faceEdgeList), _item));
-  _state.Set(DS.drawColor, static_cast<std::uint8_t>(High(edge) & EDGE_COLOR_BITS));
+  _state.Data().drawColor = static_cast<std::uint8_t>(High(edge) & EDGE_COLOR_BITS);
   const auto vertices = static_cast<std::uint16_t>(edge & EDGE_VERTEX_BITS);
   const std::uint16_t to = Offset(DS.vertexBuffer.offset, Low(vertices));
   const std::uint16_t from = Offset(DS.vertexBuffer.offset, High(vertices));
@@ -319,7 +319,7 @@ struct WindingProducts
 // offset past the vertex bytes.
 [[nodiscard]] std::uint16_t DrawFaceTriangle(GameState& _state, std::uint8_t _item, std::uint16_t _vertices, bool _backward)
 {
-  _state.Set(DS.triangleFillPattern, _state.Word(Offset(DS.faceFillPatterns.offset, _item)));
+  _state.Data().triangleFillPattern = _state.Word(Offset(DS.faceFillPatterns.offset, _item));
   const Triangle triangle = LoadTriangle(_state, _vertices, 1);
   const auto offScreen = [](ScreenPoint _point) { return static_cast<std::uint16_t>(_point.x) == OFF_SCREEN; };
   if (!offScreen(triangle.first) && !offScreen(triangle.second) && !offScreen(triangle.third))
@@ -374,21 +374,21 @@ struct WindingProducts
 // ClassifyViewPosition (CS:3CA1), the shared tail of TransformShip and ClassifyStationPosition: _view is _slot's view
 // position. Visible, with byte 0 bit 7 set, when z is at least nearClipZ and twice |x| and twice |y| are at most z; the
 // position is stored, in the slot and as drawCenter, when z passes.
-[[nodiscard]] ViewTest ClassifyViewPosition(GameState& _state, ObjectSlot _slot, Vector _view)
+[[nodiscard]] ViewTest ClassifyViewPosition(GameState& _state, SpaceObject& _slot, Vector _view)
 {
   const auto x = static_cast<std::uint16_t>(_view.x);
   const auto y = static_cast<std::uint16_t>(_view.y);
   const auto z = static_cast<std::uint16_t>(_view.z);
-  if (Negative(z) || z < _state.Get(DS.nearClipZ))
+  if (Negative(z) || z < _state.Data().nearClipZ)
   {
     return ViewTest::TooNear;
   }
-  _slot.Set(SlotWord::ViewX, x);
-  _state.Set(DS.drawCenterX, x);
-  _slot.Set(SlotWord::ViewY, y);
-  _state.Set(DS.drawCenterY, y);
-  _slot.Set(SlotWord::ViewZ, z);
-  _state.Set(DS.drawCenterZ, z);
+  _slot.viewX = x;
+  _state.Data().drawCenterX = x;
+  _slot.viewY = y;
+  _state.Data().drawCenterY = y;
+  _slot.viewZ = z;
+  _state.Data().drawCenterZ = z;
   if (z < DoubledMagnitude(x))
   {
     return ViewTest::WideX;
@@ -397,22 +397,21 @@ struct WindingProducts
   {
     return ViewTest::WideY;
   }
-  _slot.Set(SlotByte::Type, static_cast<std::uint8_t>(_slot.Get(SlotByte::Type) | SLOT_VISIBLE));
+  _slot.type = static_cast<std::uint8_t>(_slot.type | SLOT_VISIBLE);
   return ViewTest::Visible;
 }
 
 // A station's compass position, as MOV AX,[DI+20h] / MOV BX,[DI+22h] / MOV CX,[DI+24h] load it.
-[[nodiscard]] Vector CompassPosition(ObjectSlot _slot) noexcept
+[[nodiscard]] Vector CompassPosition(SpaceObject& _slot) noexcept
 {
-  return Vector{static_cast<std::int16_t>(_slot.Get(SlotWord::CompassX)), static_cast<std::int16_t>(_slot.Get(SlotWord::CompassY)),
-                static_cast<std::int16_t>(_slot.Get(SlotWord::CompassZ))};
+  return Vector{static_cast<std::int16_t>(_slot.compassX), static_cast<std::int16_t>(_slot.compassY),
+                static_cast<std::int16_t>(_slot.compassZ)};
 }
 
 // An object's view position, as MOV AX,[DI+10h] / MOV BX,[DI+12h] / MOV CX,[DI+14h] load it.
-[[nodiscard]] Vector ViewPosition(ObjectSlot _slot) noexcept
+[[nodiscard]] Vector ViewPosition(SpaceObject& _slot) noexcept
 {
-  return Vector{static_cast<std::int16_t>(_slot.Get(SlotWord::ViewX)), static_cast<std::int16_t>(_slot.Get(SlotWord::ViewY)),
-                static_cast<std::int16_t>(_slot.Get(SlotWord::ViewZ))};
+  return Vector{static_cast<std::int16_t>(_slot.viewX), static_cast<std::int16_t>(_slot.viewY), static_cast<std::int16_t>(_slot.viewZ)};
 }
 
 // RotateToViewDirection (CS:3EE6), the shared tail of the two TransformToView entries: _view with (x, z) rotated by -viewAngle
@@ -420,7 +419,7 @@ struct WindingProducts
 // position, which comes back in the registers it went in.
 [[nodiscard]] Vector RotateToViewDirection(GameState& _state, Vector _view)
 {
-  const std::uint16_t viewAngle = _state.Get(DS.viewAngle);
+  const std::uint16_t viewAngle = _state.Data().viewAngle;
   if (viewAngle == 0)
   {
     return _view;
@@ -439,14 +438,14 @@ struct WindingProducts
 // CheckShipInRange's test once IsObjectNear has passed (CS:3BEF): |x|, |y| and |z| below maxAxisDistance, then the high words
 // of their unsigned squares, summed, below maxDistanceSquaredHigh after the second and the third. Within, the sum shifted
 // right 6 is the ship's size, and byte 0 bit 6 is set.
-[[nodiscard]] ShipRange ShipWithinRange(GameState& _state, ObjectSlot _slot)
+[[nodiscard]] ShipRange ShipWithinRange(GameState& _state, SpaceObject& _slot)
 {
   ShipRange range{};
-  constexpr std::array<SlotWord, 3> POSITION = {SlotWord::X, SlotWord::Y, SlotWord::Z};
+  constexpr std::array<ObjectWord, 3> POSITION = {&SpaceObject::x, &SpaceObject::y, &SpaceObject::z};
   for (std::size_t axis = 0; axis < POSITION.size(); ++axis)
   {
-    range.magnitudes[axis] = Magnitude(_slot.Get(POSITION[axis]));
-    if (range.magnitudes[axis] >= _state.Get(DS.maxAxisDistance))
+    range.magnitudes[axis] = Magnitude(_slot.*POSITION[axis]);
+    if (range.magnitudes[axis] >= _state.Data().maxAxisDistance)
     {
       return range;
     }
@@ -454,14 +453,14 @@ struct WindingProducts
   for (std::size_t axis = 0; axis < POSITION.size(); ++axis)
   {
     range.squaredHigh = Offset(range.squaredHigh, static_cast<std::uint16_t>(UnsignedSquare(range.magnitudes[axis]) >> 16));
-    if (axis != 0 && range.squaredHigh >= _state.Get(DS.maxDistanceSquaredHigh))
+    if (axis != 0 && range.squaredHigh >= _state.Data().maxDistanceSquaredHigh)
     {
       return range;
     }
   }
   range.within = true;
-  _slot.Set(SlotByte::Size, Low(static_cast<std::uint16_t>(range.squaredHigh >> SQUARED_DISTANCE_SHIFT)));
-  _slot.Set(SlotByte::Type, static_cast<std::uint8_t>(_slot.Get(SlotByte::Type) | SLOT_IN_RANGE));
+  _slot.size = Low(static_cast<std::uint16_t>(range.squaredHigh >> SQUARED_DISTANCE_SHIFT));
+  _slot.type = static_cast<std::uint8_t>(_slot.type | SLOT_IN_RANGE);
   return range;
 }
 
@@ -471,28 +470,28 @@ struct WindingProducts
 // TransformShip), and the station classified at its compass position (ClassifyStationPosition) when UpdateCompass has made it the
 // compass's target and its depth is below 2. Returns the slot DI holds after it, from which the pass steps on: UpdateCompass,
 // once it runs, leaves DI at stationSlot; every other callee keeps it.
-[[nodiscard]] std::uint16_t ClassifyObject(GameState& _state, ObjectSlot _slot)
+[[nodiscard]] std::uint16_t ClassifyObject(GameState& _state, SpaceObject& _slot)
 {
-  _slot.Set(SlotByte::Flags, static_cast<std::uint8_t>(_slot.Get(SlotByte::Flags) & ~STATE_DRAWN));
-  if ((_slot.Get(SlotByte::Type) & SLOT_ACTIVE) == 0)
+  _slot.flags = static_cast<std::uint8_t>(_slot.flags & ~STATE_DRAWN);
+  if ((_slot.type & SLOT_ACTIVE) == 0)
   {
-    return _slot.Offset();
+    return _state.OffsetOf(_slot);
   }
-  _slot.Set(SlotByte::Type, static_cast<std::uint8_t>(_slot.Get(SlotByte::Type) & SLOT_KEEP_BITS));
-  if (_slot.Get(SlotByte::FramesAway) != 0 && (_slot.Get(SlotByte::Flags) & STATE_BLIP_SHOWN) == 0)
+  _slot.type = static_cast<std::uint8_t>(_slot.type & SLOT_KEEP_BITS);
+  if (_slot.framesAway != 0 && (_slot.flags & STATE_BLIP_SHOWN) == 0)
   {
     // Off the scanner: despawned on the 255th frame.
-    _slot.Set(SlotByte::FramesAway, static_cast<std::uint8_t>(_slot.Get(SlotByte::FramesAway) + 1));
-    if (_slot.Get(SlotByte::FramesAway) == 0)
+    _slot.framesAway = static_cast<std::uint8_t>(_slot.framesAway + 1);
+    if (_slot.framesAway == 0)
     {
       (void)RemoveObject(_state, _slot);
-      return _slot.Offset();
+      return _state.OffsetOf(_slot);
     }
   }
   if (IsSunOrPlanet(_slot))
   {
     TransformSunOrPlanet(_state, _slot);
-    return _slot.Offset();
+    return _state.OffsetOf(_slot);
   }
   if (!IsStation(_slot).station)
   {
@@ -500,11 +499,11 @@ struct WindingProducts
     {
       TransformShip(_state, _slot);
     }
-    return _slot.Offset();
+    return _state.OffsetOf(_slot);
   }
-  const std::uint16_t station = UpdateCompass(_state) ? DS.stationSlot.offset : _slot.Offset();
-  const ObjectSlot target(_state, station);
-  if (_state.Get(DS.compassTargetIsStation) != 0 && target.Get(SlotByte::Depth) < DISTANT_DEPTH)
+  const std::uint16_t station = UpdateCompass(_state) ? DS.stationSlot.offset : _state.OffsetOf(_slot);
+  SpaceObject& target = _state.ObjectAt(station);
+  if (_state.Data().compassTargetIsStation != 0 && target.depth < DISTANT_DEPTH)
   {
     (void)ClassifyStationPosition(_state, target);
   }
@@ -513,21 +512,21 @@ struct WindingProducts
 
 // The station in _slot (CS:3DEE), when it is far enough away to draw as a disc: true if it is, and DrawDistantStation drew it.
 // One at depth 1 nearer than 1B58h has its compass position doubled into its view position instead.
-[[nodiscard]] bool DrawStationIfDistant(GameState& _state, ObjectSlot _slot, bool _backward)
+[[nodiscard]] bool DrawStationIfDistant(GameState& _state, SpaceObject& _slot, bool _backward)
 {
-  const std::uint8_t depth = _slot.Get(SlotByte::Depth);
+  const std::uint8_t depth = _slot.depth;
   if (depth == 0)
   {
     return false;
   }
   if (depth == 1)
   {
-    const std::uint16_t z = _slot.Get(SlotWord::CompassZ);
+    const std::uint16_t z = _slot.compassZ;
     if (z < DISTANT_STATION_Z)
     {
-      _slot.Set(SlotWord::ViewZ, static_cast<std::uint16_t>(z << 1));
-      _slot.Set(SlotWord::ViewX, static_cast<std::uint16_t>(_slot.Get(SlotWord::CompassX) << 1));
-      _slot.Set(SlotWord::ViewY, static_cast<std::uint16_t>(_slot.Get(SlotWord::CompassY) << 1));
+      _slot.viewZ = static_cast<std::uint16_t>(z << 1);
+      _slot.viewX = static_cast<std::uint16_t>(_slot.compassX << 1);
+      _slot.viewY = static_cast<std::uint16_t>(_slot.compassY << 1);
       return false;
     }
   }
@@ -538,29 +537,29 @@ struct WindingProducts
 
 // _slot's flashing, for an object with +1Eh bit 5, the one that carries the device: true when it is in its off frames and not
 // drawn.
-[[nodiscard]] bool FlashedOff(ObjectSlot _slot)
+[[nodiscard]] bool FlashedOff(SpaceObject& _slot)
 {
-  if ((_slot.Get(SlotByte::Flags) & STATE_FLASHING) == 0)
+  if ((_slot.flags & STATE_FLASHING) == 0)
   {
     return false;
   }
-  const bool off = (_slot.Get(SlotByte::Flags) & STATE_FLASH_OFF) != 0;
-  _slot.Set(SlotByte::FlashFrames, static_cast<std::uint8_t>(_slot.Get(SlotByte::FlashFrames) - 1));
-  if (_slot.Get(SlotByte::FlashFrames) != 0)
+  const bool off = (_slot.flags & STATE_FLASH_OFF) != 0;
+  _slot.flashFrames = static_cast<std::uint8_t>(_slot.flashFrames - 1);
+  if (_slot.flashFrames != 0)
   {
     return off;
   }
-  _slot.Set(SlotByte::Flags, static_cast<std::uint8_t>(_slot.Get(SlotByte::Flags) ^ STATE_FLASH_OFF));
-  _slot.Set(SlotByte::FlashFrames, off ? FLASH_OFF_FRAMES : FLASH_ON_FRAMES);
+  _slot.flags = static_cast<std::uint8_t>(_slot.flags ^ STATE_FLASH_OFF);
+  _slot.flashFrames = off ? FLASH_OFF_FRAMES : FLASH_ON_FRAMES;
   return false;
 }
 
 // DrawObjectAsDot (CS:3E8C): _slot's view position projected (ProjectToScreen), as a disc of radius 2 in colour 3. PUSH DI /
 // POP DI round it keep the slot.
-void DrawObjectAsDot(GameState& _state, ObjectSlot _slot, bool _backward)
+void DrawObjectAsDot(GameState& _state, SpaceObject& _slot, bool _backward)
 {
   const ScreenPoint at = ProjectToScreen(_state, ViewPosition(_slot));
-  _state.Set(DS.drawColor, DOT_COLOR);
+  _state.Data().drawColor = DOT_COLOR;
   DrawDisc(_state, DOT_RADIUS, static_cast<std::uint16_t>(at.x), static_cast<std::uint16_t>(at.y), _backward);
 }
 
@@ -569,7 +568,7 @@ void DrawObjectAsDot(GameState& _state, ObjectSlot _slot, bool _backward)
 // passes its level of detail (+3Fh); else its blueprint, from blueprintTable by its type (RunBlueprintHandler), at its angles and
 // view position. PUSH DI / POP DI round the sun's, the station's and the dot's keep the slot, and the search the draws jump back
 // to loads what it reads. Returns the direction flag as the drawing leaves it.
-[[nodiscard]] bool DrawObject(GameState& _state, Hardware& _hardware, ObjectSlot _slot, bool _backward)
+[[nodiscard]] bool DrawObject(GameState& _state, Hardware& _hardware, SpaceObject& _slot, bool _backward)
 {
   if (IsSunOrPlanet(_slot))
   {
@@ -584,20 +583,19 @@ void DrawObjectAsDot(GameState& _state, ObjectSlot _slot, bool _backward)
   {
     return _backward;
   }
-  if (_slot.Get(SlotByte::Detail) < _slot.Get(SlotByte::Size))
+  if (_slot.detail < _slot.size)
   {
     DrawObjectAsDot(_state, _slot, _backward);
     return _backward;
   }
   // MOV BL,[DI] / AND BX,3Eh: the type, doubled, indexes blueprintTable.
-  const std::uint16_t blueprint =
-    _state.Word(Offset(static_cast<std::uint16_t>(_slot.Get(SlotByte::Type) & SLOT_TYPE_BITS), DS.blueprintTable.offset));
-  _state.Set(DS.drawPitchAngle, _slot.Get(SlotWord::Pitch));
-  _state.Set(DS.drawYawAngle, _slot.Get(SlotWord::Yaw));
-  _state.Set(DS.drawRollAngle, _slot.Get(SlotWord::Roll));
-  _state.Set(DS.drawCenterX, _slot.Get(SlotWord::ViewX));
-  _state.Set(DS.drawCenterY, _slot.Get(SlotWord::ViewY));
-  _state.Set(DS.drawCenterZ, _slot.Get(SlotWord::ViewZ));
+  const std::uint16_t blueprint = _state.Word(Offset(static_cast<std::uint16_t>(_slot.type & SLOT_TYPE_BITS), DS.blueprintTable.offset));
+  _state.Data().drawPitchAngle = std::uint16_t{_slot.pitch};
+  _state.Data().drawYawAngle = std::uint16_t{_slot.yaw};
+  _state.Data().drawRollAngle = std::uint16_t{_slot.roll};
+  _state.Data().drawCenterX = std::uint16_t{_slot.viewX};
+  _state.Data().drawCenterY = std::uint16_t{_slot.viewY};
+  _state.Data().drawCenterZ = std::uint16_t{_slot.viewZ};
   return RunBlueprintHandler(_state, blueprint, _backward);
 }
 
@@ -612,16 +610,16 @@ void DrawObjectAsDot(GameState& _state, ObjectSlot _slot, bool _backward)
   std::uint8_t farthestDepth = 0;
   std::uint16_t farthestZ = 0;
   std::uint16_t slot = DS.shipSlots.offset;
-  for (std::uint32_t count = LoopCount(_state.Get(DS.shipSlotCount)); count != 0; --count)
+  for (std::uint32_t count = LoopCount(_state.Data().shipSlotCount); count != 0; --count)
   {
-    const ObjectSlot object(_state, slot);
-    if ((object.Get(SlotByte::Type) & SLOT_DRAWABLE) == SLOT_DRAWABLE && (object.Get(SlotByte::Flags) & STATE_DRAWN) == 0)
+    const SpaceObject& object = _state.ObjectAt(slot);
+    if ((object.type & SLOT_DRAWABLE) == SLOT_DRAWABLE && (object.flags & STATE_DRAWN) == 0)
     {
-      const std::uint8_t depth = object.Get(SlotByte::Depth);
-      if (farthestDepth < depth || (farthestDepth == depth && farthestZ < object.Get(SlotWord::ViewZ)))
+      const std::uint8_t depth = object.depth;
+      if (farthestDepth < depth || (farthestDepth == depth && farthestZ < object.viewZ))
       {
         farthestDepth = depth;
-        farthestZ = object.Get(SlotWord::ViewZ);
+        farthestZ = object.viewZ;
         farthest = slot;
       }
     }
@@ -631,20 +629,19 @@ void DrawObjectAsDot(GameState& _state, ObjectSlot _slot, bool _backward)
   {
     return std::nullopt;
   }
-  ObjectSlot object(_state, *farthest);
-  object.Set(SlotByte::Flags, static_cast<std::uint8_t>(object.Get(SlotByte::Flags) | STATE_DRAWN));
+  SpaceObject& object = _state.ObjectAt(*farthest);
+  object.flags = static_cast<std::uint8_t>(object.flags | STATE_DRAWN);
   return DrawObject(_state, _hardware, object, _backward);
 }
 
 // One coordinate of the sun's or planet's centre (CS:4030, CS:404E): 256|_value| over _slot's view z, by DIV [DI+14h], rounded
 // down, with _value's sign put back. A divide that overflows saves BX, _radius.
-[[nodiscard]] std::uint16_t ProjectDiscCoordinate(GameState& _state, ObjectSlot _slot, std::uint16_t _value, std::uint16_t _returnOffset,
+[[nodiscard]] std::uint16_t ProjectDiscCoordinate(GameState& _state, SpaceObject& _slot, std::uint16_t _value, std::uint16_t _returnOffset,
                                                   std::uint16_t _radius)
 {
   const bool negative = Negative(_value);
   const std::uint16_t magnitude = negative ? Negate(_value) : _value;
-  const std::uint16_t coordinate =
-    DivideUnsigned(_state, ScaledDividend(magnitude), _slot.Get(SlotWord::ViewZ), _returnOffset, _radius).quotient;
+  const std::uint16_t coordinate = DivideUnsigned(_state, ScaledDividend(magnitude), _slot.viewZ, _returnOffset, _radius).quotient;
   return negative ? Negate(coordinate) : coordinate;
 }
 
@@ -664,15 +661,15 @@ void DrawObjectAsDot(GameState& _state, ObjectSlot _slot, bool _backward)
 
 // DrawSunOrPlanetDisc (CS:402C): a disc of radius _radius at _slot's view position projected, in its colour (+0Bh), drawn only
 // when the disc's whole box is on the 256x128 view: DrawDisc with twice the radius.
-void DrawSunOrPlanetDisc(GameState& _state, ObjectSlot _slot, std::uint16_t _radius, bool _backward)
+void DrawSunOrPlanetDisc(GameState& _state, SpaceObject& _slot, std::uint16_t _radius, bool _backward)
 {
-  const auto row = Offset(ProjectDiscCoordinate(_state, _slot, _slot.Get(SlotWord::ViewY), DISC_Y_DIVIDE_RETURN, _radius), SCREEN_CENTER_Y);
-  const auto x = Offset(ProjectDiscCoordinate(_state, _slot, _slot.Get(SlotWord::ViewX), DISC_X_DIVIDE_RETURN, _radius), SCREEN_CENTER_X);
+  const auto row = Offset(ProjectDiscCoordinate(_state, _slot, _slot.viewY, DISC_Y_DIVIDE_RETURN, _radius), SCREEN_CENTER_Y);
+  const auto x = Offset(ProjectDiscCoordinate(_state, _slot, _slot.viewX, DISC_X_DIVIDE_RETURN, _radius), SCREEN_CENTER_X);
   if (!DiscWithin(x, _radius, SCREEN_RIGHT) || !DiscWithin(row, _radius, SCREEN_BOTTOM))
   {
     return;
   }
-  _state.Set(DS.drawColor, _slot.Get(SlotByte::Color));
+  _state.Data().drawColor = High(_slot.pitch); // the disc's colour
   DrawDisc(_state, static_cast<std::uint16_t>(_radius << 1), x, row, _backward);
 }
 
@@ -689,26 +686,26 @@ struct SupernovaGlow
 // _backward), and the heat is FFh. None while the countdown runs, or when it is 0. _slot is the sun's slot, DI.
 [[nodiscard]] std::optional<SupernovaGlow> SupernovaHeat(GameState& _state, Hardware& _hardware, std::uint16_t _slot, bool _backward)
 {
-  if (_state.Get(DS.supernovaFrames) == 0)
+  if (_state.Data().commanderBlock.supernovaFrames == 0)
   {
     return std::nullopt;
   }
-  _state.Set(DS.supernovaFrames, static_cast<std::uint16_t>(_state.Get(DS.supernovaFrames) - 1));
-  if (_state.Get(DS.supernovaFrames) != 0)
+  _state.Data().commanderBlock.supernovaFrames = static_cast<std::uint16_t>(_state.Data().commanderBlock.supernovaFrames - 1);
+  if (_state.Data().commanderBlock.supernovaFrames != 0)
   {
     return std::nullopt;
   }
-  _state.Set(DS.supernovaFrames, 1);
-  if (_state.Get(DS.supernovaHeat) == 0)
+  _state.Data().commanderBlock.supernovaFrames = 1;
+  if (_state.Data().commanderBlock.supernovaHeat == 0)
   {
-    _state.Set(DS.supernovaHeat, _state.Get(DS.cabinTemperature));
+    _state.Data().commanderBlock.supernovaHeat = std::uint8_t{_state.Data().cabinTemperature};
   }
-  auto step = static_cast<std::uint8_t>(_state.Get(DS.supernovaHeat) >> 2);
+  auto step = static_cast<std::uint8_t>(_state.Data().commanderBlock.supernovaHeat >> 2);
   if (step == 0)
   {
     step = 1;
   }
-  const unsigned sum = unsigned{step} + _state.Get(DS.supernovaHeat);
+  const unsigned sum = unsigned{step} + _state.Data().commanderBlock.supernovaHeat;
   SupernovaGlow glow{static_cast<std::uint8_t>(sum), _slot};
   if (sum > 0xFF)
   {
@@ -718,12 +715,12 @@ struct SupernovaGlow
     }
     // DetonateEnergyBomb's LOOP leaves DI past the ship slots, by the count it loads: objectSlotCount less 3, a byte, 0 for
     // 65,536.
-    const auto ships = static_cast<std::uint8_t>(_state.Get(DS.objectSlotCount) - BOMB_FIRST_SLOT);
+    const auto ships = static_cast<std::uint8_t>(_state.Data().objectSlotCount - BOMB_FIRST_SLOT);
     (void)DetonateEnergyBomb(_state, _hardware, _backward);
-    glow.slot = static_cast<std::uint16_t>(DS.firstShipSlot.offset + LoopCount(ships) * ObjectSlot::BYTES);
+    glow.slot = static_cast<std::uint16_t>(DS.firstShipSlot.offset + LoopCount(ships) * SpaceObject::BYTES);
     glow.heat = 0xFF;
   }
-  _state.Set(DS.supernovaHeat, Low(glow.heat));
+  _state.Data().commanderBlock.supernovaHeat = Low(glow.heat);
   return glow;
 }
 
@@ -740,10 +737,10 @@ struct SunDisc
 // over it on a carry, with FUEL SCOOPS ACTIVE for 5 frames; from FDh, KillPlayer, whose StartPlayerDeathSound leaves its step length
 // in AL over the radius's low byte, as there is no PUSH AX round it here, and a radius past a byte held to FFh. Returns the disc
 // in front of the view.
-[[nodiscard]] std::optional<SunDisc> SizeSun(GameState& _state, Hardware& _hardware, ObjectSlot _slot, bool _backward)
+[[nodiscard]] std::optional<SunDisc> SizeSun(GameState& _state, Hardware& _hardware, SpaceObject& _slot, bool _backward)
 {
-  SunDisc disc{0, _slot.Offset()};
-  if (const std::optional<SupernovaGlow> glow = SupernovaHeat(_state, _hardware, _slot.Offset(), _backward))
+  SunDisc disc{0, _state.OffsetOf(_slot)};
+  if (const std::optional<SupernovaGlow> glow = SupernovaHeat(_state, _hardware, _state.OffsetOf(_slot), _backward))
   {
     disc = SunDisc{glow->heat, glow->slot};
   }
@@ -752,35 +749,35 @@ struct SunDisc
     // MOV DX,64h / XOR AX,AX: DX:AX = 100 * 65536.
     disc.radius = ScaleByInverseDistance(_state, _slot, std::uint32_t{SUN_SCALE} << 16);
   }
-  _state.Set(DS.cabinTemperature, Low(disc.radius));
-  if ((ObjectSlot(_state, disc.slot).Get(SlotByte::ViewZHigh) & 0x80) != 0)
+  _state.Data().cabinTemperature = Low(disc.radius);
+  if ((High(_state.ObjectAt(disc.slot).viewZ) & 0x80) != 0)
   {
     return std::nullopt;
   }
-  _state.Set(DS.sunFringeMask, FRINGE_SMALL);
+  _state.Data().sunFringeMask = FRINGE_SMALL;
   if (disc.radius < FRINGE_RADIUS_SMALL)
   {
     return disc;
   }
-  _state.Set(DS.sunFringeMask, FRINGE_MEDIUM);
+  _state.Data().sunFringeMask = FRINGE_MEDIUM;
   if (disc.radius < FRINGE_RADIUS_LARGE)
   {
     return disc;
   }
-  _state.Set(DS.sunFringeMask, FRINGE_LARGE);
+  _state.Data().sunFringeMask = FRINGE_LARGE;
   if (disc.radius < SCOOP_RADIUS)
   {
     return disc;
   }
-  if (_state.Get(DS.fuelScoopsFitted) == 1)
+  if (_state.Data().commanderBlock.fuelScoopsFitted == 1)
   {
-    const unsigned fuel = unsigned{_state.Get(DS.fuel)} + SCOOP_FUEL;
-    _state.Set(DS.fuel, static_cast<std::uint8_t>(fuel));
+    const unsigned fuel = unsigned{_state.Data().commanderBlock.fuel} + SCOOP_FUEL;
+    _state.Data().commanderBlock.fuel = static_cast<std::uint8_t>(fuel);
     if (fuel > 0xFF)
     {
-      _state.Set(DS.fuel, 0xFF);
+      _state.Data().commanderBlock.fuel = 0xFF;
       _state.Set(DS.messagePointer, DS.fuelScoopsActiveText.offset);
-      _state.Set(DS.messageFrames, SCOOP_MESSAGE_FRAMES);
+      _state.Data().messageFrames = SCOOP_MESSAGE_FRAMES;
     }
   }
   if (disc.radius >= FATAL_RADIUS)
@@ -801,9 +798,9 @@ struct SunDisc
 // SizePlanet (CS:3FF6): sunFringeMask cleared, the radius ScaleByInverseDistance makes of 50 at _slot's distance, and the
 // altitude, twice 255 less that radius held to 127. In front of the view, a radius of FDh or more kills the player, with
 // StartPlayerDeathSound's STI, and one past a byte draws as FFh. Returns the disc's radius in front of the view.
-std::optional<std::uint16_t> SizePlanet(GameState& _state, Hardware& _hardware, ObjectSlot _slot)
+std::optional<std::uint16_t> SizePlanet(GameState& _state, Hardware& _hardware, SpaceObject& _slot)
 {
-  _state.Set(DS.sunFringeMask, FRINGE_NONE);
+  _state.Data().sunFringeMask = FRINGE_NONE;
   // MOV DX,32h / XOR AX,AX: DX:AX = 50 * 65536.
   const std::uint16_t scaled = ScaleByInverseDistance(_state, _slot, std::uint32_t{PLANET_SCALE} << 16);
   auto altitude = static_cast<std::uint8_t>(~Low(scaled));
@@ -812,8 +809,8 @@ std::optional<std::uint16_t> SizePlanet(GameState& _state, Hardware& _hardware, 
     altitude = ALTITUDE_LIMIT;
   }
   altitude = static_cast<std::uint8_t>(altitude << 1);
-  _state.Set(DS.altitude, altitude);
-  if ((_slot.Get(SlotByte::ViewZHigh) & 0x80) != 0)
+  _state.Data().altitude = altitude;
+  if ((High(_slot.viewZ) & 0x80) != 0)
   {
     return std::nullopt;
   }
@@ -839,13 +836,13 @@ void ProjectVertices(GameState& _state, std::uint8_t _trapHigh)
 {
   // MOV CX,[projectedVertexCount] / AND CX,CX / JE, then LOOP: a count of the whole word, 0 none. SI walks the vertices and DI the
   // points they become, in place; PUSH SI / POP SI keep the caller's.
-  const std::uint16_t count = _state.Get(DS.projectedVertexCount);
+  const std::uint16_t count = _state.Data().projectedVertexCount;
   std::uint16_t vertex = DS.vertexBuffer.offset;
   std::uint16_t point = vertex;
   for (std::uint16_t left = count; left != 0; --left)
   {
     const auto z = Offset(vertex, VERTEX_Z);
-    if (static_cast<std::int16_t>(_state.Word(z)) < static_cast<std::int16_t>(_state.Get(DS.nearPlaneZ)))
+    if (static_cast<std::int16_t>(_state.Word(z)) < static_cast<std::int16_t>(_state.Data().nearPlaneZ))
     {
       _state.SetWord(point, NEAR_VERTEX_X);
     }
@@ -864,11 +861,12 @@ void ProjectVertices(GameState& _state, std::uint8_t _trapHigh)
 Vector ReflectVertexAboutCenter(GameState& _state, std::uint16_t _vertex, std::uint16_t _reflection)
 {
   std::array<std::uint16_t, 3> center{};
-  constexpr std::array<DataField<std::uint16_t>, 3> CENTER = {DS.drawCenterX, DS.drawCenterY, DS.drawCenterZ};
+  constexpr std::array<Counted<std::uint16_t> GameData::*, 3> CENTER = {&GameData::drawCenterX, &GameData::drawCenterY,
+                                                                        &GameData::drawCenterZ};
   for (std::size_t axis = 0; axis < CENTER.size(); ++axis)
   {
     const auto bytes = static_cast<std::uint16_t>(2 * axis);
-    center[axis] = _state.Get(CENTER[axis]);
+    center[axis] = _state.Data().*CENTER[axis];
     _state.SetWord(Offset(_reflection, bytes), static_cast<std::uint16_t>(center[axis] - _state.Word(Offset(_vertex, bytes))));
     _state.SetWord(Offset(_vertex, bytes), Offset(_state.Word(Offset(_vertex, bytes)), center[axis]));
   }
@@ -878,11 +876,12 @@ Vector ReflectVertexAboutCenter(GameState& _state, std::uint16_t _vertex, std::u
 Vector OffsetVertexByCenter(GameState& _state, std::uint16_t _vertex)
 {
   std::array<std::uint16_t, 3> center{};
-  constexpr std::array<DataField<std::uint16_t>, 3> CENTER = {DS.drawCenterX, DS.drawCenterY, DS.drawCenterZ};
+  constexpr std::array<Counted<std::uint16_t> GameData::*, 3> CENTER = {&GameData::drawCenterX, &GameData::drawCenterY,
+                                                                        &GameData::drawCenterZ};
   for (std::size_t axis = 0; axis < CENTER.size(); ++axis)
   {
     const auto bytes = static_cast<std::uint16_t>(2 * axis);
-    center[axis] = _state.Get(CENTER[axis]);
+    center[axis] = _state.Data().*CENTER[axis];
     _state.SetWord(Offset(_vertex, bytes), Offset(_state.Word(Offset(_vertex, bytes)), center[axis]));
   }
   return Vector{static_cast<std::int16_t>(center[0]), static_cast<std::int16_t>(center[1]), static_cast<std::int16_t>(center[2])};
@@ -901,13 +900,13 @@ std::uint16_t BuildBoxCornerVertices(GameState& _state, std::uint16_t _extents)
   _state.SetWord(Offset(corners, 2 * VERTEX_BYTES + VERTEX_Z), length);
   // (p, q) by -roll, and its opposite, (-p, -q); then (p, -q).
   const Pair upper =
-    RotateByStoredSinCos(_state, 3, Pair{static_cast<std::int16_t>(_state.Get(DS.boxHalfWidth)), static_cast<std::int16_t>(height)});
+    RotateByStoredSinCos(_state, 3, Pair{static_cast<std::int16_t>(_state.Data().boxHalfWidth), static_cast<std::int16_t>(height)});
   _state.SetWord(corners, static_cast<std::uint16_t>(upper.first));
   _state.SetWord(Offset(corners, 2), static_cast<std::uint16_t>(upper.second));
   _state.SetWord(Offset(corners, 2 * VERTEX_BYTES), Negate(static_cast<std::uint16_t>(upper.first)));
   _state.SetWord(Offset(corners, 2 * VERTEX_BYTES + 2), Negate(static_cast<std::uint16_t>(upper.second)));
-  const Pair lower = RotateByStoredSinCos(
-    _state, 3, Pair{static_cast<std::int16_t>(_state.Get(DS.boxHalfWidth)), static_cast<std::int16_t>(Negate(height))});
+  const Pair lower =
+    RotateByStoredSinCos(_state, 3, Pair{static_cast<std::int16_t>(_state.Data().boxHalfWidth), static_cast<std::int16_t>(Negate(height))});
   _state.SetWord(Offset(corners, VERTEX_BYTES), static_cast<std::uint16_t>(lower.first));
   _state.SetWord(Offset(corners, VERTEX_BYTES + 2), static_cast<std::uint16_t>(lower.second));
   RotateVertices(_state, corners, BOX_CORNERS_ROTATED, 0, VERTEX_Z, 4);
@@ -954,7 +953,7 @@ Vector BuildDodoVertices(GameState& _state)
   // From the roll angle, in 72-degree steps: the sine and cosine high bytes of each, scaled to the two rings.
   const auto ringRadii = [&_state](std::uint16_t _angle)
   { return ScaleDodoRadii(static_cast<std::int8_t>(_state.Byte(Offset(_angle, SINE_HIGH_BYTES)))); };
-  auto angle = static_cast<std::uint16_t>((_state.Get(DS.drawRollAngle) & ANGLE_BITS) << 1);
+  auto angle = static_cast<std::uint16_t>((_state.Data().drawRollAngle & ANGLE_BITS) << 1);
   std::uint16_t vertex = DS.vertexBuffer.offset;
   for (std::uint16_t left = DODO_RING_VERTICES; left != 0; --left)
   {
@@ -1113,7 +1112,7 @@ FacesEnd DrawVisibleFaces(GameState& _state, std::uint16_t _list, std::uint16_t 
   return end;
 }
 
-ShipRangeCheck CheckShipInRange(GameState& _state, ObjectSlot _slot)
+ShipRangeCheck CheckShipInRange(GameState& _state, SpaceObject& _slot)
 {
   ShipRangeCheck check{IsObjectNear(_state, _slot), ShipRange{}};
   if (check.near.nearby)
@@ -1128,37 +1127,36 @@ ShipRangeCheck CheckShipInRange(GameState& _state, ObjectSlot _slot)
   return check;
 }
 
-void TransformSunOrPlanet(GameState& _state, ObjectSlot _slot)
+void TransformSunOrPlanet(GameState& _state, SpaceObject& _slot)
 {
   // MOV [DI+0Ah],CL / MOV [DI+3Dh],CL / MOV DH,CL: the shift, as the disc's scale and its depth, and for ScalePositionDown.
   const std::uint8_t shift = GetPositionScaleShift(_slot).shift;
-  _slot.Set(SlotByte::DiscScale, shift);
-  _slot.Set(SlotByte::Depth, shift);
+  _slot.pitch = WithLow(_slot.pitch, shift); // the disc's scale shift
+  _slot.depth = shift;
   // PUSH DI / POP DI round TransformToViewWithBlip keep the slot.
   const Vector view = TransformToViewWithBlip(_state, _slot, ScalePositionDown(_slot, shift));
-  _slot.Set(SlotWord::ViewX, static_cast<std::uint16_t>(view.x));
-  _slot.Set(SlotWord::ViewY, static_cast<std::uint16_t>(view.y));
-  _slot.Set(SlotWord::ViewZ, static_cast<std::uint16_t>(view.z));
-  _slot.Set(SlotByte::Type, static_cast<std::uint8_t>(_slot.Get(SlotByte::Type) | SLOT_VISIBLE));
+  _slot.viewX = static_cast<std::uint16_t>(view.x);
+  _slot.viewY = static_cast<std::uint16_t>(view.y);
+  _slot.viewZ = static_cast<std::uint16_t>(view.z);
+  _slot.type = static_cast<std::uint8_t>(_slot.type | SLOT_VISIBLE);
 }
 
-ViewTest ClassifyStationPosition(GameState& _state, ObjectSlot _slot)
+ViewTest ClassifyStationPosition(GameState& _state, SpaceObject& _slot)
 {
   return ClassifyViewPosition(_state, _slot, CompassPosition(_slot));
 }
 
-void TransformShip(GameState& _state, ObjectSlot _slot)
+void TransformShip(GameState& _state, SpaceObject& _slot)
 {
   // MOV AX,[DI+4] / MOV BX,[DI+6] / MOV CX,[DI+8], then PUSH DI / POP DI round the transform and the scoop, which keep the slot.
-  const Vector position{static_cast<std::int16_t>(_slot.Get(SlotWord::X)), static_cast<std::int16_t>(_slot.Get(SlotWord::Y)),
-                        static_cast<std::int16_t>(_slot.Get(SlotWord::Z))};
+  const Vector position{static_cast<std::int16_t>(_slot.x), static_cast<std::int16_t>(_slot.y), static_cast<std::int16_t>(_slot.z)};
   const Vector view = TransformToViewWithBlip(_state, _slot, position);
-  if (_state.Get(DS.fuelScoopsFitted) == 1 && _state.Get(DS.gameOverFrames) == 0)
+  if (_state.Data().commanderBlock.fuelScoopsFitted == 1 && _state.Data().gameOverFrames == 0)
   {
     // The scoop keeps AX, BX and CX, the view position, round its work.
     (void)TryScoopObject(_state, _slot, view);
   }
-  _slot.Set(SlotByte::Depth, 0);
+  _slot.depth = 0;
   (void)ClassifyViewPosition(_state, _slot, view);
 }
 
@@ -1168,7 +1166,7 @@ bool RunBlueprintHandler(GameState& _state, std::uint16_t _blueprint, bool _back
   // to the handler with SI past them. The slot and the way back are the stack the handler returns through, which this unit
   // keeps itself.
   const std::uint16_t handler = _state.Word(_blueprint);
-  _state.Set(DS.boxHalfWidth, _state.Byte(Offset(_blueprint, 2)));
+  _state.Data().boxHalfWidth = _state.Byte(Offset(_blueprint, 2));
   std::uint16_t body = Offset(_blueprint, BLUEPRINT_HANDLER_BYTES);
   // Every blueprint's handler is one of these two; the blueprints are never written.
   if (handler == BUILD_BOX_CORNER_VERTICES)
@@ -1186,15 +1184,15 @@ bool RunBlueprintHandler(GameState& _state, std::uint16_t _blueprint, bool _back
 
 bool TransformAndDrawObjects(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  (void)SetSinCos(_state, 0, _state.Get(DS.playerPitchAngle));
-  (void)SetSinCos(_state, 1, _state.Get(DS.playerYawAngle));
-  (void)SetSinCos(_state, 2, _state.Get(DS.playerRollAngle));
+  (void)SetSinCos(_state, 0, _state.Data().playerPitchAngle);
+  (void)SetSinCos(_state, 1, _state.Data().playerYawAngle);
+  (void)SetSinCos(_state, 2, _state.Data().playerRollAngle);
   // MOV CL,shipSlotCount / XOR CH,CH, then LOOP with PUSH CX / POP CX round each slot: a count of 0 classifies 65,536. DI steps on
   // from where each slot's classification leaves it.
   std::uint16_t slot = DS.shipSlots.offset;
-  for (std::uint32_t count = LoopCount(_state.Get(DS.shipSlotCount)); count != 0; --count)
+  for (std::uint32_t count = LoopCount(_state.Data().shipSlotCount); count != 0; --count)
   {
-    slot = Offset(ClassifyObject(_state, ObjectSlot(_state, slot)), SLOT_BYTES);
+    slot = Offset(ClassifyObject(_state, _state.ObjectAt(slot)), SLOT_BYTES);
   }
   bool backward = _backward;
   while (const std::optional<bool> drawn = DrawFarthestObject(_state, _hardware, backward))
@@ -1204,11 +1202,11 @@ bool TransformAndDrawObjects(GameState& _state, Hardware& _hardware, bool _backw
   return backward;
 }
 
-Vector TransformToViewWithBlip(GameState& _state, ObjectSlot _slot, Vector _position)
+Vector TransformToViewWithBlip(GameState& _state, SpaceObject& _slot, Vector _position)
 {
   const Vector camera = RotatePitchYawRoll(_state, _position);
   // MOV [DI+3Ch],CH.
-  _slot.Set(SlotByte::CameraZHigh, High(static_cast<std::uint16_t>(camera.z)));
+  _slot.cameraZHigh = High(static_cast<std::uint16_t>(camera.z));
   UpdateScannerBlip(_state, _slot, camera);
   return RotateToViewDirection(_state, camera);
 }
@@ -1218,7 +1216,7 @@ Vector TransformToView(GameState& _state, Vector _position)
   return RotateToViewDirection(_state, RotatePitchYawRoll(_state, _position));
 }
 
-void DrawSunOrPlanet(GameState& _state, Hardware& _hardware, ObjectSlot _slot, bool _backward)
+void DrawSunOrPlanet(GameState& _state, Hardware& _hardware, SpaceObject& _slot, bool _backward)
 {
   if (IsPlanet(_slot))
   {
@@ -1232,17 +1230,17 @@ void DrawSunOrPlanet(GameState& _state, Hardware& _hardware, ObjectSlot _slot, b
   // DI, that slot's, as the original draws it.
   if (const std::optional<SunDisc> disc = SizeSun(_state, _hardware, _slot, _backward))
   {
-    DrawSunOrPlanetDisc(_state, ObjectSlot(_state, disc->slot), disc->radius, _backward);
+    DrawSunOrPlanetDisc(_state, _state.ObjectAt(disc->slot), disc->radius, _backward);
   }
 }
 
-void DrawDistantStation(GameState& _state, ObjectSlot _slot, bool _backward)
+void DrawDistantStation(GameState& _state, SpaceObject& _slot, bool _backward)
 {
   const ScreenPoint at = ProjectToScreen(_state, CompassPosition(_slot));
   const auto x = static_cast<std::uint16_t>(at.x);
   const auto row = static_cast<std::uint16_t>(at.y);
-  _state.Set(DS.drawColor, STATION_COLOR);
-  const std::uint8_t depth = _slot.Get(SlotByte::StationDepth);
+  _state.Data().drawColor = STATION_COLOR;
+  const std::uint8_t depth = High(_slot.compassZ); // the station's depth
   if (depth < NEAR_STATION_DEPTH)
   {
     DrawDisc(_state, NEAR_STATION_RADIUS, x, row, _backward);
@@ -1265,9 +1263,9 @@ void DrawDistantStation(GameState& _state, ObjectSlot _slot, bool _backward)
 
 SinCos LoadPlayerAngles(GameState& _state)
 {
-  (void)SetSinCos(_state, 0, _state.Get(DS.playerPitchAngle));
-  (void)SetSinCos(_state, 1, _state.Get(DS.playerYawAngle));
-  return SetSinCos(_state, 2, _state.Get(DS.playerRollAngle));
+  (void)SetSinCos(_state, 0, _state.Data().playerPitchAngle);
+  (void)SetSinCos(_state, 1, _state.Data().playerYawAngle);
+  return SetSinCos(_state, 2, _state.Data().playerRollAngle);
 }
 
 ScreenPoint ProjectToScreen(GameState& _state, Vector _view)
