@@ -33,6 +33,14 @@ bool SameKey(const KeyEvent& _a, const KeyEvent& _b) noexcept
   return _a.scanCode == _b.scanCode && _a.extended == _b.extended;
 }
 
+// The size of a window around a client area of _clientWidth by _clientHeight pixels, with the frame Windows draws at _dpi.
+SIZE FramedSize(int _clientWidth, int _clientHeight, UINT _dpi) noexcept
+{
+  RECT frame{0, 0, _clientWidth, _clientHeight};
+  AdjustWindowRectExForDpi(&frame, WS_OVERLAPPEDWINDOW, FALSE, 0, _dpi);
+  return SIZE{frame.right - frame.left, frame.bottom - frame.top};
+}
+
 } // namespace
 
 Window::~Window()
@@ -58,12 +66,19 @@ bool Window::Create(HINSTANCE _instance, const wchar_t* _title, int _clientWidth
     return false;
   }
 
-  RECT frame{0, 0, _clientWidth, _clientHeight};
-  AdjustWindowRect(&frame, WS_OVERLAPPEDWINDOW, FALSE);
-  if (CreateWindowExW(0, CLASS_NAME, _title, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, frame.right - frame.left,
-                      frame.bottom - frame.top, nullptr, nullptr, _instance, this) == nullptr)
+  // The client area is in physical pixels, and the frame around it is drawn at the DPI of the screen the window opens on: most
+  // likely the system's, but known only once the window exists. It is still hidden, so a correction then is not seen.
+  const UINT systemDpi = GetDpiForSystem();
+  const SIZE framed = FramedSize(_clientWidth, _clientHeight, systemDpi);
+  if (CreateWindowExW(0, CLASS_NAME, _title, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, framed.cx, framed.cy, nullptr, nullptr,
+                      _instance, this) == nullptr)
   {
     return false;
+  }
+  if (const UINT dpi = GetDpiForWindow(m_window); dpi != systemDpi)
+  {
+    const SIZE corrected = FramedSize(_clientWidth, _clientHeight, dpi);
+    SetWindowPos(m_window, nullptr, 0, 0, corrected.cx, corrected.cy, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
   }
   m_open = true;
   if (_fullScreen)
@@ -172,6 +187,9 @@ LRESULT Window::HandleMessage(UINT _message, WPARAM _wParam, LPARAM _lParam)
   case WM_SIZE:
     m_resized = true;
     return 0;
+  case WM_DPICHANGED:
+    ApplyDpiChange(*std::bit_cast<const RECT*>(_lParam));
+    return 0;
   case WM_ERASEBKGND:
     return 1;
   case WM_CLOSE:
@@ -198,8 +216,27 @@ void Window::ReleaseHeldKeys()
   m_held.clear();
 }
 
+void Window::ApplyDpiChange(const RECT& _suggested)
+{
+  if (!m_fullScreen)
+  {
+    SetWindowPos(m_window, nullptr, _suggested.left, _suggested.top, _suggested.right - _suggested.left, _suggested.bottom - _suggested.top,
+                 SWP_NOZORDER | SWP_NOACTIVATE);
+    return;
+  }
+  // The suggestion is the window scaled by the change of DPI, which is not the screen: cover the whole of the screen it is on.
+  MONITORINFO monitor{};
+  monitor.cbSize = sizeof(monitor);
+  if (GetMonitorInfoW(MonitorFromRect(&_suggested, MONITOR_DEFAULTTONEAREST), &monitor))
+  {
+    SetWindowPos(m_window, nullptr, monitor.rcMonitor.left, monitor.rcMonitor.top, monitor.rcMonitor.right - monitor.rcMonitor.left,
+                 monitor.rcMonitor.bottom - monitor.rcMonitor.top, SWP_NOZORDER | SWP_NOACTIVATE);
+  }
+}
+
 void Window::ToggleFullScreen()
 {
+  // m_fullScreen changes before the window moves: a WM_DPICHANGED sent while it moves must see the mode it is moving into.
   if (!m_fullScreen)
   {
     m_windowedPlacement.length = sizeof(m_windowedPlacement);
@@ -210,19 +247,19 @@ void Window::ToggleFullScreen()
     {
       return;
     }
+    m_fullScreen = true;
     // A window not yet shown stays hidden, for ShowWindow to show and activate.
     const LONG_PTR visible = IsWindowVisible(m_window) ? WS_VISIBLE : 0;
     SetWindowLongPtrW(m_window, GWL_STYLE, WS_POPUP | visible);
     SetWindowPos(m_window, HWND_TOP, monitor.rcMonitor.left, monitor.rcMonitor.top, monitor.rcMonitor.right - monitor.rcMonitor.left,
                  monitor.rcMonitor.bottom - monitor.rcMonitor.top, SWP_FRAMECHANGED | SWP_NOOWNERZORDER);
-    m_fullScreen = true;
   }
   else
   {
+    m_fullScreen = false;
     SetWindowLongPtrW(m_window, GWL_STYLE, WS_OVERLAPPEDWINDOW | WS_VISIBLE);
     SetWindowPlacement(m_window, &m_windowedPlacement);
     SetWindowPos(m_window, nullptr, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER);
-    m_fullScreen = false;
   }
   m_resized = true;
 }

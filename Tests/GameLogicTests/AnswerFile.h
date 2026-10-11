@@ -1,29 +1,23 @@
 // Tests/GameLogicTests/AnswerFile.h
 #pragma once
 
-#include "Outcome.h"
 #include "Reference.h"
 
-#include <charconv>
 #include <cstddef>
-#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <format>
 #include <fstream>
-#include <map>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 namespace GameLogicTests
 {
 
-/// The environment variable that makes a run record the guard of D33 instead of checking it, when it is set and not empty:
-/// the corpus's picture and outcome lines and the twins' pictures and outcomes, each recorded only from a run that met every
-/// state digest, and the subsystems' known answers (CheckSubsystemAnswers). The guard is recorded by hand, in one process,
-/// never in CI, and a second recording reproduces every file byte for byte.
+/// The environment variable that makes a run record the subsystems' known answers (CheckSubsystemAnswers, D33) instead of
+/// checking them, when it is set and not empty. They are recorded by hand, in one process, never in CI, and a second
+/// recording reproduces every file byte for byte.
 inline constexpr const char* RECORD_GUARD = "OUTPOST_ELITE_RECORD_GUARD";
 
 /// The value of the environment variable _name, or empty if it is not set.
@@ -187,131 +181,5 @@ inline void CheckSubsystemAnswers(std::string_view _file, const std::vector<std:
   }
   Assert::AreEqual(_count, file.Answers().size(), AnswerFile::Widen(std::string(_file) + ": the answers recorded").c_str());
 }
-
-/// A file of answers by twin and ordinal, in KnownAnswers.txt's form: one to a line, the twin's name, the ordinal of the
-/// answer within the twin, counted from 1 over all its Play calls, and the value, separated by single spaces. Lines are
-/// sorted by twin and ordinal. What the value is, the file's header documents and _shape checks.
-class TwinAnswers
-{
-public:
-  /// What a value is.
-  enum class Shape : std::uint8_t
-  {
-    Sha256,  ///< a SHA-256 in lowercase hex: a state digest or a picture digest
-    Outcomes ///< outcomes as Elite::OutcomeText writes them, name=value pairs separated by single spaces
-  };
-
-  /// Every answer in _file, a path from the repository's root. A file that is not found, a line that is not an answer of
-  /// _shape, and an answer given twice fail the test.
-  TwinAnswers(std::string_view _file, Shape _shape)
-  {
-    using Microsoft::VisualStudio::CppUnitTestFramework::Assert;
-    std::string error;
-    const bool parsed = Parse(AnswerFile(_file).Answers(), _shape, m_answers, error); // before the message, which names the line
-    Assert::IsTrue(parsed, AnswerFile::Widen(std::string(_file) + ": " + error).c_str());
-  }
-
-  /// _twin's answer _ordinal, or nothing.
-  [[nodiscard]] const std::string* Find(const std::string& _twin, std::size_t _ordinal) const
-  {
-    const auto found = m_answers.find(std::pair{_twin, _ordinal});
-    return found == m_answers.end() ? nullptr : &found->second;
-  }
-
-  /// Replaces every answer _file holds for _twin with _values, the first as ordinal 1, and writes the file again
-  /// (AnswerFile::Write), every twin's answers in order of name and ordinal. The file is read afresh, so that what other
-  /// twins recorded in the same run is kept. Returns false if it cannot be read or written.
-  static bool Record(std::string_view _file, Shape _shape, const std::string& _twin, const std::vector<std::string>& _values) noexcept
-  {
-    try
-    {
-      Answers answers;
-      std::string error;
-      if (!Parse(AnswerFile(_file).Answers(), _shape, answers, error))
-      {
-        return false;
-      }
-      std::erase_if(answers, [&_twin](const Answers::value_type& _answer) { return _answer.first.first == _twin; });
-      for (std::size_t index = 0; index < _values.size(); ++index)
-      {
-        answers.emplace(std::pair{_twin, index + 1}, _values[index]);
-      }
-      std::vector<std::string> lines;
-      for (const auto& [key, value] : answers)
-      {
-        lines.push_back(std::format("{} {} {}", key.first, key.second, value));
-      }
-      return AnswerFile::Write(_file, lines);
-    }
-    catch (...)
-    {
-      return false;
-    }
-  }
-
-private:
-  /// The answers, by the twin's name and the ordinal.
-  using Answers = std::map<std::pair<std::string, std::size_t>, std::string>;
-
-  static constexpr std::size_t SHA256_CHARACTERS = 64; // in hex
-
-  /// Whether _value is a value of _shape.
-  [[nodiscard]] static bool IsValue(std::string_view _value, Shape _shape)
-  {
-    std::string error;
-    switch (_shape)
-    {
-    case Shape::Sha256:
-      return _value.size() == SHA256_CHARACTERS && _value.find_first_not_of("0123456789abcdef") == std::string_view::npos;
-    case Shape::Outcomes:
-      return Elite::CheckOutcomeText(_value, error);
-    }
-    return false;
-  }
-
-  /// What a line of _shape holds, for a message.
-  [[nodiscard]] static std::string_view Describe(Shape _shape) noexcept
-  {
-    switch (_shape)
-    {
-    case Shape::Sha256:
-      return "a SHA-256 in lowercase hex";
-    case Shape::Outcomes:
-      return "outcomes, name=value pairs of Outcome.h's names";
-    }
-    return "a value";
-  }
-
-  /// Every answer of _lines into _answers. Returns false, with _error naming the line, for a line that is not a twin's name,
-  /// an ordinal from 1 and a value of _shape, or an answer given twice.
-  static bool Parse(const std::vector<AnswerFile::Answer>& _lines, Shape _shape, Answers& _answers, std::string& _error)
-  {
-    for (const AnswerFile::Answer& line : _lines)
-    {
-      const std::string_view text = line.text;
-      const std::size_t first = text.find(' ');
-      const std::size_t second = first == std::string_view::npos ? first : text.find(' ', first + 1);
-      const std::string_view twin = text.substr(0, first);
-      const std::string ordinalText(second == std::string_view::npos ? std::string_view{} : text.substr(first + 1, second - first - 1));
-      const std::string_view value = second == std::string_view::npos ? std::string_view{} : text.substr(second + 1);
-      std::size_t ordinal = 0;
-      const char* const ordinalEnd = ordinalText.data() + ordinalText.size();
-      const std::from_chars_result parsed = std::from_chars(ordinalText.data(), ordinalEnd, ordinal);
-      if (twin.empty() || parsed.ec != std::errc() || parsed.ptr != ordinalEnd || ordinal == 0 || !IsValue(value, _shape))
-      {
-        _error = std::format("line {} is not a twin's name, an ordinal from 1 and {}", line.line, Describe(_shape));
-        return false;
-      }
-      if (!_answers.emplace(std::pair{std::string(twin), ordinal}, std::string(value)).second)
-      {
-        _error = std::format("line {} gives {}'s answer {} again", line.line, twin, ordinal);
-        return false;
-      }
-    }
-    return true;
-  }
-
-  Answers m_answers;
-};
 
 } // namespace GameLogicTests

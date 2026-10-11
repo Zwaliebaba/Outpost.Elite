@@ -172,9 +172,8 @@ jobs:
       #
       # Build\RunTests.py runs them as vstest processes at once, one per shard of test classes; one
       # shard takes every class the others do not name, so nothing is left out, and a shard that runs
-      # no test fails. The shards are balanced on the classes' measured times; the replay corpus is
-      # about half of the whole (a private repository's windows-latest has two vCPUs; a public one's
-      # has four).
+      # no test fails. The shards are balanced on the classes' measured times. Since D57 deleted the
+      # replay corpus's test and the twins (ADR-028), the suite is one shard of a few seconds.
       - name: Run the tests
         shell: pwsh
         run: python Build\RunTests.py --configuration $env:CONFIGURATION

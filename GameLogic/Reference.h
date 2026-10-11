@@ -14,7 +14,7 @@ namespace Elite
 
 // ADR-001 and ADR-007: the reference binary, byte for byte, and the one byte the host changes in memory
 // (D5), the protection's "already shown" flag at DS:25E4. Nothing reads the file (D3, D36), and since D28 it is not in the tree
-// (ADR-020): its load image is checked in (ReferenceImage.h), and ReferenceImageTests holds it to the hash measured from it.
+// (ADR-020): its load image is checked in (ReferenceImage.h), and since D57 nothing holds it to the file's bytes (ADR-028).
 inline constexpr std::uint16_t D5_OFFSET = 0x25E4;
 
 // The image's layout: one code segment at paragraph 0 of the image, 0x8F40 bytes, and the data segment
@@ -41,7 +41,7 @@ inline constexpr DosDateTime START_MOMENT = {1980, 1, 1, 0, 0, 0, 0};
 [[nodiscard]] std::optional<std::vector<std::uint8_t>> ReferenceLoadImage();
 
 /// The first of _name found walking up from the working directory, and then from the repository this
-/// file was compiled in; empty if there is none. How the tests and tools find Replays/ and the known answers.
+/// file was compiled in; empty if there is none. How the tests find the subsystems' known answers.
 [[nodiscard]] std::filesystem::path FindInRepository(const std::filesystem::path& _name);
 
 /// A whole file, or nothing if it cannot be read.

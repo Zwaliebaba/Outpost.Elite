@@ -30,7 +30,7 @@
 // the native routines where the original's entries are (ADR-010), and follows the steps (Replay.h) in paced time: shots
 // go to DIR/NAME.png, digests to standard output. DOS's files live in DIR/files, which must be empty when the run
 // starts, as a replay's conditions require (ADR-008); a run refuses one that is not. A file step copies from the replay
-// file's own directory, or from Replays/ in the repository for --steps.
+// file's own directory, or from the working directory for --steps.
 //
 // A digest with an expected value that does not match fails the run. Nothing writes a digest back: since D7 deleted the
 // interpreter there is no original to record one from, and a digest changes only by a ruling (ADR-008 item 7).
@@ -238,7 +238,7 @@ int Run(int _argc, char** _argv)
   // (Elite::ExpectedStop), which for an end step is with the program ended.
   Elite::StopReason reason = Elite::StopReason::Reached;
   bool asExpected = true;
-  const std::filesystem::path sources = options.replay.empty() ? Elite::FindInRepository("Replays") : options.replay.parent_path();
+  const std::filesystem::path sources = options.replay.empty() ? std::filesystem::current_path() : options.replay.parent_path();
   Elite::ReplayPlayer player(platform, game->State(), files, sources);
   std::size_t mismatches = 0;
   GuardTally tally;
