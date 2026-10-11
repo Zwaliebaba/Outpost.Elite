@@ -1,6 +1,6 @@
 # ADR-010 — Native routines, and how each is proved
 
-**Status:** accepted 2026-10-10, with the change that implements it. That change contains:
+**Status:** accepted 2026-10-10, with the change that implements it. That change contains: **Amended 2026-10-11:** the data overlay, `DataOverlay.h` and `DataField.h`, is deleted; native code and the tests reach the game's state as members of `GameData` (ADR-024, ADR-025).
 
 - the hooks and the comparison in `Machine` (`NativeCode`, `Pc::Hook`, `Pc::CallNear`);
 - the data overlay and `Guest` in `GameLogic`;
