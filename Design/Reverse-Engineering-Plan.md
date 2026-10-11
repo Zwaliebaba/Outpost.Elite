@@ -254,3 +254,4 @@ Elite's procedural galaxy is thoroughly documented: the starting seeds, Lave's e
 | [ADR-018](ADR/ADR-018-the-gamestate-owns-the-games-memory.md) | The `GameState` owns the game's memory: `GameData`, generated at the original layout, and `Memory`'s mapped regions (D19, D23) | Phase 4 — written |
 | [ADR-019](ADR/ADR-019-the-reference-as-generated-tables.md) | The reference's image as generated tables: `ELITES.EXE` not read at run time (D3, D23) | Phase 4 — written |
 | [ADR-020](ADR/ADR-020-elites-exe-leaves-the-tree.md) | `ELITES.EXE` leaves the tree: the image held to a measured hash, the loader tested on synthetic files (D28) | Phase 5 — written |
+| [ADR-021](ADR/ADR-021-the-games-files-native.md) | The game's files native, on a `Platform` the `Game` owns (D27 step 1) | Phase 5 — written |
