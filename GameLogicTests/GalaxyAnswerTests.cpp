@@ -36,7 +36,7 @@ constexpr std::size_t SYSTEMS = 256;
 
   std::string name;
   const std::span<const Elite::Counted<std::uint8_t>> characters =
-    _state.BytesFrom(_state.Data().commander.selectedSystemName, _state.Data().commander.selectedSystemNameLength);
+    Elite::BytesOf(_state.Data().commander.selectedSystemName).first(_state.Data().commander.selectedSystemNameLength);
   for (const std::uint8_t character : characters)
   {
     name += static_cast<char>(character);

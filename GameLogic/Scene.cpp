@@ -8,8 +8,10 @@
 #include "Maths.h"
 #include "SceneTables.h"
 #include "SharedTables.h"
+#include "Text.h"
 #include "Video.h"
 
+#include <algorithm>
 #include <initializer_list>
 #include <optional>
 
@@ -129,7 +131,7 @@ constexpr std::size_t BOX_REFLECTION_SKIP = 0x12; // three vertices
 // starts at, where the original holds its address.
 [[nodiscard]] std::span<Counted<std::uint8_t>> Vertices(GameState& _state)
 {
-  return _state.BytesFrom(_state.Data().scene.vertexBuffer, VERTEX_REACH);
+  return BytesOf(_state.Data().scene.vertexBuffer);
 }
 
 // The high byte of sineTable's word at byte _angle, which is even: a signed byte.
@@ -684,14 +686,14 @@ void DrawSunOrPlanetDisc(GameState& _state, SpaceObject& _slot, std::uint16_t _r
 struct SupernovaGlow
 {
   std::uint16_t heat; // AX, AH 0: the heat, which stands for the sun's radius
-  std::uint16_t slot; // DI after it: the sun's, or past the ship slots once an energy bomb went off and its LOOP looked at them
+  SlotIndex slot;     // DI after it: the sun's, or past the ship slots once an energy bomb went off and its LOOP looked at them
 };
 
 // SupernovaHeat (CS:3F57): once supernovaFrames has counted down to 1, where an INC keeps it, the sun's heat is supernovaHeat,
 // first the cabin temperature, growing by a quarter of itself (at least 1) a frame; when it overflows a byte, the player is
 // killed (KillPlayer, with StartPlayerDeathSound's STI) and an energy bomb goes off (DetonateEnergyBomb, its copies backwards when
 // _backward), and the heat is FFh. None while the countdown runs, or when it is 0. _slot is the sun's slot, DI.
-[[nodiscard]] std::optional<SupernovaGlow> SupernovaHeat(GameState& _state, Hardware& _hardware, std::uint16_t _slot, bool _backward)
+[[nodiscard]] std::optional<SupernovaGlow> SupernovaHeat(GameState& _state, Hardware& _hardware, SlotIndex _slot, bool _backward)
 {
   if (_state.Data().commander.supernovaFrames == 0)
   {
@@ -721,10 +723,11 @@ struct SupernovaGlow
       _hardware.EnableInterrupts();
     }
     // DetonateEnergyBomb's LOOP leaves DI past the ship slots, by the count it loads: objectSlotCount less 3, a byte, 0 for
-    // 65,536.
+    // 65,536, which DI's 64 KiB wrap brings back to the first ship's slot: the slot that many on from the first ship's. In flight
+    // objectSlotCount is 14h, as SetUpLocalSpace sets it and nothing else writes it, so that is the first debris slot, 17 on.
     const auto ships = static_cast<std::uint8_t>(_state.Data().flight.objectSlotCount - BOMB_FIRST_SLOT);
     DetonateEnergyBomb(_state, _hardware, _backward);
-    glow.slot = static_cast<std::uint16_t>(GameState::SlotOffset(SlotIndex::FirstShip) + LoopCount(ships) * SpaceObject::BYTES);
+    glow.slot = SlotAfter(SlotIndex::FirstShip, ships);
     glow.heat = 0xFF;
   }
   _state.Data().commander.supernovaHeat = Low(glow.heat);
@@ -735,7 +738,7 @@ struct SupernovaGlow
 struct SunDisc
 {
   std::uint16_t radius; // AX
-  std::uint16_t slot;   // DI: the sun's, or where a supernova's energy bomb left it
+  SlotIndex slot;       // DI: the sun's, or where a supernova's energy bomb left it
 };
 
 // SizeSun (CS:3F57-3FF4): the sun's radius, SupernovaHeat's heat or else 100 scaled to _slot's distance (ScaleByInverseDistance),
@@ -746,8 +749,8 @@ struct SunDisc
 // in front of the view.
 [[nodiscard]] std::optional<SunDisc> SizeSun(GameState& _state, Hardware& _hardware, SpaceObject& _slot, bool _backward)
 {
-  SunDisc disc{0, _state.OffsetOf(_slot)};
-  if (const std::optional<SupernovaGlow> glow = SupernovaHeat(_state, _hardware, _state.OffsetOf(_slot), _backward))
+  SunDisc disc{0, _state.IndexOf(_slot)};
+  if (const std::optional<SupernovaGlow> glow = SupernovaHeat(_state, _hardware, _state.IndexOf(_slot), _backward))
   {
     disc = SunDisc{glow->heat, glow->slot};
   }
@@ -757,7 +760,7 @@ struct SunDisc
     disc.radius = ScaleByInverseDistance(_slot, std::uint32_t{SUN_SCALE} << 16);
   }
   _state.Data().playerShip.cabinTemperature = Low(disc.radius);
-  if ((High(_state.ObjectAt(disc.slot).viewZ) & 0x80) != 0)
+  if ((High(_state.Slot(disc.slot).viewZ) & 0x80) != 0)
   {
     return std::nullopt;
   }
@@ -837,14 +840,28 @@ std::optional<std::uint16_t> SizePlanet(GameState& _state, Hardware& _hardware, 
   return radius;
 }
 
+// The most vertices a blueprint has ProjectVertices project: a count of vertexBuffer's, which holds 42.
+[[nodiscard]] consteval std::size_t MostProjectedVertices()
+{
+  std::size_t most = 0;
+  for (const Blueprint& blueprint : BLUEPRINTS)
+  {
+    most = std::max<std::size_t>(most, blueprint.projectedVertices);
+  }
+  return most;
+}
+
+static_assert(MostProjectedVertices() * VERTEX_BYTES <= VERTEX_REACH, "a blueprint projects vertexBuffer's vertices alone");
+
 } // namespace
 
 void ProjectVertices(GameState& _state)
 {
   // MOV CX,[projectedVertexCount] / AND CX,CX / JE, then LOOP: a count of the whole word, 0 none. SI walks the vertices and DI the
   // points they become, in place; PUSH SI / POP SI keep the caller's.
+  // The count is a blueprint's (RenderBlueprint), at most 37 of vertexBuffer's 42 vertices (MostProjectedVertices).
   const std::uint16_t count = _state.Data().scene.projectedVertexCount;
-  const std::span<Counted<std::uint8_t>> vertices = _state.BytesFrom(_state.Data().scene.vertexBuffer, std::size_t{count} * VERTEX_BYTES);
+  const std::span<Counted<std::uint8_t>> vertices = BytesWithin(Vertices(_state), 0, std::size_t{count} * VERTEX_BYTES);
   std::size_t vertex = 0;
   std::size_t point = 0;
   for (std::uint16_t left = count; left != 0; --left)
@@ -905,8 +922,9 @@ void BuildBoxCornerVertices(GameState& _state, std::uint16_t _extents)
   const std::uint16_t length = Negate(std::uint16_t{High(extents)});
   // boxCornerVertices, vertex 34 on, the box's corners.
   const std::span<Counted<std::uint8_t>> vertices = Vertices(_state);
-  const auto corners = static_cast<std::size_t>(_state.OffsetOf(_state.Data().scene.vertexBuffer.boxCornerVertices) -
-                                                _state.OffsetOf(_state.Data().scene.vertexBuffer));
+  static_assert(GAME_DATA_OFFSET(scene.vertexBuffer.boxCornerVertices) ==
+                GAME_DATA_OFFSET(scene.vertexBuffer) + sizeof(SceneState::VertexBuffer::gap7230));
+  const std::size_t corners = sizeof(SceneState::VertexBuffer::gap7230);
   SetWordIn(vertices, corners + VERTEX_Z, length);
   SetWordIn(vertices, corners + VERTEX_BYTES + VERTEX_Z, length);
   SetWordIn(vertices, corners + 2 * VERTEX_BYTES + VERTEX_Z, length);
@@ -1234,7 +1252,7 @@ void DrawSunOrPlanet(GameState& _state, Hardware& _hardware, SpaceObject& _slot,
   // DI, that slot's, as the original draws it.
   if (const std::optional<SunDisc> disc = SizeSun(_state, _hardware, _slot, _backward))
   {
-    DrawSunOrPlanetDisc(_state, _state.ObjectAt(disc->slot), disc->radius, _backward);
+    DrawSunOrPlanetDisc(_state, _state.Slot(disc->slot), disc->radius, _backward);
   }
 }
 

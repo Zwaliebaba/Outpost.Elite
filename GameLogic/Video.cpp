@@ -8,6 +8,7 @@
 #include "SaveLoad.h"
 #include "SharedTables.h"
 #include "StartUp.h"
+#include "Text.h"
 #include "Timer.h"
 #include "VideoTables.h"
 
@@ -102,6 +103,16 @@ constexpr std::uint8_t CLIP_SPRITE_LEFT = 0x55;  // only the sprite's right byte
 constexpr std::uint8_t CLIP_SPRITE_RIGHT = 0xAA; // only its left byte is drawn
 constexpr std::uint16_t CIRCLE_CHORDS = 32;
 constexpr std::size_t CIRCLE_POINT_BYTES = 4;
+static_assert(sizeof(VideoState::CirclePoints) == std::size_t{CIRCLE_CHORDS} * CIRCLE_POINT_BYTES, "circlePoints holds the 32 points");
+
+// The drawing buffer is DrawingState's first three members, DS:0000-1FFF as in 1987: gap0000's row, spaceViewBuffer's 126 and
+// gap1FC0's.
+static_assert(GAME_DATA_OFFSET(drawing.spaceViewBuffer) == GAME_DATA_OFFSET(drawing.gap0000) + sizeof(DrawingState::gap0000) &&
+              GAME_DATA_OFFSET(drawing.gap1FC0) == GAME_DATA_OFFSET(drawing.spaceViewBuffer) + sizeof(DrawingState::spaceViewBuffer) &&
+              sizeof(DrawingState::gap0000) + sizeof(DrawingState::spaceViewBuffer) + sizeof(DrawingState::gap1FC0) ==
+                DRAWING_BUFFER_BYTES);
+// spaceViewBuffer's first byte in the drawing buffer, a row in: where PresentSpaceView's copy starts (MOV SI,spaceViewBuffer).
+constexpr std::uint16_t SPACE_VIEW_BUFFER_START = sizeof(DrawingState::gap0000);
 
 // XCHG AH,AL.
 [[nodiscard]] constexpr std::uint16_t SwapBytes(std::uint16_t _word) noexcept
@@ -140,20 +151,37 @@ constexpr std::size_t CIRCLE_POINT_BYTES = 4;
   return static_cast<std::uint8_t>((_byte >> count) | (_byte << ((8u - count) & 7u)));
 }
 
-// MOV BX,colorFillBytes / ADD BL,[drawColor]: the ADD carries nothing into BH, so a colour past the page's end would wrap to its
-// start. The offset the original reads.
-[[nodiscard]] std::uint16_t ColorFillByteOffset(std::uint8_t _color) noexcept
+// MOV BX,colorFillBytes / ADD BL,[drawColor]: colorFillBytes[_color], the original reading on past the table for a colour past 3.
+// drawColor is 0-3 wherever it is written: the code's colours, the laser beams' (BEAM_COLOR_MASK, and the toggle's 3 and 1), the
+// hyperspace rings' table, an edge's colour bits (EDGE_COLOR_BITS), and the sun's and the planet's, 1 or 2; it is 0 in the
+// image. One past 3 throws std::out_of_range.
+[[nodiscard]] std::uint8_t ColorFillByte(std::uint8_t _color)
 {
-  const std::uint16_t table = OriginalOffset("colorFillBytes");
-  return Join(High(table), static_cast<std::uint8_t>(Low(table) + _color));
+  return ByteWithin(std::span<const std::uint8_t>(COLOR_FILL_BYTES), _color);
+}
+
+// The byte of the drawing buffer at _offset, where a drawing routine's DI points. Every place they draw at is on it: lines,
+// spans, discs and triangles are clipped to its 256x128 pixels, and the direction flag is clear wherever the original runs them
+// (its one STD, at CS:2E4A, is cleared at CS:2E5C with no call between), so no string instruction runs down past its start. A
+// byte off it, which the original would reach in the data segment around the buffer, throws std::out_of_range.
+[[nodiscard]] Counted<std::uint8_t>& BufferByte(GameState& _state, std::uint16_t _offset)
+{
+  return ByteWithin(DrawingBuffer(_state), _offset);
+}
+
+// The word of the drawing buffer at _offset, as BufferByte finds its bytes.
+[[nodiscard]] std::span<Counted<std::uint8_t>> BufferWord(GameState& _state, std::uint16_t _offset)
+{
+  return BytesWithin(DrawingBuffer(_state), _offset, 2);
 }
 
 // AND [_offset],_keep / OR [_offset],_color: the pixels _keep clears, then _color's set, two writes.
 void Plot(GameState& _state, std::uint16_t _offset, std::uint8_t _keep, std::uint8_t _color)
 {
-  const auto kept = static_cast<std::uint8_t>(_state.Byte(_offset) & _keep);
-  _state.SetByte(_offset, kept);
-  _state.SetByte(_offset, static_cast<std::uint8_t>(kept | _color));
+  Counted<std::uint8_t>& pixels = BufferByte(_state, _offset);
+  const auto kept = static_cast<std::uint8_t>(pixels & _keep);
+  pixels = kept;
+  pixels = static_cast<std::uint8_t>(kept | _color);
 }
 
 // ROR DL,1 twice and ROR DH,1 twice: the pixel's color and keep-mask move one pixel right. The result
@@ -171,23 +199,36 @@ void Plot(GameState& _state, std::uint16_t _offset, std::uint8_t _keep, std::uin
   return _backward ? Negate(_bytes) : _bytes;
 }
 
-// STOSB: _value at _segment:_offset. Returns the offset _step on, what DI becomes.
-[[nodiscard]] std::uint16_t StoreByte(GameState& _state, std::uint16_t _segment, std::uint16_t _offset, std::uint8_t _value,
-                                      std::uint16_t _step)
+// STOSB with ES on the data segment: _value at the drawing buffer's byte _offset. Returns the offset _step on, what DI becomes.
+[[nodiscard]] std::uint16_t StoreBufferByte(GameState& _state, std::uint16_t _offset, std::uint8_t _value, std::uint16_t _step)
 {
-  _state.SetFarByte(_segment, _offset, _value);
+  BufferByte(_state, _offset) = _value;
   return static_cast<std::uint16_t>(_offset + _step);
 }
 
-// REP STOSW: _words words of _value from _segment:_offset, _step apart. Returns the offset after the last, what DI
-// becomes; CX ends at 0.
-[[nodiscard]] std::uint16_t RepeatStoreWords(GameState& _state, std::uint16_t _segment, std::uint16_t _offset, std::uint16_t _words,
-                                             std::uint16_t _value, std::uint16_t _step)
+// REP STOSW with ES on the data segment: _words words of _value into the drawing buffer from its byte _offset, _step apart.
+// Returns the offset after the last, what DI becomes; CX ends at 0.
+[[nodiscard]] std::uint16_t RepeatStoreBufferWords(GameState& _state, std::uint16_t _offset, std::uint16_t _words, std::uint16_t _value,
+                                                   std::uint16_t _step)
 {
   std::uint16_t offset = _offset;
   for (std::uint16_t words = _words; words != 0; --words)
   {
-    _state.SetFarWord(_segment, offset, _value);
+    SetWordIn(BufferWord(_state, offset), 0, _value);
+    offset = static_cast<std::uint16_t>(offset + _step);
+  }
+  return offset;
+}
+
+// REP STOSW with ES on the CGA's memory: _words words of _value from B800:_offset, _step apart. Returns the offset after the last,
+// what DI becomes; CX ends at 0.
+[[nodiscard]] std::uint16_t RepeatStoreVideoWords(GameState& _state, std::uint16_t _offset, std::uint16_t _words, std::uint16_t _value,
+                                                  std::uint16_t _step)
+{
+  std::uint16_t offset = _offset;
+  for (std::uint16_t words = _words; words != 0; --words)
+  {
+    _state.SetVideoWord(offset, _value);
     offset = static_cast<std::uint16_t>(offset + _step);
   }
   return offset;
@@ -200,14 +241,15 @@ struct StringOffsets
   std::uint16_t destination;
 };
 
-// REP MOVSW: _words words from _sourceSegment:_source to _segment:_destination, _step apart. CX ends at 0.
-[[nodiscard]] StringOffsets RepeatMoveWords(GameState& _state, std::uint16_t _sourceSegment, std::uint16_t _source, std::uint16_t _segment,
-                                            std::uint16_t _destination, std::uint16_t _words, std::uint16_t _step)
+// REP MOVSW from the data segment to the CGA's memory: _words words from the drawing buffer's byte _source to B800:_destination,
+// _step apart. CX ends at 0.
+[[nodiscard]] StringOffsets RepeatMoveBufferWords(GameState& _state, std::uint16_t _source, std::uint16_t _destination,
+                                                  std::uint16_t _words, std::uint16_t _step)
 {
   StringOffsets offsets{_source, _destination};
   for (std::uint16_t words = _words; words != 0; --words)
   {
-    _state.SetFarWord(_segment, offsets.destination, _state.FarWord(_sourceSegment, offsets.source));
+    _state.SetVideoWord(offsets.destination, WordIn(BufferWord(_state, offsets.source), 0));
     offsets.source = static_cast<std::uint16_t>(offsets.source + _step);
     offsets.destination = static_cast<std::uint16_t>(offsets.destination + _step);
   }
@@ -249,7 +291,7 @@ struct LineState
       _line.al = static_cast<std::uint8_t>((_line.al & _line.dh) | _line.dl);
       if (!NextPixel(_line.dl, _line.dh))
       {
-        _state.SetByte(_line.di, _line.al);
+        BufferByte(_state, _line.di) = _line.al;
         ++_line.di;
         if (--_line.cx == 0)
         {
@@ -259,7 +301,7 @@ struct LineState
       }
       if (--_line.cx == 0)
       {
-        _state.SetByte(_line.di, _line.al);
+        BufferByte(_state, _line.di) = _line.al;
         return false;
       }
     }
@@ -274,7 +316,7 @@ struct LineState
     _line.bh = High(_state.DataSegment());
     for (; _line.cx != 0; --_line.cx)
     {
-      _state.SetByte(_line.di, _line.al);
+      BufferByte(_state, _line.di) = _line.al;
       ++_line.di;
     }
   }
@@ -284,13 +326,13 @@ struct LineState
     return storesBytes;
   }
   _line.cx = _line.ah;
-  _line.al = _state.Byte(_line.di);
+  _line.al = BufferByte(_state, _line.di);
   do
   {
     _line.al = static_cast<std::uint8_t>((_line.al & _line.dh) | _line.dl);
     (void)NextPixel(_line.dl, _line.dh);
   } while (--_line.cx != 0);
-  _state.SetByte(_line.di, _line.al);
+  BufferByte(_state, _line.di) = _line.al;
   return storesBytes;
 }
 
@@ -351,22 +393,22 @@ void DrawShallowLine(GameState& _state, LineState& _line)
     {
       _line.ah = static_cast<std::uint8_t>(_line.ah + _line.bl);
       const bool sameByte = NextPixel(_line.dl, _line.dh);
-      _state.SetByte(_line.di, _line.al);
+      BufferByte(_state, _line.di) = _line.al;
       _line.di = static_cast<std::uint16_t>(_line.di + _line.bp + (sameByte ? 0 : 1));
-      _line.al = _state.Byte(_line.di);
+      _line.al = BufferByte(_state, _line.di);
     }
     else if (!NextPixel(_line.dl, _line.dh))
     {
-      _state.SetByte(_line.di, _line.al);
+      BufferByte(_state, _line.di) = _line.al;
       ++_line.di;
-      _line.al = _state.Byte(_line.di);
+      _line.al = BufferByte(_state, _line.di);
     }
     else
     {
       if (--_line.cx == 0)
       {
         _line.al = static_cast<std::uint8_t>((_line.al & _line.dh) | _line.dl);
-        _state.SetByte(_line.di, _line.al);
+        BufferByte(_state, _line.di) = _line.al;
         return;
       }
       continue;
@@ -655,9 +697,10 @@ void DrawSmallDisc(GameState& _state, const SmallDiscPlace& _place)
         // Both bytes, as a word, the sprite's left byte at the lower address: AND WORD [DI] with the bits' complement,
         // then OR WORD [DI] with the bits in the fill.
         const std::uint16_t word = SwapBytes(bits);
-        const auto kept = static_cast<std::uint16_t>(_state.Word(at) & ~word);
-        _state.SetWord(at, kept);
-        _state.SetWord(at, static_cast<std::uint16_t>(kept | (word & Join(fill, fill))));
+        const std::span<Counted<std::uint8_t>> pixels = BufferWord(_state, at);
+        const auto kept = static_cast<std::uint16_t>(WordIn(pixels, 0) & ~word);
+        SetWordIn(pixels, 0, kept);
+        SetWordIn(pixels, 0, static_cast<std::uint16_t>(kept | (word & Join(fill, fill))));
       }
     }
     at = static_cast<std::uint16_t>(at + ROW_BYTES);
@@ -1272,11 +1315,9 @@ void CopyLinePairs(GameState& _state, Hardware& _hardware, std::uint16_t _loop, 
   std::uint16_t pairs = _linePairs;
   for (;;)
   {
-    at = RepeatMoveWords(_state, _state.DataSegment(), at.source, GameState::VIDEO_SEGMENT, at.destination, BUFFER_LINE_WORDS,
-                         StringStep(_backward, 2));
+    at = RepeatMoveBufferWords(_state, at.source, at.destination, BUFFER_LINE_WORDS, StringStep(_backward, 2));
     at.destination = static_cast<std::uint16_t>(at.destination + TO_ODD_LINE);
-    at = RepeatMoveWords(_state, _state.DataSegment(), at.source, GameState::VIDEO_SEGMENT, at.destination, BUFFER_LINE_WORDS,
-                         StringStep(_backward, 2));
+    at = RepeatMoveBufferWords(_state, at.source, at.destination, BUFFER_LINE_WORDS, StringStep(_backward, 2));
     at.destination = static_cast<std::uint16_t>(at.destination - TO_NEXT_EVEN_LINE);
     if (--pairs == 0)
     {
@@ -1302,6 +1343,12 @@ ScreenChange MakeGraphicsScreen(GameState& _state, Hardware& _hardware, std::uin
 }
 
 } // namespace
+
+std::span<Counted<std::uint8_t>, DRAWING_BUFFER_BYTES> DrawingBuffer(GameState& _state) noexcept
+{
+  DrawingState& drawing = _state.Data().drawing;
+  return BytesThrough(drawing.gap0000, drawing.gap1FC0).first<DRAWING_BUFFER_BYTES>();
+}
 
 void SaveScreenshot(GameState& _state, Hardware& _hardware)
 {
@@ -1390,8 +1437,8 @@ void PresentSpaceView(GameState& _state, Hardware& _hardware, bool _backward)
   }
   _state.Data().flow.msSinceFrame = 0;
   WaitRetraceThenDelay(_hardware);
-  CopyLinePairs(_state, _hardware, SPACE_VIEW_COPY_LOOP, _state.OffsetOf(_state.Data().drawing.spaceViewBuffer), SPACE_VIEW_SCREEN_OFFSET,
-                SPACE_VIEW_LINE_PAIRS, _backward);
+  CopyLinePairs(_state, _hardware, SPACE_VIEW_COPY_LOOP, SPACE_VIEW_BUFFER_START, SPACE_VIEW_SCREEN_OFFSET, SPACE_VIEW_LINE_PAIRS,
+                _backward);
 }
 
 void CopyChartBufferToScreen(GameState& _state, Hardware& _hardware, std::uint8_t _bandsSkipped, bool _backward)
@@ -1410,14 +1457,14 @@ void CopyChartBufferToScreen(GameState& _state, Hardware& _hardware, std::uint8_
 void ClearDrawBuffer(GameState& _state, bool _backward)
 {
   // MOV AX,<the data segment> / MOV ES,AX, then REP STOSW of 0 from DI = 0.
-  (void)RepeatStoreWords(_state, _state.DataSegment(), 0, DRAW_BUFFER_WORDS, 0, StringStep(_backward, 2));
+  (void)RepeatStoreBufferWords(_state, 0, DRAW_BUFFER_WORDS, 0, StringStep(_backward, 2));
 }
 
 void PlotPixel(GameState& _state, std::uint8_t _x, std::uint8_t _row)
 {
   // The pixel's two bits in the colour's fill byte, kept from the byte at row * 64 + x / 4 by the AND, set by the OR.
   const std::uint8_t pixel = RotateRight(LEFT_PIXEL_MASK, static_cast<unsigned>((_x & 3) << 1));
-  const auto color = static_cast<std::uint8_t>(pixel & _state.Byte(ColorFillByteOffset(_state.Data().drawing.drawColor)));
+  const auto color = static_cast<std::uint8_t>(pixel & ColorFillByte(_state.Data().drawing.drawColor));
   Plot(_state, static_cast<std::uint16_t>(Join(_row, _x) >> 2), static_cast<std::uint8_t>(~pixel), color);
 }
 
@@ -1541,7 +1588,7 @@ bool DrawLine(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromRow, std
   }
   line.bh = line.al;
   line.di = static_cast<std::uint16_t>(Join(row, x) >> 2);
-  line.al = _state.Byte(ColorFillByteOffset(_state.Data().drawing.drawColor));
+  line.al = ColorFillByte(_state.Data().drawing.drawColor);
   line.ah = line.al;
   // DL the pixel's color in place, DH the mask that keeps the rest of its byte.
   const auto shift = static_cast<std::uint8_t>((x & 3) << 1);
@@ -1549,7 +1596,7 @@ bool DrawLine(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromRow, std
   line.dh = static_cast<std::uint8_t>(~pixel);
   line.al = static_cast<std::uint8_t>(line.al & pixel);
   line.dl = line.al;
-  line.al = _state.Byte(line.di);
+  line.al = BufferByte(_state, line.di);
   line.cx = shift;
   if (line.bh == 0)
   {
@@ -1654,10 +1701,9 @@ void FillSpan(GameState& _state, std::uint8_t _left, std::uint8_t _right, std::u
   {
     if ((middle & 1) != 0)
     {
-      at = StoreByte(_state, _state.DataSegment(), at, fill, StringStep(_backward, 1));
+      at = StoreBufferByte(_state, at, fill, StringStep(_backward, 1));
     }
-    at = RepeatStoreWords(_state, _state.DataSegment(), at, static_cast<std::uint16_t>(middle >> 1), Join(fill, fill),
-                          StringStep(_backward, 2));
+    at = RepeatStoreBufferWords(_state, at, static_cast<std::uint16_t>(middle >> 1), Join(fill, fill), StringStep(_backward, 2));
   }
   Plot(_state, at, High(rightMask), static_cast<std::uint8_t>(Low(rightMask) & fill));
 }
@@ -1665,8 +1711,7 @@ void FillSpan(GameState& _state, std::uint8_t _left, std::uint8_t _right, std::u
 bool DrawCircle(GameState& _state, std::uint8_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow)
 {
   // circlePoints: 32 points of four bytes, x and row words; each loop holds a point as the byte it starts at.
-  const std::span<Counted<std::uint8_t>> points =
-    _state.BytesFrom(_state.Data().video.circlePoints, std::size_t{CIRCLE_CHORDS} * CIRCLE_POINT_BYTES);
+  const std::span<Counted<std::uint8_t>> points = BytesOf(_state.Data().video.circlePoints);
   // PUSH CX / PUSH DX keep the centre. The first octant, circleOctant's eight bytes scaled by the radius / 128 (MUL BL / SHL AX,1 /
   // MOV AL,AH), a byte of 0 staying 0, as four points of words.
   const std::span<const std::uint8_t> octant(CIRCLE_OCTANT);
@@ -1751,7 +1796,7 @@ void FillTriangleSpan(GameState& _state, std::uint16_t _row, std::uint8_t _left,
   auto middle = static_cast<std::uint16_t>(bytes - 1);
   if (middle != 0 && (at & 1) != 0)
   {
-    at = StoreByte(_state, _state.DataSegment(), at, _fill, StringStep(_backward, 1));
+    at = StoreBufferByte(_state, at, _fill, StringStep(_backward, 1));
     --middle;
   }
   if (middle != 0)
@@ -1759,11 +1804,11 @@ void FillTriangleSpan(GameState& _state, std::uint16_t _row, std::uint8_t _left,
     const auto words = static_cast<std::uint16_t>(middle >> 1);
     if (words != 0)
     {
-      at = RepeatStoreWords(_state, _state.DataSegment(), at, words, Join(_fill, _fill), StringStep(_backward, 2));
+      at = RepeatStoreBufferWords(_state, at, words, Join(_fill, _fill), StringStep(_backward, 2));
     }
     if ((middle & 1) != 0)
     {
-      at = StoreByte(_state, _state.DataSegment(), at, _fill, StringStep(_backward, 1));
+      at = StoreBufferByte(_state, at, _fill, StringStep(_backward, 1));
     }
   }
   const std::uint16_t rightMask = TriangleEdgeMask(_right, true);
@@ -1899,14 +1944,13 @@ ScreenChange ShowCockpitScreen(GameState& _state, Hardware& _hardware, bool _bac
 
 void ClearCgaScreen(GameState& _state, bool _backward)
 {
-  (void)RepeatStoreWords(_state, GameState::VIDEO_SEGMENT, 0, CGA_BANK_WORDS, 0, StringStep(_backward, 2));
-  (void)RepeatStoreWords(_state, GameState::VIDEO_SEGMENT, CGA_ODD_BANK, CGA_BANK_WORDS, 0, StringStep(_backward, 2));
+  (void)RepeatStoreVideoWords(_state, 0, CGA_BANK_WORDS, 0, StringStep(_backward, 2));
+  (void)RepeatStoreVideoWords(_state, CGA_ODD_BANK, CGA_BANK_WORDS, 0, StringStep(_backward, 2));
 }
 
 void ClearTextScreen(GameState& _state, bool _backward)
 {
-  (void)RepeatStoreWords(_state, GameState::VIDEO_SEGMENT, 0, TEXT_CELLS, Join(_state.Data().drawing.textAttribute, SPACE),
-                         StringStep(_backward, 2));
+  (void)RepeatStoreVideoWords(_state, 0, TEXT_CELLS, Join(_state.Data().drawing.textAttribute, SPACE), StringStep(_backward, 2));
 }
 
 ScreenChange DrawChartFrame(GameState& _state, Hardware& _hardware, bool _backward)
@@ -1922,8 +1966,7 @@ ScreenChange DrawChartFrame(GameState& _state, Hardware& _hardware, bool _backwa
   // the routine finds (MOV CX,20h, then MOV CL,20h over the 0 the last left).
   for (const std::uint16_t line : CHART_FRAME_LINES)
   {
-    (void)RepeatStoreWords(_state, GameState::VIDEO_SEGMENT, line, CHART_FRAME_LINE_WORDS, CHART_FRAME_COLOR_WORD,
-                           StringStep(_backward, 2));
+    (void)RepeatStoreVideoWords(_state, line, CHART_FRAME_LINE_WORDS, CHART_FRAME_COLOR_WORD, StringStep(_backward, 2));
   }
   // PUSH DS / MOV DS,ES, then the verticals at x=31 and x=288 from line 9, a line a turn, alternating banks: the step to the next
   // line and the one after it swap each turn (XCHG BP,DX), and LOOP counts the lines.

@@ -180,8 +180,8 @@ void ClearChartTextLines(GameState& _state, std::uint16_t _ink, std::uint16_t _s
 /// TerminateSelectedSystemName (CS:60EB): a NUL after selectedSystemName.
 void TerminateSelectedSystemName(GameState& _state);
 
-/// FormatSelectedSystemDistance (CS:60F7): the distance digits with a decimal point, ending at DS:7D5F, a buffer the symbol
-/// table names no row for. Returns the text, from its first digit.
+/// FormatSelectedSystemDistance (CS:60F7): the distance digits with a decimal point, in the data screen's texts from data7D48,
+/// which the symbol table names no row for, ending at their byte 17h (DS:7D5F in 1987). Returns the text, from its first digit.
 std::string_view FormatSelectedSystemDistance(GameState& _state);
 
 /// ShowSystemDescription (CS:6FC0): descriptionBuffer zeroed a word at a time as REP STOSW does, backwards when _backward
@@ -189,23 +189,24 @@ std::string_view FormatSelectedSystemDistance(GameState& _state);
 /// page from row 19, word-wrapped at the last space within 36 characters.
 void ShowSystemDescription(GameState& _state, bool _backward);
 
-/// ExpandDescriptionText (CS:700F): the coded text _text expanded into DS:_output, recursively: a byte of 1-6 runs the
+/// ExpandDescriptionText (CS:700F): the coded text _text expanded into descriptionBuffer from its byte _output, recursively: a byte
+/// of 1-6 runs the
 /// control code's handler, as textControlCodes lists them, one of 80h up a phrase from its list (DESCRIPTION_PHRASE_LISTS)
 /// picked by NextDescriptionRandom, and any other is copied, but a space after a space, and a letter after a space
 /// upper-cased while descriptionCapitalize is 1. Returns the place past the last character written.
 std::uint16_t ExpandDescriptionText(GameState& _state, std::string_view _text, std::uint16_t _output);
 
 /// InsertSystemName (CS:707A): control code 1, the selected system's name, as CopySelectedNameLower leaves it,
-/// expanded into DS:_output. Returns the place past the last character written.
+/// expanded into descriptionBuffer from its byte _output. Returns the place past the last character written.
 std::uint16_t InsertSystemName(GameState& _state, std::uint16_t _output);
 
 /// InsertSystemAdjective (CS:708D): control code 2, the selected system's name less a final vowel, and "ian ",
-/// expanded into DS:_output. Returns the place past the last character written.
+/// expanded into descriptionBuffer from its byte _output. Returns the place past the last character written.
 std::uint16_t InsertSystemAdjective(GameState& _state, std::uint16_t _output);
 
 /// InsertRandomName (CS:70C1): control code 3, a name GenerateSystemName makes from descriptionSeed0-1, expanded into
-/// DS:_output; selectedSystemName's eight bytes are kept at DS:9650 meanwhile and put back, its length not. Returns the place past
-/// the last character written.
+/// descriptionBuffer from its byte _output; selectedSystemName's eight bytes are kept in invasionDebriefText meanwhile (at DS:9650
+/// in 1987) and put back, its length not. Returns the place past the last character written.
 std::uint16_t InsertRandomName(GameState& _state, std::uint16_t _output);
 
 /// BackspaceDescription (CS:7107): control code 4, the description's output at _output back one.
