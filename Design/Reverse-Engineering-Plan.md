@@ -143,16 +143,16 @@ The native platform comes first, and it changes nothing on purpose (D23). Video 
 **The route (D33).** D27's six device steps and D31's five layout steps are replaced by three pieces of work. Pixel identity of the whole state is not required (D32), and most of the step-by-step cost went into reproducing incidental emulator behaviour: change and port-write counts, DOS's handle numbers, the bytes of its file search, writes to the code segment. Step 1, native files on a `Platform` the `Game` owns, was done first and stays.
 
 1. **The guard** (D29, brought forward). It is recorded from today's build, in runs that still meet every 1987 digest:
-   - **picture digests:** video memory and the CGA's registers, at every corpus digest point and every twin answer. They gate every later change: what the player sees at those points stays the original's;
-   - **outcome checks** at the same points: the commander's state by name (credits, fuel, cargo, legal status, rating, galaxy and system, equipment, missions) and the flight state;
+   - **picture digests:** video memory and the CGA's registers, at every corpus digest point and every twin answer. They are reported, not gated: every run says which pictures still match the original's;
+   - **outcome checks** at the same points. The player's progress gates: credits, cargo, legal status, rating and kills, galaxy and system, equipment, missiles, missions, and docked or flying. The flight values that move with exact timing are reported: energy, shields and speed;
    - **known answers per subsystem** on value routines: the eight galaxies' systems and markets, and the maths.
 
-   From then on the state digests no longer gate (D25 ends). They are re-based or dropped as the layout changes.
+   From then on the state digests no longer gate (D25 ends). They are re-based or dropped as the layout changes. The gates are the progress outcomes, the subsystem answers and the owner's play-test.
 2. **The platform swap,** one change built in parallel:
    - files, with a new save format; sound; video; input; and a fixed-tick clock, all behind `Hardware`;
    - then `Machine`, paced time's cycle model and the `Dispatcher` are deleted.
 
-   Because the picture digests gate, the clock must deliver its ticks where paced time delivers them today. That is the swap's hardest part. It is gated by the guard and by the owner's play-test.
+   A replay is a list of inputs timed against the game clock, so its outcomes mean something only while it plays out the same. The new clock therefore keeps paced time's rules (work takes no time, waits end at the next tick, idle loops skip ahead) while every emulated device goes. If it cannot, the replays and their outcomes are re-recorded by ruling.
 3. **The natural layout,** in one or two changes:
    - stored offsets become indices or references;
    - `DS.x` becomes `state.x`, mostly by script;
@@ -228,7 +228,7 @@ Elite's procedural galaxy is thoroughly documented: the starting seeds, Lave's e
 | D30 | Whether the symbol table may give a container and its first row one address | Keep one row per address. | **Keep the rule** (2026-10-10): the first spans of containers stay unnamed gaps, described in their containers' notes (ADR-018 item 1). |
 | D31 | Whether `DataOverlay.h` and the 1987 in-memory layout go in Phase 5, before any change on purpose (asked by the owner) | Yes, after the native platform. | **In Phase 5** (2026-10-11): the natural layout, now the third piece of D33's route. This is D19's natural layout, brought before D26's divergence. *Amended by D32: no serialiser keeps the 1987 layout.* *Its steps became D33's third piece.* |
 | D32 | Whether anything must stay compatible with the original's formats: saved commanders, recorded replays, the digests' 1987 layout | Saves and replays need not; keep the digests tied to 1987 through a serialiser. | **No backwards compatibility, the digests included** (2026-10-11). A `.cdr` and a `.replay` may change format, and the state digests are re-based by ruling where the layout changes. Picture digests (video memory and CGA registers), recorded while every 1987 digest still holds, carry fidelity to the original through the natural layout (Phase 5's first piece, D33). |
-| D33 | Whether Phase 5 can go faster, given that the game need not be pixel-identical (asked by the owner) | Three pieces: the guard first, then the platform swap in one go, then the natural layout; the picture digests reported rather than gating. | **The faster route, with the picture digests gating** (2026-10-11): what the player sees at the corpus's points stays the original's. The rest of the state may differ, and is guarded by the outcome checks and the owner's play-test. Step 1 (files) is finished and kept. |
+| D33 | Whether Phase 5 can go faster, given that the game need not be pixel-identical (asked by the owner) | Three pieces: the guard first, then the platform swap in one go, then the natural layout; the picture digests reported rather than gating. | **The faster route, with the picture digests gating** (2026-10-11): what the player sees at the corpus's points stays the original's. The rest of the state may differ, and is guarded by the outcome checks and the owner's play-test. Step 1 (files) is finished and kept. *Amended the same day: the picture digests are reported, not gated, and so are the timing-sensitive flight outcomes. The player's progress outcomes and the subsystem answers gate.* |
 
 ## 9. ADRs this plan produces
 
