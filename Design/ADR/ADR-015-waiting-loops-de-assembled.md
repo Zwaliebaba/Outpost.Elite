@@ -1,6 +1,6 @@
 # ADR-015 — Waiting loops de-assembled: turn signatures
 
-**Status:** accepted 2026-10-10, with the change that implements it: `Pc::LoopTurn` taking a turn signature, `Hardware::LoopTurn`, and `WaitForTimerTick` de-assembled onto it. Amended the same day: a value that changes only with memory or a port may be left out of a signature (item 2). Item 5's choice is settled by [ADR-018](ADR-018-the-gamestate-owns-the-games-memory.md) item 4: not yet needed. Since [ADR-023](ADR-023-the-platform-swap.md) the `Platform` decides a turn idle, from the same signature and the same two counts.
+**Status:** accepted 2026-10-10, with the change that implements it: `Pc::LoopTurn` taking a turn signature, `Hardware::LoopTurn`, and `WaitForTimerTick` de-assembled onto it. Amended the same day: a value that changes only with memory or a port may be left out of a signature (item 2). Item 5's choice is settled by [ADR-018](ADR-018-the-gamestate-owns-the-games-memory.md) item 4: not yet needed. Since [ADR-023](ADR-023-the-platform-swap.md) the `Platform` decides a turn idle, from the same signature and the same two counts. **Item 5 settled 2026-10-11 by [ADR-024](ADR-024-members-that-count-their-changes.md):** the structs' fields count their own changes (`Counted`), so the count, and this rule, stay as they are.
 
 ## Context
 
