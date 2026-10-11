@@ -24,9 +24,9 @@ fatal on code MSVC accepts. The manual command in .clang-tidy's header passes no
 clang-tidy finds the CRT and the Windows SDK through the INCLUDE variable, so it must run from a
 Developer PowerShell (AGENTS.md §3) -- or, in CI, after the step that imports the MSVC environment.
 
-Each file's output is printed only when it has findings or errors. Exit status: 0 clean or nothing to
-lint, 1 findings (`.clang-tidy` sets WarningsAsErrors: '*', so any finding fails), 2 usage or
-environment error (no INCLUDE, no clang-tidy, no .clang-tidy, two solutions, an unreadable project).
+Each file's output is printed only when it has findings or errors. Exit status: 0 clean, 1 findings
+(`.clang-tidy` sets WarningsAsErrors: '*', so any finding fails), 2 usage or environment error (no
+INCLUDE, no clang-tidy, no .clang-tidy, no solution or two, an unreadable project, no .cpp to check).
 """
 
 import argparse
@@ -265,8 +265,8 @@ def main() -> int:
     print(f"error: more than one solution at the root: {', '.join(path.name for path in solutions)}", file=sys.stderr)
     return 2
   if not solutions:
-    print("RunClangTidy: no solution at the repository root yet -- nothing to lint.")
-    return 0
+    print("error: no solution at the repository root", file=sys.stderr)
+    return 2
 
   units: list[tuple[Path, list[str]]] = []
   try:
@@ -279,8 +279,8 @@ def main() -> int:
     print(f"error: cannot read the projects of {solutions[0].name}: {error}", file=sys.stderr)
     return 2
   if not units:
-    print(f"RunClangTidy: {solutions[0].name} builds no .cpp yet -- nothing to lint.")
-    return 0
+    print(f"error: {solutions[0].name} builds no .cpp, so there is nothing for clang-tidy to check", file=sys.stderr)
+    return 2
 
   if not os.environ.get("INCLUDE"):
     print("error: INCLUDE is not set, so clang-tidy cannot see the MSVC headers or the Windows SDK. Run this from a "
