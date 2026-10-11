@@ -215,7 +215,7 @@ void SlowDown(GameState& _state)
 // station) into the pitch plane, whichever of up or down is nearer; then on to state _next.
 void AimRoll(GameState& _state, bool _approach, std::uint8_t _next)
 {
-  (void)LoadPlayerAngles(_state);
+  LoadPlayerAngles(_state);
   const Vector target = RotatePitchYawRoll(_state, LoadStationPosition(_state, _approach));
   const std::uint16_t angle = ArcTangent2(_state, Quarter(target.x), Quarter(target.y));
   std::uint16_t magnitude = angle;
@@ -263,7 +263,7 @@ void PitchToTarget(GameState& _state, bool _approach, std::uint16_t _tolerance, 
 {
   if (!_approach)
   {
-    (void)LoadPlayerAngles(_state);
+    LoadPlayerAngles(_state);
   }
   const Vector target = RotatePitchYawRoll(_state, LoadStationPosition(_state, _approach));
   const std::uint16_t angle = ArcTangent2(_state, Quarter(target.y), Quarter(target.z));
@@ -482,7 +482,7 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
   // MOV AX,leavingStationMessage, or autoDockMessage when docked, for one frame.
   _state.Data().messagePointer = _state.Data().playerDocked != 0 ? Message::AutoDock : Message::LeavingStation;
   _state.Data().messageFrames = 1;
-  (void)UpdateMessageLine(_state, _backward);
+  UpdateMessageLine(_state, _backward);
   UpdateDashboard(_state);
 
   // Frame n of the first ten draws the first n rectangles, n in AX, pushed round the frame and popped for its INC; the turns carry
@@ -558,7 +558,7 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
   }
 }
 
-Message ToggleDockingComputer(GameState& _state, Hardware& _hardware)
+void ToggleDockingComputer(GameState& _state, Hardware& _hardware)
 {
   _state.Data().dockingKeyReleased = 0;
   if (_state.Data().dockingComputerOn == 1)
@@ -572,26 +572,29 @@ Message ToggleDockingComputer(GameState& _state, Hardware& _hardware)
       _state.Data().velocityDirty = 1;
     }
     StartLowBeep(_state);
-    return PostDockingMessage(_state, Message::DockingComputerOff);
+    (void)PostDockingMessage(_state, Message::DockingComputerOff);
+    return;
   }
   if (!InSafeZone(_state).inside)
   {
     _state.Data().dataA137 = 0;
     StartLowBeep(_state);
-    return PostDockingMessage(_state, Message::StationOutOfRange);
+    (void)PostDockingMessage(_state, Message::StationOutOfRange);
+    return;
   }
   if ((_state.Slot(SlotIndex::Station).flags & STATION_SHOT) != 0)
   {
     _state.Data().dataA137 = 0;
     StartLowBeep(_state);
-    return PostDockingMessage(_state, Message::DockingDenied);
+    (void)PostDockingMessage(_state, Message::DockingDenied);
+    return;
   }
   _state.Data().dockingComputerSteering = 0;
   _state.Data().dockingComputerState = SLOW_TO_STOP;
   _state.Data().dockingComputerOn = 1;
   StartMusic(_state, _hardware);
   StartBeep(_state);
-  return PostDockingMessage(_state, Message::DockingComputerOn);
+  (void)PostDockingMessage(_state, Message::DockingComputerOn);
 }
 
 void RunDockingComputer(GameState& _state)

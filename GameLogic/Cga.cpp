@@ -43,9 +43,8 @@ constexpr std::uint8_t ATTRIBUTE_BLINK = 0x80;
 constexpr std::uint8_t BRIGHT_COLOR_OFFSET = 8;
 
 /// Colours 1-3 of the 320x200 palettes, before intensity.
-constexpr std::array<std::uint8_t, 3> PALETTE_0 = {2, 4, 6};          // green, red, brown
-constexpr std::array<std::uint8_t, 3> PALETTE_1 = {3, 5, 7};          // cyan, magenta, light gray
-constexpr std::array<std::uint8_t, 3> PALETTE_MONOCHROME = {3, 4, 7}; // cyan, red, light gray
+constexpr std::array<std::uint8_t, 3> PALETTE_0 = {2, 4, 6}; // green, red, brown
+constexpr std::array<std::uint8_t, 3> PALETTE_1 = {3, 5, 7}; // cyan, magenta, light gray
 
 [[nodiscard]] std::uint8_t VideoByte(Cga::VideoMemory _memory, std::uint32_t _offset) noexcept
 {
@@ -104,7 +103,7 @@ std::uint8_t Cga::Status() const noexcept
   const auto line = static_cast<std::uint32_t>(phase / CGA_CYCLES_PER_LINE);
   const Cycles lineCycle = phase % CGA_CYCLES_PER_LINE;
 
-  auto status = static_cast<std::uint8_t>(STATUS_UNDRIVEN_BITS | STATUS_LIGHT_PEN_SWITCH_OPEN);
+  std::uint8_t status = 0;
   if (line >= CGA_VISIBLE_LINES || lineCycle >= DISPLAY_CYCLES_PER_LINE)
   {
     status = static_cast<std::uint8_t>(status | STATUS_DISPLAY_INACTIVE);
@@ -158,18 +157,9 @@ std::uint64_t Cga::FrameNumber() const noexcept
 
 void Cga::Render(VideoMemory _memory, FrameImage& _image) const noexcept
 {
-  if ((m_modeControl & MODE_VIDEO_ENABLE) == 0)
-  {
-    _image.pixels.fill(0);
-    _image.borderColor = 0;
-  }
-  else if ((m_modeControl & MODE_GRAPHICS) == 0)
+  if ((m_modeControl & MODE_GRAPHICS) == 0)
   {
     RenderText(_memory, _image);
-  }
-  else if ((m_modeControl & MODE_GRAPHICS_640) != 0)
-  {
-    RenderGraphics640(_memory, _image);
   }
   else
   {
@@ -256,9 +246,7 @@ void Cga::RenderGraphics320(VideoMemory _memory, FrameImage& _image) const noexc
 {
   const auto background = static_cast<std::uint8_t>(m_colorSelect & COLOR_SELECT_COLOR);
   const std::uint8_t brightness = (m_colorSelect & COLOR_SELECT_INTENSITY) != 0 ? BRIGHT_COLOR_OFFSET : 0;
-  const std::array<std::uint8_t, 3>& palette = (m_modeControl & MODE_BLACK_AND_WHITE) != 0     ? PALETTE_MONOCHROME
-                                               : (m_colorSelect & COLOR_SELECT_PALETTE_1) != 0 ? PALETTE_1
-                                                                                               : PALETTE_0;
+  const std::array<std::uint8_t, 3>& palette = (m_colorSelect & COLOR_SELECT_PALETTE_1) != 0 ? PALETTE_1 : PALETTE_0;
   const std::array<std::uint8_t, 4> colors = {background, static_cast<std::uint8_t>(palette[0] + brightness),
                                               static_cast<std::uint8_t>(palette[1] + brightness),
                                               static_cast<std::uint8_t>(palette[2] + brightness)};
@@ -281,28 +269,6 @@ void Cga::RenderGraphics320(VideoMemory _memory, FrameImage& _image) const noexc
     }
   }
   _image.borderColor = background;
-}
-
-void Cga::RenderGraphics640(VideoMemory _memory, FrameImage& _image) const noexcept
-{
-  const auto foreground = static_cast<std::uint8_t>(m_colorSelect & COLOR_SELECT_COLOR);
-  const std::uint32_t start = StartAddress() * 2;
-
-  std::size_t pixel = 0;
-  for (std::uint32_t line = 0; line < FrameImage::HEIGHT_PIXELS; ++line)
-  {
-    const std::uint32_t lineStart = start + (line / 2) * GRAPHICS_BYTES_PER_LINE;
-    const std::uint32_t bank = (line % 2) * GRAPHICS_BANK_BYTES;
-    for (std::uint32_t column = 0; column < GRAPHICS_BYTES_PER_LINE; ++column)
-    {
-      const std::uint8_t packed = VideoByte(_memory, ((lineStart + column) & GRAPHICS_BANK_MASK) | bank);
-      for (std::uint32_t dot = 0; dot < 8; ++dot)
-      {
-        _image.pixels[pixel++] = (packed & (0x80U >> dot)) != 0 ? foreground : std::uint8_t{0};
-      }
-    }
-  }
-  _image.borderColor = 0;
 }
 
 } // namespace Elite

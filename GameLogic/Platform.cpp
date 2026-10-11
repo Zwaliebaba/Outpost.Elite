@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <stdexcept>
 #include <utility>
-#include <vector>
 
 namespace Elite
 {
@@ -15,9 +14,8 @@ namespace Elite
 namespace
 {
 
-// The bits of the 8088's FLAGS that the platform keeps: the trap and interrupt flags. The rest of FLAGS is the processor's, and
-// there is none; native code passes the direction flag itself (_backward).
-constexpr std::uint16_t FLAG_TRAP = 0x0100;
+// The bit of the 8088's FLAGS that the platform keeps: the interrupt flag. The rest of FLAGS is the processor's, and there is
+// none: nothing sets the trap flag, and native code passes the direction flag itself (_backward).
 constexpr std::uint16_t FLAG_INTERRUPT = 0x0200;
 // DOS starts a program with FLAGS F202h: interrupts on and the direction flag clear (ADR-006 item 4).
 constexpr std::uint16_t ENTRY_FLAGS = 0xF202;
@@ -41,11 +39,8 @@ constexpr std::uint32_t ADDRESS_MASK = 0xFFFFF;
 
 constexpr std::uint8_t VECTOR_TIMER = 0x08;
 constexpr std::uint8_t VECTOR_KEYBOARD = 0x09;
-constexpr std::uint8_t VECTOR_USER_TIMER = 0x1C;
-constexpr std::uint8_t VECTOR_DOS = 0x21;
 constexpr std::uint8_t VECTOR_TERMINATE = 0x22;
 constexpr std::uint8_t VECTOR_MOUSE = 0x33;
-constexpr std::uint8_t DOS_PRINT_STRING = 0x09;
 
 // What the 8088 takes over the ROM's IRET, as the interpreter charged it until D7: Intel's 8086 figure and three words popped
 // over the 8-bit bus.
@@ -73,12 +68,8 @@ constexpr Cycles POP_REGISTER = 12;   // POP AX and POP DS
 // The system control port's bit 7, which the XT's keyboard is acknowledged by.
 constexpr std::uint8_t KEYBOARD_CLEAR = 0x80;
 
-// DOS's print string: its end, the characters it treats as its own, and the longest string it reads.
+// DOS's print string: its end.
 constexpr std::uint8_t STRING_TERMINATOR = '$';
-constexpr std::uint8_t CHARACTER_TAB = 0x09;
-constexpr std::uint8_t CHARACTER_BELL = 0x07;
-constexpr std::uint8_t TAB_COLUMNS = 8;
-constexpr std::uint32_t MAX_STRING_BYTES = 0x10000;
 
 constexpr std::uint32_t CENTISECONDS_PER_MINUTE = 60 * 100;
 
@@ -135,8 +126,8 @@ Platform::Platform(GameState& _state, FileStore& _files, const Desc& _desc)
   m_powerOnVectors = m_vectors;
   // The BIOS's two hardware handlers are native, and run whenever the program has put the BIOS's vectors back and an
   // interrupt falls due (ADR-011 item 3).
-  Hook(FarAddress{ROM_SEGMENT, TIMER_HANDLER_OFFSET}, "BiosTimerHandler", [this] { RunBiosTimerHandler(); });
-  Hook(FarAddress{ROM_SEGMENT, KEYBOARD_HANDLER_OFFSET}, "BiosKeyboardHandler", [this] { RunBiosKeyboardHandler(); });
+  Hook(FarAddress{ROM_SEGMENT, TIMER_HANDLER_OFFSET}, [this] { RunBiosTimerHandler(); });
+  Hook(FarAddress{ROM_SEGMENT, KEYBOARD_HANDLER_OFFSET}, [this] { RunBiosKeyboardHandler(); });
 }
 
 Platform::~Platform()
@@ -157,23 +148,21 @@ Platform::~Platform()
 
 // ── The program ──
 
-void Platform::StartProgram(std::uint16_t _pspSegment) noexcept
+void Platform::StartProgram() noexcept
 {
-  m_pspSegment = _pspSegment;
   m_files.StartProgram();
 }
 
-void Platform::SetEntry(std::string _name, NativeRoutine _routine)
+void Platform::SetEntry(NativeRoutine _routine)
 {
   if (m_entry.routine)
   {
     throw std::logic_error("Platform: the program has a start routine already");
   }
-  m_entry.name = std::move(_name);
   m_entry.routine = std::move(_routine);
 }
 
-void Platform::Hook(FarAddress _address, std::string _name, NativeRoutine _routine)
+void Platform::Hook(FarAddress _address, NativeRoutine _routine)
 {
   // Made in place, in a node the map never moves.
   const auto [found, added] = m_hooks.try_emplace(Linear(_address));
@@ -181,7 +170,6 @@ void Platform::Hook(FarAddress _address, std::string _name, NativeRoutine _routi
   {
     throw std::logic_error("Platform: two native routines at one entry");
   }
-  found->second.name = std::move(_name);
   found->second.routine = std::move(_routine);
 }
 
@@ -216,12 +204,8 @@ StopReason Platform::RunUntil(Cycles _cycle)
 
 StopReason Platform::Stopped() const noexcept
 {
-  if (m_fault.has_value())
-    return StopReason::Fault;
   if (m_terminated)
     return StopReason::Terminated;
-  if (m_unported.has_value())
-    return StopReason::Unported;
   if (m_stepsSinceIdle >= m_spinLimit)
     return StopReason::Spinning;
   return StopReason::Reached;
@@ -351,7 +335,7 @@ void Platform::CallHandler(FarAddress _handler)
 {
   ++m_stepsSinceIdle;
   const std::uint16_t flags = m_flags;
-  m_flags = static_cast<std::uint16_t>(m_flags & ~(FLAG_INTERRUPT | FLAG_TRAP));
+  m_flags = static_cast<std::uint16_t>(m_flags & ~FLAG_INTERRUPT);
   RunHandler(_handler);
   m_flags = flags;
   if (Stopped() != StopReason::Reached)
@@ -360,11 +344,11 @@ void Platform::CallHandler(FarAddress _handler)
   }
 }
 
-// As the 8088 enters a handler: IF and TF cleared, the handler run, and its IRET putting the flags back as they were.
+// As the 8088 enters a handler: IF cleared, the handler run, and its IRET putting the flags back as they were.
 void Platform::Interrupt(std::uint8_t _vector)
 {
   const std::uint16_t flags = m_flags;
-  m_flags = static_cast<std::uint16_t>(m_flags & ~(FLAG_INTERRUPT | FLAG_TRAP));
+  m_flags = static_cast<std::uint16_t>(m_flags & ~FLAG_INTERRUPT);
   RunHandler(m_vectors[_vector]);
   m_flags = flags;
 }
@@ -383,8 +367,7 @@ void Platform::RunHandler(FarAddress _handler)
     m_instructionCycles += IRET_CYCLES; // the ROM's IRET, which the stubs nothing serves point to
     return;
   }
-  m_unported = _handler;
-  throw ProgramStopped{};
+  throw std::logic_error("Platform: an interrupt to code no native routine stands in for");
 }
 
 void Platform::SetInterruptVector(std::uint8_t _vector, FarAddress _handler) noexcept
@@ -450,17 +433,8 @@ void Platform::RunBiosTimerHandler()
     cycles += tick.dayEnded ? JUMP_NOT_TAKEN + XOR_REGISTERS + 2 * STORE_WORD + STORE_IMMEDIATE_BYTE : JUMP_TAKEN;
   }
   m_instructionCycles += cycles;
-  // INT 1Ch: the ROM's IRET while the vector is the BIOS's, as the program leaves it; otherwise the handler it names.
-  const FarAddress user = m_vectors[VECTOR_USER_TIMER];
-  if (user.segment != ROM_SEGMENT || RomByte(user) != OPCODE_IRET)
-  {
-    m_instructionCycles += SOFTWARE_INTERRUPT;
-    CallHandler(user);
-  }
-  else
-  {
-    m_instructionCycles += SOFTWARE_INTERRUPT + INTERRUPT_RETURN;
-  }
+  // INT 1Ch: the ROM's IRET, as the program leaves the vector.
+  m_instructionCycles += SOFTWARE_INTERRUPT + INTERRUPT_RETURN;
   // OUT 20h,20h.
   m_controller.EndOfInterrupt();
   ++m_portWrites;
@@ -570,49 +544,15 @@ std::uint64_t Platform::PortWrites() const noexcept
 
 void Platform::PrintDosString(std::uint16_t _segment, std::uint16_t _offset)
 {
-  if (!m_bios.TeletypeAvailable())
+  for (auto at = _offset;; ++at)
   {
-    Refuse(FaultKind::UnsupportedRequest, VECTOR_DOS, DOS_PRINT_STRING, 0);
-  }
-  std::vector<std::uint8_t> text;
-  for (std::uint32_t index = 0;; ++index)
-  {
-    if (index >= MAX_STRING_BYTES)
-    {
-      Refuse(FaultKind::UnsupportedRequest, VECTOR_DOS, DOS_PRINT_STRING, 0);
-    }
-    const std::uint8_t character = m_state.FarByte(_segment, static_cast<std::uint16_t>(_offset + index));
+    const std::uint8_t character = m_state.FarByte(_segment, at);
     if (character == STRING_TERMINATOR)
     {
-      break;
+      return;
     }
-    if (character == CHARACTER_BELL)
-    {
-      Refuse(FaultKind::UnsupportedRequest, VECTOR_DOS, DOS_PRINT_STRING, 0);
-    }
-    text.push_back(character);
+    m_bios.WriteTeletype(character);
   }
-  for (const std::uint8_t character : text)
-  {
-    if (character != CHARACTER_TAB)
-    {
-      m_bios.WriteTeletype(character);
-      continue;
-    }
-    do
-    {
-      m_bios.WriteTeletype(' ');
-    } while (m_bios.CursorColumn() % TAB_COLUMNS != 0);
-  }
-}
-
-void Platform::Refuse(FaultKind _kind, std::uint8_t _vector, std::uint8_t _ah, std::uint8_t _al)
-{
-  if (!m_fault.has_value())
-  {
-    m_fault = ServiceFault{_kind, _vector, _ah, _al};
-  }
-  throw ProgramStopped{};
 }
 
 // ── The picture ──

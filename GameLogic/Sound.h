@@ -40,13 +40,11 @@ void StartLowBeep(GameState& _state);
 /// StopSoundEffects (CS:7A63): every effect's trigger cleared. The original clears them under CLI.
 void StopSoundEffects(GameState& _state);
 
-/// StartImpactSound (CS:7AC3): a noise sweep, step 30 shrinking by 4. The original starts it under CLI. Returns the step
-/// length the step counter starts at.
-std::uint8_t StartImpactSound(GameState& _state);
+/// StartImpactSound (CS:7AC3): a noise sweep, step 30 shrinking by 4. The original starts it under CLI.
+void StartImpactSound(GameState& _state);
 
-/// StartExplosionSound (CS:7AFC): a noise sweep, step 50 shrinking by 8. The original starts it under CLI. Returns the
-/// step length the step counter starts at.
-std::uint8_t StartExplosionSound(GameState& _state);
+/// StartExplosionSound (CS:7AFC): a noise sweep, step 50 shrinking by 8. The original starts it under CLI.
+void StartExplosionSound(GameState& _state);
 
 /// StartPlayerDeathSound (CS:7B09): a noise sweep, step 60 shrinking by 7. The original starts it under CLI. Returns the
 /// step length the step counter starts at.

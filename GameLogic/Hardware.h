@@ -7,29 +7,10 @@
 
 #include <cstdint>
 #include <initializer_list>
-#include <optional>
 #include <string_view>
 
 namespace Elite
 {
-
-// ── Start, GameLoop and RunFlight (level 5, group F) ──
-
-/// What DOS answers to int 21h AH=30h: its version.
-struct DosVersion
-{
-  std::uint8_t major; ///< AL: 0 from DOS 1, which does not know the call
-  std::uint8_t minor; ///< AH
-};
-
-/// What DOS answers to int 21h AH=2Ch: the time of day.
-struct DosTime
-{
-  std::uint8_t hours;      ///< CH
-  std::uint8_t minutes;    ///< CL
-  std::uint8_t seconds;    ///< DH
-  std::uint8_t hundredths; ///< DL
-};
 
 /// The IBM PC's devices as the game drives them (ADR-014): what a de-assembled routine does to the speaker, the timer, the
 /// interrupt controller, the keyboard, the game port, the mouse, the CGA, the BIOS and DOS, named for what it does rather than
@@ -38,8 +19,7 @@ struct DosTime
 /// What paced time sees is kept: each operation counts the port writes the original's own sequence of port accesses made, in
 /// the BIOS's and DOS's services as in the game's own OUTs, and every byte of memory a service changes is counted where it
 /// lies, so a loop's turn idles exactly where it did (ADR-015). Each service operation returns what the service gives as a
-/// small typed result, and a call the services refuse stops the run (Platform::Refuse). Hardware holds no state of its own: a
-/// device's state is the platform's.
+/// small typed result. Hardware holds no state of its own: a device's state is the platform's.
 class Hardware
 {
 public:
@@ -88,31 +68,21 @@ public:
   /// IN AL,201h: the game port, the sticks' buttons in bits 4 to 7, each low while pressed.
   [[nodiscard]] std::uint8_t GamePortButtons();
 
-  /// Int 33h AX=0: the mouse driver reset. With no driver, int 33h is the ROM's IRET, and AX comes back as it went: 0, and
-  /// BX as 0.
-  MouseReset ResetMouse();
+  /// Int 33h AX=0: the mouse driver reset. With no driver, int 33h is the ROM's IRET. The game reads nothing it answers.
+  void ResetMouse();
 
-  /// Int 33h AX=5, BX=_button: the buttons held, and _button's presses (0 the left, 1 the right). With no driver, AX and BX
-  /// come back as they went, AX=5 and BX=_button, and CX and DX as 0.
-  [[nodiscard]] MousePresses ReadMousePresses(std::uint16_t _button);
+  /// Int 33h AX=5, BX=1: AX, the buttons held, bit 0 the left and bit 1 the right. With no driver AX comes back as it went: 5.
+  /// The game reads nothing else of the answer.
+  [[nodiscard]] std::uint16_t ReadMousePresses();
 
   /// Int 33h AX=0Bh: the mouse's motion since the last call. With no driver, CX and DX come back as 0.
   [[nodiscard]] MouseMotion ReadMouseMotion();
 
-  /// Int 10h AH=0, AL=_mode: the BIOS sets the CGA's mode.
+  /// Int 10h AH=0, AL=_mode: the BIOS sets the CGA's mode. Throws std::logic_error for a mode above 6, which the game never sets.
   void SetVideoMode(std::uint8_t _mode);
 
   /// Int 21h AH=9: DOS prints the text at _segment:_offset, up to its '$'.
   void PrintDosString(std::uint16_t _segment, std::uint16_t _offset);
-
-  /// Int 16h AH=1: the key at the head of the BIOS's buffer, left there, if there is one.
-  [[nodiscard]] std::optional<std::uint16_t> PeekBiosKey();
-
-  /// Int 16h AH=0: the key at the head of the BIOS's buffer, taken out of it: the scan code in the high byte and the
-  /// character in the low.
-  std::uint16_t ReadBiosKey();
-
-  // ── SaveLoad, StartUp, Timer and Input (level 4, group C) ──
 
   /// IN AL,3DAh: the CGA's status, bit 3 set during the vertical retrace.
   [[nodiscard]] std::uint8_t CgaStatus();
@@ -130,9 +100,9 @@ public:
   /// Int 10h AH=0Bh, BH=1, BL=_palette: the BIOS selects mode 4's palette.
   void SelectPalette(std::uint8_t _palette);
 
-  /// OUT 201h,_value: fires the game port's one-shots, each high until its stick's resistance times it out. The port does
-  /// not read the byte written.
-  void FireGamePort(std::uint8_t _value);
+  /// OUT 201h,AL: fires the game port's one-shots, each high until its stick's resistance times it out. The port does not
+  /// read the byte written, so none is passed.
+  void FireGamePort();
 
   /// IN AL,201h: the game port, its one-shots in bits 0 to 3, each high while it runs, and the buttons in bits 4 to 7.
   [[nodiscard]] std::uint8_t GamePortOneShots();
@@ -143,13 +113,6 @@ public:
 
   /// Int 1Ah AH=0: the BIOS's clock, its rollover flag cleared.
   [[nodiscard]] BiosClock ReadBiosClock();
-
-  /// Int 1Ah AH=1, CX:DX=_ticks: the BIOS's clock set.
-  void SetBiosClock(std::uint32_t _ticks);
-
-  /// The BIOS's handler for the timer's tick at _segment:_offset, run to its IRET as the game's own handler chains to it, by a
-  /// far jump with the interrupt's frame in place (Platform::CallHandler).
-  void RunBiosTimerTick(std::uint16_t _segment, std::uint16_t _offset);
 
   // DOS's file services, int 21h: native, on the platform's DosFiles, which answers as the emulated DOS did.
 
@@ -189,20 +152,9 @@ public:
   /// Int 21h AH=4Fh: the next file of the search the disk transfer area holds, into it.
   [[nodiscard]] DosAnswer FindNextFile();
 
-  // ── Docked, Galaxy, StartUp and Scene (level 5, group B3) ──
-
   /// _point's cycles pass as they pass in a wait (Platform::Spend): the time the IBM PC spent on work the reference sets no
   /// pace for, paid where an interpreted run paid it (ADR-013).
   void Spend(const PacingPoint& _point);
-
-  // ── Start, GameLoop and RunFlight (level 5, group F) ──
-
-  /// Int 21h AH=30h, AL=_al: DOS's version, 3.30. AL goes in as the caller has it: DOS 5 and later read it as which of two
-  /// answers to give in BH.
-  [[nodiscard]] DosVersion ReadDosVersion(std::uint8_t _al);
-
-  /// Int 21h AH=2Ch: DOS's time of day.
-  [[nodiscard]] DosTime ReadDosTime();
 
   // ── What the emulated PC kept in memory, outside the game's (D33) ──
 

@@ -13,8 +13,6 @@
 #include "Text.h"
 #include "Video.h"
 
-#include <utility>
-
 namespace Elite
 {
 
@@ -398,7 +396,7 @@ Explosion DropCargo(GameState& _state, const SpaceObject& _object, bool _backwar
 bool DestroyTarget(GameState& _state, Hardware& _hardware, SpaceObject& _target, bool _backward, std::uint16_t _bx)
 {
   const KillCredit credit = CreditKill(_state, _target);
-  (void)CheckMissileTargetDestroyed(_state, _target);
+  CheckMissileTargetDestroyed(_state, _target);
   (void)ExplodeObject(_state, _hardware, _target, _backward, credit.paidTenths ? std::uint16_t{0} : _bx);
   const bool filled = DrawLaserBeams(_state);
   _state.Data().miningLaserOnAsteroid = 0;
@@ -415,7 +413,7 @@ bool DestroyTarget(GameState& _state, Hardware& _hardware, SpaceObject& _target,
 [[nodiscard]] bool HitTarget(GameState& _state, Hardware& _hardware, SpaceObject& _target)
 {
   _target.flags = static_cast<std::uint8_t>(_target.flags | FLAG_HOSTILE);
-  (void)StartImpactSound(_state);
+  StartImpactSound(_state);
   _hardware.EnableInterrupts();
   const std::uint8_t laser = _state.Data().firingLaserType;
   if (laser == MINING_LASER && TypeOf(_target) == TYPE_ASTEROID)
@@ -592,7 +590,7 @@ Explosion ExplodeObject(GameState& _state, Hardware& _hardware, SpaceObject& _ob
   {
     return left;
   }
-  (void)StartExplosionSound(_state);
+  StartExplosionSound(_state);
   _hardware.EnableInterrupts();
   _state.Data().explodingStation = 1;
   if (!IsStation(_object).station)
@@ -763,16 +761,15 @@ bool ResolveLaserFire(GameState& _state, Hardware& _hardware, bool _backward)
   return filled;
 }
 
-bool CheckMissileTargetDestroyed(GameState& _state, const SpaceObject& _slot)
+void CheckMissileTargetDestroyed(GameState& _state, const SpaceObject& _slot)
 {
   if (_state.Data().missileState != MISSILE_LOCKED || _state.IndexOf(_slot) != _state.Data().missileTarget)
   {
-    return false;
+    return;
   }
   _state.Data().messagePointer = Message::MissileTargetDestroyed;
   _state.Data().messageFrames = MISSILE_MESSAGE_FRAMES;
   _state.Data().missileState = 0;
-  return true;
 }
 
 KillCredit CreditKill(GameState& _state, SpaceObject& _slot)
@@ -917,13 +914,12 @@ std::optional<std::uint8_t> TakeDamage(GameState& _state, std::uint16_t _damage)
   return stepLength;
 }
 
-Detonation DetonateEnergyBomb(GameState& _state, Hardware& _hardware, bool _backward)
+void DetonateEnergyBomb(GameState& _state, Hardware& _hardware, bool _backward)
 {
   if (InSafeZone(_state).inside)
   {
     AddSaturating(_state.Data().commanderBlock.legalStatus, LEGAL_STATUS_PER_BOMB);
   }
-  Detonation left{std::nullopt, std::nullopt};
   // Every active ship with a blip explodes, its cargo emptied first: MOV CL,objectSlotCount / SUB CL,3 / XOR CH,CH, then LOOP, a
   // count of 0 running 65,536 times; PUSH DI and PUSH CX round each explosion.
   SlotIndex slot = SlotIndex::FirstShip;
@@ -935,19 +931,10 @@ Detonation DetonateEnergyBomb(GameState& _state, Hardware& _hardware, bool _back
     {
       ship.cargo = 0;
       // With no cargo the barrel count is never divided, and the BX it is called with reaches nothing.
-      const Explosion exploded = ExplodeObject(_state, _hardware, ship, _backward, 0);
-      if (exploded.si)
-      {
-        left.si = exploded.si;
-      }
-      if (exploded.es)
-      {
-        left.es = exploded.es;
-      }
+      (void)ExplodeObject(_state, _hardware, ship, _backward, 0);
     }
     slot = SlotAfter(slot);
   }
-  return left;
 }
 
 void SpawnPlayerWreckage(GameState& _state)

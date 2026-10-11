@@ -24,15 +24,13 @@ class Speaker;
 /// refresh, which nothing here models. Channel 2's gate is the system control port's bit 0 (SetChannel2Gate, from the
 /// keyboard's 8255), and its output drives the speaker, which logs every change of channel 2's state (Speaker).
 ///
-/// Power-on state, as the BIOS leaves it: channel 0 in mode 3 with divisor 0, which is 65,536, so IRQ 0 at about 18.2 Hz;
-/// channel 1 in mode 2 with divisor 18; channel 2 in mode 3 with divisor 0533h, the BIOS beep's 896 Hz, gate low. All three
-/// were loaded at tick 0.
+/// Power-on state, as the BIOS leaves it: channel 0 with divisor 0, which is 65,536, so IRQ 0 at about 18.2 Hz, and channel 2
+/// with divisor 0533h, the BIOS beep's 896 Hz, gate low; both in mode 3, and loaded at tick 0. Channel 1, which the BIOS sets
+/// to mode 2 for the refresh, nothing sets up or reads.
 ///
-/// Modes 0 (interrupt on terminal count), 2 (rate generator) and 3 (square wave) are modelled, with the gate. A count is
-/// loaded into the counting element on the tick after it is written. In modes 2 and 3 a count written while the counter runs
-/// takes effect at the end of the current period (mode 2) or half-period (mode 3); a control word stops the counter until a
-/// count is written, which Program does at once. Mode 3 with an odd count N is high for (N+1)/2 ticks and low for (N-1)/2.
-/// Modes 1, 4 and 5 count but their output stays high, and BCD counting counts in binary; nothing the game does uses them.
+/// Mode 3 (square wave), the only mode the game programs, is modelled, with the gate. A count is loaded into the counting
+/// element on the tick after it is written. With an odd count N the output is high for (N+1)/2 ticks and low for (N-1)/2. BCD
+/// counting counts in binary; nothing the game does uses it.
 ///
 /// Time. The timer reads the clock when it is programmed and in Advance(), which the platform calls whenever its clock
 /// moves, and which raises IRQ 0 if channel 0's output rose since the last call. A move that spans several rising edges
@@ -50,15 +48,10 @@ public:
   /// channel 2's.
   struct Channel
   {
-    std::uint8_t mode = 3;
-    bool loaded = false;             // a count has been written since the last control word
-    bool gate = true;                // the gate input
-    std::uint32_t reload = 0;        // the count the counting element runs with, 1-65536
-    std::int64_t originTick = 0;     // the tick `reload` was loaded on: phase zero, output high (modes 2, 3)
-    std::int64_t pausedTick = 0;     // with the gate low: the tick it went low on
-    std::int64_t switchTick = NEVER; // modes 2, 3: when a count written while running takes over
-    std::uint32_t nextReload = 0;
-    std::int64_t nextOriginTick = 0;
+    bool loaded = false;         // a count has been written since the last control word
+    bool gate = true;            // the gate input
+    std::uint32_t reload = 0;    // the count the counting element runs with, 1-65536
+    std::int64_t originTick = 0; // the tick `reload` was loaded on: phase zero, output high
 
     /// Whether the output is high during tick _tick, the interval from that tick to the next.
     [[nodiscard]] bool OutputHigh(std::int64_t _tick) const noexcept;
@@ -67,7 +60,7 @@ public:
     [[nodiscard]] std::int64_t NextRisingEdge(std::int64_t _tick) const noexcept;
 
     /// The time-integral of the output (1 high, 0 low) over [_from, _to), in a time base of _unitsPerTick units to the tick,
-    /// with tick t covering [t * _unitsPerTick, (t + 1) * _unitsPerTick). A mode 2 or 3 wave whose period is shorter than
+    /// with tick t covering [t * _unitsPerTick, (t + 1) * _unitsPerTick). A wave whose period is shorter than
     /// _averageBelowTicks ticks counts as its mean level instead of its shape; 0 means always exact.
     [[nodiscard]] double Integral(std::uint64_t _from, std::uint64_t _to, std::uint64_t _unitsPerTick,
                                   std::uint32_t _averageBelowTicks) const noexcept;
@@ -80,9 +73,9 @@ public:
   IntervalTimer(const Cycles& _clock, InterruptController& _controller, Speaker& _speaker);
 
   /// OUT 43h,_control, then _divisor's low and high bytes to the channel _control selects: a control word for both bytes of a
-  /// count (bits 5-4 = 11), its mode in bits 3-1, then the count. A control word that sets channel 0's low output high raises
-  /// IRQ 0 at once. Throws std::invalid_argument for any other access, or for the 8254's read-back, which the game never
-  /// writes.
+  /// count (bits 5-4 = 11), mode 3 in bits 3-1 (or 7, which the 8253 takes as 3), then the count. A control word that sets
+  /// channel 0's low output high raises IRQ 0 at once. Throws std::invalid_argument for any other access or mode, or for the
+  /// 8254's read-back, which the game never writes.
   void Program(std::uint8_t _control, std::uint16_t _divisor);
 
   /// Raises IRQ 0 if channel 0's output rose since the last call.
@@ -112,7 +105,7 @@ public:
 
 private:
   [[nodiscard]] std::int64_t Now() const noexcept;
-  void WriteControl(std::size_t _channel, std::uint8_t _mode);
+  void WriteControl(std::size_t _channel);
   void LoadCount(std::size_t _channel, std::uint32_t _count);
   // Raises IRQ 0 for a rising edge caused by programming rather than by a tick.
   void CheckWriteEdge(std::size_t _channel, bool _wasHigh) noexcept;

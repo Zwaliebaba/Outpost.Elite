@@ -7,7 +7,6 @@
 
 #include <array>
 #include <memory>
-#include <optional>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
@@ -50,11 +49,6 @@ public:
   [[nodiscard]] Elite::Cga& Card() noexcept
   {
     return m_cga;
-  }
-
-  [[nodiscard]] Elite::GameState& State() noexcept
-  {
-    return *m_state;
   }
 
   void FillVideo(std::uint8_t _value)
@@ -115,9 +109,6 @@ public:
     Assert::AreEqual(0x29u, std::uint32_t{rig.Card().ModeControl()});
     Assert::AreEqual(0x30u, std::uint32_t{rig.Card().ColorSelect()});
     Assert::IsTrue(rig.VideoHolds(0x20, 0x07), L"spaces, light grey on black");
-    Assert::IsTrue(rig.Services().TeletypeAvailable(), L"a text mode");
-    Assert::AreEqual(0u, std::uint32_t{rig.Services().CursorColumn()});
-    Assert::IsFalse(rig.Services().PeekKey().has_value(), L"the keyboard buffer empty");
     Assert::AreEqual(NOON_TICKS, rig.Services().Ticks(), L"ticks at noon: 786,521");
     Assert::AreEqual(Elite::Bios::TICKS_PER_DAY - 1, Elite::Bios::TimerTicksAt(8'639'999), L"never a whole day");
   }
@@ -137,7 +128,6 @@ public:
     Assert::AreEqual(0x2Au, std::uint32_t{rig.Card().ModeControl()});
     Assert::AreEqual(0x30u, std::uint32_t{rig.Card().ColorSelect()});
     Assert::IsTrue(rig.VideoHolds(0x00, 0x00), L"all 16 KiB cleared to zero");
-    Assert::IsFalse(rig.Services().TeletypeAvailable(), L"a graphics mode");
     Assert::IsTrue(rig.Services().ChangeCount() > changes, L"the data area's mode, columns and page size, counted");
   }
 
@@ -145,11 +135,8 @@ public:
   TEST_METHOD(SetMode1ProgramsTheCgaAndBlanksTheText)
   {
     BiosRig rig;
-    for (const char character : {'O', 'K'})
-    {
-      Assert::IsTrue(rig.Services().WriteTeletype(static_cast<std::uint8_t>(character)));
-    }
-    Assert::AreEqual(2u, std::uint32_t{rig.Services().CursorColumn()});
+    rig.Services().WriteTeletype('O');
+    rig.Services().WriteTeletype('K');
     rig.FillVideo(0x55);
     const std::uint64_t writes = rig.Services().PortWrites();
 
@@ -159,7 +146,6 @@ public:
     Assert::IsTrue(rig.CrtcHolds(CRTC_40X25), L"the 40x25 CRTC table");
     Assert::AreEqual(0x28u, std::uint32_t{rig.Card().ModeControl()});
     Assert::IsTrue(rig.VideoHolds(0x20, 0x07), L"spaces, light grey on black");
-    Assert::AreEqual(0u, std::uint32_t{rig.Services().CursorColumn()}, L"cursor home");
   }
 
   // SetGraphicsMode's next call, int 10h AH=0Bh BH=1: palette 0, colour select's bit 5 cleared from the data area's copy.
@@ -176,7 +162,7 @@ public:
     Assert::AreEqual(0x30u, std::uint32_t{rig.Card().ColorSelect()}, L"palette 1: bit 5 set again");
   }
 
-  // A mode above 6 the BIOS refuses here, and nothing changes; Hardware stops the run.
+  // A mode above 6 the BIOS refuses here, and nothing changes. The game never asks for one: Hardware throws std::logic_error.
   TEST_METHOD(UnsupportedModeChangesNothing)
   {
     BiosRig rig;
@@ -185,25 +171,7 @@ public:
     Assert::IsFalse(rig.Services().SetMode(7));
     Assert::AreEqual(writes, rig.Services().PortWrites());
     Assert::AreEqual(changes, rig.Services().ChangeCount());
-    Assert::IsTrue(rig.CrtcHolds(CRTC_80X25));
-    Assert::IsTrue(rig.Services().TeletypeAvailable(), L"still mode 3");
-  }
-
-  // ExitToDos (CS:00B9) flushes the keyboard: AH=01h until ZF, AH=00h for each key. The ROM's own int 9 keeps no key, so a
-  // key is in the buffer only when a test puts one there.
-  TEST_METHOD(KeyboardBufferPeeksAndReads)
-  {
-    BiosRig rig;
-    Assert::IsFalse(rig.Services().PeekKey().has_value(), L"no key");
-    Assert::IsFalse(rig.Services().ReadKey().has_value(), L"and reading none would wait for ever: Hardware stops the run");
-
-    const std::uint64_t changes = rig.Services().ChangeCount();
-    rig.Services().InsertKey(0x1E61);
-    Assert::AreEqual(changes + 3, rig.Services().ChangeCount(), L"the key's two bytes and the tail's low byte");
-    Assert::AreEqual(0x1E61u, std::uint32_t{rig.Services().PeekKey().value_or(0)});
-    Assert::AreEqual(0x1E61u, std::uint32_t{rig.Services().PeekKey().value_or(0)}, L"a peek leaves it there");
-    Assert::AreEqual(0x1E61u, std::uint32_t{rig.Services().ReadKey().value_or(0)});
-    Assert::IsFalse(rig.Services().PeekKey().has_value(), L"a read takes it out");
+    Assert::IsTrue(rig.CrtcHolds(CRTC_80X25), L"still mode 3");
   }
 
   // RestoreTimerInterrupt (CS:016B) reads the count and sets it back a day when it is over one. The timer handler's count

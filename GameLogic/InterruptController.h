@@ -18,9 +18,8 @@ namespace Elite
 /// Requests. RaiseIrq(n) is an edge on line n: it sets request bit n, masked or not, and the bit stays set until the request
 /// is acknowledged; a second edge while it is set is not queued. A request is granted when it is unmasked and its priority is
 /// higher than that of every level in service. Acknowledge, the CPU's acknowledge cycle, moves the highest such request into
-/// service and returns its vector; with nothing to grant it returns IRQ7's without touching the levels in service, the
-/// 8259A's spurious interrupt. EndOfInterrupt, OUT 20h,20h, the non-specific end of interrupt that the game and the BIOS
-/// send, ends the highest level in service.
+/// service and returns its vector; the platform acknowledges only when a request is pending (InterruptPending). EndOfInterrupt,
+/// OUT 20h,20h, the non-specific end of interrupt that the game and the BIOS send, ends the highest level in service.
 class InterruptController
 {
 public:

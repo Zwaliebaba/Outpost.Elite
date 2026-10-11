@@ -2,7 +2,6 @@
 
 #include "Sound.h"
 
-#include "Arithmetic.h"
 #include "SoundTables.h"
 
 namespace Elite
@@ -118,14 +117,14 @@ std::uint8_t ToggleSpeaker(GameState& _state, Hardware& _hardware)
   return port;
 }
 
-std::uint8_t StartImpactSound(GameState& _state)
+void StartImpactSound(GameState& _state)
 {
-  return StartNoiseSweep(_state, 30, 4);
+  StartNoiseSweep(_state, 30, 4);
 }
 
-std::uint8_t StartExplosionSound(GameState& _state)
+void StartExplosionSound(GameState& _state)
 {
-  return StartNoiseSweep(_state, 50, 8);
+  StartNoiseSweep(_state, 50, 8);
 }
 
 std::uint8_t StartPlayerDeathSound(GameState& _state)

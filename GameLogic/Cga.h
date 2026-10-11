@@ -159,9 +159,6 @@ public:
   // Mode control, 3D8h.
   static constexpr std::uint8_t MODE_TEXT_80_COLUMNS = 0x01;
   static constexpr std::uint8_t MODE_GRAPHICS = 0x02;
-  static constexpr std::uint8_t MODE_BLACK_AND_WHITE = 0x04;
-  static constexpr std::uint8_t MODE_VIDEO_ENABLE = 0x08;
-  static constexpr std::uint8_t MODE_GRAPHICS_640 = 0x10;
   static constexpr std::uint8_t MODE_BLINK_ENABLE = 0x20;
 
   // Colour select, 3D9h.
@@ -171,9 +168,7 @@ public:
 
   // Status, 3DAh.
   static constexpr std::uint8_t STATUS_DISPLAY_INACTIVE = 0x01;
-  static constexpr std::uint8_t STATUS_LIGHT_PEN_SWITCH_OPEN = 0x04;
   static constexpr std::uint8_t STATUS_VERTICAL_SYNC = 0x08;
-  static constexpr std::uint8_t STATUS_UNDRIVEN_BITS = 0xF0;
 
   static constexpr Cycles DISPLAY_CYCLES_PER_LINE = 213;
   static constexpr std::uint32_t VERTICAL_SYNC_LINES = 16;
@@ -234,7 +229,6 @@ private:
 
   void RenderText(VideoMemory _memory, FrameImage& _image) const noexcept;
   void RenderGraphics320(VideoMemory _memory, FrameImage& _image) const noexcept;
-  void RenderGraphics640(VideoMemory _memory, FrameImage& _image) const noexcept;
 
   const Cycles& m_clock;
   std::array<std::uint8_t, CRTC_REGISTER_COUNT> m_crtc{};

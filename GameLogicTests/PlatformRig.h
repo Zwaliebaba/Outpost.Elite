@@ -33,7 +33,7 @@ public:
   /// The program's start: _routine runs on the native thread from the first RunUntil, and the program ends when it returns.
   void Start(Elite::NativeRoutine _routine)
   {
-    m_platform->SetEntry("Program", std::move(_routine));
+    m_platform->SetEntry(std::move(_routine));
   }
 
   [[nodiscard]] Elite::Platform& Host() noexcept

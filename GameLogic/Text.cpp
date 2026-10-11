@@ -311,7 +311,7 @@ SmallViewPlace DrawSmallViewChar(GameState& _state, std::uint8_t _letter, std::u
   return SmallViewPlace{static_cast<std::uint16_t>(_place.at + (shift == 0 ? 1 : 2)), shift};
 }
 
-SmallViewPlace DrawSmallViewString(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _position)
+void DrawSmallViewString(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _position)
 {
   // SHR DI,1 twice for the byte; SHL CL,1 / NOT CL / AND CL,4 for the shift, 4 where bit 1 of x is clear.
   const auto shift = static_cast<std::uint8_t>(~(Low(_position) << 1) & SMALL_GLYPH_SHIFT);
@@ -320,7 +320,6 @@ SmallViewPlace DrawSmallViewString(GameState& _state, std::string_view _text, st
   {
     next = DrawSmallViewChar(_state, static_cast<std::uint8_t>(letter), _ink, next);
   }
-  return next;
 }
 
 void FormatCredits(GameState& _state)
@@ -378,7 +377,7 @@ std::string_view MessageText(const GameState& _state, Message _message) noexcept
   return index < MESSAGE_TEXTS.size() ? MESSAGE_TEXTS[index] : std::string_view{};
 }
 
-bool UpdateMessageLine(GameState& _state, bool _backwards)
+void UpdateMessageLine(GameState& _state, bool _backwards)
 {
   UpdateWarnings(_state);
   if (_state.Data().messageFramesBytes.messageDrawn != 0)
@@ -388,7 +387,7 @@ bool UpdateMessageLine(GameState& _state, bool _backwards)
     if (frames != 0)
     {
       _state.Data().messageFrames = WithLow(_state.Data().messageFrames, static_cast<std::uint8_t>(frames - 1));
-      return false;
+      return;
     }
     const std::uint16_t view = _state.Data().viewAngle;
     _state.Data().messagePointer = view == 0           ? Message::FrontView
@@ -396,7 +395,7 @@ bool UpdateMessageLine(GameState& _state, bool _backwards)
                                    : view == VIEW_LEFT ? Message::LeftView
                                                        : Message::RightView;
   }
-  return ShowMessage(_state, _backwards);
+  ShowMessage(_state, _backwards);
 }
 
 void ClearMessageLine(GameState& _state, std::uint16_t _segment, bool _backwards)
@@ -466,7 +465,7 @@ std::uint16_t PrintTextModeString(GameState& _state, std::string_view _text, std
   return cell;
 }
 
-std::uint8_t ToggleMenuRowHighlight(GameState& _state, std::uint16_t _segment, std::uint16_t _row)
+void ToggleMenuRowHighlight(GameState& _state, std::uint16_t _segment, std::uint16_t _row)
 {
   const std::uint8_t attribute = SwapTextAttributeNibbles(_state);
   std::uint16_t cell = _row;
@@ -475,7 +474,6 @@ std::uint8_t ToggleMenuRowHighlight(GameState& _state, std::uint16_t _segment, s
     _state.SetFarByte(_segment, cell, attribute);
     cell = Offset(cell, 2);
   }
-  return attribute;
 }
 
 void ClearDockedMessageLine(GameState& _state, std::uint16_t _segment)
@@ -544,8 +542,8 @@ std::uint16_t PrintTextLines(GameState& _state, std::string_view _first, std::ui
   return line;
 }
 
-std::uint16_t ReadTextLine(GameState& _state, Hardware& _hardware, std::span<Counted<std::uint8_t>> _buffer, std::uint8_t _most,
-                           std::uint16_t _segment, std::uint16_t _cell)
+void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<Counted<std::uint8_t>> _buffer, std::uint8_t _most,
+                  std::uint16_t _segment, std::uint16_t _cell)
 {
   const TypedLine line{_buffer, _segment, _cell};
   ResetKeyboard(_state, _hardware);
@@ -588,7 +586,7 @@ std::uint16_t ReadTextLine(GameState& _state, Hardware& _hardware, std::span<Cou
         ToggleInputCursor(_state);
         RedrawInputLine(_state, _buffer, length, _segment, _cell);
       }
-      return length;
+      return;
     }
     if (character == BACKSPACE_KEY)
     {

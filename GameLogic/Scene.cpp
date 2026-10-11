@@ -328,7 +328,7 @@ struct WindingProducts
   const auto offScreen = [](ScreenPoint _point) { return static_cast<std::uint16_t>(_point.x) == OFF_SCREEN; };
   if (!offScreen(triangle.first) && !offScreen(triangle.second) && !offScreen(triangle.third))
   {
-    (void)FillTriangle(_state, triangle, _backward);
+    FillTriangle(_state, triangle, _backward);
   }
   return Offset(_vertices, TRIANGLE_VERTEX_BYTES);
 }
@@ -510,7 +510,7 @@ struct WindingProducts
   SpaceObject& target = _state.Slot(station);
   if (_state.Data().compassTargetIsStation != 0 && target.depth < DISTANT_DEPTH)
   {
-    (void)ClassifyStationPosition(_state, target);
+    ClassifyStationPosition(_state, target);
   }
   return station;
 }
@@ -721,7 +721,7 @@ struct SupernovaGlow
     // DetonateEnergyBomb's LOOP leaves DI past the ship slots, by the count it loads: objectSlotCount less 3, a byte, 0 for
     // 65,536.
     const auto ships = static_cast<std::uint8_t>(_state.Data().objectSlotCount - BOMB_FIRST_SLOT);
-    (void)DetonateEnergyBomb(_state, _hardware, _backward);
+    DetonateEnergyBomb(_state, _hardware, _backward);
     glow.slot = static_cast<std::uint16_t>(GameState::SlotOffset(SlotIndex::FirstShip) + LoopCount(ships) * SpaceObject::BYTES);
     glow.heat = 0xFF;
   }
@@ -864,7 +864,7 @@ void ProjectVertices(GameState& _state)
   }
 }
 
-Vector ReflectVertexAboutCenter(GameState& _state, std::size_t _vertex, std::size_t _reflection)
+void ReflectVertexAboutCenter(GameState& _state, std::size_t _vertex, std::size_t _reflection)
 {
   const std::span<Counted<std::uint8_t>> vertices = Vertices(_state);
   std::array<std::uint16_t, 3> center{};
@@ -877,7 +877,6 @@ Vector ReflectVertexAboutCenter(GameState& _state, std::size_t _vertex, std::siz
     SetWordIn(vertices, _reflection + bytes, static_cast<std::uint16_t>(center[axis] - WordIn(vertices, _vertex + bytes)));
     SetWordIn(vertices, _vertex + bytes, Offset(WordIn(vertices, _vertex + bytes), center[axis]));
   }
-  return Vector{static_cast<std::int16_t>(center[0]), static_cast<std::int16_t>(center[1]), static_cast<std::int16_t>(center[2])};
 }
 
 Vector OffsetVertexByCenter(GameState& _state, std::size_t _vertex)
@@ -945,19 +944,19 @@ void BuildBoxCornerVertices(GameState& _state, std::uint16_t _extents)
   }
   std::size_t vertex = corners;
   std::size_t reflection = BOX_SEVENTH_CORNER;
-  (void)ReflectVertexAboutCenter(_state, vertex, reflection);
+  ReflectVertexAboutCenter(_state, vertex, reflection);
   vertex += BOX_REFLECTION_STEP;
   reflection -= BOX_REFLECTION_STEP;
-  (void)ReflectVertexAboutCenter(_state, vertex, reflection);
+  ReflectVertexAboutCenter(_state, vertex, reflection);
   vertex += BOX_REFLECTION_SKIP;
   reflection -= VERTEX_BYTES;
-  (void)ReflectVertexAboutCenter(_state, vertex, reflection);
+  ReflectVertexAboutCenter(_state, vertex, reflection);
   vertex -= BOX_REFLECTION_STEP;
   reflection += BOX_REFLECTION_STEP;
-  (void)ReflectVertexAboutCenter(_state, vertex, reflection);
+  ReflectVertexAboutCenter(_state, vertex, reflection);
 }
 
-Vector BuildDodoVertices(GameState& _state)
+void BuildDodoVertices(GameState& _state)
 {
   SetDrawAngles(_state);
   // From the roll angle, in 72-degree steps: the sine and cosine high bytes of each, scaled to the two rings.
@@ -1008,17 +1007,15 @@ Vector BuildDodoVertices(GameState& _state)
   std::size_t reflection = DODO_REFLECTED;
   for (std::uint16_t left = DODO_REFLECTED_VERTICES; left != 0; --left)
   {
-    (void)ReflectVertexAboutCenter(_state, vertex, reflection);
+    ReflectVertexAboutCenter(_state, vertex, reflection);
     vertex += VERTEX_BYTES;
     reflection += VERTEX_BYTES;
   }
-  Vector center{};
   for (std::uint16_t left = DODO_SLOT_CORNERS; left != 0; --left)
   {
-    center = OffsetVertexByCenter(_state, vertex);
+    (void)OffsetVertexByCenter(_state, vertex);
     vertex += VERTEX_BYTES;
   }
-  return center;
 }
 
 DodoRadii ScaleDodoRadii(std::int8_t _value)
@@ -1149,9 +1146,9 @@ void TransformSunOrPlanet(GameState& _state, SpaceObject& _slot)
   _slot.type = static_cast<std::uint8_t>(_slot.type | SLOT_VISIBLE);
 }
 
-ViewTest ClassifyStationPosition(GameState& _state, SpaceObject& _slot)
+void ClassifyStationPosition(GameState& _state, SpaceObject& _slot)
 {
-  return ClassifyViewPosition(_state, _slot, CompassPosition(_slot));
+  (void)ClassifyViewPosition(_state, _slot, CompassPosition(_slot));
 }
 
 void TransformShip(GameState& _state, SpaceObject& _slot)
@@ -1162,7 +1159,7 @@ void TransformShip(GameState& _state, SpaceObject& _slot)
   if (_state.Data().commanderBlock.fuelScoopsFitted == 1 && _state.Data().gameOverFrames == 0)
   {
     // The scoop keeps AX, BX and CX, the view position, round its work.
-    (void)TryScoopObject(_state, _slot, view);
+    TryScoopObject(_state, _slot, view);
   }
   _slot.depth = 0;
   (void)ClassifyViewPosition(_state, _slot, view);
@@ -1180,7 +1177,7 @@ bool RunBlueprintHandler(GameState& _state, const Blueprint& _blueprint, bool _b
   }
   else
   {
-    (void)BuildDodoVertices(_state);
+    BuildDodoVertices(_state);
   }
   // Every blueprint's vertex program begins by loading a vertex into the accumulator, so what the handler leaves in BP, BX and
   // DX is never read.
@@ -1266,11 +1263,11 @@ void DrawDistantStation(GameState& _state, SpaceObject& _slot, bool _backward)
   DrawDisc(_state, static_cast<std::uint16_t>(rows << 1), x, row, _backward);
 }
 
-SinCos LoadPlayerAngles(GameState& _state)
+void LoadPlayerAngles(GameState& _state)
 {
   (void)SetSinCos(_state, 0, _state.Data().playerPitchAngle);
   (void)SetSinCos(_state, 1, _state.Data().playerYawAngle);
-  return SetSinCos(_state, 2, _state.Data().playerRollAngle);
+  (void)SetSinCos(_state, 2, _state.Data().playerRollAngle);
 }
 
 ScreenPoint ProjectToScreen(Vector _view)

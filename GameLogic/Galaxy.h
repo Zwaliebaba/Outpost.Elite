@@ -116,7 +116,7 @@ std::uint8_t FindNearestSystem(GameState& _state, std::uint16_t _countIfNone);
 
 /// ComputeDistanceToSystem (CS:12F9): the distance from the current system to the one in systemSeeds, in
 /// tenths of a light year: four times the root of dx^2 + (dy/2)^2. It writes selectedDistanceTenthsLy.
-std::uint16_t ComputeDistanceToSystem(GameState& _state);
+void ComputeDistanceToSystem(GameState& _state);
 
 /// ShowNearestSystemDistance (CS:1341): the system nearest the chart cursor selected (FindNearestSystem, with
 /// _countIfNone), and 'Distance: nnn.n Light Years' and its name on the two text lines under the chart, at _segment.
@@ -156,9 +156,8 @@ ScreenKey ShowGalacticChart(GameState& _state, Hardware& _hardware, bool _backwa
 ScreenKey ShowShortRangeChart(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _segment);
 
 /// DrawChartItems (CS:14C5): the short-range chart's chartItemCount items in colour 3: a label by DrawSmallViewString in ink
-/// FFFFh at its top-left corner, a disc (DrawDisc, which goes by _backward, the direction flag) at its centre. Returns whether it
-/// drew a disc, which leaves the original's ES on the data segment.
-bool DrawChartItems(GameState& _state, bool _backward);
+/// FFFFh at its top-left corner, a disc (DrawDisc, which goes by _backward, the direction flag) at its centre.
+void DrawChartItems(GameState& _state, bool _backward);
 
 /// PlaceChartLabels (CS:1505): each of chartItemCount pending labels, nudged clear of every chart item until
 /// NudgeChartLabel runs out of tries, added to chartItems by AddChartLabel.
@@ -176,11 +175,10 @@ void AddChartLabel(GameState& _state, ChartSpan _x, ChartSpan _rows);
 [[nodiscard]] bool ChartItemOverlaps(const GameState& _state, std::size_t _item, ChartSpan _x, ChartSpan _rows);
 
 /// ClearChartTextLines (CS:15BC): blankChartLine drawn in _ink at _segment over the two text lines under a chart.
-/// Returns the place after the second's last character.
-std::uint16_t ClearChartTextLines(GameState& _state, std::uint16_t _ink, std::uint16_t _segment);
+void ClearChartTextLines(GameState& _state, std::uint16_t _ink, std::uint16_t _segment);
 
-/// TerminateSelectedSystemName (CS:60EB): a NUL after selectedSystemName. Returns the name's length.
-std::uint8_t TerminateSelectedSystemName(GameState& _state);
+/// TerminateSelectedSystemName (CS:60EB): a NUL after selectedSystemName.
+void TerminateSelectedSystemName(GameState& _state);
 
 /// FormatSelectedSystemDistance (CS:60F7): the distance digits with a decimal point, ending at DS:7D5F, a buffer the symbol
 /// table names no row for. Returns the text, from its first digit.

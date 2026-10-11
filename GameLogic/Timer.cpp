@@ -3,7 +3,6 @@
 #include "Timer.h"
 
 #include "Arithmetic.h"
-#include "Input.h"
 #include "Sound.h"
 
 namespace Elite
@@ -17,21 +16,12 @@ constexpr std::uint16_t TIMER_INTERRUPT = 0x0215;
 constexpr std::uint8_t TIMER_VECTOR = 0x08;
 
 constexpr std::uint8_t PIT_CHANNEL0_SQUARE_WAVE = 0x36; // channel 0, both bytes, mode 3
-constexpr std::uint8_t PIT_CHANNEL0_RATE = 0x34;        // channel 0, both bytes, mode 2: the Amstrad's mouse
 constexpr std::uint16_t TICK_DIVISOR = 0x04A9;          // about 1000.15 Hz
-constexpr std::uint16_t AMSTRAD_MOUSE_DIVISOR = 0x5555;
 constexpr std::uint32_t TICKS_PER_DAY = 0x1800B0;
 constexpr std::uint8_t SPEAKER_BITS = 0x03; // gate and data, cleared at start-up
 constexpr std::uint8_t SPEAKER_DATA = 0x02;
 
-constexpr std::uint8_t HUM_TICKS = 0x0F;
 constexpr std::uint8_t SWEEP_LAST_PERIOD = 7;
-constexpr std::uint8_t SLOW_NOISE_TICKS = 5;
-constexpr std::uint16_t TWO_TONE_TICKS = 0x12C;
-constexpr std::uint8_t SIREN_TICKS = 0x4B;
-constexpr std::uint8_t SIREN_FIRST_STAGE = 2;
-constexpr std::uint8_t BIOS_CHAIN_TICKS_WITH_MOUSE = 55;
-constexpr std::uint8_t BIOS_CHAIN_TICKS = 18;
 
 constexpr std::uint8_t TUNE_RESTART = 'G';
 constexpr std::uint8_t TUNE_REST = 'F';
@@ -61,11 +51,6 @@ void OutSpeaker(GameState& _state, Hardware& _hardware, std::uint8_t _image)
 void SetSpeakerData(GameState& _state, Hardware& _hardware, std::uint8_t _bit)
 {
   OutSpeaker(_state, _hardware, static_cast<std::uint8_t>((_state.Data().speakerPortImage & ~SPEAKER_DATA) | _bit));
-}
-
-void ToggleSpeakerData(GameState& _state, Hardware& _hardware)
-{
-  OutSpeaker(_state, _hardware, static_cast<std::uint8_t>(_state.Data().speakerPortImage ^ SPEAKER_DATA));
 }
 
 // TimerTickMusic (0x72FF): titleTune's notes, each a byte (negative: no gap after it, 'F' a rest, 'G' the end) and a
@@ -161,51 +146,6 @@ void TickSweep(GameState& _state, Hardware& _hardware, SweepSample _sample, Coun
   }
 }
 
-// The siren (0x72C3): every other tick, a square wave of sirenCountdown's bit 0 or, in stage 1, of every tick.
-void TickSiren(GameState& _state, Hardware& _hardware)
-{
-  const auto half = static_cast<std::uint8_t>(_state.Data().sirenHalfTick ^ 1);
-  _state.Data().sirenHalfTick = half;
-  if (half != 0)
-  {
-    return;
-  }
-  const std::uint8_t countdown = Decrement(_state.Data().sirenCountdown);
-  if (countdown == 0)
-  {
-    const std::uint8_t stage = Decrement(_state.Data().sirenStage);
-    _state.Data().sirenCountdown = SIREN_TICKS;
-    if (stage == 0)
-    {
-      _state.Data().sirenStage = SIREN_FIRST_STAGE;
-      return;
-    }
-    _state.Data().sirenCountdown = static_cast<std::uint8_t>(SIREN_TICKS << 1);
-    return;
-  }
-  if (_state.Data().sirenStage == 1 || (countdown & 1) == 0)
-  {
-    ToggleSpeakerData(_state, _hardware);
-  }
-}
-
-// The two-tone (0x725E): twoToneTicks of a square wave on every tick in stage 1, every other tick otherwise.
-void TickTwoTone(GameState& _state, Hardware& _hardware)
-{
-  const auto ticks = static_cast<std::uint16_t>(_state.Data().twoToneTicks - 1);
-  _state.Data().twoToneTicks = ticks;
-  if (ticks == 0)
-  {
-    Decrement(_state.Data().twoToneStage);
-    _state.Data().twoToneTicks = TWO_TONE_TICKS;
-    return;
-  }
-  if (_state.Data().twoToneStage == 1 || (ticks & 1) == 0)
-  {
-    ToggleSpeakerData(_state, _hardware);
-  }
-}
-
 // TimerTickSoundEffects (0x717F): the beeps, then the one effect of highest priority.
 void TickSoundEffects(GameState& _state, Hardware& _hardware)
 {
@@ -216,11 +156,6 @@ void TickSoundEffects(GameState& _state, Hardware& _hardware)
   if (_state.Data().lowBeepTicks != 0)
   {
     SetSpeakerData(_state, _hardware, static_cast<std::uint8_t>(Decrement(_state.Data().lowBeepTicks) & SPEAKER_DATA));
-  }
-  if (_state.Data().sirenEnabled == 1)
-  {
-    TickSiren(_state, _hardware);
-    return;
   }
   if (_state.Data().noiseSweepActive == 1)
   {
@@ -236,48 +171,7 @@ void TickSoundEffects(GameState& _state, Hardware& _hardware)
   if (_state.Data().toneSweepActive == 1)
   {
     TickSweep(_state, _hardware, &ToggleSpeaker, _state.Data().toneSweepActive);
-    return;
   }
-  if (_state.Data().twoToneStage != 0)
-  {
-    TickTwoTone(_state, _hardware);
-    return;
-  }
-  if (_state.Data().slowNoiseCount != 0)
-  {
-    if (Decrement(_state.Data().slowNoiseDivider) != 0)
-    {
-      return;
-    }
-    _state.Data().slowNoiseDivider = SLOW_NOISE_TICKS;
-    Decrement(_state.Data().slowNoiseCount);
-    EmitNoiseSample(_state, _hardware);
-    return;
-  }
-  if (_state.Data().humEnabled == 1)
-  {
-    if (Decrement(_state.Data().humCountdownTicks) != 0)
-    {
-      return;
-    }
-    _state.Data().humCountdownTicks = HUM_TICKS;
-    ToggleSpeakerData(_state, _hardware);
-    return;
-  }
-  if (_state.Data().continuousNoise == 1)
-  {
-    EmitNoiseSample(_state, _hardware);
-  }
-}
-
-// TimerInterrupt's chain to the BIOS (0x0255): a far jump, through savedTimerVector, to the BIOS's handler for the tick, with
-// the interrupt's frame in place, so that the BIOS's IRET ends the interrupt. Here the handler is run to its IRET, which comes
-// back to this routine, and TimerInterrupt's own IRET takes the frame. savedTimerVector, in the code segment, holds what
-// InstallTimerInterrupt found on int 8, the BIOS's own handler: native code chains to that.
-void ChainToBiosTimer(Hardware& _hardware)
-{
-  const FarAddress bios = _hardware.BiosInterruptVector(TIMER_VECTOR);
-  _hardware.RunBiosTimerTick(bios.segment, bios.offset);
 }
 
 } // namespace
@@ -291,7 +185,7 @@ void InstallTimerInterrupt(GameState& _state, Hardware& _hardware)
   _state.Data().speakerPortImage = image;
   _hardware.SetSystemControl(image);
   // The game's own handler installed in place of the BIOS's, which the original keeps in savedTimerVector and native code takes
-  // from the BIOS (ChainToBiosTimer, RestoreTimerInterrupt).
+  // from the BIOS (RestoreTimerInterrupt).
   _hardware.SetInterruptVector(TIMER_VECTOR, FarAddress{_state.CodeSegment(), TIMER_INTERRUPT});
   _hardware.EnableInterrupts();
 }
@@ -302,27 +196,9 @@ BiosClock RestoreTimerInterrupt(GameState& _state, Hardware& _hardware)
   // The BIOS's handler put back, as InstallTimerInterrupt found it.
   _hardware.SetInterruptVector(TIMER_VECTOR, _hardware.BiosInterruptVector(TIMER_VECTOR));
   _hardware.SetSystemControl(_state.Data().savedSpeakerPort);
-  std::uint8_t mode = PIT_CHANNEL0_SQUARE_WAVE;
-  std::uint16_t divisor = 0;
-  if (_state.Data().amstradPresent == 1)
-  {
-    // The Amstrad's mouse driver keeps its own rate.
-    mode = PIT_CHANNEL0_RATE;
-    if (IsMouseDriverInstalled(_hardware).installed)
-    {
-      divisor = AMSTRAD_MOUSE_DIVISOR;
-    }
-  }
-  _hardware.SetTickDivisor(mode, divisor);
+  _hardware.SetTickDivisor(PIT_CHANNEL0_SQUARE_WAVE, 0);
   _hardware.EnableInterrupts();
-
-  // The BIOS clock past a day is set back by one: SUB DX / SBB CX.
-  const BiosClock clock = _hardware.ReadBiosClock();
-  if (clock.ticks >= TICKS_PER_DAY)
-  {
-    _hardware.SetBiosClock(clock.ticks - TICKS_PER_DAY);
-  }
-  return clock;
+  return _hardware.ReadBiosClock();
 }
 
 std::uint16_t ClockLessADayHigh(const BiosClock& _clock) noexcept
@@ -336,18 +212,6 @@ void TimerInterrupt(GameState& _state, Hardware& _hardware)
   // and the end of the interrupt's 20h, goes no further.
   TimerTick(_state, _hardware);
   _hardware.EndOfInterrupt();
-  if (_state.Data().amstradPresent != 1)
-  {
-    return;
-  }
-  // The Amstrad's BIOS clock still needs its 18.2 Hz: every 18th tick, or every 55th with the mouse driver's rate.
-  const bool mouse = IsMouseDriverInstalled(_hardware).installed;
-  if (Decrement(_state.Data().biosTimerChainCountdown) != 0)
-  {
-    return;
-  }
-  _state.Data().biosTimerChainCountdown = mouse ? BIOS_CHAIN_TICKS_WITH_MOUSE : BIOS_CHAIN_TICKS;
-  ChainToBiosTimer(_hardware);
 }
 
 void TimerTick(GameState& _state, Hardware& _hardware)
@@ -392,7 +256,7 @@ namespace
 {
 
 constexpr std::array ENTRIES = {
-  NativeEntry{TIMER_INTERRUPT, "TimerInterrupt", &TimerInterruptEntry, EntryReturn::Interrupt},
+  NativeEntry{TIMER_INTERRUPT, &TimerInterruptEntry, EntryReturn::Interrupt},
 };
 
 } // namespace

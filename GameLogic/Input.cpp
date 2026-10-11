@@ -6,8 +6,6 @@
 #include "Maths.h"
 #include "Video.h"
 
-#include <bit>
-
 namespace Elite
 {
 
@@ -18,9 +16,6 @@ namespace
 constexpr std::uint16_t WAIT_FOR_KEY_PRESS = 0x6DEC;
 
 constexpr std::uint8_t MOUSE_VECTOR = 0x33;
-// The button int 33h AX=5 is asked about: BX=1, the right. The game reads only AX, the buttons held, and discards the
-// right button's presses.
-constexpr std::uint16_t MOUSE_RIGHT_BUTTON = 1;
 constexpr std::uint8_t IRET_OPCODE = 0xCF;
 constexpr std::uint8_t MOST_MOUSE_STEP = 0x3F; // mickeys / 8, either way
 constexpr std::uint16_t MOUSE_STEP_LIMIT = 0x40;
@@ -277,28 +272,24 @@ MouseDriver IsMouseDriverInstalled(Hardware& _hardware)
   // The int 33h vector: installed when it is set and does not point at an IRET.
   const FarAddress vector = _hardware.InterruptVector(MOUSE_VECTOR);
   const bool set = (vector.offset | vector.segment) != 0;
-  return MouseDriver{set && _hardware.HandlerOpcode(vector) != IRET_OPCODE, vector.segment};
+  return MouseDriver{set && _hardware.HandlerOpcode(vector) != IRET_OPCODE};
 }
 
-KeyPress WaitForKeyPress(GameState& _state, Hardware& _hardware)
+void WaitForKeyPress(GameState& _state, Hardware& _hardware)
 {
   // GetKey until a key comes: each empty turn ends at the original's JE back to the entry. The turn carries nothing: GetKey
   // writes AH before it reads it and keeps BX, and it reads AL only when it takes a code, which changes keyBuffer's count.
-  bool screenshot = false;
   for (;;)
   {
-    KeyPress key = GetKey(_state, _hardware);
-    screenshot = screenshot || key.screenshot;
-    if (key.scanCode != 0)
+    if (GetKey(_state, _hardware).scanCode != 0)
     {
-      key.screenshot = screenshot;
-      return key;
+      return;
     }
     _hardware.LoopTurn(WAIT_FOR_KEY_PRESS, {});
   }
 }
 
-Steering ReadSteering(GameState& _state, Hardware& _hardware, std::uint8_t _trigger)
+Steering ReadSteering(GameState& _state, Hardware& _hardware)
 {
   const std::uint8_t device = _state.Data().inputDevice;
   if (device == KEYBOARD_DEVICE)
@@ -307,7 +298,7 @@ Steering ReadSteering(GameState& _state, Hardware& _hardware, std::uint8_t _trig
   }
   if (device == JOYSTICK_DEVICE)
   {
-    const Steering stick = ReadJoystickSteering(_state, _hardware, _trigger);
+    const Steering stick = ReadJoystickSteering(_state, _hardware);
     return _state.Data().joystickIsAmstrad == 1 ? ApplyKeyboardRates(_state, stick) : stick;
   }
   return ReadMouseSteering(_state, _hardware);
@@ -407,16 +398,11 @@ bool ReadFireButton(const GameState& _state, Hardware& _hardware)
     const std::uint8_t buttons = _hardware.GamePortButtons();
     return (buttons & STICK_BUTTON_A) == 0 || (buttons & STICK_BUTTON_B) == 0;
   }
-  if (_state.Data().amstradPresent == 1)
-  {
-    return Pressed(
-      static_cast<std::uint8_t>(_state.Data().keyDown.keyDownAmstradMouseRight | _state.Data().keyDown.keyDownAmstradMouseLeft));
-  }
   // SHR AL,1 twice: the left button, then the right.
-  return (Low(_hardware.ReadMousePresses(MOUSE_RIGHT_BUTTON).buttons) & MOUSE_LEFT_AND_RIGHT) != 0;
+  return (Low(_hardware.ReadMousePresses()) & MOUSE_LEFT_AND_RIGHT) != 0;
 }
 
-StickAxes ReadJoystickAxes(GameState& _state, Hardware& _hardware, std::uint8_t _trigger)
+StickAxes ReadJoystickAxes(GameState& _state, Hardware& _hardware)
 {
   // With interrupts off, the one-shots fired, and each axis's polls counted until its bit drops. The game port times its one-shots
   // by the instructions executed, so each of the original's is counted (CountInstructionCycles) before the port access after it.
@@ -427,7 +413,7 @@ StickAxes ReadJoystickAxes(GameState& _state, Hardware& _hardware, std::uint8_t 
   std::uint16_t x = AXIS_COUNT_START;
   std::uint16_t y = x;
   _hardware.CountInstructionCycles(BEFORE_FIRING_CYCLES);
-  _hardware.FireGamePort(_trigger);
+  _hardware.FireGamePort();
   _hardware.CountInstructionCycles(OUT_CYCLES);
   std::uint8_t bits = static_cast<std::uint8_t>(_hardware.GamePortOneShots() & BOTH_AXES);
   _hardware.CountInstructionCycles(IN_CYCLES + AND_CYCLES + CMP_CYCLES);
@@ -474,7 +460,7 @@ StickAxes ReadJoystickAxes(GameState& _state, Hardware& _hardware, std::uint8_t 
     _hardware.LoopTurn(BOTH_DOWN_TURN, {bits});
   }
   _hardware.CountInstructionCycles(NOT_TAKEN_CYCLES);
-  _hardware.FireGamePort(bits);
+  _hardware.FireGamePort();
   _hardware.CountInstructionCycles(OUT_CYCLES);
   for (;;)
   {
@@ -516,13 +502,13 @@ StickAxes ReadJoystickAxes(GameState& _state, Hardware& _hardware, std::uint8_t 
   return StickAxes{false, x, y};
 }
 
-Steering ReadJoystickSteering(GameState& _state, Hardware& _hardware, std::uint8_t _trigger)
+Steering ReadJoystickSteering(GameState& _state, Hardware& _hardware)
 {
   if (_state.Data().joystickIsAmstrad == 1)
   {
     return ReadAmstradStick(_state);
   }
-  const StickAxes axes = ReadJoystickAxes(_state, _hardware, _trigger);
+  const StickAxes axes = ReadJoystickAxes(_state, _hardware);
   if (axes.timedOut)
   {
     return Steering{0, 0};
@@ -564,16 +550,7 @@ Steering ReadMouseSteering(GameState& _state, Hardware& _hardware)
   const MouseMotion motion = _hardware.ReadMouseMotion();
   const std::uint8_t rollStep = MouseAxis(motion.acrossMickeys);
   const std::uint8_t pitchStep = MouseAxis(motion.downMickeys);
-  std::uint8_t buttons = 0;
-  if (_state.Data().amstradPresent == 1)
-  {
-    buttons =
-      static_cast<std::uint8_t>((_state.Data().keyDown.keyDownAmstradMouseRight << 1) | _state.Data().keyDown.keyDownAmstradMouseLeft);
-  }
-  else
-  {
-    buttons = Low(_hardware.ReadMousePresses(MOUSE_RIGHT_BUTTON).buttons);
-  }
+  const std::uint8_t buttons = Low(_hardware.ReadMousePresses());
   _state.Data().mouseButtons = buttons;
   if ((buttons & 1) != 0)
   {
@@ -583,9 +560,9 @@ Steering ReadMouseSteering(GameState& _state, Hardware& _hardware)
   return Steering{MouseRate(rollStep, Low(_state.Data().rollRate)), MouseRate(Negate(pitchStep), _state.Data().rollRateBytes.pitchRate)};
 }
 
-bool PollScreenDumpKey(GameState& _state, Hardware& _hardware)
+void PollScreenDumpKey(GameState& _state, Hardware& _hardware)
 {
-  return SaveScreenshotIfAsked(_state, _hardware);
+  SaveScreenshotIfAsked(_state, _hardware);
 }
 
 void ResetMouseIfSelected(const GameState& _state, Hardware& _hardware)
@@ -625,7 +602,7 @@ namespace
 {
 
 constexpr std::array ENTRIES = {
-  NativeEntry{0x0201, "KeyboardInterrupt", &KeyboardInterruptEntry, EntryReturn::Interrupt},
+  NativeEntry{0x0201, &KeyboardInterruptEntry, EntryReturn::Interrupt},
 };
 
 } // namespace

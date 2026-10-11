@@ -225,9 +225,6 @@
     <ClInclude Include="SceneTables.h">
       <Filter>Scene</Filter>
     </ClInclude>
-    <ClInclude Include="ServiceFault.h">
-      <Filter>Platform</Filter>
-    </ClInclude>
     <ClInclude Include="Sha256.h">
       <Filter>Replay</Filter>
     </ClInclude>

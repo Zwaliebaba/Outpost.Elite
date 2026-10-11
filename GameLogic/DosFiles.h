@@ -65,7 +65,6 @@ public:
   static constexpr std::uint16_t FIRST_HANDLE = 5;
   static constexpr std::uint16_t HANDLE_COUNT = 20; // the PSP's table, the first five DOS's standard handles
   static constexpr std::uint8_t CURRENT_DRIVE = 3;  // C:, counting A: as 1, as the transfer area does
-  static constexpr std::uint16_t TRANSFER_AREA_BYTES = 43;
 
   /// _state is the game's memory and _files where the files are; both must outlive this. DOS's clock starts at
   /// _startMoment.

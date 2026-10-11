@@ -124,9 +124,8 @@ void GalacticJump(GameState& _state, std::uint16_t _countIfNone)
   SelectSystemAtCursor(_state, Negate(index));
 }
 
-// The arrival's message, and a fuel leak armed for missions 1 and 3 at their stages. Returns the message, whose text's
-// address the original leaves in SI.
-[[nodiscard]] Message PostArrival(GameState& _state)
+// The arrival's message, and a fuel leak armed for missions 1 and 3 at their stages.
+void PostArrival(GameState& _state)
 {
   Message message = Message::ArrivalSystem;
   if (_state.Data().galacticJumpPending != 0)
@@ -144,7 +143,7 @@ void GalacticJump(GameState& _state, std::uint16_t _countIfNone)
   _state.Data().galacticJumpPending = 0;
   if (_state.Data().commanderBlock.witchspaceCountdown == 1)
   {
-    return message;
+    return;
   }
   const std::uint8_t mission = _state.Data().commanderBlock.missionNumber;
   const std::uint8_t stage = _state.Data().commanderBlock.missionStage;
@@ -152,7 +151,6 @@ void GalacticJump(GameState& _state, std::uint16_t _countIfNone)
   {
     _state.Data().commanderBlock.fuelLeakDelayFrames = FUEL_LEAK_DELAY_FRAMES;
   }
-  return message;
 }
 
 // add [_low], low byte of _value; adc [_high], high byte: _value added to the top 16 bits of a coordinate, _low's high byte
@@ -166,12 +164,12 @@ void AddCarried(Counted<std::uint16_t>& _low, Counted<std::uint8_t>& _high, std:
 
 } // namespace
 
-ScreenChange ArriveInSystem(GameState& _state, Hardware& _hardware, bool _backward)
+void ArriveInSystem(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  const ScreenChange change = SetUpLocalSpace(_state, _hardware, _backward);
+  (void)SetUpLocalSpace(_state, _hardware, _backward);
   if (_state.Data().commanderBlock.witchspaceCountdown != 0)
   {
-    return change;
+    return;
   }
   // A random word for z, in CX, then the offsets for y, in BX, and x, in AX.
   const std::uint16_t zOffset = NextRandom(_state);
@@ -194,7 +192,6 @@ ScreenChange ArriveInSystem(GameState& _state, Hardware& _hardware, bool _backwa
   _state.Data().playerPitchAngle = toStation.first;
   _state.Data().playerYawAngle = toStation.second;
   _state.Data().playerRollAngle = static_cast<std::uint16_t>(NextRandom(_state) & ANGLE_MASK);
-  return change;
 }
 
 MassLock IsMassLocked(GameState& _state)
@@ -326,12 +323,12 @@ void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_
 
   // The tunnel's frames end with FinishSpaceViewFrame's CLD, so the arrival copies forwards.
   PlayHyperspaceTunnel(_state, _hardware, _backward);
-  (void)ArriveInSystem(_state, _hardware, false);
-  (void)UpdateMissionSchedule(_state);
+  ArriveInSystem(_state, _hardware, false);
+  UpdateMissionSchedule(_state);
   _state.Data().commanderBlock.supernovaHeat = 0;
   _state.Data().commanderBlock.supernovaFrames = 0;
   _state.Data().commanderBlock.jumpedSinceBriefing = 1;
-  (void)PostArrival(_state);
+  PostArrival(_state);
 }
 
 void ResetHyperspaceRings(GameState& _state, bool _backward)
@@ -348,11 +345,10 @@ void ResetHyperspaceRings(GameState& _state, bool _backward)
   }
 }
 
-bool DrawHyperspaceRings(GameState& _state)
+void DrawHyperspaceRings(GameState& _state)
 {
   // LOOP over the ten rings, three bytes each: the delay, the radius and the colour. PUSH CX and PUSH SI keep the count and
   // the ring round DrawCircle.
-  bool filled = false;
   for (Counted<std::uint8_t>(&ring)[HYPERSPACE_RING_BYTES] : _state.Data().hyperspaceRings)
   {
     const std::uint8_t delay = ring[0];
@@ -369,14 +365,10 @@ bool DrawHyperspaceRings(GameState& _state)
       if (grown >= HYPERSPACE_RING_SMALLEST_DRAWN)
       {
         _state.Data().drawColor = std::uint8_t{ring[2]};
-        if (DrawCircle(_state, grown, SPACE_VIEW_CENTER_X, SPACE_VIEW_CENTER_ROW))
-        {
-          filled = true;
-        }
+        (void)DrawCircle(_state, grown, SPACE_VIEW_CENTER_X, SPACE_VIEW_CENTER_ROW);
       }
     }
   }
-  return filled;
 }
 
 void PlayHyperspaceTunnel(GameState& _state, Hardware& _hardware, bool _backward)
@@ -386,8 +378,8 @@ void PlayHyperspaceTunnel(GameState& _state, Hardware& _hardware, bool _backward
   bool backward = _backward;
   for (std::uint16_t frames = HYPERSPACE_TUNNEL_FRAMES;;)
   {
-    (void)UpdateMessageLine(_state, backward);
-    (void)DrawHyperspaceRings(_state);
+    UpdateMessageLine(_state, backward);
+    DrawHyperspaceRings(_state);
     FinishSpaceViewFrame(_state, _hardware);
     backward = false;
     if (--frames == 0)
@@ -417,11 +409,11 @@ void EnterWitchSpace(GameState& _state)
   _state.Data().commanderBlock.shortRangeCursorY = CHART_CENTER_Y;
 }
 
-bool UpdateMissionSchedule(GameState& _state)
+void UpdateMissionSchedule(GameState& _state)
 {
   if (_state.Data().commanderBlock.witchspaceCountdown != 0)
   {
-    return false;
+    return;
   }
   if (_state.Data().commanderBlock.maskSystemJumps != 0)
   {
@@ -434,7 +426,7 @@ bool UpdateMissionSchedule(GameState& _state)
   }
   if (_state.Data().commanderBlock.galaxyNumber == 0 && _state.Data().commanderBlock.data7629 != 1)
   {
-    return false;
+    return;
   }
   const auto jumps = static_cast<std::uint8_t>(_state.Data().commanderBlock.missionJumpCount + 1);
   _state.Data().commanderBlock.missionJumpCount = jumps;
@@ -442,7 +434,6 @@ bool UpdateMissionSchedule(GameState& _state)
   {
     _state.Data().commanderBlock.missionNumber = MissionStartedAt(jumps);
   }
-  return true;
 }
 
 void LatchHyperspaceTarget(GameState& _state)

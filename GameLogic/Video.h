@@ -124,8 +124,7 @@ void DrawDisc(GameState& _state, std::uint16_t _radius, std::uint16_t _centerX, 
 
 /// FillSpan (CS:1A07): row _doubledRow / 2 of the drawing buffer filled with discFillByte from x = _left to x = _right, the
 /// end bytes through spanLeftMasks and spanRightMasks and the bytes between them by STOSB and REP STOSW into ES = DS.
-/// Returns the offset of the span's last byte.
-std::uint16_t FillSpan(GameState& _state, std::uint8_t _left, std::uint8_t _right, std::uint8_t _doubledRow, bool _backward);
+void FillSpan(GameState& _state, std::uint8_t _left, std::uint8_t _right, std::uint8_t _doubledRow, bool _backward);
 
 /// FillTriangleSpan (CS:1B7A): x = _left to _right, _left first, of the drawing buffer's row at DS:_row filled with _fill: the
 /// end bytes through triangleEdgeMasks, which the original reads through BP from SS:0000, DS:AD60, and the bytes between
@@ -135,9 +134,8 @@ void FillTriangleSpan(GameState& _state, std::uint16_t _row, std::uint8_t _left,
 /// FillTriangle (CS:1BFB): _triangle filled with triangleFillPattern, its low byte on even rows and its high on odd ones. Wholly
 /// on the drawing buffer, the rows' spans are walked down from the top on 8.8 edges into a container, as the original pushes
 /// them, and drawn from the bottom up, as it pops them (DrawStackedSpansFromRow, FillTriangleSpan); otherwise FillClippedTriangle.
-/// The edges' steps are the instructions it patches into its code, ADD or SUB, which it writes as the original does. Returns
-/// false when the triangle is wholly off the buffer and nothing is drawn; otherwise the original sets ES to DS.
-bool FillTriangle(GameState& _state, Triangle _triangle, bool _backward);
+/// The edges' steps are the instructions it patches into its code, ADD or SUB, which it writes as the original does.
+void FillTriangle(GameState& _state, Triangle _triangle, bool _backward);
 
 /// FillClippedTriangle (CS:1E6E): FillTriangle's path for a triangle not wholly on the buffer, _doubled's rows twice the rows: one
 /// wholly left, above, right or below the buffer is not drawn; otherwise its rows are walked on 16.16 edges, only those on the

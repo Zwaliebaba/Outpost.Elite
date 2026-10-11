@@ -263,13 +263,6 @@ private:
     using Microsoft::VisualStudio::CppUnitTestFramework::Assert;
     Elite::Checkpoint checkpoint;
     const Elite::StopReason stopped = m_player.Play(_step, checkpoint);
-    if (stopped == Elite::StopReason::Unported)
-    {
-      const Elite::FarAddress at = m_rig.Host().UnportedAt().value_or(Elite::FarAddress{});
-      Assert::Fail((_where + L": the twin sent an interrupt to code no native routine stands in for, at " +
-                    Widen(std::format("{:04X}:{:04X}", at.segment, at.offset)))
-                     .c_str());
-    }
     Assert::IsTrue(stopped == _expected, (_where + L": the run stopped otherwise").c_str());
     return checkpoint;
   }

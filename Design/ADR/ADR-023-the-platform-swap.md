@@ -1,6 +1,6 @@
 # ADR-023 — The platform swap: every device native, and `Machine` deleted (D33)
 
-**Status:** accepted 2026-10-11, with the change that implements it: the PC's devices moved into `Elite::Platform`, then the `Machine` and `MachineTests` projects deleted. It is the second piece of D33's route ([Reverse-Engineering-Plan.md §5](../Reverse-Engineering-Plan.md#phase-5--beyond-the-original-outside-this-plan)), and finishes what ADR-021 began. The owner played main at `7242663`, with it, and reported that it works perfectly (2026-10-11).
+**Status:** accepted 2026-10-11, with the change that implements it: the PC's devices moved into `Elite::Platform`, then the `Machine` and `MachineTests` projects deleted. It is the second piece of D33's route ([Reverse-Engineering-Plan.md §5](../Reverse-Engineering-Plan.md#phase-5--beyond-the-original-outside-this-plan)), and finishes what ADR-021 began. The owner played main at `7242663`, with it, and reported that it works perfectly (2026-10-11). **Amended 2026-10-11 (D37):** the dead-code sweep removed what of the devices the game never reaches: the timer's other modes and its count written while running, the BIOS's key buffer and teletype control codes, the mouse driver's unread answers, the Amstrad paths, the CGA modes and status bits never used, `StopReason::Unported` and `Fault`, and `ServiceFault.h`. A state the game cannot reach now throws `std::logic_error`.
 
 ## Context
 

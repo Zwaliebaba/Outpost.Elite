@@ -34,9 +34,6 @@ constexpr std::uint16_t TEXT = 0x0200;
 // A handler's address in the program's code, which a vector can name and a native routine stand in for.
 constexpr Elite::FarAddress HANDLER{0x2000, 0x0010};
 
-// An address in the program's code that no native routine stands in for.
-constexpr Elite::FarAddress UNPORTED{0x2000, 0x0020};
-
 // What the 8088 takes over the ROM's IRET: Intel's 8086 figure and three words popped over the 8-bit bus.
 constexpr Elite::Cycles IRET_CYCLES = 24 + 3 * 4;
 
@@ -69,12 +66,6 @@ void Put(Elite::GameState& _state, std::uint16_t _offset, std::string_view _text
   {
     _state.SetByte(static_cast<std::uint16_t>(_offset + index), static_cast<std::uint8_t>(_text[index]));
   }
-}
-
-[[nodiscard]] Elite::ServiceFault FaultOf(const Elite::Platform& _platform)
-{
-  Assert::IsTrue(_platform.Fault().has_value(), L"a refused call is recorded");
-  return _platform.Fault().value_or(Elite::ServiceFault{});
 }
 
 // Sets its flag when it is destroyed: whether what the native thread was running was unwound.
@@ -131,32 +122,6 @@ public:
     Assert::AreEqual(std::uint64_t{0}, rig.Host().Clock(), L"it took no time");
     Assert::AreEqual(std::uint64_t{1}, rig.Host().Entry().calls);
     Assert::IsTrue(rig.Host().RunUntil(2'000'000) == Elite::StopReason::Terminated, L"and stays ended");
-  }
-
-  // A run stops at its first refused call, and that is the one reported, even if native code went on and made another.
-  TEST_METHOD(TheFirstRefusalIsKept)
-  {
-    PlatformRig rig("PlatformFirstFault");
-    bool unwound = false;
-    rig.Start(
-      [&rig, &unwound]
-      {
-        try
-        {
-          (void)rig.Native().ReadBiosKey(); // the buffer is empty: the ROM would wait for ever
-        }
-        catch (...)
-        {
-          unwound = true; // a routine that swallowed the stop, which no native routine does
-        }
-        rig.Native().SetVideoMode(7);
-      });
-    Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Elite::StopReason::Fault);
-    Assert::IsTrue(unwound);
-    const Elite::ServiceFault fault = FaultOf(rig.Host());
-    Assert::IsTrue(fault.kind == Elite::FaultKind::WouldBlock);
-    Assert::AreEqual(0x16u, std::uint32_t{fault.vector}, L"the keyboard read, not the mode set");
-    Assert::AreEqual(0x00u, std::uint32_t{fault.ah});
   }
 
   // Paced time (ADR-008): a loop that counts is work, and work takes no time: a turn whose signature changed never idles.
@@ -284,8 +249,8 @@ public:
   TEST_METHOD(TwoRoutinesAtOneEntryAreRefused)
   {
     PlatformRig rig("PlatformTwice");
-    rig.Host().Hook(HANDLER, "Handler", [] {});
-    Assert::ExpectException<std::logic_error>([&rig] { rig.Host().Hook(HANDLER, "Again", [] {}); }, L"a handler");
+    rig.Host().Hook(HANDLER, [] {});
+    Assert::ExpectException<std::logic_error>([&rig] { rig.Host().Hook(HANDLER, [] {}); }, L"a handler");
     rig.Start([] {});
     Assert::ExpectException<std::logic_error>([&rig] { rig.Start([] {}); }, L"the program's start");
   }
@@ -297,7 +262,7 @@ public:
     PlatformRig rig("PlatformInterrupts");
     bool enabledInside = true;
     bool enabledAfter = false;
-    rig.Host().Hook(HANDLER, "Handler", [&rig, &enabledInside] { enabledInside = rig.Host().InterruptsEnabled(); });
+    rig.Host().Hook(HANDLER, [&rig, &enabledInside] { enabledInside = rig.Host().InterruptsEnabled(); });
     const std::uint64_t changes = rig.Host().MemoryChanges();
     rig.Native().SetInterruptVector(0x60, HANDLER);
     Assert::AreEqual(changes + 3, rig.Host().MemoryChanges(), L"F000:FD60 to 2000:0010: three bytes changed");
@@ -316,20 +281,6 @@ public:
     Assert::AreEqual(std::uint64_t{1}, rig.Host().Hooks().at(0x20010).calls);
   }
 
-  // An interrupt whose vector names code no native routine stands in for stops the run there: nothing interprets it.
-  TEST_METHOD(AnInterruptToCodeNoRoutineStandsInForStopsTheRun)
-  {
-    PlatformRig rig("PlatformUnported");
-    rig.Start(
-      [&rig]
-      {
-        rig.Native().SetInterruptVector(0x60, UNPORTED);
-        rig.Host().SoftwareInterrupt(0x60);
-      });
-    Assert::IsTrue(rig.Host().RunUntil(1'000) == Elite::StopReason::Unported);
-    Assert::IsTrue(rig.Host().UnportedAt().value_or(Elite::FarAddress{}) == UNPORTED, L"where it was sent");
-  }
-
   // The game's own timer handler in vector 8: IRQ 0 is taken as the 8088 takes one, at each rising edge of channel 0 while
   // the program waits, with IF cleared and the entry's cycles on the instruction clock; the handler's end of interrupt lets
   // the next one in.
@@ -338,7 +289,7 @@ public:
     PlatformRig rig("PlatformIrq");
     std::vector<Elite::Cycles> taken;
     bool enabledInside = false;
-    rig.Host().Hook(HANDLER, "TimerHandler",
+    rig.Host().Hook(HANDLER,
                     [&rig, &taken, &enabledInside]
                     {
                       taken.push_back(rig.Host().Clock());
@@ -477,39 +428,8 @@ public:
     Assert::AreEqual(0x4Cu, std::uint32_t{platform.KeyboardController().SystemControl()}, L"bit 7 high, then low");
     Assert::AreEqual(std::uint64_t{3}, platform.PortWrites() - writes, L"61h twice, then the end of interrupt");
     Assert::AreEqual(std::uint64_t{0}, platform.MemoryChanges() - changes, L"nothing buffered");
-    Assert::IsFalse(platform.BiosServices().PeekKey().has_value());
     Assert::AreEqual(Elite::Platform::HARDWARE_INTERRUPT_CYCLES + 127, platform.InstructionCycles() - cycles);
     Assert::AreEqual(0u, std::uint32_t{platform.Interrupts().InServiceRegister()}, L"ended");
-  }
-
-  // Start (CS:000E) refuses to run when DOS's major version is 0.
-  TEST_METHOD(DosVersionIs330)
-  {
-    PlatformRig rig("PlatformDosVersion");
-    const Elite::DosVersion version = rig.Native().ReadDosVersion(0);
-    Assert::AreEqual(3u, std::uint32_t{version.major});
-    Assert::AreEqual(30u, std::uint32_t{version.minor});
-  }
-
-  // DOS's time of day is the start moment, 12:00:00.00 by default, plus the platform's time: 90.5 s later, 12:01:30.50.
-  TEST_METHOD(DosTimeIsTheStartMomentPlusThePlatformsTime)
-  {
-    PlatformRig rig("PlatformDosTime");
-    rig.Start(
-      [&rig]
-      {
-        rig.Native().DisableInterrupts();
-        for (;;)
-        {
-          rig.Native().LoopTurn(WAIT_LOOP, {});
-        }
-      });
-    Assert::IsTrue(rig.Host().RunUntil(431'931'764) == Elite::StopReason::Reached); // 90.5 s at 14.31818 MHz / 3
-    const Elite::DosTime time = rig.Native().ReadDosTime();
-    Assert::AreEqual(12u, std::uint32_t{time.hours});
-    Assert::AreEqual(1u, std::uint32_t{time.minutes});
-    Assert::AreEqual(30u, std::uint32_t{time.seconds});
-    Assert::AreEqual(50u, std::uint32_t{time.hundredths});
   }
 
   // ExitToDos (CS:00AD) prints the exit message in mode 2 through DOS's int 21h AH=09h, which writes through the BIOS's
@@ -517,63 +437,17 @@ public:
   TEST_METHOD(PrintStringWritesAtTheCursorThroughTheBios)
   {
     PlatformRig rig("PlatformPrint");
-    Put(rig.State(), TEXT, "AB\r\nC$");
+    Put(rig.State(), TEXT, "ABC$");
     rig.Host().PrintDosString(rig.State().DataSegment(), TEXT);
 
     const Elite::GameState& state = rig.State();
     Assert::AreEqual(std::uint32_t{'A'}, std::uint32_t{state.VideoByte(0)});
     Assert::AreEqual(0x07u, std::uint32_t{state.VideoByte(1)}, L"the attribute is kept");
     Assert::AreEqual(std::uint32_t{'B'}, std::uint32_t{state.VideoByte(2)});
-    Assert::AreEqual(std::uint32_t{'C'}, std::uint32_t{state.VideoByte(160)}, L"row 1, column 0");
-    Assert::AreEqual(1u, std::uint32_t{rig.Host().BiosServices().CursorColumn()});
+    Assert::AreEqual(std::uint32_t{'C'}, std::uint32_t{state.VideoByte(4)});
     const Elite::Cga& cga = rig.Host().Video();
-    Assert::AreEqual(0x00u, std::uint32_t{cga.Crtc(Elite::CrtcRegister::CursorAddressHigh)}, L"the CRTC's cursor at 81");
-    Assert::AreEqual(0x51u, std::uint32_t{cga.Crtc(Elite::CrtcRegister::CursorAddressLow)});
-    Assert::IsFalse(rig.Host().Fault().has_value());
-  }
-
-  TEST_METHOD(PrintStringScrollsAtTheBottomAndExpandsTabs)
-  {
-    PlatformRig rig("PlatformScroll");
-    Elite::GameState& state = rig.State();
-    state.SetVideoByte(0, 'Q');
-    state.SetVideoByte(160, 'R');
-    state.SetVideoByte(24 * 160 + 1, 0x1F);
-    for (int row = 0; row < 24; ++row)
-    {
-      Assert::IsTrue(rig.Host().BiosServices().WriteTeletype('\n')); // to row 24, column 0
-    }
-    Put(state, TEXT, "Z\n\tX$");
-    rig.Host().PrintDosString(state.DataSegment(), TEXT);
-
-    Assert::AreEqual(std::uint32_t{'R'}, std::uint32_t{state.VideoByte(0)}, L"row 1 moved to row 0");
-    Assert::AreEqual(std::uint32_t{'Z'}, std::uint32_t{state.VideoByte(23 * 160)}, L"row 24 moved to row 23");
-    Assert::AreEqual(0x1Fu, std::uint32_t{state.VideoByte(23 * 160 + 1)});
-    Assert::AreEqual(std::uint32_t{' '}, std::uint32_t{state.VideoByte(24 * 160)}, L"the new row is blank");
-    Assert::AreEqual(0x07u, std::uint32_t{state.VideoByte(24 * 160 + 1)}, L"with the attribute under the cursor");
-    // After the line feed the cursor is at row 24, column 1; the tab runs to column 8.
-    Assert::AreEqual(std::uint32_t{'X'}, std::uint32_t{state.VideoByte(24 * 160 + 16)});
-    Assert::AreEqual(9u, std::uint32_t{rig.Host().BiosServices().CursorColumn()});
-  }
-
-  // In a graphics mode the teletype would need the ROM's font, which is not part of the reference (ADR-001 D14): the call is
-  // refused and nothing is printed.
-  TEST_METHOD(PrintStringInAGraphicsModeIsRefusedAndPrintsNothing)
-  {
-    PlatformRig rig("PlatformPrintGraphics");
-    Put(rig.State(), TEXT, "Hi$");
-    rig.Start(
-      [&rig]
-      {
-        rig.Native().SetVideoMode(4);
-        rig.Native().PrintDosString(rig.State().DataSegment(), TEXT);
-      });
-    Assert::IsTrue(rig.Host().RunUntil(1'000) == Elite::StopReason::Fault);
-    const Elite::ServiceFault fault = FaultOf(rig.Host());
-    Assert::IsTrue(fault.kind == Elite::FaultKind::UnsupportedRequest);
-    Assert::AreEqual(0x21u, std::uint32_t{fault.vector});
-    Assert::AreEqual(0x09u, std::uint32_t{fault.ah});
-    Assert::AreEqual(0u, std::uint32_t{rig.State().VideoByte(0)}, L"mode 4 cleared it, and nothing was printed");
+    Assert::AreEqual(0x00u, std::uint32_t{cga.Crtc(Elite::CrtcRegister::CursorAddressHigh)}, L"the CRTC's cursor at 3");
+    Assert::AreEqual(0x03u, std::uint32_t{cga.Crtc(Elite::CrtcRegister::CursorAddressLow)});
   }
 };
 

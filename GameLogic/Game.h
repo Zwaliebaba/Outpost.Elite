@@ -3,7 +3,6 @@
 
 #include "GameState.h"
 #include "Platform.h"
-#include "Reference.h"
 
 #include <cstdint>
 
@@ -39,18 +38,8 @@ public:
     return m_platform;
   }
 
-  [[nodiscard]] const Platform& Host() const noexcept
-  {
-    return m_platform;
-  }
-
   /// The game's memory, once Load has loaded it.
   [[nodiscard]] GameState& State() noexcept
-  {
-    return m_state;
-  }
-
-  [[nodiscard]] const GameState& State() const noexcept
   {
     return m_state;
   }

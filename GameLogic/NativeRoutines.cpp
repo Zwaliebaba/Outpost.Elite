@@ -38,10 +38,10 @@ void InstallNativeRoutines(Platform& _platform, GameState& _state)
       switch (entry.exit)
       {
       case EntryReturn::Far:
-        _platform.SetEntry(std::string(entry.name), routine);
+        _platform.SetEntry(routine);
         break;
       case EntryReturn::Interrupt:
-        _platform.Hook(FarAddress{code, entry.offset}, std::string(entry.name), routine);
+        _platform.Hook(FarAddress{code, entry.offset}, routine);
         break;
       }
     }

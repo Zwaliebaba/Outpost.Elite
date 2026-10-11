@@ -15,46 +15,10 @@ namespace Elite
 // The reference's ships routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): the ship slots, blueprints and their vertex
 // programs. Each takes values and gives values back, on the GameState and, where it drives a device, the devices (ADR-014).
 
-// The 64-byte object record of shipSlots: the fields the ported routines use, as offsets into it. Combat and Ai use them too.
+// The size of shipSlots' object record, SpaceObject.
 inline constexpr std::uint16_t SLOT_BYTES = 0x40;
-inline constexpr std::uint16_t SLOT_TYPE = 0x00;   ///< bit 0 active, bits 1-5 the type, bit 7 drawn this frame
-inline constexpr std::uint16_t SLOT_X_HIGH = 0x01; ///< the high bytes of the 24-bit position: x, then y and z
-inline constexpr std::uint16_t SLOT_X = 0x04;      ///< the low words of the position: x, then y (+6) and z (+8)
-inline constexpr std::uint16_t SLOT_Y = 0x06;
-inline constexpr std::uint16_t SLOT_Z = 0x08;
-inline constexpr std::uint16_t SLOT_PITCH = 0x0A; ///< the heading, as ConvertVectorToAngles gives it: AX
-inline constexpr std::uint16_t SLOT_YAW = 0x0C;   ///< and BX
-inline constexpr std::uint16_t SLOT_ROLL = 0x0E;
-inline constexpr std::uint16_t SLOT_VIEW_X = 0x10; ///< the position in the camera's frame: x, y (+12h), z (+14h)
-inline constexpr std::uint16_t SLOT_VIEW_Y = 0x12;
-inline constexpr std::uint16_t SLOT_VIEW_Z = 0x14;
-inline constexpr std::uint16_t SLOT_PASSES = 0x16; ///< attack passes left
-inline constexpr std::uint16_t SLOT_STATE = 0x17;  ///< the AI state
-inline constexpr std::uint16_t SLOT_SPEED = 0x18;
-inline constexpr std::uint16_t SLOT_VELOCITY = 0x19; ///< three signed bytes: x, y, z
-inline constexpr std::uint16_t SLOT_RANGE = 0x1C;    ///< the high byte of the range a ship turns back at
-inline constexpr std::uint16_t SLOT_TURN_RATE = 0x1D;
-inline constexpr std::uint16_t SLOT_FLAGS = 0x1E;     ///< bit 0 hostile, 1 blip drawn, 2 indestructible, 5 carries the device
-inline constexpr std::uint16_t SLOT_THARGONS = 0x1F;  ///< Thargons a Thargoid has left to launch
-inline constexpr std::uint16_t SLOT_SPIN_ROLL = 0x26; ///< a fragment's spin, added to the roll and the pitch each frame
-inline constexpr std::uint16_t SLOT_SPIN_PITCH = 0x27;
-inline constexpr std::uint16_t SLOT_ENERGY = 0x2B;
-inline constexpr std::uint16_t SLOT_CARGO = 0x2C;
-inline constexpr std::uint16_t SLOT_FRAGMENTS = 0x2D;
-inline constexpr std::uint16_t SLOT_LIFETIME = 0x2E; ///< frames a fragment has left
-inline constexpr std::uint16_t SLOT_AGE = 0x2F;
-inline constexpr std::uint16_t SLOT_AGGRESSION = 0x30;
-inline constexpr std::uint16_t SLOT_BOUNTY = 0x31;
-inline constexpr std::uint16_t SLOT_MISSILES = 0x32;
-inline constexpr std::uint16_t SLOT_CLASS = 0x33; ///< the behaviour class, behaviorHandlers' index
-inline constexpr std::uint16_t SLOT_SCANNED = 0x34;
-inline constexpr std::uint16_t SLOT_JINK_FRAMES = 0x35; ///< frames to the next evasive jink
-inline constexpr std::uint16_t SLOT_JINK_PITCH = 0x36;  ///< words: the jink added to the wanted heading
-inline constexpr std::uint16_t SLOT_JINK_YAW = 0x38;
-inline constexpr std::uint16_t SLOT_VIEW_Z_HIGH = 0x3C; ///< the high byte of the camera-frame z: bit 7 set behind
-inline constexpr std::uint16_t SLOT_DETAIL = 0x3F;      ///< the level-of-detail threshold, from the template
 
-// SLOT_TYPE: the active bit, and the types the ported routines name (bits 1-5).
+// A slot's type byte: the active bit, and the types the ported routines name (bits 1-5).
 inline constexpr std::uint8_t SLOT_ACTIVE = 0x01;
 inline constexpr std::uint8_t TYPE_MASK = 0x1F;
 inline constexpr std::uint8_t TYPE_DODO = 0x00;
@@ -120,9 +84,8 @@ struct Velocity
 /// The slot ReclaimShipSlot found.
 struct ReclaimedSlot
 {
-  SlotIndex slot;                           ///< it, which the original leaves in SI
-  bool evicted;                             ///< every ship slot had a blip, so this one was removed to make room
-  std::optional<DashboardPixel> erasedBlip; ///< then, what RemoveObject erased of its blip
+  SlotIndex slot; ///< it, which the original leaves in SI
+  bool evicted;   ///< every ship slot had a blip, so this one was removed to make room
 };
 
 /// ADD [slot+4+2*axis],_value / ADC [slot+1+axis],DL with DL from CWD: _value added to the 24-bit coordinate _axis (0 x, 1 y,

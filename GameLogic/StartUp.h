@@ -19,14 +19,13 @@ namespace Elite
 
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState and the devices (ADR-014) ──
 
-/// Start (CS:0000), the program's entry from DOS, _psp its program segment prefix: the DOS version (DOS 1 is told it
-/// is not enough), the start-up commander kept (SaveStartupCommander, by _backward, the direction flag DOS left), the Amstrad's ROM
-/// looked for; then from RestartPlay the DOS clock read twice, the timer, int 0 and int 9, the cheat argument and
+/// Start (CS:0000), the program's entry from DOS: the start-up commander kept (SaveStartupCommander, by _backward, the direction
+/// flag DOS left), the Amstrad's ROM looked for; then from RestartPlay the timer, int 0 and int 9, the cheat argument and
 /// GameLoop, which comes back only for a disk request (HandleDiskRequest): the interrupts put back, and the request made with the
 /// game's own critical-error handler on int 24h, after which it starts again. _countIfNone is BP as DOS left it, which GameLoop
-/// takes. Returns when the program ends: on DOS 1, or once a request to leave has wiped the program and said farewell (ExitToDos).
-/// Waits in GameLoop.
-void Start(GameState& _state, Hardware& _hardware, std::uint16_t _psp, std::uint16_t _countIfNone, bool _backward);
+/// takes. Returns when the program ends, once a request to leave has wiped the program and said farewell (ExitToDos). Waits in
+/// GameLoop.
+void Start(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward);
 
 /// What GameLoop leaves for Start when the disc menu leaves it for the disk: BP and the direction flag as the docked screens left
 /// them, which Start hands back to it after the request.

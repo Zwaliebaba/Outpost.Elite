@@ -53,8 +53,7 @@ struct Angles
 /// GetPositionScaleShift's result.
 struct PositionScale
 {
-  std::uint8_t shift;      ///< what brings the largest coordinate below 10000h and then below 24B8h
-  std::uint16_t magnitude; ///< that coordinate's magnitude, so shifted
+  std::uint8_t shift; ///< what brings the largest coordinate below 10000h and then below 24B8h
 };
 
 /// What a byte divide leaves: AL and AH.

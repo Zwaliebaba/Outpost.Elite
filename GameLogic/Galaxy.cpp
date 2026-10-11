@@ -289,23 +289,20 @@ bool DrawCross(GameState& _state, std::uint16_t _x, std::uint16_t _row, std::uin
   return across || down;
 }
 
-// The chart cursor's cross in colour 1 and the dot at its centre in colour 0 (CS:0D4D, CS:0F99). Returns whether a line of the
-// cross filled, as DrawCross.
-bool DrawChartCursor(GameState& _state)
+// The chart cursor's cross in colour 1 and the dot at its centre in colour 0 (CS:0D4D, CS:0F99).
+void DrawChartCursor(GameState& _state)
 {
   _state.Data().drawColor = 1;
-  const bool filled = DrawCross(_state, _state.Data().commanderBlock.chartCursorX, _state.Data().commanderBlock.chartCursorY, CURSOR_ARM);
+  (void)DrawCross(_state, _state.Data().commanderBlock.chartCursorX, _state.Data().commanderBlock.chartCursorY, CURSOR_ARM);
   _state.Data().drawColor = 0;
   PlotPixel(_state, _state.Data().commanderBlock.chartCursorX, _state.Data().commanderBlock.chartCursorY);
-  return filled;
 }
 
 // The steering moves a chart's cursor (CS:0DB4, CS:0FDA): the roll across, clamped to the chart, and the pitch negated down,
-// clamped to its 128 rows. _trigger is the AL the chart's loop leaves, which ReadSteering fires the stick with. Returns the
-// cursor, which the original leaves in AX.
-ChartPoint MoveChartCursor(GameState& _state, Hardware& _hardware, std::uint8_t _trigger)
+// clamped to its 128 rows. Returns the cursor, which the original leaves in AX.
+ChartPoint MoveChartCursor(GameState& _state, Hardware& _hardware)
 {
-  const Steering steering = ReadSteering(_state, _hardware, _trigger);
+  const Steering steering = ReadSteering(_state, _hardware);
   const std::uint8_t across = steering.roll;
   const unsigned x = unsigned{across} + unsigned{_state.Data().commanderBlock.chartCursorX};
   ChartPoint cursor{};
@@ -346,7 +343,7 @@ void DrawGalacticChart(GameState& _state, Hardware& _hardware, bool _backward)
   _state.Data().drawColor = 0;
   (void)DrawCross(_state, _state.Data().commanderBlock.currentSystemX, _state.Data().commanderBlock.currentSystemChartY,
                   CURRENT_SYSTEM_ARM);
-  (void)DrawChartCursor(_state);
+  DrawChartCursor(_state);
   _state.Data().drawColor = CHART_DISC_COLOR;
   // XOR AL,AL, then PUSH AX / POP AX round each dot.
   for (std::uint8_t systems = 0;;)
@@ -378,8 +375,8 @@ void DrawShortRangeChart(GameState& _state, Hardware& /*_hardware*/, bool _backw
   const bool downFilled = DrawLine(_state, 0x50, 0x51, 0x50, 0x2F);
   const bool acrossFilled = DrawLine(_state, 0x61, 0x40, 0x3F, 0x40);
   _state.Data().drawColor = CHART_DISC_COLOR;
-  (void)DrawChartItems(_state, _backward && !downFilled && !acrossFilled);
-  (void)DrawChartCursor(_state);
+  DrawChartItems(_state, _backward && !downFilled && !acrossFilled);
+  DrawChartCursor(_state);
 }
 
 // What tells the two charts apart: how a frame is drawn and paced, where the loop jumps back to, and the keys.
@@ -497,7 +494,7 @@ ScreenKey RunChartFrames(GameState& _state, Hardware& _hardware, const ChartKeys
     _chart.drawFrame(_state, _hardware, backward);
     _hardware.Spend(_chart.pacing);
     PresentChartFrame(_state, _hardware);
-    const ChartPoint cursor = MoveChartCursor(_state, _hardware, Low(GameState::VIDEO_SEGMENT));
+    const ChartPoint cursor = MoveChartCursor(_state, _hardware);
     if (const std::optional<ScreenKey> key = ReadChartKey(_state, _hardware, _chart, cursor.x))
     {
       return *key;
@@ -511,7 +508,7 @@ void DrawChartTitle(GameState& _state, std::string_view _title, std::uint16_t _s
 {
   _state.Data().textPaperPattern = 0;
   (void)DrawScreenString(_state, _title, INK_1, _segment, CHART_TITLE);
-  (void)ClearChartTextLines(_state, INK_1, _segment);
+  ClearChartTextLines(_state, INK_1, _segment);
 }
 
 // The segment a chart draws its title in: B800h once DrawChartFrame has made the screen ready (MOV ES,AX), otherwise _segment,
@@ -597,7 +594,6 @@ struct ByteComparison
 {
   std::uint16_t compared; // the bytes it compared, which SI and DI move on by and CX goes down by
   bool equal;             // every byte compared was equal: ZF
-  bool below;             // the last byte compared was below the other: CF
 };
 
 // REPE CMPSB: DS:_source with _segment:_destination, for at most _count bytes, backwards when _backwards, until
@@ -606,7 +602,7 @@ struct ByteComparison
                                           std::uint16_t _destination, std::uint16_t _count, bool _backwards)
 {
   const auto step = static_cast<std::uint16_t>(_backwards ? 0xFFFF : 1);
-  ByteComparison comparison{0, true, false};
+  ByteComparison comparison{0, true};
   std::uint16_t source = _source;
   std::uint16_t destination = _destination;
   while (comparison.compared < _count && comparison.equal)
@@ -614,7 +610,6 @@ struct ByteComparison
     const std::uint8_t sourceByte = _state.Byte(source);
     const std::uint8_t destinationByte = _state.FarByte(_segment, destination);
     comparison.equal = sourceByte == destinationByte;
-    comparison.below = sourceByte < destinationByte;
     source = Offset(source, step);
     destination = Offset(destination, step);
     ++comparison.compared;
@@ -868,7 +863,7 @@ std::uint8_t FindNearestSystem(GameState& _state, std::uint16_t _countIfNone)
   return static_cast<std::uint8_t>(GALAXY_SYSTEMS - SearchNearestSystem(_state, _countIfNone));
 }
 
-std::uint16_t ComputeDistanceToSystem(GameState& _state)
+void ComputeDistanceToSystem(GameState& _state)
 {
   const SystemSeeds seeds = ReadSystemSeeds(_state);
   // Each difference made positive, and its low byte squared by a byte multiply.
@@ -887,7 +882,6 @@ std::uint16_t ComputeDistanceToSystem(GameState& _state)
   } while (remaining >= 0);
   const auto distanceTenthsLy = static_cast<std::uint16_t>(root << 2);
   _state.Data().commanderBlock.selectedDistanceTenthsLy = distanceTenthsLy;
-  return distanceTenthsLy;
 }
 
 void ShowNearestSystemDistance(GameState& _state, std::uint16_t _countIfNone, std::uint16_t _segment)
@@ -973,7 +967,7 @@ void FindSystemByName(GameState& _state, Hardware& _hardware, std::uint16_t _seg
   {
     SetWordIn(typed, word, 0);
   }
-  (void)ReadTextLine(_state, _hardware, typed, static_cast<std::uint8_t>(SYSTEM_NAME_BYTES), _segment, CHART_TEXT_LINE_2);
+  ReadTextLine(_state, _hardware, typed, static_cast<std::uint8_t>(SYSTEM_NAME_BYTES), _segment, CHART_TEXT_LINE_2);
   if (typed[0] == 0)
   {
     // Nothing typed: on into ShowNearestSystemDistance, by a jump back to its entry, with ES as ReadTextLine leaves it.
@@ -1033,16 +1027,15 @@ void FindSystemByName(GameState& _state, Hardware& _hardware, std::uint16_t _seg
   ShowNotOnMap(_state, GameState::VIDEO_SEGMENT);
 }
 
-bool DrawChartItems(GameState& _state, bool _backward)
+void DrawChartItems(GameState& _state, bool _backward)
 {
   // MOV CL,[chartItemCount] / AND CX,0FFh: CH stays 0, the high byte of a disc's centre row.
   const std::uint8_t items = _state.Data().chartItemCount;
   if (items == 0)
   {
-    return false;
+    return;
   }
   _state.Data().drawColor = CHART_DISC_COLOR;
-  bool discDrawn = false;
   // PUSH CX / PUSH DI round each item keep the count and the item: the LOOP's count is a local.
   std::size_t index = 0;
   for (std::uint8_t itemsLeft = items; itemsLeft != 0; --itemsLeft)
@@ -1052,19 +1045,17 @@ bool DrawChartItems(GameState& _state, bool _backward)
     if (High(mark) != 0)
     {
       // A label, its text at its top-left corner: the x range's first byte in DL and the rows' first in DH.
-      (void)DrawSmallViewString(_state, _state.TextAt(_state.Data().pendingChartLabels, WordIn(item, CHART_ITEM_TEXT)), INK_3,
-                                MakeWord(item[CHART_ITEM_X], item[CHART_ITEM_ROWS]));
+      DrawSmallViewString(_state, _state.TextAt(_state.Data().pendingChartLabels, WordIn(item, CHART_ITEM_TEXT)), INK_3,
+                          MakeWord(item[CHART_ITEM_X], item[CHART_ITEM_ROWS]));
     }
     else
     {
       // A disc: the radius in BX, the centre's x in DX and its row in CX.
       const std::uint16_t center = WordIn(item, CHART_ITEM_TEXT);
       DrawDisc(_state, mark, Low(center), High(center), _backward);
-      discDrawn = true;
     }
     ++index;
   }
-  return discDrawn;
 }
 
 void PlaceChartLabels(GameState& _state)
@@ -1156,10 +1147,10 @@ bool ChartItemOverlaps(const GameState& _state, std::size_t _item, ChartSpan _x,
   return itemX.last >= _x.first && _x.last >= itemX.first && itemRows.last >= _rows.first && _rows.last >= itemRows.first;
 }
 
-std::uint16_t ClearChartTextLines(GameState& _state, std::uint16_t _ink, std::uint16_t _segment)
+void ClearChartTextLines(GameState& _state, std::uint16_t _ink, std::uint16_t _segment)
 {
   DrawScreenString(_state, _state.TextAt(_state.Data().blankChartLine), _ink, _segment, CHART_TEXT_LINE_1);
-  return DrawScreenString(_state, _state.TextAt(_state.Data().blankChartLine), _ink, _segment, CHART_TEXT_LINE_2);
+  DrawScreenString(_state, _state.TextAt(_state.Data().blankChartLine), _ink, _segment, CHART_TEXT_LINE_2);
 }
 
 ScreenKey ShowSystemDataScreen(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _countIfNone)
@@ -1232,11 +1223,10 @@ ScreenKey ShowSystemDataScreen(GameState& _state, Hardware& _hardware, bool _bac
   return WaitForScreenExitKey(_state, _hardware, SCAN_F7, 0, _countIfNone);
 }
 
-std::uint8_t TerminateSelectedSystemName(GameState& _state)
+void TerminateSelectedSystemName(GameState& _state)
 {
   const std::uint8_t length = _state.Data().commanderBlock.selectedSystemNameLength;
   _state.BytesFrom(_state.Data().commanderBlock.selectedSystemName, std::size_t{length} + 1)[length] = 0;
-  return length;
 }
 
 std::string_view FormatSelectedSystemDistance(GameState& _state)

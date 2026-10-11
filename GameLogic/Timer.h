@@ -19,8 +19,8 @@ namespace Elite
 
 // ── The routines de-assembled (ADR-012), on the GameState and the devices (ADR-014) ──
 
-/// TimerInterrupt (CS:0215): int 8's handler, without the IRET: TimerTick, then the end of the interrupt; on the Amstrad, every
-/// 18th tick, or every 55th with its mouse driver's rate, the BIOS's handler too (biosTimerChainCountdown).
+/// TimerInterrupt (CS:0215): int 8's handler, without the IRET: TimerTick, then the end of the interrupt. The original's chain
+/// to the BIOS's handler on an Amstrad (biosTimerChainCountdown) is not taken: Start clears amstradPresent.
 void TimerInterrupt(GameState& _state, Hardware& _hardware);
 
 /// InstallTimerInterrupt (CS:00C6): the PIT at about 1 kHz, port 61h saved and the speaker's gate and data cleared,
@@ -28,9 +28,10 @@ void TimerInterrupt(GameState& _state, Hardware& _hardware);
 /// (savedTimerVector) and native code takes from the BIOS, and interrupts enabled.
 void InstallTimerInterrupt(GameState& _state, Hardware& _hardware);
 
-/// RestoreTimerInterrupt (CS:016B): with interrupts off, the BIOS's handler put back on int 8, port 61h
-/// as InstallTimerInterrupt found it, and the PIT's tick as the BIOS has it (on the Amstrad, as its mouse driver does); then
-/// interrupts on, and the BIOS clock set back by a day when it is past one. Returns the clock as int 1Ah gave it.
+/// RestoreTimerInterrupt (CS:016B): with interrupts off, the BIOS's handler put back on int 8, port 61h as
+/// InstallTimerInterrupt found it, and the PIT's tick as the BIOS has it; then interrupts on. Returns the clock as int 1Ah gave
+/// it. The original's Amstrad rate is not taken (Start clears amstradPresent), and its setting back of a clock past a day
+/// never is: the BIOS's tick count starts again from 0 at a day.
 BiosClock RestoreTimerInterrupt(GameState& _state, Hardware& _hardware);
 
 /// What RestoreTimerInterrupt leaves in CX: the high word of its SUB DX / SBB CX, _clock less a day, whether or not it set the

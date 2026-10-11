@@ -18,8 +18,7 @@ class Guest
 {
 public:
   Guest(Platform& _platform, GameState& _state) noexcept
-    : m_platform(_platform),
-      m_state(_state),
+    : m_state(_state),
       m_hardware(_platform)
   {
   }
@@ -37,12 +36,6 @@ public:
     return m_hardware;
   }
 
-  /// The segment of the program's PSP: what DOS leaves in DS for the program's start.
-  [[nodiscard]] std::uint16_t PspSegment() const noexcept
-  {
-    return m_platform.PspSegment();
-  }
-
   /// BP as DOS leaves it for the program's start (Platform::ENTRY_BASE_POINTER).
   [[nodiscard]] static constexpr std::uint16_t EntryBasePointer() noexcept
   {
@@ -50,7 +43,6 @@ public:
   }
 
 private:
-  Platform& m_platform;
   GameState& m_state;
   Hardware m_hardware;
 };

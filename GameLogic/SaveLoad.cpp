@@ -287,27 +287,26 @@ DiscMenuExit LeaveGameLoopForDisk(GameState& _state, std::uint8_t _operation)
   return INPUT_DEVICE_NAMES[_state.Data().inputDevice];
 }
 
-// ShowControlDevice (CS:6705): "DEVICE:" and the input device's name, and the help rows blanked. Returns where the second
-// blank stops.
-std::uint16_t ShowControlDevice(GameState& _state)
+// ShowControlDevice (CS:6705): "DEVICE:" and the input device's name, and the help rows blanked.
+void ShowControlDevice(GameState& _state)
 {
   const std::uint16_t label = PrintAt(_state, DEVICE_TEXT, STATUS_POSITION);
   PrintTextModeString(_state, InputDeviceName(_state), label);
-  return BlankHelpRows(_state);
+  BlankHelpRows(_state);
 }
 
 // The joystick could not be read (CS:67C4), or the Amstrad's never moved: the error, and the help's two lines, or only its
-// first for the Amstrad's. Returns where the last print stops.
-std::uint16_t ShowNoJoystick(GameState& _state)
+// first for the Amstrad's.
+void ShowNoJoystick(GameState& _state)
 {
   PrintAt(_state, NO_JOYSTICK_TEXT, STATUS_POSITION);
-  const std::uint16_t help = PrintAt(_state, JOYSTICK_HELP_LINES[0], HELP_POSITION);
+  PrintAt(_state, JOYSTICK_HELP_LINES[0], HELP_POSITION);
   if (_state.Data().joystickIsAmstrad == 1)
   {
-    return help;
+    return;
   }
   // INC SI: the second line starts after the first's NUL.
-  return PrintAt(_state, JOYSTICK_HELP_LINES[1], SECOND_HELP_POSITION);
+  PrintAt(_state, JOYSTICK_HELP_LINES[1], SECOND_HELP_POSITION);
 }
 
 // J (CS:6743): which joystick, then the Amstrad's moves or the IBM's centre. True when it is selected, and the menu goes on at
@@ -339,12 +338,11 @@ std::uint16_t ShowNoJoystick(GameState& _state)
     }
     return _state.Data().amstradJoystickMoved == 1;
   }
-  // The IBM's: its centre read once a key says the stick is let go. ReadJoystickAxes fires the stick with AL as GetKey leaves
-  // it, from the print's NUL.
+  // The IBM's: its centre read once a key says the stick is let go.
   _state.Data().joystickIsAmstrad = 0;
   PrintAt(_state, CENTER_JOYSTICK_TEXT, HELP_POSITION);
-  const KeyPress key = WaitForKey(_state, _hardware, CENTER_KEY_LOOP);
-  const StickAxes center = ReadJoystickAxes(_state, _hardware, AlAfterKey(0, key));
+  (void)WaitForKey(_state, _hardware, CENTER_KEY_LOOP);
+  const StickAxes center = ReadJoystickAxes(_state, _hardware);
   _state.Data().joystickCenterX = center.x;
   _state.Data().joystickCenterY = center.y;
   if (center.timedOut)
@@ -595,7 +593,7 @@ bool PromptCommanderFileName(GameState& _state, Hardware& _hardware)
 {
   PrintAt(_state, FILE_NAME_PROMPT_TEXT, STATUS_POSITION);
   const std::span<Counted<std::uint8_t>> name(_state.Data().commanderFileName);
-  (void)ReadTextLine(_state, _hardware, name, MOST_NAME_CHARACTERS, GameState::VIDEO_SEGMENT, NAME_POSITION);
+  ReadTextLine(_state, _hardware, name, MOST_NAME_CHARACTERS, GameState::VIDEO_SEGMENT, NAME_POSITION);
   // A letter, then letters and digits, folded to upper case, each turn of the check carrying its place.
   std::size_t letter = 0;
   auto character = static_cast<std::uint8_t>(name[letter] & LOWER_CASE_BIT_CLEAR);

@@ -37,13 +37,6 @@ struct Explosion
   std::optional<std::uint16_t> es;
 };
 
-/// What DetonateEnergyBomb's explosions leave in SI and ES, the last of them to write each, which DrawSunOrPlanet goes on with.
-struct Detonation
-{
-  std::optional<std::uint16_t> si;
-  std::optional<std::uint16_t> es;
-};
-
 /// What FindShipInCrosshairs finds.
 struct CrosshairTarget
 {
@@ -94,8 +87,8 @@ std::optional<std::uint8_t> TakeDamage(GameState& _state, std::uint16_t _damage)
 
 /// DetonateEnergyBomb (CS:2ED6): in the safe zone a crime, 28h added to legalStatus up to FFh (the sum written, then FFh over
 /// it on a carry); then every active ship from firstShipSlot with its blip drawn has its cargo emptied and explodes
-/// (ExplodeObject, its copies backwards when _backward). Returns what the explosions leave in SI and ES.
-Detonation DetonateEnergyBomb(GameState& _state, Hardware& _hardware, bool _backward);
+/// (ExplodeObject, its copies backwards when _backward).
+void DetonateEnergyBomb(GameState& _state, Hardware& _hardware, bool _backward);
 
 /// SpawnPlayerWreckage (CS:2FE3): the player's death: the drift, 40 along the nose (ComputeDeathDebrisVector), kept in
 /// wreckDrift; the player stopped at speed 8 with the view locked; six splinters in debris slots drifting with it and a
@@ -175,8 +168,7 @@ MissileFlight UpdateMissileAi(GameState& _state, Hardware& _hardware, SpaceObjec
 bool ResolveLaserFire(GameState& _state, Hardware& _hardware, bool _backward);
 
 /// CheckMissileTargetDestroyed (CS:8B8B): when a missile is locked on the slot at _slot, its message and the missile unlocked.
-/// Returns whether it was.
-bool CheckMissileTargetDestroyed(GameState& _state, const SpaceObject& _slot);
+void CheckMissileTargetDestroyed(GameState& _state, const SpaceObject& _slot);
 
 /// CreditKill (CS:8BC6): the kill of _slot paid for, or held against the player's legal status. A bounty of 0 pays nothing;
 /// any other counts a kill in killCount, the INC written and then FEh over FFh; FFh pays 500 for a Thargoid and otherwise is a
