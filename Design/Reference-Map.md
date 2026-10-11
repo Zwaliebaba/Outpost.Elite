@@ -1,6 +1,6 @@
 # How the reference works
 
-**Status:** Phase 1, in progress (plan §5). This is the written half of the map, and [`Symbols.tsv`](Symbols.tsv) is the named half. `python Tools/MapReference.py --listing <file>` regenerates the annotated disassembly from both, and every claim below names the addresses it rests on, so it can be checked against that listing. Under AGENTS.md's preamble the reference is the design. This document says what the reference does; it says what the port must do only where a ruling exists or a behaviour has to be kept.
+**Status:** written in Phase 1 (plan §5), and kept as the record of what the reference does (ADR-017; `MapReference.py` stays by D36). This is the written half of the map, and [`Symbols.tsv`](Symbols.tsv) is the named half. `python Tools/MapReference.py --listing <file>` regenerates the annotated disassembly from both, and every claim below names the addresses it rests on, so it can be checked against that listing. Under AGENTS.md's preamble the reference is the design. This document says what the reference does; it says what the port must do only where a ruling exists or a behaviour has to be kept.
 
 ## Coverage
 
@@ -377,7 +377,7 @@ The waits on vertical retrace at 0x45FF and 0x05CC precede block copies to the s
 - **The planet description generator** never capitalises y or z.
 - **The rock split** at 0x56B1 can never run.
 
-**A probable latent bug, to confirm with a Phase 2 trace:** `ShowShortRangeChart` calls `PresentChartFrame` with whatever AL `DrawLine` left, which `CopyChartBufferToScreen` then uses as a band offset.
+**Not a bug, as it once looked:** `ShowShortRangeChart` calls `PresentChartFrame` with whatever AL `DrawLine` left, but `PresentChartFrame` loads AX with B800h before `CopyChartBufferToScreen` reads AL as a band offset, so the offset is always 0 (settled in Phase 3; `PresentChartFrame` in `GameLogic/Video.cpp`).
 
 ## Naming status
 
