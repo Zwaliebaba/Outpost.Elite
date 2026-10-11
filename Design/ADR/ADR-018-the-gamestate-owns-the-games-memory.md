@@ -1,6 +1,6 @@
 # ADR-018 — The GameState owns the game's memory (D19, D23)
 
-**Status:** accepted 2026-10-10, with the change that implements it: `GameData`, generated from the symbol table; `Elite::Game`, which owns a `GameState` and the `Pc` that maps it; and `Machine::Memory::Map`. It records D19 and D23 ([Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner)), and settles the choice ADR-015 item 5 left to D19's ADR.
+**Status:** accepted 2026-10-10, with the change that implements it: `GameData`, generated from the symbol table; `Elite::Game`, which owns a `GameState` and the `Pc` that maps it; and `Machine::Memory::Map`. It records D19 and D23 ([Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner)), and settles the choice ADR-015 item 5 left to D19's ADR. **Amended 2026-10-11 by [ADR-023](ADR-023-the-platform-swap.md):** `Memory` and its mapping are deleted; the `GameState` counts its own changed bytes, and the `Game` owns the `Platform` in the `Pc`'s place (D33).
 
 ## Context
 

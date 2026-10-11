@@ -1,6 +1,6 @@
 # ADR-006 — The PC host
 
-**Status:** accepted 2026-10-09, with the change that implements it: `Machine::Pc` and the devices and services it puts together, and the `ReferenceRunner` (ADR-004). **Amended 2026-10-10:** item 1's clock has a second mode, paced time, which ADR-008 decides. **Amended 2026-10-10 by [ADR-019](ADR-019-the-reference-as-generated-tables.md):** item 4's hosts load the generated image, not the file.
+**Status:** accepted 2026-10-09, with the change that implements it: `Machine::Pc` and the devices and services it puts together, and the `ReferenceRunner` (ADR-004). **Amended 2026-10-10:** item 1's clock has a second mode, paced time, which ADR-008 decides. **Amended 2026-10-10 by [ADR-019](ADR-019-the-reference-as-generated-tables.md):** item 4's hosts load the generated image, not the file. **Superseded 2026-10-11 by [ADR-023](ADR-023-the-platform-swap.md):** the `Pc`, its devices and services are deleted; the `Platform` holds the devices the game uses, typed and without ports (D33).
 
 ## Context
 
