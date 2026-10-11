@@ -36,9 +36,10 @@ ROOT = Path(__file__).resolve().parent.parent
 # The groups, by the classes' times measured on 2026-10-10 after D7 deleted the interpreter and the comparisons:
 # GameLogicTests' 47 tests and MachineTests' 131, each test timed by a stand-in test host, in one process, from a g++
 # -O0 build (Debug, as CI builds) and a g++ -O2 one. The replay corpus, one test, is 14.8 s of the Debug 28.3 s
-# (2.3 s of the Release 4.4 s), and every other class together is 13.5 s (2.2 s), the twins most of it; MachineTests
-# is 0.4 s (0.1 s). No shard can be shorter than the corpus, so two shards, the corpus and the rest, are as even as
-# the classes allow, and keep both of a private repository's two vCPUs busy to the end; each test is one thread.
+# (2.3 s of the Release 4.4 s), and every other class together is 13.5 s (2.2 s), the twins most of it; MachineTests,
+# whose classes D33 moved into GameLogicTests or deleted with the emulated PC, was 0.4 s (0.1 s). No shard can be
+# shorter than the corpus, so two shards, the corpus and the rest, are as even as the classes allow, and keep both of a
+# private repository's two vCPUs busy to the end; each test is one thread.
 GROUPS = [
   ("corpus", ["CorpusTests"]),
 ]

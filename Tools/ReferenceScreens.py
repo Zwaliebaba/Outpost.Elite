@@ -25,7 +25,7 @@ an approximation of the run it records: good for comparing static screens, not f
 is mounted with -nocachedir, so that a file a step copies there mid-run is in DOS's directory at once.
 
 Each shot is the emulated screen as a 640x200 image on the CGA's dot grid, the same grid
-Machine::Cga renders: DOSBox-X draws the 200-line picture doubled to 400, so every other row is
+Elite::Cga renders: DOSBox-X draws the 200-line picture doubled to 400, so every other row is
 taken, after checking that each pair of rows is identical. Wall-clock timing makes animated screens
 (the title's turning ship, flight) differ from run to run; static ones (the docked screens, the
 charts) do not, and two runs give the same bytes.

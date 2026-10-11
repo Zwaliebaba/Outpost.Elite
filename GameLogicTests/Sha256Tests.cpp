@@ -9,7 +9,7 @@
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
-namespace MachineTests
+namespace GameLogicTests
 {
 
 namespace
@@ -18,7 +18,7 @@ namespace
 std::string HexOf(std::string_view _text)
 {
   const auto* bytes = reinterpret_cast<const std::uint8_t*>(_text.data());
-  return Machine::Sha256::ToHex(Machine::Sha256::Of({bytes, _text.size()}));
+  return Elite::Sha256::ToHex(Elite::Sha256::Of({bytes, _text.size()}));
 }
 
 } // namespace
@@ -56,7 +56,7 @@ public:
   TEST_METHOD(IncrementalUpdatesMatchOnePiece)
   {
     const std::vector<std::uint8_t> million(1'000'000, std::uint8_t{'a'});
-    Machine::Sha256 hash;
+    Elite::Sha256 hash;
     std::size_t offset = 0;
     for (std::size_t piece = 1; offset < million.size(); piece = piece * 3 + 1)
     {
@@ -64,12 +64,12 @@ public:
       hash.Update({million.data() + offset, length});
       offset += length;
     }
-    Assert::AreEqual("cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0", Machine::Sha256::ToHex(hash.Finish()).c_str());
+    Assert::AreEqual("cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0", Elite::Sha256::ToHex(hash.Finish()).c_str());
 
     const auto* abc = reinterpret_cast<const std::uint8_t*>("abc");
     hash.Update({abc, 3});
-    Assert::AreEqual("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", Machine::Sha256::ToHex(hash.Finish()).c_str());
+    Assert::AreEqual("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", Elite::Sha256::ToHex(hash.Finish()).c_str());
   }
 };
 
-} // namespace MachineTests
+} // namespace GameLogicTests
