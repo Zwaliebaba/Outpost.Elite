@@ -613,6 +613,12 @@ void AddShortRangeSystem(GameState& _state, Hardware& _hardware, std::int16_t _x
   // The label's bytes, its name LOOP counts in CX, 65,536 letters for 0, and its NUL.
   const std::uint16_t cursor = _state.Data().galaxy.chartLabelCursor;
   const std::uint32_t letters = LoopCount(length);
+  // A label that would run past pendingChartLabels is not kept, a change on purpose: the original wrote on past it. Only a chart
+  // of 20 systems or more fills it, and PlaceChartLabels stops at the 32nd item before it reaches one.
+  if (cursor + CHART_LABEL_NAME + letters + 1 > sizeof(GalaxyState::pendingChartLabels))
+  {
+    return;
+  }
   const std::span<const Counted<std::uint8_t>> name = BytesWithin(SystemNameField(std::as_const(_state)), 0, letters);
   const std::span<Counted<std::uint8_t>> label = LabelBytes(_state, cursor, CHART_LABEL_NAME + letters + 1);
   SetWordIn(label, CHART_ITEM_X, Word(x));
@@ -1117,9 +1123,13 @@ void DrawChartItems(GameState& _state, bool _backward)
     const std::uint16_t mark = WordIn(item, CHART_ITEM_RADIUS);
     if (High(mark) != 0)
     {
-      // A label, its text at its top-left corner: the x range's first byte in DL and the rows' first in DH.
-      DrawSmallViewString(_state, LabelText(_state, WordIn(item, CHART_ITEM_TEXT)), INK_3,
-                          MakeWord(item[CHART_ITEM_X], item[CHART_ITEM_ROWS]));
+      // A label, its text at its top-left corner: the x range's first byte in DL and the rows' first in DH. One that ran out of
+      // nudges below the chart is not drawn, a change on purpose: the original drew it on past the drawing buffer.
+      if (item[CHART_ITEM_ROWS + 1] < CHART_ROWS)
+      {
+        DrawSmallViewString(_state, LabelText(_state, WordIn(item, CHART_ITEM_TEXT)), INK_3,
+                            MakeWord(item[CHART_ITEM_X], item[CHART_ITEM_ROWS]));
+      }
     }
     else
     {
@@ -1142,6 +1152,12 @@ void PlaceChartLabels(GameState& _state)
   _state.Data().galaxy.chartLabelCursor = 0;
   do
   {
+    // No label past chartItems' 32nd item, a change on purpose: the original placed one over chartLabelCursor and read on from
+    // wherever it then pointed. A chart of more than 16 systems labels its first 32 less that many.
+    if (_state.Data().galaxy.chartItemEnd == std::size(_state.Data().galaxy.chartItems))
+    {
+      return;
+    }
     // The label's x range and rows, then its name.
     const std::uint16_t cursor = _state.Data().galaxy.chartLabelCursor;
     const std::span<const Counted<std::uint8_t>> label = LabelBytes(_state, cursor, CHART_LABEL_NAME);
