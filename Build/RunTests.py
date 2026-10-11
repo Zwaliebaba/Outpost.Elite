@@ -102,19 +102,21 @@ DIFFERENCE = re.compile(r" differs?: |\b[1-9][0-9]* differ\b")
 
 
 def messages(_name: str) -> list[str]:
-  """Every line the tests of TestResults/<_name>.trx wrote to their log, in the order of the results."""
+  """Every line the tests of TestResults/<_name>.trx wrote to their log, in the order of the results: each result's
+  Output/StdOut, where the C++ framework's Logger writes, or, in a file that has none, its text messages."""
   try:
     root = ElementTree.parse(ROOT / RESULTS / f"{_name}.trx").getroot()
   except (OSError, ElementTree.ParseError):
     return []
-  lines = []
+  found: dict[str, list[str]] = {"StdOut": [], "Message": []}
   for result in root.iter():
     if not result.tag.endswith("UnitTestResult"):
       continue
     for element in result.iter():
-      if (element.tag.endswith("StdOut") or element.tag.endswith("Message")) and element.text:
-        lines.extend(line for line in element.text.splitlines() if line.strip())
-  return lines
+      kind = next((kind for kind in found if element.tag.endswith(kind)), None)
+      if kind and element.text:
+        found[kind].extend(line for line in element.text.splitlines() if line.strip())
+  return found["StdOut"] or found["Message"]
 
 
 def main() -> int:
