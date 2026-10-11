@@ -1,6 +1,6 @@
 # ADR-016 — Known answers: the twins after D7
 
-**Status:** accepted 2026-10-10, with the change that implements it: recorded answers for every twin in `GameLogicTests/KnownAnswers.txt`, `NativeTwin`, and eight twins for the gaps D20 leaves to known answers. It records how D20's second half is met ([Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner), ADR-008 item 8).
+**Status:** accepted 2026-10-10, with the change that implements it: recorded answers for every twin in `GameLogicTests/KnownAnswers.txt`, `NativeTwin`, and eight twins for the gaps D20 leaves to known answers. It records how D20's second half is met ([Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner), ADR-008 item 8). Amended 2026-10-11 by [ADR-022](ADR-022-the-guard.md) (D33): each answer has a picture in `KnownPictures.txt` and outcomes in `KnownOutcomes.txt`, recorded from runs that met it.
 
 ## Context
 

@@ -2,6 +2,7 @@
 
 #include "DirectoryFileStore.h"
 #include "Game.h"
+#include "Outcome.h"
 #include "Pc.h"
 #include "PngWriter.h"
 #include "Reference.h"
@@ -34,8 +35,15 @@
 // A digest with an expected value that does not match fails the run. Nothing writes a digest back: since D7 deleted the
 // interpreter there is no original to record one from, and a digest changes only by a ruling (ADR-008 item 7).
 //
+// A digest's picture and outcome lines (Replay.h) are checked too (D33). A picture that differs is reported: it prints both
+// values and does not fail the run. An outcome of the player's progress that differs fails the run; a timing outcome that
+// differs is reported (Elite::OutcomeKind). The last lines sum what was checked and what differs. A digest that names its
+// expected value but has no recorded picture or outcomes fails the run, naming the line.
+//
 // Exit status: 0 the steps ran and every digest matched, 1 the program stopped them (a refused call, its end, a spin, a
-// native routine that waited where it cannot, or unported code) or a digest did not match, 2 usage or file errors.
+// native routine that waited where it cannot, or unported code), a digest or an outcome of progress did not match, or a
+// checked digest has no picture or outcomes, 2 usage or file errors. A picture or a timing outcome that differs does not
+// change it.
 // Only an end step may end the program, and it must (Elite::ExpectedStop): a replay that leaves for DOS ends with one,
 // and its digests after the end read what the program left.
 
@@ -121,6 +129,67 @@ std::string Describe(Machine::StopReason _reason, const Machine::Pc& _pc)
   return "running";
 }
 
+// What the guard's checks found over the run (D33).
+struct GuardTally
+{
+  std::size_t unrecorded = 0; // checked digests with no picture, or no outcomes, recorded
+  std::size_t picturesChecked = 0;
+  std::size_t picturesDiffer = 0;
+  std::size_t outcomesChecked = 0; // digests whose outcomes were checked
+  std::size_t progressDiffer = 0;  // outcomes of the player's progress that differ, or are not recorded: these fail the run
+  std::size_t timingDiffer = 0;    // timing outcomes that differ: these are reported
+};
+
+// _step's picture line against _checkpoint's picture, printed. A difference is reported; when the digest is _checked, a
+// picture not recorded fails the run.
+void CheckPicture(const Elite::Step& _step, const Elite::Checkpoint& _checkpoint, bool _checked, GuardTally& _tally)
+{
+  if (_step.expectedPicture.empty())
+  {
+    Print(std::format("picture\t{}\t{}\n", _step.name, _checkpoint.picture));
+    if (_checked)
+    {
+      ++_tally.unrecorded;
+      std::fprintf(stderr, "ReferenceRunner: line %zu: digest %s has no recorded picture\n", _step.line, _step.name.c_str());
+    }
+    return;
+  }
+  ++_tally.picturesChecked;
+  const bool same = _checkpoint.picture == _step.expectedPicture;
+  _tally.picturesDiffer += same ? 0 : 1;
+  Print(std::format("picture\t{}\t{}\t{}\n", _step.name, _checkpoint.picture,
+                    same ? "matches" : std::format("DIFFERS from the recorded {}", _step.expectedPicture)));
+}
+
+// _step's outcome line against _checkpoint's outcomes, each difference printed with its kind (Elite::OutcomeKind). An outcome
+// of the player's progress that differs, or is not recorded, fails the run; a timing outcome that differs is reported. When
+// the digest is _checked, outcomes not recorded at all fail the run.
+void CheckOutcomes(const Elite::Step& _step, const Elite::Checkpoint& _checkpoint, bool _checked, GuardTally& _tally)
+{
+  if (_step.expectedOutcomes.empty())
+  {
+    Print(std::format("outcome\t{}\t{}\n", _step.name, _checkpoint.outcomes));
+    if (_checked)
+    {
+      ++_tally.unrecorded;
+      std::fprintf(stderr, "ReferenceRunner: line %zu: digest %s has no recorded outcomes\n", _step.line, _step.name.c_str());
+    }
+    return;
+  }
+  ++_tally.outcomesChecked;
+  const std::vector<Elite::OutcomeDifference> differences = Elite::CompareOutcomes(_step.expectedOutcomes, _checkpoint.outcomes);
+  for (const Elite::OutcomeDifference& difference : differences)
+  {
+    const bool gates = difference.kind == Elite::OutcomeKind::Progress || !difference.recorded;
+    (gates ? _tally.progressDiffer : _tally.timingDiffer) += 1;
+    Print(std::format("outcome\t{}\t{}={}\t{}\t{}\n", _step.name, difference.name, difference.actual,
+                      difference.recorded ? std::format("DIFFERS from the recorded {}", *difference.recorded) : "NOT RECORDED",
+                      gates ? "progress: fails the run" : "timing: reported"));
+  }
+  if (differences.empty())
+    Print(std::format("outcome\t{}\tmatches\n", _step.name));
+}
+
 int Run(int _argc, char** _argv)
 {
   Options options;
@@ -182,11 +251,12 @@ int Run(int _argc, char** _argv)
   const std::filesystem::path sources = options.replay.empty() ? Elite::FindInRepository("Replays") : options.replay.parent_path();
   Elite::ReplayPlayer player(pc, game->State(), files, sources);
   std::size_t mismatches = 0;
+  GuardTally tally;
   for (std::size_t index = 0; index < steps.size() && asExpected; ++index)
   {
     const Elite::Step& step = steps[index];
-    std::string digest;
-    const Machine::StopReason stop = player.Play(step, digest);
+    Elite::Checkpoint checkpoint;
+    const Machine::StopReason stop = player.Play(step, checkpoint);
     asExpected = stop == Elite::ExpectedStop(step);
     if (step.kind == Elite::StepKind::Wait || step.kind == Elite::StepKind::End)
       reason = stop;
@@ -205,10 +275,12 @@ int Run(int _argc, char** _argv)
     else if (step.kind == Elite::StepKind::Digest)
     {
       const bool checked = !step.expectedDigest.empty();
-      const bool matches = digest == step.expectedDigest;
+      const bool matches = checkpoint.digest == step.expectedDigest;
       if (checked && !matches)
         ++mismatches;
-      Print(std::format("digest\t{}\t{}{}\n", step.name, digest, !checked ? "" : matches ? "\tmatches" : "\tDOES NOT MATCH"));
+      Print(std::format("digest\t{}\t{}{}\n", step.name, checkpoint.digest, !checked ? "" : matches ? "\tmatches" : "\tDOES NOT MATCH"));
+      CheckPicture(step, checkpoint, checked, tally);
+      CheckOutcomes(step, checkpoint, checked, tally);
     }
   }
 
@@ -217,12 +289,24 @@ int Run(int _argc, char** _argv)
   Print(std::format("ran\t{} instructions\t{} cycles\t{:.3f} s\t{}\n", pc.Processor().InstructionCount(), pc.Clock(),
                     static_cast<double>(pc.Clock()) * Machine::CPU_CLOCK_DIVISOR / static_cast<double>(Machine::CRYSTAL_HZ),
                     Describe(reason, pc)));
+  Print(std::format("pictures\t{} checked\t{} differ\n", tally.picturesChecked, tally.picturesDiffer));
+  Print(std::format("outcomes\t{} checked\t{} differ in progress\t{} differ in timing\n", tally.outcomesChecked, tally.progressDiffer,
+                    tally.timingDiffer));
+  if (tally.picturesDiffer > 0 || tally.timingDiffer > 0)
+    std::fprintf(stderr,
+                 "ReferenceRunner: %zu picture(s) and %zu timing outcome(s) differ from those recorded (reported, not failing the run)\n",
+                 tally.picturesDiffer, tally.timingDiffer);
   if (mismatches > 0)
   {
     std::fprintf(stderr, "ReferenceRunner: %zu digest(s) did not match\n", mismatches);
     return 1;
   }
-  return asExpected ? 0 : 1;
+  if (tally.progressDiffer > 0)
+  {
+    std::fprintf(stderr, "ReferenceRunner: %zu outcome(s) of the player's progress differ from those recorded\n", tally.progressDiffer);
+    return 1;
+  }
+  return asExpected && tally.unrecorded == 0 ? 0 : 1;
 }
 
 } // namespace

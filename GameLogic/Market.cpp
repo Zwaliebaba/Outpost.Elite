@@ -78,6 +78,10 @@ constexpr std::uint16_t UNIT_FACTOR = 0x100;
 constexpr std::uint16_t PRICE_FACTOR_ROW_BYTES = 0x10;
 constexpr std::uint16_t TRADE_RECORD_BYTES = 3;
 constexpr std::uint8_t MARKET_TECH_LEVEL_MOST = 9;
+// The quantity on sale from a market random number r: ((r & 1Fh) - 7) xor (r >> 8 & 3).
+constexpr std::uint8_t QUANTITY_RANDOM_MASK = 0x1F;
+constexpr std::uint8_t QUANTITY_RANDOM_BIAS = 7;
+constexpr std::uint8_t QUANTITY_RANDOM_HIGH_MASK = 3;
 
 // The cargo menu's rows, from 1: the commodities in cargoHold's order, each with the amount held and the amount
 // the market has. From gold on they are counted in kilograms or grams, outside the hold's tonnes; alien items, the
@@ -420,6 +424,25 @@ std::uint16_t NextMarketRandom(GameState& _state)
   _state.SetWord(DS.marketRandomState.offset, b);
   _state.Set(DS.data8C22, static_cast<std::uint16_t>(c + sum));
   return sum;
+}
+
+void StartMarketRandom(GameState& _state)
+{
+  _state.SetWord(DS.marketRandomState.offset, _state.Get(DS.randomState0));
+  _state.Set(DS.data8C20, _state.Get(DS.randomState1));
+  _state.Set(DS.data8C22, _state.Get(DS.randomState2));
+}
+
+std::optional<std::uint8_t> RollQuantityOnSale(GameState& _state)
+{
+  // ((r & 31) - 7) xor (r >> 8 & 3), none when that borrows.
+  const std::uint16_t random = NextMarketRandom(_state);
+  const auto drawn = static_cast<std::uint8_t>(Low(random) & QUANTITY_RANDOM_MASK);
+  if (drawn < QUANTITY_RANDOM_BIAS)
+  {
+    return std::nullopt;
+  }
+  return static_cast<std::uint8_t>((drawn - QUANTITY_RANDOM_BIAS) ^ (High(random) & QUANTITY_RANDOM_HIGH_MASK));
 }
 
 Quantity ParseQuantity(const GameState& _state, std::uint16_t _text)

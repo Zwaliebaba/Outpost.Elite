@@ -1,6 +1,6 @@
 # ADR-008 — Time, pacing and the replay digests
 
-**Status:** accepted 2026-10-10, with the change that implements it: paced time in `Machine::Pc`, the `GameLogic` library with the replay format and the game-state digest, and the seed corpus in `Replays/`. It records D6, the owner's speed ruling, and D16, the owner's ruling of 2026-10-10 that replays are framed by the game's own pace and that this ADR is written now rather than in Phase 4 ([Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner)). Amended 2026-10-10 by [ADR-013](ADR-013-the-charts-at-the-ibm-pcs-speed.md) (D18): the galactic and short-range charts take the time they took on the IBM PC. Amended again the same day: the `file` step, prepared commanders and the corpus Phase 4 completes (items 4, 6 and 8). Amended a third time the same day with the owner's ruling on the corpus's gaps (D20, item 8), and a fourth with the `end` step and the replays that close them (items 4 and 8).
+**Status:** accepted 2026-10-10, with the change that implements it: paced time in `Machine::Pc`, the `GameLogic` library with the replay format and the game-state digest, and the seed corpus in `Replays/`. It records D6, the owner's speed ruling, and D16, the owner's ruling of 2026-10-10 that replays are framed by the game's own pace and that this ADR is written now rather than in Phase 4 ([Reverse-Engineering-Plan.md §8](../Reverse-Engineering-Plan.md#8-decisions-for-the-owner)). Amended 2026-10-10 by [ADR-013](ADR-013-the-charts-at-the-ibm-pcs-speed.md) (D18): the galactic and short-range charts take the time they took on the IBM PC. Amended again the same day: the `file` step, prepared commanders and the corpus Phase 4 completes (items 4, 6 and 8). Amended a third time the same day with the owner's ruling on the corpus's gaps (D20, item 8), and a fourth with the `end` step and the replays that close them (items 4 and 8). Amended 2026-10-11 by [ADR-022](ADR-022-the-guard.md) (D33): a `picture` line and an `outcome` line follow each `digest` line (item 4).
 
 ## Context
 
@@ -61,6 +61,8 @@ Only three loops read 3DAh (0x04C1, 0x05D0, 0x4602), all of this form; the first
 - **There are no 1987 slowdowns,** because the work between waits takes no time, as D6 ruled. The charts are the one exception (ADR-013). The port's scheduler in Phase 4 runs the same way, so Phase 4 no longer moves the digests for this reason.
 
 **4. A replay** is a script of steps (`GameLogic/Replay.h`): `wait`, `key`, `down`, `up`, `shot`, `digest`, `file` and `end`.
+
+*Since ADR-022, each `digest` line is followed by a `picture` line and an `outcome` line, which belong to it and are not steps: the picture digest and the outcomes of the same point.*
 
 - **It always runs in paced time.** It starts from these fixed conditions:
   - the reference loaded with the D5 byte (`Elite::LoadReference`);

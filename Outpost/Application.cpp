@@ -190,7 +190,7 @@ int Application::Run(HINSTANCE _instance)
     while (reason == Machine::StopReason::Reached && nextDigest <= target)
     {
       reason = pc->RunUntil(Elite::ReplayCycle(start, nextDigest));
-      recorder.Digest(nextDigest, std::format("t{}", nextDigest / 1000), Elite::GameStateDigest(game->State(), pc->Video()));
+      recorder.Digest(nextDigest, std::format("t{}", nextDigest / 1000), Elite::TakeCheckpoint(game->State(), pc->Video()));
       nextDigest += DIGEST_INTERVAL_MILLISECONDS;
     }
     if (reason == Machine::StopReason::Reached)
@@ -225,7 +225,7 @@ int Application::Run(HINSTANCE _instance)
   if (!replays.empty() && elapsedMilliseconds > DIGEST_INTERVAL_MILLISECONDS)
   {
     // The last digest is where the session ended, so the replay plays to the end, or to the same stop.
-    recorder.Digest(elapsedMilliseconds, "end", Elite::GameStateDigest(game->State(), pc->Video()));
+    recorder.Digest(elapsedMilliseconds, "end", Elite::TakeCheckpoint(game->State(), pc->Video()));
     std::ofstream out(replays / (session + ".replay"), std::ios::binary | std::ios::trunc);
     out << recorder.Text();
   }

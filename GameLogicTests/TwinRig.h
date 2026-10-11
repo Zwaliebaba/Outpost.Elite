@@ -1,20 +1,18 @@
 // GameLogicTests/TwinRig.h
 #pragma once
 
+#include "AnswerFile.h"
+#include "GuardReport.h"
 #include "ReferenceRig.h"
 #include "Replay.h"
 #include "StateDigest.h"
 
-#include <charconv>
 #include <cstddef>
+#include <exception>
 #include <filesystem>
 #include <format>
-#include <fstream>
-#include <map>
-#include <sstream>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 namespace GameLogicTests
@@ -31,6 +29,14 @@ struct TwinOptions
 /// The twins' known answers, from the repository's root. The file's header documents its format.
 inline constexpr std::string_view KNOWN_ANSWERS_FILE = "GameLogicTests/KnownAnswers.txt";
 
+/// The twins' pictures (D33), from the repository's root: beside each known answer, the picture digest of the same state,
+/// under the same twin and ordinal. The file's header documents its format.
+inline constexpr std::string_view KNOWN_PICTURES_FILE = "GameLogicTests/KnownPictures.txt";
+
+/// The twins' outcomes (D33), from the repository's root: beside each known answer, the outcomes of the same state
+/// (Elite::OutcomeText), under the same twin and ordinal. The file's header documents its format.
+inline constexpr std::string_view KNOWN_OUTCOMES_FILE = "GameLogicTests/KnownOutcomes.txt";
+
 /// The twins' known answers (D20, ADR-008 item 8), as KNOWN_ANSWERS_FILE holds them: every digest a twin gives, at each
 /// digest step and at the end of each Play, recorded from the interpreted original before D7 deleted it, under the twin's
 /// name and the digest's ordinal within the twin, counted from 1 over all its Play calls. They are what a twin's machine
@@ -41,13 +47,8 @@ public:
   /// Every answer in the file. A file that is not found, a line that is neither blank, a comment nor an answer, and an
   /// answer given twice fail the test.
   KnownAnswers()
+    : m_answers(KNOWN_ANSWERS_FILE, TwinAnswers::Shape::Sha256)
   {
-    using Microsoft::VisualStudio::CppUnitTestFramework::Assert;
-    const std::filesystem::path path = Elite::FindInRepository(KNOWN_ANSWERS_FILE);
-    Assert::IsFalse(path.empty(), L"GameLogicTests/KnownAnswers.txt in the repository");
-    std::string error;
-    const bool read = Read(path, m_answers, error); // before the message, which names what it found
-    Assert::IsTrue(read, Widen(std::string(KNOWN_ANSWERS_FILE) + ": " + error).c_str());
   }
 
   /// Asserts that _digest, which _what names, is _twin's known answer _ordinal. A missing answer fails too, naming the
@@ -55,79 +56,27 @@ public:
   void Check(const std::string& _twin, std::size_t _ordinal, std::string_view _digest, const std::wstring& _what) const
   {
     using Microsoft::VisualStudio::CppUnitTestFramework::Assert;
-    const auto found = m_answers.find(std::pair{_twin, _ordinal});
-    if (found == m_answers.end())
+    const std::string* const found = m_answers.Find(_twin, _ordinal);
+    if (found == nullptr)
     {
       Assert::Fail((_what + L" is " + Widen(_digest) + L", and " +
                     Widen(std::format("{} has no known answer {} in {}", _twin, _ordinal, KNOWN_ANSWERS_FILE)))
                      .c_str());
     }
-    else if (found->second != _digest)
+    else if (*found != _digest)
     {
       Assert::Fail(
-        (_what + L" is " + Widen(_digest) + L", and " + Widen(std::format("{}'s known answer {} is {}", _twin, _ordinal, found->second)))
-          .c_str());
+        (_what + L" is " + Widen(_digest) + L", and " + Widen(std::format("{}'s known answer {} is {}", _twin, _ordinal, *found))).c_str());
     }
   }
 
 private:
-  /// The answers, by the twin's name and the ordinal.
-  using Answers = std::map<std::pair<std::string, std::size_t>, std::string>;
-
-  static constexpr std::size_t DIGEST_CHARACTERS = 64; // a SHA-256 in hex
-
-  /// Reads every answer in _path into _answers. Returns false, with _error naming the line, for a line that is neither
-  /// blank, a comment nor an answer, or an answer given twice.
-  static bool Read(const std::filesystem::path& _path, Answers& _answers, std::string& _error)
-  {
-    std::ifstream file(_path);
-    if (!file)
-    {
-      _error = "cannot be read";
-      return false;
-    }
-    std::string line;
-    for (std::size_t number = 1; std::getline(file, line); ++number)
-    {
-      if (!line.empty() && line.back() == '\r')
-      {
-        line.pop_back();
-      }
-      if (line.empty() || line.front() == '#')
-      {
-        continue;
-      }
-      std::istringstream fields(line);
-      std::string twin;
-      std::string ordinalText;
-      std::string digest;
-      std::string extra;
-      fields >> twin >> ordinalText >> digest;
-      std::size_t ordinal = 0;
-      const char* const ordinalEnd = ordinalText.data() + ordinalText.size();
-      const std::from_chars_result parsed = std::from_chars(ordinalText.data(), ordinalEnd, ordinal);
-      const bool hex = digest.find_first_not_of("0123456789abcdef") == std::string::npos;
-      if (twin.empty() || parsed.ec != std::errc() || parsed.ptr != ordinalEnd || ordinal == 0 || digest.size() != DIGEST_CHARACTERS ||
-          !hex || (fields >> extra))
-      {
-        _error = std::format("line {} is not a twin's name, an ordinal from 1 and a SHA-256 in lowercase hex", number);
-        return false;
-      }
-      if (!_answers.emplace(std::pair{twin, ordinal}, digest).second)
-      {
-        _error = std::format("line {} gives {}'s answer {} again", number, twin, ordinal);
-        return false;
-      }
-    }
-    return true;
-  }
-
   [[nodiscard]] static std::wstring Widen(std::string_view _text)
   {
     return std::wstring(_text.begin(), _text.end());
   }
 
-  Answers m_answers;
+  TwinAnswers m_answers;
 };
 
 /// A twin (ADR-016): the reference booted to its title screen, or started at power-on, on a Dispatcher with the native
@@ -136,11 +85,20 @@ private:
 /// step and at the end of every Play, must be the twin's next known answer (KnownAnswers), which the interpreted original
 /// gave for the same scenario before D7 deleted it. On a Dispatcher nothing is interpreted, so a twin also shows that its
 /// scenario reaches no code that no native routine stands in for.
+///
+/// Beside each answer, the picture and the outcomes of the same state (D33) are checked against the ones recorded in
+/// KNOWN_PICTURES_FILE and KNOWN_OUTCOMES_FILE (GuardReport). A picture, or a timing outcome, that differs is reported: it
+/// is written to the test's log with both values. An outcome of the player's progress that differs fails, and so does a
+/// picture or outcomes not recorded. While the guard is recorded (RecordingGuard), a twin keeps its pictures and outcomes
+/// instead and writes them when it is done, only if every state digest it gave met its known answer.
 class TwinRig
 {
 public:
   explicit TwinRig(std::string_view _name, const TwinOptions& _options = {})
     : m_name(_name),
+      m_report(Widen(_name)),
+      m_recording(RecordingGuard()),
+      m_exceptions(std::uncaught_exceptions()),
       m_rig(_name, _options.startMoment, _options.mousePresent),
       m_player(m_rig.Host(), m_rig.State())
   {
@@ -154,7 +112,33 @@ public:
   TwinRig& operator=(const TwinRig&) = delete;
   TwinRig(TwinRig&&) = delete;
   TwinRig& operator=(TwinRig&&) = delete;
-  ~TwinRig() = default;
+
+  /// A twin that is done, and threw nothing, so that every state digest it gave met its known answer: while the guard is
+  /// recorded it writes its pictures and outcomes, replacing the ones it had; otherwise it writes its summary to the test's
+  /// log.
+  ~TwinRig()
+  {
+    if (std::uncaught_exceptions() > m_exceptions)
+    {
+      return;
+    }
+    if (!m_recording)
+    {
+      m_report.LogSummary();
+    }
+    else if (!TwinAnswers::Record(KNOWN_PICTURES_FILE, TwinAnswers::Shape::Sha256, m_name, m_recordedPictures) ||
+             !TwinAnswers::Record(KNOWN_OUTCOMES_FILE, TwinAnswers::Shape::Outcomes, m_name, m_recordedOutcomes))
+    {
+      try
+      {
+        GuardReport::Log(Widen(m_name) + L": its pictures and outcomes could not be written");
+      }
+      catch (...)
+      {
+        return;
+      }
+    }
+  }
 
   /// Calls _change(pc, program) on the machine: how a test sets up a state no replay reaches, through Ram() and the data
   /// segment (Elite::DataSegment). The name is the one the twins' set-ups were written with, when there were two machines.
@@ -179,13 +163,13 @@ public:
     {
       const Elite::Step& step = steps[index];
       const std::wstring where = Where(step);
-      const std::string digest = PlayStep(step, Stop(index, steps.size(), _end), where);
+      const Elite::Checkpoint checkpoint = PlayStep(step, Stop(index, steps.size(), _end), where);
       if (step.kind == Elite::StepKind::Digest)
       {
-        Answer(digest, where);
+        Answer(checkpoint, where);
       }
     }
-    Answer(Elite::GameStateDigest(m_rig.State(), m_rig.Host().Video()), Widen(m_name) + L", the state Play ends in");
+    Answer(Elite::TakeCheckpoint(m_rig.State(), m_rig.Host().Video()), Widen(m_name) + L", the state Play ends in");
   }
 
   [[nodiscard]] Machine::Pc& Host() noexcept
@@ -227,12 +211,12 @@ private:
     return where;
   }
 
-  /// Plays _step, which must stop the run as _expected says, and returns its digest: a digest step's, or empty.
-  [[nodiscard]] std::string PlayStep(const Elite::Step& _step, Machine::StopReason _expected, const std::wstring& _where)
+  /// Plays _step, which must stop the run as _expected says, and returns its checkpoint: a digest step's, or empty.
+  [[nodiscard]] Elite::Checkpoint PlayStep(const Elite::Step& _step, Machine::StopReason _expected, const std::wstring& _where)
   {
     using Microsoft::VisualStudio::CppUnitTestFramework::Assert;
-    std::string digest;
-    const Machine::StopReason stopped = m_player.Play(_step, digest);
+    Elite::Checkpoint checkpoint;
+    const Machine::StopReason stopped = m_player.Play(_step, checkpoint);
     if (stopped == Machine::StopReason::Unported)
     {
       const Machine::Registers& at = m_rig.Host().Processor().Regs();
@@ -246,13 +230,44 @@ private:
         (_where + L": native " + Widen(m_rig.Host().Native().Overran()) + L" waited, and is not hooked as a routine that waits").c_str());
     }
     Assert::IsTrue(stopped == _expected, (_where + L": the run stopped otherwise").c_str());
-    return digest;
+    return checkpoint;
   }
 
-  /// _digest, which _what names, is the twin's next known answer.
-  void Answer(std::string_view _digest, const std::wstring& _what)
+  /// _checkpoint, which _what names, is the twin's next answer: its digest must be the known answer, and its picture and
+  /// outcomes are checked against the recorded ones (GuardReport), which fails on an outcome of the player's progress that
+  /// differs and reports the rest; a picture or outcomes not recorded fail. While the guard is recorded, the picture and
+  /// the outcomes are kept for the destructor to write instead.
+  void Answer(const Elite::Checkpoint& _checkpoint, const std::wstring& _what)
   {
-    m_answers.Check(m_name, ++m_digests, _digest, _what + L": the digest");
+    using Microsoft::VisualStudio::CppUnitTestFramework::Assert;
+    ++m_digests;
+    m_answers.Check(m_name, m_digests, _checkpoint.digest, _what + L": the digest");
+    if (m_recording)
+    {
+      m_recordedPictures.push_back(_checkpoint.picture);
+      m_recordedOutcomes.push_back(_checkpoint.outcomes);
+      return;
+    }
+    const std::string* const picture = m_pictures.Find(m_name, m_digests);
+    if (picture == nullptr)
+    {
+      Assert::Fail((_what + L": the picture is " + Widen(_checkpoint.picture) + L", and " +
+                    Widen(std::format("{} has no recorded picture {} in {}", m_name, m_digests, KNOWN_PICTURES_FILE)))
+                     .c_str());
+    }
+    const std::wstring point = _what + L", answer " + std::to_wstring(m_digests);
+    m_report.Picture(point, *picture, _checkpoint.picture);
+    const std::string* const outcomes = m_outcomes.Find(m_name, m_digests);
+    if (outcomes == nullptr)
+    {
+      Assert::Fail((point + L": the outcomes are " + Widen(_checkpoint.outcomes) + L", and " +
+                    Widen(std::format("{} has no recorded outcomes {} in {}", m_name, m_digests, KNOWN_OUTCOMES_FILE)))
+                     .c_str());
+    }
+    if (const std::wstring failure = m_report.Outcomes(point, *outcomes, _checkpoint.outcomes); !failure.empty())
+    {
+      Assert::Fail(failure.c_str());
+    }
   }
 
   [[nodiscard]] static std::wstring Widen(std::string_view _text)
@@ -262,7 +277,14 @@ private:
 
   std::string m_name;
   KnownAnswers m_answers;
-  std::size_t m_digests = 0; // the twin's digests so far, the last one's ordinal
+  TwinAnswers m_pictures{KNOWN_PICTURES_FILE, TwinAnswers::Shape::Sha256};
+  TwinAnswers m_outcomes{KNOWN_OUTCOMES_FILE, TwinAnswers::Shape::Outcomes};
+  GuardReport m_report;
+  bool m_recording = false;                    // the guard is recorded, not checked (RecordingGuard)
+  int m_exceptions = 0;                        // std::uncaught_exceptions() when the twin was made
+  std::vector<std::string> m_recordedPictures; // while recording, the pictures by ordinal from 1
+  std::vector<std::string> m_recordedOutcomes; // while recording, the outcomes by ordinal from 1
+  std::size_t m_digests = 0;                   // the twin's digests so far, the last one's ordinal
   ReferenceRig m_rig;
   Elite::ReplayPlayer m_player;
 };

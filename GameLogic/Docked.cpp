@@ -110,9 +110,6 @@ constexpr std::uint16_t BUY_PRICE = 0;
 constexpr std::uint16_t SELL_PRICE = 2;
 constexpr std::uint16_t INVENTORY_ROWS = 0x12; // the 17 products and the refugees
 constexpr std::uint16_t QUANTITY_DIGITS_BLANKED = 4;
-constexpr std::uint8_t QUANTITY_RANDOM_MASK = 0x1F;
-constexpr std::uint8_t QUANTITY_RANDOM_BIAS = 7;
-constexpr std::uint8_t QUANTITY_RANDOM_HIGH_MASK = 3;
 constexpr std::uint16_t SYSTEM_LABEL_TEXT = 0x83CB;      // 'System:'
 constexpr std::uint16_t HYPERSYSTEM_LABEL_TEXT = 0x83DA; // 'Hypersystem:'
 constexpr std::uint16_t WITCH_SPACE_TEXT = 0x8E30;       // 'WITCH SPACE'
@@ -589,9 +586,7 @@ ScreenKey ShowSellCargoScreen(GameState& _state, Hardware& _hardware, bool _back
 
 ScreenKey ShowBuyCargoScreen(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  _state.SetWord(DS.marketRandomState.offset, _state.Get(DS.randomState0));
-  _state.Set(DS.data8C20, _state.Get(DS.randomState1));
-  _state.Set(DS.data8C22, _state.Get(DS.randomState2));
+  StartMarketRandom(_state);
   DrawTradeScreenHeader(_state, _hardware, DS.buyCargoFrame.offset, BUY_CARGO_HELP_TEXT, _backward);
   TradeRow row = FIRST_TRADE_ROW;
   for (;;)
@@ -600,13 +595,8 @@ ScreenKey ShowBuyCargoScreen(GameState& _state, Hardware& _hardware, bool _backw
     std::optional<std::uint8_t> onSale;
     if (_state.Get(DS.marketQuantitiesSet) == 0)
     {
-      // The quantity on sale, the first time after an arrival: ((r & 31) - 7) xor (r >> 8 & 3), none when that borrows.
-      const std::uint16_t random = NextMarketRandom(_state);
-      const auto drawn = static_cast<std::uint8_t>(Low(random) & QUANTITY_RANDOM_MASK);
-      if (drawn >= QUANTITY_RANDOM_BIAS)
-      {
-        onSale = static_cast<std::uint8_t>((drawn - QUANTITY_RANDOM_BIAS) ^ (High(random) & QUANTITY_RANDOM_HIGH_MASK));
-      }
+      // The quantity on sale, the first time after an arrival.
+      onSale = RollQuantityOnSale(_state);
     }
     else
     {
