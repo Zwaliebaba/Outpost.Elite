@@ -9,6 +9,7 @@
 #include "Reference.h"
 #include "Renderer.h"
 #include "Replay.h"
+#include "SpaceView.h"
 #include "Window.h"
 
 #include <objbase.h>
@@ -114,6 +115,12 @@ int Application::Run(HINSTANCE _instance)
     Fail(L"Direct3D 12 is not available on this machine.");
     return 1;
   }
+  SpaceView spaceView;
+  if (!spaceView.AddModels(renderer))
+  {
+    Fail(L"The display device would not take the ships' models.");
+    return 1;
+  }
   Engine::AudioStream audio;
   (void)audio.Create(SAMPLE_RATE); // without a sound device the game runs silent
 
@@ -191,7 +198,8 @@ int Application::Run(HINSTANCE _instance)
     {
       pixels[index] = rgb(frame->pixels[index]);
     }
-    if (!renderer.Present(pixels, rgb(frame->borderColor)))
+    // The space view drawn over the picture while the screen shows a frame of flight (ADR-033).
+    if (!renderer.Present(pixels, rgb(frame->borderColor), spaceView.Frame(*platform)))
     {
       Fail(L"The display device was lost.");
       return 1;

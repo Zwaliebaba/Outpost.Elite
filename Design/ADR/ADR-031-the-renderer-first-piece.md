@@ -1,6 +1,6 @@
 # ADR-031 — The renderer's first piece: the picture on two frames in flight, and the engine's tests on WARP
 
-**Status:** accepted 2026-10-12, with the change that implements it, piece 1 of Phase 6 ([Reverse-Engineering-Plan.md §5, Phase 6](../Reverse-Engineering-Plan.md#phase-6--the-new-game)). It is the first part of the renderer that D47 rules and AGENTS.md R12 leaves to the time the renderer is built. The owner's ruling D60 sets its scope. It amends [ADR-004](ADR-004-projects-and-layout.md) with a project, `EngineTests`, and [ADR-009](ADR-009-windows-shell.md), whose `Presenter` it replaces. **Amended 2026-10-12 by [ADR-032](ADR-032-the-flight-snapshot.md) (D61):** piece 2 lands as data and tests, so tearing, which the table below gives to piece 2, moves on to piece 3 with the first frames drawn between updates.
+**Status:** accepted 2026-10-12, with the change that implements it, piece 1 of Phase 6 ([Reverse-Engineering-Plan.md §5, Phase 6](../Reverse-Engineering-Plan.md#phase-6--the-new-game)). It is the first part of the renderer that D47 rules and AGENTS.md R12 leaves to the time the renderer is built. The owner's ruling D60 sets its scope. It amends [ADR-004](ADR-004-projects-and-layout.md) with a project, `EngineTests`, and [ADR-009](ADR-009-windows-shell.md), whose `Presenter` it replaces. **Amended 2026-10-12 by [ADR-032](ADR-032-the-flight-snapshot.md) (D61):** piece 2 lands as data and tests, so tearing, which the table below gives to piece 2, moves on to piece 3 with the first frames drawn between updates. **Amended 2026-10-12 by [ADR-033](ADR-033-the-space-view-hybrid.md) (D62):** the scene's targets arrive with the space view's first part; bloom moves on to the sun and the planet, and tearing to the full window.
 
 ## Context
 
@@ -50,6 +50,7 @@ PerMonitorV2, the rest of D48 in piece 1, is in already (ADR-009 item 2).
 | `PlacePicture` | each case of the test computed by hand |
 | Checkers | `CheckProjectFiles` (five projects) and `CheckFormat` are clean |
 | Not run here | the MSVC build, the WARP tests and the game: CI builds the solution and runs `EngineTests`, and the owner plays it at 100 to 200% display scale, which is piece 1's exit |
+| Played 2026-10-12 | by the owner: piece 1's exit holds |
 
 ## What this forecloses
 

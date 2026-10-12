@@ -101,6 +101,29 @@ public:
     m_platform.PublishFlightSnapshot(_snapshot, _continues);
   }
 
+  /// The space view's layers (ADR-033), which watch the drawing buffer and write no port and no byte of the game's state: a
+  /// frame of flight's drawing begins, an object is about to be drawn, the one being drawn is a blueprint's model, and the
+  /// object in slot _slot is drawn (SpaceViewLayers).
+  void BeginSpaceViewFrame() noexcept
+  {
+    m_platform.BeginSpaceViewFrame();
+  }
+
+  void BeginSpaceViewObject() noexcept
+  {
+    m_platform.BeginSpaceViewObject();
+  }
+
+  void NoteSpaceViewModel() noexcept
+  {
+    m_platform.NoteSpaceViewModel();
+  }
+
+  void EndSpaceViewObject(std::uint8_t _slot) noexcept
+  {
+    m_platform.EndSpaceViewObject(_slot);
+  }
+
   /// OUT 3D4h,0Eh, then OUT 3D5h,_value: the CRTC's register 14, the high byte of the cursor's address.
   void SetCursorAddressHigh(std::uint8_t _value);
 

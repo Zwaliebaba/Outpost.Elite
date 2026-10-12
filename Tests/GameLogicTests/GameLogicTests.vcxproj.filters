@@ -167,6 +167,12 @@
     <ClCompile Include="Sha256Tests.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
+    <ClCompile Include="ShipModelTests.cpp">
+      <Filter>Flight</Filter>
+    </ClCompile>
+    <ClCompile Include="SpaceViewLayersTests.cpp">
+      <Filter>Flight</Filter>
+    </ClCompile>
     <ClCompile Include="SpeakerTests.cpp">
       <Filter>Platform</Filter>
     </ClCompile>

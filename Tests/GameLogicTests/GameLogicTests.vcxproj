@@ -124,6 +124,8 @@
     <ClCompile Include="ReplayTests.cpp" />
     <ClCompile Include="SaveLoadTests.cpp" />
     <ClCompile Include="Sha256Tests.cpp" />
+    <ClCompile Include="ShipModelTests.cpp" />
+    <ClCompile Include="SpaceViewLayersTests.cpp" />
     <ClCompile Include="SpeakerTests.cpp" />
     <ClCompile Include="StartUpTests.cpp" />
     <ClCompile Include="StateDigestTests.cpp" />

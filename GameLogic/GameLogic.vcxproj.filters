@@ -318,6 +318,9 @@
     <ClInclude Include="SharedTables.h">
       <Filter>Reference</Filter>
     </ClInclude>
+    <ClInclude Include="ShipModel.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
     <ClInclude Include="Ships.h">
       <Filter>Ships</Filter>
     </ClInclude>
@@ -335,6 +338,9 @@
     </ClInclude>
     <ClInclude Include="SpaceObject.h">
       <Filter>State</Filter>
+    </ClInclude>
+    <ClInclude Include="SpaceViewLayers.h">
+      <Filter>Scene</Filter>
     </ClInclude>
     <ClInclude Include="Speaker.h">
       <Filter>Platform</Filter>
@@ -494,11 +500,17 @@
     <ClCompile Include="Sha256.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
+    <ClCompile Include="ShipModel.cpp">
+      <Filter>Scene</Filter>
+    </ClCompile>
     <ClCompile Include="Ships.cpp">
       <Filter>Ships</Filter>
     </ClCompile>
     <ClCompile Include="Sound.cpp">
       <Filter>Sound</Filter>
+    </ClCompile>
+    <ClCompile Include="SpaceViewLayers.cpp">
+      <Filter>Scene</Filter>
     </ClCompile>
     <ClCompile Include="Speaker.cpp">
       <Filter>Platform</Filter>

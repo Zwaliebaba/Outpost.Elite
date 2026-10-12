@@ -45,6 +45,12 @@ struct Blueprint
   std::span<const std::uint8_t> faceList;      ///< each face: its three vertex bytes, a count, and its items
 };
 
+/// Ship type _kind's blueprint, blueprintTable's entry, _kind below 30 (ShipModel.h).
+[[nodiscard]] const Blueprint& BlueprintOf(std::uint8_t _kind);
+
+/// faceFillPatterns' entry _index, below 16: its low byte fills even rows and its high byte odd ones, four 2-bit pixels each.
+[[nodiscard]] std::uint16_t FaceFillPattern(std::uint8_t _index);
+
 /// ScaleDodoRadii's two radii, in the ratio of a dodecahedron's two rings, about 1.62.
 struct DodoRadii
 {

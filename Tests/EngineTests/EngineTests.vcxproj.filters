@@ -20,6 +20,9 @@
     <ClCompile Include="RendererTests.cpp">
       <Filter>Rendering</Filter>
     </ClCompile>
+    <ClCompile Include="SceneInsetTests.cpp">
+      <Filter>Rendering</Filter>
+    </ClCompile>
     <ClCompile Include="SceneSnapshotTests.cpp">
       <Filter>Rendering</Filter>
     </ClCompile>
