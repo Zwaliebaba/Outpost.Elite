@@ -1,6 +1,6 @@
 # ELITES.EXE — reverse-engineering and native port plan
 
-**Status:** proposed 2026-10-09. The owner's rulings are D1 to D58 in §8. A ruling becomes a decision when the ADR in §9 records it (AGENTS.md §6). Each phase's section in §5 says how its exit was met.
+**Status:** proposed 2026-10-09. The owner's rulings are D1 to D59 in §8. A ruling becomes a decision when the ADR in §9 records it (AGENTS.md §6). Each phase's section in §5 says how its exit was met.
 
 | Phase | State | Recorded in |
 |---|---|---|
@@ -9,7 +9,7 @@
 | 2 — The host | Exit met headless 2026-10-10; the shell makes it playable | ADR-004 to ADR-009 |
 | 3 — Replace routines with C++ | Exit met 2026-10-10 | ADR-010 |
 | 4 — Detach | Closed 2026-10-10 | ADR-011 to ADR-019 |
-| 5 — The native platform and the natural layout | Pieces 1 and 2 done. Piece 3: changes 1, 2, 3a and 3b done; change 3c remains. Piece 4 moved to Phase 6 (D52). | ADR-020 to ADR-026 |
+| 5 — The native platform and the natural layout | Pieces 1 and 2 done. Piece 3: changes 1, 2, 3a and 3b done; change 3c remains, and is next. The guard D57 deleted is restored (D59). Piece 4 moved to Phase 6 (D52). | ADR-020 to ADR-026, ADR-029 |
 | 6 — The new game | Ruled (D39, D44–D55), not started. Done ahead of it: D41 (ADR-027), and D42 and D48's PerMonitorV2 (ADR-009). D43 goes with change 3c. | — |
 
 **Play-tests.** The owner played the build with D19 and D3 (`472a6b8`) and reported it good; played main at `7242663`, with the platform swap and change 1, and reported that it works perfectly; and played the game after D7 and reported that it works as designed.
@@ -186,6 +186,8 @@ The native platform comes first, and it changes nothing on purpose (D23). Video 
 
    *`ReferenceRunner` is renamed `ReplayRunner` 2026-10-11 (D35), ahead of change 3c.*
 
+   *The guard is restored 2026-10-12 (D59, ADR-029), ahead of change 3c: D57 deleted it after two hand edits to the load image, and with both reverted the corpus, the twins and the image's hash hold again as recorded.*
+
    *Left for change 3c, from the overflow audit and change 3b (2026-10-11):* name the runs that still cross members (the space view's buffer as one 8 KiB member; the fuel text and digits; the missiles' name; the dashboard cache; the pause menu and options; the supernova debriefing text; the docked frames' descriptors), then remove the `GameState`'s answer by 1987 address, the unused members (keeping the three M's launch reads), the 19 gaps, the four constants in the state and the unions, and re-base once. The nine direction-flag branches are unreachable (the only STD is in `MaskOutsideTunnel`) and go. D37's second round: 15 routines whose result is unread. Removing a write the idle test sees is a ruling. D43's checks at load ride with it. Normal play reaches nothing else past a member.
 
    The same gates apply.
@@ -330,8 +332,9 @@ After D44, no replay reaches the docked screens. Their rules are functions with 
 | D54 | Who designs what the canvas does not show: the message line, the ECM's E, the other views, the disc menu, the laser mount, the pause screen, the missions and the error states | The owner draws them first. | **The owner draws them first** (2026-10-11), before the code that needs them. Phase 6 lists them. |
 | D55 | D39's scope: the ruling names the HUD, and §5 applied Bahnschrift to every canvas screen | Every canvas screen. | **Every canvas screen** (2026-10-11): Bahnschrift with tabular figures on the HUD and on the docked screens. Extends D39. |
 | D56 | The plan's status paragraph, 925 words, against §2.4's aim that the plan stays short | A status table. | **A status table** (2026-10-11): the paragraph becomes a table of the phases; the detail is in §5, §8 and the ADRs. |
-| D57 | Whether the tests still hold the port to `ELITES.EXE`, now that `3eeaca6` fits the docking computer at the start and 38 tests fail on it (raised by the owner) | Keep each scenario's own checks, and drop only the comparisons with `ELITES.EXE`. | **Delete the 38 failing tests** (2026-10-11): matching `ELITES.EXE` is no longer needed. The image's hash test, the 36 twins and the corpus test go, with the twins' answers, pictures and outcomes. Asked the same day, what then went unused goes too: the replay corpus in `Replays/`, `PrepareCommanders.py` and the functions that recorded the corpus. The subsystems' answers and `ReplayRunner` stay. ADR-028 records it. Amends D20, D25, D33 and D35. |
+| D57 | Whether the tests still hold the port to `ELITES.EXE`, now that `3eeaca6` fits the docking computer at the start and 38 tests fail on it (raised by the owner) | Keep each scenario's own checks, and drop only the comparisons with `ELITES.EXE`. | **Delete the 38 failing tests** (2026-10-11): matching `ELITES.EXE` is no longer needed. *Superseded by D59: the edits are reverted and the tests restored.* The image's hash test, the 36 twins and the corpus test go, with the twins' answers, pictures and outcomes. Asked the same day, what then went unused goes too: the replay corpus in `Replays/`, `PrepareCommanders.py` and the functions that recorded the corpus. The subsystems' answers and `ReplayRunner` stay. ADR-028 records it. Amends D20, D25, D33 and D35. |
 | D58 | Whether `ReplayRunner` is still used, after D57 left it no replay to play (asked by the owner) | Remove it, and the shell's session recording with it, or keep it as a hand-run tool. | **Remove it** (2026-10-11): `ReplayRunner` is deleted, and with it the shell's recording and `ReplayRecorder`, which nothing else used. The replay format stays for the tests. ADR-028 records it. Amends D35 and D57. |
+| D59 | Whether change 3c and Phase 6 can go ahead on what D57 left: no check of flight, combat, docking, hyperspace, missions or saving against anything recorded (raised by the review of this plan, 2026-10-12) | Rebuild the guard before change 3c. Revert the two hand edits to the load image (`3eeaca6`'s docking computer, marked a cheat, and `4450185`'s credits), and every 1987 answer holds again with nothing re-recorded. | **As recommended** (2026-10-12): both edits are reverted and everything D57 deleted is restored; D58 stands. A change to the starting state is a ruling, never an edit to the image. ADR-029 records it. Supersedes D57. |
 
 ## 9. ADRs this plan produces
 
@@ -365,6 +368,7 @@ After D44, no replay reaches the docked screens. Their rules are functions with 
 | [ADR-026](ADR/ADR-026-the-data-segment-distributed.md) | The data segment distributed: groups of state, and constants out of it (D38, piece 3 change 3a) | Phase 5 — written |
 | [ADR-027](ADR/ADR-027-the-short-range-chart-capped.md) | The short-range chart capped to its buffers, the first change on purpose (D41) | Phase 5 — written |
 | [ADR-028](ADR/ADR-028-the-match-to-elites-exe-retired.md) | The tests no longer hold the port to `ELITES.EXE` (D57), and `ReplayRunner` goes (D58) | Phase 5 — written |
+| [ADR-029](ADR/ADR-029-the-guard-restored.md) | The guard restored: the image's two edits reverted and D57's deletions undone (D59) | Phase 5 — written |
 | — | Change 3c: the last members by name, and a loaded commander clamped (D43) | Phase 5, piece 3 — to write |
 | — | The renderer: device, frames in flight, targets, the 2D layer, text and the resolution policy (D47, D48, D55) | Phase 6, piece 1 — to write |
 | — | The space view: the snapshot, interpolation, the field of view, ships, planets and sky (D45, D49, D50) | Phase 6, pieces 2 and 3 — to write |

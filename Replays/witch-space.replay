@@ -1,0 +1,92 @@
+# Misjumps into witch space and fights the Thargoids there until they kill the commander. It starts from
+# fighter.cdr (Tools/PrepareCommanders.py): the reference's own save, with Leesti selected, a military laser,
+# ECM, an energy unit and enough kills (20) that enemies fire missiles. Alt+W during the countdown sets
+# forceMisjump, the reference's own way to make a misjump; the arrival then puts the ship in witch space
+# between the systems, where only Thargoids spawn, ten at once. The first spawns where the ship is (see
+# mask-mission.replay: nothing has turned the spawn point yet) and dies ramming it; the military laser
+# destroys another, each kill shortening the witch-space countdown; they launch Thargons, the ECM (E) removes
+# the missile one fires, and they kill the commander: GAME OVER, then the title screen. The fight was played by
+# a scratch program that steered at the nearest ship by its position each frame and fired when it was in the
+# sights; what it pressed is recorded here like any other replay.
+file JAMESON.CDR fighter.cdr
+wait 0.5; key space; wait 3.5      # any key: the credits, then the status screen
+key Escape; wait 0.3               # the disc menu
+key l; wait 0.3                    # Load Commander: it asks for a file name
+key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
+digest loaded d82b79ec0314c28e3ffa19c5f2ff21d2b5018d5305949ab9549a4360593b6f2e
+picture loaded 44fd17ae02fbc25fb600d728cb324d04ff3a9ca1e4d3c452baf2feb4e9d0a706
+outcome loaded galaxy=0 system=7 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=1000 legalStatus=0 kills=20 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=1 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=1 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=0 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=1 laserTypes=3 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=48 fuel=255 shipSlotsInUse=1 cabinTemperature=12 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
+key F1; wait 0.5                   # launch
+down h; wait 1; up h               # the countdown to Leesti
+down Alt_L; key w; up Alt_L        # Alt+W: a misjump
+wait 8
+digest witch-space a89bbb6cc1246889991a050e0e1dcc8f41314977a8527ec8c98300383bf050c9
+picture witch-space f6b29f711c3525fb71d14f40642b2fe3254150765ac7a01f5846a70273e6d651
+outcome witch-space galaxy=0 system=55 witchSpace=65 docked=0 inFlight=1 dead=0 creditsTenths=1500 legalStatus=0 kills=21 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=1 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=1 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=0 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=1 laserTypes=3 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=1 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=831 foreShield=0 aftShield=90 speed=20 fuel=126 shipSlotsInUse=12 cabinTemperature=11 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
+# The fight, as recorded: a step for each change of the keys, and the frames between.
+down Left; wait 0.500
+down Up; wait 0.100
+up Left; wait 0.150
+down Right; wait 0.200
+up Up; wait 0.450
+down Up; wait 0.200
+down Left; up Right; wait 0.050
+down space; wait 0.050
+up Up; wait 0.050
+down Down; wait 0.050
+up space; wait 0.200
+up Down; down space; wait 0.300
+down Up; wait 0.100
+key e; wait 0.050
+up Left; key e; wait 0.050
+down Right; wait 0.050
+up Up; down Down; wait 0.250
+up Down; wait 0.050
+down Up; wait 0.200
+up Right; wait 0.050
+up Up; down Down; wait 0.100
+down Right; wait 0.150
+down Up; up Down; wait 0.150
+up Right; wait 0.050
+down Left; wait 0.050
+up Up; down Down; wait 0.200
+up Down; wait 0.050
+down Up; wait 0.150
+up Up; wait 0.150
+down Up; wait 0.100
+up Left; up Up; wait 0.050
+down Right; up space; wait 0.600
+down Up; wait 0.200
+up Right; down space; wait 0.050
+down Left; wait 0.050
+up Up; down Down; wait 0.050
+up space; wait 0.150
+down space; wait 0.100
+down Up; up Down; wait 0.050
+up space; wait 0.050
+up Left; down Right; wait 0.150
+up Up; wait 0.500
+down Up; wait 0.250
+up Right; wait 0.150
+down Left; wait 0.450
+up Left; wait 0.150
+down Right; wait 0.100
+up Right; wait 0.050
+down Right; wait 0.100
+up Up; down space; wait 0.050
+down Down; up space; wait 0.200
+up Down; wait 0.650
+down Up; wait 0.200
+down Left; up Right; wait 0.100
+down space; wait 0.050
+up Up; down Down; wait 0.050
+up space; wait 0.150
+up Down; wait 0.550
+up Left
+digest killed 1e1b391fb7509d42d13959df9680fc8b99fd985f40b75f2a18dc1ee29a15e635
+picture killed caeb445cbb7f3d05a26510b0ac0cfc24207865b947c309d5e6bd16e5c046aa2f
+outcome killed galaxy=0 system=55 witchSpace=30 docked=0 inFlight=1 dead=1 creditsTenths=2000 legalStatus=0 kills=22 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=1 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=0 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=1 laserTypes=3 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=1 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=0 foreShield=0 aftShield=0 speed=8 fuel=126 shipSlotsInUse=22 cabinTemperature=11 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
+wait 2
+digest title 6410d5840874d31cc161aa6951913eefce41bd3a1c9981e674189f61b00990ec
+picture title a13ebaa75e8a45d55c5b119fd5e9d7684480535cfd2c07eb061d293a5f51608b
+outcome title galaxy=0 system=55 witchSpace=30 docked=0 inFlight=0 dead=1 creditsTenths=2000 legalStatus=0 kills=22 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=1 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=0 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=0 laserTypes=3 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=1 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=0 foreShield=0 aftShield=0 speed=8 fuel=126 shipSlotsInUse=1 cabinTemperature=11 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0

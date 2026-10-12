@@ -1,6 +1,6 @@
 // GameLogic/ReferenceImage.cpp
-// The reference's load image, checked in (D36): ReferenceImage.h says where it came from. Its bytes are the file's, except
-// where D57 lets them differ (ADR-028); its rows are laid out to be read, and for clang-format to keep (Tools/GenerateTables.py).
+// The reference's load image, checked in (D36): ReferenceImage.h says where it came from. Its bytes are the file's, which
+// ReferenceImageTests holds them to; its rows are laid out to be read, and for clang-format to keep (Tools/GenerateTables.py).
 #include "pch.h"
 
 #include "ReferenceImage.h"
