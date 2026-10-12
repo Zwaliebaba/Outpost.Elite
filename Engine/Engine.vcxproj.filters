@@ -21,6 +21,12 @@
     <ClInclude Include="AudioStream.h">
       <Filter>Audio</Filter>
     </ClInclude>
+    <ClInclude Include="Canvas.h">
+      <Filter>Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="GlyphAtlas.h">
+      <Filter>Rendering</Filter>
+    </ClInclude>
     <ClInclude Include="pch.h">
       <Filter>Build</Filter>
     </ClInclude>
@@ -41,6 +47,12 @@
     <ClCompile Include="AudioStream.cpp">
       <Filter>Audio</Filter>
     </ClCompile>
+    <ClCompile Include="Canvas.cpp">
+      <Filter>Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="GlyphAtlas.cpp">
+      <Filter>Rendering</Filter>
+    </ClCompile>
     <ClCompile Include="pch.cpp">
       <Filter>Build</Filter>
     </ClCompile>
@@ -55,11 +67,20 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <None Include="Shader\Canvas.hlsli">
+      <Filter>Shader</Filter>
+    </None>
     <None Include="Shader\Scene.hlsli">
       <Filter>Shader</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>
+    <FxCompile Include="Shader\CanvasPS.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\CanvasVS.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
     <FxCompile Include="Shader\CompositePS.hlsl">
       <Filter>Shader</Filter>
     </FxCompile>

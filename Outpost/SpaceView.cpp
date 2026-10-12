@@ -15,9 +15,6 @@ namespace Outpost
 namespace
 {
 
-// The space view in the picture's grid of 640 dots by 200 lines (FrameImage): the 320x200 mode's pixels are two dots each.
-constexpr float DOTS_PER_PIXEL = 2.0f;
-
 // ProjectVertices' projection: 256 pixels across per unit of x / z and 256 lines down per unit of y / z, from pixel 128 of the
 // view and buffer row 64, the view's row 63. Each rounds its coordinate towards zero or to the nearest, so a pixel's middle is
 // where its coordinate falls: the axis is at the middle of pixel 128 and of row 63.
@@ -135,7 +132,7 @@ Engine::SceneSnapshot SpaceView::SceneOf(const Elite::FlightSnapshot& _snapshot)
   return scene;
 }
 
-const Engine::SceneFrame* SpaceView::Frame(const Elite::Platform& _platform)
+const Engine::SceneFrame* SpaceView::Frame(const Elite::Platform& _platform, const Engine::Rect& _place)
 {
   const Elite::FlightSnapshot& latest = _platform.LatestFlightSnapshot();
   if (latest.sequence == 0 || !_platform.SpaceViewShown())
@@ -175,14 +172,17 @@ const Engine::SceneFrame* SpaceView::Frame(const Elite::Platform& _platform)
   {
     inset.palette[color] = Rgb(palette[colors[color] & 0x0F]);
   }
-  inset.left = static_cast<float>(Elite::SPACE_VIEW_LEFT_PIXELS) * DOTS_PER_PIXEL;
-  inset.top = static_cast<float>(Elite::SPACE_VIEW_TOP_LINES);
-  inset.width = static_cast<float>(Elite::SPACE_VIEW_WIDTH_PIXELS) * DOTS_PER_PIXEL;
-  inset.height = static_cast<float>(Elite::SPACE_VIEW_HEIGHT_PIXELS);
-  inset.focalX = FOCAL * DOTS_PER_PIXEL;
-  inset.focalY = FOCAL;
-  inset.centerX = AXIS_PIXEL * DOTS_PER_PIXEL;
-  inset.centerY = AXIS_ROW;
+  // The view's 256 x 126 pixels stretched over _place, and the projection with them.
+  const float across = _place.width / static_cast<float>(Elite::SPACE_VIEW_WIDTH_PIXELS);
+  const float down = _place.height / static_cast<float>(Elite::SPACE_VIEW_HEIGHT_PIXELS);
+  inset.left = _place.left;
+  inset.top = _place.top;
+  inset.width = _place.width;
+  inset.height = _place.height;
+  inset.focalX = FOCAL * across;
+  inset.focalY = FOCAL * down;
+  inset.centerX = AXIS_PIXEL * across;
+  inset.centerY = AXIS_ROW * down;
   inset.nearUnits = NEAR_UNITS;
   inset.towardsLight = towardsLight;
   inset.layerWidth = Elite::SPACE_VIEW_WIDTH_PIXELS;

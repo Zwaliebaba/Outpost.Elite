@@ -2,7 +2,10 @@
 
 #include "FlightSnapshot.h"
 
+#include "Arithmetic.h"
 #include "GameState.h"
+#include "Message.h"
+#include "Text.h"
 
 #include <algorithm>
 #include <array>
@@ -20,6 +23,14 @@ constexpr std::uint8_t TYPE_BITS = 0x3E; // bits 1-5 of a slot's type byte
 constexpr std::int32_t SIGN_24 = 0x800000;
 constexpr std::int32_t WRAP_24 = 0x1000000;
 constexpr std::uint16_t TURN = 0x800; // a whole turn, in the game's angles
+
+// The dashboard as UpdateDashboard and its routines keep it (Flight.cpp).
+constexpr std::uint8_t FLAG_HOSTILE = 0x01;
+constexpr std::uint8_t FLAG_BLIP_DRAWN = 0x02;
+constexpr std::uint8_t SAFE_ZONE_GLYPH = 0x82;
+constexpr std::uint8_t ECM_GLYPH = 0x81;
+constexpr std::uint8_t COMPASS_CENTER_X = 0xCF;
+constexpr std::uint8_t COMPASS_CENTER_Y = 0x27;
 
 // The 24-bit two's complement number of a coordinate's high byte and low word.
 [[nodiscard]] constexpr std::int32_t Coordinate(std::uint8_t _high, std::uint16_t _low) noexcept
@@ -123,6 +134,52 @@ using Matrix = std::array<std::array<double, 3>, 3>; // rows: where each axis go
   return Orientation{.x = static_cast<float>(x), .y = static_cast<float>(y), .z = static_cast<float>(z), .w = static_cast<float>(w)};
 }
 
+// The dashboard as the frame left it: the values UpdateDashboard drew, each slot's blip, the compass's dot and the message line.
+[[nodiscard]] SnapshotDashboard TakeDashboard(const GameState& _state)
+{
+  const GameData& data = _state.Data();
+  SnapshotDashboard dashboard;
+  dashboard.foreShield = data.playerShip.foreShield;
+  dashboard.aftShield = data.playerShip.aftShield;
+  dashboard.fuel = data.commander.fuel;
+  dashboard.cabinTemperature = data.playerShip.cabinTemperature;
+  dashboard.laserTemperature = data.flight.laserTemperature;
+  dashboard.altitude = data.playerShip.altitude;
+  dashboard.speed = Low(data.playerShip.playerSpeed);
+  dashboard.roll = static_cast<std::int8_t>(Low(data.playerShip.rollRate));
+  dashboard.pitch = static_cast<std::int8_t>(High(data.playerShip.rollRate));
+  dashboard.energy = data.playerShip.playerEnergy;
+  dashboard.missiles = data.commander.missileCount;
+  dashboard.missileState = data.playerShip.missileState;
+  dashboard.condition = data.flight.conditionColor;
+  dashboard.safeZone = std::uint8_t{data.flight.safeZoneGlyphShown} == SAFE_ZONE_GLYPH;
+  dashboard.ecm = std::uint8_t{data.flight.ecmGlyphShown} == ECM_GLYPH;
+  // The station's blip bytes hold the compass's dot: x and y about its centre, and whether its target is in front.
+  const SpaceObject& station = _state.Slot(SlotIndex::Station);
+  dashboard.compass = (station.flags & FLAG_BLIP_DRAWN) != 0;
+  dashboard.compassX = static_cast<std::int8_t>(std::uint8_t{station.blipX} - COMPASS_CENTER_X);
+  dashboard.compassY = static_cast<std::int8_t>(std::uint8_t{station.blipY} - COMPASS_CENTER_Y);
+  dashboard.compassInFront = std::uint8_t{station.blipZ} != 0;
+  // The ships' blips: every slot from the first ship's to the debris's with its blip drawn.
+  for (std::uint16_t number = Number(SlotIndex::FirstShip); number < Number(SlotIndex::FirstDebris); ++number)
+  {
+    const SpaceObject& slot = _state.Slot(SlotAfter(SlotIndex::Sun, number));
+    if ((slot.type & SpaceObject::ACTIVE) == 0 || (slot.flags & FLAG_BLIP_DRAWN) == 0)
+    {
+      continue;
+    }
+    dashboard.blips[dashboard.blipCount] = SnapshotBlip{.slot = static_cast<std::uint8_t>(number),
+                                                        .x = static_cast<std::int8_t>(std::uint8_t{slot.blipX}),
+                                                        .y = static_cast<std::int8_t>(std::uint8_t{slot.blipY}),
+                                                        .z = static_cast<std::int8_t>(std::uint8_t{slot.blipZ}),
+                                                        .hostile = (slot.flags & FLAG_HOSTILE) != 0};
+    ++dashboard.blipCount;
+  }
+  const std::string message = MessageText(_state, data.messages.messageShown);
+  std::copy_n(message.begin(), std::min(message.size(), dashboard.message.size() - 1), dashboard.message.begin());
+  return dashboard;
+}
+
 } // namespace
 
 FlightSnapshot TakeFlightSnapshot(const GameState& _state)
@@ -155,6 +212,7 @@ FlightSnapshot TakeFlightSnapshot(const GameState& _state)
                                                             .model = false};
     ++snapshot.objectCount;
   }
+  snapshot.dashboard = TakeDashboard(_state);
   return snapshot;
 }
 

@@ -119,6 +119,9 @@
     <ClCompile Include="GamePortTests.cpp">
       <Filter>Platform</Filter>
     </ClCompile>
+    <ClCompile Include="GaugesTests.cpp">
+      <Filter>Flight</Filter>
+    </ClCompile>
     <ClCompile Include="HyperspaceTests.cpp">
       <Filter>Hyperspace</Filter>
     </ClCompile>
