@@ -1,0 +1,183 @@
+#include "pch.h"
+
+#include "FlightSnapshot.h"
+#include "GameState.h"
+#include "Maths.h"
+#include "PlatformRig.h"
+#include "SpaceObject.h"
+
+#include <cmath>
+#include <memory>
+#include <string>
+
+using namespace Microsoft::VisualStudio::CppUnitTestFramework;
+
+namespace GameLogicTests
+{
+
+namespace
+{
+
+// A vector of this length on each axis in turn, long enough that RotatePitchYawRoll's rounding is far below the tolerance.
+constexpr std::int16_t PROBE_LENGTH = 0x2000;
+
+// RotatePitchYawRoll's result within this fraction of the probe's length of the rotation's: its sine table and its rounded products
+// are not exact.
+constexpr double MOST_RELATIVE_ERROR = 0.002;
+
+// _vector turned by _rotation, the quaternion's sandwich product.
+[[nodiscard]] std::array<double, 3> Rotate(const Elite::Orientation& _rotation, const std::array<double, 3>& _vector)
+{
+  const double x = _rotation.x;
+  const double y = _rotation.y;
+  const double z = _rotation.z;
+  const double w = _rotation.w;
+  // t = 2 (q.xyz x v); v' = v + w t + q.xyz x t.
+  const std::array<double, 3> t = {2.0 * (y * _vector[2] - z * _vector[1]), 2.0 * (z * _vector[0] - x * _vector[2]),
+                                   2.0 * (x * _vector[1] - y * _vector[0])};
+  return {_vector[0] + w * t[0] + (y * t[2] - z * t[1]), _vector[1] + w * t[1] + (z * t[0] - x * t[2]),
+          _vector[2] + w * t[2] + (x * t[1] - y * t[0])};
+}
+
+// A slot of _state made active as _kind at (_x, _y, _z), 24 bits each.
+void Place(Elite::GameState& _state, std::uint16_t _slot, std::uint8_t _kind, std::int32_t _x, std::int32_t _y, std::int32_t _z)
+{
+  Elite::SpaceObject& object = _state.Slot(Elite::SlotAfter(Elite::SlotIndex::Sun, _slot));
+  object.type = static_cast<std::uint8_t>((_kind << 1) | Elite::SpaceObject::ACTIVE);
+  const auto high = [](std::int32_t _value) { return static_cast<std::uint8_t>((static_cast<std::uint32_t>(_value) >> 16) & 0xFF); };
+  const auto low = [](std::int32_t _value) { return static_cast<std::uint16_t>(static_cast<std::uint32_t>(_value) & 0xFFFF); };
+  object.xHigh = high(_x);
+  object.x = low(_x);
+  object.yHigh = high(_y);
+  object.y = low(_y);
+  object.zHigh = high(_z);
+  object.z = low(_z);
+}
+
+} // namespace
+
+// The flight snapshot (ADR-032): what it takes of a frame, how it tells one object from the next, and the player's rotation.
+TEST_CLASS(FlightSnapshotTests)
+{
+public:
+  // PlayerRotation turns a vector as RotatePitchYawRoll does, at angles round the whole turn on each axis and mixed.
+  TEST_METHOD(PlayerRotationIsTheGamesRotation)
+  {
+    const auto state = std::make_unique<Elite::GameState>();
+    for (std::uint16_t pitch = 0; pitch < 0x800; pitch += 0x0B3)
+    {
+      for (std::uint16_t yaw = 0x20; yaw < 0x800; yaw += 0x0E5)
+      {
+        for (std::uint16_t roll = 0x40; roll < 0x800; roll += 0x127)
+        {
+          (void)Elite::SetSinCos(*state, 0, pitch);
+          (void)Elite::SetSinCos(*state, 1, yaw);
+          (void)Elite::SetSinCos(*state, 2, roll);
+          const Elite::Orientation rotation = Elite::PlayerRotation(pitch, yaw, roll);
+          for (std::size_t axis = 0; axis < 3; ++axis)
+          {
+            std::array<double, 3> unit{};
+            unit[axis] = PROBE_LENGTH;
+            const Elite::Vector game =
+              Elite::RotatePitchYawRoll(*state, Elite::Vector{static_cast<std::int16_t>(unit[0]), static_cast<std::int16_t>(unit[1]),
+                                                              static_cast<std::int16_t>(unit[2])});
+            const std::array<double, 3> turned = Rotate(rotation, unit);
+            const double error = std::hypot(turned[0] - game.x, turned[1] - game.y, turned[2] - game.z) / PROBE_LENGTH;
+            Assert::IsTrue(error < MOST_RELATIVE_ERROR, (L"pitch " + std::to_wstring(pitch) + L", yaw " + std::to_wstring(yaw) +
+                                                         L", roll " + std::to_wstring(roll) + L", axis " + std::to_wstring(axis))
+                                                          .c_str());
+          }
+        }
+      }
+    }
+  }
+
+  // The angle between two rotations: none between one and itself or its negation, and a quarter turn of pitch is a quarter turn.
+  TEST_METHOD(AngleBetweenIsTheTurnFromOneToTheOther)
+  {
+    const Elite::Orientation start = Elite::PlayerRotation(0x123, 0x456, 0x789);
+    const Elite::Orientation negated{.x = -start.x, .y = -start.y, .z = -start.z, .w = -start.w};
+    Assert::IsTrue(Elite::AngleBetween(start, start) < 1e-3f, L"itself");
+    Assert::IsTrue(Elite::AngleBetween(start, negated) < 1e-3f, L"its negation, the same rotation");
+    const float quarter = Elite::AngleBetween(Elite::PlayerRotation(0, 0, 0), Elite::PlayerRotation(0x200, 0, 0));
+    Assert::IsTrue(std::abs(quarter - 1.5707963f) < 1e-3f, L"a quarter turn");
+  }
+
+  // The active slots in slot order, each 24-bit coordinate sign-extended, and the player's angles and view.
+  TEST_METHOD(TakesEveryActiveSlotAndThePlayer)
+  {
+    const auto state = std::make_unique<Elite::GameState>();
+    Place(*state, 0, 0, 0x7FFFFF, -0x800000, 0);
+    Place(*state, 2, 3, -1, 0x1234, -0x5678);
+    Place(*state, 35, 9, 0x10000, -0x10000, 0xFFFF);
+    state->Data().playerShip.playerPitchAngle = 0x100;
+    state->Data().playerShip.viewAngle = 0x400;
+    const Elite::FlightSnapshot snapshot = Elite::TakeFlightSnapshot(*state);
+    Assert::AreEqual(std::uint32_t{3}, static_cast<std::uint32_t>(snapshot.objectCount), L"three slots are active");
+    const Elite::SnapshotObject& sun = snapshot.objects[0];
+    Assert::IsTrue(sun.slot == 0 && sun.kind == 0 && sun.x == 0x7FFFFF && sun.y == -0x800000 && sun.z == 0, L"the sun");
+    const Elite::SnapshotObject& station = snapshot.objects[1];
+    Assert::IsTrue(station.slot == 2 && station.kind == 3 && station.x == -1 && station.y == 0x1234 && station.z == -0x5678, L"slot 2");
+    const Elite::SnapshotObject& last = snapshot.objects[2];
+    Assert::IsTrue(last.slot == 35 && last.kind == 9 && last.x == 0x10000 && last.y == -0x10000 && last.z == 0xFFFF, L"the last slot");
+    Assert::IsTrue(snapshot.playerPitch == 0x100 && snapshot.viewAngle == 0x400, L"the player");
+  }
+
+  // An object continues when its slot holds the same kind within a frame's step; a new kind, a jump, or a slot that was empty
+  // does not. The camera continues within a frame's turn and the same view.
+  TEST_METHOD(ContinuityIsTheSameKindWithinAFramesStep)
+  {
+    const auto state = std::make_unique<Elite::GameState>();
+    Place(*state, 3, 5, 1000, 2000, 3000);
+    Place(*state, 4, 5, 1000, 2000, 3000);
+    Place(*state, 5, 5, 1000, 2000, 3000);
+    Elite::FlightSnapshot before = Elite::TakeFlightSnapshot(*state);
+    Place(*state, 3, 5, 1000 + Elite::MOST_STEP_PER_FRAME, 2000, 3000);     // as far as a frame takes it
+    Place(*state, 4, 6, 1000, 2000, 3000);                                  // another kind
+    Place(*state, 5, 5, 1000, 2000 - Elite::MOST_STEP_PER_FRAME - 1, 3000); // further than a frame takes it
+    Place(*state, 6, 5, 0, 0, 0);                                           // a slot that was empty
+    state->Data().playerShip.playerRollAngle = 0x20;
+    Elite::FlightSnapshot after = Elite::TakeFlightSnapshot(*state);
+    Elite::ContinueFrom(before, after);
+    Assert::AreEqual(std::uint32_t{4}, static_cast<std::uint32_t>(after.objectCount));
+    Assert::IsTrue(after.objects[0].continues, L"the same kind, a frame's step on");
+    Assert::IsFalse(after.objects[1].continues, L"another kind");
+    Assert::IsFalse(after.objects[2].continues, L"a jump");
+    Assert::IsFalse(after.objects[3].continues, L"a slot that was empty");
+    Assert::IsTrue(after.cameraContinues, L"a small roll");
+
+    before = after;
+    state->Data().playerShip.viewAngle = 0x200;
+    after = Elite::TakeFlightSnapshot(*state);
+    Elite::ContinueFrom(before, after);
+    Assert::IsFalse(after.cameraContinues, L"another view");
+    before = after;
+    state->Data().playerShip.playerYawAngle = 0x300;
+    after = Elite::TakeFlightSnapshot(*state);
+    Elite::ContinueFrom(before, after);
+    Assert::IsFalse(after.cameraContinues, L"more than a frame's turn");
+  }
+
+  // The platform numbers each snapshot, stamps it with its clock, and links it to the one before unless it starts a flight.
+  TEST_METHOD(ThePlatformKeepsTheLastTwo)
+  {
+    PlatformRig rig("FlightSnapshotPublish");
+    Place(rig.State(), 3, 5, 0, 0, 0);
+    Elite::Platform& platform = rig.Host();
+    Assert::AreEqual(std::uint64_t{0}, platform.LatestFlightSnapshot().sequence, L"none yet");
+    platform.PublishFlightSnapshot(Elite::TakeFlightSnapshot(rig.State()), true);
+    Assert::AreEqual(std::uint64_t{1}, platform.LatestFlightSnapshot().sequence);
+    Assert::IsFalse(platform.LatestFlightSnapshot().objects[0].continues, L"the first continues nothing");
+    platform.PublishFlightSnapshot(Elite::TakeFlightSnapshot(rig.State()), true);
+    Assert::AreEqual(std::uint64_t{2}, platform.LatestFlightSnapshot().sequence);
+    Assert::AreEqual(std::uint64_t{1}, platform.PreviousFlightSnapshot().sequence);
+    Assert::IsTrue(platform.LatestFlightSnapshot().objects[0].continues && platform.LatestFlightSnapshot().cameraContinues,
+                   L"the second continues the first");
+    Assert::AreEqual(platform.Clock(), platform.LatestFlightSnapshot().pacedTime, L"stamped with the clock");
+    platform.PublishFlightSnapshot(Elite::TakeFlightSnapshot(rig.State()), false);
+    Assert::IsFalse(platform.LatestFlightSnapshot().objects[0].continues || platform.LatestFlightSnapshot().cameraContinues,
+                    L"a new flight continues nothing");
+  }
+};
+
+} // namespace GameLogicTests

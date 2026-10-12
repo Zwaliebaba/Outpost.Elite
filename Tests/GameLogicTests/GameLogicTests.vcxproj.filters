@@ -104,6 +104,9 @@
     <ClCompile Include="EquipmentTests.cpp">
       <Filter>Equipment</Filter>
     </ClCompile>
+    <ClCompile Include="FlightSnapshotTests.cpp">
+      <Filter>Flight</Filter>
+    </ClCompile>
     <ClCompile Include="FlightTests.cpp">
       <Filter>Flight</Filter>
     </ClCompile>

@@ -165,6 +165,9 @@
     <ClInclude Include="Flight.h">
       <Filter>Flight</Filter>
     </ClInclude>
+    <ClInclude Include="FlightSnapshot.h">
+      <Filter>Flight</Filter>
+    </ClInclude>
     <ClInclude Include="FlightState.h">
       <Filter>Flight</Filter>
     </ClInclude>
@@ -417,6 +420,9 @@
       <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="Flight.cpp">
+      <Filter>Flight</Filter>
+    </ClCompile>
+    <ClCompile Include="FlightSnapshot.cpp">
       <Filter>Flight</Filter>
     </ClCompile>
     <ClCompile Include="Galaxy.cpp">

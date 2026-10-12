@@ -94,6 +94,13 @@ public:
   /// bits 0-3, the bright palette in bit 4.
   void SetColorSelect(std::uint8_t _value);
 
+  /// The frame of flight just drawn, as _snapshot holds it, to the platform for a renderer (ADR-032): a write to no port and no
+  /// byte of the game's state. _continues is false for the first frame of a flight, which continues nothing before it.
+  void PublishFlightSnapshot(const FlightSnapshot& _snapshot, bool _continues) noexcept
+  {
+    m_platform.PublishFlightSnapshot(_snapshot, _continues);
+  }
+
   /// OUT 3D4h,0Eh, then OUT 3D5h,_value: the CRTC's register 14, the high byte of the cursor's address.
   void SetCursorAddressHigh(std::uint8_t _value);
 

@@ -541,6 +541,19 @@ std::uint64_t Platform::PortWrites() const noexcept
 
 // ── The picture ──
 
+void Platform::PublishFlightSnapshot(const FlightSnapshot& _snapshot, bool _continues) noexcept
+{
+  m_flightSnapshots[0] = m_flightSnapshots[1];
+  FlightSnapshot& latest = m_flightSnapshots[1];
+  latest = _snapshot;
+  latest.sequence = m_flightSnapshots[0].sequence + 1;
+  latest.pacedTime = m_clock;
+  if (_continues && m_flightSnapshots[0].sequence != 0)
+  {
+    ContinueFrom(m_flightSnapshots[0], latest);
+  }
+}
+
 void Platform::Render(FrameImage& _image) const noexcept
 {
   m_cga.Render(m_state.VideoBytes(), _image);
