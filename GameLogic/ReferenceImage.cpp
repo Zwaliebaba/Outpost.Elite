@@ -9106,7 +9106,7 @@ const std::array<std::uint8_t, REFERENCE_IMAGE_BYTES> REFERENCE_IMAGE = {
   0x00,                                           // DS:75F0 maskingDeviceFitted
   0x01,                                           // DS:75F1 laserMountsFitted
   0x00,                                           // DS:75F2 laserMountTypes
-  0x80, 0xEE,                                     // DS:75F3 creditsTenths
+  0xE8, 0x03,                                     // DS:75F3 creditsTenths
   0x00, 0x00,                                     // DS:75F5 data75F5
   0x00,                                           // DS:75F7 legalStatus
   0x00,                                           // DS:75F8 killCount
