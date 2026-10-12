@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <new>
 #include <utility>
 
 namespace Engine
@@ -55,52 +56,59 @@ public:
     return 1;
   }
 
-  HRESULT STDMETHODCALLTYPE IsPixelSnappingDisabled(void*, BOOL* _disabled) override
+  HRESULT STDMETHODCALLTYPE IsPixelSnappingDisabled(void*, BOOL* _disabled) noexcept override
   {
     *_disabled = FALSE;
     return S_OK;
   }
 
-  HRESULT STDMETHODCALLTYPE GetCurrentTransform(void*, DWRITE_MATRIX* _transform) override
+  HRESULT STDMETHODCALLTYPE GetCurrentTransform(void*, DWRITE_MATRIX* _transform) noexcept override
   {
     *_transform = DWRITE_MATRIX{1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f};
     return S_OK;
   }
 
-  HRESULT STDMETHODCALLTYPE GetPixelsPerDip(void*, FLOAT* _pixels) override
+  HRESULT STDMETHODCALLTYPE GetPixelsPerDip(void*, FLOAT* _pixels) noexcept override
   {
     *_pixels = 1.0f;
     return S_OK;
   }
 
   HRESULT STDMETHODCALLTYPE DrawGlyphRun(void*, FLOAT _baselineX, FLOAT _baselineY, DWRITE_MEASURING_MODE, const DWRITE_GLYPH_RUN* _run,
-                                         const DWRITE_GLYPH_RUN_DESCRIPTION*, IUnknown*) override
+                                         const DWRITE_GLYPH_RUN_DESCRIPTION*, IUnknown*) noexcept override
   {
     float pen = _baselineX;
     for (UINT32 glyph = 0; glyph < _run->glyphCount; ++glyph)
     {
       const float offset = _run->glyphOffsets != nullptr ? _run->glyphOffsets[glyph].advanceOffset : 0.0f;
-      glyphs.push_back(LaidGlyph{.face = _run->fontFace,
-                                 .emSize = _run->fontEmSize,
-                                 .index = _run->glyphIndices[glyph],
-                                 .penX = pen + offset,
-                                 .baselineY = _baselineY});
+      try
+      {
+        glyphs.push_back(LaidGlyph{.face = _run->fontFace,
+                                   .emSize = _run->fontEmSize,
+                                   .index = _run->glyphIndices[glyph],
+                                   .penX = pen + offset,
+                                   .baselineY = _baselineY});
+      }
+      catch (const std::bad_alloc&)
+      {
+        return E_OUTOFMEMORY; // DirectWrite calls in through COM, which an exception may not cross
+      }
       pen += _run->glyphAdvances[glyph];
     }
     return S_OK;
   }
 
-  HRESULT STDMETHODCALLTYPE DrawUnderline(void*, FLOAT, FLOAT, const DWRITE_UNDERLINE*, IUnknown*) override
+  HRESULT STDMETHODCALLTYPE DrawUnderline(void*, FLOAT, FLOAT, const DWRITE_UNDERLINE*, IUnknown*) noexcept override
   {
     return S_OK;
   }
 
-  HRESULT STDMETHODCALLTYPE DrawStrikethrough(void*, FLOAT, FLOAT, const DWRITE_STRIKETHROUGH*, IUnknown*) override
+  HRESULT STDMETHODCALLTYPE DrawStrikethrough(void*, FLOAT, FLOAT, const DWRITE_STRIKETHROUGH*, IUnknown*) noexcept override
   {
     return S_OK;
   }
 
-  HRESULT STDMETHODCALLTYPE DrawInlineObject(void*, FLOAT, FLOAT, IDWriteInlineObject*, BOOL, BOOL, IUnknown*) override
+  HRESULT STDMETHODCALLTYPE DrawInlineObject(void*, FLOAT, FLOAT, IDWriteInlineObject*, BOOL, BOOL, IUnknown*) noexcept override
   {
     return S_OK;
   }
