@@ -28,7 +28,6 @@ constexpr std::uint8_t NOISE_BURST_TICKS = 100;
   _state.Data().audio.sweepTickCounter = 1;
   const std::uint8_t stepLength = _state.Data().audio.sweepStepLength;
   _state.Data().audio.sweepStepCounter = stepLength;
-  _state.Data().unused.twoToneStage = 0;
   return stepLength;
 }
 
@@ -87,11 +86,6 @@ void StopSoundEffects(GameState& _state)
 {
   _state.Data().audio.toneSweepActive = 0;
   _state.Data().audio.noiseSweepActive = 0;
-  _state.Data().unused.twoToneStage = 0;
-  _state.Data().unused.slowNoiseCount = 0;
-  _state.Data().unused.humEnabled = 0;
-  _state.Data().unused.continuousNoise = 0;
-  _state.Data().unused.sirenEnabled = 0;
   _state.Data().audio.beepTicks = 0;
   _state.Data().audio.lowBeepTicks = 0;
 }
@@ -132,11 +126,6 @@ std::uint8_t StartPlayerDeathSound(GameState& _state)
   return StartNoiseSweep(_state, 60, 7);
 }
 
-void StopContinuousNoise(GameState& _state)
-{
-  _state.Data().unused.continuousNoise = 0;
-}
-
 std::optional<std::uint8_t> StartLaserSound(GameState& _state)
 {
   if (_state.Data().audio.noiseSweepActive == 1)
@@ -154,7 +143,6 @@ std::optional<std::uint8_t> StartLaserSound(GameState& _state)
 void StartPlayerHitSound(GameState& _state)
 {
   _state.Data().audio.toneSweepActive = 0;
-  _state.Data().unused.twoToneStage = 0;
   _state.Data().audio.noiseBurstTicks = NOISE_BURST_TICKS;
 }
 

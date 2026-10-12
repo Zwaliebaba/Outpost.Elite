@@ -19,6 +19,8 @@ struct StartUpState
   StartUpState() noexcept = default;
   explicit StartUpState(const StartUpState&) noexcept = default;
 
+  /// 1 in the file; cleared at start-up unless the ROM at FC00:0016 reads Amstrad
+  Counted<std::uint8_t> amstradPresent;
   /// 1 when the command tail is exactly ' cheat' (CheckCheatArgument compares PSP:80h with DS:2063 XOR AAh); RunFlight then ignores the...
   Counted<std::uint8_t> cheatEnabled;
 };

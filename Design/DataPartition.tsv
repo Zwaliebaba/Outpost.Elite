@@ -9,7 +9,7 @@
 #              a shared group several subsystems write it: PlayerShip, Messages, Audio, Menus, Disk, Drawing, Commander,
 #                             World, Flow, Jump or Keyboard
 #              constant       nothing writes it: a constexpr table of the subsystem that reads it (Tools/GenerateTables.py)
-#              unused         nothing reads it: kept in UnusedState for change 3b, which removes it with the turn probe
+#              unused         nothing reads it: not in the state, and no table either (change 3c removed it with the turn probe)
 #   readers  the subsystems (GameLogic/<Subsystem>.cpp) that read it, by member, by raw offset or as part of a text
 #   writers  the subsystems that write it
 #   notes    where the static scan was wrong, and why a member is where it is
@@ -18,15 +18,13 @@
 # image (GameState). Members read as one text or span stay together, in their 1987 order. Measured on 6252eec: a static scan of
 # GameLogic/, confirmed in the code, and the bytes the corpus and the tests read and write.
 member	address	bytes	group	readers	writers	notes
-gap0000	DS:0000	64	Drawing		Combat,Docking,Flight,Galaxy,Text,Video	a gap kept: row 0 of the space view buffer, which drawing writes; the first of members read as one text or span, which stay together
-spaceViewBuffer	DS:0040	8064	Drawing	Video	Combat,Docking,Flight,Galaxy,Text,Video	the scan missed its writes by Combat, Docking, Flight, Galaxy, Text, Video: written by raw offset from DS:0000: lines, discs, triangles, strings, the laser, the tunnel, the charts and the pause menu; stays beside gap0000, read as one text or span with it
-gap1FC0	DS:1FC0	64	Drawing		Combat,Docking,Flight,Galaxy,Text,Video	a gap kept: row 127 of the space view buffer, which drawing writes; stays beside gap0000, read as one text or span with it
-amstradPresent	DS:2000	1	unused		StartUp	written by StartUp, read by nothing
+drawingBuffer	DS:0000	8192	Drawing	Video	Combat,Docking,Flight,Galaxy,Text,Video	the drawing buffer whole: rows 0 and 127, which drawing writes, with the space view between (change 3c); written by offset in it: lines, discs, triangles, strings, the laser, the tunnel, the charts and the pause menu
+amstradPresent	DS:2000	1	StartUp	StartUp	StartUp	written by StartUp; read by M's launch from past the drawing buffer (BytesAfterDrawBuffer)
 amstradSignature	DS:2001	7	constant	StartUp		
 speakerPortImage	DS:2008	1	Audio	Sound,Timer	Sound,Timer	
 diskOperation	DS:2009	1	SaveLoad	SaveLoad,StartUp	SaveLoad	
 exitMessage	DS:200A	47	constant	StartUp		
-dosVersionMessage	DS:2039	42	unused			
+dosVersionMessage	DS:2039	42	constant	StartUp		read by M's launch from past the drawing buffer (BytesAfterDrawBuffer)
 cheatArgumentKey	DS:2063	6	constant	StartUp		
 pspSegment	DS:2069	2	unused			
 cheatEnabled	DS:206B	1	StartUp	Flight	StartUp	
@@ -76,9 +74,9 @@ nameLinePadding	DS:29FB	13	constant	Galaxy
 findPrompt	DS:2A08	21	constant	Galaxy		
 systemNameDigrams	DS:2A1D	64	constant	Galaxy		
 shortRangeChartTitle	DS:2A5D	18	constant	Galaxy		
-galacticChartTitle	DS:2A6F	15	Galaxy	Galaxy		nothing writes it, but it is read as one text with galacticChartNumber, which Galaxy writes: kept beside it; the first of members read as one text or span, which stay together
-galacticChartNumber	DS:2A7E	1	Galaxy	Galaxy	Galaxy	the scan missed its reads by Galaxy: read as the last character of galacticChartTitle; stays beside galacticChartTitle, read as one text or span with it
-gap2A7F	DS:2A7F	2	Galaxy			a gap kept: the galactic chart title's NUL, after galacticChartNumber; stays beside galacticChartTitle, read as one text or span with it
+galacticChartTitle	DS:2A6F	15	constant	Galaxy		the title's text before the galaxy's digit; the title is composed from it, galacticChartNumber and galacticChartTitleEnd (change 3c)
+galacticChartNumber	DS:2A7E	1	Galaxy	Galaxy	Galaxy	written into the title between galacticChartTitle and galacticChartTitleEnd, which are constants (change 3c)
+galacticChartTitleEnd	DS:2A7F	2	constant	Galaxy		the title's end after the galaxy's digit (change 3c)
 findErrorPrefix	DS:2A81	8	constant	Galaxy		
 findErrorSuffix	DS:2A89	13	constant	Galaxy		
 chartItemCount	DS:2A96	1	Galaxy	Galaxy	Galaxy	
@@ -161,7 +159,7 @@ foreShieldShown	DS:4234	1	Flight	Flight	Flight	the scan missed its writes by Fli
 aftShieldShown	DS:4235	1	Flight	Flight	Flight	the scan missed its writes by Flight: the dashboard's cache, written through spans; stays beside missileCountShown, read as one text or span with it
 conditionColorShown	DS:4236	1	Flight	Flight	Flight	stays beside missileCountShown, read as one text or span with it
 speedShown	DS:4237	1	Flight	Flight	Flight	stays beside missileCountShown, read as one text or span with it
-equipmentLossMessage	DS:4238	40	unused			
+equipmentLossMessage	DS:4238	40	constant	Flight		read by M's launch from past the dashboard's cache (BytesAfterDashboardCache)
 playerHitBy	DS:4260	2	Combat	Combat	Combat	
 playerHitPending	DS:4262	1	Combat	Combat	Combat	
 playerDocked	DS:4263	1	Flight	Docked,Docking,Flight,Outcome	Flight	
@@ -280,17 +278,17 @@ inventoryFrame	DS:7BB4	12	constant	Docked
 emergencyFrame	DS:7BC0	76	constant	Docked		
 economyNames	DS:7C0C	16	unused			
 governmentNames	DS:7CBD	16	unused			
-data7D48	DS:7D48	1	Galaxy	Galaxy	Galaxy	the first of members read as one text or span, which stay together
-data7D49	DS:7D49	1	Galaxy	Galaxy	Galaxy	the scan missed its reads by Galaxy: read as part of data7D48's text; stays beside data7D48, read as one text or span with it
-gap7D4A	DS:7D4A	84	Galaxy		Galaxy	a gap kept: the distance's and the population's digit buffers (DISTANCE_DIGITS, POPULATION_DIGITS), and data7D48's NUL; stays beside data7D48, read as one text or span with it
+data7D48	DS:7D48	1	Galaxy	Galaxy	Galaxy	the tech level's two characters, printed as a text of their own (change 3c)
+data7D49	DS:7D49	1	Galaxy	Galaxy	Galaxy	the tech level's units digit
+selectedDistanceText	DS:7D5A	6	Galaxy	Galaxy	Galaxy	the distance FormatSelectedSystemDistance copies and returns (change 3c)
+populationDigits	DS:7D7D	5	Galaxy	Galaxy	Galaxy	printed with POPULATION_UNIT_TEXT after it (change 3c)
 speciesSizeNames	DS:7D9E	16	unused			
 speciesColorNames	DS:7DC5	16	unused			
 speciesTraitNames	DS:7E01	16	unused			
 speciesTypeNames	DS:7E3D	16	unused			
-data7EA3	DS:7EA3	1	Galaxy	Galaxy	Galaxy	the first of members read as one text or span, which stay together
-gap7EA4	DS:7EA4	23	Galaxy		Galaxy	a gap kept: the productivity's text after data7EA3's digits; stays beside data7EA3, read as one text or span with it
-data7EBB	DS:7EBB	1	Galaxy	Galaxy	Galaxy	stays beside data7EA3, read as one text or span with it
-gap7EBC	DS:7EBC	8	Galaxy		Galaxy	a gap kept: the radius's text after data7EBB's digits; stays beside data7EA3, read as one text or span with it
+productivityDigits	DS:7EA3	5	Galaxy	Galaxy	Galaxy	printed with PRODUCTIVITY_UNIT_TEXT after it (change 3c)
+radiusLabel	DS:7EAE	13	constant	Galaxy		printed before radiusDigits (change 3c)
+radiusDigits	DS:7EBB	5	Galaxy	Galaxy	Galaxy	printed between radiusLabel and RADIUS_UNIT_TEXT (change 3c)
 equipmentList	DS:7EC4	376	constant	Equipment		
 priceText	DS:803C	7	Menus	Docked,Equipment,Market,Text	Equipment,Text	
 equipHelpText	DS:8043	375	constant	Equipment		
@@ -302,20 +300,19 @@ menuFirstRowAttr	DS:822B	2	Menus	Equipment	Equipment,Market
 menuSelectedRow	DS:822D	1	Menus	Docked,Equipment,Market	Docked,Equipment	
 selectedLaserMount	DS:822E	1	Equipment	Equipment	Equipment	
 screenPrices	DS:823B	68	Menus	Docked,Equipment,Market	Equipment,Market	the scan missed its writes by Equipment, Market: written through ScreenPrices' span in both
-gap827F	DS:827F	376	Docked		Docked	a gap kept: the fuel text, FUEL_TEXT (83E9); the first of members read as one text or span, which stay together
-data83F7	DS:83F7	1	Docked	Docked	Docked	the scan missed its reads by Docked: read as part of the fuel text (FUEL_TEXT); stays beside gap827F, read as one text or span with it
-gap83F8	DS:83F8	1	Docked			a gap kept: the fuel text's point; stays beside gap827F, read as one text or span with it
-data83F9	DS:83F9	1	Docked	Docked	Docked	the scan missed its reads by Docked: read as part of the fuel text (FUEL_TEXT); stays beside gap827F, read as one text or span with it
-gap83FA	DS:83FA	16	Docked		Docked	a gap kept: the fuel text's end and the fuel's digits (FUEL_DIGITS); stays beside gap827F, read as one text or span with it
-data840A	DS:840A	1	Docked	Docked	Docked	the scan missed its writes by Docked: the fuel's digits, written by FormatDecimal5 through a span at FUEL_DIGITS; stays beside gap827F, read as one text or span with it
-data840B	DS:840B	1	Docked	Docked	Docked	the scan missed its writes by Docked: the fuel's digits, written by FormatDecimal5 through a span at FUEL_DIGITS; stays beside gap827F, read as one text or span with it
+fuelTextPrefix	DS:83E9	14	constant	Docked		the fuel text before its units digit (change 3c)
+data83F7	DS:83F7	1	Docked	Docked	Docked	a digit of the fuel text, printed between fuelTextPrefix, fuelTextPoint and fuelTextSuffix (change 3c)
+fuelTextPoint	DS:83F8	1	constant	Docked		the fuel text's point (change 3c)
+data83F9	DS:83F9	1	Docked	Docked	Docked	a digit of the fuel text, printed between fuelTextPrefix, fuelTextPoint and fuelTextSuffix (change 3c)
+fuelTextSuffix	DS:83FA	13	constant	Docked		the fuel text after its tenths digit (change 3c)
+fuelDigits	DS:8407	5	Docked	Docked	Docked	FormatDecimal5's digits for the fuel, the last two copied into data83F7 and data83F9 (change 3c)
 legalStatusNames	DS:842A	6	unused			
 ratingThresholds	DS:8457	9	constant	Docked		
 ratingNames	DS:8460	18	unused			
 equipmentNames	DS:84D2	26	constant	Docked		
-gap84EC	DS:84EC	9	Docked	Docked		a gap kept: the missiles' text, around data84F5; the first of members read as one text or span, which stay together
-data84F5	DS:84F5	1	Docked	Docked	Docked	the scan missed its reads by Docked: read as part of the missiles' text, gap84EC's; stays beside gap84EC, read as one text or span with it
-gap84F6	DS:84F6	179	Docked			a gap kept: the missiles' text's end; stays beside gap84EC, read as one text or span with it
+missileNameOpen	DS:84EC	9	constant	Docked		the missiles' name before its count (change 3c)
+data84F5	DS:84F5	1	Docked	Docked	Docked	the missile count's digit, printed between missileNameOpen and missileNameClose (change 3c)
+missileNameClose	DS:84F6	2	constant	Docked		the missiles' name after its count (change 3c)
 discMenuText	DS:85A9	199	constant	SaveLoad		
 inputDeviceNames	DS:8670	6	unused			
 commanderFileName	DS:868A	13	SaveLoad	SaveLoad	SaveLoad	the scan missed its writes by SaveLoad: ReadTextLine and the load's copy write it through spans
@@ -338,9 +335,10 @@ tradeScreenIsBuy	DS:8C24	1	Docked	Market	Docked
 selectedLaserType	DS:8E2E	1	Equipment	Docked,Equipment	Equipment	
 marketTechLevel	DS:8E2F	1	Market	Market	Market	
 supernovaBriefingText	DS:8E3C	503	constant	Docked		
-taskCompleteFrame	DS:9033	75	Docked	Docked		nothing writes it, but it is read as one text with refugeeRewardDigit, which Docked writes: kept beside it; the first of members read as one text or span, which stay together
-refugeeRewardDigit	DS:907E	1	Docked	Docked	Docked	the scan missed its reads by Docked: read as part of the supernova debriefing (SUPERNOVA_DEBRIEFING_TEXT); stays beside taskCompleteFrame, read as one text or span with it
-gap907F	DS:907F	41	Docked			a gap kept: the supernova debriefing's end, after refugeeRewardDigit; stays beside taskCompleteFrame, read as one text or span with it
+taskCompleteFrame	DS:9033	35	constant	Docked		the task-complete frame's descriptor (change 3c)
+supernovaDebriefOpen	DS:9056	40	constant	Docked		the supernova's debriefing before the reward's digit (change 3c)
+refugeeRewardDigit	DS:907E	1	Docked	Docked	Docked	printed between supernovaDebriefOpen and supernovaDebriefClose (change 3c)
+supernovaDebriefClose	DS:907F	41	constant	Docked		the supernova's debriefing after the reward's digit (change 3c)
 maskBriefingText	DS:90A8	729	constant	Docked		
 invasionBriefingText	DS:9381	312	constant	Docked		
 invasionDebriefText	DS:94B9	416	Galaxy	Docked,Galaxy	Galaxy	the scan missed its writes by Galaxy: Galaxy saves the system's name into it through a span (SAVED_SYSTEM_NAME)
@@ -422,9 +420,8 @@ galacticJumpPending	DS:A7F3	1	Jump	Hyperspace	Flight,Hyperspace
 idIndicatorMessage	DS:A7F4	49	unused			
 galacticDriveReadyFrames	DS:A825	1	Jump	Flight,Hyperspace	Flight,Hyperspace	
 galacticDriveReadyMessage	DS:A826	27	unused			
-hyperspaceCountdownMessage	DS:A841	24	Hyperspace	Text		nothing writes it, but it is read as one text with hyperspaceCountdownDigits, which Hyperspace writes: kept beside it; the first of members read as one text or span, which stay together
-hyperspaceCountdownDigits	DS:A859	2	Hyperspace	Text	Hyperspace	the scan missed its reads by Text: read as part of hyperspaceCountdownMessage's text; stays beside hyperspaceCountdownMessage, read as one text or span with it
-gapA85B	DS:A85B	1	Hyperspace			a gap kept: the countdown message's NUL, after hyperspaceCountdownDigits; stays beside hyperspaceCountdownMessage, read as one text or span with it
+hyperspaceCountdownMessage	DS:A841	24	constant	Text		the countdown's message before its digits; MessageText composes it with them (change 3c)
+hyperspaceCountdownDigits	DS:A859	2	Hyperspace	Text	Hyperspace	printed after hyperspaceCountdownMessage (change 3c)
 hyperspaceCountdown	DS:A85C	1	Jump	Flight,Galaxy,Hyperspace	Equipment,Flight,Hyperspace	
 hyperspaceCountdownFrames	DS:A85D	1	Jump	Hyperspace	Flight,Hyperspace	
 outOfRangeMessage	DS:A85E	33	unused			
@@ -471,19 +468,18 @@ laserAlternateFrame	DS:AB2E	1	Flight	Flight	Flight
 shipIdRequested	DS:AB2F	1	Flight	Flight	Flight	
 gameOverFrames	DS:AB30	1	Flight	Combat,Flight,Scene	Flight	
 gameOverMessage	DS:AB31	11	unused			
-pauseMenuText	DS:AB3C	195	Flight	Flight		nothing writes it, but it is read as one text with frameRateKeyLabel, which Flight writes: kept beside it; the first of members read as one text or span, which stay together
-frameRateKeyLabel	DS:ABFF	3	Flight	Flight	Flight	the scan missed its reads by Flight: read as part of pauseMenuText's last line; stays beside pauseMenuText, read as one text or span with it
-gapAC02	DS:AC02	1	Flight			a gap kept: pauseMenuText's last NUL, after frameRateKeyLabel; stays beside pauseMenuText, read as one text or span with it
-keyboardRecenter	DS:AC03	1	Flight	Flight,Input	Flight	the scan missed its writes by Flight: the pause menu toggles the options through PauseOptions' span; stays beside pauseMenuText, read as one text or span with it
-gapAC04	DS:AC04	1	Flight			a gap kept: the high byte of the pause options' words; stays beside pauseMenuText, read as one text or span with it
-keyboardDamping	DS:AC05	1	Flight	Input	Flight	the scan missed its writes by Flight: the pause menu toggles the options through PauseOptions' span; stays beside pauseMenuText, read as one text or span with it
-gapAC06	DS:AC06	1	Flight			a gap kept: the high byte of the pause options' words; stays beside pauseMenuText, read as one text or span with it
-reverseYControl	DS:AC07	1	Flight	Input	Flight	the scan missed its writes by Flight: the pause menu toggles the options through PauseOptions' span; stays beside pauseMenuText, read as one text or span with it
-gapAC08	DS:AC08	1	Flight			a gap kept: the high byte of the pause options' words; stays beside pauseMenuText, read as one text or span with it
-reverseXAndY	DS:AC09	1	Flight	Input	Flight	the scan missed its writes by Flight: the pause menu toggles the options through PauseOptions' span; stays beside pauseMenuText, read as one text or span with it
-gapAC0A	DS:AC0A	1	Flight			a gap kept: the high byte of the pause options' words; stays beside pauseMenuText, read as one text or span with it
-soundEnabled	DS:AC0B	1	Flight	Timer	Flight	the scan missed its writes by Flight: the pause menu toggles the options through PauseOptions' span; stays beside pauseMenuText, read as one text or span with it
-gapAC0C	DS:AC0C	1	Flight			a gap kept: the high byte of the pause options' words; stays beside pauseMenuText, read as one text or span with it
+pauseMenuText	DS:AB3C	195	constant	Flight		the pause screen's lines, each its place and its text; the last runs on into frameRateKeyLabel, which DrawPauseMenu composes after it (change 3c)
+frameRateKeyLabel	DS:ABFF	3	Flight	Flight	Flight	written into the pause menu's last line after pauseMenuText (change 3c)
+keyboardRecenter	DS:AC03	1	Flight	Flight,Input	Flight	a pause option's flag, its letter a constant after it (change 3c)
+recenterLetter	DS:AC04	1	constant	Flight		the letter shown for keyboardRecenter (change 3c)
+keyboardDamping	DS:AC05	1	Flight	Input	Flight	a pause option's flag, its letter a constant after it (change 3c)
+dampingLetter	DS:AC06	1	constant	Flight		the letter shown for keyboardDamping (change 3c)
+reverseYControl	DS:AC07	1	Flight	Input	Flight	a pause option's flag, its letter a constant after it (change 3c)
+yReverseLetter	DS:AC08	1	constant	Flight		the letter shown for reverseYControl (change 3c)
+reverseXAndY	DS:AC09	1	Flight	Input	Flight	a pause option's flag, its letter a constant after it (change 3c)
+xyReverseLetter	DS:AC0A	1	constant	Flight		the letter shown for reverseXAndY (change 3c)
+soundEnabled	DS:AC0B	1	Flight	Timer	Flight	a pause option's flag, its letter a constant after it (change 3c)
+soundLetter	DS:AC0C	1	constant	Flight		the letter shown for soundEnabled (change 3c)
 maskingBackgroundColor	DS:AC0D	1	Drawing	Combat,Flight	Ai,Combat	
 antiEcmActive	DS:AC0E	1	Flight	Ai	Flight	
 gamePaused	DS:AC0F	1	Flight	Timer	Flight	

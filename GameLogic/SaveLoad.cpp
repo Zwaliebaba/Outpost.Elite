@@ -366,7 +366,7 @@ void ShowNoJoystick(GameState& _state)
   _state.Data().saveLoad.joystickIsAmstrad = 0;
   PrintAt(_state, CENTER_JOYSTICK_TEXT, HELP_POSITION);
   (void)WaitForKey(_state, _hardware, CENTER_KEY_LOOP);
-  const StickAxes center = ReadJoystickAxes(_state, _hardware);
+  const StickAxes center = ReadJoystickAxes(_hardware);
   _state.Data().saveLoad.joystickCenterX = center.x;
   _state.Data().saveLoad.joystickCenterY = center.y;
   if (center.timedOut)

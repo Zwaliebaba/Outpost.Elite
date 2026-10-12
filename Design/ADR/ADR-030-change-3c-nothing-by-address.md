@@ -1,6 +1,6 @@
-# ADR-030 — Change 3c: nothing by the original's address
+# ADR-030 — Change 3c: nothing by the original's address, and the layout's remainder
 
-**Status:** accepted 2026-10-12, with the change that implements it, the first part of change 3c of D33's piece 3 ([Reverse-Engineering-Plan.md §5, Phase 5](../Reverse-Engineering-Plan.md#phase-5--the-native-platform-and-the-natural-layout)). The later parts amend it: the layout's clean-up with one re-base, D37's second round, and D43's clamp at load. It amends ADR-015, ADR-018 and ADR-026.
+**Status:** accepted 2026-10-12, with the change that implements it, the first part of change 3c of D33's piece 3 ([Reverse-Engineering-Plan.md §5, Phase 5](../Reverse-Engineering-Plan.md#phase-5--the-native-platform-and-the-natural-layout)). The later parts amend it: the layout's clean-up with one re-base, D37's second round, and D43's clamp at load. It amends ADR-015, ADR-018 and ADR-026. **Amended 2026-10-12 by the second part,** the layout's clean-up and its one re-base (below).
 
 ## Context
 
@@ -69,8 +69,50 @@ In a Linux session with g++ 13.3 and clang 18 through `Tools/BuildPortable.py`, 
 | The change | 46 files, 686 lines added and 1,200 deleted; `GameState.h` is 408 lines shorter |
 | Checkers | `CheckProjectFiles`, `CheckFormat` (clang-format 18.1.3), `GenerateGameData --check` and `GenerateTables --check` are clean. clang-tidy and MSVC run in CI. |
 
+## The second part: the layout's remainder (2026-10-12)
+
+What ADR-026 item 7 left for the layout's last change: the unused members, the unions, the four constants still in the state and the 19 gaps, ending with one re-base.
+
+**8. The unused members leave the state.** The 105 members nothing reads, 8,995 bytes, and `UnusedState` with them, go. A partition row marked `unused` is now in no group and has no table, as a constant has none in the state. Of M's three launch reads (ADR-030 item 6), `equipmentLossMessage` and `dosVersionMessage`, which nothing writes, are constants. `amstradPresent`, which StartUp writes, is in `StartUpState`. The writes to the other 16 written members go, with `StopContinuousNoise`, whose only write was one. D5's byte, `protectionShown`, is one of them: the loader no longer writes it, and still checks that the image holds the file's 00 there.
+
+**9. No unions.**
+- **The generated words:** a word the symbol table also names a byte of is the word alone. The byte is reached with `High`, `WithHigh` and the named readers beside their code: `SystemX`, `SystemY` and `SystemSeed2High`. A word written whole counts one change exactly when a write of its byte would.
+- **SpaceObject's second names:** they are accessors on the one member: `SpinRoll` and `SpinPitch` for `blipX` and `blipY`, `FlashFrames` for `cargo` and `FramesAway` for `scanned`.
+
+**10. The four constants and the 19 gaps leave the state.** Measured at every digest point of the corpus and the twins, every gap byte but the drawing buffer's rows and three digit fields was never written. Each run of item 3 is now its written fields, as members, and its constant text, as generated tables. Its printer composes the text the original read as one (`JoinTexts`).
+
+| Run | Constant text | Written fields |
+|---|---|---|
+| The drawing buffer | — | `drawingBuffer`, one 8 KiB member: rows 0 and 127 and the space view between |
+| The galactic chart's title | `galacticChartTitle`, `galacticChartTitleEnd` | `galacticChartNumber` |
+| The system data screen | `radiusLabel`; its units, read up to their NULs | `data7D48`, `data7D49`, `selectedDistanceText`, `populationDigits`, `productivityDigits`, `radiusDigits` |
+| The fuel text | `fuelTextPrefix`, `fuelTextPoint`, `fuelTextSuffix` | `data83F7`, `data83F9`, `fuelDigits` |
+| The missiles' name | `missileNameOpen`, `missileNameClose` | `data84F5` |
+| The supernova's debriefing | `taskCompleteFrame`, `supernovaDebriefOpen`, `supernovaDebriefClose` | `refugeeRewardDigit` |
+| The hyperspace countdown | `hyperspaceCountdownMessage` | `hyperspaceCountdownDigits` |
+| The pause screen | `pauseMenuText`, the five options' letters | `frameRateKeyLabel`, the five options' flags |
+
+The symbol table names each new row; a text with no NUL of its own, or several texts one after another, is the generator's `chars` shape, a sized `std::string_view`. The bytes of a gap no reader reaches, such as the 362 bytes of other texts before the fuel text in `gap827F`, go with it. `PrintTextLines` walks NUL-separated texts in a `std::string_view`, and `MessageText` returns a `std::string`, so that it can return the countdown it composes. The pause screen's turns carry the menu's offset and the next option's flag's place, each one to one with the address the original holds.
+
+The gaps nested inside a named record (37, in nine groups' records) are a record's unnamed bytes, not runs, and stay; `CommanderState`, the file's format, keeps its 1987 layout whole.
+
+**11. One re-base.** `StateDumps`' gate matches each byte by its 1987 offset, not by its member's name, so a change that renames, merges, splits or drops members is still held to the dump before it. A byte the tree before held as a constant is compared with the image.
+
+### Measured 2026-10-12
+
+| Check | Result |
+|---|---|
+| The state | 24,447 bytes in 30 groups and 394 members before; 14,420 bytes in 29 groups and 268 members after |
+| The gate | at all 490 digest points, every byte the state holds equals the dump of `main` before the change at its 1987 offset, and every picture and outcome is exact; at each of the change's steps, and at its end |
+| The turn probe | each test's sequence of idle and working turns, 73,089,965 turns in all, identical to `main`'s; at the unused members' removal and at the end |
+| The re-base | the 490 state digests change (134 in `Replays/`, 356 in `KnownAnswers.txt`), and no picture or outcome line; a second re-base writes every file byte for byte the same |
+| The suite | 141 tests pass in check mode under g++ `-O2` (2.7 s), g++ `-O0` (27.0 s) and clang++ 18 |
+| Checkers | `CheckProjectFiles`, `CheckFormat`, `GenerateGameData --check` and `GenerateTables --check` are clean; clang-tidy and MSVC run in CI |
+
 ## What this forecloses
 
 - **Reaching on past a member.** A path that reads a text or span past its member's end, or its run's, throws `std::out_of_range` where the original would read on. The corpus and the twins reach none. A hand-edited `.cdr` whose name has no NUL now throws on the status screen. D43's clamp, the last part of change 3c, terminates the name at load.
 - **A wait that idles on a turn the original does not.** That cannot come from this change: a place stands for an offset one to one.
 - **A downward string operation outside `MaskOutsideTunnel`'s two instructions.** Should a change on purpose ever set the flag elsewhere, it designs its own copy.
+- **Constant text in the state.** A text the original reads as one, partly constant and partly written, is composed where it is printed; only what the game writes is state.
+- **A gap or a union in the state's groups.** The 1987 offsets survive in `DATA_PLACES`, which the image's loader and the re-base gate read, and nowhere native code reaches the state.

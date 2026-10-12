@@ -9,7 +9,7 @@
 | 2 — The host | Exit met headless 2026-10-10; the shell makes it playable | ADR-004 to ADR-009 |
 | 3 — Replace routines with C++ | Exit met 2026-10-10 | ADR-010 |
 | 4 — Detach | Closed 2026-10-10 | ADR-011 to ADR-019 |
-| 5 — The native platform and the natural layout | Pieces 1 and 2 done. Piece 3: changes 1, 2, 3a and 3b done; change 3c under way: its first part, nothing by address, is done. The guard D57 deleted is restored (D59). Piece 4 moved to Phase 6 (D52). | ADR-020 to ADR-026, ADR-029, ADR-030 |
+| 5 — The native platform and the natural layout | Pieces 1 and 2 done. Piece 3: changes 1, 2, 3a and 3b done; change 3c under way: its first two parts, nothing by address and the layout's remainder, are done. The guard D57 deleted is restored (D59). Piece 4 moved to Phase 6 (D52). | ADR-020 to ADR-026, ADR-029, ADR-030 |
 | 6 — The new game | Ruled (D39, D44–D55), not started. Done ahead of it: D41 (ADR-027), and D42 and D48's PerMonitorV2 (ADR-009). D43 goes with change 3c. | — |
 
 **Play-tests.** The owner played the build with D19 and D3 (`472a6b8`) and reported it good; played main at `7242663`, with the platform swap and change 1, and reported that it works perfectly; and played the game after D7 and reported that it works as designed.
@@ -191,6 +191,8 @@ The native platform comes first, and it changes nothing on purpose (D23). Video 
    *Left for change 3c, from the overflow audit and change 3b (2026-10-11):* name the runs that still cross members (the space view's buffer as one 8 KiB member; the fuel text and digits; the missiles' name; the dashboard cache; the pause menu and options; the supernova debriefing text; the docked frames' descriptors), then remove the `GameState`'s answer by 1987 address, the unused members (keeping the three M's launch reads), the 19 gaps, the four constants in the state and the unions, and re-base once. The nine direction-flag branches are unreachable (the only STD is in `MaskOutsideTunnel`) and go. D37's second round: 15 routines whose result is unread. Removing a write the idle test sees is a ruling. D43's checks at load ride with it. Normal play reaches nothing else past a member.
 
    *Change 3c's first part done 2026-10-12 (ADR-030): the GameState answers nothing by the original's address. The eight runs that cross members are named, with two more found inside commanderBlock; turns carry a member's place in GameData; and the direction flag is shown clear wherever the game calls a routine, so the nine branches that ran down by address go, with the parameter of 33 routines that only passed it on. Every 1987 digest, picture and outcome held, with no re-base. Left: the unused members, the gaps, the four constants in the state and the unions, with the one re-base; D37's second round; and D43's clamp at load.*
+
+   *Change 3c's second part done 2026-10-12 (ADR-030): the 105 unused members, the unions, the four constants in the state and the 19 gaps are gone, the runs' constant text composed with their written fields where they are printed. The state is 14,420 bytes. Every state byte held at its 1987 offset at all 490 points, every picture and outcome was exact, the turn probe was identical, and the state digests are re-based once. Left: D37's second round and D43's clamp at load.*
 
    The same gates apply.
 

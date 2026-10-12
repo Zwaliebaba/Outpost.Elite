@@ -105,14 +105,10 @@ constexpr std::uint16_t CIRCLE_CHORDS = 32;
 constexpr std::size_t CIRCLE_POINT_BYTES = 4;
 static_assert(sizeof(VideoState::CirclePoints) == std::size_t{CIRCLE_CHORDS} * CIRCLE_POINT_BYTES, "circlePoints holds the 32 points");
 
-// The drawing buffer is DrawingState's first three members, DS:0000-1FFF as in 1987: gap0000's row, spaceViewBuffer's 126 and
-// gap1FC0's.
-static_assert(GAME_DATA_OFFSET(drawing.spaceViewBuffer) == GAME_DATA_OFFSET(drawing.gap0000) + sizeof(DrawingState::gap0000) &&
-              GAME_DATA_OFFSET(drawing.gap1FC0) == GAME_DATA_OFFSET(drawing.spaceViewBuffer) + sizeof(DrawingState::spaceViewBuffer) &&
-              sizeof(DrawingState::gap0000) + sizeof(DrawingState::spaceViewBuffer) + sizeof(DrawingState::gap1FC0) ==
-                DRAWING_BUFFER_BYTES);
-// spaceViewBuffer's first byte in the drawing buffer, a row in: where PresentSpaceView's copy starts (MOV SI,spaceViewBuffer).
-constexpr std::uint16_t SPACE_VIEW_BUFFER_START = sizeof(DrawingState::gap0000);
+// The drawing buffer, DS:0000-1FFF as in 1987: a row, the space view's 126, and a row.
+static_assert(sizeof(DrawingState::drawingBuffer) == DRAWING_BUFFER_BYTES);
+// The space view's first byte in the drawing buffer, a row in: where PresentSpaceView's copy starts (MOV SI,spaceViewBuffer).
+constexpr std::uint16_t SPACE_VIEW_BUFFER_START = 64;
 
 // XCHG AH,AL.
 [[nodiscard]] constexpr std::uint16_t SwapBytes(std::uint16_t _word) noexcept
@@ -1101,7 +1097,6 @@ struct WordRun
 void TraceClippedFlatEdges(GameState& _state, ClippedEdge _a, bool _subtractA, ClippedEdge _b, bool _subtractB, std::uint16_t _row,
                            std::uint16_t _rows, bool _backward)
 {
-  _state.Data().unused.clippedLastRow = NO_ROW;
   _state.Data().video.clippedFirstRow = NO_ROW;
   TriangleSpans spans;
   std::uint16_t row = _row;
@@ -1121,7 +1116,6 @@ void TraceClippedFlatEdges(GameState& _state, ClippedEdge _a, bool _subtractA, C
     return;
   }
   --row;
-  _state.Data().unused.clippedLastRow = row;
   DrawStackedSpansFromRow(_state, spans, Low(row), _backward);
 }
 
@@ -1218,7 +1212,6 @@ void FillClippedGeneral(GameState& _state, ScreenPoint _a, ScreenPoint _b, Scree
   ClippedEdge longEdge{Signed(_state.Data().video.clippedEdgeStartX), 0};
   ClippedEdge shortEdge = longEdge;
   std::uint16_t row = topRow;
-  _state.Data().unused.clippedLastRow = NO_ROW;
   _state.Data().video.clippedFirstRow = NO_ROW;
   _state.Data().video.clippedRowCount = 0;
   TriangleSpans spans;
@@ -1267,7 +1260,6 @@ void FillClippedGeneral(GameState& _state, ScreenPoint _a, ScreenPoint _b, Scree
     return;
   }
   --row;
-  _state.Data().unused.clippedLastRow = row;
   if (row >= BUFFER_ROWS)
   {
     return;
@@ -1346,8 +1338,7 @@ ScreenChange MakeGraphicsScreen(GameState& _state, Hardware& _hardware, std::uin
 
 std::span<Counted<std::uint8_t>, DRAWING_BUFFER_BYTES> DrawingBuffer(GameState& _state) noexcept
 {
-  DrawingState& drawing = _state.Data().drawing;
-  return BytesThrough(drawing.gap0000, drawing.gap1FC0).first<DRAWING_BUFFER_BYTES>();
+  return BytesOf(_state.Data().drawing.drawingBuffer);
 }
 
 void SaveScreenshot(GameState& _state, Hardware& _hardware)

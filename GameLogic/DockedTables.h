@@ -201,11 +201,26 @@ constexpr std::string_view INVENTORY_FRAME = "pxINVENTORY";
 /// emergencyFrame (DS:7BC0 in 1987): frame bytes, then "EMERGENCY"
 constexpr std::string_view EMERGENCY_FRAME = "\017\017EMERGENCY";
 
+/// fuelTextPrefix (DS:83E9 in 1987): 'Fuel:' and its padding, which runs on into the fuel's units digit (change 3c names it)
+constexpr std::string_view FUEL_TEXT_PREFIX{"Fuel:         ", 14};
+
+/// fuelTextPoint (DS:83F8 in 1987): the fuel text's point, between its two digits (change 3c names it)
+constexpr std::string_view FUEL_TEXT_POINT{".", 1};
+
+/// fuelTextSuffix (DS:83FA in 1987): ' Light Years' and its NUL, after the fuel's tenths digit (change 3c names it)
+constexpr std::string_view FUEL_TEXT_SUFFIX = " Light Years";
+
 /// ratingThresholds (DS:8457 in 1987): byte; 2, 4, 9, 20, 35, 90, 155, 230, 255 against killCount
 constexpr std::array<std::uint8_t, 9> RATING_THRESHOLDS = {
   0x02, 0x04, 0x09, 0x14, 0x23, 0x5A, 0x9B, 0xE6, // DS:8457
   0xFF,                                           // DS:845F
 };
+
+/// missileNameOpen (DS:84EC in 1987): 'Missile (', which runs on into the missile count's digit (change 3c names it)
+constexpr std::string_view MISSILE_NAME_OPEN{"Missile (", 9};
+
+/// missileNameClose (DS:84F6 in 1987): ')' and its NUL, after the missile count's digit (change 3c names it)
+constexpr std::string_view MISSILE_NAME_CLOSE = ")";
 
 /// supernovaBriefingText (DS:8E3C in 1987): 5 lines ending "Will you help us (Y/N)?"
 constexpr std::array<std::string_view, 5> SUPERNOVA_BRIEFING_TEXT = {
@@ -215,6 +230,17 @@ constexpr std::array<std::string_view, 5> SUPERNOVA_BRIEFING_TEXT = {
   std::string_view{" "},                               // DS:8E97
   std::string_view{"Will you help us (Y/N)?"},         // DS:8E99
 };
+
+/// taskCompleteFrame (DS:9033 in 1987): frame bytes, then "TASK COMPLETE - CONGRATULATIONS!"
+constexpr std::string_view TASK_COMPLETE_FRAME = "\017\017TASK COMPLETE - CONGRATULATIONS!";
+
+/// supernovaDebriefOpen (DS:9056 in 1987): 'Thank you for saving us.', then 'Please accept 1', which runs on into refugeeRewardDigit
+/// (change 3c names it)
+constexpr std::string_view SUPERNOVA_DEBRIEF_OPEN{"Thank you for saving us.\000Please accept 1", 40};
+
+/// supernovaDebriefClose (DS:907F in 1987): '00 Credits!', a blank line and 'Press any key to continue!', after refugeeRewardDigit (change
+/// 3c names it)
+constexpr std::string_view SUPERNOVA_DEBRIEF_CLOSE{"00 Credits!\000 \000Press any key to continue!\000", 41};
 
 /// maskBriefingText (DS:90A8 in 1987): 9 lines on the invisible masking device
 constexpr std::array<std::string_view, 9> MASK_BRIEFING_TEXT = {

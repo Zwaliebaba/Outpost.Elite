@@ -14,7 +14,7 @@ the groups' structs (`GameData::flight`, `GameData::commander`, ...):
                        .cdr file's format, and Replays/*.cdr are files of it
   constant             what nothing writes: not in the state, but its readers' constexpr tables (Tools/GenerateTables.py),
                        which the reference's image no longer loads
-  unused               what nothing reads, UnusedState, which change 3b removes
+  unused               what nothing reads: not in the state, and no table either (change 3c)
 
 A group's members keep their names and their 1987 order. The gaps between them go, but for the ones the partition lists, which
 the game uses. Each byte and word is a `Counted` (Counted.h), which counts its own changes, so that native code writes members
@@ -295,7 +295,9 @@ def emit_members(_members: list[Member], _indent: str, _out: list[str]) -> None:
         _out.append(f"{_indent}/// {note}")
       _out.append(f"{_indent}{record_declaration(member)}")
       continue
-    if not member.children:
+    if not member.children or member.is_word():
+      # A word the symbol table also names a byte of is the word alone: no union of two names for one place (change 3c). Its
+      # bytes are read with High and Low, beside the code that reads them.
       if note:
         _out.append(f"{_indent}/// {note}")
       _out.append(f"{_indent}{declaration(member)}")
@@ -331,23 +333,22 @@ def struct_types(_members: list[Member], _scope: str) -> list[tuple[str, int]]:
   """Every struct nested in _members, as its name qualified from _scope and its size, depth first."""
   types = []
   for member in _members:
-    if not member.children or member.name in RECORDS:
+    if not member.children or member.name in RECORDS or member.is_word():
       continue
-    name = f"{_scope}::{type_name(member)}{'Bytes' if member.is_word() else ''}"
+    name = f"{_scope}::{type_name(member)}"
     types.append((name, member.size))
     types += struct_types(member.children, name)
   return types
 
 
 def offset_paths(_members: list[Member], _strip: str, _base: int) -> list[tuple[str, int]]:
-  """Every member's path, less the prefix _strip, and its offset from _base, depth first; a word's bytes struct among them."""
+  """Every member's path, less the prefix _strip, and its offset from _base, depth first; a word's bytes are not members."""
   paths = []
   for member in _members:
     path = member.path.removeprefix(_strip)
     paths.append((path, member.offset - _base))
-    if member.is_word() and member.children:
-      paths.append((f"{path}Bytes", member.offset - _base))
-    paths += offset_paths(member.children, _strip, _base)
+    if not member.is_word():
+      paths += offset_paths(member.children, _strip, _base)
   return paths
 
 
@@ -377,8 +378,6 @@ SHARED = {
   "Flow": "Where the game is, at the title, docked or in flight, and the frame's clock, which several subsystems write.",
   "Jump": "The hyperspace and galactic jumps under way, which flight starts and Hyperspace counts down.",
   "Keyboard": "The keys held, which the keyboard's handler writes and flight clears.",
-  UNUSED: "What nothing reads (Design/DataPartition.tsv's unused): kept, and written where the game writes it, for change 3b, which "
-          "removes it with the turn probe.",
 }
 
 
@@ -390,11 +389,11 @@ class Group:
 
   @property
   def type(self) -> str:
-    return {UNUSED: "UnusedState"}.get(self.name, f"{self.name}State")
+    return f"{self.name}State"
 
   @property
   def member(self) -> str:
-    return {UNUSED: "unused"}.get(self.name, self.name[0].lower() + self.name[1:])
+    return self.name[0].lower() + self.name[1:]
 
   @property
   def header(self) -> Path:
@@ -421,7 +420,7 @@ def read_partition() -> list[dict[str, str]]:
 
 def build_groups(_members: list[Member]) -> list[Group]:
   """Every top-level member the partition keeps in the state, in its group, in the 1987 order; the groups in the order GameData
-  holds them: the subsystems', then the shared groups', and the unused last. A constant is in none: it is not in the state."""
+  holds them: the subsystems', then the shared groups'. A constant and an unused member are in none: they are not in the state."""
   by_name = {member.name: member for member in _members}
   groups: dict[str, Group] = {}
   rows = read_partition()
@@ -437,18 +436,17 @@ def build_groups(_members: list[Member]) -> list[Group]:
     if row["address"] != f"DS:{member.offset:04X}" or int(row["bytes"]) != member.size:
       sys.exit(f"GenerateGameData: Design/DataPartition.tsv gives {name} as {row['address']}, {row['bytes']} bytes, and the "
                f"symbol table as DS:{member.offset:04X}, {member.size}")
-    if group not in SUBSYSTEMS and group not in SHARED and group not in ("Commander", CONSTANT):
+    if group not in SUBSYSTEMS and group not in SHARED and group not in ("Commander", CONSTANT, UNUSED):
       sys.exit(f"GenerateGameData: {name}'s group, {group}, is neither a subsystem nor a shared group")
     if (group == "Commander") != (name == COMMANDER):
       sys.exit("GenerateGameData: the Commander group is commanderBlock, alone")
-    if group != CONSTANT:
+    if group not in (CONSTANT, UNUSED):
       groups.setdefault(group, Group(group)).members.append(member)
   missing = [member.name for member in _members if member.row is not None and member.name not in seen]
   if missing:
     sys.exit(f"GenerateGameData: Design/DataPartition.tsv does not place {', '.join(missing)}")
   order = [name for name in SUBSYSTEMS if name in groups] + [name for name in [*SHARED, "Commander"]
-                                                             if name in groups and name != UNUSED]
-  order += [name for name in (UNUSED,) if name in groups]
+                                                             if name in groups]
   for group in groups.values():
     group.members.sort(key=lambda _member: _member.offset)
   return [groups[name] for name in order]
@@ -618,7 +616,7 @@ def generate_data_places(_groups: list[Group], _members: list[Member]) -> str:
     "{",
     "  State,    ///< a member of GameData, in its group",
     "  Constant, ///< nothing writes it: not in GameData, but its readers' constexpr tables (Tools/GenerateTables.py)",
-    "  Unused,   ///< nothing reads it: a member of GameData, in UnusedState, which change 3b removes",
+    "  Unused,   ///< nothing reads it: not in GameData, and no table either (change 3c)",
     "};",
     "",
     "/// No place in GameData: a constant, which the state does not hold.",

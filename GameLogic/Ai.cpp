@@ -251,7 +251,7 @@ void SpawnByGovernment(GameState& _state)
 void MarkMaskShip(SpaceObject& _slot)
 {
   _slot.flags = static_cast<std::uint8_t>(_slot.flags | FLAG_DEVICE);
-  _slot.flashFrames = MASK_SHIP_FLASH_FRAMES;
+  _slot.FlashFrames() = MASK_SHIP_FLASH_FRAMES;
   _slot.aggression = 0;
 }
 

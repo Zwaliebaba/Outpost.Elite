@@ -308,12 +308,12 @@ void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_
   else
   {
     _state.Data().commander.witchspaceCountdown = 0;
-    const std::uint8_t x = _state.Data().galaxy.systemSeed1Bytes.systemX;
+    const std::uint8_t x = SystemX(_state);
     _state.Data().commander.currentSystemX = x;
     _state.Data().commander.chartCursorX = x;
     _state.Data().commander.galacticCursorX = x;
     _state.Data().commander.shortRangeCursorX = CHART_CENTER_X;
-    const auto y = static_cast<std::uint8_t>(_state.Data().galaxy.systemSeed0Bytes.systemY >> 1);
+    const auto y = static_cast<std::uint8_t>(SystemY(_state) >> 1);
     _state.Data().commander.currentSystemChartY = y;
     _state.Data().commander.chartCursorY = y;
     _state.Data().commander.galacticCursorY = y;
@@ -399,14 +399,13 @@ void EnterWitchSpace(GameState& _state)
 {
   _state.Data().commander.witchspaceCountdown = WITCHSPACE_FRAMES;
   // Halfway along the jump: x the mean of the two, y the mean of the chart's (the destination's halved).
-  const auto x = static_cast<std::uint8_t>((_state.Data().galaxy.systemSeed1Bytes.systemX + _state.Data().commander.currentSystemX) >> 1);
+  const auto x = static_cast<std::uint8_t>((SystemX(_state) + _state.Data().commander.currentSystemX) >> 1);
   _state.Data().commander.currentSystemX = x;
   _state.Data().commander.chartCursorX = x;
   _state.Data().commander.galacticCursorX = x;
   _state.Data().commander.shortRangeCursorX = CHART_CENTER_X;
   // add al, [currentSystemChartY]; shr al,1: a byte sum, its carry lost.
-  const auto sum =
-    static_cast<std::uint8_t>((_state.Data().galaxy.systemSeed0Bytes.systemY >> 1) + _state.Data().commander.currentSystemChartY);
+  const auto sum = static_cast<std::uint8_t>((SystemY(_state) >> 1) + _state.Data().commander.currentSystemChartY);
   const auto y = static_cast<std::uint8_t>(sum >> 1);
   _state.Data().commander.currentSystemChartY = y;
   _state.Data().commander.chartCursorY = y;

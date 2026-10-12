@@ -369,9 +369,6 @@
     <ClInclude Include="Timing.h">
       <Filter>Platform</Filter>
     </ClInclude>
-    <ClInclude Include="UnusedState.h">
-      <Filter>State</Filter>
-    </ClInclude>
     <ClInclude Include="Video.h">
       <Filter>Video</Filter>
     </ClInclude>

@@ -1,6 +1,7 @@
 // GameLogic/Galaxy.h
 #pragma once
 
+#include "Arithmetic.h"
 #include "Docked.h"
 #include "GameState.h"
 #include "Hardware.h"
@@ -46,6 +47,25 @@ struct SystemSeeds
 
 /// systemSeed0-2: the seeds of the system the galaxy's routines are on.
 [[nodiscard]] SystemSeeds ReadSystemSeeds(const GameState& _state);
+
+/// systemX, the high byte of systemSeed1 (DS:2973 in 1987): the x on the galactic chart of the system being generated.
+[[nodiscard]] inline std::uint8_t SystemX(const GameState& _state) noexcept
+{
+  return High(_state.Data().galaxy.systemSeed1);
+}
+
+/// systemY, the high byte of systemSeed0 (DS:2971 in 1987): twice the row on the galactic chart of the system being generated,
+/// and its size's bit.
+[[nodiscard]] inline std::uint8_t SystemY(const GameState& _state) noexcept
+{
+  return High(_state.Data().galaxy.systemSeed0);
+}
+
+/// systemSeed2High, the high byte of systemSeed2 (DS:2975 in 1987).
+[[nodiscard]] inline std::uint8_t SystemSeed2High(const GameState& _state) noexcept
+{
+  return High(_state.Data().galaxy.systemSeed2);
+}
 
 /// A place in the galaxy in chart units: x, and the row, half the galaxy's y.
 struct ChartPoint
@@ -180,8 +200,8 @@ void ClearChartTextLines(GameState& _state, std::uint16_t _ink, std::uint16_t _s
 /// TerminateSelectedSystemName (CS:60EB): a NUL after selectedSystemName.
 void TerminateSelectedSystemName(GameState& _state);
 
-/// FormatSelectedSystemDistance (CS:60F7): the distance digits with a decimal point, in the data screen's texts from data7D48,
-/// which the symbol table names no row for, ending at their byte 17h (DS:7D5F in 1987). Returns the text, from its first digit.
+/// FormatSelectedSystemDistance (CS:60F7): the distance digits with a decimal point, copied into selectedDistanceText, ending at
+/// its last byte (DS:7D5F in 1987). Returns the text, from its first digit.
 std::string_view FormatSelectedSystemDistance(GameState& _state);
 
 /// ShowSystemDescription (CS:6FC0): descriptionBuffer zeroed a word at a time as REP STOSW does, backwards when _backward

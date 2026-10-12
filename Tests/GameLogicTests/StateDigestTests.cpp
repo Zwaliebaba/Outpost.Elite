@@ -27,7 +27,7 @@ public:
     const std::string first = Elite::GameStateDigest(state, video);
     Assert::AreNotEqual(before.c_str(), first.c_str(), false, L"the state counts, its first group");
 
-    state.Data().unused.dockingDeniedMessage[0] = static_cast<std::uint8_t>(state.Data().unused.dockingDeniedMessage[0] ^ 0x55);
+    state.Data().commander.hyperspaceTargetIndex = static_cast<std::uint8_t>(state.Data().commander.hyperspaceTargetIndex ^ 0x55);
     const std::string last = Elite::GameStateDigest(state, video);
     Assert::AreNotEqual(first.c_str(), last.c_str(), false, L"and its last");
 
@@ -50,12 +50,11 @@ public:
     Assert::AreEqual(std::uint32_t{state.CodeSegment()} + Elite::DATA_SEGMENT_PARAGRAPH, std::uint32_t{state.DataSegment()},
                      L"the data segment");
 
-    // The state as the image loads it, with the D5 byte; and video memory as mode 3 leaves it.
+    // The state as the image loads it; and video memory as mode 3 leaves it.
     const std::vector<std::uint8_t> image = Elite::ReferenceLoadImage().value_or(std::vector<std::uint8_t>{});
     Assert::IsFalse(image.empty(), L"the image loads");
     const std::span<const std::uint8_t> data(image);
     Assert::IsTrue(std::ranges::equal(state.DataBytes(), data), L"the state, from the data segment's image");
-    Assert::AreEqual(1u, std::uint32_t{state.Data().unused.protectionShown}, L"with the D5 byte");
     for (std::uint16_t offset = 0; offset < Elite::Cga::VIDEO_MEMORY_BYTES; offset += 2)
     {
       if (state.VideoByte(offset) != 0x20 || state.VideoByte(static_cast<std::uint16_t>(offset + 1)) != 0x07)

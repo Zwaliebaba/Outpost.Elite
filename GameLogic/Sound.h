@@ -50,9 +50,6 @@ void StartExplosionSound(GameState& _state);
 /// step length the step counter starts at.
 std::uint8_t StartPlayerDeathSound(GameState& _state);
 
-/// StopContinuousNoise (CS:7B6B): continuousNoise = 0.
-void StopContinuousNoise(GameState& _state);
-
 /// StartLaserSound (CS:7B71): unless a noise sweep runs, a tone sweep, step 20 shrinking by 2. The original starts it
 /// under CLI. Returns the step length the step counter starts at, or nothing when a noise sweep runs.
 std::optional<std::uint8_t> StartLaserSound(GameState& _state);

@@ -226,12 +226,10 @@ void RotateVerticesToView(GameState& _state, std::size_t _first, std::uint16_t _
   count = 0;
   // Fixed edges, then face edges: a count byte, then two bytes for each.
   SetLow(count, static_cast<std::uint8_t>(_blueprint.fixedEdges.size() / 2));
-  _state.Data().unused.fixedEdgeCount = count;
   count = static_cast<std::uint16_t>(count << 1);
   // The original keeps the edge lists' addresses in fixedEdgeList and faceEdgeList for its edge routines; native code hands
   // them _blueprint, and nothing reads the two.
   SetLow(count, static_cast<std::uint8_t>(_blueprint.faceEdges.size() / 2));
-  _state.Data().unused.faceEdgeCount = count;
   count = static_cast<std::uint16_t>(count << 1);
   SetLow(count, _blueprint.faces);
   return DrawVisibleFaces(_state, _blueprint, count, _backward).backward;
@@ -276,7 +274,6 @@ constexpr std::uint16_t TRIANGLE_VERTEX_BYTES = 3;
   const ScreenPoint firstPoint{coordinate(first, 0), coordinate(first, 2)};
   const std::size_t second = vertex(1);
   const std::int16_t secondX = coordinate(second, 0);
-  _state.Data().unused.faceTestScratch = static_cast<std::uint16_t>(secondX);
   const ScreenPoint secondPoint{secondX, coordinate(second, 2)};
   const std::size_t third = vertex(2);
   return Triangle{firstPoint, secondPoint, ScreenPoint{coordinate(third, 0), coordinate(third, 2)}};
@@ -487,11 +484,11 @@ struct WindingProducts
     return _state.IndexOf(_slot);
   }
   _slot.type = static_cast<std::uint8_t>(_slot.type & SLOT_KEEP_BITS);
-  if (_slot.framesAway != 0 && (_slot.flags & STATE_BLIP_SHOWN) == 0)
+  if (_slot.FramesAway() != 0 && (_slot.flags & STATE_BLIP_SHOWN) == 0)
   {
     // Off the scanner: despawned on the 255th frame.
-    _slot.framesAway = static_cast<std::uint8_t>(_slot.framesAway + 1);
-    if (_slot.framesAway == 0)
+    _slot.FramesAway() = static_cast<std::uint8_t>(_slot.FramesAway() + 1);
+    if (_slot.FramesAway() == 0)
     {
       (void)RemoveObject(_state, _slot);
       return _state.IndexOf(_slot);
@@ -553,13 +550,13 @@ struct WindingProducts
     return false;
   }
   const bool off = (_slot.flags & STATE_FLASH_OFF) != 0;
-  _slot.flashFrames = static_cast<std::uint8_t>(_slot.flashFrames - 1);
-  if (_slot.flashFrames != 0)
+  _slot.FlashFrames() = static_cast<std::uint8_t>(_slot.FlashFrames() - 1);
+  if (_slot.FlashFrames() != 0)
   {
     return off;
   }
   _slot.flags = static_cast<std::uint8_t>(_slot.flags ^ STATE_FLASH_OFF);
-  _slot.flashFrames = off ? FLASH_OFF_FRAMES : FLASH_ON_FRAMES;
+  _slot.FlashFrames() = off ? FLASH_OFF_FRAMES : FLASH_ON_FRAMES;
   return false;
 }
 

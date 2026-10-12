@@ -591,14 +591,12 @@ void ToggleDockingComputer(GameState& _state, Hardware& _hardware)
   }
   if (!InSafeZone(_state).inside)
   {
-    _state.Data().unused.dataA137 = 0;
     StartLowBeep(_state);
     (void)PostDockingMessage(_state, Message::StationOutOfRange);
     return;
   }
   if ((_state.Slot(SlotIndex::Station).flags & STATION_SHOT) != 0)
   {
-    _state.Data().unused.dataA137 = 0;
     StartLowBeep(_state);
     (void)PostDockingMessage(_state, Message::DockingDenied);
     return;
@@ -671,7 +669,6 @@ void CancelDockingComputer(GameState& _state, Hardware& _hardware)
     return;
   }
   _state.Data().playerShip.dockingComputerOn = 0;
-  _state.Data().unused.dataA137 = 0;
   _state.Data().playerShip.viewLocked = 0;
   // PUSH AX / POP AX round it: StopAllSound's AX does not come out.
   StopAllSound(_state, _hardware);

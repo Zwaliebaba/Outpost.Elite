@@ -97,8 +97,8 @@ void MakeMineralSplinter(Elite::GameState& _state, Elite::SpaceObject& _slot)
   Elite::InitObjectFromTemplate(_slot, DRIFTER_TEMPLATES, ASTEROID_DRIFTER);
   _slot.aiState = 0;
   const std::uint16_t spin = Elite::NextRandom(_state);
-  _slot.spinRoll = static_cast<std::uint8_t>(spin & 0xFF);
-  _slot.spinPitch = static_cast<std::uint8_t>(spin >> 8);
+  _slot.SpinRoll() = static_cast<std::uint8_t>(spin & 0xFF);
+  _slot.SpinPitch() = static_cast<std::uint8_t>(spin >> 8);
   const auto scatter = static_cast<std::uint16_t>(spin & FRAGMENT_SCATTER_MASK);
   _slot.velocityX = HalveSigned(static_cast<std::uint8_t>((scatter & 0xFF) - FRAGMENT_SCATTER_CENTER));
   _slot.velocityY = HalveSigned(static_cast<std::uint8_t>((scatter >> 8) - FRAGMENT_SCATTER_CENTER));

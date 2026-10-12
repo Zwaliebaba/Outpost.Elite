@@ -31,13 +31,9 @@ constexpr std::uint16_t CREDITS_ON_MESSAGE_LINE = 0x78; // B800:0078
 
 constexpr std::uint8_t FUEL_TENTHS_PER_UNIT = 10;
 constexpr std::uint8_t FUEL_UNITS_PER_TENTH = 0x24; // 255 is 7.0 light years
-// 'Fuel:         n.n Light Years', from 16Ah into gap827F on through data83F7-data83F9 into gap83FA, and the five digits
-// FormatDecimal5 writes for it, from 0Dh into gap83FA on through data840A and data840B, of which the last two are shown: buffers
-// the symbol table starts no row for, reached from the members they start in, the bytes after them beside them (D38).
-constexpr std::size_t FUEL_TEXT_IN_GAP = 0x16A;
-constexpr std::size_t FUEL_TEXT_BYTES = 30;
-constexpr std::size_t FUEL_DIGITS_IN_GAP = 0x0D;
-constexpr std::size_t FUEL_DIGITS_BYTES = 5;
+// fuelDigits' last two, the units and the tenths, which go either side of the fuel text's point.
+constexpr std::size_t FUEL_UNITS_DIGIT = 3;
+constexpr std::size_t FUEL_TENTHS_DIGIT = 4;
 
 constexpr std::uint8_t TEXT_LAYOUT = 2;
 constexpr std::uint8_t ATTRIBUTE_MASK = 0x7F; // no blinking
@@ -121,10 +117,9 @@ constexpr std::uint8_t LASER_MOUNT_TYPE_MASK = 3;
 constexpr std::uint16_t INVENTORY_CASH_BACK = 0x10; // the cash eight cells nearer its label than the status screen's
 // The inventory's quantity, which FormatQuantity writes: a buffer past productNames' rows, which the symbol table sizes to take it.
 constexpr std::size_t INVENTORY_QUANTITY_IN_NAMES = std::size_t{INVENTORY_ROWS} * PRODUCT_NAME_BYTES;
-constexpr std::size_t QUANTITY_TEXT_BYTES = 6;       // five digits and a NUL
-constexpr std::uint16_t FUEL_LABEL_BYTES = 6;        // 'Fuel: ', where a NUL cuts the fuel text
-constexpr std::uint16_t FUEL_DIGITS_AFTER_LABEL = 8; // from that NUL past the padding to 'n.n Light Years'
-constexpr std::uint16_t RANK_LETTERS = 9;            // 'ARCHANGEL' over 'COMMANDER'
+constexpr std::size_t QUANTITY_TEXT_BYTES = 6; // five digits and a NUL
+constexpr std::uint16_t FUEL_LABEL_BYTES = 6;  // 'Fuel: ', where a NUL cuts the fuel text
+constexpr std::uint16_t RANK_LETTERS = 9;      // 'ARCHANGEL' over 'COMMANDER'
 constexpr std::uint8_t SPACE = 0x20;
 constexpr std::uint8_t NUL = 0;
 
@@ -141,9 +136,6 @@ constexpr std::uint8_t REWARD_DIGIT_FULL_HOLD = 0x30; // '1000 Credits' when all
 constexpr std::uint16_t REWARD_FULL_HOLD_TENTHS = 0x2710;
 constexpr std::uint8_t REWARD_DIGIT_OTHERWISE = 0x34; // '1400 Credits'
 constexpr std::uint16_t REWARD_OTHERWISE_TENTHS = 0x36B0;
-// 'Thank you for saving us.' and three lines more, after taskCompleteFrame's title: from 23h into it, on through
-// refugeeRewardDigit, the reward's digit, into gap907F, a text the symbol table starts no row for (D38).
-constexpr std::size_t SUPERNOVA_DEBRIEFING_IN_FRAME = 0x23;
 constexpr std::uint16_t SUPERNOVA_DEBRIEFING_LINES = 4;
 constexpr std::uint16_t INVASION_DEBRIEFING_LINES = 0x0E;
 
@@ -225,37 +217,11 @@ void FormatQuantity(std::uint16_t _quantity, std::span<Counted<std::uint8_t>> _t
   return BytesOf(_state.Data().commander.cargoHold);
 }
 
-// The run of the fuel's text and its digits, gap827F to data840B: the text is written into data83F7 and data83F9, either side of its point,
-// and its digits are formatted into gap83FA and data840A to data840B.
-static_assert(GAME_DATA_OFFSET(docked.data840B) + 1 - GAME_DATA_OFFSET(docked.gap827F) == 0x840C - 0x827F,
-              "the fuel's run holds its members together, as in 1987");
-[[nodiscard]] std::span<Counted<std::uint8_t>> FuelRun(GameState& _state)
+// The fuel's 'n.n Light Years': its two digits, which FormatFuelLightYears writes, either side of its point.
+[[nodiscard]] std::string FuelLightYearsText(const GameState& _state)
 {
-  return BytesThrough(_state.Data().docked.gap827F, _state.Data().docked.data840B);
-}
-
-// The fuel's text, 'Fuel:         n.n Light Years' (FormatFuelLightYears).
-[[nodiscard]] std::span<Counted<std::uint8_t>> FuelText(GameState& _state)
-{
-  return BytesWithin(FuelRun(_state), FUEL_TEXT_IN_GAP, FUEL_TEXT_BYTES);
-}
-
-// The run of the missiles' name on the status screen, gap84EC to gap84F6: the count is written into data84F5, inside its text.
-static_assert(GAME_DATA_OFFSET(docked.gap84F6) + sizeof(DockedState::gap84F6) - GAME_DATA_OFFSET(docked.gap84EC) == 0x85A9 - 0x84EC,
-              "the missiles' run holds its members together, as in 1987");
-[[nodiscard]] std::span<const Counted<std::uint8_t>> MissilesRun(const GameState& _state)
-{
-  return BytesThrough(_state.Data().docked.gap84EC, _state.Data().docked.gap84F6);
-}
-
-// The run of the task-complete frame and the supernova's debriefing after its title, taskCompleteFrame to gap907F: the reward is written
-// into refugeeRewardDigit, inside the debriefing.
-static_assert(GAME_DATA_OFFSET(docked.gap907F) + sizeof(DockedState::gap907F) - GAME_DATA_OFFSET(docked.taskCompleteFrame) ==
-                0x90A8 - 0x9033,
-              "the debriefing's run holds its members together, as in 1987");
-[[nodiscard]] std::span<const Counted<std::uint8_t>> TaskCompleteRun(const GameState& _state)
-{
-  return BytesThrough(_state.Data().docked.taskCompleteFrame, _state.Data().docked.gap907F);
+  const DockedState& docked = _state.Data().docked;
+  return JoinTexts({CharText(docked.data83F7), FUEL_TEXT_POINT, CharText(docked.data83F9), FUEL_TEXT_SUFFIX});
 }
 
 // The first byte of product _product's row of productNames: its name, a space and its unit.
@@ -353,7 +319,6 @@ std::uint16_t RunTitle(GameState& _state, Hardware& _hardware, bool _backward)
   _state.Data().playerShip.playerYawAngle = 0;
   _state.Data().playerShip.playerRollAngle = 0;
   _state.Data().playerShip.viewAngle = 0;
-  _state.Data().unused.anyKeyLatch = 0;
   _state.Data().drawing.screenLayout = TITLE_LAYOUT;
   (void)ShowCockpitScreen(_state, _hardware, _backward);
   bool backward = false;
@@ -523,12 +488,11 @@ void FormatFuelLightYears(GameState& _state)
 {
   // MUL AH by 10, then DIV BL by 36, which cannot overflow: at most 2550/36.
   const auto tenths = static_cast<std::uint16_t>(_state.Data().commander.fuel * FUEL_TENTHS_PER_UNIT);
-  FormatDecimal5(static_cast<std::uint8_t>(tenths / FUEL_UNITS_PER_TENTH),
-                 BytesWithin(FuelRun(_state), GAME_DATA_OFFSET(docked.gap83FA) - GAME_DATA_OFFSET(docked.gap827F) + FUEL_DIGITS_IN_GAP,
-                             FUEL_DIGITS_BYTES));
+  DockedState& docked = _state.Data().docked;
+  FormatDecimal5(static_cast<std::uint8_t>(tenths / FUEL_UNITS_PER_TENTH), docked.fuelDigits);
   // The units and the tenths, the last two of the five digits, into the text either side of its point.
-  _state.Data().docked.data83F7 = std::uint8_t{_state.Data().docked.data840A};
-  _state.Data().docked.data83F9 = std::uint8_t{_state.Data().docked.data840B};
+  docked.data83F7 = std::uint8_t{docked.fuelDigits[FUEL_UNITS_DIGIT]};
+  docked.data83F9 = std::uint8_t{docked.fuelDigits[FUEL_TENTHS_DIGIT]};
 }
 
 void DrawDockedFrameAt(GameState& _state, Hardware& _hardware, std::uint8_t _screen, std::uint8_t _frame, bool _backward)
@@ -732,7 +696,7 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
   printed = PrintTextModeString(_state, HYPERSYSTEM_LABEL_TEXT, LINE_4);
   PrintTextModeString(_state, inWitchSpace ? WITCH_SPACE_TEXT : TextWithin(SelectedNameRun(_state), 0), printed);
   FormatFuelLightYears(_state);
-  PrintTextModeString(_state, TextIn(FuelText(_state)), LINE_5);
+  PrintTextModeString(_state, JoinTexts({FUEL_TEXT_PREFIX, FuelLightYearsText(_state)}), LINE_5);
   printed = PrintTextModeString(_state, CASH_LABEL_TEXT, LINE_6);
   PrintTextModeString(_state, SkipCashSpaces(_state, _hardware, STATUS_CASH_SPACE), printed);
   printed = PrintTextModeString(_state, LEGAL_STATUS_LABEL_TEXT, LINE_7);
@@ -770,8 +734,10 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
   {
     if (fitted[item] != 0)
     {
-      // The missiles' name is the buffer their count was written into above; the rest are constant.
-      const std::string_view name = item == 0 ? TextWithin(MissilesRun(_state), 0) : EQUIPMENT_NAMES[item];
+      // The missiles' name has their count's digit inside it, which the original writes into the text above; the rest are
+      // constant.
+      const std::string missiles = JoinTexts({MISSILE_NAME_OPEN, CharText(_state.Data().docked.data84F5), MISSILE_NAME_CLOSE});
+      const std::string_view name = item == 0 ? std::string_view(missiles) : EQUIPMENT_NAMES[item];
       const std::uint16_t named = PrintTextModeString(_state, name, row);
       al = 0;
       if (SelectLaserType(_state))
@@ -817,15 +783,11 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
 ScreenKey ShowInventoryScreen(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _countIfNone)
 {
   PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, INVENTORY_FRAME, _backward), TITLE_CELL);
-  // The fuel text without the padding the status screen has: 'Fuel: ', cut by a NUL that becomes a space again, then
-  // 'n.n Light Years'.
+  // The fuel text without the padding the status screen has: 'Fuel: ', which the original cuts from the text by a NUL that
+  // becomes a space again, then 'n.n Light Years'.
   FormatFuelLightYears(_state);
-  const std::span<Counted<std::uint8_t>> fuel = FuelText(_state);
-  fuel[FUEL_LABEL_BYTES] = NUL;
-  const std::string_view label = TextIn(fuel);
-  const std::uint16_t labelEnd = PrintTextModeString(_state, label, LINE_3);
-  fuel[label.size()] = SPACE;
-  PrintTextModeString(_state, TextIn(fuel.subspan(label.size() + FUEL_DIGITS_AFTER_LABEL)), labelEnd);
+  const std::uint16_t labelEnd = PrintTextModeString(_state, FUEL_TEXT_PREFIX.substr(0, FUEL_LABEL_BYTES), LINE_3);
+  PrintTextModeString(_state, FuelLightYearsText(_state), labelEnd);
   const std::uint16_t cash = PrintTextModeString(_state, CASH_LABEL_TEXT, LINE_4);
   const auto cashCell = static_cast<std::uint16_t>(cash - INVENTORY_CASH_BACK);
   PrintTextModeString(_state, SkipCashSpaces(_state, _hardware, INVENTORY_CASH_SPACE), cashCell);
@@ -945,8 +907,7 @@ void ShowMissionDebriefing(GameState& _state, Hardware& _hardware, bool _backwar
   {
     return;
   }
-  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, BytesOf(std::as_const(_state).Data().docked.taskCompleteFrame), _backward),
-                      TITLE_CELL);
+  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, TASK_COMPLETE_FRAME, _backward), TITLE_CELL);
   _state.Data().commander.missionStage = STAGE_DEBRIEFED;
   const std::uint8_t mission = _state.Data().commander.missionNumber;
   if (mission == MISSION_SUPERNOVA)
@@ -956,7 +917,10 @@ void ShowMissionDebriefing(GameState& _state, Hardware& _hardware, bool _backwar
     _state.Data().commander.cargoHold.refugeesTonnes = 0;
     _state.Data().commander.cargoHold.cargoUsedTonnes = 0;
     AddCredits(_state, fullHold ? REWARD_FULL_HOLD_TENTHS : REWARD_OTHERWISE_TENTHS);
-    PrintTextLines(_state, TaskCompleteRun(_state), SUPERNOVA_DEBRIEFING_IN_FRAME, LINE_4, SUPERNOVA_DEBRIEFING_LINES);
+    // 'Thank you for saving us.' and three lines more, the reward's digit inside the second, which the original writes into it.
+    const std::string debriefing =
+      JoinTexts({SUPERNOVA_DEBRIEF_OPEN, CharText(_state.Data().docked.refugeeRewardDigit), SUPERNOVA_DEBRIEF_CLOSE});
+    PrintTextLines(_state, debriefing, LINE_4, SUPERNOVA_DEBRIEFING_LINES);
     WaitForKeyPress(_state, _hardware);
     _state.Data().commander.missionNumber = 0;
     _state.Data().commander.missionStage = 0;
@@ -986,7 +950,7 @@ void ShowMissionDebriefing(GameState& _state, Hardware& _hardware, bool _backwar
     _state.Data().commander.missionStage = 0;
     return;
   }
-  PrintTextLines(_state, BytesOf(_state.Data().galaxy.invasionDebriefText), 0, LINE_4, INVASION_DEBRIEFING_LINES);
+  PrintTextLines(_state, TextsOf(BytesOf(_state.Data().galaxy.invasionDebriefText)), LINE_4, INVASION_DEBRIEFING_LINES);
   WaitForKeyPress(_state, _hardware);
   AwardArchangelTitle(_state);
   _state.Data().commander.antiEcmEmulatorFitted = 1;

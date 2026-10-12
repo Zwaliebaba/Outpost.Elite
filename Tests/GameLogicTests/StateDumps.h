@@ -32,8 +32,9 @@ inline constexpr const char* DUMP_STATE = "OUTPOST_ELITE_DUMP_STATE";
 
 /// The environment variable that makes a run re-base the state digests from the directory it names, which holds the dumps of
 /// the tree before the change, as DUMP_STATE writes them. At every digest it takes, every member of the state but the unused
-/// must hold the value the dump before the change gives it, by name, wherever each tree lays it out (DATA_PLACES, and the 1987
-/// offsets for a dump with no layout.tsv); every constant the dump's, its value in the reference's image; and the picture and
+/// must hold the value the dump before the change gives it, byte by byte at its 1987 offset, wherever each tree lays it out
+/// (DATA_PLACES, and the 1987 offsets for a dump with no layout.tsv), or the image's where that tree held a constant there; every
+/// constant the dump's, its value in the reference's image; and the picture and
 /// every outcome, timing outcomes too, the recorded ones exactly. Then the run writes its own digests: every replay's digest
 /// lines, and each twin's known answers in KnownAnswers.txt, only once all of the replay's or the twin's points have met that
 /// gate. It is run by hand, in one process, never in CI, once the subsystems' answers and the turn probe are known to hold; a
@@ -104,17 +105,12 @@ public:
       {
         continue;
       }
-      const std::optional<std::size_t> found = Before(place, before.size());
-      if (!found.has_value())
-      {
-        Assert::Fail(AnswerFile::Widen(std::format("{}: the dump before the change has no {}", file.string(), place.name)).c_str());
-        return;
-      }
-      const std::size_t was = *found;
       for (std::size_t index = 0; index < place.bytes; ++index)
       {
-        const std::uint8_t old = before[was + index];
         const std::size_t original = std::size_t{place.original} + index;
+        const std::optional<std::size_t> was = Before(original, before.size());
+        // A byte the tree before the change did not hold in its state is a constant's there: the image's, which nothing writes.
+        const std::uint8_t old = was.has_value() ? before[*was] : original < image.size() ? image[original] : 0;
         const std::uint8_t now = place.place != Elite::NO_PLACE ? data[place.place + index] : original < image.size() ? image[original] : 0;
         if (now != old)
         {
@@ -172,8 +168,10 @@ private:
     }
   }
 
-  /// The places the dumps before the change give the members, from their layout.tsv; with none, the dumps are of the 1987 data
-  /// segment, every member at its 1987 offset.
+  /// Where the dumps before the change hold each byte of the 1987 data segment, by its 1987 offset, from their layout.tsv: each
+  /// row's bytes at its place, a constant's nowhere. Members are matched byte by byte at their 1987 offsets, not by name, so a
+  /// change may rename, merge, split or drop members and still be held to the dump. With no layout.tsv, the dumps are of the
+  /// 1987 data segment, every byte at its 1987 offset.
   void ReadLayout()
   {
     std::ifstream stream(m_directory / LAYOUT_FILE, std::ios::binary);
@@ -181,6 +179,8 @@ private:
     {
       return;
     }
+    m_heldBefore = true;
+    m_beforePlaces.assign(BYTES_1987, std::nullopt);
     std::string line;
     while (std::getline(stream, line))
     {
@@ -188,40 +188,50 @@ private:
       {
         continue;
       }
-      const std::size_t first = line.find('\t');
-      const std::size_t last = line.rfind('\t');
-      if (first == std::string::npos || line.substr(last + 1) == "-")
+      std::vector<std::string> fields;
+      for (std::size_t start = 0;;)
+      {
+        const std::size_t tab = line.find('\t', start);
+        fields.push_back(line.substr(start, tab == std::string::npos ? std::string::npos : tab - start));
+        if (tab == std::string::npos)
+        {
+          break;
+        }
+        start = tab + 1;
+      }
+      if (fields.size() != 4 || fields[3] == "-")
       {
         continue;
       }
-      m_beforePlaces.emplace_back(line.substr(0, first), static_cast<std::size_t>(std::stoul(line.substr(last + 1), nullptr, 16)));
+      const auto original = static_cast<std::size_t>(std::stoul(fields[1], nullptr, 16));
+      const auto bytes = static_cast<std::size_t>(std::stoul(fields[2], nullptr, 16));
+      const auto place = static_cast<std::size_t>(std::stoul(fields[3], nullptr, 16));
+      for (std::size_t index = 0; index < bytes && original + index < BYTES_1987; ++index)
+      {
+        m_beforePlaces[original + index] = place + index;
+      }
     }
   }
 
-  /// Where the dump before the change holds _place's member, a dump of _size bytes: its place there, by name, or its 1987
-  /// offset in a dump of the 1987 data segment. Nothing if it holds none of it.
-  [[nodiscard]] std::optional<std::size_t> Before(const Elite::DataPlace& _place, std::size_t _size) const
+  /// Where the dump before the change, of _size bytes, holds the byte at _original, the 1987 offset of a byte of the data segment:
+  /// its place there, or its 1987 offset in a dump of the 1987 data segment. Nothing if it does not hold it: a constant there.
+  [[nodiscard]] std::optional<std::size_t> Before(std::size_t _original, std::size_t _size) const
   {
-    std::size_t at = _place.original;
-    if (!m_beforePlaces.empty())
-    {
-      const auto found = std::ranges::find_if(m_beforePlaces, [&_place](const auto& _entry) { return _entry.first == _place.name; });
-      if (found == m_beforePlaces.end())
-      {
-        return std::nullopt;
-      }
-      at = found->second;
-    }
-    if (at + _place.bytes > _size)
+    const std::optional<std::size_t> at = m_heldBefore ? m_beforePlaces[_original] : std::optional<std::size_t>(_original);
+    if (!at.has_value() || *at >= _size)
     {
       return std::nullopt;
     }
     return at;
   }
 
+  /// The 1987 data segment's size: every byte a dump's layout can place.
+  static constexpr std::size_t BYTES_1987 = 0x10000;
+
   DigestMode m_mode = DigestMode::Check;
   std::filesystem::path m_directory;
-  std::vector<std::pair<std::string, std::size_t>> m_beforePlaces;
+  bool m_heldBefore = false;
+  std::vector<std::optional<std::size_t>> m_beforePlaces;
   std::string m_error;
 };
 

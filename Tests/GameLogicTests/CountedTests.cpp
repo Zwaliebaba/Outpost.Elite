@@ -1,5 +1,6 @@
 #include "pch.h"
 
+#include "Galaxy.h"
 #include "GameState.h"
 
 #include <memory>
@@ -76,8 +77,8 @@ public:
     Assert::AreEqual(changes + 3, state.ChangeCount(), L"a copy from another member, through its value");
   }
 
-  // Every way to reach a member counts: an array's element, a table's, a nested struct's member, a union's, a slot's field by name and by
-  // its number, a gap's byte, a helper's reference, and video memory.
+  // Every way to reach a member counts: an array's element, a table's, a nested struct's member, a word's high byte, a slot's field by name and by
+  // its number, a buffer's byte, a helper's reference, and video memory.
   TEST_METHOD(EveryWritePathCounts)
   {
     Elite::GameState state;
@@ -96,17 +97,17 @@ public:
     counted(L"a table's");
     data.commander.cargoHold.cargoAlloysTonnes = 4;
     counted(L"a nested struct's member");
-    data.galaxy.systemSeed0Bytes.systemY = 0x80;
-    counted(L"a union's");
-    Assert::AreEqual(0x8000u, std::uint32_t{data.galaxy.systemSeed0}, L"in the word's high byte");
+    data.galaxy.systemSeed0 = Elite::WithHigh(data.galaxy.systemSeed0, 0x80);
+    counted(L"a word's high byte");
+    Assert::AreEqual(0x80u, std::uint32_t{Elite::SystemY(state)}, L"the byte the original names on its own");
     data.world.shipSlots[7].flags = 0x21;
     counted(L"a slot's field");
     Assert::AreEqual(0x21u, std::uint32_t{state.Slot(Elite::SlotIndex{7}).flags}, L"the same record by its number");
     state.Slot(Elite::SlotIndex::Station).yaw = 0x0101;
     counted(L"a record's word by its number");
     Assert::AreEqual(0x0101u, std::uint32_t{data.world.shipSlots[2].yaw});
-    data.drawing.gap0000[63] = 1;
-    counted(L"a gap's byte");
+    data.drawing.drawingBuffer[63] = 1;
+    counted(L"a buffer's byte");
     StoreSeven(data.commander.legalStatus);
     counted(L"a helper's reference");
     StoreSeven(data.commander.legalStatus);

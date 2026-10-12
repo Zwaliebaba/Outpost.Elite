@@ -57,7 +57,8 @@ enum class SlotIndex : std::uint16_t
 /// its own changes (Counted). The GameState gives the record of a slot's number (GameState::Slot), and a record's number
 /// (GameState::IndexOf), where the original holds the record's offset in SI or DI.
 ///
-/// Where the original reads one place by two names of one width, the two are members of an anonymous union. Where it reads
+/// Where the original reads one place by two names of one width, the record has one member and an accessor for the other name
+/// (SpinRoll, SpinPitch, FlashFrames, FramesAway): no union (change 3c). Where it reads
 /// a byte of a word, or two bytes as one word, the record has the field it reads most, and the rest is read and written with
 /// Low, High, WithLow and WithHigh where it is used:
 /// - x, y and z: their high bytes (+05, +07, +09), which the sun's and planet's set-up writes, and z's low byte (+08);
@@ -66,7 +67,7 @@ enum class SlotIndex : std::uint16_t
 /// - yaw: the station's collided bit (+0C, bit 0 of its low byte). The colour and the byte after it (+0B-0C) are written as
 ///   one word, pitch's high byte and yaw's low byte;
 /// - viewZ's high byte (+15), and compassZ's (+25), the station's depth;
-/// - the spin (a fragment's) and the compass dot (the station's) as one word (+26), the two bytes of the union there;
+/// - the spin (a fragment's) and the compass dot (the station's) as one word (+26), blipX's and blipY's bytes;
 /// - cargo and fragments as one word (+2C), and aggression and bounty (+30).
 struct SpaceObject
 {
@@ -106,24 +107,12 @@ struct SpaceObject
   Counted<std::uint16_t> compassX; ///< +20: the station's direction for the compass
   Counted<std::uint16_t> compassY;
   Counted<std::uint16_t> compassZ;
-  union
-  {
-    Counted<std::uint8_t> blipX;    ///< +26: the scanner blip, or the station's compass dot: x, y, z
-    Counted<std::uint8_t> spinRoll; ///< +26: a fragment's spin, added to the roll and the pitch each frame
-  };
-  union
-  {
-    Counted<std::uint8_t> blipY;
-    Counted<std::uint8_t> spinPitch;
-  };
+  Counted<std::uint8_t> blipX; ///< +26: the scanner blip, or the station's compass dot: x, y, z; a fragment's spin (SpinRoll)
+  Counted<std::uint8_t> blipY; ///< +27: and a fragment's (SpinPitch)
   Counted<std::uint8_t> blipZ;
   Counted<SlotIndex> target; ///< +29: a missile's target, a hunter's pack mate; SlotIndex::Player for the player
   Counted<std::uint8_t> energy;
-  union
-  {
-    Counted<std::uint8_t> cargo;       ///< +2C
-    Counted<std::uint8_t> flashFrames; ///< +2C: a ship's that carries the device (flags bit 5): frames to its next flash on or off
-  };
+  Counted<std::uint8_t> cargo; ///< +2C; for a ship that carries the device, its flash's frames (FlashFrames)
   Counted<std::uint8_t> fragments;
   Counted<std::uint8_t> lifetime; ///< +2E: frames a fragment has left
   Counted<std::uint8_t> age;
@@ -131,13 +120,9 @@ struct SpaceObject
   Counted<std::uint8_t> bounty;
   Counted<std::uint8_t> missiles;
   Counted<std::uint8_t> behaviorClass; ///< +33: the behaviour class, behaviorHandlers' index
-  union
-  {
-    Counted<std::uint8_t> scanned;    ///< +34
-    Counted<std::uint8_t> framesAway; ///< +34: from scanned's 1, the frames an object spends off the scanner
-  };
-  Counted<std::uint8_t> jinkFrames; ///< +35: frames to the next evasive jink
-  Counted<std::uint16_t> jinkPitch; ///< +36: the jink added to the wanted heading
+  Counted<std::uint8_t> scanned;       ///< +34; from its 1, the frames an object spends off the scanner (FramesAway)
+  Counted<std::uint8_t> jinkFrames;    ///< +35: frames to the next evasive jink
+  Counted<std::uint16_t> jinkPitch;    ///< +36: the jink added to the wanted heading
   Counted<std::uint16_t> jinkYaw;
   Counted<SlotIndex> owner;          ///< +3A: a Thargon's mother; SlotIndex::Police for a police Viper, SlotIndex::None for neither
   Counted<std::uint8_t> cameraZHigh; ///< +3C: the high byte of the camera-frame z: bit 7 set behind
@@ -160,6 +145,50 @@ struct SpaceObject
   [[nodiscard]] std::uint32_t PositionZ() const noexcept
   {
     return Position(zHigh, z);
+  }
+
+  /// +26 and +27 read as a fragment's spin, added to the roll and the pitch each frame: blipX's and blipY's bytes, which a
+  /// fragment, having no blip, uses for it.
+  [[nodiscard]] Counted<std::uint8_t>& SpinRoll() noexcept
+  {
+    return blipX;
+  }
+
+  [[nodiscard]] const Counted<std::uint8_t>& SpinRoll() const noexcept
+  {
+    return blipX;
+  }
+
+  [[nodiscard]] Counted<std::uint8_t>& SpinPitch() noexcept
+  {
+    return blipY;
+  }
+
+  [[nodiscard]] const Counted<std::uint8_t>& SpinPitch() const noexcept
+  {
+    return blipY;
+  }
+
+  /// +2C read for a ship that carries the device (flags bit 5): frames to its next flash on or off, cargo's byte.
+  [[nodiscard]] Counted<std::uint8_t>& FlashFrames() noexcept
+  {
+    return cargo;
+  }
+
+  [[nodiscard]] const Counted<std::uint8_t>& FlashFrames() const noexcept
+  {
+    return cargo;
+  }
+
+  /// +34 read, from scanned's 1, as the frames an object spends off the scanner: scanned's byte.
+  [[nodiscard]] Counted<std::uint8_t>& FramesAway() noexcept
+  {
+    return scanned;
+  }
+
+  [[nodiscard]] const Counted<std::uint8_t>& FramesAway() const noexcept
+  {
+    return scanned;
   }
 
 private:
@@ -202,12 +231,12 @@ static_assert(SPACE_OBJECT_OFFSET(thargons) == 0x1F);
 static_assert(SPACE_OBJECT_OFFSET(compassX) == 0x20);
 static_assert(SPACE_OBJECT_OFFSET(compassY) == 0x22);
 static_assert(SPACE_OBJECT_OFFSET(compassZ) == 0x24);
-static_assert(SPACE_OBJECT_OFFSET(blipX) == 0x26 && SPACE_OBJECT_OFFSET(spinRoll) == 0x26);
-static_assert(SPACE_OBJECT_OFFSET(blipY) == 0x27 && SPACE_OBJECT_OFFSET(spinPitch) == 0x27);
+static_assert(SPACE_OBJECT_OFFSET(blipX) == 0x26);
+static_assert(SPACE_OBJECT_OFFSET(blipY) == 0x27);
 static_assert(SPACE_OBJECT_OFFSET(blipZ) == 0x28);
 static_assert(SPACE_OBJECT_OFFSET(target) == 0x29);
 static_assert(SPACE_OBJECT_OFFSET(energy) == 0x2B);
-static_assert(SPACE_OBJECT_OFFSET(cargo) == 0x2C && SPACE_OBJECT_OFFSET(flashFrames) == 0x2C);
+static_assert(SPACE_OBJECT_OFFSET(cargo) == 0x2C);
 static_assert(SPACE_OBJECT_OFFSET(fragments) == 0x2D);
 static_assert(SPACE_OBJECT_OFFSET(lifetime) == 0x2E);
 static_assert(SPACE_OBJECT_OFFSET(age) == 0x2F);
@@ -215,7 +244,7 @@ static_assert(SPACE_OBJECT_OFFSET(aggression) == 0x30);
 static_assert(SPACE_OBJECT_OFFSET(bounty) == 0x31);
 static_assert(SPACE_OBJECT_OFFSET(missiles) == 0x32);
 static_assert(SPACE_OBJECT_OFFSET(behaviorClass) == 0x33);
-static_assert(SPACE_OBJECT_OFFSET(scanned) == 0x34 && SPACE_OBJECT_OFFSET(framesAway) == 0x34);
+static_assert(SPACE_OBJECT_OFFSET(scanned) == 0x34);
 static_assert(SPACE_OBJECT_OFFSET(jinkFrames) == 0x35);
 static_assert(SPACE_OBJECT_OFFSET(jinkPitch) == 0x36);
 static_assert(SPACE_OBJECT_OFFSET(jinkYaw) == 0x38);

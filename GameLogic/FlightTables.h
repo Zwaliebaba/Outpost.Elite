@@ -7,6 +7,7 @@
 
 #include <array>
 #include <cstdint>
+#include <string_view>
 
 namespace Elite
 {
@@ -51,6 +52,15 @@ constexpr std::array<std::uint16_t, 8> CONDITION_LIGHT_BITMAP = {
   0x0FF0, 0x3FFC, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0x3FFC, 0x0FF0, // DS:4210
 };
 
+/// equipmentLossMessage (DS:4238 in 1987): 'Equipment Loss due to Low Energy'
+constexpr std::array<std::uint8_t, 40> EQUIPMENT_LOSS_MESSAGE = {
+  0x45, 0x71, 0x75, 0x69, 0x70, 0x6D, 0x65, 0x6E, // DS:4238
+  0x74, 0x20, 0x4C, 0x6F, 0x73, 0x73, 0x20, 0x64, // DS:4240
+  0x75, 0x65, 0x20, 0x74, 0x6F, 0x20, 0x4C, 0x6F, // DS:4248
+  0x77, 0x20, 0x45, 0x6E, 0x65, 0x72, 0x67, 0x79, // DS:4250
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // DS:4258
+};
+
 /// collisionRanges (DS:4264 in 1987): word; box half-size per object type for CheckCollisions: 275 for types 0-1 (stations), 100 for the
 /// rest
 constexpr std::array<std::uint16_t, 32> COLLISION_RANGES = {
@@ -86,6 +96,29 @@ constexpr std::array<std::uint8_t, 129> SQRT_TABLE = {
 constexpr std::array<std::uint8_t, 4> DASHBOARD_PIXEL_MASKS = {
   0x80, 0x20, 0x08, 0x02, // DS:73B3
 };
+
+/// pauseMenuText (DS:AB3C in 1987): word buffer offset, then zero-terminated text; the pause screen's lines: SPACE..Restart Game,
+/// A......Abort Game, R Keyboard Recentre, D Keyboard Damping, Y Reverse Y control, B Reverse X and Y, S Sound Toggle, F1/F10.Set Frame
+/// Rate (F8)
+constexpr std::string_view PAUSE_MENU_TEXT{"\010\006SPACE..Restart Game\000\010\010A......Abort Game\000\010\014R......Keyboard Recentre"
+                                           "\000\010\016D......Keyboard Damping\000\010\020Y......Reverse Y control\000\010\022B......Reve"
+                                           "rse X and Y\000\010\024S......Sound Toggle\000\010\030F1/F10.Set Frame Rate (F",
+                                           195};
+
+/// recenterLetter (DS:AC04 in 1987): 'R', the letter the pause screen shows for keyboardRecenter, after it (change 3c names it)
+constexpr std::string_view RECENTER_LETTER{"R", 1};
+
+/// dampingLetter (DS:AC06 in 1987): 'D', the letter the pause screen shows for keyboardDamping, after it (change 3c names it)
+constexpr std::string_view DAMPING_LETTER{"D", 1};
+
+/// yReverseLetter (DS:AC08 in 1987): 'Y', the letter the pause screen shows for reverseYControl, after it (change 3c names it)
+constexpr std::string_view Y_REVERSE_LETTER{"Y", 1};
+
+/// xyReverseLetter (DS:AC0A in 1987): 'B', the letter the pause screen shows for reverseXAndY, after it (change 3c names it)
+constexpr std::string_view XY_REVERSE_LETTER{"B", 1};
+
+/// soundLetter (DS:AC0C in 1987): 'S', the letter the pause screen shows for soundEnabled, after it (change 3c names it)
+constexpr std::string_view SOUND_LETTER{"S", 1};
 
 /// frameTimeChoices (DS:ACF1 in 1987): byte; 200, 125, 100, 83, 67, 56, 50, 40, 30, 1 ms, chosen with F1-F10 on the pause screen
 constexpr std::array<std::uint8_t, 10> FRAME_TIME_CHOICES = {

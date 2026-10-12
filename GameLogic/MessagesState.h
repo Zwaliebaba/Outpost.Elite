@@ -24,22 +24,8 @@ struct MessagesState
   Counted<Message> messageShown;
   /// text the message line should show; written with messageFrames by about 18 routines
   Counted<Message> messagePointer;
-  /// messageFrames's two bytes, as the symbol table names them (DS:4B09 in 1987).
-  struct MessageFramesBytes
-  {
-    MessageFramesBytes() noexcept = default;
-    explicit MessageFramesBytes(const MessageFramesBytes&) noexcept = default;
-
-    Counted<std::uint8_t> gap4B09[1];
-    /// 0 = a new message is waiting; UpdateMessageLine sets 0xFF
-    Counted<std::uint8_t> messageDrawn;
-  };
-  union
-  {
-    /// frames left; posters write it as a word, which also zeroes messageDrawn
-    Counted<std::uint16_t> messageFrames;
-    MessageFramesBytes messageFramesBytes;
-  };
+  /// frames left; posters write it as a word, which also zeroes messageDrawn
+  Counted<std::uint16_t> messageFrames;
   /// 20 when a warning is raised; counts down
   Counted<std::uint8_t> warningFrames;
 };
