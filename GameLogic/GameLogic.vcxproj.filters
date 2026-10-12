@@ -198,6 +198,9 @@
     <ClInclude Include="GameState.h">
       <Filter>State</Filter>
     </ClInclude>
+    <ClInclude Include="Gauges.h">
+      <Filter>Flight</Filter>
+    </ClInclude>
     <ClInclude Include="Guest.h">
       <Filter>Native</Filter>
     </ClInclude>
@@ -442,6 +445,9 @@
     </ClCompile>
     <ClCompile Include="GameState.cpp">
       <Filter>State</Filter>
+    </ClCompile>
+    <ClCompile Include="Gauges.cpp">
+      <Filter>Flight</Filter>
     </ClCompile>
     <ClCompile Include="Hardware.cpp">
       <Filter>State</Filter>

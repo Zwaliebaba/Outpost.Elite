@@ -72,6 +72,7 @@ struct Seen
   std::size_t underPixels = 0;
   std::size_t overPixels = 0;
   std::size_t modelPixels = 0;
+  std::size_t titleModels = 0; ///< the title's turning ship, drawn as a model
 };
 
 // The latest frame's layers explain what the screen shows: where the over layer holds a pixel it is the screen's, where a model
@@ -125,6 +126,7 @@ void CheckFrame(ReferenceRig& _rig, Elite::FrameImage& _image, Seen& _seen)
   for (std::size_t index = 0; index < snapshot.objectCount; ++index)
   {
     _seen.models += snapshot.objects[index].model ? 1 : 0;
+    _seen.titleModels += snapshot.title && snapshot.objects[index].model ? 1 : 0;
   }
   ++_seen.frames;
 }
@@ -152,28 +154,37 @@ public:
     Assert::IsFalse(layers->Shown(*state), L"no frame is shown before one is finished");
   }
 
-  // Where the layers put a pixel, held to the game's own copy of the view to the screen and to the CGA's picture of it: an
-  // object that is not a model draws a pattern over the whole view, and a model draws over part of it. The under layer is the
-  // pattern, pixel for pixel, but for its 0s, which changed nothing of the cleared buffer; where the model drew it is the model's, and as nothing is drawn after them the over layer is
-  // clear. The screen shows the pattern where PresentSpaceView copies it, in the CGA's colours, and the view is shown in graphics
-  // mode until a byte of it changes.
+  // Where the layers put a pixel, held to the game's own copy of the view to the screen and to the CGA's picture of it. Before
+  // any object a row is drawn, as the title draws its words; an object that is not a model draws a pattern over the rest of the
+  // view; a model draws over part of it; and a background, as the stardust is, over a row of the model. The early row is over.
+  // The under layer is the pattern, pixel for pixel, but for its 0s, which changed nothing of the cleared buffer, and the
+  // background's row; where the model drew last it is the model's. The screen shows them where PresentSpaceView copies them, in
+  // the CGA's colours, and the view is shown in graphics mode until a byte of it changes.
   TEST_METHOD(PixelsAreWhereTheScreenShowsThem)
   {
     constexpr std::size_t MODEL_FIRST_ROW = 40;
     constexpr std::size_t MODEL_LAST_ROW = 60;
     constexpr std::uint8_t MODEL_SLOT = 3;
+    constexpr std::size_t EARLY_ROW = 120;     // drawn before any object
+    constexpr std::size_t BACKGROUND_ROW = 50; // a background's, over the model
+    constexpr std::uint8_t EARLY_VALUE = 3;
+    const auto background = [](std::size_t _row, std::size_t _x) { return static_cast<std::uint8_t>(Pattern(_row, _x) ^ 2); };
     PlatformRig rig("SpaceViewPixels");
     rig.Start(
-      [&rig]
+      [&rig, &background]
       {
         Elite::Hardware& hardware = rig.Native();
         Elite::GameState& state = rig.State();
         Elite::SetGraphicsMode(hardware); // the game's mode 4, in which the CGA shows the view
         hardware.BeginSpaceViewFrame();
+        for (std::size_t x = 0; x < Elite::SPACE_VIEW_WIDTH_PIXELS; ++x)
+        {
+          DrawPixel(state, EARLY_ROW, x, EARLY_VALUE);
+        }
         hardware.BeginSpaceViewObject();
         for (std::size_t row = 0; row < Elite::SPACE_VIEW_HEIGHT_PIXELS; ++row)
         {
-          for (std::size_t x = 0; x < Elite::SPACE_VIEW_WIDTH_PIXELS; ++x)
+          for (std::size_t x = 0; x < Elite::SPACE_VIEW_WIDTH_PIXELS && row != EARLY_ROW; ++x)
           {
             DrawPixel(state, row, x, Pattern(row, x));
           }
@@ -189,6 +200,12 @@ public:
           }
         }
         hardware.EndSpaceViewObject(MODEL_SLOT);
+        hardware.BeginSpaceViewObject();
+        for (std::size_t x = 0; x < Elite::SPACE_VIEW_WIDTH_PIXELS; ++x)
+        {
+          DrawPixel(state, BACKGROUND_ROW, x, background(BACKGROUND_ROW, x));
+        }
+        hardware.EndSpaceViewBackground();
         Elite::PresentSpaceView(state, hardware, false);
         hardware.PublishFlightSnapshot(Elite::TakeFlightSnapshot(state), false);
       });
@@ -201,13 +218,25 @@ public:
     Assert::IsTrue(layers.DrawnAsModel(MODEL_SLOT) && !layers.DrawnAsModel(0), L"the model's slot");
     for (std::size_t row = 0; row < Elite::SPACE_VIEW_HEIGHT_PIXELS; ++row)
     {
-      const bool modelRow = row >= MODEL_FIRST_ROW && row <= MODEL_LAST_ROW;
+      const bool modelRow = row >= MODEL_FIRST_ROW && row <= MODEL_LAST_ROW && row != BACKGROUND_ROW;
       for (std::size_t x = 0; x < Elite::SPACE_VIEW_WIDTH_PIXELS; ++x)
       {
         const std::size_t pixel = row * Elite::SPACE_VIEW_WIDTH_PIXELS + x;
-        const std::uint8_t drawn = modelRow ? static_cast<std::uint8_t>(Pattern(row, x) ^ 1) : Pattern(row, x);
-        const std::uint8_t under = Pattern(row, x) == 0 ? Elite::LAYER_CLEAR : Pattern(row, x); // 0 is what was there
-        if (layers.Under()[pixel] != under || layers.Over()[pixel] != Elite::LAYER_CLEAR || layers.ModelOwns(pixel) != modelRow ||
+        std::uint8_t drawn = modelRow ? static_cast<std::uint8_t>(Pattern(row, x) ^ 1) : Pattern(row, x);
+        std::uint8_t under = Pattern(row, x) == 0 ? Elite::LAYER_CLEAR : Pattern(row, x); // 0 is what was there
+        std::uint8_t over = Elite::LAYER_CLEAR;
+        if (row == BACKGROUND_ROW)
+        {
+          drawn = background(row, x);
+          under = drawn;
+        }
+        else if (row == EARLY_ROW)
+        {
+          drawn = EARLY_VALUE;
+          under = Elite::LAYER_CLEAR;
+          over = EARLY_VALUE;
+        }
+        if (layers.Under()[pixel] != under || layers.Over()[pixel] != over || layers.ModelOwns(pixel) != modelRow ||
             ShownPixel(rig.State(), row, x) != drawn ||
             image->At(static_cast<std::uint32_t>(2 * (Elite::SPACE_VIEW_LEFT_PIXELS + x)),
                       static_cast<std::uint32_t>(Elite::SPACE_VIEW_TOP_LINES + row)) != colors[drawn])
@@ -244,6 +273,7 @@ public:
     // By each frame's sequence: whether the screen stopped showing it before the next, and when it was published.
     std::vector<bool> hidden(1, false);
     std::vector<std::uint64_t> publishedMilliseconds(1, 0);
+    std::vector<bool> titles(1, false);
     std::uint64_t elapsedMilliseconds = 0;
     for (const Elite::Step& step : steps)
     {
@@ -267,6 +297,7 @@ public:
           CheckFrame(rig, *image, seen);
           hidden.push_back(false);
           publishedMilliseconds.push_back(elapsedMilliseconds);
+          titles.push_back(rig.Host().LatestFlightSnapshot().title);
         }
         if (sequence != 0 && !rig.Host().SpaceViewShown())
         {
@@ -275,18 +306,20 @@ public:
       }
     }
     Assert::IsTrue(seen.frames > 0, L"frames of flight");
-    // Between two frames of one flight the screen shows the first until the second: a renderer drawing in its place never falls
-    // back to the game's picture mid-flight. A frame followed only later may be hidden: a jump, a death or a screen came between.
+    // Between two frames of one flight, or of the title, the screen shows the first until the second: a renderer drawing in its
+    // place never falls back to the game's picture mid-flight. A frame followed only later, or by the other kind, may be hidden:
+    // a jump, a death, the credits or a screen came between.
     std::size_t ends = 0;
     for (std::size_t sequence = 1; sequence < hidden.size(); ++sequence)
     {
-      const bool followed = sequence + 1 < publishedMilliseconds.size() &&
+      const bool followed = sequence + 1 < publishedMilliseconds.size() && titles[sequence + 1] == titles[sequence] &&
                             publishedMilliseconds[sequence + 1] - publishedMilliseconds[sequence] <= MOST_FRAME_GAP_MILLISECONDS;
       Assert::IsFalse(followed && hidden[sequence], (L"frame " + std::to_wstring(sequence) + L" hidden before the next").c_str());
       ends += hidden[sequence] ? 1 : 0;
     }
     Logger::WriteMessage(("frames hidden before a tunnel, a jump or a screen: " + std::to_string(ends)).c_str());
     Assert::IsTrue(seen.models > 0 && seen.modelPixels > 0, L"ships drawn as models");
+    Assert::IsTrue(seen.titleModels > 0, L"the title's ship drawn as a model");
     Assert::IsTrue(seen.underPixels > 0, L"under pixels: the sun, the planet or a dot");
     Assert::IsTrue(seen.overPixels > 0, L"over pixels: stardust, beams or the sights");
     Logger::WriteMessage(("frames " + std::to_string(seen.frames) + ", models " + std::to_string(seen.models) + ", model pixels " +

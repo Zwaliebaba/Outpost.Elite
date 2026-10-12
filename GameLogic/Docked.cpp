@@ -5,6 +5,7 @@
 #include "Arithmetic.h"
 #include "DockedTables.h"
 #include "Equipment.h"
+#include "FlightSnapshot.h"
 #include "Galaxy.h"
 #include "Input.h"
 #include "Market.h"
@@ -335,10 +336,15 @@ std::uint16_t RunTitle(GameState& _state, Hardware& _hardware, bool _backward)
   ship.xHigh = 0; // xHigh and yHigh, written as a word
   ship.yHigh = 0;
   ship.zHigh = 0;
+  bool firstFrame = true;
   for (;;)
   {
+    // The space view's layers watch the frame, the planet a background under the ship (ADR-033).
+    _hardware.BeginSpaceViewFrame();
+    _hardware.BeginSpaceViewObject();
     _state.Data().drawing.drawColor = TITLE_PLANET_COLOR;
     DrawTitlePlanet(_state, TITLE_PLANET_RADIUS, TITLE_PLANET_X, TITLE_PLANET_Y, backward);
+    _hardware.EndSpaceViewBackground();
     ship.flags = TITLE_SHIP_FLAGS;
     // MOV BL,titleShipType / SHL BL,1 / XOR BH,BH: the type doubled indexes titleShipDistances, and INC BL makes it the type byte,
     // active. The ship stands at the type's own distance, turned a step on each axis: the roll, the yaw, then the pitch.
@@ -353,6 +359,11 @@ std::uint16_t RunTitle(GameState& _state, Hardware& _hardware, bool _backward)
     DrawViewString(_state, PRESS_ANY_KEY_TEXT, PRESS_ANY_KEY_MASK, PRESS_ANY_KEY_PLACE);
     (void)TransformAndDrawObjects(_state, _hardware, backward);
     FinishSpaceViewFrame(_state, _hardware);
+    // The frame as it was drawn, marked the title's, for a renderer that draws its ship (ADR-033).
+    FlightSnapshot snapshot = TakeFlightSnapshot(_state);
+    snapshot.title = true;
+    _hardware.PublishFlightSnapshot(snapshot, !firstFrame);
+    firstFrame = false;
     backward = false;
     if (const KeyPress key = GetKey(_state, _hardware); key.scanCode != 0)
     {

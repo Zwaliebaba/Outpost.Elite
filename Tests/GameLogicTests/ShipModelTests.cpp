@@ -23,6 +23,8 @@ namespace
 {
 
 constexpr std::size_t VERTEX_BYTES = 6;
+constexpr std::uint16_t DODO_FRONT_FACE = 11; // the face with the slot, its last two triangles
+constexpr std::uint8_t SOLID_BLACK = 0;       // faceFillPatterns' first, colour 0
 
 // The game's rounding: each plane turn's, the arithmetic shifts of the program's averages, which round down and pile up to 4 units
 // on a vertex built from several, and the Dodo's ring sines, high bytes only, which are out by up to 6 on a vertex 250 from the
@@ -253,6 +255,60 @@ public:
       }
       Assert::IsTrue(model.faces.empty() || !model.triangles.empty(), (L"type " + std::to_wstring(kind) + L" is filled").c_str());
     }
+  }
+
+  // Each face's items, its triangles and edges, are layered 0, 1, 2... in the order the game paints them, so that one painted later
+  // over another in the same plane keeps it covered: the Dodo's slot, two black triangles last on its front face, is over the
+  // face's own. No face has more than MOST_LAYERS items, which bounds the depth a renderer lifts the last of them by.
+  TEST_METHOD(ItemsAreLayeredInPaintingOrder)
+  {
+    constexpr std::size_t MOST_LAYERS = 32;
+    std::size_t deepest = 0;
+    for (std::uint8_t kind = 0; kind < Elite::SHIP_MODELS; ++kind)
+    {
+      const Elite::ShipModel model = Elite::ShipModelOf(kind);
+      std::vector<std::vector<std::uint8_t>> layers(model.faces.size());
+      for (const Elite::ModelTriangle& triangle : model.triangles)
+      {
+        layers[triangle.face].push_back(triangle.layer);
+      }
+      for (const Elite::ModelEdge& edge : model.edges)
+      {
+        layers[edge.face].push_back(edge.layer);
+      }
+      for (std::vector<std::uint8_t>& face : layers)
+      {
+        std::ranges::sort(face);
+        for (std::size_t index = 0; index < face.size(); ++index)
+        {
+          Assert::AreEqual(static_cast<std::uint32_t>(index), std::uint32_t{face[index]},
+                           (L"type " + std::to_wstring(kind) + L": a face's items layered 0, 1, 2...").c_str());
+        }
+        deepest = std::max(deepest, face.size());
+      }
+    }
+    Assert::IsTrue(deepest <= MOST_LAYERS, (L"the most items on a face: " + std::to_wstring(deepest)).c_str());
+
+    const Elite::ShipModel dodo = Elite::ShipModelOf(0);
+    std::uint8_t slot = 0;
+    std::uint8_t front = 0;
+    for (const Elite::ModelTriangle& triangle : dodo.triangles)
+    {
+      if (triangle.face != DODO_FRONT_FACE)
+      {
+        continue;
+      }
+      if (triangle.pattern == SOLID_BLACK)
+      {
+        slot = slot == 0 ? triangle.layer : std::min(slot, triangle.layer);
+      }
+      else
+      {
+        front = std::max(front, triangle.layer);
+      }
+    }
+    Assert::IsTrue(slot > front, L"the Dodo's slot is painted over its front face");
+    Logger::WriteMessage(("the most items on a face: " + std::to_string(deepest)).c_str());
   }
 
   // A fill pattern's mix: a solid colour is all of one, a checkerboard half of each of two, and every mix sums to one.

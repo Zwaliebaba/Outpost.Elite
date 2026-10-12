@@ -113,6 +113,7 @@
     <ClInclude Include="GameData.h" />
     <ClInclude Include="GamePort.h" />
     <ClInclude Include="GameState.h" />
+    <ClInclude Include="Gauges.h" />
     <ClInclude Include="Guest.h" />
     <ClInclude Include="Hardware.h" />
     <ClInclude Include="Hyperspace.h" />
@@ -196,6 +197,7 @@
     <ClCompile Include="Game.cpp" />
     <ClCompile Include="GamePort.cpp" />
     <ClCompile Include="GameState.cpp" />
+    <ClCompile Include="Gauges.cpp" />
     <ClCompile Include="Hardware.cpp" />
     <ClCompile Include="Hyperspace.cpp" />
     <ClCompile Include="Input.cpp" />

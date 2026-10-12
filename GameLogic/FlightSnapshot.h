@@ -42,6 +42,50 @@ struct SnapshotObject
   friend bool operator==(const SnapshotObject&, const SnapshotObject&) = default;
 };
 
+/// A blip on the scanner (UpdateScannerBlip): its slot, and its x, its height y and its depth z as the slot keeps them, the
+/// camera's frame's high bytes, y and z times 1.25. XorScannerBlip draws it (3Dh + x, 1Fh - z / 4) from the scanner's corner,
+/// with a stick of y / 4 pixels, down for a positive y.
+struct SnapshotBlip
+{
+  std::uint8_t slot = 0;
+  std::int8_t x = 0;
+  std::int8_t y = 0;
+  std::int8_t z = 0;
+  bool hostile = false; ///< the slot's +1Eh bit 0
+
+  friend bool operator==(const SnapshotBlip&, const SnapshotBlip&) = default;
+};
+
+/// What the frame's dashboard showed (ADR-034, D51): the values UpdateDashboard draws as it left them, the scanner's blips, the
+/// compass's dot and the message line, in the game's units.
+struct SnapshotDashboard
+{
+  static constexpr std::size_t MESSAGE_BYTES = 48; ///< the message line's text, NUL-terminated
+
+  std::uint8_t foreShield = 0; ///< 0-FFh
+  std::uint8_t aftShield = 0;
+  std::uint8_t fuel = 0; ///< FFh full; light years are fuel / 36
+  std::uint8_t cabinTemperature = 0;
+  std::uint8_t laserTemperature = 0;
+  std::uint8_t altitude = 0;
+  std::uint8_t speed = 0;        ///< 0-30h
+  std::int8_t roll = 0;          ///< rollRate's low byte, which the indicator holds to -23..23
+  std::int8_t pitch = 0;         ///< rollRate's high byte, likewise
+  std::uint16_t energy = 0;      ///< 0-3FFh, four banks of FFh
+  std::uint8_t missiles = 0;     ///< 0-4
+  std::uint8_t missileState = 0; ///< 0 idle, 1 armed and looking, 2 locked
+  std::uint8_t condition = 0;    ///< conditionColor: 0 flashing, 1 green, 2 red, 3 yellow
+  bool safeZone = false;         ///< the S shown
+  bool ecm = false;              ///< the E shown, for the frame the ECM fired
+  bool compass = false;          ///< the compass dot shown
+  std::int8_t compassX = 0;      ///< the dot, -7..7 steps right of the compass's centre
+  std::int8_t compassY = 0;      ///< and below it
+  bool compassInFront = false;   ///< its target ahead: the dot solid, else a ring
+  std::array<SnapshotBlip, 36> blips{};
+  std::size_t blipCount = 0;
+  std::array<char, MESSAGE_BYTES> message{}; ///< what the message line shows, the view's name when no message is up
+};
+
 /// What one frame of flight drew (ADR-032, D49): the camera and every active object, taken where RunFlight's frame is finished,
 /// so that a renderer can draw between the last two. It is the game's, in the game's units; the space view (Phase 6, piece 3)
 /// makes the engine's scene of it. It is taken outside the game's counted state, and changes nothing the digests or turns see.
@@ -57,8 +101,10 @@ struct FlightSnapshot
   std::uint16_t viewAngle = 0;  ///< the view: 0 front, 200h left, 400h rear, 600h right
   Orientation player;           ///< the player's angles as the rotation RotatePitchYawRoll makes of them (PlayerRotation)
   bool cameraContinues = false; ///< the camera turned from the snapshot before's, as the player can in one frame (ContinueFrom)
+  bool title = false;           ///< a frame of the title's turning ship (RunTitle), not of flight
   std::array<SnapshotObject, MOST_OBJECTS> objects{};
   std::size_t objectCount = 0; ///< the active slots, in slot order, at the start of objects
+  SnapshotDashboard dashboard;
 };
 
 /// The farthest any object moves against the player in one frame, on any axis, in the slot's units (ADR-032 measures it). A

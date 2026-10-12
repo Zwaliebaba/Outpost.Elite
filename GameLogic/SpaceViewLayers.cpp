@@ -49,6 +49,29 @@ static_assert(sizeof(DrawingState::drawingBuffer) == DRAWING_BUFFER_BYTES && Spa
   return (line % 2) * VIDEO_ODD_BANK + (line / 2) * VIDEO_LINE_BYTES + SPACE_VIEW_LEFT_PIXELS / PIXELS_PER_BYTE;
 }
 
+// _visit(pixel, value) for each pixel of the view whose value in _after, a drawing buffer, differs from _before's.
+template <typename Visit> void ForEachChanged(std::span<const std::uint8_t> _before, std::span<const std::uint8_t> _after, Visit _visit)
+{
+  for (std::size_t row = 0; row < SPACE_VIEW_HEIGHT_PIXELS; ++row)
+  {
+    const std::size_t start = BufferRow(row);
+    if (std::equal(_after.begin() + static_cast<std::ptrdiff_t>(start),
+                   _after.begin() + static_cast<std::ptrdiff_t>(start + BUFFER_ROW_BYTES),
+                   _before.begin() + static_cast<std::ptrdiff_t>(start)))
+    {
+      continue;
+    }
+    for (std::size_t x = 0; x < SPACE_VIEW_WIDTH_PIXELS; ++x)
+    {
+      const std::uint8_t now = PixelOf(&_after[start], x);
+      if (now != PixelOf(&_before[start], x))
+      {
+        _visit(row * SPACE_VIEW_WIDTH_PIXELS + x, now);
+      }
+    }
+  }
+}
+
 } // namespace
 
 SpaceViewLayers::SpaceViewLayers() noexcept
@@ -56,6 +79,7 @@ SpaceViewLayers::SpaceViewLayers() noexcept
   m_under.fill(LAYER_CLEAR);
   m_publishedUnder.fill(LAYER_CLEAR);
   m_publishedOver.fill(LAYER_CLEAR);
+  m_over.fill(LAYER_CLEAR);
 }
 
 void SpaceViewLayers::BeginFrame() noexcept
@@ -63,6 +87,7 @@ void SpaceViewLayers::BeginFrame() noexcept
   // The buffer as FinishSpaceViewFrame's ClearDrawBuffer left it, all 0: anything drawn in it since, before the objects, is over.
   m_last.fill(0);
   m_under.fill(LAYER_CLEAR);
+  m_over.fill(LAYER_CLEAR);
   m_modelOwned.reset();
   m_models.reset();
   m_drawingModel = false;
@@ -70,7 +95,11 @@ void SpaceViewLayers::BeginFrame() noexcept
 
 void SpaceViewLayers::BeginObject(const GameState& _state) noexcept
 {
-  std::ranges::copy(BufferOf(_state), m_before.begin());
+  // What was drawn since the last object, the title's words or anything between two objects, is over, unless an object paints
+  // over it later.
+  const std::span<const std::uint8_t> buffer = BufferOf(_state);
+  ForEachChanged(m_last, buffer, [this](std::size_t _pixel, std::uint8_t _value) { m_over[_pixel] = _value; });
+  std::ranges::copy(buffer, m_before.begin());
   m_drawingModel = false;
 }
 
@@ -86,30 +115,16 @@ void SpaceViewLayers::EndObject(const GameState& _state, std::uint8_t _slot) noe
   {
     m_models.set(_slot);
   }
-  for (std::size_t row = 0; row < SPACE_VIEW_HEIGHT_PIXELS; ++row)
-  {
-    const std::size_t start = BufferRow(row);
-    if (std::equal(buffer.begin() + static_cast<std::ptrdiff_t>(start),
-                   buffer.begin() + static_cast<std::ptrdiff_t>(start + BUFFER_ROW_BYTES),
-                   m_before.begin() + static_cast<std::ptrdiff_t>(start)))
-    {
-      continue;
-    }
-    for (std::size_t x = 0; x < SPACE_VIEW_WIDTH_PIXELS; ++x)
-    {
-      const std::uint8_t now = PixelOf(&buffer[start], x);
-      if (now == PixelOf(&m_before[start], x))
-      {
-        continue;
-      }
-      const std::size_t pixel = row * SPACE_VIEW_WIDTH_PIXELS + x;
-      m_modelOwned[pixel] = m_drawingModel;
-      if (!m_drawingModel)
-      {
-        m_under[pixel] = now;
-      }
-    }
-  }
+  ForEachChanged(m_before, buffer,
+                 [this](std::size_t _pixel, std::uint8_t _value)
+                 {
+                   m_modelOwned[_pixel] = m_drawingModel;
+                   m_over[_pixel] = LAYER_CLEAR;
+                   if (!m_drawingModel)
+                   {
+                     m_under[_pixel] = _value;
+                   }
+                 });
   std::ranges::copy(buffer, m_last.begin());
   m_drawingModel = false;
 }
@@ -124,7 +139,8 @@ void SpaceViewLayers::Finish(const GameState& _state) noexcept
     for (std::size_t x = 0; x < SPACE_VIEW_WIDTH_PIXELS; ++x)
     {
       const std::uint8_t now = PixelOf(shown, x);
-      m_publishedOver[row * SPACE_VIEW_WIDTH_PIXELS + x] = now == PixelOf(last, x) ? LAYER_CLEAR : now;
+      const std::size_t pixel = row * SPACE_VIEW_WIDTH_PIXELS + x;
+      m_publishedOver[pixel] = now == PixelOf(last, x) ? m_over[pixel] : now;
     }
   }
   m_publishedUnder = m_under;

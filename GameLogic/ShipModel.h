@@ -25,6 +25,7 @@ struct ModelTriangle
   std::array<std::uint16_t, 3> vertices{};
   std::uint8_t pattern = 0;
   std::uint16_t face = 0; ///< the face it belongs to, ShipModel::faces' index
+  std::uint8_t layer = 0; ///< its place among its face's items, which the game paints in order (ShipModel)
 };
 
 /// A line drawn over a ship model's face: its two vertices and its colour, 0-3.
@@ -33,6 +34,7 @@ struct ModelEdge
   std::array<std::uint16_t, 2> vertices{};
   std::uint8_t color = 0;
   std::uint16_t face = 0; ///< the face it belongs to
+  std::uint8_t layer = 0; ///< its place among its face's items
 };
 
 /// A face of a ship model: the triangle whose winding decides whether the game draws it (TriangleWindingSign), and that
@@ -47,7 +49,9 @@ struct ModelFace
 
 /// A ship type's model (ADR-033): the vertices its blueprint's handler and vertex program build, with every angle 0 and its centre
 /// at the origin, and its faces as DrawVisibleFaces walks them. A face's triangles need not lie in its test triangle's plane,
-/// so it is the face, by its normal, that is seen or not, not each triangle. Turned by ModelRotation and then the player's rotation and moved to the object's view
+/// so it is the face, by its normal, that is seen or not, not each triangle. A face's items are painted in order, each over those
+/// before it: the Dodo's slot is two black triangles after the front face's own, in the same plane. Each item's layer is its place
+/// among them, from 0, for a renderer to keep that order where two lie in one plane. Turned by ModelRotation and then the player's rotation and moved to the object's view
 /// position, its vertices are where the game puts them (ShipModelTests).
 struct ShipModel
 {

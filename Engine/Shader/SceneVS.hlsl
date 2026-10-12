@@ -1,8 +1,9 @@
 // Engine/Shader/SceneVS.hlsl
 // A scene model's vertex (ADR-033): turned and moved into the camera's frame, x right, y down and z ahead, and projected onto the
 // inset, z into reversed depth with no far plane. A vertex of a face whose normal points away from the camera is put behind the
-// near plane, so that the whole face, which carries one normal and one point of its plane, is clipped. Its colour is its mix of
-// the palette, lit by the light as the face's normal meets it, or as it is for a line.
+// near plane, so that the whole face, which carries one normal and one point of its plane, is clipped. A higher layer is drawn a
+// little nearer, over a lower one in its plane. Its colour is its mix of the palette, lit by the light as the face's normal meets
+// it, or as it is for a line.
 
 #include "Scene.hlsli"
 
@@ -12,9 +13,11 @@ struct SceneVertexIn
   float3 normal : NORMAL;
   float3 facePoint : TEXCOORD0;
   float4 paletteWeights : COLOR0;
+  float layer : TEXCOORD1;
 };
 
-static const float AMBIENT = 0.35; // the light on a face turned from the sun
+static const float AMBIENT = 0.35;          // the light on a face turned from the sun
+static const float LAYER_LIFT = 1.0 / 8192.0; // a layer's depth lift, as SCENE_LAYERS says
 
 float3 Rotate(float4 _rotation, float3 _vector)
 {
@@ -38,6 +41,6 @@ SceneVertexOut main(SceneVertexIn _input)
     return output;
   }
   output.position = float4(g_projection.x * at.x + g_projection.y * at.z, g_projection.w * at.z - g_projection.z * at.y,
-                           g_nearUnits * g_depthLift, at.z);
+                           g_nearUnits * g_depthLift * (1.0 + LAYER_LIFT * _input.layer), at.z);
   return output;
 }

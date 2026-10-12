@@ -3,6 +3,8 @@
 #include "Application.h"
 
 #include "AudioStream.h"
+#include "Canvas.h"
+#include "Cockpit.h"
 #include "DirectoryFileStore.h"
 #include "Game.h"
 #include "Platform.h"
@@ -32,6 +34,7 @@ constexpr bool START_FULL_SCREEN = true; // borderless over the whole screen, F1
 constexpr std::uint32_t SAMPLE_RATE = 44'100;
 constexpr std::uint64_t LONGEST_CATCH_UP_MILLISECONDS = 250;
 constexpr std::uint8_t BREAK_BIT = 0x80;
+constexpr std::uint32_t COCKPIT_BACKGROUND = 0x000000; // round the view in the frame's window, and past the design at other shapes
 
 // Initialises COM on this thread for XAudio2, and undoes it.
 class ComScope
@@ -116,6 +119,7 @@ int Application::Run(HINSTANCE _instance)
     return 1;
   }
   SpaceView spaceView;
+  Engine::Canvas canvas;
   if (!spaceView.AddModels(renderer))
   {
     Fail(L"The display device would not take the ships' models.");
@@ -193,13 +197,25 @@ int Application::Run(HINSTANCE _instance)
     audioCycle = platform->Clock();
     platform->Sound().DiscardBefore(Elite::Speaker::FirstSampleStart(audioCycle, SAMPLE_RATE));
 
-    platform->Render(*frame);
-    for (std::size_t index = 0; index < pixels.size(); ++index)
+    // In flight, the cockpit with the space view in its window (ADR-034, D63); on the title and every other screen, the CGA
+    // picture, the title's ship drawn over it (ADR-033).
+    bool presented = false;
+    const Elite::FlightSnapshot& latest = platform->LatestFlightSnapshot();
+    if (latest.sequence != 0 && !latest.title && platform->SpaceViewShown())
     {
-      pixels[index] = rgb(frame->pixels[index]);
+      Cockpit::Draw(latest.dashboard, elapsedMilliseconds, renderer, canvas);
+      presented = renderer.Present({}, COCKPIT_BACKGROUND, spaceView.Frame(*platform, Cockpit::VIEW), &canvas);
     }
-    // The space view drawn over the picture while the screen shows a frame of flight (ADR-033).
-    if (!renderer.Present(pixels, rgb(frame->borderColor), spaceView.Frame(*platform)))
+    else
+    {
+      platform->Render(*frame);
+      for (std::size_t index = 0; index < pixels.size(); ++index)
+      {
+        pixels[index] = rgb(frame->pixels[index]);
+      }
+      presented = renderer.Present(pixels, rgb(frame->borderColor), spaceView.Frame(*platform, SpaceView::PICTURE_PLACE));
+    }
+    if (!presented)
     {
       Fail(L"The display device was lost.");
       return 1;

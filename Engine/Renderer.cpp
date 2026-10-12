@@ -2,6 +2,8 @@
 
 #include "Renderer.h"
 
+#include "CompiledShader/CanvasPS.h"
+#include "CompiledShader/CanvasVS.h"
 #include "CompiledShader/CompositePS.h"
 #include "CompiledShader/PresentPS.h"
 #include "CompiledShader/PresentVS.h"
@@ -21,7 +23,9 @@ namespace
 {
 
 constexpr DXGI_FORMAT TARGET_FORMAT = DXGI_FORMAT_R8G8B8A8_UNORM;
-constexpr DXGI_FORMAT PICTURE_FORMAT = DXGI_FORMAT_B8G8R8A8_UNORM; // a 0x00RRGGBB word, little-endian
+constexpr DXGI_FORMAT TARGET_SRGB_FORMAT = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;   // the canvas's view of the same target (D47)
+constexpr DXGI_FORMAT TARGET_TYPELESS_FORMAT = DXGI_FORMAT_R8G8B8A8_TYPELESS; // a capture's target, which has both views
+constexpr DXGI_FORMAT PICTURE_FORMAT = DXGI_FORMAT_B8G8R8A8_UNORM;            // a 0x00RRGGBB word, little-endian
 constexpr UINT PRESENT_SYNC_INTERVAL = 1;
 constexpr UINT FRAME_LATENCY = 1;
 constexpr UINT SWAP_CHAIN_FLAGS = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
@@ -37,7 +41,7 @@ constexpr DXGI_FORMAT SCENE_DEPTH_FORMAT = DXGI_FORMAT_D32_FLOAT;
 constexpr DXGI_FORMAT LAYER_FORMAT = DXGI_FORMAT_R8G8_UINT; // under, then over
 constexpr UINT SCENE_SAMPLES = 4;
 constexpr float FARTHEST_DEPTH = 0.0f;                  // reversed Z: 1 at the near plane, 0 at infinity
-constexpr float LINE_DEPTH_LIFT = 1.0f + 1.0f / 256.0f; // a line drawn a 256th nearer than its face, so the face does not hide it
+constexpr float LINE_DEPTH_LIFT = 1.0f + 1.0f / 128.0f; // a line drawn a 128th nearer than its face, over every layer of it
 constexpr UINT ROOT_PARAMETER_FRAME = 0;
 constexpr UINT ROOT_PARAMETER_OBJECT = 1;
 constexpr UINT ROOT_PARAMETER_PALETTE = 2;
@@ -49,7 +53,19 @@ constexpr UINT ROOT_PARAMETER_COMPOSITE_CONSTANTS = 1;
 constexpr UINT COMPOSITE_CONSTANT_COUNT = 20;
 constexpr UINT DESCRIPTOR_SCENE = 1; // then the layers, in the composite's table
 constexpr UINT DESCRIPTOR_LAYERS = 2;
-constexpr UINT DESCRIPTOR_COUNT = 3;
+constexpr UINT DESCRIPTOR_ATLAS = 3;
+constexpr UINT DESCRIPTOR_SHAPES = 4; // one for each frame in flight
+constexpr UINT DESCRIPTOR_COUNT = DESCRIPTOR_SHAPES + Renderer::FRAME_COUNT;
+
+// The 2D layer (ADR-034).
+constexpr DXGI_FORMAT ATLAS_FORMAT = DXGI_FORMAT_R8_UNORM;
+constexpr UINT ROOT_PARAMETER_CANVAS_SHAPES = 0;
+constexpr UINT ROOT_PARAMETER_CANVAS_ATLAS = 1;
+constexpr UINT ROOT_PARAMETER_CANVAS_PLACEMENT = 2;
+constexpr UINT CANVAS_PLACEMENT_COUNT = 8;
+constexpr UINT CANVAS_VERTICES = 6; // two triangles a shape
+constexpr std::size_t LEAST_SHAPE_CAPACITY = 256;
+static_assert(sizeof(CanvasShape) == 64, "CanvasShape is Canvas.hlsli's, packed");
 constexpr std::size_t LAYER_TEXEL_BYTES = 2;
 constexpr std::size_t PALETTE_COLORS = 4;
 
@@ -126,6 +142,15 @@ float Channel(std::uint32_t _color, int _shift) noexcept
   return static_cast<float>((_color >> _shift) & 0xFFu) / 255.0f;
 }
 
+// A view of a render target in _format.
+D3D12_RENDER_TARGET_VIEW_DESC TargetView(DXGI_FORMAT _format) noexcept
+{
+  D3D12_RENDER_TARGET_VIEW_DESC desc{};
+  desc.Format = _format;
+  desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+  return desc;
+}
+
 // A display-encoded channel, sRGB, in linear light.
 float LinearChannel(std::uint32_t _color, int _shift) noexcept
 {
@@ -173,13 +198,14 @@ D3D12_RESOURCE_DESC MultisampledOfSize(std::uint32_t _width, std::uint32_t _heig
 }
 
 // The scene's vertex, as SceneVS reads it.
-constexpr std::array<D3D12_INPUT_ELEMENT_DESC, 4> SCENE_VERTEX_LAYOUT = {{
+constexpr std::array<D3D12_INPUT_ELEMENT_DESC, 5> SCENE_VERTEX_LAYOUT = {{
   {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(SceneVertex, position), D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
   {"NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(SceneVertex, normal), D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
   {"TEXCOORD", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(SceneVertex, facePoint), D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
   {"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(SceneVertex, paletteWeights), D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+  {"TEXCOORD", 1, DXGI_FORMAT_R32_FLOAT, 0, offsetof(SceneVertex, layer), D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
 }};
-static_assert(sizeof(SceneVertex) == 13 * sizeof(float), "SceneVertex is SceneVS's vertex, packed");
+static_assert(sizeof(SceneVertex) == 14 * sizeof(float), "SceneVertex is SceneVS's vertex, packed");
 
 [[nodiscard]] D3D12_ROOT_PARAMETER Constants(UINT _register, UINT _count, D3D12_SHADER_VISIBILITY _visibility) noexcept
 {
@@ -201,6 +227,14 @@ static_assert(sizeof(SceneVertex) == 13 * sizeof(float), "SceneVertex is SceneVS
 }
 
 } // namespace
+
+DesignPlacement PlaceDesign(std::uint32_t _width, std::uint32_t _height) noexcept
+{
+  const float scale = std::min(static_cast<float>(_width) / DESIGN_WIDTH, static_cast<float>(_height) / DESIGN_HEIGHT);
+  return DesignPlacement{.scale = scale,
+                         .left = (static_cast<float>(_width) - DESIGN_WIDTH * scale) / 2.0f,
+                         .top = (static_cast<float>(_height) - DESIGN_HEIGHT * scale) / 2.0f};
+}
 
 ScreenRect PlacePicture(std::uint32_t _targetWidth, std::uint32_t _targetHeight, std::uint32_t _logicalWidth,
                         std::uint32_t _logicalHeight) noexcept
@@ -247,7 +281,7 @@ bool Renderer::Create(const Desc& _desc)
   m_sourceHeight = _desc.sourceHeight;
   m_logicalWidth = _desc.logicalWidth;
   m_logicalHeight = _desc.logicalHeight;
-  return CreateDevice(_desc.warp) && CreatePipeline() && CreateScenePipelines() && CreatePicture();
+  return CreateDevice(_desc.warp) && CreatePipeline() && CreateScenePipelines() && CreatePicture() && CreateCanvasPipeline();
 }
 
 bool Renderer::CreateDevice(bool _warp)
@@ -576,6 +610,123 @@ bool Renderer::CreatePicture()
   return true;
 }
 
+bool Renderer::CreateCanvasPipeline()
+{
+  if (!m_glyphs.Create())
+  {
+    return false;
+  }
+  // The shapes, which the vertex shader places and the pixel shader draws; the glyph atlas; and the placement.
+  D3D12_DESCRIPTOR_RANGE shapes{};
+  shapes.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+  shapes.NumDescriptors = 1;
+  shapes.BaseShaderRegister = 0;
+  shapes.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+  D3D12_DESCRIPTOR_RANGE atlas = shapes;
+  atlas.BaseShaderRegister = 1;
+  std::array<D3D12_ROOT_PARAMETER, 3> parameters{};
+  parameters[ROOT_PARAMETER_CANVAS_SHAPES].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+  parameters[ROOT_PARAMETER_CANVAS_SHAPES].DescriptorTable.NumDescriptorRanges = 1;
+  parameters[ROOT_PARAMETER_CANVAS_SHAPES].DescriptorTable.pDescriptorRanges = &shapes;
+  parameters[ROOT_PARAMETER_CANVAS_SHAPES].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+  parameters[ROOT_PARAMETER_CANVAS_ATLAS].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+  parameters[ROOT_PARAMETER_CANVAS_ATLAS].DescriptorTable.NumDescriptorRanges = 1;
+  parameters[ROOT_PARAMETER_CANVAS_ATLAS].DescriptorTable.pDescriptorRanges = &atlas;
+  parameters[ROOT_PARAMETER_CANVAS_ATLAS].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+  parameters[ROOT_PARAMETER_CANVAS_PLACEMENT] = Constants(0, CANVAS_PLACEMENT_COUNT, D3D12_SHADER_VISIBILITY_ALL);
+  D3D12_ROOT_SIGNATURE_DESC rootDesc{};
+  rootDesc.NumParameters = static_cast<UINT>(parameters.size());
+  rootDesc.pParameters = parameters.data();
+  rootDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+  if (!CreateRootSignature(m_device.Get(), rootDesc, m_canvasSignature))
+  {
+    return false;
+  }
+  // Premultiplied colours over what is there, blended in linear light through the sRGB view.
+  constexpr D3D12_RENDER_TARGET_BLEND_DESC OVER{.BlendEnable = TRUE,
+                                                .LogicOpEnable = FALSE,
+                                                .SrcBlend = D3D12_BLEND_ONE,
+                                                .DestBlend = D3D12_BLEND_INV_SRC_ALPHA,
+                                                .BlendOp = D3D12_BLEND_OP_ADD,
+                                                .SrcBlendAlpha = D3D12_BLEND_ONE,
+                                                .DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA,
+                                                .BlendOpAlpha = D3D12_BLEND_OP_ADD,
+                                                .LogicOp = D3D12_LOGIC_OP_NOOP,
+                                                .RenderTargetWriteMask = static_cast<UINT8>(D3D12_COLOR_WRITE_ENABLE_ALL)};
+  const D3D12_GRAPHICS_PIPELINE_STATE_DESC pipelineDesc{
+    .pRootSignature = m_canvasSignature.Get(),
+    .VS = {g_CanvasVS, sizeof(g_CanvasVS)},
+    .PS = {g_CanvasPS, sizeof(g_CanvasPS)},
+    .DS = {},
+    .HS = {},
+    .GS = {},
+    .StreamOutput = {},
+    .BlendState = {.AlphaToCoverageEnable = FALSE,
+                   .IndependentBlendEnable = FALSE,
+                   .RenderTarget = {OVER, OVER, OVER, OVER, OVER, OVER, OVER, OVER}},
+    .SampleMask = UINT_MAX,
+    .RasterizerState = {.FillMode = D3D12_FILL_MODE_SOLID,
+                        .CullMode = D3D12_CULL_MODE_NONE,
+                        .FrontCounterClockwise = FALSE,
+                        .DepthBias = 0,
+                        .DepthBiasClamp = 0.0f,
+                        .SlopeScaledDepthBias = 0.0f,
+                        .DepthClipEnable = TRUE,
+                        .MultisampleEnable = FALSE,
+                        .AntialiasedLineEnable = FALSE,
+                        .ForcedSampleCount = 0,
+                        .ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF},
+    .DepthStencilState = {.DepthEnable = FALSE,
+                          .DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO,
+                          .DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS,
+                          .StencilEnable = FALSE,
+                          .StencilReadMask = D3D12_DEFAULT_STENCIL_READ_MASK,
+                          .StencilWriteMask = D3D12_DEFAULT_STENCIL_WRITE_MASK,
+                          .FrontFace = KEEP_STENCIL,
+                          .BackFace = KEEP_STENCIL},
+    .InputLayout = {},
+    .IBStripCutValue = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED,
+    .PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE,
+    .NumRenderTargets = 1,
+    .RTVFormats = {TARGET_SRGB_FORMAT},
+    .DSVFormat = DXGI_FORMAT_UNKNOWN,
+    .SampleDesc = {.Count = 1, .Quality = 0},
+    .NodeMask = 0,
+    .CachedPSO = {},
+    .Flags = D3D12_PIPELINE_STATE_FLAG_NONE};
+  if (FAILED(m_device->CreateGraphicsPipelineState(&pipelineDesc, IID_PPV_ARGS(&m_canvasPipeline))))
+  {
+    return false;
+  }
+
+  // The atlas: a texture the frames copy into when it changed, through an upload buffer each.
+  const D3D12_RESOURCE_DESC atlasDesc =
+    TextureOfSize(GlyphAtlas::SIZE_PIXELS, GlyphAtlas::SIZE_PIXELS, ATLAS_FORMAT, D3D12_RESOURCE_FLAG_NONE);
+  const D3D12_HEAP_PROPERTIES defaultHeap = HeapOfType(D3D12_HEAP_TYPE_DEFAULT);
+  if (FAILED(m_device->CreateCommittedResource(&defaultHeap, D3D12_HEAP_FLAG_NONE, &atlasDesc, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+                                               nullptr, IID_PPV_ARGS(&m_atlas))))
+  {
+    return false;
+  }
+  UINT64 atlasBytes = 0;
+  m_device->GetCopyableFootprints(&atlasDesc, 0, 1, 0, &m_atlasFootprint, nullptr, nullptr, &atlasBytes);
+  m_atlasUploadBytes = atlasBytes;
+  D3D12_SHADER_RESOURCE_VIEW_DESC viewDesc{};
+  viewDesc.Format = ATLAS_FORMAT;
+  viewDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+  viewDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+  viewDesc.Texture2D.MipLevels = 1;
+  D3D12_CPU_DESCRIPTOR_HANDLE view = m_shaderResourceHeap->GetCPUDescriptorHandleForHeapStart();
+  view.ptr += std::size_t{DESCRIPTOR_ATLAS} * m_resourceStride;
+  m_device->CreateShaderResourceView(m_atlas.Get(), &viewDesc, view);
+  return true;
+}
+
+float Renderer::MeasureText(const CanvasText& _text)
+{
+  return m_glyphs.Measure(_text);
+}
+
 bool Renderer::AttachWindow(HWND _window)
 {
   m_window = _window;
@@ -613,6 +764,10 @@ bool Renderer::AttachWindow(HWND _window)
   {
     return false;
   }
+  if (FAILED(m_device->CreateDescriptorHeap(&targetHeap, IID_PPV_ARGS(&m_srgbTargetHeap))))
+  {
+    return false;
+  }
   m_renderTargetStride = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
   return CreateWindowTargets();
 }
@@ -620,6 +775,8 @@ bool Renderer::AttachWindow(HWND _window)
 bool Renderer::CreateWindowTargets()
 {
   D3D12_CPU_DESCRIPTOR_HANDLE handle = m_renderTargetHeap->GetCPUDescriptorHandleForHeapStart();
+  D3D12_CPU_DESCRIPTOR_HANDLE srgbHandle = m_srgbTargetHeap->GetCPUDescriptorHandleForHeapStart();
+  const D3D12_RENDER_TARGET_VIEW_DESC srgbDesc = TargetView(TARGET_SRGB_FORMAT);
   for (UINT index = 0; index < FRAME_COUNT; ++index)
   {
     if (FAILED(m_swapChain->GetBuffer(index, IID_PPV_ARGS(&m_backBuffers[index]))))
@@ -627,7 +784,9 @@ bool Renderer::CreateWindowTargets()
       return false;
     }
     m_device->CreateRenderTargetView(m_backBuffers[index].Get(), nullptr, handle);
+    m_device->CreateRenderTargetView(m_backBuffers[index].Get(), &srgbDesc, srgbHandle);
     handle.ptr += m_renderTargetStride;
+    srgbHandle.ptr += m_renderTargetStride;
   }
   return true;
 }
@@ -762,23 +921,45 @@ bool Renderer::Drawable(const SceneFrame* _scene) noexcept
          inset.over.size() >= layerPixels;
 }
 
-ScreenRect Renderer::InsetPlace(const SceneInset& _inset, std::uint32_t _width, std::uint32_t _height) const noexcept
+ScreenRect Renderer::InsetPlace(const SceneInset& _inset, std::uint32_t _width, std::uint32_t _height, bool _design) const noexcept
 {
-  const ScreenRect picture = PlacePicture(_width, _height, m_logicalWidth, m_logicalHeight);
-  const float across = static_cast<float>(picture.width) / static_cast<float>(m_sourceWidth);
-  const float down = static_cast<float>(picture.height) / static_cast<float>(m_sourceHeight);
-  const auto edge = [](std::uint32_t _origin, float _at, float _scale)
-  { return _origin + static_cast<std::uint32_t>(std::lround(std::max(_at, 0.0f) * _scale)); };
-  const std::uint32_t left = edge(picture.left, _inset.left, across);
-  const std::uint32_t top = edge(picture.top, _inset.top, down);
-  const std::uint32_t right = std::min(edge(picture.left, _inset.left + _inset.width, across), picture.left + picture.width);
-  const std::uint32_t bottom = std::min(edge(picture.top, _inset.top + _inset.height, down), picture.top + picture.height);
+  float originX = 0.0f;
+  float originY = 0.0f;
+  float across = 0.0f;
+  float down = 0.0f;
+  std::uint32_t limitX = _width;
+  std::uint32_t limitY = _height;
+  if (_design)
+  {
+    const DesignPlacement design = PlaceDesign(_width, _height);
+    originX = design.left;
+    originY = design.top;
+    across = design.scale;
+    down = design.scale;
+  }
+  else
+  {
+    const ScreenRect picture = PlacePicture(_width, _height, m_logicalWidth, m_logicalHeight);
+    originX = static_cast<float>(picture.left);
+    originY = static_cast<float>(picture.top);
+    across = static_cast<float>(picture.width) / static_cast<float>(m_sourceWidth);
+    down = static_cast<float>(picture.height) / static_cast<float>(m_sourceHeight);
+    limitX = picture.left + picture.width;
+    limitY = picture.top + picture.height;
+  }
+  const auto edge = [](float _origin, float _at, float _scale)
+  { return static_cast<std::uint32_t>(std::max(std::lround(_origin + _at * _scale), 0L)); };
+  const std::uint32_t left = edge(originX, _inset.left, across);
+  const std::uint32_t top = edge(originY, _inset.top, down);
+  const std::uint32_t right = std::min(edge(originX, _inset.left + _inset.width, across), limitX);
+  const std::uint32_t bottom = std::min(edge(originY, _inset.top + _inset.height, down), limitY);
   return ScreenRect{.left = left, .top = top, .width = right > left ? right - left : 0, .height = bottom > top ? bottom - top : 0};
 }
 
-bool Renderer::Present(std::span<const std::uint32_t> _pixels, std::uint32_t _border, const SceneFrame* _scene)
+bool Renderer::Present(std::span<const std::uint32_t> _pixels, std::uint32_t _border, const SceneFrame* _scene, const Canvas* _canvas)
 {
-  if (_pixels.size() < std::size_t{m_sourceWidth} * m_sourceHeight)
+  const bool picture = _canvas == nullptr;
+  if (picture && _pixels.size() < std::size_t{m_sourceWidth} * m_sourceHeight)
   {
     return true;
   }
@@ -791,36 +972,17 @@ bool Renderer::Present(std::span<const std::uint32_t> _pixels, std::uint32_t _bo
   WaitForSingleObjectEx(m_frameLatencyWaitable, LONGEST_FRAME_WAIT_MILLISECONDS, TRUE);
 
   Frame& frame = m_frames[m_nextFrame];
-  const SceneFrame* scene = Drawable(_scene) ? _scene : nullptr;
-  if (scene != nullptr)
-  {
-    const ScreenRect inset = InsetPlace(scene->inset, m_clientWidth, m_clientHeight);
-    if (inset.width == 0 || inset.height == 0)
-    {
-      scene = nullptr;
-    }
-    else if (!SizeSceneTargets(inset.width, inset.height))
-    {
-      return false;
-    }
-  }
-  if (!BeginFrame(frame, _pixels, scene))
-  {
-    return false;
-  }
   const UINT index = m_swapChain->GetCurrentBackBufferIndex();
   ID3D12Resource* target = m_backBuffers[index].Get();
-  const D3D12_RESOURCE_BARRIER toTarget = Transition(target, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
-  m_commands->ResourceBarrier(1, &toTarget);
   D3D12_CPU_DESCRIPTOR_HANDLE targetView = m_renderTargetHeap->GetCPUDescriptorHandleForHeapStart();
   targetView.ptr += std::size_t{index} * m_renderTargetStride;
-  DrawPicture(targetView, m_clientWidth, m_clientHeight, _border);
-  if (scene != nullptr && !DrawScene(targetView, m_clientWidth, m_clientHeight, *scene))
+  D3D12_CPU_DESCRIPTOR_HANDLE srgbView = m_srgbTargetHeap->GetCPUDescriptorHandleForHeapStart();
+  srgbView.ptr += std::size_t{index} * m_renderTargetStride;
+  if (!DrawFrame(frame, targetView, srgbView, m_clientWidth, m_clientHeight, _border, _scene, _canvas, _pixels, target,
+                 D3D12_RESOURCE_STATE_PRESENT))
   {
     return false;
   }
-  const D3D12_RESOURCE_BARRIER toPresent = Transition(target, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
-  m_commands->ResourceBarrier(1, &toPresent);
   if (FAILED(m_commands->Close()))
   {
     return false;
@@ -839,15 +1001,70 @@ bool Renderer::Present(std::span<const std::uint32_t> _pixels, std::uint32_t _bo
   return true;
 }
 
-std::vector<std::uint32_t> Renderer::Capture(std::span<const std::uint32_t> _pixels, std::uint32_t _border, std::uint32_t _width,
-                                             std::uint32_t _height, const SceneFrame* _scene)
+bool Renderer::DrawFrame(Frame& _frame, D3D12_CPU_DESCRIPTOR_HANDLE _targetView, D3D12_CPU_DESCRIPTOR_HANDLE _srgbView,
+                         std::uint32_t _width, std::uint32_t _height, std::uint32_t _border, const SceneFrame* _scene,
+                         const Canvas* _canvas, std::span<const std::uint32_t> _pixels, ID3D12Resource* _target,
+                         D3D12_RESOURCE_STATES _targetState)
 {
-  if (_pixels.size() < std::size_t{m_sourceWidth} * m_sourceHeight || _width == 0 || _height == 0)
+  const bool picture = _canvas == nullptr;
+  const SceneFrame* scene = Drawable(_scene) ? _scene : nullptr;
+  ScreenRect inset{};
+  if (scene != nullptr)
+  {
+    inset = InsetPlace(scene->inset, _width, _height, !picture);
+    if (inset.width == 0 || inset.height == 0)
+    {
+      scene = nullptr;
+    }
+    else if (!SizeSceneTargets(inset.width, inset.height))
+    {
+      return false;
+    }
+  }
+  if (!BeginFrame(_frame, _pixels, scene, picture))
+  {
+    return false;
+  }
+  if (_targetState != D3D12_RESOURCE_STATE_RENDER_TARGET)
+  {
+    const D3D12_RESOURCE_BARRIER toTarget = Transition(_target, _targetState, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    m_commands->ResourceBarrier(1, &toTarget);
+  }
+  if (picture)
+  {
+    DrawPicture(_targetView, _width, _height, _border);
+  }
+  else
+  {
+    m_commands->OMSetRenderTargets(1, &_targetView, FALSE, nullptr);
+    const std::array<float, 4> border = {Channel(_border, 16), Channel(_border, 8), Channel(_border, 0), 1.0f};
+    m_commands->ClearRenderTargetView(_targetView, border.data(), 0, nullptr);
+  }
+  if (scene != nullptr && !DrawScene(_targetView, inset, *scene))
+  {
+    return false;
+  }
+  if (!picture && !DrawCanvas(_frame, _srgbView, _width, _height, *_canvas))
+  {
+    return false;
+  }
+  if (_targetState != D3D12_RESOURCE_STATE_RENDER_TARGET)
+  {
+    const D3D12_RESOURCE_BARRIER back = Transition(_target, D3D12_RESOURCE_STATE_RENDER_TARGET, _targetState);
+    m_commands->ResourceBarrier(1, &back);
+  }
+  return true;
+}
+
+std::vector<std::uint32_t> Renderer::Capture(std::span<const std::uint32_t> _pixels, std::uint32_t _border, std::uint32_t _width,
+                                             std::uint32_t _height, const SceneFrame* _scene, const Canvas* _canvas)
+{
+  if ((_canvas == nullptr && _pixels.size() < std::size_t{m_sourceWidth} * m_sourceHeight) || _width == 0 || _height == 0)
   {
     return {};
   }
-  // A target of the window's size, in the swap chain's format, and a buffer to read it back through.
-  const D3D12_RESOURCE_DESC targetDesc = TextureOfSize(_width, _height, TARGET_FORMAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
+  // A target of the window's size, in the swap chain's format with an sRGB view as well, and a buffer to read it back through.
+  const D3D12_RESOURCE_DESC targetDesc = TextureOfSize(_width, _height, TARGET_TYPELESS_FORMAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
   const D3D12_HEAP_PROPERTIES defaultHeap = HeapOfType(D3D12_HEAP_TYPE_DEFAULT);
   Microsoft::WRL::ComPtr<ID3D12Resource> target;
   if (FAILED(m_device->CreateCommittedResource(&defaultHeap, D3D12_HEAP_FLAG_NONE, &targetDesc, D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr,
@@ -868,35 +1085,24 @@ std::vector<std::uint32_t> Renderer::Capture(std::span<const std::uint32_t> _pix
   }
   D3D12_DESCRIPTOR_HEAP_DESC targetHeapDesc{};
   targetHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-  targetHeapDesc.NumDescriptors = 1;
+  targetHeapDesc.NumDescriptors = 2;
   Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> targetHeap;
   if (FAILED(m_device->CreateDescriptorHeap(&targetHeapDesc, IID_PPV_ARGS(&targetHeap))))
   {
     return {};
   }
   const D3D12_CPU_DESCRIPTOR_HANDLE targetView = targetHeap->GetCPUDescriptorHandleForHeapStart();
-  m_device->CreateRenderTargetView(target.Get(), nullptr, targetView);
+  D3D12_CPU_DESCRIPTOR_HANDLE srgbView = targetView;
+  // Its own increment: m_renderTargetStride is set only once a window is attached, and a capture needs none.
+  srgbView.ptr += m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+  const D3D12_RENDER_TARGET_VIEW_DESC unormDesc = TargetView(TARGET_FORMAT);
+  const D3D12_RENDER_TARGET_VIEW_DESC srgbDesc = TargetView(TARGET_SRGB_FORMAT);
+  m_device->CreateRenderTargetView(target.Get(), &unormDesc, targetView);
+  m_device->CreateRenderTargetView(target.Get(), &srgbDesc, srgbView);
 
   Frame& frame = m_frames[m_nextFrame];
-  const SceneFrame* scene = Drawable(_scene) ? _scene : nullptr;
-  if (scene != nullptr)
-  {
-    const ScreenRect inset = InsetPlace(scene->inset, _width, _height);
-    if (inset.width == 0 || inset.height == 0)
-    {
-      scene = nullptr;
-    }
-    else if (!SizeSceneTargets(inset.width, inset.height))
-    {
-      return {};
-    }
-  }
-  if (!BeginFrame(frame, _pixels, scene))
-  {
-    return {};
-  }
-  DrawPicture(targetView, _width, _height, _border);
-  if (scene != nullptr && !DrawScene(targetView, _width, _height, *scene))
+  if (!DrawFrame(frame, targetView, srgbView, _width, _height, _border, _scene, _canvas, _pixels, target.Get(),
+                 D3D12_RESOURCE_STATE_RENDER_TARGET))
   {
     return {};
   }
@@ -945,7 +1151,7 @@ std::vector<std::uint32_t> Renderer::Capture(std::span<const std::uint32_t> _pix
   return pixels;
 }
 
-bool Renderer::BeginFrame(Frame& _frame, std::span<const std::uint32_t> _pixels, const SceneFrame* _scene)
+bool Renderer::BeginFrame(Frame& _frame, std::span<const std::uint32_t> _pixels, const SceneFrame* _scene, bool _picture)
 {
   // The frame's allocator and upload buffer are the GPU's until the frame it last drew is done.
   if (!WaitForFrame(_frame))
@@ -993,22 +1199,34 @@ bool Renderer::BeginFrame(Frame& _frame, std::span<const std::uint32_t> _pixels,
   }
   void* mapped = nullptr;
   const D3D12_RANGE nothingRead{0, 0};
-  if (FAILED(_frame.upload->Map(0, &nothingRead, &mapped)))
+  if (_picture)
   {
-    return false;
+    if (FAILED(_frame.upload->Map(0, &nothingRead, &mapped)))
+    {
+      return false;
+    }
+    auto* rows = static_cast<std::byte*>(mapped) + m_footprint.Offset;
+    for (std::uint32_t row = 0; row < m_sourceHeight; ++row)
+    {
+      std::memcpy(rows + std::size_t{row} * m_footprint.Footprint.RowPitch, _pixels.data() + std::size_t{row} * m_sourceWidth,
+                  std::size_t{m_sourceWidth} * sizeof(std::uint32_t));
+    }
+    _frame.upload->Unmap(0, nullptr);
   }
-  auto* rows = static_cast<std::byte*>(mapped) + m_footprint.Offset;
-  for (std::uint32_t row = 0; row < m_sourceHeight; ++row)
-  {
-    std::memcpy(rows + std::size_t{row} * m_footprint.Footprint.RowPitch, _pixels.data() + std::size_t{row} * m_sourceWidth,
-                std::size_t{m_sourceWidth} * sizeof(std::uint32_t));
-  }
-  _frame.upload->Unmap(0, nullptr);
 
   if (FAILED(_frame.allocator->Reset()) || FAILED(m_commands->Reset(_frame.allocator.Get(), m_pipeline.Get())))
   {
     return false;
   }
+  if (_picture && !CopyPicture(_frame))
+  {
+    return false;
+  }
+  return _scene == nullptr || UploadLayers(_frame, *_scene);
+}
+
+bool Renderer::CopyPicture(Frame& _frame)
+{
   D3D12_TEXTURE_COPY_LOCATION destination{};
   destination.pResource = m_picture.Get();
   destination.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
@@ -1021,12 +1239,14 @@ bool Renderer::BeginFrame(Frame& _frame, std::span<const std::uint32_t> _pixels,
   const D3D12_RESOURCE_BARRIER toRead =
     Transition(m_picture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
   m_commands->ResourceBarrier(1, &toRead);
-  if (_scene == nullptr)
-  {
-    return true;
-  }
+  return true;
+}
 
+bool Renderer::UploadLayers(Frame& _frame, const SceneFrame& _scene)
+{
   // The layers, each pixel's under and over side by side.
+  void* mapped = nullptr;
+  const D3D12_RANGE nothingRead{0, 0};
   if (FAILED(_frame.layerUpload->Map(0, &nothingRead, &mapped)))
   {
     return false;
@@ -1038,8 +1258,8 @@ bool Renderer::BeginFrame(Frame& _frame, std::span<const std::uint32_t> _pixels,
     for (std::uint32_t column = 0; column < m_layerWidth; ++column)
     {
       const std::size_t pixel = std::size_t{row} * m_layerWidth + column;
-      texel[0] = _scene->inset.under[pixel];
-      texel[1] = _scene->inset.over[pixel];
+      texel[0] = _scene.inset.under[pixel];
+      texel[1] = _scene.inset.over[pixel];
       texel += LAYER_TEXEL_BYTES;
     }
   }
@@ -1094,10 +1314,10 @@ void Renderer::DrawPicture(D3D12_CPU_DESCRIPTOR_HANDLE _targetView, std::uint32_
   m_commands->ResourceBarrier(1, &toWrite);
 }
 
-bool Renderer::DrawScene(D3D12_CPU_DESCRIPTOR_HANDLE _targetView, std::uint32_t _width, std::uint32_t _height, const SceneFrame& _scene)
+bool Renderer::DrawScene(D3D12_CPU_DESCRIPTOR_HANDLE _targetView, const ScreenRect& _place, const SceneFrame& _scene)
 {
   const SceneInset& inset = _scene.inset;
-  const ScreenRect place = InsetPlace(inset, _width, _height);
+  const ScreenRect& place = _place;
 
   // The models, into the scene's targets.
   const std::array<D3D12_RESOURCE_BARRIER, 1> toTarget = {
@@ -1222,6 +1442,148 @@ void Renderer::DrawModels(const SceneFrame& _scene, bool _lines)
     m_commands->IASetVertexBuffers(0, 1, _lines ? &model.lines : &model.triangles);
     m_commands->DrawInstanced(vertices, 1, 0, 0);
   }
+}
+
+bool Renderer::DrawCanvas(Frame& _frame, D3D12_CPU_DESCRIPTOR_HANDLE _srgbView, std::uint32_t _width, std::uint32_t _height,
+                          const Canvas& _canvas)
+{
+  // The canvas in its order, each line of text turned to its glyphs, placed on whole pixels.
+  const DesignPlacement design = PlaceDesign(_width, _height);
+  m_drawnShapes.clear();
+  for (const Canvas::Item& item : _canvas.Items())
+  {
+    if (!item.text)
+    {
+      m_drawnShapes.push_back(_canvas.Shapes()[item.index]);
+      continue;
+    }
+    const CanvasText& text = _canvas.Texts()[item.index];
+    m_placedGlyphs.clear();
+    if (!m_glyphs.Lay(text, design.scale, Point{.x = design.left, .y = design.top}, m_placedGlyphs))
+    {
+      return false;
+    }
+    for (const PlacedGlyph& glyph : m_placedGlyphs)
+    {
+      CanvasShape shape;
+      shape.bounds = {(glyph.left - design.left) / design.scale, (glyph.top - design.top) / design.scale,
+                      (glyph.right - design.left) / design.scale, (glyph.bottom - design.top) / design.scale};
+      std::ranges::copy(glyph.texels, shape.params.begin());
+      shape.kind = ShapeKind::Glyph;
+      shape.color = text.color;
+      m_drawnShapes.push_back(shape);
+    }
+  }
+  if (m_drawnShapes.empty())
+  {
+    return true;
+  }
+
+  void* mapped = nullptr;
+  const D3D12_RANGE nothingRead{0, 0};
+  const D3D12_HEAP_PROPERTIES uploadHeap = HeapOfType(D3D12_HEAP_TYPE_UPLOAD);
+  // The atlas, copied whole when a glyph was added to it.
+  if (m_glyphs.TakeChanged())
+  {
+    if (!_frame.atlasUpload)
+    {
+      const D3D12_RESOURCE_DESC bufferDesc = BufferOfBytes(m_atlasUploadBytes);
+      if (FAILED(m_device->CreateCommittedResource(&uploadHeap, D3D12_HEAP_FLAG_NONE, &bufferDesc, D3D12_RESOURCE_STATE_GENERIC_READ,
+                                                   nullptr, IID_PPV_ARGS(&_frame.atlasUpload))))
+      {
+        return false;
+      }
+    }
+    if (FAILED(_frame.atlasUpload->Map(0, &nothingRead, &mapped)))
+    {
+      return false;
+    }
+    auto* rows = static_cast<std::byte*>(mapped) + m_atlasFootprint.Offset;
+    const std::span<const std::uint8_t> pixels = m_glyphs.Pixels();
+    for (std::uint32_t row = 0; row < GlyphAtlas::SIZE_PIXELS; ++row)
+    {
+      std::memcpy(rows + std::size_t{row} * m_atlasFootprint.Footprint.RowPitch, pixels.data() + std::size_t{row} * GlyphAtlas::SIZE_PIXELS,
+                  GlyphAtlas::SIZE_PIXELS);
+    }
+    _frame.atlasUpload->Unmap(0, nullptr);
+    const D3D12_RESOURCE_BARRIER toCopy =
+      Transition(m_atlas.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
+    m_commands->ResourceBarrier(1, &toCopy);
+    D3D12_TEXTURE_COPY_LOCATION destination{};
+    destination.pResource = m_atlas.Get();
+    destination.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    destination.SubresourceIndex = 0;
+    D3D12_TEXTURE_COPY_LOCATION source{};
+    source.pResource = _frame.atlasUpload.Get();
+    source.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    source.PlacedFootprint = m_atlasFootprint;
+    m_commands->CopyTextureRegion(&destination, 0, 0, 0, &source, nullptr);
+    const D3D12_RESOURCE_BARRIER toRead =
+      Transition(m_atlas.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    m_commands->ResourceBarrier(1, &toRead);
+  }
+
+  // The shapes, through the frame's own buffer, grown when the canvas outgrows it.
+  if (_frame.shapeCapacity < m_drawnShapes.size())
+  {
+    const std::size_t capacity = std::max({m_drawnShapes.size(), _frame.shapeCapacity * 2, LEAST_SHAPE_CAPACITY});
+    const D3D12_RESOURCE_DESC bufferDesc = BufferOfBytes(capacity * sizeof(CanvasShape));
+    _frame.shapeUpload.Reset();
+    if (FAILED(m_device->CreateCommittedResource(&uploadHeap, D3D12_HEAP_FLAG_NONE, &bufferDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
+                                                 IID_PPV_ARGS(&_frame.shapeUpload))))
+    {
+      _frame.shapeCapacity = 0;
+      return false;
+    }
+    _frame.shapeCapacity = capacity;
+  }
+  if (FAILED(_frame.shapeUpload->Map(0, &nothingRead, &mapped)))
+  {
+    return false;
+  }
+  std::memcpy(mapped, m_drawnShapes.data(), m_drawnShapes.size() * sizeof(CanvasShape));
+  _frame.shapeUpload->Unmap(0, nullptr);
+  const auto frameIndex = static_cast<UINT>(&_frame - m_frames.data());
+  D3D12_SHADER_RESOURCE_VIEW_DESC shapeView{};
+  shapeView.Format = DXGI_FORMAT_UNKNOWN;
+  shapeView.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+  shapeView.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+  shapeView.Buffer.NumElements = static_cast<UINT>(m_drawnShapes.size());
+  shapeView.Buffer.StructureByteStride = sizeof(CanvasShape);
+  D3D12_CPU_DESCRIPTOR_HANDLE shapeHandle = m_shaderResourceHeap->GetCPUDescriptorHandleForHeapStart();
+  shapeHandle.ptr += std::size_t{DESCRIPTOR_SHAPES + frameIndex} * m_resourceStride;
+  m_device->CreateShaderResourceView(_frame.shapeUpload.Get(), &shapeView, shapeHandle);
+
+  m_commands->OMSetRenderTargets(1, &_srgbView, FALSE, nullptr);
+  D3D12_VIEWPORT viewport{};
+  viewport.Width = static_cast<float>(_width);
+  viewport.Height = static_cast<float>(_height);
+  viewport.MaxDepth = 1.0f;
+  const D3D12_RECT scissor{0, 0, static_cast<LONG>(_width), static_cast<LONG>(_height)};
+  m_commands->RSSetViewports(1, &viewport);
+  m_commands->RSSetScissorRects(1, &scissor);
+  m_commands->SetPipelineState(m_canvasPipeline.Get());
+  m_commands->SetGraphicsRootSignature(m_canvasSignature.Get());
+  ID3D12DescriptorHeap* heaps[] = {m_shaderResourceHeap.Get()};
+  m_commands->SetDescriptorHeaps(1, heaps);
+  D3D12_GPU_DESCRIPTOR_HANDLE shapes = m_shaderResourceHeap->GetGPUDescriptorHandleForHeapStart();
+  shapes.ptr += std::uint64_t{DESCRIPTOR_SHAPES + frameIndex} * m_resourceStride;
+  D3D12_GPU_DESCRIPTOR_HANDLE atlas = m_shaderResourceHeap->GetGPUDescriptorHandleForHeapStart();
+  atlas.ptr += std::uint64_t{DESCRIPTOR_ATLAS} * m_resourceStride;
+  m_commands->SetGraphicsRootDescriptorTable(ROOT_PARAMETER_CANVAS_SHAPES, shapes);
+  m_commands->SetGraphicsRootDescriptorTable(ROOT_PARAMETER_CANVAS_ATLAS, atlas);
+  const std::array<float, CANVAS_PLACEMENT_COUNT> placement = {design.scale,
+                                                               design.left,
+                                                               design.top,
+                                                               0.0f,
+                                                               static_cast<float>(_width),
+                                                               static_cast<float>(_height),
+                                                               static_cast<float>(GlyphAtlas::SIZE_PIXELS),
+                                                               static_cast<float>(GlyphAtlas::SIZE_PIXELS)};
+  m_commands->SetGraphicsRoot32BitConstants(ROOT_PARAMETER_CANVAS_PLACEMENT, CANVAS_PLACEMENT_COUNT, Bits(placement).data(), 0);
+  m_commands->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+  m_commands->DrawInstanced(CANVAS_VERTICES, static_cast<UINT>(m_drawnShapes.size()), 0, 0);
+  return true;
 }
 
 bool Renderer::Submit(Frame& _frame)
