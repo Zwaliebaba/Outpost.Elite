@@ -19,7 +19,7 @@ struct KeyEvent
   bool repeat = false; ///< a make the keyboard repeated while the key was held
 };
 
-/// The game's window: a resizable top-level window whose client area the Presenter draws into. It reports
+/// The game's window: a resizable top-level window whose client area the Renderer draws into. It reports
 /// keys, including the ones Windows keeps for itself (Alt, F10), and releases every held key when it loses
 /// the focus, so nothing sticks down. F11 switches between a window and the whole screen, borderless.
 ///

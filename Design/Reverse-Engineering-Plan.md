@@ -9,8 +9,8 @@
 | 2 — The host | Exit met headless 2026-10-10; the shell makes it playable | ADR-004 to ADR-009 |
 | 3 — Replace routines with C++ | Exit met 2026-10-10 | ADR-010 |
 | 4 — Detach | Closed 2026-10-10 | ADR-011 to ADR-019 |
-| 5 — The native platform and the natural layout | Pieces 1 and 2 done. Piece 3: changes 1, 2, 3a and 3b done; change 3c under way: its first two parts, nothing by address and the layout's remainder, are done. The guard D57 deleted is restored (D59). Piece 4 moved to Phase 6 (D52). | ADR-020 to ADR-026, ADR-029, ADR-030 |
-| 6 — The new game | Ruled (D39, D44–D55), not started. Done ahead of it: D41 (ADR-027), and D42 and D48's PerMonitorV2 (ADR-009). D43 goes with change 3c. | — |
+| 5 — The native platform and the natural layout | Closed 2026-10-12: pieces 1 to 3 done, change 3c's four parts with them. The guard D57 deleted is restored (D59). Piece 4 moved to Phase 6 (D52). | ADR-020 to ADR-026, ADR-029, ADR-030 |
+| 6 — The new game | Ruled (D39, D44–D55, D60). Piece 1, the renderer's first part, written (ADR-031). Done ahead of it: D41 (ADR-027), D42 and D48's PerMonitorV2 (ADR-009), and D43 (ADR-030). | ADR-031 |
 
 **Play-tests.** The owner played the build with D19 and D3 (`472a6b8`) and reported it good; played main at `7242663`, with the platform swap and change 1, and reported that it works perfectly; and played the game after D7 and reported that it works as designed.
 
@@ -212,7 +212,7 @@ Then come the changes on purpose, from which the game diverges freely (D26). The
 
 **The order (D52).** The new renderer comes first and reads the game's state. Pieces 1 to 3 do not change the game's logic, so the replays, the outcomes, the subsystem answers and the pictures still guard it. The PC model goes next (piece 4), and the docked screens are rewritten last (piece 5).
 
-1. **The renderer** (D47, D48). It replaces `Presenter`, and its ADR is the one AGENTS.md R12 asks for.
+1. **The renderer** (D47, D48). It replaces `Presenter`, and its ADR is the one AGENTS.md R12 asks for. *D60 (2026-10-12): piece 1 builds what its exit can observe: the device, two frames in flight, the waitable swap chain, the CGA picture through it, and a headless capture on WARP that `EngineTests` checks (ADR-031). The scene's targets and bloom come with the space view, the 2D layer, the text and the design units with the HUD (piece 3), and tearing with the snapshot (piece 2).*
    - One D3D12 device and two frames in flight. The swap chain waits for a frame latency of one, and allows tearing where the display supports it.
    - The scene is linear FP16, with 4× MSAA and a `D32_FLOAT` depth buffer in reversed Z. It is resolved, then bloomed.
    - The 2D layer is written through an sRGB view of the back buffer. One signed-distance shader draws rectangles, chamfers, lines, circles and ellipses. Text comes from a DirectWrite glyph atlas, with `tnum` through `IDWriteTypography`.
@@ -343,6 +343,7 @@ After D44, no replay reaches the docked screens. Their rules are functions with 
 | D57 | Whether the tests still hold the port to `ELITES.EXE`, now that `3eeaca6` fits the docking computer at the start and 38 tests fail on it (raised by the owner) | Keep each scenario's own checks, and drop only the comparisons with `ELITES.EXE`. | **Delete the 38 failing tests** (2026-10-11): matching `ELITES.EXE` is no longer needed. *Superseded by D59: the edits are reverted and the tests restored.* The image's hash test, the 36 twins and the corpus test go, with the twins' answers, pictures and outcomes. Asked the same day, what then went unused goes too: the replay corpus in `Replays/`, `PrepareCommanders.py` and the functions that recorded the corpus. The subsystems' answers and `ReplayRunner` stay. ADR-028 records it. Amends D20, D25, D33 and D35. |
 | D58 | Whether `ReplayRunner` is still used, after D57 left it no replay to play (asked by the owner) | Remove it, and the shell's session recording with it, or keep it as a hand-run tool. | **Remove it** (2026-10-11): `ReplayRunner` is deleted, and with it the shell's recording and `ReplayRecorder`, which nothing else used. The replay format stays for the tests. ADR-028 records it. Amends D35 and D57. |
 | D59 | Whether change 3c and Phase 6 can go ahead on what D57 left: no check of flight, combat, docking, hyperspace, missions or saving against anything recorded (raised by the review of this plan, 2026-10-12) | Rebuild the guard before change 3c. Revert the two hand edits to the load image (`3eeaca6`'s docking computer, marked a cheat, and `4450185`'s credits), and every 1987 answer holds again with nothing re-recorded. | **As recommended** (2026-10-12): both edits are reverted and everything D57 deleted is restored; D58 stands. A change to the starting state is a ruling, never an edit to the image. ADR-029 records it. Supersedes D57. |
+| D60 | How much of D47's renderer piece 1 builds, when its exit observes only the CGA picture, and what checks the renderer (raised at the start of Phase 6) | Build what the exit can observe, and test the renderer on WARP now. | **As recommended** (2026-10-12): piece 1 is the device, two frames in flight, the waitable swap chain at a latency of one, the CGA picture through it and a headless capture. The FP16 scene with MSAA, reversed Z and bloom come with the space view; the sRGB 2D layer, the glyph atlas and D48's design units with the HUD; tearing with the snapshot. A new `EngineTests` draws on WARP in CI. ADR-031 records it. Amends D47 and D52's piece list. |
 
 ## 9. ADRs this plan produces
 
@@ -378,7 +379,8 @@ After D44, no replay reaches the docked screens. Their rules are functions with 
 | [ADR-028](ADR/ADR-028-the-match-to-elites-exe-retired.md) | The tests no longer hold the port to `ELITES.EXE` (D57), and `ReplayRunner` goes (D58) | Phase 5 — written |
 | [ADR-029](ADR/ADR-029-the-guard-restored.md) | The guard restored: the image's two edits reverted and D57's deletions undone (D59) | Phase 5 — written |
 | [ADR-030](ADR/ADR-030-change-3c-nothing-by-address.md) | Change 3c: nothing by the original's address; then the layout's clean-up, D37's second round and a loaded commander clamped (D43) | Phase 5, piece 3 — written |
-| — | The renderer: device, frames in flight, targets, the 2D layer, text and the resolution policy (D47, D48, D55) | Phase 6, piece 1 — to write |
+| [ADR-031](ADR/ADR-031-the-renderer-first-piece.md) | The renderer's first piece: the picture on two frames in flight, and the engine's tests on WARP (D47, D60) | Phase 6, piece 1 — written |
+| — | The renderer's scene, 2D layer, text and design units (D47, D48, D55) | Phase 6, pieces 2 and 3 — to write, or amending ADR-031 |
 | — | The space view: the snapshot, interpolation, the field of view, ships, planets and sky (D45, D49, D50) | Phase 6, pieces 2 and 3 — to write |
 | — | The cockpit HUD and its gauges (D39, D51) | Phase 6, piece 3 — to write |
 | — | The native game loop (D40, D52) | Phase 6, piece 4 — to write |

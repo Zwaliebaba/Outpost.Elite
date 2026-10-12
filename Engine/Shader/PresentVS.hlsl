@@ -1,6 +1,6 @@
 // Engine/Shader/PresentVS.hlsl
 // One triangle that covers the viewport, with the picture's texture coordinates: (0, 0) top left,
-// (1, 1) bottom right. Presenter sets the viewport to the picture's rectangle.
+// (1, 1) bottom right. Renderer sets the viewport to the picture's rectangle.
 
 struct PresentVertex
 {
