@@ -149,7 +149,7 @@ public:
   // missile and the condition light dark, with the title on the message line.
   TEST_METHOD(TheTitlesDashboardIsDark)
   {
-    const Elite::SnapshotDashboard title = Elite::TitleDashboard();
+    const Elite::SnapshotDashboard title = Elite::TitleDashboard("---- E L I T E ----");
     Assert::IsFalse(title.live);
     Assert::AreEqual(std::string("---- E L I T E ----"), std::string(title.message.data()));
     const Elite::Gauges gauges = Elite::GaugesOf(title);

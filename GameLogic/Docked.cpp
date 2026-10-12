@@ -363,7 +363,7 @@ std::uint16_t RunTitle(GameState& _state, Hardware& _hardware, bool _backward)
     // shows: the cockpit's picture, nothing on it live (D64).
     FlightSnapshot snapshot = TakeFlightSnapshot(_state);
     snapshot.title = true;
-    snapshot.dashboard = TitleDashboard();
+    snapshot.dashboard = TitleDashboard(ELITE_TITLE_TEXT);
     _hardware.PublishFlightSnapshot(snapshot, !firstFrame);
     firstFrame = false;
     backward = false;

@@ -6,6 +6,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 
 namespace Elite
 {
@@ -145,8 +146,8 @@ inline constexpr float MOST_TURN_PER_FRAME_RADIANS = 0.5f;
 [[nodiscard]] FlightSnapshot TakeFlightSnapshot(const GameState& _state);
 
 /// The title's dashboard (RunTitle, D64): the cockpit's picture as ShowCockpitScreen copies it, which UpdateDashboard never draws
-/// over on the title, so nothing on it is live; and ---- E L I T E ---- on the message line.
-[[nodiscard]] SnapshotDashboard TitleDashboard();
+/// over on the title, so nothing on it is live; and _message, the title's ---- E L I T E ----, on the message line.
+[[nodiscard]] SnapshotDashboard TitleDashboard(std::string_view _message);
 
 /// Whether _after is the object _before was, one frame on: the same slot, the same kind, and no further than MOST_STEP_PER_FRAME
 /// on any axis. A slot freed and filled again within a frame by an object of the same kind within that distance is taken for the
