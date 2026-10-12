@@ -77,10 +77,11 @@ The owner played [ADR-033](ADR-033-the-space-view-hybrid.md)'s space view and ru
 | A preview of the layout | a scratch program, never committed, drew `Cockpit::Draw`'s canvas on the CPU with `CanvasPS`'s distances ported, text as boxes: the layout matches `cockpit-hud-01.png`'s |
 | The shaders | `CanvasVS` and `CanvasPS` compile with DXC 1.8 under HLSL 2018 rules, as scratch checks; FXC runs in CI |
 | Compiles | the engine's, the shell's and the tests' new and changed files, syntax only, with mingw-w64's g++ 13 and its Windows SDK headers, `-Wall -Wextra -Wconversion -Wpedantic -Werror`: clean |
-| clang-tidy | the root `.clang-tidy` with clang-tidy 18 on every changed file: no finding |
+| clang-tidy | the root `.clang-tidy` with clang-tidy 18 on every changed file: no finding. CI's clang-tidy 22 against MSVC's headers then found three that 18 against mingw-w64's cannot see: `Renderer`'s constructor was `noexcept` over a debug `std::map`, the glyph collector's DirectWrite methods lacked the SDK's `nothrow`, and the gauge test seeded `std::mt19937` with a constant. The test now draws from a pinned xorshift32 of its own, and moving the altitude's danger level by one still fails it. |
 | The turn probe | each test's sequence of idle and working turns identical to `main`'s |
 | The suite | `GameLogicTests` passes under g++ `-O2` and clang++ 18 |
-| Not run here | the MSVC build, `CanvasTests` on WARP, and the game: CI builds the solution and runs `EngineTests`, and the owner plays it |
+| On CI | the MSVC build, clang-tidy 22, and `CanvasTests` on WARP, Bahnschrift among the fonts the runner has; `Capture` gave its sRGB view a descriptor of its own once the tests showed both views on one |
+| Not run here | the game: the owner plays it |
 
 ## What this forecloses
 
