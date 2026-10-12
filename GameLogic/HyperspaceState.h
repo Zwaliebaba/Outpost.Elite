@@ -36,11 +36,8 @@ struct HyperspaceState
   Counted<std::uint8_t> hyperspaceRings[10][3];
   /// selectedSystemName latched when the countdown starts
   Counted<std::uint8_t> hyperspaceTargetRecord[25];
-  /// 'Prepare to Hyperspace...' followed by hyperspaceCountdownDigits
-  Counted<std::uint8_t> hyperspaceCountdownMessage[24];
   /// two ASCII digits at the end of hyperspaceCountdownMessage, written by ShowHyperspaceCountdown
   Counted<std::uint16_t> hyperspaceCountdownDigits;
-  Counted<std::uint8_t> gapA85B[1];
 };
 
 static_assert(std::is_trivially_copyable_v<HyperspaceState> && std::is_standard_layout_v<HyperspaceState>);

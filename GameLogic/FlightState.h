@@ -99,8 +99,6 @@ struct FlightState
   Counted<std::uint8_t> shipIdRequested;
   /// 40 at death; RunFlight keeps running frames until it reaches 0
   Counted<std::uint8_t> gameOverFrames;
-  /// word buffer offset, then zero-terminated text; the pause screen's lines: SPACE..Restart Game, A......Abort Game, R Keyboard Recentr...
-  Counted<std::uint8_t> pauseMenuText[195];
   /// frameRateKeyLabel's fields, DS:ABFF-AC01 in 1987, at their places there.
   struct FrameRateKeyLabel
   {
@@ -113,22 +111,16 @@ struct FlightState
   };
   /// the '8) ' of '(F8) ' at the end of the pause menu's frame-rate line; rewritten by F1-F10
   FrameRateKeyLabel frameRateKeyLabel;
-  Counted<std::uint8_t> gapAC02[1];
   /// pause option R, 'Keyboard Recentre', 1 in the file: a key against the current rate zeroes it first. First of five (value, letter) r...
   Counted<std::uint8_t> keyboardRecenter;
-  Counted<std::uint8_t> gapAC04[1];
   /// pause option D, 'Keyboard Damping', 1 in the file: an idle axis decays 3 a frame toward 0
   Counted<std::uint8_t> keyboardDamping;
-  Counted<std::uint8_t> gapAC06[1];
   /// pause option Y, 'Reverse Y control', 0 in the file: negates pitch (ApplyReverseControls)
   Counted<std::uint8_t> reverseYControl;
-  Counted<std::uint8_t> gapAC08[1];
   /// pause option B, 'Reverse X and Y', 0 in the file: negates roll and pitch
   Counted<std::uint8_t> reverseXAndY;
-  Counted<std::uint8_t> gapAC0A[1];
   /// pause option S, 'Sound Toggle', 1 in the file; TimerTick does nothing more when it is 0
   Counted<std::uint8_t> soundEnabled;
-  Counted<std::uint8_t> gapAC0C[1];
   /// toggled by 'L' (0x8379, 0x838C) when antiEcmEmulatorFitted; at 1 the station starts no ECM
   Counted<std::uint8_t> antiEcmActive;
   /// TimerTick plays nothing while it is 1

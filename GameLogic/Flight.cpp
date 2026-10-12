@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <array>
 #include <span>
+#include <utility>
 
 namespace Elite
 {
@@ -156,8 +157,8 @@ constexpr std::uint8_t SCAN_F8 = 0x42;
 constexpr std::uint8_t SCAN_F9 = 0x43;
 constexpr std::uint8_t SCAN_F10 = 0x44;
 
-// The pause screen: its keys, and the option letters it shows in reverse video when they are on, a flag
-// byte and a letter each from keyboardRecenter.
+// The pause screen: its keys, and the option letters it shows in reverse video when they are on, each a flag (PauseOption) and a
+// constant letter (PAUSE_LETTERS).
 constexpr std::uint8_t SCAN_A = 0x1E;
 constexpr std::uint8_t SCAN_B = 0x30;
 constexpr std::uint8_t SCAN_D = 0x20;
@@ -815,27 +816,24 @@ KeyPress WaitForKey(GameState& _state, Hardware& _hardware, std::uint16_t _call)
   }
 }
 
-// The run of the pause screen's text and its options, pauseMenuText to gapAC0C: the menu's lines, with the frame rate's key written into
-// frameRateKeyLabel, and then the five options from keyboardRecenter, two bytes each.
-static_assert(GAME_DATA_OFFSET(flight.gapAC0C) + 1 - GAME_DATA_OFFSET(flight.pauseMenuText) == 0xAC0D - 0xAB3C,
-              "the pause screen's run holds its members together, as in 1987");
-[[nodiscard]] std::span<Counted<std::uint8_t>> PauseRun(GameState& _state)
+// The pause screen's five options' flags, which R, D, Y, B and S toggle, in the order the original keeps them, each before its letter.
+[[nodiscard]] Counted<std::uint8_t>& PauseOption(GameState& _state, std::size_t _index)
 {
-  return BytesThrough(_state.Data().flight.pauseMenuText, _state.Data().flight.gapAC0C);
+  FlightState& flight = _state.Data().flight;
+  const std::array<Counted<std::uint8_t>*, PAUSE_OPTIONS> flags = {&flight.keyboardRecenter, &flight.keyboardDamping,
+                                                                   &flight.reverseYControl, &flight.reverseXAndY, &flight.soundEnabled};
+  return *flags.at(_index);
 }
 
-// The pause screen's five options from keyboardRecenter, two bytes each: the option's flag, then its letter.
-[[nodiscard]] std::span<Counted<std::uint8_t>> PauseOptions(GameState& _state)
-{
-  return BytesWithin(PauseRun(_state), GAME_DATA_OFFSET(flight.keyboardRecenter) - GAME_DATA_OFFSET(flight.pauseMenuText),
-                     std::size_t{PAUSE_OPTIONS} * 2);
-}
+// The letters the pause screen shows for its options, each after its flag in the original.
+constexpr std::array<std::string_view, PAUSE_OPTIONS> PAUSE_LETTERS = {RECENTER_LETTER, DAMPING_LETTER, Y_REVERSE_LETTER, XY_REVERSE_LETTER,
+                                                                       SOUND_LETTER};
 
 // PauseShowOptions (0x8D8F): the five option letters, in reverse video when on. The loop at 0x8D98 pushes and pops CX, DI
-// and SI round DrawViewChar, and each turn carries them: the options left, the letter's place and the option's flag byte.
+// and SI round DrawViewChar, and each turn carries them: the options left, the letter's place and the next option's flag, by its
+// place (PlaceOf), where SI holds its address.
 void ShowPauseOptions(GameState& _state, Hardware& _hardware)
 {
-  const std::span<Counted<std::uint8_t>> options = PauseOptions(_state);
   std::uint16_t position = PAUSE_FIRST_OPTION;
   std::size_t option = 0;
   std::uint16_t optionsLeft = PAUSE_OPTIONS;
@@ -843,20 +841,20 @@ void ShowPauseOptions(GameState& _state, Hardware& _hardware)
   {
     _state.Data().drawing.textPaperPattern = 0;
     std::uint16_t ink = ALL_COLORS;
-    if (options[option] == 1)
+    if (PauseOption(_state, option) == 1)
     {
       // xchg [textPaperPattern], bx
       ink = _state.Data().drawing.textPaperPattern;
       _state.Data().drawing.textPaperPattern = ALL_COLORS;
     }
-    (void)DrawViewChar(_state, options[option + 1], ink, position);
-    option += 2;
+    (void)DrawViewChar(_state, static_cast<std::uint8_t>(PAUSE_LETTERS[option][0]), ink, position);
+    ++option;
     position = Plus(position, PAUSE_OPTION_STEP);
     if (--optionsLeft == 0)
     {
       return;
     }
-    _hardware.LoopTurn(PAUSE_OPTIONS_LOOP, {optionsLeft, position, _state.PlaceOf(options[option])});
+    _hardware.LoopTurn(PAUSE_OPTIONS_LOOP, {optionsLeft, position, _state.PlaceOf(PauseOption(_state, option))});
   }
 }
 
@@ -868,7 +866,7 @@ void ShowPauseOptions(GameState& _state, Hardware& _hardware)
   {
     if (KEYS[index] == _key)
     {
-      Counted<std::uint8_t>& option = PauseOptions(_state)[std::size_t{index} * 2];
+      Counted<std::uint8_t>& option = PauseOption(_state, index);
       option = static_cast<std::uint8_t>(option ^ 1);
       StartBeep(_state);
       return true;
@@ -886,26 +884,29 @@ enum class PauseExit : std::uint8_t
 };
 
 // 0x8D6D-0x8D8C: the drawing buffer cleared and the menu's eight lines drawn into it, in every colour on a paper of 0: each line of
-// pauseMenuText its place in spaceViewBuffer, a word, then its text. The loop at 0x8D7C pushes and pops CX round each line, and
-// each turn carries it and SI, the next line's place and text.
+// pauseMenuText its place in the space view, a word, then its text, the last line's ending in frameRateKeyLabel, which the original
+// writes into it. The loop at 0x8D7C pushes and pops CX round each line, and each turn carries it and SI, the next line's place
+// and text, by its offset in the menu where SI holds its address.
 void DrawPauseMenu(GameState& _state, Hardware& _hardware, bool _backward)
 {
   ClearDrawBuffer(_state, _backward);
   _state.Data().drawing.textPaperPattern = 0;
+  const std::string menu =
+    JoinTexts({PAUSE_MENU_TEXT, TextsOf(BytesOf(std::as_const(_state).Data().flight.frameRateKeyLabel)), std::string_view("\0", 1)});
   std::size_t line = 0;
   for (std::uint16_t lines = PAUSE_MENU_LINES;;)
   {
     // MOV DI,[SI] / ADD SI,2: the line's place, then its text; INC SI past its NUL.
-    const std::span<const Counted<std::uint8_t>> run = PauseRun(_state);
-    const std::uint16_t at = WordIn(BytesWithin(run, 0, line + 2), line);
-    const std::string_view text = TextWithin(run, line + 2);
+    const std::string_view rest = std::string_view(menu).substr(line);
+    const auto at = static_cast<std::uint16_t>(static_cast<std::uint8_t>(rest.at(0)) | (static_cast<std::uint8_t>(rest.at(1)) << 8));
+    const std::string_view text = rest.substr(2, rest.find('\0', 2) - 2);
     (void)DrawViewString(_state, text, ALL_COLORS, at);
     line += 2 + text.size() + 1;
     if (--lines == 0)
     {
       return;
     }
-    _hardware.LoopTurn(PAUSE_MENU_LOOP, {lines, static_cast<std::uint16_t>(_state.PlaceOf(_state.Data().flight.pauseMenuText) + line)});
+    _hardware.LoopTurn(PAUSE_MENU_LOOP, {lines, static_cast<std::uint16_t>(line)});
   }
 }
 

@@ -109,6 +109,9 @@ constexpr std::string_view LIGHT_YEARS_TEXT = " Light Years";
 /// DS:7D6E
 constexpr std::string_view POPULATION_LABEL_TEXT = "Population:   ";
 
+/// DS:7D82
+constexpr std::string_view POPULATION_UNIT_TEXT = " Billion";
+
 /// DS:7D8B
 constexpr std::string_view SPECIES_OPEN_TEXT = "(";
 
@@ -117,6 +120,12 @@ constexpr std::string_view HUMAN_COLONIALS_TEXT = "Human Colonials)";
 
 /// DS:7E94
 constexpr std::string_view PRODUCTIVITY_LABEL_TEXT = "Productivity: ";
+
+/// DS:7EA8
+constexpr std::string_view PRODUCTIVITY_UNIT_TEXT = " M CR";
+
+/// DS:7EC0
+constexpr std::string_view RADIUS_UNIT_TEXT = " km";
 
 /// Every phrase descriptionPhraseLists' lists point at, in the order of their addresses: its text up to its NUL, which
 /// may hold the control codes (1-31) and phrase codes (80h on) ExpandDescriptionText expands.
@@ -422,6 +431,13 @@ constexpr std::array<std::array<std::uint8_t, 2>, 32> SYSTEM_NAME_DIGRAMS = {{
 /// shortRangeChartTitle (DS:2A5D in 1987): 'SHORT RANGE CHART'
 constexpr std::string_view SHORT_RANGE_CHART_TITLE = "SHORT RANGE CHART";
 
+/// galacticChartTitle (DS:2A6F in 1987): 'GALACTIC CHART ' then galacticChartNumber
+constexpr std::string_view GALACTIC_CHART_TITLE{"GALACTIC CHART ", 15};
+
+/// galacticChartTitleEnd (DS:2A7F in 1987): the space and the NUL that end the galactic chart's title after galacticChartNumber (change 3c
+/// names it)
+constexpr std::string_view GALACTIC_CHART_TITLE_END = " ";
+
 /// findErrorPrefix (DS:2A81 in 1987): 'ERROR: '
 constexpr std::string_view FIND_ERROR_PREFIX = "ERROR: ";
 
@@ -430,6 +446,9 @@ constexpr std::string_view FIND_ERROR_SUFFIX = " not on map!";
 
 /// systemDataFrame (DS:7B89 in 1987): frame bytes, then "DATA ON "
 constexpr std::string_view SYSTEM_DATA_FRAME = "\033\037DATA ON ";
+
+/// radiusLabel (DS:7EAE in 1987): 'Radius (Av): ', which runs on into radiusDigits (change 3c names it)
+constexpr std::string_view RADIUS_LABEL{"Radius (Av): ", 13};
 
 /// descriptionTemplate (DS:965A in 1987): code 6, phrase 0x92, "is ", phrase 0x93, code 4, "."
 constexpr std::string_view DESCRIPTION_TEMPLATE = "\006\222is \223\004.";

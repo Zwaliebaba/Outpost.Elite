@@ -19,27 +19,19 @@ struct DockedState
   DockedState() noexcept = default;
   explicit DockedState(const DockedState&) noexcept = default;
 
-  Counted<std::uint8_t> gap827F[376];
   Counted<std::uint8_t> data83F7;
-  Counted<std::uint8_t> gap83F8[1];
   Counted<std::uint8_t> data83F9;
-  Counted<std::uint8_t> gap83FA[16];
-  Counted<std::uint8_t> data840A;
-  Counted<std::uint8_t> data840B;
-  Counted<std::uint8_t> gap84EC[9];
+  /// the five digits FormatDecimal5 writes for the fuel, of which the last two are shown (change 3c names it)
+  Counted<std::uint8_t> fuelDigits[5];
   Counted<std::uint8_t> data84F5;
-  Counted<std::uint8_t> gap84F6[179];
   /// text; 17-byte rows: name, unit (t, kg, g); the 18th is Refugees
   Counted<std::uint8_t> productNames[312];
   /// walks cargoHold while the trade screens draw
   Counted<std::uint16_t> cargoRowPointer;
   /// 0 sell screen (F2), 1 buy screen (F3); RunCargoTradeMenu ignores the screen's own F-key (0x3C+this), B on the sell screen and S on...
   Counted<std::uint8_t> tradeScreenIsBuy;
-  /// frame bytes, then "TASK COMPLETE - CONGRATULATIONS!"
-  Counted<std::uint8_t> taskCompleteFrame[75];
   /// '0' or '4' patched into "Please accept 1000 Credits!"
   Counted<std::uint8_t> refugeeRewardDigit;
-  Counted<std::uint8_t> gap907F[41];
   /// ship type shown on the title (1Ah in the file), F9/F10 step it through 2-29
   Counted<std::uint8_t> titleShipType;
 };

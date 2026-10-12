@@ -303,6 +303,9 @@ constexpr std::array<std::uint8_t, 84> SCAN_CODE_TO_ASCII = {
   0x32, 0x33, 0x30, 0x2E,                         // DS:A121
 };
 
+/// hyperspaceCountdownMessage (DS:A841 in 1987): 'Prepare to Hyperspace...' followed by hyperspaceCountdownDigits
+constexpr std::string_view HYPERSPACE_COUNTDOWN_MESSAGE{"Prepare to Hyperspace...", 24};
+
 } // namespace
 
 } // namespace Elite

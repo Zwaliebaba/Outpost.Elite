@@ -7,6 +7,7 @@
 
 #include <array>
 #include <cstdint>
+#include <string_view>
 
 namespace Elite
 {
@@ -95,6 +96,29 @@ constexpr std::array<std::uint8_t, 129> SQRT_TABLE = {
 constexpr std::array<std::uint8_t, 4> DASHBOARD_PIXEL_MASKS = {
   0x80, 0x20, 0x08, 0x02, // DS:73B3
 };
+
+/// pauseMenuText (DS:AB3C in 1987): word buffer offset, then zero-terminated text; the pause screen's lines: SPACE..Restart Game,
+/// A......Abort Game, R Keyboard Recentre, D Keyboard Damping, Y Reverse Y control, B Reverse X and Y, S Sound Toggle, F1/F10.Set Frame
+/// Rate (F8)
+constexpr std::string_view PAUSE_MENU_TEXT{"\010\006SPACE..Restart Game\000\010\010A......Abort Game\000\010\014R......Keyboard Recentre"
+                                           "\000\010\016D......Keyboard Damping\000\010\020Y......Reverse Y control\000\010\022B......Reve"
+                                           "rse X and Y\000\010\024S......Sound Toggle\000\010\030F1/F10.Set Frame Rate (F",
+                                           195};
+
+/// recenterLetter (DS:AC04 in 1987): 'R', the letter the pause screen shows for keyboardRecenter, after it (change 3c names it)
+constexpr std::string_view RECENTER_LETTER{"R", 1};
+
+/// dampingLetter (DS:AC06 in 1987): 'D', the letter the pause screen shows for keyboardDamping, after it (change 3c names it)
+constexpr std::string_view DAMPING_LETTER{"D", 1};
+
+/// yReverseLetter (DS:AC08 in 1987): 'Y', the letter the pause screen shows for reverseYControl, after it (change 3c names it)
+constexpr std::string_view Y_REVERSE_LETTER{"Y", 1};
+
+/// xyReverseLetter (DS:AC0A in 1987): 'B', the letter the pause screen shows for reverseXAndY, after it (change 3c names it)
+constexpr std::string_view XY_REVERSE_LETTER{"B", 1};
+
+/// soundLetter (DS:AC0C in 1987): 'S', the letter the pause screen shows for soundEnabled, after it (change 3c names it)
+constexpr std::string_view SOUND_LETTER{"S", 1};
 
 /// frameTimeChoices (DS:ACF1 in 1987): byte; 200, 125, 100, 83, 67, 56, 50, 40, 30, 1 ms, chosen with F1-F10 on the pause screen
 constexpr std::array<std::uint8_t, 10> FRAME_TIME_CHOICES = {

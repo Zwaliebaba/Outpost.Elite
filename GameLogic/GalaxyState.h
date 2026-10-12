@@ -45,11 +45,8 @@ struct GalaxyState
   Counted<std::uint8_t> findInput[9];
   /// the name as typed, for the error message
   Counted<std::uint8_t> findInputEcho[9];
-  /// 'GALACTIC CHART ' then galacticChartNumber
-  Counted<std::uint8_t> galacticChartTitle[15];
   /// '1' + galaxyNumber
   Counted<std::uint8_t> galacticChartNumber;
-  Counted<std::uint8_t> gap2A7F[2];
   /// items in chartItems: stars first, then labels added by AddChartLabel
   Counted<std::uint8_t> chartItemCount;
   /// address of the next free 8-byte item in chartItems
@@ -66,11 +63,14 @@ struct GalaxyState
   Counted<std::uint8_t> labelsLeftToPlace;
   Counted<std::uint8_t> data7D48;
   Counted<std::uint8_t> data7D49;
-  Counted<std::uint8_t> gap7D4A[84];
-  Counted<std::uint8_t> data7EA3;
-  Counted<std::uint8_t> gap7EA4[23];
-  Counted<std::uint8_t> data7EBB;
-  Counted<std::uint8_t> gap7EBC[8];
+  /// the selected system's distance as FormatSelectedSystemDistance copies it, its digits and point, back to the space before them (chan...
+  Counted<std::uint8_t> selectedDistanceText[6];
+  /// the population's five digits, the units digit and a point moved into the last two (change 3c names it)
+  Counted<std::uint8_t> populationDigits[5];
+  /// the productivity's five digits, a leading zero blanked (change 3c names it)
+  Counted<std::uint8_t> productivityDigits[5];
+  /// the radius's five digits, the first blanked (change 3c names it)
+  Counted<std::uint8_t> radiusDigits[5];
   /// 14 lines: anti-ECM device on 'L', title Archangel
   Counted<std::uint8_t> invasionDebriefText[416];
   /// control codes 5 and 6

@@ -8,7 +8,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <span>
+#include <string>
 #include <string_view>
 
 namespace Elite
@@ -80,6 +82,16 @@ template <typename Byte, std::size_t Extent> [[nodiscard]] Byte& ByteWithin(std:
 /// BytesWithin does, where the original would read on.
 [[nodiscard]] std::string_view TextWithin(std::span<const Counted<std::uint8_t>> _bytes, std::size_t _at);
 
+/// _pieces one after another: a text the original reads as one, from constants of its image and bytes the game writes between
+/// them, which the state holds apart since change 3c.
+[[nodiscard]] std::string JoinTexts(std::initializer_list<std::string_view> _pieces);
+
+/// _byte, a character the game writes into a text, as a text of its own (JoinTexts).
+[[nodiscard]] inline std::string_view CharText(const Counted<std::uint8_t>& _byte) noexcept
+{
+  return std::string_view(reinterpret_cast<const char*>(&_byte), 1);
+}
+
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
 // Each is what the routine Symbols.tsv names computes, with no register in sight: its inputs are
@@ -140,9 +152,10 @@ void DrawSmallViewString(GameState& _state, std::string_view _text, std::uint16_
 /// blanked and a decimal point before the last.
 void FormatCredits(GameState& _state);
 
-/// _message's text, up to its NUL: a constant one's from MESSAGE_TEXTS, and the five the program writes into from the data
-/// segment, as they are now. Message::None has none.
-[[nodiscard]] std::string_view MessageText(const GameState& _state, Message _message) noexcept;
+/// _message's text, up to its NUL: a constant one's from MESSAGE_TEXTS, and the five the program writes into from the state, as
+/// they are now: the hyperspace countdown's composed from its constant message and the digits written after it (change 3c).
+/// Message::None has none.
+[[nodiscard]] std::string MessageText(const GameState& _state, Message _message);
 
 /// UpdateMessageLine (CS:35A3): the message line's work for a frame: UpdateWarnings; then while the message drawn has frames
 /// left, one fewer; else, once they run out, the view's name as the message, and the message shown, the line cleared a row at a
@@ -186,11 +199,16 @@ void FormatTenths(GameState& _state, std::uint16_t _tenths);
 /// B800:_cell. Returns the cell a row below the last line's first.
 std::uint16_t PrintTextLines(GameState& _state, std::span<const std::string_view> _lines, std::uint16_t _cell);
 
-/// PrintTextLines (CS:6DDE) for _lines texts that follow one another in _bytes from its _at, each after the NUL of the one before, as the
-/// original steps past a NUL to the next: a text the game writes into. Every text's NUL must be within _bytes (TextWithin). _lines is not
-/// 0, which LOOP would count as 65,536.
-std::uint16_t PrintTextLines(GameState& _state, std::span<const Counted<std::uint8_t>> _bytes, std::size_t _at, std::uint16_t _cell,
-                             std::uint16_t _lines);
+/// PrintTextLines (CS:6DDE) for _lines texts that follow one another in _texts, each after the NUL of the one before, as the original
+/// steps past a NUL to the next: texts the game writes into, or composes from constants and what it writes (JoinTexts). Every text's
+/// NUL but the last's must be within _texts; the last may end at _texts' end. _lines is not 0, which LOOP would count as 65,536.
+std::uint16_t PrintTextLines(GameState& _state, std::string_view _texts, std::uint16_t _cell, std::uint16_t _lines);
+
+/// _bytes, a member of texts the game writes into, as PrintTextLines reads them.
+[[nodiscard]] inline std::string_view TextsOf(std::span<const Counted<std::uint8_t>> _bytes) noexcept
+{
+  return std::string_view(reinterpret_cast<const char*>(_bytes.data()), _bytes.size());
+}
 
 /// ReadTextLine (CS:7694): a line typed into _buffer, a buffer of the data segment of at least _most + 1 bytes, at most _most
 /// characters, after ResetKeyboard and with textPaperPattern cleared; echoed by RedrawInputLine at _segment:_cell, with a

@@ -121,32 +121,25 @@ constexpr std::uint8_t LOWER_CASE_BIT = 0x20;
 constexpr std::uint16_t SYSTEM_NAME_PAIRS = 4;
 constexpr std::uint16_t SYSTEM_NAME_FOURTH_PAIR = 0x40;
 
-// Where the data screen prints (text offsets), and the texts it writes into, in buffers the symbol table names no row for, by
-// their bytes in SystemDataTexts and SystemSizeTexts; its labels are constants (GalaxyTables.h).
+// Where the data screen prints (text offsets). The fields it writes into are members (change 3c), and its labels and units are
+// constants (GalaxyTables.h).
 constexpr std::uint16_t DATA_TITLE = 0x0054;
 constexpr std::uint16_t DISTANCE_ROW = 0x0144;
 constexpr std::uint16_t ECONOMY_ROW = 0x01E4;
 constexpr std::uint16_t GOVERNMENT_ROW = 0x0284;
 constexpr std::uint16_t TECH_LEVEL_ROW = 0x0324;
-constexpr std::size_t POPULATION_DIGITS = 0x35; // '000.0 Billion', DS:7D7D in 1987
-constexpr std::size_t POPULATION_SHOWN = 2;     // the units digit, where the point goes after it
+constexpr std::size_t POPULATION_SHOWN = 2; // the units digit, where the point goes after it
 constexpr std::uint16_t POPULATION_ROW = 0x03C4;
 constexpr std::uint16_t SPECIES_ROW = 0x0414;
 constexpr std::uint8_t NO_SPECIES = 0xFF;
 constexpr std::uint16_t PRODUCTIVITY_ROW = 0x04B4;
-constexpr std::size_t RADIUS_TEXT = 0x0B;   // 'Radius (Av): 00000 km', DS:7EAE in 1987
-constexpr std::size_t RADIUS_DIGITS = 0x18; // its digits, data7EBB on
 constexpr std::uint16_t RADIUS_ROW = 0x0554;
 constexpr std::uint8_t TECH_LEVEL_TENS = 10;
 
-// FormatSelectedSystemDistance's text ends here, its tenths digit last: DS:7D5F in 1987, in SystemDataTexts.
-constexpr std::size_t SELECTED_DISTANCE_TEXT_END = 0x17;
 // Where InsertRandomName keeps selectedSystemName while it borrows it: DS:9650, in invasionDebriefText's row.
 constexpr std::size_t SAVED_SYSTEM_NAME = 0x9650 - 0x94B9;
 constexpr std::uint16_t SYSTEM_NAME_BYTES = 8;
 constexpr std::uint16_t ADJECTIVE_SUFFIX_BYTES = 5;
-// The five digits FormatDecimal5 writes.
-constexpr std::size_t DECIMAL_DIGITS = 5;
 // A label in pendingChartLabels: its x range and its rows, two bytes each, then its name.
 constexpr std::size_t CHART_LABEL_NAME = 4;
 
@@ -251,27 +244,10 @@ template <typename State> [[nodiscard]] auto SystemNameField(State& _state)
   return BytesThrough(commander.selectedSystemName, commander.gap75CC);
 }
 
-// The data screen's texts the symbol table names no row for, which ShowSystemDataScreen and FormatSelectedSystemDistance write
-// digits into and print, members that follow one another in GalaxyState as in 1987 (change 3c names them): the tech level's two
-// characters and their NUL, the distance's digits and the population's text, in the 86 bytes from data7D48 to gap7D4A's end; and the
-// productivity's text and the radius's, its digits at data7EBB, in the 33 from data7EA3 to gap7EBC's end.
-static_assert(GAME_DATA_OFFSET(galaxy.data7D49) == GAME_DATA_OFFSET(galaxy.data7D48) + 1 &&
-              GAME_DATA_OFFSET(galaxy.gap7D4A) == GAME_DATA_OFFSET(galaxy.data7D49) + 1);
-static_assert(GAME_DATA_OFFSET(galaxy.gap7EA4) == GAME_DATA_OFFSET(galaxy.data7EA3) + 1 &&
-              GAME_DATA_OFFSET(galaxy.data7EBB) == GAME_DATA_OFFSET(galaxy.gap7EA4) + sizeof(GalaxyState::gap7EA4) &&
-              GAME_DATA_OFFSET(galaxy.gap7EBC) == GAME_DATA_OFFSET(galaxy.data7EBB) + 1);
-static_assert(RADIUS_DIGITS == GAME_DATA_OFFSET(galaxy.data7EBB) - GAME_DATA_OFFSET(galaxy.data7EA3));
-
-[[nodiscard]] std::span<Counted<std::uint8_t>> SystemDataTexts(GameState& _state)
+// _digits' characters, a field of the data screen the game writes, as a text (JoinTexts).
+[[nodiscard]] std::string_view DigitsText(std::span<const Counted<std::uint8_t>> _digits) noexcept
 {
-  GalaxyState& galaxy = _state.Data().galaxy;
-  return BytesThrough(galaxy.data7D48, galaxy.gap7D4A);
-}
-
-[[nodiscard]] std::span<Counted<std::uint8_t>> SystemSizeTexts(GameState& _state)
-{
-  GalaxyState& galaxy = _state.Data().galaxy;
-  return BytesThrough(galaxy.data7EA3, galaxy.gap7EBC);
+  return std::string_view(reinterpret_cast<const char*>(_digits.data()), _digits.size());
 }
 
 // Item _index of chartItems, the item chartItemEnd numbers, as its eight bytes; and _count bytes of pendingChartLabels from its byte
@@ -752,12 +728,9 @@ ScreenKey ShowGalacticChart(GameState& _state, Hardware& _hardware, bool _backwa
   _state.Data().commander.currentSystemChartY = static_cast<std::uint8_t>(SystemY(_state) >> 1);
   const std::uint16_t segment = ChartSegment(DrawChartFrame(_state, _hardware, _backward), _segment);
   _state.Data().galaxy.galacticChartNumber = static_cast<std::uint8_t>(_state.Data().commander.galaxyNumber + '1');
-  // 'GALACTIC CHART ', the galaxy's digit, and a space and the NUL in gap2A7F after it.
-  GalaxyState& galaxy = _state.Data().galaxy;
-  static_assert(GAME_DATA_OFFSET(galaxy.galacticChartNumber) ==
-                  GAME_DATA_OFFSET(galaxy.galacticChartTitle) + sizeof(GalaxyState::galacticChartTitle) &&
-                GAME_DATA_OFFSET(galaxy.gap2A7F) == GAME_DATA_OFFSET(galaxy.galacticChartNumber) + 1);
-  DrawChartTitle(_state, TextWithin(BytesThrough(galaxy.galacticChartTitle, galaxy.gap2A7F), 0), segment);
+  // 'GALACTIC CHART ', the galaxy's digit, and the space after it, which the original reads as one text from galacticChartTitle.
+  const std::string title = JoinTexts({GALACTIC_CHART_TITLE, CharText(_state.Data().galaxy.galacticChartNumber), GALACTIC_CHART_TITLE_END});
+  DrawChartTitle(_state, title, segment);
   _state.Data().commander.chartCursorX = std::uint8_t{_state.Data().commander.galacticCursorX};
   _state.Data().commander.chartCursorY = std::uint8_t{_state.Data().commander.galacticCursorY};
   _state.Data().commander.chartIsShortRange = 0;
@@ -1264,15 +1237,15 @@ ScreenKey ShowSystemDataScreen(GameState& _state, Hardware& _hardware, bool _bac
     cell = Offset(cell, 2);
   }
   _state.Data().galaxy.data7D49 = static_cast<std::uint8_t>(level + '0');
-  PrintTextModeString(_state, TextWithin(SystemDataTexts(_state), 0), cell);
+  PrintTextModeString(_state, JoinTexts({CharText(_state.Data().galaxy.data7D48), CharText(_state.Data().galaxy.data7D49)}), cell);
 
   // The population in tenths of a billion, its last two digits about a point.
-  const std::span<Counted<std::uint8_t>> population = BytesWithin(SystemDataTexts(_state), POPULATION_DIGITS, DECIMAL_DIGITS);
+  const std::span<Counted<std::uint8_t>> population = BytesOf(_state.Data().galaxy.populationDigits);
   FormatDecimal5(_state.Data().commander.selectedPopulationTenthsBillion, population);
   printed = PrintTextModeString(_state, POPULATION_LABEL_TEXT, POPULATION_ROW);
   population[POPULATION_SHOWN] = std::uint8_t{population[POPULATION_SHOWN + 1]};
   population[POPULATION_SHOWN + 1] = DECIMAL_POINT;
-  PrintTextModeString(_state, TextWithin(SystemDataTexts(_state), POPULATION_DIGITS + POPULATION_SHOWN), printed);
+  PrintTextModeString(_state, JoinTexts({DigitsText(population.subspan(POPULATION_SHOWN)), POPULATION_UNIT_TEXT}), printed);
 
   printed = PrintTextModeString(_state, SPECIES_OPEN_TEXT, SPECIES_ROW);
   const std::uint8_t size = _state.Data().commander.selectedSpeciesAdjective1;
@@ -1291,17 +1264,18 @@ ScreenKey ShowSystemDataScreen(GameState& _state, Hardware& _hardware, bool _bac
   }
 
   // The productivity, its leading zero blanked a column left; the radius, its leading digit blanked.
-  FormatDecimal5(_state.Data().commander.selectedProductivityMillionCredits, BytesWithin(SystemSizeTexts(_state), 0, DECIMAL_DIGITS));
+  GalaxyState& galaxy = _state.Data().galaxy;
+  FormatDecimal5(_state.Data().commander.selectedProductivityMillionCredits, galaxy.productivityDigits);
   cell = PrintTextModeString(_state, PRODUCTIVITY_LABEL_TEXT, PRODUCTIVITY_ROW);
-  if (_state.Data().galaxy.data7EA3 == '0')
+  if (galaxy.productivityDigits[0] == '0')
   {
-    _state.Data().galaxy.data7EA3 = SPACE;
+    galaxy.productivityDigits[0] = SPACE;
     cell = static_cast<std::uint16_t>(cell - 2);
   }
-  PrintTextModeString(_state, TextWithin(SystemSizeTexts(_state), 0), cell);
-  FormatDecimal5(_state.Data().commander.selectedRadiusKm, BytesWithin(SystemSizeTexts(_state), RADIUS_DIGITS, DECIMAL_DIGITS));
-  _state.Data().galaxy.data7EBB = SPACE;
-  PrintTextModeString(_state, TextWithin(SystemSizeTexts(_state), RADIUS_TEXT), RADIUS_ROW);
+  PrintTextModeString(_state, JoinTexts({DigitsText(galaxy.productivityDigits), PRODUCTIVITY_UNIT_TEXT}), cell);
+  FormatDecimal5(_state.Data().commander.selectedRadiusKm, galaxy.radiusDigits);
+  galaxy.radiusDigits[0] = SPACE;
+  PrintTextModeString(_state, JoinTexts({RADIUS_LABEL, DigitsText(galaxy.radiusDigits), RADIUS_UNIT_TEXT}), RADIUS_ROW);
   ShowSystemDescription(_state, _backward);
   // ShowSystemDescription's last print leaves AL 0.
   return WaitForScreenExitKey(_state, _hardware, SCAN_F7, 0, _countIfNone);
@@ -1320,9 +1294,9 @@ std::string_view FormatSelectedSystemDistance(GameState& _state)
   // distance is below 10000 tenths of a light year (it is at most four times the root of 255^2 + 127^2), so its first digit is a
   // zero BlankLeadingZeros blanks, and the copy stops there at the latest.
   const std::span<const Counted<std::uint8_t>> digits = BytesOf(_state.Data().galaxy.distanceDigits);
-  const std::span<Counted<std::uint8_t>> texts = SystemDataTexts(_state);
+  const std::span<Counted<std::uint8_t>> texts = BytesOf(_state.Data().galaxy.selectedDistanceText);
   std::size_t from = digits.size() - 1;
-  std::size_t to = SELECTED_DISTANCE_TEXT_END;
+  std::size_t to = texts.size() - 1;
   ByteWithin(texts, to) = std::uint8_t{ByteWithin(digits, from)};
   --to;
   ByteWithin(texts, to) = DECIMAL_POINT;
@@ -1335,7 +1309,7 @@ std::string_view FormatSelectedSystemDistance(GameState& _state)
     copied = ByteWithin(digits, from);
     ByteWithin(texts, to) = copied;
   } while (copied != SPACE);
-  return TextWithin(texts, to + 1);
+  return DigitsText(texts.subspan(to + 1));
 }
 
 void ShowSystemDescription(GameState& _state, bool _backward)

@@ -256,6 +256,16 @@ std::string_view TextWithin(std::span<const Counted<std::uint8_t>> _bytes, std::
   return text;
 }
 
+std::string JoinTexts(std::initializer_list<std::string_view> _pieces)
+{
+  std::string text;
+  for (const std::string_view piece : _pieces)
+  {
+    text += piece;
+  }
+  return text;
+}
+
 std::uint16_t DrawViewChar(GameState& _state, std::uint8_t _character, std::uint16_t _ink, std::uint16_t _at)
 {
   const std::uint16_t paper = _state.Data().drawing.textPaperPattern;
@@ -410,32 +420,28 @@ void FormatCredits(GameState& _state)
   text[TENTHS] = '.';
 }
 
-std::string_view MessageText(const GameState& _state, Message _message) noexcept
+std::string MessageText(const GameState& _state, Message _message)
 {
   // Each text holds its NUL, which nothing writes: the last of bountyText, shipIdentityText, scoopedCargoText and
-  // arrivalGalaxyText's record, and, after hyperspaceCountdownMessage's 24 characters and the countdown's two digits, gapA85B.
+  // arrivalGalaxyText's record. The countdown's is after its two digits, where the original's NUL is.
   const HyperspaceState& hyperspace = _state.Data().hyperspace;
-  static_assert(GAME_DATA_OFFSET(hyperspace.hyperspaceCountdownDigits) ==
-                  GAME_DATA_OFFSET(hyperspace.hyperspaceCountdownMessage) + sizeof(HyperspaceState::hyperspaceCountdownMessage) &&
-                GAME_DATA_OFFSET(hyperspace.gapA85B) ==
-                  GAME_DATA_OFFSET(hyperspace.hyperspaceCountdownDigits) + sizeof(HyperspaceState::hyperspaceCountdownDigits));
   switch (_message)
   {
   case Message::Bounty:
-    return TextIn(_state.Data().text.bountyText);
+    return std::string(TextIn(_state.Data().text.bountyText));
   case Message::ShipIdentity:
-    return TextIn(_state.Data().text.shipIdentityText);
+    return std::string(TextIn(_state.Data().text.shipIdentityText));
   case Message::ScoopedCargo:
-    return TextIn(_state.Data().equipment.scoopedCargoText);
+    return std::string(TextIn(_state.Data().equipment.scoopedCargoText));
   case Message::ArrivalGalaxy:
-    return TextIn(BytesOf(hyperspace.arrivalGalaxyText));
+    return std::string(TextIn(BytesOf(hyperspace.arrivalGalaxyText)));
   case Message::HyperspaceCountdown:
-    return TextIn(BytesThrough(hyperspace.hyperspaceCountdownMessage, hyperspace.gapA85B));
+    return JoinTexts({HYPERSPACE_COUNTDOWN_MESSAGE, TextIn(BytesOf(hyperspace.hyperspaceCountdownDigits))});
   default:
     break;
   }
   const auto index = static_cast<std::size_t>(_message);
-  return index < MESSAGE_TEXTS.size() ? MESSAGE_TEXTS[index] : std::string_view{};
+  return std::string(index < MESSAGE_TEXTS.size() ? MESSAGE_TEXTS[index] : std::string_view{});
 }
 
 void UpdateMessageLine(GameState& _state, bool _backwards)
@@ -584,17 +590,21 @@ std::uint16_t PrintTextLines(GameState& _state, std::span<const std::string_view
   return line;
 }
 
-std::uint16_t PrintTextLines(GameState& _state, std::span<const Counted<std::uint8_t>> _bytes, std::size_t _at, std::uint16_t _cell,
-                             std::uint16_t _lines)
+std::uint16_t PrintTextLines(GameState& _state, std::string_view _texts, std::uint16_t _cell, std::uint16_t _lines)
 {
   std::uint16_t line = _cell;
-  std::size_t at = _at;
+  std::string_view rest = _texts;
   for (std::uint16_t left = _lines; left != 0; --left)
   {
-    const std::string_view text = TextWithin(_bytes, at);
+    const std::size_t nul = rest.find('\0');
+    if (nul == std::string_view::npos && left > 1)
+    {
+      RefuseBytesPast(_texts.size() - rest.size(), rest.size() + 1, _texts.size());
+    }
+    const std::string_view text = rest.substr(0, nul);
     (void)PrintTextModeString(_state, text, line);
     line = Offset(line, TEXT_ROW_BYTES);
-    at += text.size() + 1;
+    rest = nul == std::string_view::npos ? std::string_view{} : rest.substr(nul + 1);
   }
   return line;
 }

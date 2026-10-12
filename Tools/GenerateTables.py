@@ -146,9 +146,12 @@ CONSTANT_TEXTS = {
     ("DISTANCE_LABEL_TEXT", 0x7D4B, 1),
     ("LIGHT_YEARS_TEXT", 0x7D61, 1),
     ("POPULATION_LABEL_TEXT", 0x7D6E, 1),
+    ("POPULATION_UNIT_TEXT", 0x7D82, 1),
     ("SPECIES_OPEN_TEXT", 0x7D8B, 1),
     ("HUMAN_COLONIALS_TEXT", 0x7D8D, 1),
     ("PRODUCTIVITY_LABEL_TEXT", 0x7E94, 1),
+    ("PRODUCTIVITY_UNIT_TEXT", 0x7EA8, 1),
+    ("RADIUS_UNIT_TEXT", 0x7EC0, 1),
   ],
   "SaveLoad": [
     ("DEVICE_TEXT", 0x8667, 1),
@@ -684,8 +687,12 @@ def noise_source(_image: Image) -> list[str]:
 PARTITION = ROOT / "Design" / "DataPartition.tsv"
 # The header of the constants several subsystems read, SharedTables.h.
 SHARED = "Shared"
+# The longest line clang-format keeps (.clang-format's ColumnLimit), which a long chars constant's lines are packed to.
+LINE_LIMIT = 140
 # How native code reads a constant, where the member's own shape is not how:
 #   text       std::string_view: its text up to its NUL, which must be inside it
+#   chars      std::string_view: all its bytes, NULs too: a text, or texts one after another, that runs on into what the game
+#              writes after it, or that follows what the game writes before it
 #   lines, N   std::array<std::string_view, N>: N texts from its first, each after the one before's NUL, N the count the code
 #              that prints them loads (PrintTextLines' CX)
 #   counted    lines, as many as the count byte at its first says, from the byte after it
@@ -696,13 +703,17 @@ SHARED = "Shared"
 # entries of a size an array of arrays of their bytes, and anything else, a record with members inside it too, an array of its
 # bytes.
 CONSTANT_SHAPES = {
-  "diskErrorText": ("text",), "blankChartLine": ("text",), "nameLinePadding": ("text",), "findPrompt": ("text",),
+  "diskErrorText": ("text",), "galacticChartTitleEnd": ("text",), "fuelTextSuffix": ("text",), "missileNameClose": ("text",), "blankChartLine": ("text",), "nameLinePadding": ("text",), "findPrompt": ("text",),
   "shortRangeChartTitle": ("text",), "findErrorPrefix": ("text",), "findErrorSuffix": ("text",), "versionString": ("text",),
   "descriptionTemplate": ("text",), "pressAnyKeyText": ("text",), "eliteTitleText": ("text",),
   "supernovaBriefingText": ("lines", 5), "maskBriefingText": ("lines", 9), "invasionBriefingText": ("lines", 12),
   "equipHelpText": ("counted",), "discMenuText": ("counted",),
-  "sellCargoFrame": ("frame",), "buyCargoFrame": ("frame",), "equipShipFrame": ("frame",), "systemDataFrame": ("frame",),
+  "taskCompleteFrame": ("frame",), "sellCargoFrame": ("frame",), "buyCargoFrame": ("frame",), "equipShipFrame": ("frame",), "systemDataFrame": ("frame",),
   "marketPricesFrame": ("frame",), "discControlFrame": ("frame",), "inventoryFrame": ("frame",), "emergencyFrame": ("frame",),
+  "galacticChartTitle": ("chars",), "radiusLabel": ("chars",), "fuelTextPrefix": ("chars",), "fuelTextPoint": ("chars",), "missileNameOpen": ("chars",), "hyperspaceCountdownMessage": ("chars",),
+  "pauseMenuText": ("chars",), "recenterLetter": ("chars",), "dampingLetter": ("chars",),
+  "yReverseLetter": ("chars",), "xyReverseLetter": ("chars",), "soundLetter": ("chars",),
+  "supernovaDebriefOpen": ("chars",), "supernovaDebriefClose": ("chars",),
   "laserSights": ("bytes",), "smallDiscSprites": ("bytes",), "circleOctant": ("bytes",),
 }
 # The constants whose tables are their entries' texts already (TEXT_TABLES): the member's own words are the original's
@@ -781,6 +792,24 @@ def constant_table(_image: Image, _constant: Constant, _qualifier: str) -> tuple
   heading = f"{member.name} (DS:{member.offset:04X} in 1987)" + (f": {_constant.note}" if _constant.note else "")
   out = textwrap.wrap(heading, width=COMMENT_LIMIT, initial_indent="/// ", subsequent_indent="/// ", break_on_hyphens=False)
   data = _image.bytes("DS", member.offset, member.size)
+  if shape == "chars":
+    # Sized, so that a NUL inside does not end it. A long one is adjacent literals, aligned under the first as clang-format lays them out.
+    line = f"{_qualifier} std::string_view {name}{{{literal(data)}, {len(data)}}};"
+    if len(line) <= LINE_LIMIT:
+      return {"<string_view>"}, out + [line, ""]
+    head = f"{_qualifier} std::string_view {name}{{"
+    align = " " * len(head)
+    chunks: list[str] = []
+    start = 0
+    while start < len(data):
+      end = start + 1
+      while end < len(data) and len(align) + len(literal(data[start:end + 1])) + 1 <= LINE_LIMIT:
+        end += 1
+      chunks.append(literal(data[start:end]))
+      start = end
+    rows = [head + chunks[0]] + [align + chunk for chunk in chunks[1:]]
+    rows[-1] += ","
+    return {"<string_view>"}, out + [*rows, f"{align}{len(data)}}};", ""]
   if shape in ("text", "frame"):
     text = _image.text(member.offset)
     if len(text) >= member.size:

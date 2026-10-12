@@ -23,7 +23,7 @@ namespace
 {
 
 // The laser sights: a 16x16 sprite at the centre of the space view's 64-byte rows, 128 bytes a laser type, from row 56, which is
-// row 55 of spaceViewBuffer: gap0000 is the view's first row (D38).
+// row 55 of the space view, which starts a row into the drawing buffer.
 constexpr std::uint16_t VIEW_ROW_BYTES = 64;
 constexpr std::uint16_t SIGHTS_OFFSET = 55 * VIEW_ROW_BYTES + 30;
 constexpr std::uint16_t SIGHTS_ROWS = 16;
@@ -467,7 +467,7 @@ void DrawLaserSights(GameState& _state)
     return;
   }
   // MOV AH,AL / XOR AL,AL / SHR AX,1: 128 bytes a laser type.
-  const std::span<Counted<std::uint8_t>> view(_state.Data().drawing.spaceViewBuffer);
+  const std::span<Counted<std::uint8_t>> view = BytesOf(_state.Data().drawing.drawingBuffer).subspan(VIEW_ROW_BYTES);
   std::size_t row = SIGHTS_OFFSET;
   const std::span<const std::uint8_t> sprites(LASER_SIGHTS);
   std::size_t sprite = std::size_t{*laser} << 7;

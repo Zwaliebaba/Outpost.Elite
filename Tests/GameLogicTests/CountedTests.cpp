@@ -78,7 +78,7 @@ public:
   }
 
   // Every way to reach a member counts: an array's element, a table's, a nested struct's member, a word's high byte, a slot's field by name and by
-  // its number, a gap's byte, a helper's reference, and video memory.
+  // its number, a buffer's byte, a helper's reference, and video memory.
   TEST_METHOD(EveryWritePathCounts)
   {
     Elite::GameState state;
@@ -106,8 +106,8 @@ public:
     state.Slot(Elite::SlotIndex::Station).yaw = 0x0101;
     counted(L"a record's word by its number");
     Assert::AreEqual(0x0101u, std::uint32_t{data.world.shipSlots[2].yaw});
-    data.drawing.gap0000[63] = 1;
-    counted(L"a gap's byte");
+    data.drawing.drawingBuffer[63] = 1;
+    counted(L"a buffer's byte");
     StoreSeven(data.commander.legalStatus);
     counted(L"a helper's reference");
     StoreSeven(data.commander.legalStatus);
