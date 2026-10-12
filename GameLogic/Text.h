@@ -186,9 +186,11 @@ void FormatTenths(GameState& _state, std::uint16_t _tenths);
 /// B800:_cell. Returns the cell a row below the last line's first.
 std::uint16_t PrintTextLines(GameState& _state, std::span<const std::string_view> _lines, std::uint16_t _cell);
 
-/// PrintTextLines (CS:6DDE) for _lines texts of the data segment that follow one another from _first (TextAt), each after
-/// the one before's NUL: a text the game writes into. _lines is not 0, which LOOP would count as 65,536.
-std::uint16_t PrintTextLines(GameState& _state, std::string_view _first, std::uint16_t _cell, std::uint16_t _lines);
+/// PrintTextLines (CS:6DDE) for _lines texts that follow one another in _bytes from its _at, each after the NUL of the one before, as the
+/// original steps past a NUL to the next: a text the game writes into. Every text's NUL must be within _bytes (TextWithin). _lines is not
+/// 0, which LOOP would count as 65,536.
+std::uint16_t PrintTextLines(GameState& _state, std::span<const Counted<std::uint8_t>> _bytes, std::size_t _at, std::uint16_t _cell,
+                             std::uint16_t _lines);
 
 /// ReadTextLine (CS:7694): a line typed into _buffer, a buffer of the data segment of at least _most + 1 bytes, at most _most
 /// characters, after ResetKeyboard and with textPaperPattern cleared; echoed by RedrawInputLine at _segment:_cell, with a

@@ -114,7 +114,7 @@ void RemoveShip(TwinRig& _rig, Elite::SlotIndex _slot)
 Elite::SlotIndex LaunchMissileAtPlayer(TwinRig& _rig, Elite::SlotIndex _launcher)
 {
   Elite::GameState& state = _rig.State();
-  const std::optional<Elite::SlotIndex> slot = Elite::LaunchShipFromObject(state, state.Slot(_launcher), MISSILE_LAUNCH, false);
+  const std::optional<Elite::SlotIndex> slot = Elite::LaunchShipFromObject(state, state.Slot(_launcher), MISSILE_LAUNCH);
   Assert::IsTrue(slot.has_value(), L"a free slot for the missile");
   return slot.value_or(Elite::SlotIndex::None);
 }

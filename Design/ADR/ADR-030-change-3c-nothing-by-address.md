@@ -1,0 +1,76 @@
+# ADR-030 — Change 3c: nothing by the original's address
+
+**Status:** accepted 2026-10-12, with the change that implements it, the first part of change 3c of D33's piece 3 ([Reverse-Engineering-Plan.md §5, Phase 5](../Reverse-Engineering-Plan.md#phase-5--the-native-platform-and-the-natural-layout)). The later parts amend it: the layout's clean-up with one re-base, D37's second round, and D43's clamp at load. It amends ADR-015, ADR-018 and ADR-026.
+
+## Context
+
+After change 3b, game code reached its state by member almost everywhere. The `GameState` still answered by the original's address, through `OriginalLayout`, its map of the 1987 data segment onto `GameData`:
+- **The accessors by offset and the far ones:** `Byte`, `Word`, `SetByte`, `SetWord`, `FarByte`, `SetFarByte`, `LinearByte` and their kin, `ObjectAt`, `TextAtOffset` and `BytesAt`.
+- **The views from a member:** `TextAt`, `TextAfter`, `BytesFrom`, `WordOf` and `SetWordOf`. These read on past a member's end wherever `GameData` held the next bytes beside it.
+- **`OffsetOf`, `SlotOffset` and `SlotAt`:** the 1987 offset of a member or slot. The waiting loops carried these in their turns, and the register-like results of Combat and Flight held them.
+
+The plan's list for change 3c named the runs that still cross members and the direction-flag branches that still went by address. The guard ([ADR-029](ADR-029-the-guard-restored.md)) holds again, so this change could be proved against every 1987 digest.
+
+## Decision
+
+**1. The `GameState` holds members and video memory, and nothing else.**
+- **What is deleted:** `OriginalLayout`, every accessor by offset or far address, `ObjectAt`, `OffsetOf`, `SlotOffset`, `SlotAt` and the text and span views.
+- **What stays:** `Slot`, and `IndexOf`, which finds a slot's number from its record, never from an offset. The video accessors work on video memory directly and refuse an offset past its 16 KiB.
+- **What is new:** `PlaceOf(member)`, a member's offset in `GameData`.
+
+**2. A turn carries a member's place where it carried its 1987 offset (ADR-015).** A turn's signature is only ever compared with the last turn's. A place is one-to-one with the offset it replaces, so every turn idles exactly where it did. 15 turn sites, in Docked, Flight, Hyperspace, Market and SaveLoad, changed.
+
+**3. Every run the original reads across members is named.** Each run uses `BytesThrough(first, last)` (`Text.h`) with a `static_assert` that its members still follow one another as they did in 1987. A text or span inside a run or member uses `TextWithin` or `BytesWithin`, which throw rather than read on.
+
+Two probes found the runs:
+- **A probe of every run across top-level members** found eight, in all of the corpus and the twins.
+- **The suite with the views made strict** found two more, inside `commanderBlock`, which the first probe could not see.
+
+| Run | Members | Reader |
+|---|---|---|
+| The drawing buffer, 8 KiB | `gap0000` to `gap1FC0` | `DrawingBuffer` (Video), now also Docking's `ViewBuffer` |
+| The fuel's text and digits | `gap827F` to `data840B` | `FuelRun` (Docked) |
+| The status screen's missiles | `gap84EC` to `gap84F6` | `MissilesRun` (Docked) |
+| The supernova's debriefing | `taskCompleteFrame` to `gap907F` | `TaskCompleteRun` (Docked) |
+| The dashboard's cache | `missileCountShown` to `speedShown` | `InvalidateDashboard` (Flight) |
+| The pause screen's text and options | `pauseMenuText` to `gapAC0C` | `PauseRun` (Flight) |
+| The cash's text and its NUL | `creditBalanceText`, `gap759A` | `CashRun` (Docked) |
+| The selected system's name and its NUL | `selectedSystemName`, `gap75CC` | `SelectedNameRun` (Docked) |
+
+A text that steps from one NUL to the next (`PrintTextLines`) walks its run's bytes. A docked frame's descriptor (`DrawDockedFrame`) is the bytes from where it starts to the end of the member that holds it. The commander's equipment and system records are reached as bytes of `commanderBlock`, at `COMMANDER_STATE_OFFSET`.
+
+**4. The direction flag is clear wherever the game calls a routine, so the branches that ran down by address go.**
+- **The binary has one `STD`,** at CS:2E4A in `MaskOutsideTunnel`, and its `CLD` is at CS:2E5C. Between them the code runs straight on, apart from a `jnz` back inside the pair, and there is no `POPF`. Interrupts land only in waits, and there is no wait there (ADR-015). This was measured from the checked-in image's code segment, disassembled with `ndisasm`.
+- **In the native code,** every value the direction flag is passed as comes from `Start`'s `false` (DOS's `CLD`), a literal `false`, an `&&` with one of those, or a callee's own parameter handed back.
+
+So the downward branches of these routines could never run, and they go: `ClearAllObjects`, `CopyObject`, `SaveStartupCommander`, `StartNewGame`, `ResetHyperspaceRings`, `UpdateObjectsAndSpawn`'s clear, M's launch from past a buffer filled downward, and the first half of `MaskOutsideTunnel`.
+
+Each routine whose only use of the flag was to pass it on loses the parameter: 33 functions in all. Where the flag still decides something (a screen's copy, a fill), it stays, and a later change can remove it on the same proof.
+
+**5. `MaskOutsideTunnel`'s `STD` half keeps its downward stores,** in the buffer. For each of the ten tunnel rectangles, both halves stay within the 8 KiB buffer: from 382 to 7,872, measured from `tunnelRectangles`. So a store outside it throws, where the original would have run on into the data segment.
+
+**6. The register-like values that carried offsets are what they mean.**
+- **M's launch:** DI before the launch is a `LaunchDi`: a slot, or which buffer it is past. `MissileSource` holds a slot.
+- **Combat's results:** `Explosion::slot` and `CrosshairTarget::diSlot` are `SlotIndex`. `Explosion`'s SI and ES, `FragmentsLeft`'s ES and `MissileFlight`'s DI were never read, and go.
+
+**7. The PC model reads the game's memory by address nowhere.**
+- `Platform::PrintDosString(segment, offset)` had no caller; `Hardware::PrintDosString(text)` is the game's. It goes, and its test prints through `Hardware`.
+- `HandlerOpcode` reads the ROM only. The disc-menu twin's simulated mouse driver points the int 33h vector at the ROM's driver entry instead of into the data segment, and its digest is unchanged.
+
+## Measured 2026-10-12
+
+In a Linux session with g++ 13.3 and clang 18 through `Tools/BuildPortable.py`, and a stand-in for `CppUnitTest.h` outside the tree (ADR-004 item 4):
+
+| Check | Result |
+|---|---|
+| The suite, g++ `-O2` | 141 tests, all pass, in 2.6 s: every corpus digest, picture and outcome and every twin's known answer is the 1987 one, with no re-base |
+| The suite, g++ `-O0` | 141 tests, all pass, in 28.1 s |
+| The suite, clang++ 18 `-O2` | 141 tests, all pass |
+| The change | 46 files, 686 lines added and 1,200 deleted; `GameState.h` is 408 lines shorter |
+| Checkers | `CheckProjectFiles`, `CheckFormat` (clang-format 18.1.3), `GenerateGameData --check` and `GenerateTables --check` are clean. clang-tidy and MSVC run in CI. |
+
+## What this forecloses
+
+- **Reaching on past a member.** A path that reads a text or span past its member's end, or its run's, throws `std::out_of_range` where the original would read on. The corpus and the twins reach none. A hand-edited `.cdr` whose name has no NUL now throws on the status screen. D43's clamp, the last part of change 3c, terminates the name at load.
+- **A wait that idles on a turn the original does not.** That cannot come from this change: a place stands for an offset one to one.
+- **A downward string operation outside `MaskOutsideTunnel`'s two instructions.** Should a change on purpose ever set the flag elsewhere, it designs its own copy.

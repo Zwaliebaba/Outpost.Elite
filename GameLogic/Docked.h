@@ -83,28 +83,26 @@ void FormatFuelLightYears(GameState& _state);
 /// direction flag, which the clear and the rows' REP STOSW go by.
 void DrawDockedFrameAt(GameState& _state, Hardware& _hardware, std::uint8_t _screen, std::uint8_t _frame, bool _backward);
 
-/// DrawDockedFrame (CS:7C88): DrawDockedFrameAt from _descriptor, a member of GameData that starts a frame's descriptor: the
-/// two attributes, then the title. The symbol table sizes a descriptor as it pleases, two bytes or the whole screen's text, so
-/// its bytes are reached from where it starts. Returns the title.
-template <typename Descriptor>
-std::string_view DrawDockedFrame(GameState& _state, Hardware& _hardware, const Descriptor& _descriptor, bool _backward)
+/// DrawDockedFrame (CS:7C88): DrawDockedFrameAt from _descriptor, the bytes of GameData from where a frame's descriptor starts to the end
+/// of the member that holds it: the two attributes, then the title. The symbol table sizes a descriptor as it pleases, two bytes or the
+/// whole screen's text, so the caller passes the bytes its title is within. Returns the title.
+inline std::string_view DrawDockedFrame(GameState& _state, Hardware& _hardware, std::span<const Counted<std::uint8_t>> _descriptor,
+                                        bool _backward)
 {
-  const std::span<const Counted<std::uint8_t>> attributes = _state.BytesFrom(_descriptor, 2);
-  DrawDockedFrameAt(_state, _hardware, attributes[0], attributes[1], _backward);
-  return _state.TextAt(_descriptor, 2);
+  DrawDockedFrameAt(_state, _hardware, ByteWithin(_descriptor, 0), ByteWithin(_descriptor, 1), _backward);
+  return TextWithin(_descriptor, 2);
 }
 
 /// DrawDockedFrame (CS:7C88) for a frame's descriptor that is a constant of the data segment (D38), its two attributes and then
 /// its title, a table of the subsystem's: DrawDockedFrameAt from the attributes. Returns the title.
 std::string_view DrawDockedFrame(GameState& _state, Hardware& _hardware, std::string_view _descriptor, bool _backward);
 
-/// DrawFrameSides (CS:7CE9): BAh in attribute _attribute at columns 0 and 39 of _rows rows of the text page at
-/// _segment from _cell, 65,536 for 0, as LOOP counts.
-void DrawFrameSides(GameState& _state, std::uint16_t _segment, std::uint16_t _cell, std::uint16_t _rows, std::uint8_t _attribute);
+/// DrawFrameSides (CS:7CE9): BAh in attribute _attribute at columns 0 and 39 of _rows rows of the text page in video memory from _cell,
+/// 65,536 for 0, as LOOP counts. The original takes the page's segment in ES, which is the video segment wherever it is called.
+void DrawFrameSides(GameState& _state, std::uint16_t _cell, std::uint16_t _rows, std::uint8_t _attribute);
 
-/// DrawFrameRow (CS:7CF8): the character and attribute _value in 38 cells from _segment:_cell, forwards or,
-/// _backwards, down.
-void DrawFrameRow(GameState& _state, std::uint16_t _segment, std::uint16_t _cell, std::uint16_t _value, bool _backwards);
+/// DrawFrameRow (CS:7CF8): the character and attribute _value in 38 cells of video memory from _cell, forwards or, _backwards, down.
+void DrawFrameRow(GameState& _state, std::uint16_t _cell, std::uint16_t _value, bool _backwards);
 
 /// How the docked screens end (DockedKeyDispatch, CS:0B40), and with them RunTitleAndDocked.
 struct DockedExit

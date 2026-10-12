@@ -6,6 +6,7 @@
 #include "Flight.h"
 #include "Maths.h"
 #include "ShipsTables.h"
+#include "Text.h"
 
 #include <span>
 #include <utility>
@@ -76,12 +77,6 @@ constexpr std::uint16_t FIRST_EVICTED_SLOT = 4; // ReclaimShipSlot evicts one of
 
 constexpr std::uint16_t SPAWN_DISTANCE = 10000;
 constexpr std::uint16_t SPAWN_SCATTER_MASK = 0x7FF; // halved and signed by its low bit: +-1023
-
-// The step of a string instruction: backwards when DF is set.
-[[nodiscard]] std::uint16_t StringStep(bool _backward, std::uint16_t _bytes) noexcept
-{
-  return _backward ? Negate(_bytes) : _bytes;
-}
 
 // MOV AL,[DI] / SHR AL,1 / AND AL,1Fh.
 [[nodiscard]] std::uint8_t TypeOf(const SpaceObject& _slot) noexcept
@@ -176,10 +171,10 @@ void AddToCoordinate(SpaceObject& _slot, int _axis, std::int16_t _value)
   _slot.*POSITION_HIGH[axis] = static_cast<std::uint8_t>(_slot.*POSITION_HIGH[axis] + Low(SignWord(value)) + (sum >> 16));
 }
 
-void ClearObjectSlot(GameState& _state, SpaceObject& _slot)
+void ClearObjectSlot(SpaceObject& _slot)
 {
   // MOV [SI],CH while CX counts down from 40h: CH is 0 throughout.
-  for (Counted<std::uint8_t>& byte : _state.BytesFrom(_slot, SpaceObject::BYTES))
+  for (Counted<std::uint8_t>& byte : BytesOf(_slot))
   {
     byte = 0;
   }
@@ -478,30 +473,17 @@ SlotSearch FindFreeShipSlot(GameState& _state)
   return SlotSearch{false, slot};
 }
 
-void ClearAllObjects(GameState& _state, bool _backward)
+void ClearAllObjects(GameState& _state)
 {
-  // MOV CH,shipSlotCount / XOR CL,CL / SHR CX,1 three times: 32 words a slot, cleared by REP STOSW into ES = DS. Going up, the
-  // first shipSlotCount slots, a word at a time, low byte first: shipSlotCount is only ever 3, 20h or 24h, so every store is in
-  // shipSlots' 36, and a count past them throws (GameState::Slot).
-  if (!_backward)
+  // MOV CH,shipSlotCount / XOR CL,CL / SHR CX,1 three times: 32 words a slot, cleared by REP STOSW into ES = DS, upwards, as the direction
+  // flag is clear wherever the game calls it: the only STD, MaskOutsideTunnel's, has its CLD before the routine returns (change 3c): the
+  // first shipSlotCount slots, a word at a time, low byte first. shipSlotCount is only ever 3, 20h or 24h, so every store is in shipSlots'
+  // 36, and a count past them throws (GameState::Slot).
+  SlotIndex slot = SlotIndex::Sun;
+  for (std::uint8_t slots = _state.Data().world.shipSlotCount; slots != 0; --slots)
   {
-    SlotIndex slot = SlotIndex::Sun;
-    for (std::uint8_t slots = _state.Data().world.shipSlotCount; slots != 0; --slots)
-    {
-      ClearObjectSlot(_state, _state.Slot(slot));
-      slot = SlotAfter(slot);
-    }
-    return;
-  }
-  // Backwards, REP STOSW starts from the first slot's first word and runs down from there, as the original's does: past
-  // shipSlots' start into what the original's data segment holds before it, still by the original's addresses, as change 3c of
-  // D38 takes the direction flag.
-  const std::uint16_t step = StringStep(_backward, 2);
-  std::uint16_t at = _state.OffsetOf(_state.Data().world.shipSlots);
-  for (auto words = static_cast<std::uint16_t>(_state.Data().world.shipSlotCount << 5); words != 0; --words)
-  {
-    _state.SetWord(at, 0);
-    at = Offset(at, step);
+    ClearObjectSlot(_state.Slot(slot));
+    slot = SlotAfter(slot);
   }
 }
 
@@ -535,31 +517,16 @@ SlotIndex FindDebrisSlot(GameState& _state)
   return oldest;
 }
 
-void CopyObject(GameState& _state, const SpaceObject& _source, SpaceObject& _destination, bool _backward)
+void CopyObject(const SpaceObject& _source, SpaceObject& _destination)
 {
-  // REP MOVSW from DS:SI to ES:DI, ES = DS: 32 words, word by word as the 8088 does it, each read whole and then written, from
-  // the first.
-  if (!_backward)
+  // REP MOVSW from DS:SI to ES:DI, ES = DS: 32 words, word by word as the 8088 does it, each read whole and then written, from the first,
+  // upwards, as the direction flag is clear wherever the game calls it: the only STD, MaskOutsideTunnel's, has its CLD before the routine
+  // returns (change 3c).
+  const std::span<const Counted<std::uint8_t>> source = BytesOf(std::as_const(_source));
+  const std::span<Counted<std::uint8_t>> destination = BytesOf(_destination);
+  for (std::size_t word = 0; word < SpaceObject::BYTES; word += 2)
   {
-    const std::span<const Counted<std::uint8_t>> source = std::as_const(_state).BytesFrom(_source, SpaceObject::BYTES);
-    const std::span<Counted<std::uint8_t>> destination = _state.BytesFrom(_destination, SpaceObject::BYTES);
-    for (std::size_t word = 0; word < SpaceObject::BYTES; word += 2)
-    {
-      SetWordIn(destination, word, WordIn(source, word));
-    }
-    return;
-  }
-  // Backwards, from the first word and down past it, as the original's runs with the direction flag set: into what the
-  // original's data segment holds before both records, still by the original's addresses, as change 3c of D38 takes the
-  // direction flag.
-  const std::uint16_t step = StringStep(_backward, 2);
-  std::uint16_t source = _state.OffsetOf(_source);
-  std::uint16_t destination = _state.OffsetOf(_destination);
-  for (std::uint16_t words = SpaceObject::BYTES / 2; words != 0; --words)
-  {
-    _state.SetWord(destination, _state.Word(source));
-    source = Offset(source, step);
-    destination = Offset(destination, step);
+    SetWordIn(destination, word, WordIn(source, word));
   }
 }
 

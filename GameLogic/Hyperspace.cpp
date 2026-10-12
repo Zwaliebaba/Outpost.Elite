@@ -13,6 +13,7 @@
 #include "Video.h"
 
 #include <algorithm>
+#include <utility>
 
 namespace Elite
 {
@@ -267,9 +268,11 @@ void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_
   _state.Data().commander.selectedDistanceTenthsLy = 0;
   const bool galactic = _state.Data().jump.galacticJumpPending == 1;
   const std::uint32_t bytes = LoopCount(SYSTEM_RECORD_BYTES);
-  const std::span<const Counted<std::uint8_t>> from = galactic ? _state.BytesFrom(_state.Data().commander.selectedSystemName, bytes)
-                                                               : _state.BytesFrom(_state.Data().hyperspace.hyperspaceTargetRecord, bytes);
-  const std::span<Counted<std::uint8_t>> to = _state.BytesFrom(_state.Data().commander.currentSystemName, bytes);
+  const std::span<const Counted<std::uint8_t>> from =
+    galactic ? BytesWithin(BytesOf(std::as_const(_state).Data().commander), COMMANDER_STATE_OFFSET(selectedSystemName), bytes)
+             : BytesWithin(BytesOf(_state.Data().hyperspace.hyperspaceTargetRecord), 0, bytes);
+  const std::span<Counted<std::uint8_t>> to =
+    BytesWithin(BytesOf(_state.Data().commander), COMMANDER_STATE_OFFSET(currentSystemName), bytes);
   for (std::uint32_t copied = 0;;)
   {
     to[copied] = std::uint8_t{from[copied]};
@@ -279,7 +282,7 @@ void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_
       break;
     }
     _hardware.LoopTurn(DESTINATION_COPY_LOOP,
-                       {static_cast<std::uint16_t>(bytes - copied), _state.OffsetOf(from[copied]), _state.OffsetOf(to[copied])});
+                       {static_cast<std::uint16_t>(bytes - copied), _state.PlaceOf(from[copied]), _state.PlaceOf(to[copied])});
   }
   _state.Data().commander.marketQuantitiesSet = 0;
   CommanderState& commander = _state.Data().commander;
@@ -332,31 +335,18 @@ void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_
   PostArrival(_state);
 }
 
-void ResetHyperspaceRings(GameState& _state, bool _backward)
+void ResetHyperspaceRings(GameState& _state)
 {
-  // REP MOVSW within the data segment, a word at a time, SI and DI from the tables' starts: going up, hyperspaceRingStart's
-  // bytes into hyperspaceRings, each counted when it changes.
+  // REP MOVSW within the data segment, a word at a time, SI and DI from the tables' starts: hyperspaceRingStart's bytes into
+  // hyperspaceRings, each counted when it changes, upwards, as the direction flag is clear wherever the game calls it: the only STD,
+  // MaskOutsideTunnel's, has its CLD before the routine returns (change 3c).
   static_assert(sizeof(HyperspaceState::hyperspaceRings) == std::size_t{HYPERSPACE_RING_WORDS} * 2);
-  if (!_backward)
+  for (std::size_t ring = 0; ring < HYPERSPACE_RING_START.size(); ++ring)
   {
-    for (std::size_t ring = 0; ring < HYPERSPACE_RING_START.size(); ++ring)
+    for (std::size_t byte = 0; byte < HYPERSPACE_RING_START[ring].size(); ++byte)
     {
-      for (std::size_t byte = 0; byte < HYPERSPACE_RING_START[ring].size(); ++byte)
-      {
-        _state.Data().hyperspace.hyperspaceRings[ring][byte] = HYPERSPACE_RING_START[ring][byte];
-      }
+      _state.Data().hyperspace.hyperspaceRings[ring][byte] = HYPERSPACE_RING_START[ring][byte];
     }
-    return;
-  }
-  // Going down from each start, past both tables' first words into what the original's data segment holds before them: still
-  // by the original's addresses, as change 3c of D38 takes the direction flag.
-  std::uint16_t from = OriginalOffset("hyperspaceRingStart");
-  std::uint16_t to = _state.OffsetOf(_state.Data().hyperspace.hyperspaceRings);
-  for (std::uint16_t word = 0; word < HYPERSPACE_RING_WORDS; ++word)
-  {
-    _state.SetWord(to, _state.Word(from));
-    from = Offset(from, 0xFFFE);
-    to = Offset(to, 0xFFFE);
   }
 }
 
@@ -456,8 +446,9 @@ void LatchHyperspaceTarget(GameState& _state)
   _state.Data().commander.hyperspaceTargetIndex = std::uint8_t{_state.Data().commander.selectedSystemIndex};
   // LOOP: a count of 0 copies 65536 bytes.
   const std::uint32_t bytes = LoopCount(SYSTEM_RECORD_BYTES);
-  const std::span<const Counted<std::uint8_t>> from = _state.BytesFrom(_state.Data().commander.selectedSystemName, bytes);
-  const std::span<Counted<std::uint8_t>> to = _state.BytesFrom(_state.Data().hyperspace.hyperspaceTargetRecord, bytes);
+  const std::span<const Counted<std::uint8_t>> from =
+    BytesWithin(BytesOf(std::as_const(_state).Data().commander), COMMANDER_STATE_OFFSET(selectedSystemName), bytes);
+  const std::span<Counted<std::uint8_t>> to = BytesWithin(BytesOf(_state.Data().hyperspace.hyperspaceTargetRecord), 0, bytes);
   for (std::uint32_t copied = 0; copied < bytes; ++copied)
   {
     to[copied] = std::uint8_t{from[copied]};

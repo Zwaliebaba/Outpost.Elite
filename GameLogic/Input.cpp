@@ -4,6 +4,7 @@
 
 #include "Arithmetic.h"
 #include "Maths.h"
+#include "Text.h"
 #include "Video.h"
 
 namespace Elite
@@ -63,7 +64,7 @@ constexpr std::size_t KEY_DOWN_WORDS = 0x40;
 // keyDown's 128 bytes, a byte a scan code: 1 while its key is held.
 [[nodiscard]] std::span<Counted<std::uint8_t>> KeyDown(GameState& _state)
 {
-  return _state.BytesFrom(_state.Data().keyboard.keyDown, KEY_DOWN_WORDS * 2);
+  return BytesOf(_state.Data().keyboard.keyDown);
 }
 
 constexpr std::uint8_t KEYBOARD_DEVICE = 0;

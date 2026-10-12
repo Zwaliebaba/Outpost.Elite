@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "GameState.h"
+#include "Text.h"
 #include "TwinRig.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -53,7 +54,7 @@ public:
     for (std::uint16_t index = 3; index < 20; ++index)
     {
       Elite::SpaceObject& ship = state.Slot(static_cast<Elite::SlotIndex>(index));
-      const std::span<Elite::Counted<std::uint8_t>> bytes = state.BytesFrom(ship, Elite::SpaceObject::BYTES);
+      const std::span<Elite::Counted<std::uint8_t>> bytes = Elite::BytesOf(ship);
       ship.type = 0x85; // a Sidewinder, active
       for (std::size_t offset = 1; offset < bytes.size(); ++offset)
         bytes[offset] = 0;

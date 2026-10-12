@@ -93,7 +93,7 @@ struct ReclaimedSlot
 void AddToCoordinate(SpaceObject& _slot, int _axis, std::int16_t _value);
 
 /// ClearObjectSlot (CS:2FD8): the 64 bytes of _slot zeroed, byte by byte.
-void ClearObjectSlot(GameState& _state, SpaceObject& _slot);
+void ClearObjectSlot(SpaceObject& _slot);
 
 /// IsObjectNear (CS:3B9A): whether each 24-bit coordinate of _slot fits a signed word; when one does not, EraseScannerBlip.
 NearTest IsObjectNear(GameState& _state, SpaceObject& _slot);
@@ -196,17 +196,16 @@ void FacePlayer(GameState& _state, SpaceObject& _slot);
 /// slots 4-19 at random, removed (RemoveObject) to make room.
 ReclaimedSlot ReclaimShipSlot(GameState& _state);
 
-/// ClearAllObjects (CS:52B2): shipSlotCount slots from shipSlots zeroed, a word at a time as REP STOSW does, backwards when
-/// _backward (the direction flag) is set, down from the first slot by the original's addresses.
-void ClearAllObjects(GameState& _state, bool _backward);
+/// ClearAllObjects (CS:52B2): shipSlotCount slots from shipSlots zeroed, a word at a time as REP STOSW does, upwards: the direction flag is
+/// clear wherever the game calls it (change 3c).
+void ClearAllObjects(GameState& _state);
 
 /// FindDebrisSlot (CS:52EC): the first inactive debris slot, or, when every one is active, the oldest, the last of equals.
 [[nodiscard]] SlotIndex FindDebrisSlot(GameState& _state);
 
-/// CopyObject (CS:5320): _source's 64 bytes copied over _destination's a word at a time as REP MOVSW does, backwards when
-/// _backward (the direction flag) is set, down from both first words by the original's addresses. The two are slots, or, copied
-/// backwards, the source a record like one at DI (LaunchPlayerMissile).
-void CopyObject(GameState& _state, const SpaceObject& _source, SpaceObject& _destination, bool _backward);
+/// CopyObject (CS:5320): _source's 64 bytes copied over _destination's a word at a time as REP MOVSW does, upwards: the direction flag is
+/// clear wherever the game calls it (change 3c).
+void CopyObject(const SpaceObject& _source, SpaceObject& _destination);
 
 /// UpdateDebrisAi (CS:5330): a fragment's frame: its lifetime counted down, and at 0 its active bit cleared; otherwise its age
 /// counted up, its spin bytes, sign-extended, added to its roll and then its pitch, and MoveObject. Returns what MoveObject

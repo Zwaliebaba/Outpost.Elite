@@ -208,10 +208,10 @@ void UpdateSafeZone(GameState& _state);
 /// and the pitch, through rotationSinCos[8], [7] and [6], which it sets.
 [[nodiscard]] Vector ComputeDeathDebrisVector(GameState& _state);
 
-/// CheckCollisions (CS:2BC5): the player against each active one of objectSlotCount slots from shipSlots: inside its type's
-/// collisionRanges box, a ship's damage, or the station's docking, scrape or crash, the impact sound's STI on each. Returns where
-/// its look at the slots stopped, past the last, which the original leaves in DI.
-std::uint16_t CheckCollisions(GameState& _state, Hardware& _hardware);
+/// CheckCollisions (CS:2BC5): the player against each active one of objectSlotCount slots from shipSlots: inside its type's collisionRanges
+/// box, a ship's damage, or the station's docking, scrape or crash, the impact sound's STI on each. Returns where its look at the slots
+/// stopped, past the last, whose slot the original leaves in DI.
+SlotIndex CheckCollisions(GameState& _state, Hardware& _hardware);
 
 /// UpdateWarnings (CS:36B6): unless the game is over, the current warning posted again while warningFrames lasts, else the
 /// four warning checks from the one after the last warning.
@@ -310,14 +310,14 @@ struct FlightKeysExit
   bool backward; ///< the direction flag, as the function keys' screens leave it
 };
 
-/// ProcessFlightKeys (CS:7FA8): the flight controls other than steering, unless the game is over or the escape pod flies: the
-/// function keys' screens and views (HandleFlightFunctionKeys, then ChangeView); G arms the galactic drive; H starts the hyperspace
-/// countdown, which ends it; D toggles the docking computer; J the jump drive; Esc pauses (RunPauseScreen), or with Ctrl freezes
-/// until a key; T, U and M the missile; fire; E the ECM; B the energy bomb; C the escape pod; I identifies; N the masking device;
-/// L the anti-ECM emulator. _countIfNone, _segment and _backward are BP, ES and the direction flag it is called with, which
-/// HandleFlightFunctionKeys takes; _di is DI, from which M's launch copies the missile (LaunchPlayerMissile) unless a routine
-/// before it moves DI. Waits for keys on the screens', the pause's and the freeze's paths (ADR-015).
-FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, std::uint16_t _di, std::uint16_t _countIfNone,
+/// ProcessFlightKeys (CS:7FA8): the flight controls other than steering, unless the game is over or the escape pod flies: the function
+/// keys' screens and views (HandleFlightFunctionKeys, then ChangeView); G arms the galactic drive; H starts the hyperspace countdown, which
+/// ends it; D toggles the docking computer; J the jump drive; Esc pauses (RunPauseScreen), or with Ctrl freezes until a key; T, U and M the
+/// missile; fire; E the ECM; B the energy bomb; C the escape pod; I identifies; N the masking device; L the anti-ECM emulator.
+/// _countIfNone, _segment and _backward are BP, ES and the direction flag it is called with, which HandleFlightFunctionKeys takes; _diSlot
+/// is the slot DI is on, from which M's launch copies the missile (LaunchPlayerMissile) unless a routine before it moves DI. Waits for keys
+/// on the screens', the pause's and the freeze's paths (ADR-015).
+FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, SlotIndex _diSlot, std::uint16_t _countIfNone,
                                  std::uint16_t _segment, bool _backward);
 
 /// RunPauseScreen (CS:8D6A): the speaker silenced (SilenceSpeakerTimer), then the pause menu drawn and its options presented until

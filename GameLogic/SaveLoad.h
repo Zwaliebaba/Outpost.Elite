@@ -49,8 +49,8 @@ void ShowDiskError(GameState& _state);
 /// columns of ten.
 void PrintCommanderCatalogue(GameState& _state);
 
-/// SaveStartupCommander (CS:4660): commanderFileBytes of commanderBlock copied to startupCommander, a byte at a time,
-/// going up, or down from each start when _backward (REP MOVSB with the direction flag set).
-void SaveStartupCommander(GameState& _state, bool _backward);
+/// SaveStartupCommander (CS:4660): commanderFileBytes of commanderBlock copied to startupCommander, a byte at a time, going up as REP MOVSB
+/// does: the direction flag is clear wherever the game calls it (change 3c).
+void SaveStartupCommander(GameState& _state);
 
 } // namespace Elite

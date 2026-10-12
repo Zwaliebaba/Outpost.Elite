@@ -1,5 +1,6 @@
 #include "pch.h"
 
+#include "Text.h"
 #include "TwinRig.h"
 
 #include <initializer_list>
@@ -58,7 +59,8 @@ void SteerTheChartWithTheStick(TwinRig& _rig)
   const auto cursor = [&]()
   {
     std::uint16_t position = 0;
-    _rig.Both([&](Elite::Platform&, Elite::GameState& _state) { position = _state.WordOf(_state.Data().commander.chartCursorX); });
+    _rig.Both([&](Elite::Platform&, Elite::GameState& _state)
+              { position = Elite::WordIn(Elite::BytesOf(_state.Data().commander), COMMANDER_STATE_OFFSET(chartCursorX)); });
     return position;
   };
   attach(50'000, 50'000);

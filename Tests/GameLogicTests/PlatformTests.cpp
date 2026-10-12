@@ -28,9 +28,6 @@ constexpr Elite::Cycles FIRST_TICK = 65536 * Elite::CYCLES_PER_PIT_TICK; // 262,
 // A loop's address, for its turn signature (ADR-015).
 constexpr std::uint16_t WAIT_LOOP = 0x0100;
 
-// Where a test puts a string in the data segment.
-constexpr std::uint16_t TEXT = 0x0200;
-
 // A handler's address in the program's code, which a vector can name and a native routine stand in for.
 constexpr Elite::FarAddress HANDLER{0x2000, 0x0010};
 
@@ -56,15 +53,6 @@ void WaitForTick(PlatformRig& _rig)
   while (_rig.Host().BiosServices().Ticks() == ticks)
   {
     _rig.Native().LoopTurn(WAIT_LOOP, {static_cast<std::uint16_t>(ticks & 0xFFFF)});
-  }
-}
-
-// _text in the data segment at _offset.
-void Put(Elite::GameState& _state, std::uint16_t _offset, std::string_view _text)
-{
-  for (std::size_t index = 0; index < _text.size(); ++index)
-  {
-    _state.SetByte(static_cast<std::uint16_t>(_offset + index), static_cast<std::uint8_t>(_text[index]));
   }
 }
 
@@ -437,8 +425,7 @@ public:
   TEST_METHOD(PrintStringWritesAtTheCursorThroughTheBios)
   {
     PlatformRig rig("PlatformPrint");
-    Put(rig.State(), TEXT, "ABC$");
-    rig.Host().PrintDosString(rig.State().DataSegment(), TEXT);
+    rig.Native().PrintDosString("ABC$");
 
     const Elite::GameState& state = rig.State();
     Assert::AreEqual(std::uint32_t{'A'}, std::uint32_t{state.VideoByte(0)});

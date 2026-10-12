@@ -130,7 +130,7 @@ constexpr std::uint8_t MINERALS_FROM = 0x28;
 // screenPrices: row r's price at 4r, and its resale price after it.
 [[nodiscard]] std::span<Counted<std::uint8_t>> ScreenPrices(GameState& _state)
 {
-  return _state.BytesFrom(_state.Data().menus.screenPrices, sizeof(MenusState::ScreenPrices));
+  return BytesOf(_state.Data().menus.screenPrices);
 }
 
 // The index in screenPrices of row _row's price.
@@ -142,7 +142,7 @@ constexpr std::uint8_t MINERALS_FROM = 0x28;
 // Row _row's fitted count in the commander's block, from 1, fuel's.
 [[nodiscard]] Counted<std::uint8_t>& Fitted(GameState& _state, std::uint8_t _row)
 {
-  return _state.BytesFrom(_state.Data().commander.fuel, FITTED_ROWS)[std::size_t{_row} - 1];
+  return BytesWithin(BytesOf(_state.Data().commander), COMMANDER_STATE_OFFSET(fuel), FITTED_ROWS)[std::size_t{_row} - 1];
 }
 
 // The text in _table, a table of the reference's bytes, from its byte _at up to its NUL.
@@ -566,7 +566,7 @@ void LaunchEscapePod(GameState& _state)
   _state.Data().playerShip.escapePodFrames = ESCAPE_POD_FRAMES;
   const SlotSearch free = FindFreeShipSlot(_state);
   SpaceObject& pod = _state.Slot(free.found ? free.slot : ReclaimShipSlot(_state).slot);
-  ClearObjectSlot(_state, pod);
+  ClearObjectSlot(pod);
   InitAbandonedCobra(pod);
   _state.Data().playerShip.playerPitchAngle = static_cast<std::uint16_t>(_state.Data().playerShip.playerPitchAngle + HALF_TURN);
   _state.Data().playerShip.viewAngle = HALF_TURN;
@@ -580,7 +580,7 @@ void LaunchEscapePod(GameState& _state)
     MoveObjectsByVelocity(_state);
   }
   // MOV [DI],CH, which is 0 throughout: the 17 amounts held emptied.
-  const std::span<Counted<std::uint8_t>> hold = _state.BytesFrom(_state.Data().commander.cargoHold, sizeof(CommanderState::CargoHold));
+  const std::span<Counted<std::uint8_t>> hold = BytesOf(_state.Data().commander.cargoHold);
   for (std::uint16_t kind = 0; kind < CARGO_KINDS; ++kind)
   {
     hold[std::size_t{kind} * 2] = 0;
@@ -623,12 +623,13 @@ void TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
       {
         product = PRODUCT_FURS;
       }
-      IncrementByte(_state.BytesFrom(_state.Data().commander.cargoHold, sizeof(CommanderState::CargoHold))[std::size_t{product} * 2]);
+      IncrementByte(BytesOf(_state.Data().commander.cargoHold)[std::size_t{product} * 2]);
       _state.Data().commander.cargoHold.cargoUsedTonnes = static_cast<std::uint8_t>(_state.Data().commander.cargoHold.cargoUsedTonnes + 1);
       // The product's name, its first 13 bytes, over the message's.
       const std::span<const Counted<std::uint8_t>> name = std::span<const Counted<std::uint8_t>>(_state.Data().docked.productNames)
                                                             .subspan(std::size_t{product} * PRODUCT_NAME_BYTES, SCOOPED_NAME_BYTES);
-      const std::span<Counted<std::uint8_t>> scooped = _state.BytesFrom(_state.Data().equipment.scoopedCargoText, SCOOPED_NAME_BYTES);
+      const std::span<Counted<std::uint8_t>> scooped =
+        BytesWithin(BytesOf(_state.Data().equipment.scoopedCargoText), 0, SCOOPED_NAME_BYTES);
       for (std::size_t letter = 0; letter < SCOOPED_NAME_BYTES; ++letter)
       {
         scooped[letter] = std::uint8_t{name[letter]};
@@ -690,7 +691,7 @@ ScreenKey ShowEquipShipScreen(GameState& _state, Hardware& _hardware, bool _back
   _state.Data().menus.menuRowCount = 0;
   std::uint16_t cell = FIRST_ITEM_OFFSET;
   const std::span<Counted<std::uint8_t>> prices = ScreenPrices(_state);
-  const std::span<Counted<std::uint8_t>> priceText = _state.BytesFrom(_state.Data().menus.priceText, sizeof(MenusState::PriceText));
+  const std::span<Counted<std::uint8_t>> priceText = BytesOf(_state.Data().menus.priceText);
   while (list[item] < techLimit)
   {
     const auto row = static_cast<std::uint8_t>(_state.Data().menus.menuRowCount + 1);
@@ -894,7 +895,7 @@ void ShowEquipmentSellPrice(GameState& _state)
   const std::uint16_t resale = ComputeResalePrice(_state);
   SetWordIn(ScreenPrices(_state), slot + 2, resale);
   FormatTenths(_state, resale);
-  PrintEquipmentSellColumn(_state, _state.TextAt(_state.Data().menus.priceText));
+  PrintEquipmentSellColumn(_state, TextWithin(BytesOf(_state.Data().menus.priceText), 0));
 }
 
 std::uint16_t MenuFirstRowCell(const GameState& _state) noexcept

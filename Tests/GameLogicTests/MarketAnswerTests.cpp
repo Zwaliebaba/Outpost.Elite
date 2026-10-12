@@ -42,8 +42,7 @@ constexpr std::array<std::array<std::uint16_t, 3>, 3> EDGE_RANDOM_STATES = {
   _state.Data().commander.currentTechLevel = _techLevel;
   Elite::ComputeMarketPrices(_state);
   std::string line = std::format("prices {} {} {}", _economy, _government, _techLevel);
-  const std::span<const Elite::Counted<std::uint8_t>> prices =
-    _state.BytesFrom(_state.Data().menus.screenPrices, sizeof(Elite::MenusState::ScreenPrices));
+  const std::span<const Elite::Counted<std::uint8_t>> prices = Elite::BytesOf(_state.Data().menus.screenPrices);
   for (std::size_t commodity = 0; commodity < COMMODITIES; ++commodity)
   {
     const std::size_t at = commodity * PRICE_ENTRY_BYTES;

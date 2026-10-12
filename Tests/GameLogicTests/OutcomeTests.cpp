@@ -3,6 +3,7 @@
 #include "SpaceObject.h"
 #include "Outcome.h"
 #include "ReferenceRig.h"
+#include "Text.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
@@ -57,12 +58,11 @@ public:
   {
     ReferenceRig rig("OutcomeFields");
     Elite::GameState& state = rig.State();
-    state.SetWordOf(state.Data().commander.creditsTenths, 0x2345);
+    Elite::SetWordIn(Elite::BytesOf(state.Data().commander.creditsTenths), 0, 0x2345);
     state.Data().commander.creditsTenths.data75F5 = 0x0001;
     Assert::AreEqual("74565", Value(state, "creditsTenths").c_str(), false, L"10000h + 2345h tenths");
 
-    const std::span<Elite::Counted<std::uint8_t>> hold =
-      state.BytesFrom(state.Data().commander.cargoHold, sizeof(Elite::CommanderState::CargoHold));
+    const std::span<Elite::Counted<std::uint8_t>> hold = Elite::BytesOf(state.Data().commander.cargoHold);
     for (std::size_t commodity = 0; commodity < 17; ++commodity)
       hold[commodity * HOLD_ENTRY_BYTES] = static_cast<std::uint8_t>(commodity);
     hold[2 * HOLD_ENTRY_BYTES + 1] = 99; // on sale, not held

@@ -7,6 +7,7 @@
 #include "Combat.h"
 #include "Maths.h"
 #include "Ships.h"
+#include "Text.h"
 
 #include <span>
 #include <utility>
@@ -21,7 +22,6 @@ constexpr std::uint8_t FLAG_HOSTILE = 0x01;
 constexpr std::uint8_t FLAG_BLIP_DRAWN = 0x02;
 constexpr std::uint8_t FLAG_DEVICE = 0x20;
 
-constexpr std::uint16_t CLASS_COUNTS_CLEARED = 9; // activeObjectCount and the eight behaviorClassCounts
 // The behaviour classes, behaviorHandlers' indexes.
 constexpr std::uint8_t INERT_CLASS = 0;
 constexpr std::uint8_t STATION_CLASS = 1;
@@ -334,10 +334,10 @@ struct OffenderLaunch
   std::optional<Velocity> launched; // when a copy of the station went into a free slot, what ComputeVelocity gave it
 };
 
-// From 55A9: the station at _station, near, launches a police Viper, a shuttle or a trader at an offender out of the box it
-// guards: a copy of itself (CopyObject, backwards when _backward) in a free slot, out along z, turned round, its roll reversed,
-// and its velocity set. PUSH DI and POP DI keep the station.
-OffenderLaunch LaunchAtOffender(GameState& _state, SpaceObject& _station, bool _backward)
+// From 55A9: the station at _station, near, launches a police Viper, a shuttle or a trader at an offender out of the box it guards: a copy
+// of itself (CopyObject) in a free slot, out along z, turned round, its roll reversed, and its velocity set. PUSH DI and POP DI keep the
+// station.
+OffenderLaunch LaunchAtOffender(GameState& _state, SpaceObject& _station)
 {
   OffenderLaunch launch{IsObjectNear(_state, _station), std::nullopt};
   if (!launch.near.nearby || ObjectWithinBox(_station, STATION_GUARD_BOX))
@@ -355,7 +355,7 @@ OffenderLaunch LaunchAtOffender(GameState& _state, SpaceObject& _station, bool _
     return launch;
   }
   SpaceObject& ship = _state.Slot(free.slot);
-  CopyObject(_state, _station, ship, _backward);
+  CopyObject(_station, ship);
   const std::uint16_t pick = NextRandom(_state);
   if (pick >= POLICE_FROM)
   {
@@ -434,13 +434,13 @@ std::optional<DashboardPixel> CheckMissilesAtStation(GameState& _state, const Sp
 // what DL holds there, for its low byte; then a pass is counted off. After the last it rests, calmed (aggression 9) and no
 // longer hostile, and a Thargon drifts (state 0Ah); so does one whose mother is gone or is no Thargoid with a blip. Returns what
 // MoveObject did.
-MovedObject WolfTurnAway(GameState& _state, SpaceObject& _slot, std::uint8_t _rangeLow, bool _backward)
+MovedObject WolfTurnAway(GameState& _state, SpaceObject& _slot, std::uint8_t _rangeLow)
 {
   if (WithinRange(_slot, _rangeLow))
   {
     (void)TurnToVector(_state, _slot, GetObjectPosition(_slot));
     (void)ComputeVelocity(_state, _slot);
-    TryLaunchThargon(_state, _slot, _backward);
+    TryLaunchThargon(_state, _slot);
     return MoveObject(_state, _slot);
   }
   const auto passes = static_cast<std::uint8_t>(_slot.passes - 1);
@@ -508,7 +508,7 @@ MovedObject WolfTurnAway(GameState& _state, SpaceObject& _slot, std::uint8_t _ra
 
 // UpdateHunterAi's state 3 (5987): evading with random jinks, and a missile at odds of 5DCh in 65536, until beyond its range,
 // whose box takes _rangeLow, what DL holds there, for its low byte. Returns what MoveObject did.
-MovedObject HunterEvade(GameState& _state, SpaceObject& _slot, std::uint8_t _rangeLow, bool _backward)
+MovedObject HunterEvade(GameState& _state, SpaceObject& _slot, std::uint8_t _rangeLow)
 {
   if (!WithinRange(_slot, _rangeLow))
   {
@@ -516,7 +516,7 @@ MovedObject HunterEvade(GameState& _state, SpaceObject& _slot, std::uint8_t _ran
     return MoveObject(_state, _slot);
   }
   (void)TurnTowardAngles(_slot, JinkAway(_state, _slot));
-  TryLaunchMissileAtPlayer(_state, _slot, HUNTER_MISSILE_ODDS, _backward);
+  TryLaunchMissileAtPlayer(_state, _slot, HUNTER_MISSILE_ODDS);
   (void)ComputeVelocity(_state, _slot);
   return MoveObject(_state, _slot);
 }
@@ -574,7 +574,7 @@ MovedObject TraderDecide(GameState& _state, SpaceObject& _slot)
 
 // UpdateTraderOrPoliceAi's state 2 (56FC): at the player, firing, the police with missiles against an offender, until within
 // 320h on every axis, or, for any but the police, until its energy is below 8. Returns what MoveObject did.
-MovedObject TraderAttack(GameState& _state, SpaceObject& _slot, bool _backward)
+MovedObject TraderAttack(GameState& _state, SpaceObject& _slot)
 {
   if (!IsPoliceViper(_slot) && _slot.energy < TRADER_FLEE_ENERGY)
   {
@@ -591,7 +591,7 @@ MovedObject TraderAttack(GameState& _state, SpaceObject& _slot, bool _backward)
   const std::uint8_t status = _state.Data().commander.legalStatus;
   if (IsPoliceViper(_slot) && status != 0)
   {
-    TryLaunchMissileAtPlayer(_state, _slot, status >= FUGITIVE_FOR_POLICE ? FUGITIVE_MISSILE_ODDS : POLICE_MISSILE_ODDS, _backward);
+    TryLaunchMissileAtPlayer(_state, _slot, status >= FUGITIVE_FOR_POLICE ? FUGITIVE_MISSILE_ODDS : POLICE_MISSILE_ODDS);
   }
   (void)ComputeVelocity(_state, _slot);
   return MoveObject(_state, _slot);
@@ -599,11 +599,11 @@ MovedObject TraderAttack(GameState& _state, SpaceObject& _slot, bool _backward)
 
 // UpdateTraderOrPoliceAi's state 3 (5750): fleeing from the player with random jinks, a missile when nearly dead, and now and
 // then an ECM. Returns what MoveObject did.
-MovedObject TraderFlee(GameState& _state, SpaceObject& _slot, bool _backward)
+MovedObject TraderFlee(GameState& _state, SpaceObject& _slot)
 {
   if (_slot.energy < DESPERATE_ENERGY)
   {
-    TryLaunchMissileAtPlayer(_state, _slot, DESPERATE_MISSILE_ODDS, _backward);
+    TryLaunchMissileAtPlayer(_state, _slot, DESPERATE_MISSILE_ODDS);
   }
   (void)TurnTowardAngles(_slot, JinkAway(_state, _slot));
   (void)ComputeVelocity(_state, _slot);
@@ -633,30 +633,28 @@ MovedObject TraderBreakOff(GameState& _state, SpaceObject& _slot, std::uint8_t _
   return MoveObject(_state, _slot);
 }
 
-// CALL [BX+behaviorHandlers] (4A41): the handler of class _behavior for _slot, which may take DL of _dx, the DX the last handler
-// or the caller left, for its range's box (VectorWithinBox after MOV DH,[DI+1Ch] at 57BC, 5873 and 5987), and the direction flag
-// a launch's copy runs by, _backward. BX holds the class doubled, which UpdateMissileAi's explosion would save in the divide
-// trap. Returns what the handler leaves in DX. The table's eight words, which nothing writes, name these eight handlers; a class
-// of 8 or more, which no template gives, would run data as code, and runs nothing.
-std::uint16_t RunBehaviorHandler(GameState& _state, Hardware& _hardware, SpaceObject& _slot, std::uint8_t _behavior, bool _backward,
-                                 std::uint16_t _dx)
+// CALL [BX+behaviorHandlers] (4A41): the handler of class _behavior for _slot, which may take DL of _dx, the DX the last handler or the
+// caller left, for its range's box (VectorWithinBox after MOV DH,[DI+1Ch] at 57BC, 5873 and 5987). BX holds the class doubled, which
+// UpdateMissileAi's explosion would save in the divide trap. Returns what the handler leaves in DX. The table's eight words, which nothing
+// writes, name these eight handlers; a class of 8 or more, which no template gives, would run data as code, and runs nothing.
+std::uint16_t RunBehaviorHandler(GameState& _state, Hardware& _hardware, SpaceObject& _slot, std::uint8_t _behavior, std::uint16_t _dx)
 {
   switch (_behavior)
   {
   case INERT_CLASS:
     return _dx;
   case STATION_CLASS:
-    return UpdateStationAi(_state, _slot, _backward, _dx);
+    return UpdateStationAi(_state, _slot, _dx);
   case MISSILE_CLASS:
-    return UpdateMissileAi(_state, _hardware, _slot, _backward, static_cast<std::uint16_t>(_behavior << 1), _dx).dx;
+    return UpdateMissileAi(_state, _hardware, _slot, static_cast<std::uint16_t>(_behavior << 1), _dx).dx;
   case DRIFTING_CLASS:
     return UpdateDriftingObjectAi(_state, _slot).dx;
   case TRADER_CLASS:
-    return UpdateTraderOrPoliceAi(_state, _slot, Low(_dx), _backward).dx;
+    return UpdateTraderOrPoliceAi(_state, _slot, Low(_dx)).dx;
   case WOLF_CLASS:
-    return UpdateWolfAi(_state, _slot, Low(_dx), _backward).dx;
+    return UpdateWolfAi(_state, _slot, Low(_dx)).dx;
   case HUNTER_CLASS:
-    return UpdateHunterAi(_state, _slot, Low(_dx), _backward).dx;
+    return UpdateHunterAi(_state, _slot, Low(_dx)).dx;
   case DEBRIS_CLASS:
   {
     // A fragment that has run out of lifetime is only cleared, and leaves DX alone.
@@ -671,33 +669,20 @@ std::uint16_t RunBehaviorHandler(GameState& _state, Hardware& _hardware, SpaceOb
 // behaviorClassCounts' eight bytes, a count for each behaviour class.
 [[nodiscard]] std::span<Counted<std::uint8_t>> ClassCounts(GameState& _state)
 {
-  return _state.BytesFrom(_state.Data().ai.behaviorClassCounts, sizeof(AiState::BehaviorClassCounts));
+  return BytesOf(_state.Data().ai.behaviorClassCounts);
 }
 
 } // namespace
 
-void UpdateObjectsAndSpawn(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _dx)
+void UpdateObjectsAndSpawn(GameState& _state, Hardware& _hardware, std::uint16_t _dx)
 {
-  // PUSH DS / POP ES / MOV DI,activeObjectCount / XOR AL,AL / MOV CX,9 / REP STOSB: activeObjectCount and the eight
-  // behaviorClassCounts cleared, a byte at a time.
-  if (!_backward)
+  // PUSH DS / POP ES / MOV DI,activeObjectCount / XOR AL,AL / MOV CX,9 / REP STOSB: activeObjectCount and the eight behaviorClassCounts
+  // cleared, a byte at a time, upwards, as the direction flag is clear wherever the game calls it: the only STD, MaskOutsideTunnel's, has
+  // its CLD before the routine returns (change 3c).
+  _state.Data().ai.activeObjectCount = 0;
+  for (Counted<std::uint8_t>& classCount : ClassCounts(_state))
   {
-    _state.Data().ai.activeObjectCount = 0;
-    for (Counted<std::uint8_t>& classCount : ClassCounts(_state))
-    {
-      classCount = 0;
-    }
-  }
-  else
-  {
-    // Backwards when the direction flag is set: from activeObjectCount down into what the original's data segment holds before
-    // it, still by the original's addresses, as change 3c of D38 takes the direction flag.
-    std::uint16_t count = _state.OffsetOf(_state.Data().ai.activeObjectCount);
-    for (std::uint16_t bytes = CLASS_COUNTS_CLEARED; bytes != 0; --bytes)
-    {
-      _state.SetByte(count, 0);
-      count = static_cast<std::uint16_t>(count - 1);
-    }
+    classCount = 0;
   }
   // Every slot of shipSlotCount, by LOOP: an active one counted, but for debris, and in its class's count, and its class's handler
   // run, CX and DI pushed round it. DX goes on from one handler to the next.
@@ -717,7 +702,7 @@ void UpdateObjectsAndSpawn(GameState& _state, Hardware& _hardware, bool _backwar
       // slot's is a template's, one of the eight, or copied from another slot's.
       Counted<std::uint8_t>& classCount = ClassCounts(_state)[behavior];
       classCount = static_cast<std::uint8_t>(classCount + 1);
-      dx = RunBehaviorHandler(_state, _hardware, object, behavior, _backward, dx);
+      dx = RunBehaviorHandler(_state, _hardware, object, behavior, dx);
     }
     slot = SlotAfter(slot);
   }
@@ -772,8 +757,8 @@ SlotSearch IsMaskShipPresent(GameState& _state)
 void PlaceEscortNear(GameState& _state, SpaceObject& _escort, const SpaceObject& _leader)
 {
   // The leader's first 16 bytes, byte by byte: its type too.
-  const std::span<Counted<std::uint8_t>> escort = _state.BytesFrom(_escort, ESCORT_BYTES_COPIED);
-  const std::span<Counted<std::uint8_t>> leader = _state.BytesFrom(_leader, ESCORT_BYTES_COPIED);
+  const std::span<Counted<std::uint8_t>> escort = BytesWithin(BytesOf(_escort), 0, ESCORT_BYTES_COPIED);
+  const std::span<const Counted<std::uint8_t>> leader = BytesWithin(BytesOf(_leader), 0, ESCORT_BYTES_COPIED);
   for (std::size_t index = 0; index < ESCORT_BYTES_COPIED; ++index)
   {
     escort[index] = std::uint8_t{leader[index]};
@@ -833,7 +818,7 @@ VectorToObject GetVectorToObject(const SpaceObject& _slot, const SpaceObject& _o
   return VectorToObject{vector, VectorWithinBox(vector, static_cast<std::uint16_t>(_halfSize >> 2))};
 }
 
-std::uint16_t UpdateStationAi(GameState& _state, SpaceObject& _station, bool _backward, std::uint16_t _dx)
+std::uint16_t UpdateStationAi(GameState& _state, SpaceObject& _station, std::uint16_t _dx)
 {
   _station.roll = Offset(_station.roll, STATION_SPIN);
   std::uint16_t dx = _dx;
@@ -841,7 +826,7 @@ std::uint16_t UpdateStationAi(GameState& _state, SpaceObject& _station, bool _ba
   {
     // DX: the last pixel of the blip IsObjectNear erased, or MOV DX,1C2h, the guarded box, once it is near; then what
     // ComputeVelocity leaves once it launched.
-    const OffenderLaunch launch = LaunchAtOffender(_state, _station, _backward);
+    const OffenderLaunch launch = LaunchAtOffender(_state, _station);
     if (launch.near.erasedBlip)
     {
       dx = PixelPlace(*launch.near.erasedBlip);
@@ -881,7 +866,7 @@ MovedObject UpdateDriftingObjectAi(GameState& _state, SpaceObject& _slot)
   return moved;
 }
 
-MovedObject UpdateTraderOrPoliceAi(GameState& _state, SpaceObject& _slot, std::uint8_t _rangeLow, bool _backward)
+MovedObject UpdateTraderOrPoliceAi(GameState& _state, SpaceObject& _slot, std::uint8_t _rangeLow)
 {
   if (IsDebrisType(_slot))
   {
@@ -898,15 +883,15 @@ MovedObject UpdateTraderOrPoliceAi(GameState& _state, SpaceObject& _slot, std::u
   case TRADER_DECIDING:
     return TraderDecide(_state, _slot);
   case TRADER_ATTACKING:
-    return TraderAttack(_state, _slot, _backward);
+    return TraderAttack(_state, _slot);
   case TRADER_FLEEING:
-    return TraderFlee(_state, _slot, _backward);
+    return TraderFlee(_state, _slot);
   default:
     return TraderBreakOff(_state, _slot, _rangeLow);
   }
 }
 
-MovedObject UpdateWolfAi(GameState& _state, SpaceObject& _slot, std::uint8_t _rangeLow, bool _backward)
+MovedObject UpdateWolfAi(GameState& _state, SpaceObject& _slot, std::uint8_t _rangeLow)
 {
   // A Thargoid sets off its ECM at odds of 100 in 65536; a Thargoid or a Thargon spins.
   bool spins = IsThargoidType(_slot);
@@ -947,15 +932,15 @@ MovedObject UpdateWolfAi(GameState& _state, SpaceObject& _slot, std::uint8_t _ra
     }
     const Turn turn = TurnToVector(_state, _slot, GetVectorToPlayer(_slot));
     TryFireLaserAtPlayer(_state, _slot, turn.pitch.errorMagnitude, turn.yaw.errorMagnitude);
-    TryLaunchMissileAtPlayer(_state, _slot, WOLF_MISSILE_ODDS, _backward);
-    TryLaunchThargon(_state, _slot, _backward);
+    TryLaunchMissileAtPlayer(_state, _slot, WOLF_MISSILE_ODDS);
+    TryLaunchThargon(_state, _slot);
     (void)ComputeVelocity(_state, _slot);
     const MovedObject moved = MoveObject(_state, _slot);
     _slot.roll = Offset(_slot.roll, ATTACK_RUN_SPIN);
     return moved;
   }
   case STATE_TURN_AWAY:
-    return WolfTurnAway(_state, _slot, _rangeLow, _backward);
+    return WolfTurnAway(_state, _slot, _rangeLow);
   default:
     // A Thargon adrift slows down to 10.
     if (_slot.speed >= SLOWEST_ADRIFT)
@@ -967,7 +952,7 @@ MovedObject UpdateWolfAi(GameState& _state, SpaceObject& _slot, std::uint8_t _ra
   }
 }
 
-MovedObject UpdateHunterAi(GameState& _state, SpaceObject& _slot, std::uint8_t _rangeLow, bool _backward)
+MovedObject UpdateHunterAi(GameState& _state, SpaceObject& _slot, std::uint8_t _rangeLow)
 {
   switch (_slot.aiState)
   {
@@ -982,7 +967,7 @@ MovedObject UpdateHunterAi(GameState& _state, SpaceObject& _slot, std::uint8_t _
     }
     const Turn turn = TurnToVector(_state, _slot, GetVectorToPlayer(_slot));
     TryFireLaserAtPlayer(_state, _slot, turn.pitch.errorMagnitude, turn.yaw.errorMagnitude);
-    TryLaunchMissileAtPlayer(_state, _slot, HUNTER_MISSILE_ODDS, _backward);
+    TryLaunchMissileAtPlayer(_state, _slot, HUNTER_MISSILE_ODDS);
     (void)ComputeVelocity(_state, _slot);
     _slot.roll = Offset(_slot.roll, HUNTER_SPIN);
     return MoveObject(_state, _slot);
@@ -1001,7 +986,7 @@ MovedObject UpdateHunterAi(GameState& _state, SpaceObject& _slot, std::uint8_t _
     return MoveObject(_state, _slot);
   }
   case STATE_TURN_AWAY:
-    return HunterEvade(_state, _slot, _rangeLow, _backward);
+    return HunterEvade(_state, _slot, _rangeLow);
   default:
   {
     // Closing on the player while farther than 5000 on some axis.
@@ -1012,7 +997,7 @@ MovedObject UpdateHunterAi(GameState& _state, SpaceObject& _slot, std::uint8_t _
     }
     const Turn turn = TurnToVector(_state, _slot, GetVectorToPlayer(_slot));
     TryFireLaserAtPlayer(_state, _slot, turn.pitch.errorMagnitude, turn.yaw.errorMagnitude);
-    TryLaunchMissileAtPlayer(_state, _slot, CLOSING_MISSILE_ODDS, _backward);
+    TryLaunchMissileAtPlayer(_state, _slot, CLOSING_MISSILE_ODDS);
     (void)ComputeVelocity(_state, _slot);
     return MoveObject(_state, _slot);
   }

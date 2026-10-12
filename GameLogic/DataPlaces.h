@@ -36,9 +36,8 @@ struct DataPlace
 };
 
 /// Every top-level member of the 1987 data segment, and every gap of it the game uses, in their 1987 order, and where each is now: what the
-/// reference's image loads by (ReferenceLoadImage), what the GameState finds the original's addresses by, and what the state digests'
-/// re-base checks member by member (Tests/GameLogicTests/StateDumps.h). The gaps it does not list are not in the state, and nor is a
-/// constant with no place: the original's addresses there are the reference's image's.
+/// reference's image loads by (ReferenceLoadImage), and what the state digests' re-base checks member by member
+/// (Tests/GameLogicTests/StateDumps.h). The gaps it does not list are not in the state, and nor is a constant with no place.
 inline constexpr std::array<DataPlace, 480> DATA_PLACES = {{
   {"gap0000", 0x0000, 64, DataFate::State, GAME_DATA_OFFSET(drawing.gap0000)},
   {"spaceViewBuffer", 0x0040, 8064, DataFate::State, GAME_DATA_OFFSET(drawing.spaceViewBuffer)},
@@ -533,9 +532,8 @@ inline constexpr std::array<DataPlace, 480> DATA_PLACES = {{
   return index;
 }
 
-/// The 1987 offset of the top-level member named _name, a member of the data segment or a gap the game uses: the address the original holds
-/// for it, which a loop that waits still carries in its turns (ADR-015), and which native code that still reaches the data segment by the
-/// original's addresses uses (change 3b converts it). A name that is not one does not compile.
+/// The 1987 offset of the top-level member named _name, a member of the data segment or a gap the game uses: where the reference's image
+/// holds its first value, which the image's loader reads it from (ReferenceLoadImage). A name that is not one does not compile.
 [[nodiscard]] consteval std::uint16_t OriginalOffset(std::string_view _name)
 {
   return DATA_PLACES[DataPlaceIndex(_name)].original;
