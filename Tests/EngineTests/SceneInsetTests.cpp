@@ -3,7 +3,9 @@
 #include "Renderer.h"
 #include "SceneSnapshot.h"
 
+#include <algorithm>
 #include <cstdlib>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -37,7 +39,7 @@ constexpr float FOCAL = 8.0f;
 constexpr std::array<std::uint32_t, 4> PALETTE = {0x000000, 0x00AAAA, 0xAA00AA, 0xFFFFFF};
 
 // The models: a square of side 5 facing the camera, in colour 2, with a line across it in colour 3 a sixteenth of a unit below
-// its middle; and the same square facing away.
+// its middle and a patch on it a layer above it (Patch); and the same square facing away.
 constexpr std::uint32_t FACING = 1;
 constexpr std::uint32_t TURNED_AWAY = 2;
 constexpr float HALF_SIDE = 2.5f;
@@ -59,12 +61,13 @@ constexpr int MOST_CHANNEL_ERROR = 2;
   return true;
 }
 
-[[nodiscard]] Engine::SceneVertex Vertex(float _x, float _y, float _normalZ, std::size_t _color) noexcept
+[[nodiscard]] Engine::SceneVertex Vertex(float _x, float _y, float _normalZ, std::size_t _color, float _layer = 0.0f) noexcept
 {
   Engine::SceneVertex vertex{.position = {.x = _x, .y = _y, .z = 0.0f},
                              .normal = {.x = 0.0f, .y = 0.0f, .z = _normalZ},
                              .facePoint = {.x = 0.0f, .y = 0.0f, .z = 0.0f},
-                             .paletteWeights = {}};
+                             .paletteWeights = {},
+                             .layer = _layer};
   vertex.paletteWeights[_color] = 1.0f;
   return vertex;
 }
@@ -76,6 +79,18 @@ constexpr int MOST_CHANNEL_ERROR = 2;
   const Engine::SceneVertex b = Vertex(HALF_SIDE, -HALF_SIDE, _normalZ, 2);
   const Engine::SceneVertex c = Vertex(HALF_SIDE, HALF_SIDE, _normalZ, 2);
   const Engine::SceneVertex d = Vertex(-HALF_SIDE, HALF_SIDE, _normalZ, 2);
+  return {a, b, c, a, c, d};
+}
+
+// A patch in colour 3 on the square, in its plane, a layer above it, as the Dodo's slot is on its front face: x 0.5 to 2 and y
+// -2 to -1. It comes first, so that only its layer, not the order it is drawn in, puts it over the square.
+[[nodiscard]] std::vector<Engine::SceneVertex> Patch()
+{
+  constexpr float LAYER = 1.0f;
+  const Engine::SceneVertex a = Vertex(0.5f, -2.0f, -1.0f, 3, LAYER);
+  const Engine::SceneVertex b = Vertex(2.0f, -2.0f, -1.0f, 3, LAYER);
+  const Engine::SceneVertex c = Vertex(2.0f, -1.0f, -1.0f, 3, LAYER);
+  const Engine::SceneVertex d = Vertex(0.5f, -1.0f, -1.0f, 3, LAYER);
   return {a, b, c, a, c, d};
 }
 
@@ -106,7 +121,8 @@ public:
                                                           .logicalWidth = SOURCE_WIDTH,
                                                           .logicalHeight = SOURCE_HEIGHT}),
                    L"Direct3D 12 on WARP");
-    const std::vector<Engine::SceneVertex> facing = Square(-1.0f);
+    std::vector<Engine::SceneVertex> facing = Patch();
+    std::ranges::copy(Square(-1.0f), std::back_inserter(facing));
     const std::vector<Engine::SceneVertex> line = {Vertex(-HALF_SIDE, LINE_Y, -1.0f, 3), Vertex(HALF_SIDE, LINE_Y, -1.0f, 3)};
     const std::vector<Engine::SceneVertex> turnedAway = Square(1.0f);
     Assert::IsTrue(renderer.AddModel(FACING, Engine::SceneModelDesc{.triangles = facing, .lines = line}), L"the facing square");
@@ -160,6 +176,7 @@ public:
       Assert::IsTrue(CloseTo(At(pixels, 29, 13), PALETTE[2]), L"the square, lit full on");
       Assert::IsTrue(CloseTo(At(pixels, 35, 19), PALETTE[2]), L"the square's far corner");
       Assert::IsTrue(CloseTo(At(pixels, 29, 16), PALETTE[3]), L"the line on the square");
+      Assert::IsTrue(CloseTo(At(pixels, 34, 13), PALETTE[3]), L"the patch a layer above the square, drawn before it");
       Assert::AreEqual(PALETTE[1], At(pixels, 32, 16), L"over, on the square");
       Assert::AreEqual(PALETTE[1], At(pixels, 17, 9), L"under, where the scene draws nothing");
       Assert::AreEqual(PALETTE[1], At(pixels, 19, 17), L"under, left of the middle");

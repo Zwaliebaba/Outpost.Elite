@@ -5,7 +5,7 @@ cbuffer Frame : register(b0)
 {
   float4 g_projection; // inset NDC = (x * g_projection.x + z * g_projection.y, z * g_projection.w - y * g_projection.z) / z
   float g_nearUnits;   // reversed depth: g_nearUnits / z, 1 at the near plane
-  float g_depthLift;   // 1 for faces; a little over for lines, which sit on their faces
+  float g_depthLift;   // 1 for faces; a little over for lines, which sit on their faces, over every layer
   float2 g_framePadding;
 };
 

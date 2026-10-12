@@ -74,13 +74,15 @@ bool SpaceView::AddModels(Engine::Renderer& _renderer)
     m_models.push_back(Elite::ShipModelOf(kind));
     const Elite::ShipModel& model = m_models.back();
     // Each vertex carries its face's normal and the face's test corner, so the renderer sees or culls the face as the game does.
-    const auto vertex = [&model](std::uint16_t _vertex, std::uint16_t _face, const std::array<float, 4>& _weights)
+    // Each vertex carries its item's layer too, so that what the game paints later over its face, the Dodo's slot, stays over it.
+    const auto vertex = [&model](std::uint16_t _vertex, std::uint16_t _face, const std::array<float, 4>& _weights, std::uint8_t _layer)
     {
       const Elite::ModelFace& face = model.faces.at(_face);
       return Engine::SceneVertex{.position = VectorOf(model.vertices.at(_vertex)),
                                  .normal = VectorOf(face.normal),
                                  .facePoint = VectorOf(model.vertices.at(face.test[1])),
-                                 .paletteWeights = _weights};
+                                 .paletteWeights = _weights,
+                                 .layer = static_cast<float>(_layer)};
     };
     std::vector<Engine::SceneVertex> triangles;
     for (const Elite::ModelTriangle& triangle : model.triangles)
@@ -88,7 +90,7 @@ bool SpaceView::AddModels(Engine::Renderer& _renderer)
       const std::array<float, 4> weights = Elite::PatternMix(triangle.pattern);
       for (const std::uint16_t corner : triangle.vertices)
       {
-        triangles.push_back(vertex(corner, triangle.face, weights));
+        triangles.push_back(vertex(corner, triangle.face, weights, triangle.layer));
       }
     }
     std::vector<Engine::SceneVertex> lines;
@@ -98,7 +100,7 @@ bool SpaceView::AddModels(Engine::Renderer& _renderer)
       weights.at(edge.color) = 1.0f;
       for (const std::uint16_t end : edge.vertices)
       {
-        lines.push_back(vertex(end, edge.face, weights));
+        lines.push_back(vertex(end, edge.face, weights, edge.layer));
       }
     }
     if (!_renderer.AddModel(kind, Engine::SceneModelDesc{.triangles = triangles, .lines = lines}))

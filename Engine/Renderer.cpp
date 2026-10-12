@@ -37,7 +37,7 @@ constexpr DXGI_FORMAT SCENE_DEPTH_FORMAT = DXGI_FORMAT_D32_FLOAT;
 constexpr DXGI_FORMAT LAYER_FORMAT = DXGI_FORMAT_R8G8_UINT; // under, then over
 constexpr UINT SCENE_SAMPLES = 4;
 constexpr float FARTHEST_DEPTH = 0.0f;                  // reversed Z: 1 at the near plane, 0 at infinity
-constexpr float LINE_DEPTH_LIFT = 1.0f + 1.0f / 256.0f; // a line drawn a 256th nearer than its face, so the face does not hide it
+constexpr float LINE_DEPTH_LIFT = 1.0f + 1.0f / 128.0f; // a line drawn a 128th nearer than its face, over every layer of it
 constexpr UINT ROOT_PARAMETER_FRAME = 0;
 constexpr UINT ROOT_PARAMETER_OBJECT = 1;
 constexpr UINT ROOT_PARAMETER_PALETTE = 2;
@@ -173,13 +173,14 @@ D3D12_RESOURCE_DESC MultisampledOfSize(std::uint32_t _width, std::uint32_t _heig
 }
 
 // The scene's vertex, as SceneVS reads it.
-constexpr std::array<D3D12_INPUT_ELEMENT_DESC, 4> SCENE_VERTEX_LAYOUT = {{
+constexpr std::array<D3D12_INPUT_ELEMENT_DESC, 5> SCENE_VERTEX_LAYOUT = {{
   {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(SceneVertex, position), D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
   {"NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(SceneVertex, normal), D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
   {"TEXCOORD", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(SceneVertex, facePoint), D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
   {"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(SceneVertex, paletteWeights), D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+  {"TEXCOORD", 1, DXGI_FORMAT_R32_FLOAT, 0, offsetof(SceneVertex, layer), D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
 }};
-static_assert(sizeof(SceneVertex) == 13 * sizeof(float), "SceneVertex is SceneVS's vertex, packed");
+static_assert(sizeof(SceneVertex) == 14 * sizeof(float), "SceneVertex is SceneVS's vertex, packed");
 
 [[nodiscard]] D3D12_ROOT_PARAMETER Constants(UINT _register, UINT _count, D3D12_SHADER_VISIBILITY _visibility) noexcept
 {

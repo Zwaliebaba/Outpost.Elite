@@ -35,14 +35,21 @@ struct ScreenRect
 
 /// A vertex of a scene model (ADR-033), in the model's own frame and the scene's axes: x right, y down and z ahead. Each belongs to
 /// a face, whose normal and a point on whose plane it carries: the face is drawn, every triangle and line of it, exactly when
-/// its normal points towards the camera. Its colour is a mix of the scene's four palette colours, by weights that sum to 1.
+/// its normal points towards the camera. Its colour is a mix of the scene's four palette colours, by weights that sum to 1. Its
+/// layer orders what lies in one plane: a face's triangles of a higher layer are drawn over those of a lower one, as a painter
+/// would paint them in turn (SCENE_LAYERS).
 struct SceneVertex
 {
   Vector3 position;
   Vector3 normal;    ///< the face's, a unit vector out of the model
   Vector3 facePoint; ///< a point of the face's plane
   std::array<float, 4> paletteWeights{};
+  float layer = 0.0f; ///< 0 and up, below SCENE_LAYERS
 };
+
+/// The layers a scene vertex may have. A triangle of layer n is drawn as if n / 8192 of its distance nearer than it is, so that it
+/// covers a lower layer in its plane; at most 31 / 8192, under 0.4%. A line is drawn 1 / 128 nearer, over every layer of its face.
+inline constexpr std::uint32_t SCENE_LAYERS = 32;
 
 /// What a scene model is made of: its faces' triangles, three vertices each, and lines over its faces, two each.
 struct SceneModelDesc

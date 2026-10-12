@@ -105,6 +105,7 @@ void ReadFaces(const Blueprint& _blueprint, ShipModel& _model)
     const std::uint8_t bytes = list[next];
     std::size_t item = next + 1;
     next = item + bytes;
+    std::uint8_t layer = 0;
     while (item < next)
     {
       const std::uint8_t byte = list[item];
@@ -116,7 +117,8 @@ void ReadFaces(const Blueprint& _blueprint, ShipModel& _model)
         _model.edges.push_back(ModelEdge{.vertices = {PointOf(static_cast<std::uint8_t>(high & EDGE_POINT_BITS), 0),
                                                       PointOf(static_cast<std::uint8_t>(low & EDGE_POINT_BITS), 0)},
                                          .color = static_cast<std::uint8_t>(high & EDGE_COLOR_BITS),
-                                         .face = face});
+                                         .face = face,
+                                         .layer = layer});
         ++item;
       }
       else
@@ -124,9 +126,11 @@ void ReadFaces(const Blueprint& _blueprint, ShipModel& _model)
         _model.triangles.push_back(
           ModelTriangle{.vertices = {PointOf(list[item + 1], 1), PointOf(list[item + 2], 1), PointOf(list[item + 3], 1)},
                         .pattern = static_cast<std::uint8_t>(offset / 2),
-                        .face = face});
+                        .face = face,
+                        .layer = layer});
         item += TRIANGLE_ITEM_BYTES;
       }
+      ++layer;
     }
   }
 }
