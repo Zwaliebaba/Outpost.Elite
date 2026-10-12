@@ -1,6 +1,6 @@
 // GameLogic/ReferenceImage.cpp
-// The reference's load image, checked in (D36): ReferenceImage.h says where it came from. Its bytes are the file's, except
-// where D57 lets them differ (ADR-028); its rows are laid out to be read, and for clang-format to keep (Tools/GenerateTables.py).
+// The reference's load image, checked in (D36): ReferenceImage.h says where it came from. Its bytes are the file's, which
+// ReferenceImageTests holds them to; its rows are laid out to be read, and for clang-format to keep (Tools/GenerateTables.py).
 #include "pch.h"
 
 #include "ReferenceImage.h"
@@ -9099,14 +9099,14 @@ const std::array<std::uint8_t, REFERENCE_IMAGE_BYTES> REFERENCE_IMAGE = {
   0x00,                                           // DS:75E9 escapePodFitted
   0x00,                                           // DS:75EA energyBombFitted
   0x00,                                           // DS:75EB energyUnitFitted
-  0x01,                                           // DS:75EC dockingComputerFitted  ZWAAL : CHEAT
+  0x00,                                           // DS:75EC dockingComputerFitted
   0x00,                                           // DS:75ED galacticHyperdriveFitted
   0x00,                                           // DS:75EE miningLaserCount
   0x00,                                           // DS:75EF militaryLaserCount
   0x00,                                           // DS:75F0 maskingDeviceFitted
   0x01,                                           // DS:75F1 laserMountsFitted
   0x00,                                           // DS:75F2 laserMountTypes
-  0x80, 0xEE,                                     // DS:75F3 creditsTenths
+  0xE8, 0x03,                                     // DS:75F3 creditsTenths
   0x00, 0x00,                                     // DS:75F5 data75F5
   0x00,                                           // DS:75F7 legalStatus
   0x00,                                           // DS:75F8 killCount

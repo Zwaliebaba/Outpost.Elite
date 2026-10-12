@@ -103,5 +103,5 @@
 *.rc            -text
 *.rc2           -text
 
-# Commander files (*.cdr) are the game's own 208 bytes, loaded verbatim: never normalized.
+# Commander files (Replays/*.cdr) are the game's own 208 bytes, loaded verbatim: never normalized.
 *.cdr           -text
