@@ -26,9 +26,9 @@ using SpaceViewLayer = std::array<std::uint8_t, std::size_t{SPACE_VIEW_WIDTH_PIX
 
 /// The space view of one frame of flight split by what drew it (ADR-033), for a renderer that draws its ships itself:
 /// - **under**, what each object that is not a blueprint's model drew, in the game's own pixels: the sun and the planet, a
-///   distant station's disc, the dots of far ships;
-/// - **over**, what was drawn after the last object: the laser beams, the stardust, the message line's pixels in the view and
-///   the sights;
+///   distant station's disc, the dots of far ships; and the stardust, which the game draws after the objects but the owner has
+///   behind them (ADR-033);
+/// - **over**, everything else drawn in the frame: the laser beams, the sights, the title's words;
 /// - and which slots were drawn as a blueprint's model, which the renderer draws in their place.
 ///
 /// It watches the drawing buffer round each object TransformAndDrawObjects draws (BeginObject, EndObject), and reads the
@@ -51,8 +51,12 @@ public:
   /// The object being drawn is a blueprint's model, which the renderer draws in its place.
   void NoteModel() noexcept;
 
-  /// The object in slot _slot is drawn: what it changed in the buffer is the under layer's, unless it is a model.
+  /// The object in slot _slot is drawn: what it changed in the buffer is the under layer's, unless it is a model. NO_SLOT for a
+  /// background that is no object's: the stardust, the title's planet.
   void EndObject(const GameState& _state, std::uint8_t _slot) noexcept;
+
+  /// EndObject's slot for a background drawn like an object, under the models.
+  static constexpr std::uint8_t NO_SLOT = 0xFF;
 
   /// The frame's drawing is finished and in video memory: the over layer of it, and the under layer and the models as the
   /// objects left them, published for the renderer.
@@ -94,6 +98,7 @@ private:
   Buffer m_before{}; // the buffer as the object being drawn found it
   Buffer m_last{};   // the buffer as the last object left it
   SpaceViewLayer m_under{};
+  SpaceViewLayer m_over{}; // what was drawn between objects and no object painted over since
   std::bitset<std::size_t{SPACE_VIEW_WIDTH_PIXELS} * SPACE_VIEW_HEIGHT_PIXELS> m_modelOwned;
   std::bitset<SLOTS> m_models;
   bool m_drawingModel = false;

@@ -57,6 +57,7 @@ struct FlightSnapshot
   std::uint16_t viewAngle = 0;  ///< the view: 0 front, 200h left, 400h rear, 600h right
   Orientation player;           ///< the player's angles as the rotation RotatePitchYawRoll makes of them (PlayerRotation)
   bool cameraContinues = false; ///< the camera turned from the snapshot before's, as the player can in one frame (ContinueFrom)
+  bool title = false;           ///< a frame of the title's turning ship (RunTitle), not of flight
   std::array<SnapshotObject, MOST_OBJECTS> objects{};
   std::size_t objectCount = 0; ///< the active slots, in slot order, at the start of objects
 };

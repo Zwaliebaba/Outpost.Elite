@@ -124,6 +124,12 @@ public:
     m_platform.EndSpaceViewObject(_slot);
   }
 
+  /// A background drawn between BeginSpaceViewObject and this, the stardust or the title's planet, goes under the models.
+  void EndSpaceViewBackground() noexcept
+  {
+    m_platform.EndSpaceViewObject(SpaceViewLayers::NO_SLOT);
+  }
+
   /// OUT 3D4h,0Eh, then OUT 3D5h,_value: the CRTC's register 14, the high byte of the cursor's address.
   void SetCursorAddressHigh(std::uint8_t _value);
 

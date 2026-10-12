@@ -2441,7 +2441,11 @@ FlightExit RunFlight(GameState& _state, Hardware& _hardware, bool _backward)
     {
       backward = false;
     }
-    if (UpdateStardust(_state))
+    // The stardust, watched as a background, under the models (ADR-033).
+    _hardware.BeginSpaceViewObject();
+    const bool dustStreaked = UpdateStardust(_state);
+    _hardware.EndSpaceViewBackground();
+    if (dustStreaked)
     {
       backward = false;
     }
