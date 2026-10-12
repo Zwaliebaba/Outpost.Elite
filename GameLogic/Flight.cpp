@@ -60,6 +60,7 @@ constexpr std::uint16_t CLEARED_MESSAGE_LINE_BP = 0;
 // The stardust: 30 particles of 6 bytes, x and y words, a lifetime byte and a spare; stardustPrevious follows with the same
 // layout, its spare the new-particle flag.
 constexpr std::uint16_t STARDUST_COUNT = 30;
+static_assert(STARDUST_COUNT == STARDUST_PARTICLES);
 constexpr std::uint16_t PARTICLE_BYTES = 6;
 constexpr std::size_t PARTICLE_X = 0;
 constexpr std::size_t PARTICLE_Y = 2;
@@ -1526,6 +1527,36 @@ void ComputeStardustShift(GameState& _state)
   _state.Data().flight.stardustShift = shift;
 }
 
+std::optional<DrawnDust> DrawnStardust(const GameState& _state, std::size_t _particle)
+{
+  // As DrawDust draws a particle MoveDust or DrawSideStardust left on screen, which the frame's positions hold.
+  const DustPosition position = LoadDustPosition(_state, _particle);
+  if (!IsDustOnScreen(position))
+  {
+    return std::nullopt;
+  }
+  const DustScreenPosition at = DustToScreen(position);
+  if (_state.Data().flight.jumpDriveEngaged == 0)
+  {
+    return DrawnDust{at, std::nullopt};
+  }
+  if (_state.Data().flight.stardustPrevious[_particle][PARTICLE_NEW] != 0)
+  {
+    return std::nullopt;
+  }
+  const std::optional<DustScreenPosition> previous = GetPreviousDustScreenPosition(_state, _particle);
+  if (!previous)
+  {
+    return std::nullopt;
+  }
+  return DrawnDust{at, previous};
+}
+
+std::uint8_t StardustColor() noexcept
+{
+  return STARDUST_COLOR;
+}
+
 std::optional<DustScreenPosition> GetPreviousDustScreenPosition(const GameState& _state, std::size_t _particle)
 {
   const Counted<std::uint8_t>(&copy)[PARTICLE_BYTES] = _state.Data().flight.stardustPrevious[_particle];
@@ -2441,10 +2472,10 @@ FlightExit RunFlight(GameState& _state, Hardware& _hardware, bool _backward)
     {
       backward = false;
     }
-    // The stardust, watched as a background, under the models (ADR-033).
+    // The stardust, watched for the space view, which the renderer draws in its place (ADR-035).
     _hardware.BeginSpaceViewObject();
     const bool dustStreaked = UpdateStardust(_state);
-    _hardware.EndSpaceViewBackground();
+    _hardware.EndSpaceViewRendered();
     if (dustStreaked)
     {
       backward = false;

@@ -260,6 +260,7 @@ public:
   void BeginSpaceViewFrame() noexcept
   {
     m_spaceView.BeginFrame();
+    m_beamCount = 0;
   }
 
   void BeginSpaceViewObject() noexcept
@@ -270,6 +271,21 @@ public:
   void NoteSpaceViewModel() noexcept
   {
     m_spaceView.NoteModel();
+  }
+
+  void NoteSpaceViewRendered() noexcept
+  {
+    m_spaceView.NoteRendered();
+  }
+
+  /// A beam of the frame being drawn, which PublishFlightSnapshot hands to its snapshot; past MOST_BEAMS, none.
+  void NoteSpaceViewBeam(const SnapshotBeam& _beam) noexcept
+  {
+    if (m_beamCount < m_beams.size())
+    {
+      m_beams[m_beamCount] = _beam;
+      ++m_beamCount;
+    }
   }
 
   void EndSpaceViewObject(std::uint8_t _slot) noexcept
@@ -423,6 +439,8 @@ private:
   Cga m_cga;
   std::array<FlightSnapshot, 2> m_flightSnapshots{}; // the previous and the latest
   SpaceViewLayers m_spaceView;
+  std::array<SnapshotBeam, FlightSnapshot::MOST_BEAMS> m_beams{}; // the frame's beams, since BeginSpaceViewFrame
+  std::size_t m_beamCount = 0;
   Bios m_bios;
   Mouse m_mouse;
   DosFiles m_files;

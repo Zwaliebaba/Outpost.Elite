@@ -553,6 +553,8 @@ void Platform::PublishFlightSnapshot(const FlightSnapshot& _snapshot, bool _cont
   {
     latest.objects[index].model = m_spaceView.DrawnAsModel(latest.objects[index].slot);
   }
+  latest.beams = m_beams;
+  latest.beamCount = m_beamCount;
   if (_continues && m_flightSnapshots[0].sequence != 0)
   {
     ContinueFrom(m_flightSnapshots[0], latest);

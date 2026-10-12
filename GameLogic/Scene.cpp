@@ -77,8 +77,8 @@ constexpr std::uint16_t DOT_RADIUS = 2;
 constexpr std::uint16_t DISTANT_STATION_Z = 0x1B58;
 constexpr std::uint16_t SQUARED_DISTANCE_SHIFT = 6;
 constexpr std::uint8_t DISTANT_DEPTH = 2;
-constexpr std::uint16_t PLANET_SCALE = 0x32;
-constexpr std::uint16_t SUN_SCALE = 0x64;
+constexpr std::uint16_t PLANET_SCALE = PLANET_DISC_SCALE;
+constexpr std::uint16_t SUN_SCALE = SUN_DISC_SCALE;
 constexpr std::uint8_t ALTITUDE_LIMIT = 0x7F;
 constexpr std::uint16_t RADIUS_LIMIT = 0xFF;
 constexpr std::uint16_t FATAL_RADIUS = 0xFD;
@@ -573,6 +573,7 @@ void DrawObjectAsDot(GameState& _state, SpaceObject& _slot, bool _backward)
 {
   if (IsSunOrPlanet(_slot))
   {
+    _hardware.NoteSpaceViewRendered(); // the renderer draws it as a sphere (ADR-035); no byte of the state is written
     DrawSunOrPlanet(_state, _hardware, _slot, _backward);
     return _backward;
   }

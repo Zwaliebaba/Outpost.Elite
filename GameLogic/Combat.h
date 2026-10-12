@@ -74,8 +74,9 @@ void DrawLaserSights(GameState& _state);
 /// (7Eh, 3Eh), in firingLaserType's pattern: with bit 0 clear, one side's pair a shot, the sides alternating by laserBeamSide
 /// and the colour counting down past 0 for type 0 and up for type 2; type 1 both outer beams, the colour counting up; type 3 all
 /// four, the inner pair in laserBeamColorToggle's colour and the outer in the other. Returns whether a beam was a horizontal
-/// line, which DrawLine fills by REP STOSB.
-bool DrawLaserBeams(GameState& _state);
+/// line, which DrawLine fills by REP STOSB. Each beam is watched for the space view and noted for the frame's snapshot, which the
+/// renderer draws in its place (ADR-035).
+bool DrawLaserBeams(GameState& _state, Hardware& _hardware);
 
 /// TakeDamage (CS:2C9B): _damage taken by the fore shield and what it cannot take by the energy: from 100h on, the shield takes all
 /// it holds; below, the low byte goes against the shield, written back, and 0 over it on a borrow. An energy that goes below 0

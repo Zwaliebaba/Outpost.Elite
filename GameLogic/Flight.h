@@ -65,6 +65,23 @@ struct DashboardPixel
 /// frame, from its entry in stardustPrevious, when it was on screen then.
 [[nodiscard]] std::optional<DustScreenPosition> GetPreviousDustScreenPosition(const GameState& _state, std::size_t _particle);
 
+/// The stardust's particles, which UpdateStardust moves and draws.
+inline constexpr std::size_t STARDUST_PARTICLES = 30;
+
+/// A particle as UpdateStardust's DrawDust drew it: a point, or while the jump drive is engaged a streak from where it was.
+struct DrawnDust
+{
+  DustScreenPosition at;
+  std::optional<DustScreenPosition> from; ///< the streak's start, while the jump drive is engaged
+};
+
+/// Particle _particle as the frame's UpdateStardust drew it, read back once it has: none when it is off screen, which it does not
+/// draw, or while the jump drive is engaged when it was born again this frame or was off screen before, which DrawDust skips.
+[[nodiscard]] std::optional<DrawnDust> DrawnStardust(const GameState& _state, std::size_t _particle);
+
+/// The pixel value UpdateStardust draws the stardust in (stardustColor).
+[[nodiscard]] std::uint8_t StardustColor() noexcept;
+
 /// ComputeDustStripMask (CS:08B9): 2^n - 1 just covering |_step| / 2, the strip a respawned particle lands in.
 [[nodiscard]] std::uint16_t ComputeDustStripMask(std::int16_t _step);
 

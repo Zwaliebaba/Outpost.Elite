@@ -3,8 +3,12 @@
 #include "FlightSnapshot.h"
 
 #include "Arithmetic.h"
+#include "Combat.h"
+#include "Flight.h"
 #include "GameState.h"
 #include "Message.h"
+#include "Scene.h"
+#include "Ships.h"
 #include "Text.h"
 
 #include <algorithm>
@@ -22,7 +26,8 @@ namespace
 constexpr std::uint8_t TYPE_BITS = 0x3E; // bits 1-5 of a slot's type byte
 constexpr std::int32_t SIGN_24 = 0x800000;
 constexpr std::int32_t WRAP_24 = 0x1000000;
-constexpr std::uint16_t TURN = 0x800; // a whole turn, in the game's angles
+constexpr std::uint16_t TURN = 0x800;     // a whole turn, in the game's angles
+constexpr unsigned MOST_SCALE_SHIFT = 24; // a scale shift past a 24-bit position's width scales nothing more
 
 // The dashboard as UpdateDashboard and its routines keep it (Flight.cpp).
 constexpr std::uint8_t FLAG_HOSTILE = 0x01;
@@ -221,7 +226,86 @@ FlightSnapshot TakeFlightSnapshot(const GameState& _state)
     ++snapshot.objectCount;
   }
   snapshot.dashboard = TakeDashboard(_state);
+  const GameData& data = _state.Data();
+  for (std::size_t particle = 0; particle < STARDUST_PARTICLES; ++particle)
+  {
+    if (const std::optional<DrawnDust> drawn = DrawnStardust(_state, particle))
+    {
+      SnapshotDust& dust = snapshot.dust[snapshot.dustCount];
+      dust = SnapshotDust{.particle = static_cast<std::uint8_t>(particle), .x = drawn->at.x, .row = drawn->at.row};
+      if (drawn->from)
+      {
+        dust.streak = true;
+        dust.fromX = drawn->from->x;
+        dust.fromRow = drawn->from->row;
+      }
+      ++snapshot.dustCount;
+    }
+  }
+  snapshot.dustColor = StardustColor();
+  snapshot.sight = GetViewLaser(_state).value_or(FlightSnapshot::NO_SIGHT);
+  // SupernovaHeat holds supernovaFrames at 1 while the heat, from the cabin temperature, stands for the sun's radius.
+  if (data.commander.supernovaFrames == 1)
+  {
+    snapshot.supernovaHeat = data.commander.supernovaHeat;
+  }
+  snapshot.galaxy = data.commander.galaxyNumber;
+  snapshot.system = data.commander.currentSystemIndex;
   return snapshot;
+}
+
+FlightSnapshot TakeTitleSnapshot(const GameState& _state, std::string_view _message, const SnapshotDisc& _planet)
+{
+  FlightSnapshot snapshot = TakeFlightSnapshot(_state);
+  snapshot.title = true;
+  snapshot.dashboard = TitleDashboard(_message);
+  snapshot.dustCount = 0;
+  snapshot.titlePlanet = _planet;
+  return snapshot;
+}
+
+bool IsSun(const SnapshotObject& _object) noexcept
+{
+  return _object.kind == TYPE_SUN;
+}
+
+bool IsPlanet(const SnapshotObject& _object) noexcept
+{
+  return _object.kind == TYPE_PLANET;
+}
+
+SnapshotSphere SphereOf(const FlightSnapshot& _snapshot, const SnapshotObject& _object) noexcept
+{
+  // The view position is the slot's shifted down by its scale shift, the low byte of its pitch (ClassifySunOrPlanet).
+  const auto unscaled = static_cast<float>(1U << std::min<unsigned>(Low(_object.pitch), MOST_SCALE_SHIFT));
+  SnapshotSphere sphere;
+  sphere.position = ScenePosition(_snapshot, _object);
+  for (float& coordinate : sphere.position)
+  {
+    coordinate *= unscaled;
+  }
+  const float rowsAt256 = IsSun(_object) ? float{SUN_DISC_SCALE} : float{PLANET_DISC_SCALE};
+  sphere.radius = rowsAt256 * VIEW_FOCAL;
+  if (IsSun(_object) && _snapshot.supernovaHeat != 0)
+  {
+    // The heat is the disc's rows wherever the sun is.
+    const std::array<float, 3>& at = sphere.position;
+    const float distance = std::sqrt(at[0] * at[0] + at[1] * at[1] + at[2] * at[2]);
+    sphere.radius = static_cast<float>(_snapshot.supernovaHeat) * distance / VIEW_FOCAL;
+  }
+  return sphere;
+}
+
+SnapshotSphere TitlePlanetSphere(const FlightSnapshot& _snapshot) noexcept
+{
+  // The disc's centre, a buffer pixel, at its middle; the title's camera is the game's axes.
+  const SnapshotDisc& disc = _snapshot.titlePlanet;
+  constexpr float MIDDLE = 0.5f;
+  SnapshotSphere sphere;
+  sphere.position = {(static_cast<float>(disc.x) + MIDDLE - VIEW_AXIS_X) * TITLE_PLANET_DEPTH / VIEW_FOCAL,
+                     (static_cast<float>(disc.row) + MIDDLE - VIEW_AXIS_ROW) * TITLE_PLANET_DEPTH / VIEW_FOCAL, TITLE_PLANET_DEPTH};
+  sphere.radius = static_cast<float>(disc.rows) * TITLE_PLANET_DEPTH / VIEW_FOCAL;
+  return sphere;
 }
 
 Orientation PlayerRotation(std::uint16_t _pitch, std::uint16_t _yaw, std::uint16_t _roll) noexcept

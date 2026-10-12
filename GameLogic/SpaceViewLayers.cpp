@@ -76,6 +76,8 @@ template <typename Visit> void ForEachChanged(std::span<const std::uint8_t> _bef
 
 SpaceViewLayers::SpaceViewLayers() noexcept
 {
+  m_owners.fill(NO_SLOT);
+  m_publishedOwners.fill(NO_SLOT);
   m_under.fill(LAYER_CLEAR);
   m_publishedUnder.fill(LAYER_CLEAR);
   m_publishedOver.fill(LAYER_CLEAR);
@@ -88,9 +90,11 @@ void SpaceViewLayers::BeginFrame() noexcept
   m_last.fill(0);
   m_under.fill(LAYER_CLEAR);
   m_over.fill(LAYER_CLEAR);
-  m_modelOwned.reset();
+  m_rendererOwned.reset();
+  m_owners.fill(NO_SLOT);
   m_models.reset();
-  m_drawingModel = false;
+  m_drawing = Drawing::Plain;
+  m_rendererDrew = false;
 }
 
 void SpaceViewLayers::BeginObject(const GameState& _state) noexcept
@@ -100,33 +104,43 @@ void SpaceViewLayers::BeginObject(const GameState& _state) noexcept
   const std::span<const std::uint8_t> buffer = BufferOf(_state);
   ForEachChanged(m_last, buffer, [this](std::size_t _pixel, std::uint8_t _value) { m_over[_pixel] = _value; });
   std::ranges::copy(buffer, m_before.begin());
-  m_drawingModel = false;
+  m_drawing = Drawing::Plain;
 }
 
 void SpaceViewLayers::NoteModel() noexcept
 {
-  m_drawingModel = true;
+  m_drawing = Drawing::Model;
+}
+
+void SpaceViewLayers::NoteRendered() noexcept
+{
+  m_drawing = Drawing::Rendered;
 }
 
 void SpaceViewLayers::EndObject(const GameState& _state, std::uint8_t _slot) noexcept
 {
   const std::span<const std::uint8_t> buffer = BufferOf(_state);
-  if (m_drawingModel && _slot < SLOTS)
+  if (m_drawing == Drawing::Model && _slot < SLOTS)
   {
     m_models.set(_slot);
   }
+  const bool renderers = m_drawing != Drawing::Plain;
+  // A plain object drawn after one the renderer draws is nearer than it, by the painter's order: over it, and over the scene.
+  const bool over = !renderers && m_rendererDrew;
   ForEachChanged(m_before, buffer,
-                 [this](std::size_t _pixel, std::uint8_t _value)
+                 [this, _slot, renderers, over](std::size_t _pixel, std::uint8_t _value)
                  {
-                   m_modelOwned[_pixel] = m_drawingModel;
-                   m_over[_pixel] = LAYER_CLEAR;
-                   if (!m_drawingModel)
+                   m_rendererOwned[_pixel] = renderers;
+                   m_owners[_pixel] = _slot;
+                   m_over[_pixel] = over ? _value : LAYER_CLEAR;
+                   if (!renderers && !over)
                    {
                      m_under[_pixel] = _value;
                    }
                  });
   std::ranges::copy(buffer, m_last.begin());
-  m_drawingModel = false;
+  m_rendererDrew = m_rendererDrew || renderers;
+  m_drawing = Drawing::Plain;
 }
 
 void SpaceViewLayers::Finish(const GameState& _state) noexcept
@@ -144,7 +158,8 @@ void SpaceViewLayers::Finish(const GameState& _state) noexcept
     }
   }
   m_publishedUnder = m_under;
-  m_publishedModelOwned = m_modelOwned;
+  m_publishedRendererOwned = m_rendererOwned;
+  m_publishedOwners = m_owners;
   m_publishedModels = m_models;
   for (std::size_t row = 0; row < SPACE_VIEW_HEIGHT_PIXELS; ++row)
   {
