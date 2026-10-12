@@ -11,7 +11,7 @@ namespace Outpost
 
 /// The game, as the plan's Phase 2 shell runs it (ADR-009): the reference on the PC host in paced time
 /// (ADR-008), kept in step with the wall clock, drawn by the Engine's renderer, heard through its audio
-/// stream, played from the keyboard, and recorded as a replay.
+/// stream and played from the keyboard.
 class Application
 {
 public:
