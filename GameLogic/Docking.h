@@ -38,10 +38,11 @@ bool DrawTunnelRectangle(GameState& _state, std::size_t _rectangle);
 /// spin or half a turn from it.
 [[nodiscard]] bool CheckDockingAlignment(const GameState& _state, const SpaceObject& _station, std::uint16_t _tolerance);
 
-/// MaskOutsideTunnel (CS:2E0A): zeroes the space-view buffer outside the centred rectangle whose top-left corner is the first
-/// point of rectangle _rectangle of tunnelRectangles: the rows above it and its left margins each forwards or, _backwards, down
-/// (the direction flag it is called with), then the rows below it and its right margins from the end of the buffer down.
-void MaskOutsideTunnel(GameState& _state, std::size_t _rectangle, bool _backwards);
+/// MaskOutsideTunnel (CS:2E0A): zeroes the space-view buffer outside the centred rectangle whose top-left corner is the first point of
+/// rectangle _rectangle of tunnelRectangles: the rows above it and its left margins each forwards, as the direction flag is clear wherever
+/// the game calls it (change 3c), then, after its STD, the rows below it and its right margins from the end of the buffer down, and its
+/// CLD.
+void MaskOutsideTunnel(GameState& _state, std::size_t _rectangle);
 
 /// ToggleDockingComputer (CS:83B2): D, released: dockingKeyReleased cleared, and the docking computer off (all sound stopped,
 /// the view unlocked, a stopped ship given speed 4, the low beep), or on (state 0, the music and the beep) when inside the

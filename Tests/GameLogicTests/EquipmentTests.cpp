@@ -4,6 +4,7 @@
 #include "Maths.h"
 #include "SpaceObject.h"
 #include "Ships.h"
+#include "Text.h"
 #include "TwinRig.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -34,7 +35,7 @@ void SetCredits(TwinRig& _rig, std::uint32_t _tenths)
     [_tenths](Elite::Platform&, Elite::GameState& _state)
     {
       Commander::CreditsTenths& credits = _state.Data().commander.creditsTenths;
-      _state.SetWordOf(credits, static_cast<std::uint16_t>(_tenths));
+      Elite::SetWordIn(Elite::BytesOf(credits), 0, static_cast<std::uint16_t>(_tenths));
       credits.data75F5 = static_cast<std::uint16_t>(_tenths >> 16);
     });
 }
@@ -142,7 +143,7 @@ void MakeBelowTheNose(TwinRig& _rig, Scoopable _what)
     slot = free.slot;
   }
   Elite::SpaceObject& object = state.Slot(slot);
-  Elite::ClearObjectSlot(state, object);
+  Elite::ClearObjectSlot(object);
   switch (_what)
   {
   case Scoopable::Barrel:

@@ -132,30 +132,15 @@ void CheckCheatArgument(GameState& _state, const Hardware& _hardware)
   _state.Data().startUp.cheatEnabled = 1;
 }
 
-void StartNewGame(GameState& _state, bool _backward)
+void StartNewGame(GameState& _state)
 {
-  // REP MOVSB from DS to ES = DS, a byte at a time: going up, startupCommander's bytes into commanderBlock's.
-  if (!_backward)
+  // REP MOVSB from DS to ES = DS, a byte at a time: startupCommander's bytes into commanderBlock's, upwards, as the direction flag is clear
+  // wherever the game calls it: the only STD, MaskOutsideTunnel's, has its CLD before the routine returns (change 3c).
+  const std::span<Counted<std::uint8_t>> to = BytesOf(_state.Data().commander);
+  const std::span<const Counted<std::uint8_t>> from(std::as_const(_state).Data().saveLoad.startupCommander);
+  for (std::size_t index = 0; index < COMMANDER_FILE_BYTES; ++index)
   {
-    const std::span<Counted<std::uint8_t>> to = _state.BytesFrom(_state.Data().commander, COMMANDER_FILE_BYTES);
-    const std::span<const Counted<std::uint8_t>> from(std::as_const(_state).Data().saveLoad.startupCommander);
-    for (std::size_t index = 0; index < COMMANDER_FILE_BYTES; ++index)
-    {
-      to[index] = std::uint8_t{from[index]};
-    }
-  }
-  else
-  {
-    // Going down from each start, past both records' first bytes into what the original's data segment holds before them: still
-    // by the original's addresses, as change 3c of D38 takes the direction flag.
-    std::uint16_t from = _state.OffsetOf(_state.Data().saveLoad.startupCommander);
-    std::uint16_t to = _state.OffsetOf(_state.Data().commander);
-    for (std::uint16_t left = COMMANDER_FILE_BYTES; left != 0; --left)
-    {
-      _state.SetByte(to, _state.Byte(from));
-      from = Offset(from, 0xFFFF);
-      to = Offset(to, 0xFFFF);
-    }
+    to[index] = std::uint8_t{from[index]};
   }
   _state.Data().commander.witchspaceCountdown = 0;
   _state.Data().playerShip.playerEnergy = NEW_GAME_ENERGY;
@@ -185,11 +170,11 @@ void StartNewGame(GameState& _state, bool _backward)
   _state.Data().commander.maskSystemJumps = 0;
 }
 
-void Start(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward)
+void Start(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
 {
   // The original keeps the PSP's segment in pspSegment to read its command tail from, and asks DOS's version, which is 3.30
   // (ADR-006 item 3): the platform gives the tail (CheckCheatArgument), and DOS 1's refusal never comes.
-  SaveStartupCommander(_state, _backward);
+  SaveStartupCommander(_state);
 
   // CLD / REPE CMPSB of amstradSignature against the ROM at FC00:0016: not an Amstrad if a byte before the last differs.
   std::uint16_t bytesLeft = AMSTRAD_SIGNATURE_BYTES;
@@ -343,7 +328,7 @@ void StartEntry(Guest& _guest)
   // DOS leaves BP as Start takes it, and the direction flag clear. Start's first instructions push the far return to PSP:0000,
   // where DOS's INT 20h ends the program, for its RETF to take once Start returns; on the platform the program ends when Start
   // returns.
-  Start(_guest.State(), _guest.Devices(), Guest::EntryBasePointer(), false);
+  Start(_guest.State(), _guest.Devices(), Guest::EntryBasePointer());
 }
 
 namespace

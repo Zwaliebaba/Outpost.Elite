@@ -90,7 +90,7 @@ constexpr std::uint8_t QUANTITY_BASE = 10; // ParseQuantity's decimal, which the
 // cargoHold's entries: for each product, the amount held, then the amount the market has.
 [[nodiscard]] std::span<Counted<std::uint8_t>> Hold(GameState& _state)
 {
-  return _state.BytesFrom(_state.Data().commander.cargoHold, sizeof(CommanderState::CargoHold));
+  return BytesOf(_state.Data().commander.cargoHold);
 }
 
 // The index in cargoHold of the row's entry. MOV BL,[menuSelectedRow] / XOR BH,BH / DEC BX / SHL BX,1 / ADD BX,cargoHold.
@@ -102,7 +102,7 @@ constexpr std::uint8_t QUANTITY_BASE = 10; // ParseQuantity's decimal, which the
 // screenPrices: for each product its buy price and then its sell price, in tenths, a word each.
 [[nodiscard]] std::span<Counted<std::uint8_t>> ScreenPrices(GameState& _state)
 {
-  return _state.BytesFrom(_state.Data().menus.screenPrices, sizeof(MenusState::ScreenPrices));
+  return BytesOf(_state.Data().menus.screenPrices);
 }
 
 // The first byte of product _product's row of productNames: its name, a space and its unit.
@@ -112,9 +112,9 @@ constexpr std::uint8_t QUANTITY_BASE = 10; // ParseQuantity's decimal, which the
 }
 
 // Product _product's name and unit, up to its NUL.
-[[nodiscard]] std::string_view ProductName(const GameState& _state, std::uint16_t _product) noexcept
+[[nodiscard]] std::string_view ProductName(const GameState& _state, std::uint16_t _product)
 {
-  return _state.TextAt(ProductNameRow(_state, _product));
+  return TextWithin(BytesOf(_state.Data().docked.productNames), std::size_t{_product} * PRODUCT_NAME_BYTES);
 }
 
 // 6C05 and 6CB3: SI and textAttribute pushed for ShowCargoMessage, and the message's attribute set. Returns the attribute, which
@@ -306,7 +306,7 @@ ScreenKey ShowMarketPricesScreen(GameState& _state, Hardware& _hardware, bool _b
       name[letter] = 0;
       break;
     }
-    _hardware.LoopTurn(SYSTEM_NAME_SCAN, {_state.OffsetOf(name[letter])});
+    _hardware.LoopTurn(SYSTEM_NAME_SCAN, {_state.PlaceOf(name[letter])});
   }
   const std::uint16_t named = PrintTextModeString(_state, TextIn(name), TITLE_OFFSET);
   PrintTextModeString(_state, title, named);
@@ -321,17 +321,18 @@ ScreenKey ShowMarketPricesScreen(GameState& _state, Hardware& _hardware, bool _b
   {
     const std::uint16_t nameEnd = PrintTextModeString(_state, ProductName(_state, product), row);
     FormatTenths(_state, WordIn(prices, product * TRADE_PRICES_BYTES));
-    const std::uint16_t buy = PrintTextModeString(_state, _state.TextAt(_state.Data().menus.priceText), Offset(nameEnd, BUY_PRICE_COLUMN));
+    const std::uint16_t buy =
+      PrintTextModeString(_state, TextWithin(BytesOf(_state.Data().menus.priceText), 0), Offset(nameEnd, BUY_PRICE_COLUMN));
     FormatTenths(_state, WordIn(prices, product * TRADE_PRICES_BYTES + 2));
-    PrintTextModeString(_state, _state.TextAt(_state.Data().menus.priceText), Offset(buy, SELL_PRICE_COLUMN));
+    PrintTextModeString(_state, TextWithin(BytesOf(_state.Data().menus.priceText), 0), Offset(buy, SELL_PRICE_COLUMN));
     row = Offset(row, ROW_BYTES);
     ++product;
     if (--left == 0)
     {
       break;
     }
-    _hardware.LoopTurn(PRICE_ROW, {left, _state.OffsetOf(ProductNameRow(_state, product)), row,
-                                   _state.OffsetOf(prices[std::size_t{product} * TRADE_PRICES_BYTES])});
+    _hardware.LoopTurn(PRICE_ROW, {left, _state.PlaceOf(ProductNameRow(_state, product)), row,
+                                   _state.PlaceOf(prices[std::size_t{product} * TRADE_PRICES_BYTES])});
   }
   // The last print leaves AL 0.
   return WaitForScreenExitKey(_state, _hardware, SCAN_F8, 0, _countIfNone);
@@ -341,13 +342,13 @@ bool SubtractCredits(GameState& _state, std::uint32_t _tenths)
 {
   // SUB, then SBB: the 32-bit credits less _tenths, then ADD and ADC to put them back if that borrows.
   CommanderState::CreditsTenths& tenths = _state.Data().commander.creditsTenths;
-  const std::uint32_t credits = _state.WordOf(tenths) | (std::uint32_t{tenths.data75F5} << 16);
+  const std::uint32_t credits = WordIn(BytesOf(tenths), 0) | (std::uint32_t{tenths.data75F5} << 16);
   const std::uint32_t left = credits - _tenths;
-  _state.SetWordOf(tenths, static_cast<std::uint16_t>(left));
+  SetWordIn(BytesOf(tenths), 0, static_cast<std::uint16_t>(left));
   _state.Data().commander.creditsTenths.data75F5 = static_cast<std::uint16_t>(left >> 16);
   if (credits < _tenths)
   {
-    _state.SetWordOf(tenths, static_cast<std::uint16_t>(credits));
+    SetWordIn(BytesOf(tenths), 0, static_cast<std::uint16_t>(credits));
     _state.Data().commander.creditsTenths.data75F5 = static_cast<std::uint16_t>(credits >> 16);
     return false;
   }
@@ -364,8 +365,8 @@ void AddCredits(GameState& _state, std::uint32_t _tenths)
 {
   // ADD the low word, then ADC the high word with the carry it makes.
   CommanderState::CreditsTenths& tenths = _state.Data().commander.creditsTenths;
-  const std::uint32_t low = std::uint32_t{_state.WordOf(tenths)} + (_tenths & 0xFFFF);
-  _state.SetWordOf(tenths, static_cast<std::uint16_t>(low));
+  const std::uint32_t low = std::uint32_t{WordIn(BytesOf(tenths), 0)} + (_tenths & 0xFFFF);
+  SetWordIn(BytesOf(tenths), 0, static_cast<std::uint16_t>(low));
   _state.Data().commander.creditsTenths.data75F5 =
     static_cast<std::uint16_t>(_state.Data().commander.creditsTenths.data75F5 + (_tenths >> 16) + (low >> 16));
   FormatCredits(_state);
@@ -432,20 +433,20 @@ void ComputeMarketPrices(GameState& _state)
 
 std::uint16_t NextMarketRandom(GameState& _state)
 {
-  const std::uint16_t a = _state.WordOf(_state.Data().market.marketRandomState);
+  const std::uint16_t a = WordIn(BytesOf(_state.Data().market.marketRandomState), 0);
   const std::uint16_t b = _state.Data().market.marketRandomState.data8C20;
   const std::uint16_t c = _state.Data().market.marketRandomState.data8C22;
   const auto sum = static_cast<std::uint16_t>(a + b);
   // In the order the original's two XCHGs and its ADD write them.
   _state.Data().market.marketRandomState.data8C20 = c;
-  _state.SetWordOf(_state.Data().market.marketRandomState, b);
+  SetWordIn(BytesOf(_state.Data().market.marketRandomState), 0, b);
   _state.Data().market.marketRandomState.data8C22 = static_cast<std::uint16_t>(c + sum);
   return sum;
 }
 
 void StartMarketRandom(GameState& _state)
 {
-  _state.SetWordOf(_state.Data().market.marketRandomState, _state.Data().commander.randomState0);
+  SetWordIn(BytesOf(_state.Data().market.marketRandomState), 0, _state.Data().commander.randomState0);
   _state.Data().market.marketRandomState.data8C20 = std::uint16_t{_state.Data().commander.randomState1};
   _state.Data().market.marketRandomState.data8C22 = std::uint16_t{_state.Data().commander.randomState2};
 }
@@ -510,7 +511,7 @@ void PrintCargoQuantity(GameState& _state, std::uint16_t _quantity)
   {
     FormatDecimal5(_quantity, _state.Data().menus.quantityText);
     BlankLeadingZeros(_state.Data().menus.quantityText, QUANTITY_DIGITS_BLANKED);
-    text = _state.TextAt(_state.Data().menus.quantityText);
+    text = TextWithin(BytesOf(_state.Data().menus.quantityText), 0);
   }
   const std::uint8_t attribute = _state.Data().drawing.textAttribute;
   _state.Data().drawing.textAttribute = QUANTITY_ATTRIBUTE;

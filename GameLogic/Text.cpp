@@ -584,18 +584,17 @@ std::uint16_t PrintTextLines(GameState& _state, std::span<const std::string_view
   return line;
 }
 
-std::uint16_t PrintTextLines(GameState& _state, std::string_view _first, std::uint16_t _cell, std::uint16_t _lines)
+std::uint16_t PrintTextLines(GameState& _state, std::span<const Counted<std::uint8_t>> _bytes, std::size_t _at, std::uint16_t _cell,
+                             std::uint16_t _lines)
 {
   std::uint16_t line = _cell;
-  std::string_view text = _first;
+  std::size_t at = _at;
   for (std::uint16_t left = _lines; left != 0; --left)
   {
+    const std::string_view text = TextWithin(_bytes, at);
     (void)PrintTextModeString(_state, text, line);
     line = Offset(line, TEXT_ROW_BYTES);
-    if (left > 1)
-    {
-      text = _state.TextAfter(text);
-    }
+    at += text.size() + 1;
   }
   return line;
 }

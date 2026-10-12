@@ -45,9 +45,9 @@ struct JumpDriveRequest
 /// ship, and is locked when the count is below 3, the borrow of its SUB.
 MassLock IsMassLocked(GameState& _state);
 
-/// ResetHyperspaceRings (CS:48AB): hyperspaceRings from hyperspaceRingStart, fifteen words copied up through the
-/// data segment, or down from each start when _backward (REP MOVSW with the direction flag set).
-void ResetHyperspaceRings(GameState& _state, bool _backward);
+/// ResetHyperspaceRings (CS:48AB): hyperspaceRings from hyperspaceRingStart, fifteen words copied up as REP MOVSW does: the direction flag
+/// is clear wherever the game calls it (change 3c).
+void ResetHyperspaceRings(GameState& _state);
 
 /// EnterWitchSpace (CS:4917): the witch-space countdown, and the player halfway to the destination on the charts.
 void EnterWitchSpace(GameState& _state);

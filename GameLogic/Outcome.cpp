@@ -4,6 +4,7 @@
 
 #include "GameState.h"
 #include "SpaceObject.h"
+#include "Text.h"
 
 #include <algorithm>
 #include <format>
@@ -32,7 +33,8 @@ constexpr char LAST_PRINTABLE = '~';
   std::string cargo;
   for (std::size_t commodity = 0; commodity < COMMODITIES; ++commodity)
   {
-    cargo += (commodity == 0 ? "" : ",") + Number(_state.BytesFrom(_state.Data().commander.cargoHold, COMMODITIES * 2)[commodity * 2]);
+    cargo +=
+      (commodity == 0 ? "" : ",") + Number(BytesWithin(BytesOf(_state.Data().commander.cargoHold), 0, COMMODITIES * 2)[commodity * 2]);
   }
   return cargo;
 }
@@ -142,7 +144,7 @@ std::optional<std::string> OutcomeValue(const GameState& _state, std::string_vie
      [](const GameState& _game)
      {
        const CommanderState& commander = _game.Data().commander;
-       return Number(_game.WordOf(commander.creditsTenths) | (std::uint32_t{commander.creditsTenths.data75F5} << 16));
+       return Number(WordIn(BytesOf(commander.creditsTenths), 0) | (std::uint32_t{commander.creditsTenths.data75F5} << 16));
      }},
     {"legalStatus", [](const GameState& _game) { return Number(_game.Data().commander.legalStatus); }},
     {"kills", [](const GameState& _game) { return Number(_game.Data().commander.killCount); }},

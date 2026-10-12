@@ -1388,10 +1388,9 @@ void WriteScreenshotFile(GameState& _state, Hardware& _hardware)
   _state.Data().video.screenshotGraphicsFileName.screenshotGraphicsFileDigits = digits;
   // eliteNN.lo for the text page, eliteNN.hi for the graphics screen: DS:DX the name, up to the NUL each ends with, which
   // nothing writes.
-  const std::string_view name =
-    (_state.Data().drawing.screenLayout & TEXT_LAYOUT_BIT) != 0
-      ? TextIn(_state.BytesFrom(_state.Data().video.screenshotTextFileName, sizeof(VideoState::ScreenshotTextFileName)))
-      : TextIn(_state.BytesFrom(_state.Data().video.screenshotGraphicsFileName, sizeof(VideoState::ScreenshotGraphicsFileName)));
+  const std::string_view name = (_state.Data().drawing.screenLayout & TEXT_LAYOUT_BIT) != 0
+                                  ? TextIn(BytesOf(_state.Data().video.screenshotTextFileName))
+                                  : TextIn(BytesOf(_state.Data().video.screenshotGraphicsFileName));
   const DosAnswer created = _hardware.CreateFile(name, 0);
   if (created.failed)
   {

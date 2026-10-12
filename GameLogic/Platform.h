@@ -316,8 +316,8 @@ public:
   /// code is not there. Throws std::out_of_range for an address outside the ROM.
   [[nodiscard]] std::uint8_t RomByte(FarAddress _address) const;
 
-  /// The first byte of the code at _handler, which a vector names: the ROM's (RomByte), or the program's, in its code
-  /// segment (GameState). Throws std::out_of_range for an address in neither.
+  /// The first byte of the code at _handler, which a vector names: the ROM's (RomByte). The game asks only of int 33h's vector, which
+  /// nothing points into its own code (change 3c). Throws std::out_of_range for an address outside the ROM.
   [[nodiscard]] std::uint8_t HandlerOpcode(FarAddress _handler) const;
 
   /// INT _vector, to the handler its vector names, which runs to its IRET: a native routine (Hook), or the ROM's IRET.
@@ -325,9 +325,6 @@ public:
 
   /// The handler at _handler, run to its IRET as INT runs one, with the interrupt's frame in place.
   void CallHandler(FarAddress _handler);
-
-  /// Int 21h AH=09h: the string at _segment:_offset up to its '$' printed through the BIOS's teletype.
-  void PrintDosString(std::uint16_t _segment, std::uint16_t _offset);
 
 private:
   // The state at a loop's turn, kept to tell whether the next turn changed anything.

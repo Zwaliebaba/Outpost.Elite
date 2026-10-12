@@ -1,5 +1,6 @@
 #include "pch.h"
 
+#include "Text.h"
 #include "TwinRig.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -31,7 +32,7 @@ template <typename Struct> void SetBoth(TwinRig& _rig, DataByte<Struct> _member,
 void SetHeld(TwinRig& _rig, std::size_t _product, std::uint8_t _value)
 {
   _rig.Both([_product, _value](Elite::Platform&, Elite::GameState& _state)
-            { _state.BytesFrom(_state.Data().commander.cargoHold, sizeof(Commander::CargoHold))[_product * HOLD_ENTRY_BYTES] = _value; });
+            { Elite::BytesOf(_state.Data().commander.cargoHold)[_product * HOLD_ENTRY_BYTES] = _value; });
 }
 
 // The status screen again, then _steps.
@@ -63,7 +64,7 @@ void LoadCommander(TwinRig& _rig, std::string_view _source)
     [&tenths](Elite::Platform&, Elite::GameState& _state)
     {
       const Commander::CreditsTenths& credits = _state.Data().commander.creditsTenths;
-      tenths = _state.WordOf(credits) | (std::uint32_t{credits.data75F5} << 16);
+      tenths = Elite::WordIn(Elite::BytesOf(credits), 0) | (std::uint32_t{credits.data75F5} << 16);
     });
   return tenths;
 }

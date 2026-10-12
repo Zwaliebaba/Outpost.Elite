@@ -52,10 +52,10 @@ enum class SlotIndex : std::uint16_t
   return static_cast<SlotIndex>(Number(_slot) + _count);
 }
 
-/// One of the 36 records of 64 bytes in shipSlots (DS:6930) that hold the objects in space (ADR-012): slot 0 the sun, 1 the
-/// planet, 2 the station, 3-19 the ships and 20-35 the debris. Each field is at its 1987 offset, a byte or a word as the
-/// original reads it, and counts its own changes (Counted). The GameState gives the record at an offset the original holds in
-/// SI or DI (GameState::ObjectAt), and the offset of a record (GameState::OffsetOf).
+/// One of the 36 records of 64 bytes in shipSlots (DS:6930) that hold the objects in space (ADR-012): slot 0 the sun, 1 the planet, 2 the
+/// station, 3-19 the ships and 20-35 the debris. Each field is at its 1987 offset, a byte or a word as the original reads it, and counts
+/// its own changes (Counted). The GameState gives the record of a slot's number (GameState::Slot), and a record's number
+/// (GameState::IndexOf), where the original holds the record's offset in SI or DI.
 ///
 /// Where the original reads one place by two names of one width, the two are members of an anonymous union. Where it reads
 /// a byte of a word, or two bytes as one word, the record has the field it reads most, and the rest is read and written with

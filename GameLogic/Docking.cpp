@@ -90,18 +90,17 @@ constexpr std::uint8_t SHIP_TYPE_MASK = 0x1F; // of the slot's first byte, shift
   return static_cast<std::uint16_t>((row << 8) | x);
 }
 
-// The space view's buffer at DS:0000, 128 rows of 64 bytes: gap0000, its first row, then spaceViewBuffer, and gap1FC0, its
-// last, which the symbol table names apart (D38).
+// The space view's buffer at DS:0000, 128 rows of 64 bytes: the drawing buffer (DrawingBuffer).
+static_assert(VIEW_BUFFER_BYTES == DRAWING_BUFFER_BYTES);
 [[nodiscard]] std::span<Counted<std::uint8_t>> ViewBuffer(GameState& _state)
 {
-  return _state.BytesFrom(_state.Data().drawing.gap0000, VIEW_BUFFER_BYTES);
+  return DrawingBuffer(_state);
 }
 
-// REP STOSB or REP STOSW into the space view's buffer from its byte _offset, ES = DS: _value, or its low byte, _count times, a
-// byte or a word at a time (_bytes), backwards when _backward. Returns the offset after the last, which the original leaves in DI.
-// Forwards, and backwards from the buffer's end, every store is in the buffer. Backwards from its start, they run down from
-// DS:0000 to the data segment's end, which only the original's addresses reach: there they still go by them, as change 3c of D38
-// takes the direction flag.
+// REP STOSB or REP STOSW into the space view's buffer from its byte _offset, ES = DS: _value, or its low byte, _count times, a byte or a
+// word at a time (_bytes), backwards when _backward: MaskOutsideTunnel's STD half. Returns the offset after the last, which the original
+// leaves in DI. Every store of every tunnel rectangle is in the buffer, either way (measured from tunnelRectangles: 382 to 7,872), so a
+// store outside it throws std::out_of_range (BytesWithin) rather than reaching on into the data segment as the original would (change 3c).
 std::uint16_t Store(GameState& _state, std::uint16_t _offset, std::uint16_t _count, std::uint16_t _value, std::uint16_t _bytes,
                     bool _backward)
 {
@@ -110,24 +109,14 @@ std::uint16_t Store(GameState& _state, std::uint16_t _offset, std::uint16_t _cou
   std::uint16_t at = _offset;
   for (std::uint16_t left = _count; left != 0; --left)
   {
-    if (std::size_t{at} + _bytes <= buffer.size())
+    const std::span<Counted<std::uint8_t>> stored = BytesWithin(buffer, at, _bytes);
+    if (_bytes == 2)
     {
-      if (_bytes == 2)
-      {
-        SetWordIn(buffer, at, _value);
-      }
-      else
-      {
-        buffer[at] = Low(_value);
-      }
-    }
-    else if (_bytes == 2)
-    {
-      _state.SetWord(at, _value);
+      SetWordIn(stored, 0, _value);
     }
     else
     {
-      _state.SetByte(at, Low(_value));
+      stored[0] = Low(_value);
     }
     at = Offset(at, step);
   }
@@ -473,7 +462,7 @@ bool CheckDockingAlignment(const GameState& _state, const SpaceObject& _station,
   return AngleWithinTolerance(roll, static_cast<std::uint16_t>((spin + HALF_TURN) & ANGLE_MASK), _tolerance);
 }
 
-void MaskOutsideTunnel(GameState& _state, std::size_t _rectangle, bool _backwards)
+void MaskOutsideTunnel(GameState& _state, std::size_t _rectangle)
 {
   // The margins: x/4 bytes either side, and the rows above and below the rectangle, in the space-view buffer at DS:0000,
   // through ES = DS.
@@ -482,13 +471,13 @@ void MaskOutsideTunnel(GameState& _state, std::size_t _rectangle, bool _backward
   const std::uint8_t top = corner[1];
   const auto rows = static_cast<std::uint16_t>(static_cast<std::uint8_t>(Negate(top) << 1));
   const auto marginWords = static_cast<std::uint16_t>(static_cast<std::uint8_t>(top + VIEW_CENTER_ROW) << 5);
-  // The rows above, then the sides of each row of the rectangle, forwards or, as the direction flag says, down; DEC BX
-  // and JNE count the rows, 65,536 for 0.
-  std::uint16_t row = Store(_state, 0, marginWords, 0, 2, _backwards);
+  // The rows above, then the sides of each row of the rectangle, forwards: the direction flag is clear wherever the game calls it (change
+  // 3c). DEC BX and JNE count the rows, 65,536 for 0.
+  std::uint16_t row = Store(_state, 0, marginWords, 0, 2, false);
   std::uint16_t left = rows;
   do
   {
-    Store(_state, row, sideBytes, 0, 1, _backwards);
+    Store(_state, row, sideBytes, 0, 1, false);
     row = Offset(row, VIEW_ROW_BYTES);
   } while (--left != 0);
 
@@ -525,7 +514,7 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
       {
         backward = false;
       }
-      MaskOutsideTunnel(_state, 0, backward);
+      MaskOutsideTunnel(_state, 0);
       backward = false;
     }
     else
@@ -561,7 +550,7 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
         backward = false;
       }
       MoveObjectsByVelocity(_state);
-      MaskOutsideTunnel(_state, first, backward);
+      MaskOutsideTunnel(_state, first);
       backward = false;
     }
     else

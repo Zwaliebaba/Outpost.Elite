@@ -69,7 +69,6 @@ constexpr Cycles POP_REGISTER = 12;   // POP AX and POP DS
 constexpr std::uint8_t KEYBOARD_CLEAR = 0x80;
 
 // DOS's print string: its end.
-constexpr std::uint8_t STRING_TERMINATOR = '$';
 
 constexpr std::uint32_t CENTISECONDS_PER_MINUTE = 60 * 100;
 
@@ -408,7 +407,7 @@ std::uint8_t Platform::RomByte(FarAddress _address) const
 
 std::uint8_t Platform::HandlerOpcode(FarAddress _handler) const
 {
-  return Linear(_handler) >= ROM_LINEAR ? RomByte(_handler) : m_state.FarByte(_handler.segment, _handler.offset);
+  return RomByte(_handler);
 }
 
 // ── The BIOS's hardware interrupt handlers (ADR-011 item 3) ──
@@ -538,21 +537,6 @@ std::uint64_t Platform::MemoryChanges() const noexcept
 std::uint64_t Platform::PortWrites() const noexcept
 {
   return m_portWrites + m_bios.PortWrites();
-}
-
-// ── DOS's console ──
-
-void Platform::PrintDosString(std::uint16_t _segment, std::uint16_t _offset)
-{
-  for (auto at = _offset;; ++at)
-  {
-    const std::uint8_t character = m_state.FarByte(_segment, at);
-    if (character == STRING_TERMINATOR)
-    {
-      return;
-    }
-    m_bios.WriteTeletype(character);
-  }
 }
 
 // ── The picture ──

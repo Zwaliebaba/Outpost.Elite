@@ -48,8 +48,8 @@ A row that starts inside another and ends past it is an error. Every struct is t
 copy constructor explicit (ADR-024).
 
 DataPlaces.h is the map from the 1987 layout to this one: DATA_PLACES, every top-level member's name, its 1987 offset and size,
-and its place in GameData, or none for a constant, which the GameState builds its view of the original's addresses from, the
-reference's image loads by (ReferenceLoadImage), and the state digests' re-base checks by.
+and its place in GameData, or none for a constant, which the reference's image loads by (ReferenceLoadImage) and the state
+digests' re-base checks by. Since change 3c nothing reaches the state by the original's addresses.
 
 The headers are generated, never edited: change the symbol table or the partition and run this again. With --check it writes
 nothing and fails if a header in the tree is not what it would write, or a header it once wrote is left over. Standard library
@@ -637,10 +637,9 @@ def generate_data_places(_groups: list[Group], _members: list[Member]) -> str:
     "",
   ]
   out += wrap("Every top-level member of the 1987 data segment, and every gap of it the game uses, in their 1987 order, and where "
-              "each is now: what the reference's image loads by (ReferenceLoadImage), what the GameState finds the original's "
-              "addresses by, and what the state digests' re-base checks member by member (Tests/GameLogicTests/StateDumps.h). The gaps "
-              "it does not list are not in the state, and nor is a constant with no place: the original's addresses there are "
-              "the reference's image's.", "///")
+              "each is now: what the reference's image loads by (ReferenceLoadImage), and what the state digests' re-base checks "
+              "member by member (Tests/GameLogicTests/StateDumps.h). The gaps it does not list are not in the state, and nor is a "
+              "constant with no place.", "///")
   out += [f"inline constexpr std::array<DataPlace, {len(rows)}> DATA_PLACES = {{{{", *rows, "}};", ""]
   out += [
     "/// The index in DATA_PLACES of the member named _name; past the last if there is none.",
@@ -655,10 +654,9 @@ def generate_data_places(_groups: list[Group], _members: list[Member]) -> str:
     "}",
     "",
   ]
-  out += wrap("The 1987 offset of the top-level member named _name, a member of the data segment or a gap the game uses: the address "
-              "the original holds for it, which a loop that waits still carries in its turns (ADR-015), and which native code "
-              "that still reaches the data segment by the original's addresses uses (change 3b converts it). A name that is not "
-              "one does not compile.", "///")
+  out += wrap("The 1987 offset of the top-level member named _name, a member of the data segment or a gap the game uses: where the "
+              "reference's image holds its first value, which the image's loader reads it from (ReferenceLoadImage). A name that is "
+              "not one does not compile.", "///")
   out += [
     "[[nodiscard]] consteval std::uint16_t OriginalOffset(std::string_view _name)",
     "{",

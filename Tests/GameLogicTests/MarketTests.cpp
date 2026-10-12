@@ -1,5 +1,6 @@
 #include "pch.h"
 
+#include "Text.h"
 #include "TwinRig.h"
 
 #include <string>
@@ -31,7 +32,7 @@ void SetCredits(TwinRig& _rig, std::uint32_t _tenths)
     [_tenths](Elite::Platform&, Elite::GameState& _state)
     {
       Commander::CreditsTenths& credits = _state.Data().commander.creditsTenths;
-      _state.SetWordOf(credits, static_cast<std::uint16_t>(_tenths));
+      Elite::SetWordIn(Elite::BytesOf(credits), 0, static_cast<std::uint16_t>(_tenths));
       credits.data75F5 = static_cast<std::uint16_t>(_tenths >> 16);
     });
 }
@@ -51,7 +52,7 @@ void SetCredits(TwinRig& _rig, std::uint32_t _tenths)
 void SetHold(TwinRig& _rig, std::size_t _index, std::uint8_t _value)
 {
   _rig.Both([_index, _value](Elite::Platform&, Elite::GameState& _state)
-            { _state.BytesFrom(_state.Data().commander.cargoHold, sizeof(Commander::CargoHold))[_index] = _value; });
+            { Elite::BytesOf(_state.Data().commander.cargoHold)[_index] = _value; });
 }
 
 // B or S on the cargo menu, then the keys _typed names at "Quantity?", separated by spaces, and Return: Replay.h's

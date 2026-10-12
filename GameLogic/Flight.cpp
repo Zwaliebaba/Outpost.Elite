@@ -63,7 +63,6 @@ constexpr std::size_t PARTICLE_X = 0;
 constexpr std::size_t PARTICLE_Y = 2;
 constexpr std::size_t PARTICLE_LIFETIME = 4;
 constexpr std::size_t PARTICLE_NEW = 5;
-constexpr std::uint16_t STARDUST_BYTES = STARDUST_COUNT * PARTICLE_BYTES;
 // stardustShift: (34h - playerSpeed) / 12 + 4.
 constexpr std::uint16_t STARDUST_SHIFT_SPEED = 0x34;
 constexpr std::uint8_t STARDUST_SHIFT_STEP = 12;
@@ -707,26 +706,24 @@ constexpr std::array<DotStep, 8> COMPASS_RING = {
 
 // ---- The flight keys ------------------------------------------------------------------------------
 
-// What the routines before M's launch leave in DI, from which the launch copies the missile (LaunchPlayerMissile): InvalidateDashboard
-// past the cache it fills; ResetStardust past the particles; ClearDrawBuffer past the buffer its REP STOSW of 1000h words fills from
-// 0, upwards or, _backward, down; and IsMassLocked on the last slot it looked at, as the original leaves it: the sun's, the
-// planet's, then where its look at the ships stopped.
-[[nodiscard]] std::uint16_t DashboardCacheEnd(const GameState& _state) noexcept
+// What the routines before M's launch leave in DI, from which the launch copies the missile (LaunchPlayerMissile): InvalidateDashboard past
+// the cache it fills; ResetStardust past the particles; ClearDrawBuffer past the buffer its REP STOSW of 1000h words fills from 0, upwards,
+// as the direction flag is clear wherever the game calls it (change 3c); and IsMassLocked on the last slot it looked at, as the original
+// leaves it: the sun's, the planet's, then where its look at the ships stopped. Otherwise DI is where CheckCollisions' look at the slots
+// stopped, or FindShipInCrosshairs'.
+enum class PastBuffer : std::uint8_t
 {
-  return static_cast<std::uint16_t>(_state.OffsetOf(_state.Data().flight.missileCountShown) + DASHBOARD_CACHE_BYTES);
-}
+  None,           ///< DI is on a slot
+  DashboardCache, ///< past the dashboard's cache (InvalidateDashboard)
+  Stardust,       ///< past the stardust (ResetStardust)
+  DrawBuffer      ///< past the drawing buffer (ClearDrawBuffer)
+};
 
-[[nodiscard]] std::uint16_t StardustEnd(const GameState& _state) noexcept
+struct LaunchDi
 {
-  return static_cast<std::uint16_t>(_state.OffsetOf(_state.Data().flight.stardust) + STARDUST_BYTES);
-}
-
-constexpr std::uint16_t DRAW_BUFFER_BYTES = 0x2000;
-
-[[nodiscard]] std::uint16_t DrawBufferEnd(bool _backward) noexcept
-{
-  return _backward ? Negate(DRAW_BUFFER_BYTES) : DRAW_BUFFER_BYTES;
-}
+  SlotIndex slot; ///< DI's slot, when past is None
+  PastBuffer past;
+};
 
 // The 64 bytes after the dashboard's cache, DS:4238-4277 in 1987, where InvalidateDashboard leaves DI: equipmentLossMessage,
 // playerHitBy, playerHitPending, playerDocked and collisionRanges' first ten words (D38).
@@ -739,7 +736,7 @@ constexpr std::uint16_t DRAW_BUFFER_BYTES = 0x2000;
   {
     append(byte);
   }
-  for (const Counted<std::uint8_t>& byte : _state.BytesFrom(_state.Data().combat.playerHitBy, sizeof(CombatState::playerHitBy)))
+  for (const Counted<std::uint8_t>& byte : BytesOf(_state.Data().combat.playerHitBy))
   {
     append(byte);
   }
@@ -757,46 +754,43 @@ constexpr std::uint16_t DRAW_BUFFER_BYTES = 0x2000;
 [[nodiscard]] std::array<std::uint8_t, SpaceObject::BYTES> BytesAfterStardust(const GameState& _state)
 {
   std::array<std::uint8_t, SpaceObject::BYTES> bytes{};
-  const std::span<const Counted<std::uint8_t>> previous = _state.BytesFrom(_state.Data().flight.stardustPrevious, bytes.size());
+  const std::span<const Counted<std::uint8_t>> previous = BytesWithin(BytesOf(_state.Data().flight.stardustPrevious), 0, bytes.size());
   std::ranges::copy(previous, bytes.begin());
   return bytes;
 }
 
-// What M's launch copies the missile from, where _di leaves DI (LaunchPlayerMissile): past the dashboard's cache, the stardust or
-// the drawing buffer filled going up, the bytes the original's data segment holds there, by name; anywhere else, a slot. Past the
-// buffer filled going down is cockpitImage's 2EA0h-2EDFh, which only a copy going down reaches, as the buffer's fill and the
-// launch go by the same direction flag: that copy still goes by the original's addresses (CopyObject).
-[[nodiscard]] MissileSource MissileSourceAt(const GameState& _state, std::uint16_t _di)
+// What M's launch copies the missile from, where _di leaves DI (LaunchPlayerMissile): past the dashboard's cache, the stardust or the
+// drawing buffer, the bytes the original's data segment holds there, by name; otherwise its slot.
+[[nodiscard]] MissileSource MissileSourceAt(const GameState& _state, LaunchDi _di)
 {
-  if (_di == DashboardCacheEnd(_state))
+  switch (_di.past)
   {
-    return MissileSource{_di, BytesAfterDashboardCache(_state)};
+  case PastBuffer::DashboardCache:
+    return MissileSource{_di.slot, BytesAfterDashboardCache(_state)};
+  case PastBuffer::Stardust:
+    return MissileSource{_di.slot, BytesAfterStardust(_state)};
+  case PastBuffer::DrawBuffer:
+    return MissileSource{_di.slot, BytesAfterDrawBuffer(_state)};
+  case PastBuffer::None:
+    break;
   }
-  if (_di == StardustEnd(_state))
-  {
-    return MissileSource{_di, BytesAfterStardust(_state)};
-  }
-  if (_di == DrawBufferEnd(false))
-  {
-    return MissileSource{_di, BytesAfterDrawBuffer(_state)};
-  }
-  return MissileSource{_di, std::nullopt};
+  return MissileSource{_di.slot, std::nullopt};
 }
 
-[[nodiscard]] std::uint16_t DiAfterMassLock(const MassLock& _lock, std::uint16_t _di) noexcept
+[[nodiscard]] LaunchDi DiAfterMassLock(const MassLock& _lock, LaunchDi _di) noexcept
 {
-  std::uint16_t di = _di;
+  LaunchDi di = _di;
   if (_lock.sun)
   {
-    di = GameState::SlotOffset(SlotIndex::Sun);
+    di = LaunchDi{SlotIndex::Sun, PastBuffer::None};
   }
   if (_lock.planet)
   {
-    di = GameState::SlotOffset(SlotIndex::Planet);
+    di = LaunchDi{SlotIndex::Planet, PastBuffer::None};
   }
   if (_lock.ships)
   {
-    di = GameState::SlotOffset(_lock.ships->slot);
+    di = LaunchDi{_lock.ships->slot, PastBuffer::None};
   }
   return di;
 }
@@ -821,10 +815,20 @@ KeyPress WaitForKey(GameState& _state, Hardware& _hardware, std::uint16_t _call)
   }
 }
 
+// The run of the pause screen's text and its options, pauseMenuText to gapAC0C: the menu's lines, with the frame rate's key written into
+// frameRateKeyLabel, and then the five options from keyboardRecenter, two bytes each.
+static_assert(GAME_DATA_OFFSET(flight.gapAC0C) + 1 - GAME_DATA_OFFSET(flight.pauseMenuText) == 0xAC0D - 0xAB3C,
+              "the pause screen's run holds its members together, as in 1987");
+[[nodiscard]] std::span<Counted<std::uint8_t>> PauseRun(GameState& _state)
+{
+  return BytesThrough(_state.Data().flight.pauseMenuText, _state.Data().flight.gapAC0C);
+}
+
 // The pause screen's five options from keyboardRecenter, two bytes each: the option's flag, then its letter.
 [[nodiscard]] std::span<Counted<std::uint8_t>> PauseOptions(GameState& _state)
 {
-  return _state.BytesFrom(_state.Data().flight.keyboardRecenter, std::size_t{PAUSE_OPTIONS} * 2);
+  return BytesWithin(PauseRun(_state), GAME_DATA_OFFSET(flight.keyboardRecenter) - GAME_DATA_OFFSET(flight.pauseMenuText),
+                     std::size_t{PAUSE_OPTIONS} * 2);
 }
 
 // PauseShowOptions (0x8D8F): the five option letters, in reverse video when on. The loop at 0x8D98 pushes and pops CX, DI
@@ -852,7 +856,7 @@ void ShowPauseOptions(GameState& _state, Hardware& _hardware)
     {
       return;
     }
-    _hardware.LoopTurn(PAUSE_OPTIONS_LOOP, {optionsLeft, position, _state.OffsetOf(options[option])});
+    _hardware.LoopTurn(PAUSE_OPTIONS_LOOP, {optionsLeft, position, _state.PlaceOf(options[option])});
   }
 }
 
@@ -892,15 +896,16 @@ void DrawPauseMenu(GameState& _state, Hardware& _hardware, bool _backward)
   for (std::uint16_t lines = PAUSE_MENU_LINES;;)
   {
     // MOV DI,[SI] / ADD SI,2: the line's place, then its text; INC SI past its NUL.
-    const std::uint16_t at = WordIn(_state.BytesFrom(_state.Data().flight.pauseMenuText, line + 2), line);
-    const std::string_view text = _state.TextAt(_state.Data().flight.pauseMenuText, static_cast<std::uint16_t>(line + 2));
+    const std::span<const Counted<std::uint8_t>> run = PauseRun(_state);
+    const std::uint16_t at = WordIn(BytesWithin(run, 0, line + 2), line);
+    const std::string_view text = TextWithin(run, line + 2);
     (void)DrawViewString(_state, text, ALL_COLORS, at);
     line += 2 + text.size() + 1;
     if (--lines == 0)
     {
       return;
     }
-    _hardware.LoopTurn(PAUSE_MENU_LOOP, {lines, static_cast<std::uint16_t>(_state.OffsetOf(_state.Data().flight.pauseMenuText) + line)});
+    _hardware.LoopTurn(PAUSE_MENU_LOOP, {lines, static_cast<std::uint16_t>(_state.PlaceOf(_state.Data().flight.pauseMenuText) + line)});
   }
 }
 
@@ -1161,9 +1166,8 @@ void PostHyperspaceRefusal(GameState& _state, Hardware& _hardware, Message _mess
   SetMessage(_state, _message, 0x19);
 }
 
-// 0x8068-0x80FF: H, unless the docking computer is on or a countdown runs. True when the countdown started, which ends
-// ProcessFlightKeys. _backward is the direction flag ResetHyperspaceRings' copy runs by.
-[[nodiscard]] bool PressHyperspace(GameState& _state, Hardware& _hardware, bool _backward)
+// 0x8068-0x80FF: H, unless the docking computer is on or a countdown runs. True when the countdown started, which ends ProcessFlightKeys.
+[[nodiscard]] bool PressHyperspace(GameState& _state, Hardware& _hardware)
 {
   if (_state.Data().playerShip.dockingComputerOn == 1 || _state.Data().jump.hyperspaceCountdown != 0)
   {
@@ -1212,7 +1216,7 @@ void PostHyperspaceRefusal(GameState& _state, Hardware& _hardware, Message _mess
   _state.Data().jump.hyperspaceCountdown = 0x0A;
   _state.Data().jump.hyperspaceCountdownFrames = 0x0A;
   ShowHyperspaceCountdown(_state);
-  ResetHyperspaceRings(_state, _backward);
+  ResetHyperspaceRings(_state);
   _state.Data().playerShip.missileState = 0;
   _state.Data().flight.shipIdRequested = 0;
   LatchHyperspaceTarget(_state);
@@ -1222,9 +1226,9 @@ void PostHyperspaceRefusal(GameState& _state, Hardware& _hardware, Message _mess
 // 0x8171-0x826C: T primes a missile, which locks on what is in the sights; U unarms it; M launches it. _di is the DI
 // ProcessFlightKeys holds here, which M's launch copies the missile from (LaunchPlayerMissile), unless the primed missile looked
 // in the sights this frame and FindShipInCrosshairs left DI; _backward is the direction flag the copy runs by.
-void HandleMissileKeys(GameState& _state, std::uint16_t _di, bool _backward)
+void HandleMissileKeys(GameState& _state, LaunchDi _di)
 {
-  std::uint16_t source = _di;
+  LaunchDi source = _di;
   if (_state.Data().keyboard.keyDown.keyDownT == 1 && _state.Data().commander.missileCount != 0 &&
       _state.Data().playerShip.missileState == 0 && _state.Data().jump.hyperspaceCountdown == 0 &&
       _state.Data().flight.shipIdRequested != 1)
@@ -1237,7 +1241,7 @@ void HandleMissileKeys(GameState& _state, std::uint16_t _di, bool _backward)
   if (_state.Data().playerShip.missileState == 1)
   {
     const CrosshairTarget target = FindShipInCrosshairs(_state);
-    source = target.di;
+    source = LaunchDi{target.diSlot, PastBuffer::None};
     if (target.slot && (_state.Slot(*target.slot).flags & FLAG_MASKED) == 0)
     {
       _state.Data().flight.missileTarget = *target.slot;
@@ -1274,7 +1278,7 @@ void HandleMissileKeys(GameState& _state, std::uint16_t _di, bool _backward)
     _state.Data().flight.shipIdRequested = 0;
     SetMessage(_state, Message::MissileLaunched, 0x14);
     _state.Data().commander.missileCount = static_cast<std::uint8_t>(_state.Data().commander.missileCount - 1);
-    LaunchPlayerMissile(_state, MissileSourceAt(_state, source), _backward);
+    LaunchPlayerMissile(_state, MissileSourceAt(_state, source));
   }
 }
 
@@ -1728,7 +1732,7 @@ FlightScreens HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware, s
   std::uint16_t scan = SCAN_F1;
   for (std::uint16_t keys = FUNCTION_KEYS;;)
   {
-    if (_state.BytesFrom(_state.Data().keyboard.keyDown, std::size_t{scan} + 1)[scan] == 1)
+    if (ByteWithin(BytesOf(_state.Data().keyboard.keyDown), scan) == 1)
     {
       // MOV AH,BL, and PUSH AX / CALL ResetKeyboard / POP AX keep it.
       ResetKeyboard(_state, _hardware);
@@ -1758,7 +1762,9 @@ ScreenChange RestoreFlightScreen(GameState& _state, Hardware& _hardware, bool _b
 void InvalidateDashboard(GameState& _state)
 {
   // REP STOSB with ES = DS, upwards: DF is clear wherever the reference calls it, as for SaveStardustPositions.
-  for (Counted<std::uint8_t>& shown : _state.BytesFrom(_state.Data().flight.missileCountShown, DASHBOARD_CACHE_BYTES))
+  static_assert(GAME_DATA_OFFSET(flight.speedShown) + 1 - GAME_DATA_OFFSET(flight.missileCountShown) == DASHBOARD_CACHE_BYTES,
+                "the dashboard's cache holds its members together, as in 1987");
+  for (Counted<std::uint8_t>& shown : BytesThrough(_state.Data().flight.missileCountShown, _state.Data().flight.speedShown))
   {
     shown = DASHBOARD_STALE;
   }
@@ -1989,7 +1995,7 @@ void UpdateEnergyAndLaserHeat(GameState& _state)
     return;
   }
   const auto lost = static_cast<std::size_t>(Low(NextRandom(_state)) / EQUIPMENT_LOSS_DIVISOR);
-  Counted<std::uint8_t>& equipment = _state.BytesFrom(_state.Data().commander.missileCount, lost + 1)[lost];
+  Counted<std::uint8_t>& equipment = ByteWithin(BytesOf(_state.Data().commander), COMMANDER_STATE_OFFSET(missileCount) + lost);
   if (equipment == 0)
   {
     return;
@@ -2054,7 +2060,7 @@ ScreenChange SetUpLocalSpace(GameState& _state, Hardware& _hardware, bool _backw
   _state.Data().flight.objectSlotCount = 0x14;
   _state.Data().flight.debrisSlotCount = 0x10;
   _state.Data().world.shipSlotCount = 0x24;
-  ClearAllObjects(_state, _backward);
+  ClearAllObjects(_state);
   const ScreenChange change = ShowCockpitScreen(_state, _hardware, _backward);
   (void)ResetStardust(_state);
   _state.Data().jump.hyperspaceCountdown = 0;
@@ -2082,7 +2088,7 @@ ScreenChange SetUpLocalSpace(GameState& _state, Hardware& _hardware, bool _backw
   return change;
 }
 
-std::uint16_t CheckCollisions(GameState& _state, Hardware& _hardware)
+SlotIndex CheckCollisions(GameState& _state, Hardware& _hardware)
 {
   // MOV CL,objectSlotCount / XOR CH,CH, PUSH CX and POP CX round each slot, then DEC CX / JE: a count of 0 runs 65,536 times.
   SlotIndex slot = SlotIndex::Sun;
@@ -2095,7 +2101,7 @@ std::uint16_t CheckCollisions(GameState& _state, Hardware& _hardware)
     }
     slot = SlotAfter(slot);
   }
-  return GameState::SlotOffset(slot);
+  return slot;
 }
 
 SafeZone InSafeZone(const GameState& _state)
@@ -2428,7 +2434,7 @@ FlightExit RunFlight(GameState& _state, Hardware& _hardware, bool _backward)
     {
       backward = false;
     }
-    if (ResolveLaserFire(_state, _hardware, backward))
+    if (ResolveLaserFire(_state, _hardware))
     {
       backward = false;
     }
@@ -2443,10 +2449,10 @@ FlightExit RunFlight(GameState& _state, Hardware& _hardware, bool _backward)
     // Its CLD, and PresentSpaceView's MOV BP,20h and MOV DX,1FF0h, which UpdateObjectsAndSpawn hands to its first handler.
     backward = false;
     countLeft = PRESENT_SPACE_VIEW_BP;
-    UpdateObjectsAndSpawn(_state, _hardware, backward, PRESENT_SPACE_VIEW_DX);
+    UpdateObjectsAndSpawn(_state, _hardware, PRESENT_SPACE_VIEW_DX);
     UpdatePlayerMotion(_state, _hardware);
     // DI past the slots, from which M's launch copies the missile unless a routine before it moves DI (ProcessFlightKeys).
-    const std::uint16_t slotsEnd = CheckCollisions(_state, _hardware);
+    const SlotIndex slotsEnd = CheckCollisions(_state, _hardware);
     if (_state.Data().flight.playerDocked == 1)
     {
       PlayStationTunnel(_state, _hardware, backward);
@@ -2512,7 +2518,7 @@ bool TickEscapePod(GameState& _state)
   return _state.Data().playerShip.escapePodFrames == 0;
 }
 
-FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, std::uint16_t _di, std::uint16_t _countIfNone,
+FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, SlotIndex _diSlot, std::uint16_t _countIfNone,
                                  std::uint16_t _segment, bool _backward)
 {
   if (_state.Data().flight.gameOverFrames != 0)
@@ -2529,10 +2535,10 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, std::ui
   const bool backward = screens.backward;
   // DI, from which M's launch copies the missile, as the routines before it leave it: InvalidateDashboard once the cockpit came
   // back, ResetStardust once the view changed, IsMassLocked once J asked it, and ClearDrawBuffer once the pause screen resumed.
-  std::uint16_t di = screens.restored ? DashboardCacheEnd(_state) : _di;
+  LaunchDi di = screens.restored ? LaunchDi{_diSlot, PastBuffer::DashboardCache} : LaunchDi{_diSlot, PastBuffer::None};
   if (screens.view != 0 && _state.Data().playerShip.viewLocked != 1 && ChangeView(_state, screens.view))
   {
-    di = StardustEnd(_state);
+    di = LaunchDi{di.slot, PastBuffer::Stardust};
   }
   if (_state.Data().keyboard.keyDown.keyDownG == 1 && _state.Data().commander.galacticHyperdriveFitted == 1 &&
       _state.Data().jump.galacticDriveReadyFrames == 0 && _state.Data().jump.hyperspaceCountdown == 0)
@@ -2541,7 +2547,7 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, std::ui
     SetMessage(_state, Message::GalacticDriveReady, 0x28);
     _state.Data().jump.galacticDriveReadyFrames = 0x28;
   }
-  if (_state.Data().keyboard.keyDown.keyDownH == 1 && PressHyperspace(_state, _hardware, backward))
+  if (_state.Data().keyboard.keyDown.keyDownH == 1 && PressHyperspace(_state, _hardware))
   {
     return FlightKeysExit{false, backward};
   }
@@ -2583,11 +2589,11 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, std::ui
       {
         return FlightKeysExit{true, backward};
       }
-      di = DrawBufferEnd(backward);
+      di = LaunchDi{di.slot, PastBuffer::DrawBuffer};
     }
     _state.Data().flight.gamePaused = 0;
   }
-  HandleMissileKeys(_state, di, backward);
+  HandleMissileKeys(_state, di);
   HandleFireButton(_state, _hardware);
   if (_state.Data().keyboard.keyDown.keyDownE == 1 && _state.Data().commander.ecmFitted == 1)
   {
@@ -2599,7 +2605,7 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, std::ui
   if (_state.Data().keyboard.keyDown.keyDownB == 1 && _state.Data().commander.energyBombFitted == 1)
   {
     _state.Data().commander.energyBombFitted = 0;
-    DetonateEnergyBomb(_state, _hardware, backward);
+    DetonateEnergyBomb(_state, _hardware);
   }
   if (_state.Data().keyboard.keyDown.keyDownC == 1 && _state.Data().commander.escapePodFitted == 1 &&
       _state.Data().playerShip.escapePodFrames == 0)

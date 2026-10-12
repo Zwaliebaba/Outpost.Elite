@@ -689,11 +689,11 @@ struct SupernovaGlow
   SlotIndex slot;     // DI after it: the sun's, or past the ship slots once an energy bomb went off and its LOOP looked at them
 };
 
-// SupernovaHeat (CS:3F57): once supernovaFrames has counted down to 1, where an INC keeps it, the sun's heat is supernovaHeat,
-// first the cabin temperature, growing by a quarter of itself (at least 1) a frame; when it overflows a byte, the player is
-// killed (KillPlayer, with StartPlayerDeathSound's STI) and an energy bomb goes off (DetonateEnergyBomb, its copies backwards when
-// _backward), and the heat is FFh. None while the countdown runs, or when it is 0. _slot is the sun's slot, DI.
-[[nodiscard]] std::optional<SupernovaGlow> SupernovaHeat(GameState& _state, Hardware& _hardware, SlotIndex _slot, bool _backward)
+// SupernovaHeat (CS:3F57): once supernovaFrames has counted down to 1, where an INC keeps it, the sun's heat is supernovaHeat, first the
+// cabin temperature, growing by a quarter of itself (at least 1) a frame; when it overflows a byte, the player is killed (KillPlayer, with
+// StartPlayerDeathSound's STI) and an energy bomb goes off (DetonateEnergyBomb), and the heat is FFh. None while the countdown runs, or
+// when it is 0. _slot is the sun's slot, DI.
+[[nodiscard]] std::optional<SupernovaGlow> SupernovaHeat(GameState& _state, Hardware& _hardware, SlotIndex _slot)
 {
   if (_state.Data().commander.supernovaFrames == 0)
   {
@@ -726,7 +726,7 @@ struct SupernovaGlow
     // 65,536, which DI's 64 KiB wrap brings back to the first ship's slot: the slot that many on from the first ship's. In flight
     // objectSlotCount is 14h, as SetUpLocalSpace sets it and nothing else writes it, so that is the first debris slot, 17 on.
     const auto ships = static_cast<std::uint8_t>(_state.Data().flight.objectSlotCount - BOMB_FIRST_SLOT);
-    DetonateEnergyBomb(_state, _hardware, _backward);
+    DetonateEnergyBomb(_state, _hardware);
     glow.slot = SlotAfter(SlotIndex::FirstShip, ships);
     glow.heat = 0xFF;
   }
@@ -747,10 +747,10 @@ struct SunDisc
 // over it on a carry, with FUEL SCOOPS ACTIVE for 5 frames; from FDh, KillPlayer, whose StartPlayerDeathSound leaves its step length
 // in AL over the radius's low byte, as there is no PUSH AX round it here, and a radius past a byte held to FFh. Returns the disc
 // in front of the view.
-[[nodiscard]] std::optional<SunDisc> SizeSun(GameState& _state, Hardware& _hardware, SpaceObject& _slot, bool _backward)
+[[nodiscard]] std::optional<SunDisc> SizeSun(GameState& _state, Hardware& _hardware, SpaceObject& _slot)
 {
   SunDisc disc{0, _state.IndexOf(_slot)};
-  if (const std::optional<SupernovaGlow> glow = SupernovaHeat(_state, _hardware, _state.IndexOf(_slot), _backward))
+  if (const std::optional<SupernovaGlow> glow = SupernovaHeat(_state, _hardware, _state.IndexOf(_slot)))
   {
     disc = SunDisc{glow->heat, glow->slot};
   }
@@ -1250,7 +1250,7 @@ void DrawSunOrPlanet(GameState& _state, Hardware& _hardware, SpaceObject& _slot,
   }
   // The disc is the slot's that SizeSun leaves DI on: the sun's, or, once a supernova's heat killed and its energy bomb's LOOP moved
   // DI, that slot's, as the original draws it.
-  if (const std::optional<SunDisc> disc = SizeSun(_state, _hardware, _slot, _backward))
+  if (const std::optional<SunDisc> disc = SizeSun(_state, _hardware, _slot))
   {
     DrawSunOrPlanetDisc(_state, _state.Slot(disc->slot), disc->radius, _backward);
   }

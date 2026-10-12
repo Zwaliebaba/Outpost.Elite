@@ -113,13 +113,13 @@ constexpr std::uint16_t ERROR_INK = 0xFFFF; // colour 3
 // commanderBlock's commanderFileBytes, the .cdr file's: the buffer DS:DX names to the read that loads a commander.
 [[nodiscard]] std::span<Counted<std::uint8_t>> CommanderFile(GameState& _state)
 {
-  return _state.BytesFrom(_state.Data().commander, COMMANDER_FILE_BYTES);
+  return BytesOf(_state.Data().commander);
 }
 
 // The same bytes as DOS writes them out: each Counted byte is its stored byte (Counted.h).
 [[nodiscard]] std::span<const std::uint8_t> CommanderFileBytes(const GameState& _state)
 {
-  const std::span<const Counted<std::uint8_t>> bytes = _state.BytesFrom(_state.Data().commander, COMMANDER_FILE_BYTES);
+  const std::span<const Counted<std::uint8_t>> bytes = BytesOf(_state.Data().commander);
   return std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size());
 }
 
@@ -503,7 +503,7 @@ std::uint8_t ShowDiskResult(GameState& _state, Hardware& _hardware)
   std::size_t letter = 1;
   for (; name[letter] != '.'; ++letter)
   {
-    _hardware.LoopTurn(FIND_NAME_EXTENSION, {_state.OffsetOf(name[letter])});
+    _hardware.LoopTurn(FIND_NAME_EXTENSION, {_state.PlaceOf(name[letter])});
   }
   name[letter] = 0;
   PrintAt(_state, TextIn(name), result);
@@ -524,7 +524,7 @@ std::uint8_t ShowDiskResult(GameState& _state, Hardware& _hardware)
     {
       return copied;
     }
-    _hardware.LoopTurn(COPY_LOADED_NAME, {_state.OffsetOf(name[from]), _state.OffsetOf(commander[from]), left});
+    _hardware.LoopTurn(COPY_LOADED_NAME, {_state.PlaceOf(name[from]), _state.PlaceOf(commander[from]), left});
   }
 }
 
@@ -557,28 +557,15 @@ void PerformDiskRequest(GameState& _state, Hardware& _hardware, std::uint8_t _re
   }
 }
 
-void SaveStartupCommander(GameState& _state, bool _backward)
+void SaveStartupCommander(GameState& _state)
 {
-  // REP MOVSB within the data segment, a byte at a time: going up, commanderBlock's bytes into startupCommander's.
-  if (!_backward)
+  // REP MOVSB within the data segment, a byte at a time: commanderBlock's bytes into startupCommander's, upwards, as the direction flag is
+  // clear wherever the game calls it: the only STD, MaskOutsideTunnel's, has its CLD before the routine returns (change 3c).
+  const std::span<Counted<std::uint8_t>> to(_state.Data().saveLoad.startupCommander);
+  const std::span<const Counted<std::uint8_t>> from = BytesOf(std::as_const(_state).Data().commander);
+  for (std::size_t index = 0; index < COMMANDER_FILE_BYTES; ++index)
   {
-    const std::span<Counted<std::uint8_t>> to(_state.Data().saveLoad.startupCommander);
-    const std::span<const Counted<std::uint8_t>> from = std::as_const(_state).BytesFrom(_state.Data().commander, COMMANDER_FILE_BYTES);
-    for (std::size_t index = 0; index < COMMANDER_FILE_BYTES; ++index)
-    {
-      to[index] = std::uint8_t{from[index]};
-    }
-    return;
-  }
-  // Going down from each start, past both records' first bytes into what the original's data segment holds before them: still
-  // by the original's addresses, as change 3c of D38 takes the direction flag.
-  std::uint16_t from = _state.OffsetOf(_state.Data().commander);
-  std::uint16_t to = _state.OffsetOf(_state.Data().saveLoad.startupCommander);
-  for (std::uint16_t left = COMMANDER_FILE_BYTES; left != 0; --left)
-  {
-    _state.SetByte(to, _state.Byte(from));
-    from = Offset(from, 0xFFFF);
-    to = Offset(to, 0xFFFF);
+    to[index] = std::uint8_t{from[index]};
   }
 }
 
@@ -654,7 +641,7 @@ bool PromptCommanderFileName(GameState& _state, Hardware& _hardware)
       return false;
     }
     name[letter] = character;
-    _hardware.LoopTurn(NEXT_NAME_CHARACTER, {_state.OffsetOf(name[letter])});
+    _hardware.LoopTurn(NEXT_NAME_CHARACTER, {_state.PlaceOf(name[letter])});
   }
   // ".CDR" and its NUL after the name, the LOOP's turns carrying both places, SI and DI, and the count. SI goes through the
   // constant, whose place the turns carry as its index (D38).
@@ -668,7 +655,7 @@ bool PromptCommanderFileName(GameState& _state, Hardware& _hardware)
       return true;
     }
     _hardware.LoopTurn(APPEND_EXTENSION,
-                       {static_cast<std::uint16_t>(from), _state.OffsetOf(name[letter]), static_cast<std::uint16_t>(left)});
+                       {static_cast<std::uint16_t>(from), _state.PlaceOf(name[letter]), static_cast<std::uint16_t>(left)});
   }
 }
 

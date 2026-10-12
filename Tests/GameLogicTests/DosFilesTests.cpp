@@ -5,6 +5,7 @@
 #include "GameData.h"
 #include "Platform.h"
 #include "ReferenceRig.h"
+#include "Text.h"
 
 #include <array>
 #include <span>
@@ -92,7 +93,7 @@ public:
 
   [[nodiscard]] Bytes Block()
   {
-    return m_rig.State().BytesFrom(m_rig.State().Data().commander, BLOCK_BYTES);
+    return Elite::BytesWithin(Elite::BytesOf(m_rig.State().Data().commander), 0, BLOCK_BYTES);
   }
 
   /// A second transfer area, for a search that is not the game's.
