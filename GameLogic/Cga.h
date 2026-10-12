@@ -193,6 +193,14 @@ public:
   /// Draws the visible area of _memory and the border as they are at this moment.
   void Render(VideoMemory _memory, FrameImage& _image) const noexcept;
 
+  /// The colours, 0-15 of CgaPalette, that the 320x200 graphics mode shows its four pixel values in, by the colour select
+  /// register as it is now.
+  [[nodiscard]] std::array<std::uint8_t, 4> GraphicsColors() const noexcept;
+
+  /// Whether the card shows the 320x200 graphics mode from the start of video memory, where the game draws its screens: so a
+  /// byte of video memory is at the place on the screen its offset names.
+  [[nodiscard]] bool ShowsGraphicsFromStart() const noexcept;
+
   /// The status as the card drives it now, without paced time's rule.
   [[nodiscard]] std::uint8_t Status() const noexcept;
 

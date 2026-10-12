@@ -62,6 +62,24 @@ using Matrix = std::array<std::array<double, 3>, 3>; // rows: where each axis go
   return product;
 }
 
+// RotatePitchYawRoll's turn: (y, z) by the pitch, then (x, z) by the yaw, then (x, y) by the roll; the pitch acts first, so it
+// is rightmost.
+[[nodiscard]] Matrix PlayerMatrix(std::uint16_t _pitch, std::uint16_t _yaw, std::uint16_t _roll) noexcept
+{
+  constexpr std::size_t X = 0;
+  constexpr std::size_t Y = 1;
+  constexpr std::size_t Z = 2;
+  return Product(PlaneRotation(X, Y, _roll), Product(PlaneRotation(X, Z, _yaw), PlaneRotation(Y, Z, _pitch)));
+}
+
+// RotateToViewDirection's turn: (x, z) by -_viewAngle.
+[[nodiscard]] Matrix ViewMatrix(std::uint16_t _viewAngle) noexcept
+{
+  constexpr std::size_t X = 0;
+  constexpr std::size_t Z = 2;
+  return PlaneRotation(X, Z, static_cast<std::uint16_t>(TURN - _viewAngle % TURN));
+}
+
 // The unit quaternion of a rotation matrix, by its largest diagonal term for precision.
 [[nodiscard]] Orientation QuaternionOf(const Matrix& _m) noexcept
 {
@@ -130,7 +148,11 @@ FlightSnapshot TakeFlightSnapshot(const GameState& _state)
                                                             .pitch = slot.pitch,
                                                             .yaw = slot.yaw,
                                                             .roll = slot.roll,
-                                                            .continues = false};
+                                                            .viewX = static_cast<std::int16_t>(slot.viewX),
+                                                            .viewY = static_cast<std::int16_t>(slot.viewY),
+                                                            .viewZ = static_cast<std::int16_t>(slot.viewZ),
+                                                            .continues = false,
+                                                            .model = false};
     ++snapshot.objectCount;
   }
   return snapshot;
@@ -138,11 +160,43 @@ FlightSnapshot TakeFlightSnapshot(const GameState& _state)
 
 Orientation PlayerRotation(std::uint16_t _pitch, std::uint16_t _yaw, std::uint16_t _roll) noexcept
 {
+  return QuaternionOf(PlayerMatrix(_pitch, _yaw, _roll));
+}
+
+Orientation CameraRotation(const FlightSnapshot& _snapshot) noexcept
+{
+  return QuaternionOf(
+    Product(ViewMatrix(_snapshot.viewAngle), PlayerMatrix(_snapshot.playerPitch, _snapshot.playerYaw, _snapshot.playerRoll)));
+}
+
+std::array<float, 3> ScenePosition(const FlightSnapshot& _snapshot, const SnapshotObject& _object) noexcept
+{
+  // The camera's rotation undone: its matrix transposed.
+  const Matrix camera =
+    Product(ViewMatrix(_snapshot.viewAngle), PlayerMatrix(_snapshot.playerPitch, _snapshot.playerYaw, _snapshot.playerRoll));
+  const std::array<double, 3> view = {static_cast<double>(_object.viewX), static_cast<double>(_object.viewY),
+                                      static_cast<double>(_object.viewZ)};
+  std::array<float, 3> position{};
+  for (std::size_t axis = 0; axis < 3; ++axis)
+  {
+    position[axis] = static_cast<float>(camera[0][axis] * view[0] + camera[1][axis] * view[1] + camera[2][axis] * view[2]);
+  }
+  return position;
+}
+
+Orientation ObjectRotation(std::uint16_t _pitch, std::uint16_t _yaw, std::uint16_t _roll) noexcept
+{
   constexpr std::size_t X = 0;
   constexpr std::size_t Y = 1;
   constexpr std::size_t Z = 2;
-  // The pitch acts first, so it is rightmost.
-  return QuaternionOf(Product(PlaneRotation(X, Y, _roll), Product(PlaneRotation(X, Z, _yaw), PlaneRotation(Y, Z, _pitch))));
+  // The roll acts first, negated, so it is rightmost.
+  return QuaternionOf(Product(PlaneRotation(Y, Z, _pitch),
+                              Product(PlaneRotation(X, Z, _yaw), PlaneRotation(X, Y, static_cast<std::uint16_t>(TURN - _roll % TURN)))));
+}
+
+Orientation ViewRotation(std::uint16_t _viewAngle) noexcept
+{
+  return QuaternionOf(ViewMatrix(_viewAngle));
 }
 
 float AngleBetween(const Orientation& _a, const Orientation& _b) noexcept

@@ -167,6 +167,11 @@ void Cga::Render(VideoMemory _memory, FrameImage& _image) const noexcept
   }
 }
 
+bool Cga::ShowsGraphicsFromStart() const noexcept
+{
+  return (m_modeControl & MODE_GRAPHICS) != 0 && StartAddress() == 0;
+}
+
 std::uint32_t Cga::StartAddress() const noexcept
 {
   return (std::uint32_t{Crtc(CrtcRegister::StartAddressHigh)} << 8) | Crtc(CrtcRegister::StartAddressLow);
@@ -242,14 +247,19 @@ void Cga::RenderText(VideoMemory _memory, FrameImage& _image) const noexcept
   _image.borderColor = static_cast<std::uint8_t>(m_colorSelect & COLOR_SELECT_COLOR);
 }
 
-void Cga::RenderGraphics320(VideoMemory _memory, FrameImage& _image) const noexcept
+std::array<std::uint8_t, 4> Cga::GraphicsColors() const noexcept
 {
   const auto background = static_cast<std::uint8_t>(m_colorSelect & COLOR_SELECT_COLOR);
   const std::uint8_t brightness = (m_colorSelect & COLOR_SELECT_INTENSITY) != 0 ? BRIGHT_COLOR_OFFSET : 0;
   const std::array<std::uint8_t, 3>& palette = (m_colorSelect & COLOR_SELECT_PALETTE_1) != 0 ? PALETTE_1 : PALETTE_0;
-  const std::array<std::uint8_t, 4> colors = {background, static_cast<std::uint8_t>(palette[0] + brightness),
-                                              static_cast<std::uint8_t>(palette[1] + brightness),
-                                              static_cast<std::uint8_t>(palette[2] + brightness)};
+  return {background, static_cast<std::uint8_t>(palette[0] + brightness), static_cast<std::uint8_t>(palette[1] + brightness),
+          static_cast<std::uint8_t>(palette[2] + brightness)};
+}
+
+void Cga::RenderGraphics320(VideoMemory _memory, FrameImage& _image) const noexcept
+{
+  const std::array<std::uint8_t, 4> colors = GraphicsColors();
+  const std::uint8_t background = colors[0];
   const std::uint32_t start = StartAddress() * 2;
 
   std::size_t pixel = 0;

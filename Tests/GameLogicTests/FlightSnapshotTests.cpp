@@ -93,6 +93,54 @@ public:
   }
 
   // The angle between two rotations: none between one and itself or its negation, and a quarter turn of pitch is a quarter turn.
+  // The camera (ADR-033) is the player's rotation and then the view's, which turns (x, z) by minus the view: the left view, 200h,
+  // sees ahead of the player on its right. A scene position turned by the camera is the view position the frame drew, at angles
+  // round every axis and in every view.
+  TEST_METHOD(TheCameraSeesWhereTheFrameDrew)
+  {
+    constexpr double MOST_UNITS = 0.01;
+    const std::array<double, 3> ahead = Rotate(Elite::ViewRotation(0x200), {0.0, 0.0, 1000.0});
+    Assert::IsTrue(std::abs(ahead[0] - 1000.0) < MOST_UNITS && std::abs(ahead[2]) < MOST_UNITS, L"the left view sees ahead on its right");
+    for (const std::uint16_t view : std::array<std::uint16_t, 4>{0x000, 0x200, 0x400, 0x600})
+    {
+      for (std::uint16_t angle = 0; angle < 0x800; angle += 0x0D3)
+      {
+        Elite::FlightSnapshot snapshot;
+        snapshot.playerPitch = angle;
+        snapshot.playerYaw = static_cast<std::uint16_t>(0x800 - angle);
+        snapshot.playerRoll = static_cast<std::uint16_t>(angle * 3);
+        snapshot.viewAngle = view;
+        const Elite::Orientation camera = Elite::CameraRotation(snapshot);
+        const auto expected = [&](const std::array<double, 3>& _v)
+        { return Rotate(Elite::ViewRotation(view), Rotate(Elite::PlayerRotation(angle, snapshot.playerYaw, snapshot.playerRoll), _v)); };
+        const std::array<double, 3> probe = {300.0, -1200.0, 4000.0};
+        const std::array<double, 3> turned = Rotate(camera, probe);
+        const std::array<double, 3> composed = expected(probe);
+        const Elite::SnapshotObject object{.slot = 3,
+                                           .kind = 9,
+                                           .x = 0,
+                                           .y = 0,
+                                           .z = 0,
+                                           .pitch = 0,
+                                           .yaw = 0,
+                                           .roll = 0,
+                                           .viewX = -2500,
+                                           .viewY = 700,
+                                           .viewZ = 9000,
+                                           .continues = false,
+                                           .model = true};
+        const std::array<float, 3> position = Elite::ScenePosition(snapshot, object);
+        const std::array<double, 3> seen = Rotate(camera, {position[0], position[1], position[2]});
+        for (std::size_t axis = 0; axis < 3; ++axis)
+        {
+          Assert::IsTrue(std::abs(turned[axis] - composed[axis]) < MOST_UNITS * 10, L"the view after the player");
+        }
+        Assert::IsTrue(std::abs(seen[0] + 2500.0) < 1.0 && std::abs(seen[1] - 700.0) < 1.0 && std::abs(seen[2] - 9000.0) < 1.0,
+                       (L"seen where drawn, view " + std::to_wstring(view) + L", angle " + std::to_wstring(angle)).c_str());
+      }
+    }
+  }
+
   TEST_METHOD(AngleBetweenIsTheTurnFromOneToTheOther)
   {
     const Elite::Orientation start = Elite::PlayerRotation(0x123, 0x456, 0x789);

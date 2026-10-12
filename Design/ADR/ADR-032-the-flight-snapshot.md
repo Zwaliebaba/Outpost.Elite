@@ -1,6 +1,6 @@
 # ADR-032 — The flight snapshot, and drawing between two of them
 
-**Status:** accepted 2026-10-12, with the change that implements it, piece 2 of Phase 6 ([Reverse-Engineering-Plan.md §5, Phase 6](../Reverse-Engineering-Plan.md#phase-6--the-new-game)). It carries out D49 under the owner's ruling D61. It amends [ADR-031](ADR-031-the-renderer-first-piece.md)'s table of what D60 moved: tearing moves on to piece 3.
+**Status:** accepted 2026-10-12, with the change that implements it, piece 2 of Phase 6 ([Reverse-Engineering-Plan.md §5, Phase 6](../Reverse-Engineering-Plan.md#phase-6--the-new-game)). It carries out D49 under the owner's ruling D61. It amends [ADR-031](ADR-031-the-renderer-first-piece.md)'s table of what D60 moved: tearing moves on to piece 3. **Amended 2026-10-12 by [ADR-033](ADR-033-the-space-view-hybrid.md) (D62):** of what D61 left to piece 3, the objects' rotations, the making of the engine's scene and its drawing arrive for the ships, with each object's view position and whether it was drawn as a model.
 
 ## Context
 

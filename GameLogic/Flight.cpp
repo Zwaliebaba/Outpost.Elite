@@ -2431,6 +2431,7 @@ FlightExit RunFlight(GameState& _state, Hardware& _hardware, bool _backward)
     // FlightFrameLoop: one frame. The direction flag goes as each routine leaves it: TransformAndDrawObjects', and the CLD of a
     // DrawLine that fills a horizontal line's bytes, a beam's or a streak's.
     UpdateDashboard(_state);
+    _hardware.BeginSpaceViewFrame(); // the space view's layers watch the frame's drawing from here (ADR-033)
     backward = TransformAndDrawObjects(_state, _hardware, backward);
     if (ApplyEnemyLaserHit(_state, _hardware))
     {

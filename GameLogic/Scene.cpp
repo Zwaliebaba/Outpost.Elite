@@ -598,6 +598,7 @@ void DrawObjectAsDot(GameState& _state, SpaceObject& _slot, bool _backward)
   _state.Data().scene.drawCenterX = std::uint16_t{_slot.viewX};
   _state.Data().scene.drawCenterY = std::uint16_t{_slot.viewY};
   _state.Data().scene.drawCenterZ = std::uint16_t{_slot.viewZ};
+  _hardware.NoteSpaceViewModel(); // for a renderer that draws the model itself (ADR-033); no byte of the state is written
   return RunBlueprintHandler(_state, blueprint, _backward);
 }
 
@@ -633,7 +634,11 @@ void DrawObjectAsDot(GameState& _state, SpaceObject& _slot, bool _backward)
   }
   SpaceObject& object = _state.Slot(*farthest);
   object.flags = static_cast<std::uint8_t>(object.flags | STATE_DRAWN);
-  return DrawObject(_state, _hardware, object, _backward);
+  // What the object draws, watched for the space view's layers (ADR-033), which read the buffer and write nothing.
+  _hardware.BeginSpaceViewObject();
+  const bool backward = DrawObject(_state, _hardware, object, _backward);
+  _hardware.EndSpaceViewObject(static_cast<std::uint8_t>(Number(*farthest)));
+  return backward;
 }
 
 // One coordinate of the sun's or planet's centre (CS:4030, CS:404E): 256|_value| over _slot's view z, by DIV [DI+14h], rounded
@@ -1190,6 +1195,16 @@ bool RunBlueprintHandler(GameState& _state, const Blueprint& _blueprint, bool _b
   // Every blueprint's vertex program begins by loading a vertex into the accumulator, so what the handler leaves in BP, BX and
   // DX is never read.
   return RenderBlueprint(_state, _blueprint, Vector{}, _backward);
+}
+
+const Blueprint& BlueprintOf(std::uint8_t _kind)
+{
+  return BLUEPRINTS.at(_kind);
+}
+
+std::uint16_t FaceFillPattern(std::uint8_t _index)
+{
+  return FACE_FILL_PATTERNS.at(_index);
 }
 
 bool TransformAndDrawObjects(GameState& _state, Hardware& _hardware, bool _backward)

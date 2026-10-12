@@ -11,6 +11,7 @@
 #include "IntervalTimer.h"
 #include "Keyboard.h"
 #include "Mouse.h"
+#include "SpaceViewLayers.h"
 #include "Speaker.h"
 #include "Timing.h"
 
@@ -240,6 +241,48 @@ public:
   /// before it (ContinueFrom), which becomes the previous.
   void PublishFlightSnapshot(const FlightSnapshot& _snapshot, bool _continues) noexcept;
 
+  /// The space view's layers as the last published snapshot's frame drew them (ADR-033): what a renderer that draws the ships
+  /// itself draws under and over them. PublishFlightSnapshot finishes them and marks each object drawn as a model.
+  [[nodiscard]] const SpaceViewLayers& SpaceView() const noexcept
+  {
+    return m_spaceView;
+  }
+
+  /// Whether the screen still shows the last published frame's view: the CGA in its graphics mode from the start of video memory
+  /// (Cga::ShowsGraphicsFromStart), and the view's bytes unchanged there (SpaceViewLayers::Shown). While it does, a renderer may
+  /// draw the frame's scene in its place.
+  [[nodiscard]] bool SpaceViewShown() const noexcept
+  {
+    return m_cga.ShowsGraphicsFromStart() && m_spaceView.Shown(m_state);
+  }
+
+  /// The space view's watch of a frame's drawing (Hardware::BeginSpaceViewFrame and the rest), over the game's state.
+  void BeginSpaceViewFrame() noexcept
+  {
+    m_spaceView.BeginFrame();
+  }
+
+  void BeginSpaceViewObject() noexcept
+  {
+    m_spaceView.BeginObject(m_state);
+  }
+
+  void NoteSpaceViewModel() noexcept
+  {
+    m_spaceView.NoteModel();
+  }
+
+  void EndSpaceViewObject(std::uint8_t _slot) noexcept
+  {
+    m_spaceView.EndObject(m_state, _slot);
+  }
+
+  /// The colours, 0-15 of CgaPalette, the 320x200 graphics mode shows its four pixel values in now (Cga::GraphicsColors).
+  [[nodiscard]] std::array<std::uint8_t, 4> GraphicsColors() const noexcept
+  {
+    return m_cga.GraphicsColors();
+  }
+
   [[nodiscard]] IntervalTimer& Timer() noexcept
   {
     return m_timer;
@@ -379,6 +422,7 @@ private:
   GamePort m_gamePort;
   Cga m_cga;
   std::array<FlightSnapshot, 2> m_flightSnapshots{}; // the previous and the latest
+  SpaceViewLayers m_spaceView;
   Bios m_bios;
   Mouse m_mouse;
   DosFiles m_files;

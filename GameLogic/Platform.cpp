@@ -548,6 +548,11 @@ void Platform::PublishFlightSnapshot(const FlightSnapshot& _snapshot, bool _cont
   latest = _snapshot;
   latest.sequence = m_flightSnapshots[0].sequence + 1;
   latest.pacedTime = m_clock;
+  m_spaceView.Finish(m_state);
+  for (std::size_t index = 0; index < latest.objectCount; ++index)
+  {
+    latest.objects[index].model = m_spaceView.DrawnAsModel(latest.objects[index].slot);
+  }
   if (_continues && m_flightSnapshots[0].sequence != 0)
   {
     ContinueFrom(m_flightSnapshots[0], latest);

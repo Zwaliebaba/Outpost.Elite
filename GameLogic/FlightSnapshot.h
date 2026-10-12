@@ -33,7 +33,11 @@ struct SnapshotObject
   std::uint16_t pitch = 0; ///< as the slot holds them: a ship's heading, 800h per turn; the sun's and the planet's scale shift
   std::uint16_t yaw = 0;   ///< and colour in pitch; the station's collided bit in yaw's bit 0
   std::uint16_t roll = 0;
+  std::int16_t viewX = 0; ///< where the frame drew it, in the camera's frame and the view's (drawCenter), for a model only
+  std::int16_t viewY = 0;
+  std::int16_t viewZ = 0;
   bool continues = false; ///< the same object as in the snapshot before (ContinueFrom)
+  bool model = false;     ///< drawn as its blueprint's model this frame, which a renderer draws in its place (SpaceViewLayers)
 
   friend bool operator==(const SnapshotObject&, const SnapshotObject&) = default;
 };
@@ -68,6 +72,23 @@ inline constexpr float MOST_TURN_PER_FRAME_RADIANS = 0.5f;
 /// The rotation RotatePitchYawRoll makes of _pitch, _yaw and _roll, 800h per turn: (y, z) by the pitch, then (x, z) by the yaw,
 /// then (x, y) by the roll, each plane turned as RotateBySinCos turns it. It takes a position from the game's axes to the camera's.
 [[nodiscard]] Orientation PlayerRotation(std::uint16_t _pitch, std::uint16_t _yaw, std::uint16_t _roll) noexcept;
+
+/// The rotation a ship's angles make of its model (ShipModel.h), 800h per turn: its roll negated in (x, y), then its yaw in (x, z),
+/// then its pitch in (y, z), as BuildBoxCornerVertices turns a box's corners before the player's rotation turns them on. The Dodo
+/// turns the other way round its roll (ModelRotation, ShipModel.h).
+[[nodiscard]] Orientation ObjectRotation(std::uint16_t _pitch, std::uint16_t _yaw, std::uint16_t _roll) noexcept;
+
+/// The rotation RotateToViewDirection and RotateVerticesToView make of the view _viewAngle, 800h per turn: (x, z) by -_viewAngle.
+/// It takes a position from the camera's frame, PlayerRotation's, to the view's.
+[[nodiscard]] Orientation ViewRotation(std::uint16_t _viewAngle) noexcept;
+
+/// The camera of _snapshot's frame (ADR-033): the player's rotation, then the view's, ViewRotation after PlayerRotation. It takes
+/// a direction of the game's axes, in which a slot's position is held, into the view's frame, x right, y down and z ahead.
+[[nodiscard]] Orientation CameraRotation(const FlightSnapshot& _snapshot) noexcept;
+
+/// Where _object of _snapshot is in the game's axes, as a scene holds it: its view position, where the frame drew it, turned back
+/// by the camera's rotation. A scene's camera, CameraRotation at the origin, sees it where the game drew it.
+[[nodiscard]] std::array<float, 3> ScenePosition(const FlightSnapshot& _snapshot, const SnapshotObject& _object) noexcept;
 
 /// The angle between two rotations, 0 to pi radians.
 [[nodiscard]] float AngleBetween(const Orientation& _a, const Orientation& _b) noexcept;

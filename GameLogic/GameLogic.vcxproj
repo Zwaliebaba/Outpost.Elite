@@ -153,12 +153,14 @@
     <ClInclude Include="SceneTables.h" />
     <ClInclude Include="Sha256.h" />
     <ClInclude Include="SharedTables.h" />
+    <ClInclude Include="ShipModel.h" />
     <ClInclude Include="Ships.h" />
     <ClInclude Include="ShipsTables.h" />
     <ClInclude Include="Sound.h" />
     <ClInclude Include="SoundState.h" />
     <ClInclude Include="SoundTables.h" />
     <ClInclude Include="SpaceObject.h" />
+    <ClInclude Include="SpaceViewLayers.h" />
     <ClInclude Include="Speaker.h" />
     <ClInclude Include="StartUp.h" />
     <ClInclude Include="StartUpState.h" />
@@ -215,8 +217,10 @@
     <ClCompile Include="SaveLoad.cpp" />
     <ClCompile Include="Scene.cpp" />
     <ClCompile Include="Sha256.cpp" />
+    <ClCompile Include="ShipModel.cpp" />
     <ClCompile Include="Ships.cpp" />
     <ClCompile Include="Sound.cpp" />
+    <ClCompile Include="SpaceViewLayers.cpp" />
     <ClCompile Include="Speaker.cpp" />
     <ClCompile Include="StartUp.cpp" />
     <ClCompile Include="StateDigest.cpp" />
