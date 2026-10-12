@@ -1,6 +1,6 @@
 # ADR-030 — Change 3c: nothing by the original's address, and the layout's remainder
 
-**Status:** accepted 2026-10-12, with the change that implements it, the first part of change 3c of D33's piece 3 ([Reverse-Engineering-Plan.md §5, Phase 5](../Reverse-Engineering-Plan.md#phase-5--the-native-platform-and-the-natural-layout)). The later parts amend it: the layout's clean-up with one re-base, D37's second round, and D43's clamp at load. It amends ADR-015, ADR-018 and ADR-026. **Amended 2026-10-12 by the second part,** the layout's clean-up and its one re-base (below).
+**Status:** accepted 2026-10-12, with the change that implements it, the first part of change 3c of D33's piece 3 ([Reverse-Engineering-Plan.md §5, Phase 5](../Reverse-Engineering-Plan.md#phase-5--the-native-platform-and-the-natural-layout)). The later parts amend it: the layout's clean-up with one re-base, D37's second round, and D43's clamp at load. It amends ADR-015, ADR-018 and ADR-026. **Amended 2026-10-12 by the second part,** the layout's clean-up and its one re-base, **and by the third part,** D37's second round (below).
 
 ## Context
 
@@ -107,6 +107,28 @@ The gaps nested inside a named record (37, in nine groups' records) are a record
 | The turn probe | each test's sequence of idle and working turns, 73,089,965 turns in all, identical to `main`'s; at the unused members' removal and at the end |
 | The re-base | the 490 state digests change (134 in `Replays/`, 356 in `KnownAnswers.txt`), and no picture or outcome line; a second re-base writes every file byte for byte the same |
 | The suite | 141 tests pass in check mode under g++ `-O2` (2.7 s), g++ `-O0` (27.0 s) and clang++ 18 |
+| Checkers | `CheckProjectFiles`, `CheckFormat`, `GenerateGameData --check` and `GenerateTables --check` are clean; clang-tidy and MSVC run in CI |
+
+## The third part: D37's second round (2026-10-12)
+
+**12. The results no caller reads are gone.** D37 made void every native routine whose result no caller reads, and the dead-code sweep found 47. What the later changes left are 15 more. The inventory is a clang-tidy run of `bugprone-unused-return-value` over every value-returning function of `GameLogic`, against the references in the AST of every translation unit of `GameLogic` and its suite. It finds the 15 routines below, each with every caller discarding its result, in game code and tests alike:
+
+- `BlankHelpRows`, `BlankLeadingZeros`, `ClassifyViewPosition`, `DrawCircle`, `DrawCross`
+- `DrawViewString`, `FillClippedTriangle`, `FormatDecimal5`, `OffsetVertexByCenter`, `PostDockingMessage`
+- `PrintCountedTextLines`, `PrintEquipmentSellColumn`, `RepeatStoreVideoWords`, `RunVertexProgram`, `ShowMessage`
+
+All of them are now void, and `PrintTextLines` with them: `PrintCountedTextLines` was the last of its readers. A second run finds no more. The result types only they returned go with them: `BlankedZeros` and `ViewTest`. Nothing else changes. Every write each routine makes stays, in the same order, so no write the idle test sees goes, and no ruling is needed. Two routines discard their result in most calls but keep it:
+
+- `ComputeVelocity` is read by `Combat` and `Ai`.
+- `InterruptController::Acknowledge` is read by `Platform`.
+
+### Measured 2026-10-12
+
+| Check | Result |
+|---|---|
+| The gate | every digest, answer, picture and outcome unchanged, in check mode; no re-base |
+| The turn probe | each test's sequence of idle and working turns, 73,089,965 turns in all, identical to `main`'s |
+| The suite | 141 tests pass under g++ `-O2`, g++ `-O0` and clang++ 18 |
 | Checkers | `CheckProjectFiles`, `CheckFormat`, `GenerateGameData --check` and `GenerateTables --check` are clean; clang-tidy and MSVC run in CI |
 
 ## What this forecloses

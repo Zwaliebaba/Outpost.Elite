@@ -194,6 +194,8 @@ The native platform comes first, and it changes nothing on purpose (D23). Video 
 
    *Change 3c's second part done 2026-10-12 (ADR-030): the 105 unused members, the unions, the four constants in the state and the 19 gaps are gone, the runs' constant text composed with their written fields where they are printed. The state is 14,420 bytes. Every state byte held at its 1987 offset at all 490 points, every picture and outcome was exact, the turn probe was identical, and the state digests are re-based once. Left: D37's second round and D43's clamp at load.*
 
+   *Change 3c's third part done 2026-10-12 (ADR-030): D37's second round. The 15 routines whose result no caller read are void, and so is `PrintTextLines`, whose last reader was one of them. A second inventory finds none left. Every digest, answer, picture and outcome held with no re-base, and the turn probe was identical. Left: D43's clamp at load.*
+
    The same gates apply.
 
 4. **A native game loop** (D40), after piece 3: a frame tick in place of the timer's interrupts, input events in place of the scan-code buffer, synthesised sound in place of the speaker, and drawing from the game's state in place of CGA memory. The `Platform`, `Hardware`, `Bios` and the device classes then go, and paced time with them, so the fields no longer need to count their changes (ADR-024). The replays stop playing out exactly: they are re-recorded or replaced by scenarios of outcomes (D35), and the subsystem answers and the owner's play-tests guard it.
@@ -373,7 +375,7 @@ After D44, no replay reaches the docked screens. Their rules are functions with 
 | [ADR-027](ADR/ADR-027-the-short-range-chart-capped.md) | The short-range chart capped to its buffers, the first change on purpose (D41) | Phase 5 — written |
 | [ADR-028](ADR/ADR-028-the-match-to-elites-exe-retired.md) | The tests no longer hold the port to `ELITES.EXE` (D57), and `ReplayRunner` goes (D58) | Phase 5 — written |
 | [ADR-029](ADR/ADR-029-the-guard-restored.md) | The guard restored: the image's two edits reverted and D57's deletions undone (D59) | Phase 5 — written |
-| [ADR-030](ADR/ADR-030-change-3c-nothing-by-address.md) | Change 3c: nothing by the original's address; then the layout's clean-up, D37's second round and a loaded commander clamped (D43) | Phase 5, piece 3 — first part written |
+| [ADR-030](ADR/ADR-030-change-3c-nothing-by-address.md) | Change 3c: nothing by the original's address; then the layout's clean-up, D37's second round and a loaded commander clamped (D43) | Phase 5, piece 3 — three of its four parts written |
 | — | The renderer: device, frames in flight, targets, the 2D layer, text and the resolution policy (D47, D48, D55) | Phase 6, piece 1 — to write |
 | — | The space view: the snapshot, interpolation, the field of view, ships, planets and sky (D45, D49, D50) | Phase 6, pieces 2 and 3 — to write |
 | — | The cockpit HUD and its gauges (D39, D51) | Phase 6, piece 3 — to write |

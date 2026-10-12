@@ -194,16 +194,15 @@ void AddPrecious(Counted<std::uint8_t>& _field, std::uint8_t _amount)
 }
 
 // PrintEquipmentSellColumn (0x6949): _text in the resale column of menuSelectedRow's row, in the resale price's attribute, and
-// the menu's attribute put back. Returns the cell after its last character.
-std::uint16_t PrintEquipmentSellColumn(GameState& _state, std::string_view _text)
+// the menu's attribute put back.
+void PrintEquipmentSellColumn(GameState& _state, std::string_view _text)
 {
   _state.Data().drawing.textAttribute = SELL_PRICE_ATTRIBUTE;
   // (row-1)*80 bytes, as (row-1)*256/4 and that /4 again.
   const auto quarter = static_cast<std::uint16_t>((static_cast<std::uint8_t>(_state.Data().menus.menuSelectedRow - 1) << 8) >> 2);
   const auto cell = static_cast<std::uint16_t>(MenuFirstRowCell(_state) + quarter + (quarter >> 2) + SELL_PRICE_COLUMN);
-  const std::uint16_t printed = PrintTextModeString(_state, _text, cell);
+  PrintTextModeString(_state, _text, cell);
   _state.Data().drawing.textAttribute = MENU_ATTRIBUTE;
-  return printed;
 }
 
 // The name of the laser type on mount _mount, from its two bits of laserMountTypes _types.

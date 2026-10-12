@@ -173,12 +173,11 @@ void WaitTimerTicks(GameState& _state, Hardware& _hardware, std::uint16_t _ticks
   }
 }
 
-// _message posted for 25 frames. Returns it, which the original leaves in AX as its text's address (mov ax, text).
-[[nodiscard]] Message PostDockingMessage(GameState& _state, Message _message)
+// _message posted for 25 frames.
+void PostDockingMessage(GameState& _state, Message _message)
 {
   _state.Data().messages.messagePointer = _message;
   _state.Data().messages.messageFrames = DOCKING_MESSAGE_FRAMES;
-  return _message;
 }
 
 // The station's position, z moved out to the approach point when _approach: what the original loads into AX, BX
@@ -586,19 +585,19 @@ void ToggleDockingComputer(GameState& _state, Hardware& _hardware)
       _state.Data().playerShip.velocityDirty = 1;
     }
     StartLowBeep(_state);
-    (void)PostDockingMessage(_state, Message::DockingComputerOff);
+    PostDockingMessage(_state, Message::DockingComputerOff);
     return;
   }
   if (!InSafeZone(_state).inside)
   {
     StartLowBeep(_state);
-    (void)PostDockingMessage(_state, Message::StationOutOfRange);
+    PostDockingMessage(_state, Message::StationOutOfRange);
     return;
   }
   if ((_state.Slot(SlotIndex::Station).flags & STATION_SHOT) != 0)
   {
     StartLowBeep(_state);
-    (void)PostDockingMessage(_state, Message::DockingDenied);
+    PostDockingMessage(_state, Message::DockingDenied);
     return;
   }
   _state.Data().docking.dockingComputerSteering = 0;
@@ -606,7 +605,7 @@ void ToggleDockingComputer(GameState& _state, Hardware& _hardware)
   _state.Data().playerShip.dockingComputerOn = 1;
   StartMusic(_state, _hardware);
   StartBeep(_state);
-  (void)PostDockingMessage(_state, Message::DockingComputerOn);
+  PostDockingMessage(_state, Message::DockingComputerOn);
 }
 
 void RunDockingComputer(GameState& _state)

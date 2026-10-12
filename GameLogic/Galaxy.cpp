@@ -320,20 +320,18 @@ std::uint16_t RunTextControlCode(GameState& _state, std::uint8_t _code, std::uin
 }
 
 // A chart's cross (CS:0D33, CS:0D61, CS:0FAD): _arm either way of (_x, _row), across and then down, each a clipped line. The
-// original keeps the centre on the stack between them (PUSH BX / PUSH DX). Returns whether either line's DrawLine filled a
-// horizontal line's bytes, after which the direction flag is clear.
-bool DrawCross(GameState& _state, std::uint16_t _x, std::uint16_t _row, std::uint16_t _arm)
+// original keeps the centre on the stack between them (PUSH BX / PUSH DX).
+void DrawCross(GameState& _state, std::uint16_t _x, std::uint16_t _row, std::uint16_t _arm)
 {
-  const bool across = DrawClippedLine(_state, Offset(_x, _arm), _row, static_cast<std::uint16_t>(_x - _arm), _row);
-  const bool down = DrawClippedLine(_state, _x, Offset(_row, _arm), _x, static_cast<std::uint16_t>(_row - _arm));
-  return across || down;
+  (void)DrawClippedLine(_state, Offset(_x, _arm), _row, static_cast<std::uint16_t>(_x - _arm), _row);
+  (void)DrawClippedLine(_state, _x, Offset(_row, _arm), _x, static_cast<std::uint16_t>(_row - _arm));
 }
 
 // The chart cursor's cross in colour 1 and the dot at its centre in colour 0 (CS:0D4D, CS:0F99).
 void DrawChartCursor(GameState& _state)
 {
   _state.Data().drawing.drawColor = 1;
-  (void)DrawCross(_state, _state.Data().commander.chartCursorX, _state.Data().commander.chartCursorY, CURSOR_ARM);
+  DrawCross(_state, _state.Data().commander.chartCursorX, _state.Data().commander.chartCursorY, CURSOR_ARM);
   _state.Data().drawing.drawColor = 0;
   PlotPixel(_state, _state.Data().commander.chartCursorX, _state.Data().commander.chartCursorY);
 }
@@ -381,7 +379,7 @@ void DrawGalacticChart(GameState& _state, Hardware& _hardware, bool _backward)
   _state.Data().drawing.drawColor = 2;
   DrawDisc(_state, fuelRadius, _state.Data().commander.currentSystemX, _state.Data().commander.currentSystemChartY, _backward);
   _state.Data().drawing.drawColor = 0;
-  (void)DrawCross(_state, _state.Data().commander.currentSystemX, _state.Data().commander.currentSystemChartY, CURRENT_SYSTEM_ARM);
+  DrawCross(_state, _state.Data().commander.currentSystemX, _state.Data().commander.currentSystemChartY, CURRENT_SYSTEM_ARM);
   DrawChartCursor(_state);
   _state.Data().drawing.drawColor = CHART_DISC_COLOR;
   // XOR AL,AL, then PUSH AX / POP AX round each dot.
