@@ -900,7 +900,7 @@ void DrawPauseMenu(GameState& _state, Hardware& _hardware, bool _backward)
     const std::string_view rest = std::string_view(menu).substr(line);
     const auto at = static_cast<std::uint16_t>(static_cast<std::uint8_t>(rest.at(0)) | (static_cast<std::uint8_t>(rest.at(1)) << 8));
     const std::string_view text = rest.substr(2, rest.find('\0', 2) - 2);
-    (void)DrawViewString(_state, text, ALL_COLORS, at);
+    DrawViewString(_state, text, ALL_COLORS, at);
     line += 2 + text.size() + 1;
     if (--lines == 0)
     {

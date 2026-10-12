@@ -216,10 +216,8 @@ void Plot(GameState& _state, std::uint16_t _offset, std::uint8_t _keep, std::uin
   return offset;
 }
 
-// REP STOSW with ES on the CGA's memory: _words words of _value from B800:_offset, _step apart. Returns the offset after the last,
-// what DI becomes; CX ends at 0.
-[[nodiscard]] std::uint16_t RepeatStoreVideoWords(GameState& _state, std::uint16_t _offset, std::uint16_t _words, std::uint16_t _value,
-                                                  std::uint16_t _step)
+// REP STOSW with ES on the CGA's memory: _words words of _value from B800:_offset, _step apart.
+void RepeatStoreVideoWords(GameState& _state, std::uint16_t _offset, std::uint16_t _words, std::uint16_t _value, std::uint16_t _step)
 {
   std::uint16_t offset = _offset;
   for (std::uint16_t words = _words; words != 0; --words)
@@ -227,7 +225,6 @@ void Plot(GameState& _state, std::uint16_t _offset, std::uint8_t _keep, std::uin
     _state.SetVideoWord(offset, _value);
     offset = static_cast<std::uint16_t>(offset + _step);
   }
-  return offset;
 }
 
 // Where a string instruction leaves SI and DI.
@@ -1698,7 +1695,7 @@ void FillSpan(GameState& _state, std::uint8_t _left, std::uint8_t _right, std::u
   Plot(_state, at, High(rightMask), static_cast<std::uint8_t>(Low(rightMask) & fill));
 }
 
-bool DrawCircle(GameState& _state, std::uint8_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow)
+void DrawCircle(GameState& _state, std::uint8_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow)
 {
   // circlePoints: 32 points of four bytes, x and row words; each loop holds a point as the byte it starts at.
   const std::span<Counted<std::uint8_t>> points = BytesOf(_state.Data().video.circlePoints);
@@ -1752,17 +1749,14 @@ bool DrawCircle(GameState& _state, std::uint8_t _radius, std::uint16_t _centerX,
   }
   // The chord from the last point to the first, then each to the next, x and row each.
   const std::size_t last = (CIRCLE_CHORDS - 1) * CIRCLE_POINT_BYTES;
-  bool filled =
-    DrawClippedLine(_state, WordIn(points, last), WordIn(points, last + 2), WordIn(points, 0), _state.Data().video.circlePoints.data2EFE);
+  (void)DrawClippedLine(_state, WordIn(points, last), WordIn(points, last + 2), WordIn(points, 0),
+                        _state.Data().video.circlePoints.data2EFE);
   point = 0;
   for (std::uint16_t chords = CIRCLE_CHORDS - 1; chords != 0; --chords)
   {
-    const bool chordFilled =
-      DrawClippedLine(_state, WordIn(points, point + 4), WordIn(points, point + 6), WordIn(points, point), WordIn(points, point + 2));
-    filled = filled || chordFilled;
+    (void)DrawClippedLine(_state, WordIn(points, point + 4), WordIn(points, point + 6), WordIn(points, point), WordIn(points, point + 2));
     point += CIRCLE_POINT_BYTES;
   }
-  return filled;
 }
 
 void FillTriangleSpan(GameState& _state, std::uint16_t _row, std::uint8_t _left, std::uint8_t _right, std::uint8_t _fill, bool _backward)
@@ -1818,7 +1812,7 @@ void FillTriangle(GameState& _state, Triangle _triangle, bool _backward)
                                               High(word(rowsDoubled.first.y)));
   if (high != 0)
   {
-    (void)FillClippedTriangle(_state, rowsDoubled, _backward);
+    FillClippedTriangle(_state, rowsDoubled, _backward);
     return;
   }
   // CS:1C12: A in AL and AH, B in BL and BH, C in CL and CH, the rows halved back (SHR).
@@ -1827,7 +1821,7 @@ void FillTriangle(GameState& _state, Triangle _triangle, bool _backward)
   FillOnScreenTriangle(_state, corner(rowsDoubled.first), corner(rowsDoubled.second), corner(rowsDoubled.third), _backward);
 }
 
-bool FillClippedTriangle(GameState& _state, Triangle _doubled, bool _backward)
+void FillClippedTriangle(GameState& _state, Triangle _doubled, bool _backward)
 {
   const auto word = [](std::int16_t _value) { return static_cast<std::uint16_t>(_value); };
   const std::uint16_t ax = word(_doubled.first.x);
@@ -1839,17 +1833,17 @@ bool FillClippedTriangle(GameState& _state, Triangle _doubled, bool _backward)
   // MOV AX,SI / AND AX,BX / AND AX,CX / JS: every x left of 0; then every doubled row above 0.
   if (Negative(static_cast<std::uint16_t>(ax & bx & cx)) || Negative(static_cast<std::uint16_t>(dx & bp & di)))
   {
-    return false;
+    return;
   }
   // AND AH,AH / JLE, three times: every x right of 255.
   if (Signed8(High(ax)) > 0 && Signed8(High(bx)) > 0 && Signed8(High(cx)) > 0)
   {
-    return false;
+    return;
   }
   // AND DH,DH / JLE, CMP BP,100h / JL, CMP DI,100h / JGE: every doubled row below 255.
   if (Signed8(High(dx)) > 0 && Signed(bp) >= 0x100 && Signed(di) >= 0x100)
   {
-    return false;
+    return;
   }
   // PrepareClippedTriangle (CS:1E9D): SAR DX, BP and DI: the rows halved, keeping their signs. MOV SI,DS / MOV ES,SI, then the
   // ADD/ADC forms of both edges' steps, which the original patches in through SI.
@@ -1875,7 +1869,7 @@ bool FillClippedTriangle(GameState& _state, Triangle _doubled, bool _backward)
     {
       FillClippedFlatTop(_state, a, b, c, _backward);
     }
-    return true;
+    return;
   }
   if (a.y > b.y)
   {
@@ -1885,7 +1879,7 @@ bool FillClippedTriangle(GameState& _state, Triangle _doubled, bool _backward)
   {
     std::swap(a, b);
     FillClippedFlatTop(_state, a, b, c, _backward);
-    return true;
+    return;
   }
   if (a.y > c.y)
   {
@@ -1899,7 +1893,6 @@ bool FillClippedTriangle(GameState& _state, Triangle _doubled, bool _backward)
   {
     FillClippedGeneral(_state, a, b, c, _backward);
   }
-  return true;
 }
 
 void WaitRetraceThenDelay(Hardware& _hardware)
@@ -1934,13 +1927,13 @@ ScreenChange ShowCockpitScreen(GameState& _state, Hardware& _hardware, bool _bac
 
 void ClearCgaScreen(GameState& _state, bool _backward)
 {
-  (void)RepeatStoreVideoWords(_state, 0, CGA_BANK_WORDS, 0, StringStep(_backward, 2));
-  (void)RepeatStoreVideoWords(_state, CGA_ODD_BANK, CGA_BANK_WORDS, 0, StringStep(_backward, 2));
+  RepeatStoreVideoWords(_state, 0, CGA_BANK_WORDS, 0, StringStep(_backward, 2));
+  RepeatStoreVideoWords(_state, CGA_ODD_BANK, CGA_BANK_WORDS, 0, StringStep(_backward, 2));
 }
 
 void ClearTextScreen(GameState& _state, bool _backward)
 {
-  (void)RepeatStoreVideoWords(_state, 0, TEXT_CELLS, Join(_state.Data().drawing.textAttribute, SPACE), StringStep(_backward, 2));
+  RepeatStoreVideoWords(_state, 0, TEXT_CELLS, Join(_state.Data().drawing.textAttribute, SPACE), StringStep(_backward, 2));
 }
 
 ScreenChange DrawChartFrame(GameState& _state, Hardware& _hardware, bool _backward)
@@ -1956,7 +1949,7 @@ ScreenChange DrawChartFrame(GameState& _state, Hardware& _hardware, bool _backwa
   // the routine finds (MOV CX,20h, then MOV CL,20h over the 0 the last left).
   for (const std::uint16_t line : CHART_FRAME_LINES)
   {
-    (void)RepeatStoreVideoWords(_state, line, CHART_FRAME_LINE_WORDS, CHART_FRAME_COLOR_WORD, StringStep(_backward, 2));
+    RepeatStoreVideoWords(_state, line, CHART_FRAME_LINE_WORDS, CHART_FRAME_COLOR_WORD, StringStep(_backward, 2));
   }
   // PUSH DS / MOV DS,ES, then the verticals at x=31 and x=288 from line 9, a line a turn, alternating banks: the step to the next
   // line and the one after it swap each turn (XCHG BP,DX), and LOOP counts the lines.

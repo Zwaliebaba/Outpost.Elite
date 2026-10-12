@@ -98,13 +98,6 @@ template <typename Byte, std::size_t Extent> [[nodiscard]] Byte& ByteWithin(std:
 // parameters, its results come back, and every byte it writes is written as the original writes it, in
 // the same order and at the same width.
 
-/// What BlankLeadingZeros leaves of a number's text.
-struct BlankedZeros
-{
-  std::size_t firstKept;   ///< the index of the first character it kept, or of the one after the last it blanked
-  std::uint16_t triesLeft; ///< how many more it could have blanked: 0 once it has blanked as many as it may
-};
-
 /// Where DrawSmallViewChar draws a letter: the byte of the drawing buffer (DrawingBuffer), and the shift, 0 or 4, of the
 /// letter's left edge in it.
 struct SmallViewPlace
@@ -118,9 +111,8 @@ struct SmallViewPlace
 /// character, two bytes on.
 std::uint16_t DrawViewChar(GameState& _state, std::uint8_t _character, std::uint16_t _ink, std::uint16_t _at);
 
-/// DrawViewString (CS:31EC): DrawViewChar for each character of _text, from byte _at of the drawing buffer. Returns the place
-/// after the last.
-std::uint16_t DrawViewString(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _at);
+/// DrawViewString (CS:31EC): DrawViewChar for each character of _text, from byte _at of the drawing buffer.
+void DrawViewString(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _at);
 
 /// DrawScreenChar (CS:31F9): the 8x8 glyph of _character, in _ink on textPaperPattern, at _segment:_cell, an even line
 /// of the CGA's memory. _segment, ES, is the CGA's video segment; another throws std::out_of_range, where the original would
@@ -133,12 +125,11 @@ std::uint16_t DrawScreenChar(GameState& _state, std::uint8_t _character, std::ui
 std::uint16_t DrawScreenString(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _segment, std::uint16_t _cell);
 
 /// FormatDecimal5 (CS:3407): _value as five ASCII digits into the first five of _digits, a buffer of the data segment.
-/// Returns what is left of it below the last divisor: its units.
-std::uint16_t FormatDecimal5(std::uint16_t _value, std::span<Counted<std::uint8_t>> _digits);
+void FormatDecimal5(std::uint16_t _value, std::span<Counted<std::uint8_t>> _digits);
 
 /// BlankLeadingZeros (CS:3432): up to _most of _text's leading characters below '1' become spaces. Every caller's _most is
 /// less than the digits it blanks, which always end in one kept; LOOP would let 65,536 go for 0.
-BlankedZeros BlankLeadingZeros(std::span<Counted<std::uint8_t>> _text, std::uint8_t _most);
+void BlankLeadingZeros(std::span<Counted<std::uint8_t>> _text, std::uint8_t _most);
 
 /// DrawSmallViewChar (CS:349A): the 5-row letter _letter ('A'-'Z') in _ink over the drawing buffer at _place, the
 /// buffer kept around the letter's shape. Returns the next letter's place, six pixels on.
@@ -189,20 +180,20 @@ void ClearDockedMessageLine(GameState& _state, std::uint16_t _segment);
 std::uint8_t SwapTextAttributeNibbles(GameState& _state);
 
 /// PrintCountedTextLines (CS:65FA): PrintTextLines for the lines after a count byte, as many as it says: _lines, the
-/// generated lines of such a text (a subsystem's tables). Returns the cell a row below the last line's first.
-std::uint16_t PrintCountedTextLines(GameState& _state, std::span<const std::string_view> _lines, std::uint16_t _cell);
+/// generated lines of such a text (a subsystem's tables).
+void PrintCountedTextLines(GameState& _state, std::span<const std::string_view> _lines, std::uint16_t _cell);
 
 /// FormatTenths (CS:69B3): _tenths into priceText as "nnnn.n".
 void FormatTenths(GameState& _state, std::uint16_t _tenths);
 
 /// PrintTextLines (CS:6DDE): each of _lines by PrintTextModeString a row of the text page below the one before, from
-/// B800:_cell. Returns the cell a row below the last line's first.
-std::uint16_t PrintTextLines(GameState& _state, std::span<const std::string_view> _lines, std::uint16_t _cell);
+/// B800:_cell.
+void PrintTextLines(GameState& _state, std::span<const std::string_view> _lines, std::uint16_t _cell);
 
 /// PrintTextLines (CS:6DDE) for _lines texts that follow one another in _texts, each after the NUL of the one before, as the original
 /// steps past a NUL to the next: texts the game writes into, or composes from constants and what it writes (JoinTexts). Every text's
 /// NUL but the last's must be within _texts; the last may end at _texts' end. _lines is not 0, which LOOP would count as 65,536.
-std::uint16_t PrintTextLines(GameState& _state, std::string_view _texts, std::uint16_t _cell, std::uint16_t _lines);
+void PrintTextLines(GameState& _state, std::string_view _texts, std::uint16_t _cell, std::uint16_t _lines);
 
 /// _bytes, a member of texts the game writes into, as PrintTextLines reads them.
 [[nodiscard]] inline std::string_view TextsOf(std::span<const Counted<std::uint8_t>> _bytes) noexcept

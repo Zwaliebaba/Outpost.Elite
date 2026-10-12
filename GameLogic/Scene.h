@@ -73,15 +73,6 @@ struct ShipRangeCheck
   }
 };
 
-/// How far ClassifyViewPosition (CS:3CA1), the shared tail of TransformShip and ClassifyStationPosition, got with a view position.
-enum class ViewTest : std::uint8_t
-{
-  TooNear, ///< z negative or below nearClipZ: nothing stored
-  WideX,   ///< stored, but twice |x| is beyond z
-  WideY,   ///< twice |y| is beyond z
-  Visible, ///< and byte 0 bit 7 set
-};
-
 /// What DrawVisibleFaces leaves: the offset in the face list past the faces, and the direction flag, clear once an edge's DrawLine
 /// has filled.
 struct FacesEnd
@@ -99,9 +90,8 @@ void ProjectVertices(GameState& _state);
 /// then the vertex at _vertex += drawCenter, each the byte of vertexBuffer it starts at.
 void ReflectVertexAboutCenter(GameState& _state, std::size_t _vertex, std::size_t _reflection);
 
-/// OffsetVertexByCenter (CS:3768): the vertex at byte _vertex of vertexBuffer plus drawCenter, x, y and z in turn. Returns
-/// drawCenter, each coordinate as it read it.
-Vector OffsetVertexByCenter(GameState& _state, std::size_t _vertex);
+/// OffsetVertexByCenter (CS:3768): the vertex at byte _vertex of vertexBuffer plus drawCenter, x, y and z in turn.
+void OffsetVertexByCenter(GameState& _state, std::size_t _vertex);
 
 /// BuildBoxCornerVertices (CS:377A): the blueprint handler of types 1-29, from the blueprint's two extent bytes _extents, the
 /// first low. The eight corners (+-boxHalfWidth, +-the first, +-the second) about drawCenter, rotated by the drawn angles, the
@@ -118,8 +108,8 @@ void BuildDodoVertices(GameState& _state);
 
 /// RunVertexProgram (CS:3A40): runs a blueprint's ops, _program, on vertexBuffer, from _accumulator. An op's bits 0-5 are a
 /// vertex; bits 6-7 load it into the accumulator, store the accumulator there, average the two (the 16-bit sum halved
-/// arithmetically), or add it. Returns the accumulator.
-[[nodiscard]] Vector RunVertexProgram(GameState& _state, std::span<const std::uint8_t> _program, Vector _accumulator);
+/// arithmetically), or add it.
+void RunVertexProgram(GameState& _state, std::span<const std::uint8_t> _program, Vector _accumulator);
 
 /// TriangleWindingSign (CS:3A9B): whether (x0-x1)(y2-y1) - (y0-y1)(x2-x1) is negative, by the sign of the high words'
 /// difference, or of the low words' when the high words agree: true when _triangle faces the viewer.

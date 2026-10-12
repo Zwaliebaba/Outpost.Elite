@@ -274,7 +274,7 @@ void ShowCredits(GameState& _state, Hardware& _hardware, bool _backward)
   for (std::uint16_t linesLeft = CREDITS_LINES;;)
   {
     _state.Data().drawing.textPaperPattern = 0;
-    (void)DrawViewString(_state, text, WHITE_MASK, place);
+    DrawViewString(_state, text, WHITE_MASK, place);
     place = Offset(place, CREDITS_LINE_STEP);
     if (--linesLeft == 0)
     {

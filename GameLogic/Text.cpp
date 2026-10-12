@@ -219,8 +219,7 @@ void RestartInputBlink(GameState& _state, Hardware& _hardware, const TypedLine& 
 
 // MessageLine's second half (0x35B9): the message in messagePointer, unless it is already shown, on the message line,
 // cleared first a row at a time forwards or, _backwards, down. The original keeps SI round ClearMessageLine on the stack.
-// Returns whether it drew the message.
-bool ShowMessage(GameState& _state, bool _backwards)
+void ShowMessage(GameState& _state, bool _backwards)
 {
   _state.Data().messages.messageFrames = WithHigh(_state.Data().messages.messageFrames, MESSAGE_DRAWN);
   const Message message = _state.Data().messages.messagePointer;
@@ -228,11 +227,10 @@ bool ShowMessage(GameState& _state, bool _backwards)
   _state.Data().messages.messageShown = message;
   if (shown)
   {
-    return false;
+    return;
   }
   ClearMessageLine(_state, GameState::VIDEO_SEGMENT, _backwards);
   (void)DrawScreenString(_state, MessageText(_state, message), MESSAGE_INK, GameState::VIDEO_SEGMENT, MESSAGE_LINE_OFFSET);
-  return true;
 }
 
 // The digits FormatDecimal5 writes and the point after them in a number's text, from its first digit.
@@ -279,7 +277,7 @@ std::uint16_t DrawViewChar(GameState& _state, std::uint8_t _character, std::uint
   return static_cast<std::uint16_t>(_at + 2);
 }
 
-std::uint16_t DrawViewString(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _at)
+void DrawViewString(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _at)
 {
   // Each character is read as it is reached, as the original reads it from memory.
   std::uint16_t at = _at;
@@ -287,7 +285,6 @@ std::uint16_t DrawViewString(GameState& _state, std::string_view _text, std::uin
   {
     at = DrawViewChar(_state, static_cast<std::uint8_t>(character), _ink, at);
   }
-  return at;
 }
 
 std::uint16_t DrawScreenChar(GameState& _state, std::uint8_t _character, std::uint16_t _ink, std::uint16_t _segment, std::uint16_t _cell)
@@ -320,7 +317,7 @@ std::uint16_t DrawScreenString(GameState& _state, std::string_view _text, std::u
   return cell;
 }
 
-std::uint16_t FormatDecimal5(std::uint16_t _value, std::span<Counted<std::uint8_t>> _digits)
+void FormatDecimal5(std::uint16_t _value, std::span<Counted<std::uint8_t>> _digits)
 {
   std::uint16_t value = _value;
   std::size_t digit = 0;
@@ -337,23 +334,22 @@ std::uint16_t FormatDecimal5(std::uint16_t _value, std::span<Counted<std::uint8_
     ++digit;
   }
   _digits[digit] = static_cast<std::uint8_t>(Low(value) + '0');
-  return value;
 }
 
-BlankedZeros BlankLeadingZeros(std::span<Counted<std::uint8_t>> _text, std::uint8_t _most)
+void BlankLeadingZeros(std::span<Counted<std::uint8_t>> _text, std::uint8_t _most)
 {
-  BlankedZeros blanked{0, _most};
+  std::size_t character = 0;
+  std::uint16_t triesLeft = _most;
   do
   {
-    if (_text[blanked.firstKept] >= BLANK_BELOW)
+    if (_text[character] >= BLANK_BELOW)
     {
-      return blanked;
+      return;
     }
-    _text[blanked.firstKept] = ' ';
-    ++blanked.firstKept;
-    --blanked.triesLeft;
-  } while (blanked.triesLeft != 0);
-  return blanked;
+    _text[character] = ' ';
+    ++character;
+    --triesLeft;
+  } while (triesLeft != 0);
 }
 
 SmallViewPlace DrawSmallViewChar(GameState& _state, std::uint8_t _letter, std::uint16_t _ink, SmallViewPlace _place)
@@ -563,10 +559,10 @@ std::uint8_t SwapTextAttributeNibbles(GameState& _state)
   return swapped;
 }
 
-std::uint16_t PrintCountedTextLines(GameState& _state, std::span<const std::string_view> _lines, std::uint16_t _cell)
+void PrintCountedTextLines(GameState& _state, std::span<const std::string_view> _lines, std::uint16_t _cell)
 {
   // MOV CL,[SI] / XOR CH,CH, then the same loop as PrintTextLines's.
-  return PrintTextLines(_state, _lines, _cell);
+  PrintTextLines(_state, _lines, _cell);
 }
 
 void FormatTenths(GameState& _state, std::uint16_t _tenths)
@@ -579,7 +575,7 @@ void FormatTenths(GameState& _state, std::uint16_t _tenths)
   _state.Data().menus.priceText.data8040 = '.';
 }
 
-std::uint16_t PrintTextLines(GameState& _state, std::span<const std::string_view> _lines, std::uint16_t _cell)
+void PrintTextLines(GameState& _state, std::span<const std::string_view> _lines, std::uint16_t _cell)
 {
   std::uint16_t line = _cell;
   for (const std::string_view text : _lines)
@@ -587,10 +583,9 @@ std::uint16_t PrintTextLines(GameState& _state, std::span<const std::string_view
     (void)PrintTextModeString(_state, text, line);
     line = Offset(line, TEXT_ROW_BYTES);
   }
-  return line;
 }
 
-std::uint16_t PrintTextLines(GameState& _state, std::string_view _texts, std::uint16_t _cell, std::uint16_t _lines)
+void PrintTextLines(GameState& _state, std::string_view _texts, std::uint16_t _cell, std::uint16_t _lines)
 {
   std::uint16_t line = _cell;
   std::string_view rest = _texts;
@@ -606,7 +601,6 @@ std::uint16_t PrintTextLines(GameState& _state, std::string_view _texts, std::ui
     line = Offset(line, TEXT_ROW_BYTES);
     rest = nul == std::string_view::npos ? std::string_view{} : rest.substr(nul + 1);
   }
-  return line;
 }
 
 void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<Counted<std::uint8_t>> _buffer, std::uint8_t _most,

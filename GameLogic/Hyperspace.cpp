@@ -370,7 +370,7 @@ void DrawHyperspaceRings(GameState& _state)
       if (grown >= HYPERSPACE_RING_SMALLEST_DRAWN)
       {
         _state.Data().drawing.drawColor = std::uint8_t{ring[2]};
-        (void)DrawCircle(_state, grown, SPACE_VIEW_CENTER_X, SPACE_VIEW_CENTER_ROW);
+        DrawCircle(_state, grown, SPACE_VIEW_CENTER_X, SPACE_VIEW_CENTER_ROW);
       }
     }
   }

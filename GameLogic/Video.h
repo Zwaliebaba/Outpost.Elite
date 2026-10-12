@@ -117,9 +117,8 @@ struct ClipStep
 [[nodiscard]] ClipStep ClipLineToHighEdge(ClipLine _line);
 
 /// DrawCircle (CS:1AC1): a circle of radius _radius about (_centerX, _centerRow) as 32 chords through DrawClippedLine, its points
-/// circleOctant scaled by _radius/128 and turned through the eight octants into circlePoints. Returns whether any chord's
-/// DrawLine filled a horizontal line's bytes.
-bool DrawCircle(GameState& _state, std::uint8_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow);
+/// circleOctant scaled by _radius/128 and turned through the eight octants into circlePoints.
+void DrawCircle(GameState& _state, std::uint8_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow);
 
 /// DrawLine (CS:16D1): Bresenham from (_fromX, _fromRow) to (_toX, _toRow) into the drawing buffer in colorFillBytes[drawColor].
 /// Returns whether it filled whole bytes of a horizontal line with REP STOSB, for which the original sets ES to DS and clears
@@ -148,8 +147,8 @@ void FillTriangle(GameState& _state, Triangle _triangle, bool _backward);
 
 /// FillClippedTriangle (CS:1E6E): FillTriangle's path for a triangle not wholly on the buffer, _doubled's rows twice the rows: one
 /// wholly left, above, right or below the buffer is not drawn; otherwise its rows are walked on 16.16 edges, only those on the
-/// buffer kept and each span held to 0-255. Returns false when nothing is drawn for being wholly off the buffer.
-bool FillClippedTriangle(GameState& _state, Triangle _doubled, bool _backward);
+/// buffer kept and each span held to 0-255.
+void FillClippedTriangle(GameState& _state, Triangle _doubled, bool _backward);
 
 /// WaitRetraceThenDelay (CS:45FF): waits for a vertical retrace on the CGA's status port, then spins 2000 turns, a delay the
 /// 8088's speed made. Its loops turn through _hardware.

@@ -287,11 +287,11 @@ std::uint8_t WaitForEitherKey(GameState& _state, Hardware& _hardware, std::uint1
   }
 }
 
-// The two help rows blanked (CS:6664 and CS:671F). Returns where the second blank stops.
-std::uint16_t BlankHelpRows(GameState& _state)
+// The two help rows blanked (CS:6664 and CS:671F).
+void BlankHelpRows(GameState& _state)
 {
   PrintAt(_state, BLANK_LINE_TEXT, HELP_POSITION);
-  return PrintAt(_state, BLANK_LINE_TEXT, SECOND_HELP_POSITION);
+  PrintAt(_state, BLANK_LINE_TEXT, SECOND_HELP_POSITION);
 }
 
 // LeaveGameLoopForDisk (CS:7E90): diskOperation=_operation, and resumeAtDiskMenu=1, so that the menu shows what Start's disk

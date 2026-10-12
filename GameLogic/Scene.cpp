@@ -218,7 +218,7 @@ void RotateVerticesToView(GameState& _state, std::size_t _first, std::uint16_t _
 // before it leave 0, or the edge count's doubling. Returns the direction flag as DrawVisibleFaces leaves it.
 [[nodiscard]] bool RenderBlueprint(GameState& _state, const Blueprint& _blueprint, Vector _accumulator, bool _backward)
 {
-  (void)RunVertexProgram(_state, _blueprint.vertexProgram, _accumulator);
+  RunVertexProgram(_state, _blueprint.vertexProgram, _accumulator);
   std::uint16_t count = 0;
   SetLow(count, _blueprint.projectedVertices);
   _state.Data().scene.projectedVertexCount = count;
@@ -380,14 +380,14 @@ struct WindingProducts
 // ClassifyViewPosition (CS:3CA1), the shared tail of TransformShip and ClassifyStationPosition: _view is _slot's view
 // position. Visible, with byte 0 bit 7 set, when z is at least nearClipZ and twice |x| and twice |y| are at most z; the
 // position is stored, in the slot and as drawCenter, when z passes.
-[[nodiscard]] ViewTest ClassifyViewPosition(GameState& _state, SpaceObject& _slot, Vector _view)
+void ClassifyViewPosition(GameState& _state, SpaceObject& _slot, Vector _view)
 {
   const auto x = static_cast<std::uint16_t>(_view.x);
   const auto y = static_cast<std::uint16_t>(_view.y);
   const auto z = static_cast<std::uint16_t>(_view.z);
   if (Negative(z) || z < NEAR_CLIP_Z)
   {
-    return ViewTest::TooNear;
+    return;
   }
   _slot.viewX = x;
   _state.Data().scene.drawCenterX = x;
@@ -395,16 +395,11 @@ struct WindingProducts
   _state.Data().scene.drawCenterY = y;
   _slot.viewZ = z;
   _state.Data().scene.drawCenterZ = z;
-  if (z < DoubledMagnitude(x))
+  if (z < DoubledMagnitude(x) || z < DoubledMagnitude(y))
   {
-    return ViewTest::WideX;
-  }
-  if (z < DoubledMagnitude(y))
-  {
-    return ViewTest::WideY;
+    return;
   }
   _slot.type = static_cast<std::uint8_t>(_slot.type | SLOT_VISIBLE);
-  return ViewTest::Visible;
 }
 
 // A station's compass position, as MOV AX,[DI+20h] / MOV BX,[DI+22h] / MOV CX,[DI+24h] load it.
@@ -895,19 +890,16 @@ void ReflectVertexAboutCenter(GameState& _state, std::size_t _vertex, std::size_
   }
 }
 
-Vector OffsetVertexByCenter(GameState& _state, std::size_t _vertex)
+void OffsetVertexByCenter(GameState& _state, std::size_t _vertex)
 {
   const std::span<Counted<std::uint8_t>> vertices = Vertices(_state);
-  std::array<std::uint16_t, 3> center{};
   constexpr std::array<Counted<std::uint16_t> SceneState::*, 3> CENTER = {&SceneState::drawCenterX, &SceneState::drawCenterY,
                                                                           &SceneState::drawCenterZ};
   for (std::size_t axis = 0; axis < CENTER.size(); ++axis)
   {
     const std::size_t bytes = 2 * axis;
-    center[axis] = _state.Data().scene.*CENTER[axis];
-    SetWordIn(vertices, _vertex + bytes, Offset(WordIn(vertices, _vertex + bytes), center[axis]));
+    SetWordIn(vertices, _vertex + bytes, Offset(WordIn(vertices, _vertex + bytes), _state.Data().scene.*CENTER[axis]));
   }
-  return Vector{static_cast<std::int16_t>(center[0]), static_cast<std::int16_t>(center[1]), static_cast<std::int16_t>(center[2])};
 }
 
 void BuildBoxCornerVertices(GameState& _state, std::uint16_t _extents)
@@ -1030,7 +1022,7 @@ void BuildDodoVertices(GameState& _state)
   }
   for (std::uint16_t left = DODO_SLOT_CORNERS; left != 0; --left)
   {
-    (void)OffsetVertexByCenter(_state, vertex);
+    OffsetVertexByCenter(_state, vertex);
     vertex += VERTEX_BYTES;
   }
 }
@@ -1057,7 +1049,7 @@ DodoRadii ScaleDodoRadii(std::int8_t _value)
   return DodoRadii{static_cast<std::int16_t>(inner), static_cast<std::int16_t>(outer)};
 }
 
-Vector RunVertexProgram(GameState& _state, std::span<const std::uint8_t> _program, Vector _accumulator)
+void RunVertexProgram(GameState& _state, std::span<const std::uint8_t> _program, Vector _accumulator)
 {
   auto x = static_cast<std::uint16_t>(_accumulator.x);
   auto y = static_cast<std::uint16_t>(_accumulator.y);
@@ -1097,7 +1089,6 @@ Vector RunVertexProgram(GameState& _state, std::span<const std::uint8_t> _progra
       break;
     }
   }
-  return Vector{static_cast<std::int16_t>(x), static_cast<std::int16_t>(y), static_cast<std::int16_t>(z)};
 }
 
 bool TriangleWindingSign(Triangle _triangle)
@@ -1165,7 +1156,7 @@ void TransformSunOrPlanet(GameState& _state, SpaceObject& _slot)
 
 void ClassifyStationPosition(GameState& _state, SpaceObject& _slot)
 {
-  (void)ClassifyViewPosition(_state, _slot, CompassPosition(_slot));
+  ClassifyViewPosition(_state, _slot, CompassPosition(_slot));
 }
 
 void TransformShip(GameState& _state, SpaceObject& _slot)
@@ -1179,7 +1170,7 @@ void TransformShip(GameState& _state, SpaceObject& _slot)
     TryScoopObject(_state, _slot, view);
   }
   _slot.depth = 0;
-  (void)ClassifyViewPosition(_state, _slot, view);
+  ClassifyViewPosition(_state, _slot, view);
 }
 
 bool RunBlueprintHandler(GameState& _state, const Blueprint& _blueprint, bool _backward)

@@ -350,7 +350,7 @@ std::uint16_t RunTitle(GameState& _state, Hardware& _hardware, bool _backward)
     ship.yaw = Offset(ship.yaw, TITLE_YAW_STEP);
     ship.pitch = Offset(ship.pitch, TITLE_PITCH_STEP);
     _state.Data().drawing.textPaperPattern = 0;
-    (void)DrawViewString(_state, PRESS_ANY_KEY_TEXT, PRESS_ANY_KEY_MASK, PRESS_ANY_KEY_PLACE);
+    DrawViewString(_state, PRESS_ANY_KEY_TEXT, PRESS_ANY_KEY_MASK, PRESS_ANY_KEY_PLACE);
     (void)TransformAndDrawObjects(_state, _hardware, backward);
     FinishSpaceViewFrame(_state, _hardware);
     backward = false;
