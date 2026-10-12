@@ -85,6 +85,20 @@ SceneSnapshot Interpolate(const SceneSnapshot& _before, const SceneSnapshot& _af
     object.position = Lerp(earlier->position, object.position, _t);
     object.orientation = Slerp(earlier->orientation, object.orientation, _t);
   }
+  for (SceneSphere& sphere : scene.spheres)
+  {
+    if (!sphere.continues)
+    {
+      continue;
+    }
+    const auto earlier = std::ranges::find(_before.spheres, sphere.key, &SceneSphere::key);
+    if (earlier == _before.spheres.end())
+    {
+      continue;
+    }
+    sphere.position = Lerp(earlier->position, sphere.position, _t);
+    sphere.radius = earlier->radius + (sphere.radius - earlier->radius) * _t;
+  }
   return scene;
 }
 

@@ -105,6 +105,22 @@ public:
     Assert::IsTrue(Near(cut.cameraPosition, after.cameraPosition) && SameRotation(cut.cameraOrientation, after.cameraOrientation),
                    L"a camera that does not continue is where the later snapshot puts it");
   }
+
+  // A sphere that continues moves and grows between two snapshots, as an object moves; one that does not is where the later one
+  // puts it.
+  TEST_METHOD(InterpolateMovesSpheresThatContinue)
+  {
+    Engine::SceneSnapshot before;
+    before.spheres = {Engine::SceneSphere{.key = 1, .position = {.x = 0.0f, .y = 0.0f, .z = 100.0f}, .radius = 10.0f}};
+    Engine::SceneSnapshot after;
+    after.spheres = {Engine::SceneSphere{.key = 1, .position = {.x = 40.0f, .y = 0.0f, .z = 100.0f}, .radius = 20.0f, .continues = true},
+                     Engine::SceneSphere{.key = 2, .position = {.x = 8.0f, .y = 0.0f, .z = 50.0f}, .radius = 5.0f, .continues = false}};
+    const Engine::SceneSnapshot halfway = Engine::Interpolate(before, after, 0.25f);
+    Assert::AreEqual(std::size_t{2}, halfway.spheres.size());
+    Assert::AreEqual(10.0f, halfway.spheres[0].position.x, L"a quarter of the way");
+    Assert::AreEqual(12.5f, halfway.spheres[0].radius, L"and a quarter as much larger");
+    Assert::AreEqual(8.0f, halfway.spheres[1].position.x, L"a sphere that does not continue, where the later snapshot puts it");
+  }
 };
 
 } // namespace EngineTests

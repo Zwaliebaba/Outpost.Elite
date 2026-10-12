@@ -75,6 +75,32 @@ struct SceneModelDesc
 /// A pixel of a scene layer that holds nothing (SceneInset).
 inline constexpr std::uint8_t SCENE_LAYER_CLEAR = 0xFF;
 
+/// A stroke across a scene's inset (ADR-035): a capsule from (fromX, fromY) to (toX, toY) in its layers' pixels, x right and y
+/// down from the inset's top left corner, a pixel's middle half a pixel in, fromWidth across at its start and toWidth at its end,
+/// in color, 0x00RRGGBB, display-encoded, times intensity, which past 1 blooms.
+struct SceneStroke
+{
+  float fromX = 0.0f;
+  float fromY = 0.0f;
+  float toX = 0.0f;
+  float toY = 0.0f;
+  float fromWidth = 1.0f;
+  float toWidth = 1.0f;
+  std::uint32_t color = 0;
+  float intensity = 1.0f;
+};
+
+/// The sky behind a scene (ADR-035), fixed in the scene's frame: stars, starDensity of the sky's cells holding one, and a nebula
+/// of two colours, nebulaDensity its strength, laid out by seed. It is drawn where the scene and its under layer hold nothing.
+struct SceneSky
+{
+  bool shown = false;
+  std::uint32_t seed = 0;
+  std::array<std::uint32_t, 2> nebula{}; ///< 0x00RRGGBB, display-encoded
+  float nebulaDensity = 0.0f;            ///< 0 to 1
+  float starDensity = 0.0f;              ///< 0 to 1
+};
+
 /// Where a scene is drawn over the picture and how (ADR-033): an inset rectangle of the picture, in its source pixels, or of the
 /// design, in design units, when the frame draws a canvas in place of the picture (ADR-034), which the scene replaces; the camera's projection onto it; the light; the four palette colours its models and layers are drawn in; and
 /// two layers of the inset's own pixels, under and over the scene, each a palette index or SCENE_LAYER_CLEAR.
@@ -99,6 +125,10 @@ struct SceneInset
   std::uint32_t layerHeight = 0;
   std::span<const std::uint8_t> under; ///< row by row: under the scene, where it draws nothing
   std::span<const std::uint8_t> over;  ///< row by row: over the scene
+  std::span<const SceneStroke> dust;   ///< over the spheres and under the models (ADR-035)
+  std::span<const SceneStroke> beams;  ///< over everything the scene draws
+  SceneSky sky;
+  float bloom = 0.0f; ///< how much of the scene's light past 1 is spread round it, 0 for none
 };
 
 /// A scene to draw over the picture: what is in it and where it goes.
@@ -111,8 +141,10 @@ struct SceneFrame
 /// Draws the game with Direct3D 12 (ADR-031, after D47): the picture, a fixed grid of source pixels with a display shape of its
 /// own, at the place PlacePicture gives it, on a border of one colour. Inside the picture each source pixel covers the same
 /// rectangle of screen pixels, sharp at its edges (ADR-009's sharp bilinear filter). Over it, when a frame has one, a scene in an
-/// inset of the picture (ADR-033): its models drawn in a linear FP16 target with 4x MSAA and a D32_FLOAT depth buffer in reversed
-/// Z, flat and lit, at the inset's size on screen, resolved and laid between the inset's two layers.
+/// inset of the picture (ADR-033, ADR-035), drawn in a linear FP16 target with 4x MSAA and a D32_FLOAT depth buffer in reversed Z
+/// at the inset's size on screen: its spheres, traced through each pixel, and the light round them; its dust; its models, flat
+/// and lit; and its beams. It is resolved, its light past 1 bloomed at a quarter of its size, and laid between the inset's two
+/// layers, with the sky behind the under one.
 ///
 /// It draws into a window's swap chain (AttachWindow, Present), or, with no window, into a target of its own that it reads
 /// back (Capture), on any device, WARP included, which is how the tests see what it draws. Two frames are in flight: the CPU
@@ -200,6 +232,8 @@ private:
   [[nodiscard]] bool CreateDevice(bool _warp);
   [[nodiscard]] bool CreatePipeline();
   [[nodiscard]] bool CreateScenePipelines();
+  [[nodiscard]] bool CreateSpherePipelines(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& _modelDesc);
+  [[nodiscard]] bool CreateBloomPipeline(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& _compositeDesc);
   [[nodiscard]] bool CreateCanvasPipeline();
   [[nodiscard]] bool CreatePicture();
   [[nodiscard]] bool CreateWindowTargets();
@@ -223,9 +257,15 @@ private:
   // The inset's place on a target of _width x _height, in whole screen pixels: in the picture's source pixels, or in design
   // units when _design.
   [[nodiscard]] ScreenRect InsetPlace(const SceneInset& _inset, std::uint32_t _width, std::uint32_t _height, bool _design) const noexcept;
-  // _scene's models into the scene's targets, resolved, and then laid with its layers into _targetView's inset, _place.
+  // _scene into the scene's targets, resolved and bloomed, and then laid with its layers into _targetView's inset, _place.
   [[nodiscard]] bool DrawScene(D3D12_CPU_DESCRIPTOR_HANDLE _targetView, const ScreenRect& _place, const SceneFrame& _scene);
   void DrawModels(const SceneFrame& _scene, bool _lines);
+  // _scene's spheres, in the pipeline set: their surfaces, or the light round them.
+  void DrawSpheres(const SceneFrame& _scene);
+  void DrawStrokes(const SceneFrame& _scene, std::span<const SceneStroke> _strokes);
+  // The resolved scene's light past 1, at a quarter of its size, blurred, into the bloom's first target.
+  void DrawBloom();
+  void DrawComposite(D3D12_CPU_DESCRIPTOR_HANDLE _targetView, const ScreenRect& _place, const SceneFrame& _scene);
   // Whether _scene can be drawn: an inset of some size and layers that cover it.
   [[nodiscard]] static bool Drawable(const SceneFrame* _scene) noexcept;
   [[nodiscard]] bool Submit(Frame& _frame);
@@ -259,6 +299,13 @@ private:
   Microsoft::WRL::ComPtr<ID3D12PipelineState> m_linePipeline;
   Microsoft::WRL::ComPtr<ID3D12RootSignature> m_compositeSignature;
   Microsoft::WRL::ComPtr<ID3D12PipelineState> m_compositePipeline;
+  Microsoft::WRL::ComPtr<ID3D12RootSignature> m_sphereSignature; // and its glow (ADR-035)
+  Microsoft::WRL::ComPtr<ID3D12PipelineState> m_spherePipeline;
+  Microsoft::WRL::ComPtr<ID3D12PipelineState> m_glowPipeline;
+  Microsoft::WRL::ComPtr<ID3D12RootSignature> m_strokeSignature;
+  Microsoft::WRL::ComPtr<ID3D12PipelineState> m_strokePipeline;
+  Microsoft::WRL::ComPtr<ID3D12RootSignature> m_bloomSignature;
+  Microsoft::WRL::ComPtr<ID3D12PipelineState> m_bloomPipeline;
   std::vector<Model> m_models;
   Microsoft::WRL::ComPtr<ID3D12Resource> m_sceneColor;    // FP16, 4x MSAA
   Microsoft::WRL::ComPtr<ID3D12Resource> m_sceneDepth;    // D32_FLOAT, 4x MSAA, reversed Z
@@ -267,6 +314,10 @@ private:
   Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> m_sceneDepthHeap;
   std::uint32_t m_sceneWidth = 0;
   std::uint32_t m_sceneHeight = 0;
+  std::array<Microsoft::WRL::ComPtr<ID3D12Resource>, 2> m_bloomTargets; // FP16, a quarter of the scene's size: the bloom, and its blur
+  Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> m_bloomTargetHeap;
+  std::uint32_t m_bloomWidth = 0;
+  std::uint32_t m_bloomHeight = 0;
   Microsoft::WRL::ComPtr<ID3D12Resource> m_layers; // R8G8_UINT: under and over
   D3D12_PLACED_SUBRESOURCE_FOOTPRINT m_layerFootprint{};
   std::uint32_t m_layerWidth = 0;

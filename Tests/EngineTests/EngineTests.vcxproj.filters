@@ -29,5 +29,8 @@
     <ClCompile Include="SceneSnapshotTests.cpp">
       <Filter>Rendering</Filter>
     </ClCompile>
+    <ClCompile Include="SceneSphereTests.cpp">
+      <Filter>Rendering</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

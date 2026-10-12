@@ -94,6 +94,7 @@
     <ClCompile Include="RendererTests.cpp" />
     <ClCompile Include="SceneInsetTests.cpp" />
     <ClCompile Include="SceneSnapshotTests.cpp" />
+    <ClCompile Include="SceneSphereTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Engine\Engine.vcxproj">

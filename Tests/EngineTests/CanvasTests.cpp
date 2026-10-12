@@ -155,7 +155,11 @@ public:
                                                                .layerWidth = 4,
                                                                .layerHeight = 4,
                                                                .under = under,
-                                                               .over = over}};
+                                                               .over = over,
+                                                               .dust = {},
+                                                               .beams = {},
+                                                               .sky = {},
+                                                               .bloom = 0.0f}};
     const Engine::Canvas canvas;
     const std::vector<std::uint32_t> pixels = renderer.Capture({}, BORDER, TARGET_WIDTH, TARGET_HEIGHT, &frame, &canvas);
     Assert::AreEqual(std::size_t{TARGET_WIDTH} * TARGET_HEIGHT, pixels.size(), L"a pixel for each of the target's");
