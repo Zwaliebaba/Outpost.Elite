@@ -140,7 +140,55 @@ void CloseAndFail(GameState& _state, Hardware& _hardware, std::uint16_t _error)
   Fail(_state, _error);
 }
 
-// LoadCommanderFile (0x031A): only a file with no attributes, read whole into commanderBlock.
+// The most each of a loaded commander's fields holds when the game wrote it (D43): the ninth galaxy, the chart's last row, four
+// missiles, the eighth economy and government, and the kills CreditKill stops at.
+constexpr std::uint8_t MOST_GALAXY = 8;
+constexpr std::uint8_t MOST_CHART_ROW = 0x7F;
+constexpr std::uint8_t MOST_MISSILES = 4;
+constexpr std::uint8_t MOST_ECONOMY_OR_GOVERNMENT = 7;
+constexpr std::uint8_t MOST_KILLS = 0xFE;
+// The end of creditBalanceText after FormatCredits's digits and point: the image's bytes there, which no writer changes.
+constexpr std::string_view CREDITS_UNIT_TEXT = " Credits";
+
+// _field held to _most.
+void HoldTo(Counted<std::uint8_t>& _field, std::uint8_t _most) noexcept
+{
+  if (_field > _most)
+  {
+    _field = _most;
+  }
+}
+
+// What D43 does to a commander just read from a file, a change on purpose: each field the game's own writers keep in a range
+// is brought into it, the name's last byte, which no writer sets, is its NUL, and the cash's text is the cash again, with its unit and
+// its NUL.
+// A file the game saved holds all of it already, and is left as it is.
+void ClampLoadedCommander(GameState& _state)
+{
+  CommanderState& commander = _state.Data().commander;
+  HoldTo(commander.galaxyNumber, MOST_GALAXY);
+  HoldTo(commander.currentSystemChartY, MOST_CHART_ROW);
+  HoldTo(commander.chartCursorY, MOST_CHART_ROW);
+  HoldTo(commander.shortRangeCursorY, MOST_CHART_ROW);
+  HoldTo(commander.galacticCursorY, MOST_CHART_ROW);
+  HoldTo(commander.currentGovernment, MOST_ECONOMY_OR_GOVERNMENT);
+  HoldTo(commander.currentEconomy, MOST_ECONOMY_OR_GOVERNMENT);
+  HoldTo(commander.selectedGovernment, MOST_ECONOMY_OR_GOVERNMENT);
+  HoldTo(commander.selectedEconomy, MOST_ECONOMY_OR_GOVERNMENT);
+  HoldTo(commander.missileCount, MOST_MISSILES);
+  HoldTo(commander.killCount, MOST_KILLS);
+  commander.defaultCommanderName[sizeof(commander.defaultCommanderName) - 1] = 0;
+  FormatCredits(_state);
+  constexpr std::size_t UNIT = sizeof(commander.creditBalanceText) - CREDITS_UNIT_TEXT.size();
+  for (std::size_t character = 0; character < CREDITS_UNIT_TEXT.size(); ++character)
+  {
+    commander.creditBalanceText[UNIT + character] = static_cast<std::uint8_t>(CREDITS_UNIT_TEXT[character]);
+  }
+  commander.gap759A[0] = 0;
+}
+
+// LoadCommanderFile (0x031A): only a file with no attributes, read whole into commanderBlock, and then held to what the game
+// writes (D43).
 void LoadCommanderFile(GameState& _state, Hardware& _hardware)
 {
   const DosFileAttributes attributes = _hardware.ReadFileAttributes(CommanderFileName(_state));
@@ -167,6 +215,7 @@ void LoadCommanderFile(GameState& _state, Hardware& _hardware)
     CloseAndFail(_state, _hardware, read.value);
     return;
   }
+  ClampLoadedCommander(_state);
   const DosAnswer closed = _hardware.CloseFile(_state.Data().disk.fileHandle);
   if (closed.failed)
   {

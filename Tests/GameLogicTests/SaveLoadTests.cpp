@@ -1,6 +1,9 @@
 #include "pch.h"
 
+#include "PlatformRig.h"
+#include "SaveLoad.h"
 #include "Sha256.h"
+#include "Text.h"
 #include "TwinRig.h"
 
 #include <array>
@@ -21,6 +24,10 @@ namespace
 // Int 33h, the mouse driver's vector.
 constexpr std::uint8_t MOUSE_VECTOR = 0x33;
 constexpr std::uint16_t MOUSE_DRIVER_ENTRY = 0xE060; // in the ROM's segment, F000h, where the platform's driver starts
+
+// PerformDiskRequest's requests.
+constexpr std::uint8_t LOAD_COMMANDER = 1;
+constexpr std::uint8_t SAVE_COMMANDER = 2;
 
 // keyBuffer is a ring of 16 codes: the write index wraps after its last.
 constexpr std::uint16_t KEY_BUFFER_WRAP_MASK = 0x000F;
@@ -201,6 +208,61 @@ public:
     twin.Play("key space; wait 3.3\nkey F1; wait 2\ndigest launched");
     twin.Play("down Alt_L; down KP_Multiply; wait 0.1; up KP_Multiply; up Alt_L; wait 0.1\ndigest dumped");
     Assert::IsTrue(HoldsExactly(twin.Files(), FLIGHT_SCREENSHOT_FILES), L"the screenshot the original wrote");
+  }
+
+  // D43: a commander saved with every field D43 names beyond what the game writes, as only a hand-edited file holds them,
+  // loaded through PerformDiskRequest and held to what the game's writers keep.
+  TEST_METHOD(LoadedCommanderIsHeldToWhatTheGameWrites)
+  {
+    PlatformRig rig("SaveLoadClamp");
+    rig.Start(
+      [&rig]
+      {
+        Elite::GameState& state = rig.State();
+        Elite::CommanderState& commander = state.Data().commander;
+        constexpr std::string_view NAME = "H.CDR";
+        for (std::size_t letter = 0; letter < NAME.size(); ++letter)
+          state.Data().saveLoad.commanderFileName[letter] = static_cast<std::uint8_t>(NAME[letter]);
+        commander.galaxyNumber = 0x30;
+        commander.currentSystemChartY = 0x80;
+        commander.chartCursorY = 0xC0;
+        commander.shortRangeCursorY = 0x90;
+        commander.galacticCursorY = 0xFF;
+        commander.currentGovernment = 9;
+        commander.currentEconomy = 0xFF;
+        commander.selectedGovernment = 8;
+        commander.selectedEconomy = 0x80;
+        commander.missileCount = 9;
+        commander.killCount = 0xFF;
+        for (Elite::Counted<std::uint8_t>& letter : commander.defaultCommanderName)
+          letter = 'A';
+        Elite::SetWordIn(Elite::BytesOf(commander.creditsTenths), 0, 1234);
+        for (Elite::Counted<std::uint8_t>& character : commander.creditBalanceText)
+          character = 'X';
+        commander.gap759A[0] = 'Y';
+        Elite::PerformDiskRequest(state, rig.Native(), SAVE_COMMANDER, 0);
+        Elite::PerformDiskRequest(state, rig.Native(), LOAD_COMMANDER, 0);
+      });
+    Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Elite::StopReason::Terminated);
+    Elite::GameState& state = rig.State();
+    const Elite::CommanderState& commander = state.Data().commander;
+    Assert::AreEqual(std::uint32_t{0}, std::uint32_t{state.Data().disk.diskError}, L"saved and loaded");
+    Assert::AreEqual(8u, std::uint32_t{commander.galaxyNumber}, L"the ninth galaxy at most");
+    Assert::AreEqual(0x7Fu, std::uint32_t{commander.currentSystemChartY}, L"the chart's last row at most");
+    Assert::AreEqual(0x7Fu, std::uint32_t{commander.chartCursorY});
+    Assert::AreEqual(0x7Fu, std::uint32_t{commander.shortRangeCursorY});
+    Assert::AreEqual(0x7Fu, std::uint32_t{commander.galacticCursorY});
+    Assert::AreEqual(7u, std::uint32_t{commander.currentGovernment}, L"the eighth government at most");
+    Assert::AreEqual(7u, std::uint32_t{commander.currentEconomy}, L"the eighth economy at most");
+    Assert::AreEqual(7u, std::uint32_t{commander.selectedGovernment});
+    Assert::AreEqual(7u, std::uint32_t{commander.selectedEconomy});
+    Assert::AreEqual(4u, std::uint32_t{commander.missileCount}, L"four missiles at most");
+    Assert::AreEqual(0xFEu, std::uint32_t{commander.killCount}, L"the kills CreditKill stops at");
+    Assert::AreEqual(std::uint32_t{'A'}, std::uint32_t{commander.defaultCommanderName[7]}, L"the name's eight letters kept");
+    Assert::AreEqual(0u, std::uint32_t{commander.defaultCommanderName[8]}, L"and its NUL after them");
+    Assert::AreEqual(0u, std::uint32_t{commander.gap759A[0]}, L"the cash's text's NUL");
+    const std::string_view cash = Elite::TextWithin(Elite::BytesThrough(commander.creditBalanceText, commander.gap759A), 0);
+    Assert::IsTrue(cash == "      123.4 Credits", L"the cash's text is the cash's");
   }
 };
 
