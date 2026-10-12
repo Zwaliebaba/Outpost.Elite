@@ -115,19 +115,26 @@ void LeftGauge(Engine::Canvas& _canvas, const wchar_t* _label, float _y, const E
 {
   Label(_canvas, _label, LEFT_LABEL_X, _y);
   Bar(_canvas, LEFT_BAR_X, LEFT_BAR_WIDTH, LEFT_SEGMENTS, _y, _gauge.fill, LevelColor(_gauge.level, _flashOn));
+  if (_gauge.number.empty())
+  {
+    return;
+  }
   const std::wstring number(_gauge.number.begin(), _gauge.number.end());
   _canvas.Text(number, Engine::Font::Number, NUMBER_SIZE, 0.0f, Engine::Point{.x = LEFT_NUMBER_X, .y = _y}, Engine::Align::Right,
                AMBER_LIGHT);
 }
 
-// The roll or the dive and climb: a track with a marker at _travel, -1 to 1, of its half-width from its middle.
-void Indicator(Engine::Canvas& _canvas, const wchar_t* _label, float _y, float _travel)
+// The roll or the dive and climb: a track with a marker at _travel, -1 to 1, of its half-width from its middle, while _live.
+void Indicator(Engine::Canvas& _canvas, const wchar_t* _label, float _y, float _travel, bool _live)
 {
   _canvas.Box(Engine::Rect{.left = RIGHT_BAR_X, .top = _y - BAR_HEIGHT / 2.0f, .width = RIGHT_BAR_WIDTH, .height = BAR_HEIGHT}, TRACK,
               1.5f);
-  const float middle = RIGHT_BAR_X + RIGHT_BAR_WIDTH / 2.0f;
-  const float x = middle + _travel * (RIGHT_BAR_WIDTH / 2.0f - 4.0f);
-  _canvas.Box(Engine::Rect{.left = x - 3.0f, .top = _y - 11.0f, .width = 6.0f, .height = 22.0f}, AMBER, 1.5f);
+  if (_live)
+  {
+    const float middle = RIGHT_BAR_X + RIGHT_BAR_WIDTH / 2.0f;
+    const float x = middle + _travel * (RIGHT_BAR_WIDTH / 2.0f - 4.0f);
+    _canvas.Box(Engine::Rect{.left = x - 3.0f, .top = _y - 11.0f, .width = 6.0f, .height = 22.0f}, AMBER, 1.5f);
+  }
   Label(_canvas, _label, RIGHT_LABEL_X, _y);
 }
 
@@ -231,6 +238,10 @@ void Missiles(const Elite::Gauges& _gauges, Engine::Canvas& _canvas)
     }
     _canvas.BoxEdge(rect, 1.5f, next && _gauges.missileState != Elite::MissileState::Idle ? YELLOW : here ? MISSILE : LABEL);
   }
+  if (!_gauges.live)
+  {
+    return;
+  }
   _canvas.Text(std::to_wstring(_gauges.missiles), Engine::Font::Number, NUMBER_SIZE, 0.0f, Engine::Point{.x = LEFT_NUMBER_X, .y = y},
                Engine::Align::Right, AMBER_LIGHT);
 }
@@ -266,7 +277,8 @@ void Scanner(const Elite::SnapshotDashboard& _dashboard, Engine::Canvas& _canvas
 
 void ConditionAndCompass(const Elite::SnapshotDashboard& _dashboard, const Elite::Gauges& _gauges, bool _flashOn, Engine::Canvas& _canvas)
 {
-  std::uint32_t light = GREEN;
+  // Dark with nothing live (the title's dashboard, D64).
+  std::uint32_t light = _gauges.live ? GREEN : PANEL;
   switch (_gauges.condition)
   {
   case Elite::Condition::Yellow:
@@ -329,8 +341,8 @@ void Cockpit::Draw(const Elite::SnapshotDashboard& _dashboard, std::uint64_t _mi
 
   Bar(_canvas, RIGHT_BAR_X, RIGHT_BAR_WIDTH, RIGHT_SEGMENTS, ROWS[0], gauges.speed.fill, AMBER);
   Label(_canvas, L"SPEED", RIGHT_LABEL_X, ROWS[0]);
-  Indicator(_canvas, L"ROLL", ROWS[1], gauges.roll);
-  Indicator(_canvas, L"DIVE / CLIMB", ROWS[2], gauges.pitch);
+  Indicator(_canvas, L"ROLL", ROWS[1], gauges.roll, gauges.live);
+  Indicator(_canvas, L"DIVE / CLIMB", ROWS[2], gauges.pitch, gauges.live);
   constexpr std::array<const wchar_t*, 4> BANKS = {L"ENERGY 1", L"ENERGY 2", L"ENERGY 3", L"ENERGY 4"};
   for (std::size_t bank = 0; bank < BANKS.size(); ++bank)
   {

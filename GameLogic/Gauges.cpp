@@ -82,6 +82,11 @@ constexpr std::uint8_t LASER_TOO_HOT = 0xF0;
 Gauges GaugesOf(const SnapshotDashboard& _dashboard)
 {
   Gauges gauges;
+  if (!_dashboard.live)
+  {
+    gauges.live = false;
+    return gauges;
+  }
   gauges.foreShield = ByteGauge(_dashboard.foreShield, ShieldLevel(_dashboard.foreShield));
   gauges.aftShield = ByteGauge(_dashboard.aftShield, ShieldLevel(_dashboard.aftShield));
   // Fuel: its share of a full tank as the bar, and light years, to the tenth below, as the number.

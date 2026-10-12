@@ -145,6 +145,31 @@ public:
     }
   }
 
+  // The title's dashboard is the cockpit's picture, which nothing draws over (D64): every bar empty, every number blank, no
+  // missile and the condition light dark, with the title on the message line.
+  TEST_METHOD(TheTitlesDashboardIsDark)
+  {
+    const Elite::SnapshotDashboard title = Elite::TitleDashboard();
+    Assert::IsFalse(title.live);
+    Assert::AreEqual(std::string("---- E L I T E ----"), std::string(title.message.data()));
+    const Elite::Gauges gauges = Elite::GaugesOf(title);
+    Assert::IsFalse(gauges.live);
+    for (const Elite::Gauge* gauge :
+         {&gauges.foreShield, &gauges.aftShield, &gauges.fuel, &gauges.cabinTemperature, &gauges.laserTemperature, &gauges.altitude,
+          &gauges.speed, &gauges.energyBanks[0], &gauges.energyBanks[1], &gauges.energyBanks[2], &gauges.energyBanks[3]})
+    {
+      Assert::AreEqual(0.0f, gauge->fill);
+      Assert::IsTrue(gauge->number.empty());
+      Assert::IsTrue(gauge->level == Elite::GaugeLevel::Normal);
+    }
+    Assert::AreEqual(std::uint8_t{0}, gauges.missiles);
+    // A live dashboard of the same zeros is live, its empty shields red: the title's is dark because it is not live.
+    Elite::SnapshotDashboard zeros = title;
+    zeros.live = true;
+    Assert::IsTrue(Elite::GaugesOf(zeros).live);
+    Assert::IsTrue(Elite::GaugesOf(zeros).foreShield.level == Elite::GaugeLevel::Danger);
+  }
+
   // The snapshot takes the dashboard as the frame left it: the values, the glyphs shown, the compass's dot and the blips.
   TEST_METHOD(TheSnapshotTakesTheDashboard)
   {

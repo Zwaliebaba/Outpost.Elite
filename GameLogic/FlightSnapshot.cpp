@@ -5,6 +5,7 @@
 #include "Arithmetic.h"
 #include "GameState.h"
 #include "Message.h"
+#include "SharedTables.h"
 #include "Text.h"
 
 #include <algorithm>
@@ -181,6 +182,14 @@ using Matrix = std::array<std::array<double, 3>, 3>; // rows: where each axis go
 }
 
 } // namespace
+
+SnapshotDashboard TitleDashboard()
+{
+  SnapshotDashboard dashboard;
+  dashboard.live = false;
+  std::copy_n(ELITE_TITLE_TEXT.begin(), std::min(ELITE_TITLE_TEXT.size(), dashboard.message.size() - 1), dashboard.message.begin());
+  return dashboard;
+}
 
 FlightSnapshot TakeFlightSnapshot(const GameState& _state)
 {

@@ -359,9 +359,11 @@ std::uint16_t RunTitle(GameState& _state, Hardware& _hardware, bool _backward)
     DrawViewString(_state, PRESS_ANY_KEY_TEXT, PRESS_ANY_KEY_MASK, PRESS_ANY_KEY_PLACE);
     (void)TransformAndDrawObjects(_state, _hardware, backward);
     FinishSpaceViewFrame(_state, _hardware);
-    // The frame as it was drawn, marked the title's, for a renderer that draws its ship (ADR-033).
+    // The frame as it was drawn, marked the title's, for a renderer that draws its ship (ADR-033), with the dashboard the title
+    // shows: the cockpit's picture, nothing on it live (D64).
     FlightSnapshot snapshot = TakeFlightSnapshot(_state);
     snapshot.title = true;
+    snapshot.dashboard = TitleDashboard();
     _hardware.PublishFlightSnapshot(snapshot, !firstFrame);
     firstFrame = false;
     backward = false;

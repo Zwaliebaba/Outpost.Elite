@@ -84,6 +84,7 @@ struct SnapshotDashboard
   std::array<SnapshotBlip, 36> blips{};
   std::size_t blipCount = 0;
   std::array<char, MESSAGE_BYTES> message{}; ///< what the message line shows, the view's name when no message is up
+  bool live = true; ///< the values drawn; false on the title, whose dashboard is the cockpit's picture, never updated (D64)
 };
 
 /// What one frame of flight drew (ADR-032, D49): the camera and every active object, taken where RunFlight's frame is finished,
@@ -142,6 +143,10 @@ inline constexpr float MOST_TURN_PER_FRAME_RADIANS = 0.5f;
 /// The snapshot of _state as the frame just drawn left it: the player's angles and view, and each active slot. Its sequence,
 /// paced time and continuity are the publisher's (Platform::PublishFlightSnapshot).
 [[nodiscard]] FlightSnapshot TakeFlightSnapshot(const GameState& _state);
+
+/// The title's dashboard (RunTitle, D64): the cockpit's picture as ShowCockpitScreen copies it, which UpdateDashboard never draws
+/// over on the title, so nothing on it is live; and ---- E L I T E ---- on the message line.
+[[nodiscard]] SnapshotDashboard TitleDashboard();
 
 /// Whether _after is the object _before was, one frame on: the same slot, the same kind, and no further than MOST_STEP_PER_FRAME
 /// on any axis. A slot freed and filled again within a frame by an object of the same kind within that distance is taken for the

@@ -197,11 +197,11 @@ int Application::Run(HINSTANCE _instance)
     audioCycle = platform->Clock();
     platform->Sound().DiscardBefore(Elite::Speaker::FirstSampleStart(audioCycle, SAMPLE_RATE));
 
-    // In flight, the cockpit with the space view in its window (ADR-034, D63); on the title and every other screen, the CGA
-    // picture, the title's ship drawn over it (ADR-033).
+    // In flight and on the title, the cockpit with the space view in its window (ADR-034, D63, D64); on every other screen, the
+    // CGA picture.
     bool presented = false;
     const Elite::FlightSnapshot& latest = platform->LatestFlightSnapshot();
-    if (latest.sequence != 0 && !latest.title && platform->SpaceViewShown())
+    if (latest.sequence != 0 && platform->SpaceViewShown())
     {
       Cockpit::Draw(latest.dashboard, elapsedMilliseconds, renderer, canvas);
       presented = renderer.Present({}, COCKPIT_BACKGROUND, spaceView.Frame(*platform, Cockpit::VIEW), &canvas);
@@ -213,7 +213,7 @@ int Application::Run(HINSTANCE _instance)
       {
         pixels[index] = rgb(frame->pixels[index]);
       }
-      presented = renderer.Present(pixels, rgb(frame->borderColor), spaceView.Frame(*platform, SpaceView::PICTURE_PLACE));
+      presented = renderer.Present(pixels, rgb(frame->borderColor), nullptr);
     }
     if (!presented)
     {
