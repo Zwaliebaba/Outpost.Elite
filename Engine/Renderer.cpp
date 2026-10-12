@@ -1093,7 +1093,8 @@ std::vector<std::uint32_t> Renderer::Capture(std::span<const std::uint32_t> _pix
   }
   const D3D12_CPU_DESCRIPTOR_HANDLE targetView = targetHeap->GetCPUDescriptorHandleForHeapStart();
   D3D12_CPU_DESCRIPTOR_HANDLE srgbView = targetView;
-  srgbView.ptr += m_renderTargetStride;
+  // Its own increment: m_renderTargetStride is set only once a window is attached, and a capture needs none.
+  srgbView.ptr += m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
   const D3D12_RENDER_TARGET_VIEW_DESC unormDesc = TargetView(TARGET_FORMAT);
   const D3D12_RENDER_TARGET_VIEW_DESC srgbDesc = TargetView(TARGET_SRGB_FORMAT);
   m_device->CreateRenderTargetView(target.Get(), &unormDesc, targetView);
