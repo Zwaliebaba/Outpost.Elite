@@ -9,7 +9,7 @@
 #              a shared group several subsystems write it: PlayerShip, Messages, Audio, Menus, Disk, Drawing, Commander,
 #                             World, Flow, Jump or Keyboard
 #              constant       nothing writes it: a constexpr table of the subsystem that reads it (Tools/GenerateTables.py)
-#              unused         nothing reads it: kept in UnusedState for change 3b, which removes it with the turn probe
+#              unused         nothing reads it: not in the state, and no table either (change 3c removed it with the turn probe)
 #   readers  the subsystems (GameLogic/<Subsystem>.cpp) that read it, by member, by raw offset or as part of a text
 #   writers  the subsystems that write it
 #   notes    where the static scan was wrong, and why a member is where it is
@@ -21,12 +21,12 @@ member	address	bytes	group	readers	writers	notes
 gap0000	DS:0000	64	Drawing		Combat,Docking,Flight,Galaxy,Text,Video	a gap kept: row 0 of the space view buffer, which drawing writes; the first of members read as one text or span, which stay together
 spaceViewBuffer	DS:0040	8064	Drawing	Video	Combat,Docking,Flight,Galaxy,Text,Video	the scan missed its writes by Combat, Docking, Flight, Galaxy, Text, Video: written by raw offset from DS:0000: lines, discs, triangles, strings, the laser, the tunnel, the charts and the pause menu; stays beside gap0000, read as one text or span with it
 gap1FC0	DS:1FC0	64	Drawing		Combat,Docking,Flight,Galaxy,Text,Video	a gap kept: row 127 of the space view buffer, which drawing writes; stays beside gap0000, read as one text or span with it
-amstradPresent	DS:2000	1	unused		StartUp	written by StartUp, read by nothing
+amstradPresent	DS:2000	1	StartUp	StartUp	StartUp	written by StartUp; read by M's launch from past the drawing buffer (BytesAfterDrawBuffer)
 amstradSignature	DS:2001	7	constant	StartUp		
 speakerPortImage	DS:2008	1	Audio	Sound,Timer	Sound,Timer	
 diskOperation	DS:2009	1	SaveLoad	SaveLoad,StartUp	SaveLoad	
 exitMessage	DS:200A	47	constant	StartUp		
-dosVersionMessage	DS:2039	42	unused			
+dosVersionMessage	DS:2039	42	constant	StartUp		read by M's launch from past the drawing buffer (BytesAfterDrawBuffer)
 cheatArgumentKey	DS:2063	6	constant	StartUp		
 pspSegment	DS:2069	2	unused			
 cheatEnabled	DS:206B	1	StartUp	Flight	StartUp	
@@ -161,7 +161,7 @@ foreShieldShown	DS:4234	1	Flight	Flight	Flight	the scan missed its writes by Fli
 aftShieldShown	DS:4235	1	Flight	Flight	Flight	the scan missed its writes by Flight: the dashboard's cache, written through spans; stays beside missileCountShown, read as one text or span with it
 conditionColorShown	DS:4236	1	Flight	Flight	Flight	stays beside missileCountShown, read as one text or span with it
 speedShown	DS:4237	1	Flight	Flight	Flight	stays beside missileCountShown, read as one text or span with it
-equipmentLossMessage	DS:4238	40	unused			
+equipmentLossMessage	DS:4238	40	constant	Flight		read by M's launch from past the dashboard's cache (BytesAfterDashboardCache)
 playerHitBy	DS:4260	2	Combat	Combat	Combat	
 playerHitPending	DS:4262	1	Combat	Combat	Combat	
 playerDocked	DS:4263	1	Flight	Docked,Docking,Flight,Outcome	Flight	

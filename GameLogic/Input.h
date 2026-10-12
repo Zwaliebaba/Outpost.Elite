@@ -57,7 +57,7 @@ void KeyboardInterrupt(GameState& _state, Hardware& _hardware);
 /// (OUT 201h, whose byte the port does not read) to the last poll; then the port's byte into joystickPortByte, and
 /// fireLatch set while button 1 is down. Counts the 8088's cycles for its instructions, by which the port times its one-shots, and
 /// waits when X's one-shot drops before Y's, for Y's.
-[[nodiscard]] StickAxes ReadJoystickAxes(GameState& _state, Hardware& _hardware);
+[[nodiscard]] StickAxes ReadJoystickAxes(Hardware& _hardware);
 
 /// IsMouseDriverInstalled (CS:02D4): the int 33h vector in the interrupt table, and whether a driver is behind it: whether
 /// the code it names is not an IRET.

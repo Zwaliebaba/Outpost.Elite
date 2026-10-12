@@ -55,7 +55,7 @@ constexpr std::array<LoadedWord, 3> LOADED_WORDS = {
 std::optional<std::vector<std::uint8_t>> ReferenceLoadImage()
 {
   const std::span<const std::uint8_t> image = std::span<const std::uint8_t>(REFERENCE_IMAGE).subspan(CODE_SEGMENT_BYTES);
-  // D5 (ADR-001) is written over the 00 the file holds, and each stored address must hold the address the file's does.
+  // The image holds the file's 00 at D5's byte (ADR-001), and each stored address must hold the address the file's does.
   if (image[D5_OFFSET] != 0x00)
   {
     return std::nullopt;
@@ -80,13 +80,8 @@ std::optional<std::vector<std::uint8_t>> ReferenceLoadImage()
       state[place.place + index] = image[place.original + index];
     }
   }
-  // D5's byte, the protection's "already shown" flag; and the stored addresses, each loaded as what it means.
-  const std::optional<std::size_t> d5 = PlaceOf(D5_OFFSET);
-  if (!d5)
-  {
-    return std::nullopt;
-  }
-  state[*d5] = 0x01;
+  // The stored addresses, each loaded as what it means. D5's byte, the protection's "already shown" flag, is not in the state
+  // since change 3c: nothing reads it, as the native game has no protection to show (ADR-001, ADR-030).
   for (const LoadedWord& word : LOADED_WORDS)
   {
     const std::optional<std::size_t> low = PlaceOf(word.offset);

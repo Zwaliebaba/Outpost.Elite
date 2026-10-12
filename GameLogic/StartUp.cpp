@@ -190,7 +190,7 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
   }
   if (bytesLeft != 0)
   {
-    _state.Data().unused.amstradPresent = 0;
+    _state.Data().startUp.amstradPresent = 0;
   }
 
   // From here on the direction flag is as the CLD left it, and as GameLoop leaves it; BP as DOS left it, and as GameLoop leaves it.
@@ -303,7 +303,7 @@ std::array<std::uint8_t, SpaceObject::BYTES> BytesAfterDrawBuffer(const GameStat
   std::array<std::uint8_t, SpaceObject::BYTES> bytes{};
   std::size_t at = 0;
   const auto append = [&bytes, &at](std::uint8_t _byte) { bytes.at(at++) = _byte; };
-  append(_state.Data().unused.amstradPresent);
+  append(_state.Data().startUp.amstradPresent);
   for (const std::uint8_t byte : AMSTRAD_SIGNATURE)
   {
     append(byte);
@@ -316,7 +316,7 @@ std::array<std::uint8_t, SpaceObject::BYTES> BytesAfterDrawBuffer(const GameStat
   }
   for (std::size_t index = 0; at < bytes.size(); ++index)
   {
-    append(_state.Data().unused.dosVersionMessage[index]);
+    append(DOS_VERSION_MESSAGE.at(index));
   }
   return bytes;
 }

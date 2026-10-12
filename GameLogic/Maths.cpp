@@ -288,9 +288,7 @@ bool ObjectWithinBox(const SpaceObject& _slot, std::uint16_t _halfSize)
 Vector RotatePitchYawRoll(GameState& _state, Vector _vector)
 {
   const Pair yz = RotateByStoredSinCos(_state, 0, Pair{_vector.y, _vector.z});
-  _state.Data().unused.rotateScratch = Word(yz.first);
   const Pair xz = RotateByStoredSinCos(_state, 1, Pair{_vector.x, yz.second});
-  _state.Data().unused.rotateScratch = Word(xz.second);
   const Pair xy = RotateByStoredSinCos(_state, 2, Pair{xz.first, yz.first});
   return Vector{xy.first, xy.second, xz.second};
 }
@@ -306,11 +304,8 @@ Vector RotateRollYawPitch(const GameState& _state, Vector _vector)
 Vector RotateBySinCos7210(GameState& _state, Vector _vector)
 {
   const Pair yz = RotateByStoredSinCos(_state, 7, Pair{_vector.y, _vector.z});
-  _state.Data().unused.rotateScratch = Word(yz.second);
   const Pair xy = RotateByStoredSinCos(_state, 2, Pair{_vector.x, yz.first});
-  _state.Data().unused.rotateScratch = Word(xy.second);
   const Pair xz = RotateByStoredSinCos(_state, 1, Pair{xy.first, yz.second});
-  _state.Data().unused.rotateScratch = Word(xz.first);
   const Pair rotatedYz = RotateByStoredSinCos(_state, 0, Pair{xy.second, xz.second});
   return Vector{xz.first, rotatedYz.first, rotatedYz.second};
 }

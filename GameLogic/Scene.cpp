@@ -226,12 +226,10 @@ void RotateVerticesToView(GameState& _state, std::size_t _first, std::uint16_t _
   count = 0;
   // Fixed edges, then face edges: a count byte, then two bytes for each.
   SetLow(count, static_cast<std::uint8_t>(_blueprint.fixedEdges.size() / 2));
-  _state.Data().unused.fixedEdgeCount = count;
   count = static_cast<std::uint16_t>(count << 1);
   // The original keeps the edge lists' addresses in fixedEdgeList and faceEdgeList for its edge routines; native code hands
   // them _blueprint, and nothing reads the two.
   SetLow(count, static_cast<std::uint8_t>(_blueprint.faceEdges.size() / 2));
-  _state.Data().unused.faceEdgeCount = count;
   count = static_cast<std::uint16_t>(count << 1);
   SetLow(count, _blueprint.faces);
   return DrawVisibleFaces(_state, _blueprint, count, _backward).backward;
@@ -276,7 +274,6 @@ constexpr std::uint16_t TRIANGLE_VERTEX_BYTES = 3;
   const ScreenPoint firstPoint{coordinate(first, 0), coordinate(first, 2)};
   const std::size_t second = vertex(1);
   const std::int16_t secondX = coordinate(second, 0);
-  _state.Data().unused.faceTestScratch = static_cast<std::uint16_t>(secondX);
   const ScreenPoint secondPoint{secondX, coordinate(second, 2)};
   const std::size_t third = vertex(2);
   return Triangle{firstPoint, secondPoint, ScreenPoint{coordinate(third, 0), coordinate(third, 2)}};

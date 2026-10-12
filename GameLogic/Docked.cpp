@@ -353,7 +353,6 @@ std::uint16_t RunTitle(GameState& _state, Hardware& _hardware, bool _backward)
   _state.Data().playerShip.playerYawAngle = 0;
   _state.Data().playerShip.playerRollAngle = 0;
   _state.Data().playerShip.viewAngle = 0;
-  _state.Data().unused.anyKeyLatch = 0;
   _state.Data().drawing.screenLayout = TITLE_LAYOUT;
   (void)ShowCockpitScreen(_state, _hardware, _backward);
   bool backward = false;

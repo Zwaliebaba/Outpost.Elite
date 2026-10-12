@@ -54,7 +54,6 @@ constexpr Cycles RET_CYCLES = 12;              // RET: 8, and 4 for the word pop
 constexpr std::uint8_t OVERRUN_CODE = 0xFF;
 constexpr std::uint8_t BREAK_BIT = 0x80;
 constexpr std::uint8_t SHIFT_BIT = 0x80; // on a code in keyBuffer
-constexpr std::uint8_t ESC_CODE = 0x01;
 constexpr std::uint8_t W_CODE = 0x11;
 constexpr std::uint8_t D_CODE = 0x20;
 constexpr std::uint8_t KEY_BUFFER_CODES = 0x10;
@@ -354,11 +353,6 @@ void ReadScanCode(GameState& _state, Hardware& _hardware)
     }
     else
     {
-      _state.Data().unused.anyKeyLatch = 1;
-      if (scan == ESC_CODE)
-      {
-        _state.Data().unused.escKeyLatch = 1;
-      }
       if (scan == W_CODE && _state.Data().keyboard.keyDown.keyDownAlt == 1)
       {
         _state.Data().jump.forceMisjump = 1;
@@ -404,7 +398,7 @@ bool ReadFireButton(const GameState& _state, Hardware& _hardware)
   return (Low(_hardware.ReadMousePresses()) & MOUSE_LEFT_AND_RIGHT) != 0;
 }
 
-StickAxes ReadJoystickAxes(GameState& _state, Hardware& _hardware)
+StickAxes ReadJoystickAxes(Hardware& _hardware)
 {
   // With interrupts off, the one-shots fired, and each axis's polls counted until its bit drops. The game port times its one-shots
   // by the instructions executed, so each of the original's is counted (CountInstructionCycles) before the port access after it.
@@ -488,12 +482,10 @@ StickAxes ReadJoystickAxes(GameState& _state, Hardware& _hardware)
   x = static_cast<std::uint16_t>(x - AXIS_COUNT_START);
   _hardware.CountInstructionCycles(BEFORE_LAST_READ_CYCLES);
   const std::uint8_t port = _hardware.GamePortButtons();
-  _state.Data().unused.joystickPortByte = port;
   // Bit 4, the stick's first button, low while pressed.
   _hardware.CountInstructionCycles(IN_CYCLES + STORE_CYCLES + AND_CYCLES);
   if ((port & STICK_BUTTON_B) == 0)
   {
-    _state.Data().unused.fireLatch = 1;
     _hardware.CountInstructionCycles(NOT_TAKEN_CYCLES + LATCH_CYCLES);
   }
   else
@@ -510,7 +502,7 @@ Steering ReadJoystickSteering(GameState& _state, Hardware& _hardware)
   {
     return ReadAmstradStick(_state);
   }
-  const StickAxes axes = ReadJoystickAxes(_state, _hardware);
+  const StickAxes axes = ReadJoystickAxes(_hardware);
   if (axes.timedOut)
   {
     return Steering{0, 0};
@@ -552,12 +544,8 @@ Steering ReadMouseSteering(GameState& _state, Hardware& _hardware)
   const MouseMotion motion = _hardware.ReadMouseMotion();
   const std::uint8_t rollStep = MouseAxis(motion.acrossMickeys);
   const std::uint8_t pitchStep = MouseAxis(motion.downMickeys);
-  const std::uint8_t buttons = Low(_hardware.ReadMousePresses());
-  _state.Data().unused.mouseButtons = buttons;
-  if ((buttons & 1) != 0)
-  {
-    _state.Data().unused.fireLatch = 1;
-  }
+  // The presses, which the original keeps in mouseButtons and latches into fireLatch: nothing reads either (change 3c).
+  (void)_hardware.ReadMousePresses();
   // NEG AH / SAR AL,1 / SAR AH,1: half of each step, the pitch negated, added to the rates the last frame left.
   return Steering{MouseRate(rollStep, Low(_state.Data().playerShip.rollRate)),
                   MouseRate(Negate(pitchStep), _state.Data().playerShip.rollRateBytes.pitchRate)};

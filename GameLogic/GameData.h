@@ -32,7 +32,6 @@
 #include "JumpState.h"
 #include "KeyboardState.h"
 #include "CommanderState.h"
-#include "UnusedState.h"
 
 #include <cstddef>
 #include <type_traits>
@@ -88,7 +87,6 @@ struct GameData
   JumpState jump;
   KeyboardState keyboard;
   CommanderState commander;
-  UnusedState unused;
 };
 
 static_assert(std::is_trivially_copyable_v<GameData> && std::is_standard_layout_v<GameData>);

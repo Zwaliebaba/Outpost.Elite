@@ -170,7 +170,6 @@
     <ClInclude Include="TimerState.h" />
     <ClInclude Include="TimerTables.h" />
     <ClInclude Include="Timing.h" />
-    <ClInclude Include="UnusedState.h" />
     <ClInclude Include="Video.h" />
     <ClInclude Include="VideoState.h" />
     <ClInclude Include="VideoTables.h" />

@@ -732,7 +732,7 @@ struct LaunchDi
   std::array<std::uint8_t, SpaceObject::BYTES> bytes{};
   std::size_t at = 0;
   const auto append = [&bytes, &at](std::uint8_t _byte) { bytes.at(at++) = _byte; };
-  for (const Counted<std::uint8_t>& byte : _state.Data().unused.equipmentLossMessage)
+  for (const std::uint8_t byte : EQUIPMENT_LOSS_MESSAGE)
   {
     append(byte);
   }
@@ -2065,7 +2065,6 @@ ScreenChange SetUpLocalSpace(GameState& _state, Hardware& _hardware, bool _backw
   (void)ResetStardust(_state);
   _state.Data().jump.hyperspaceCountdown = 0;
   _state.Data().playerShip.dockingComputerOn = 0;
-  _state.Data().unused.dataA137 = 0;
   _state.Data().playerShip.viewAngle = 0;
   _state.Data().playerShip.viewLocked = 0;
   _state.Data().playerShip.escapePodFrames = 0;
@@ -2489,7 +2488,6 @@ FlightExit RunFlight(GameState& _state, Hardware& _hardware, bool _backward)
       SpawnPlayerWreckage(_state);
       _state.Data().flight.gameOverFrames = GAME_OVER_FRAMES;
       SetMessage(_state, Message::GameOver, GAME_OVER_FRAMES);
-      StopContinuousNoise(_state);
       _hardware.LoopTurn(FLIGHT_FRAME_LOOP, {});
       continue;
     }

@@ -12,8 +12,9 @@
 namespace Elite
 {
 
-// ADR-001 and ADR-007: the reference binary, byte for byte, and the one byte the host changes in memory
-// (D5), the protection's "already shown" flag at DS:25E4. Nothing reads the file (D3, D36), and since D28 it is not in the tree
+// ADR-001 and ADR-007: the reference binary, byte for byte, and the one byte the host changed in memory
+// (D5), the protection's "already shown" flag at DS:25E4, which since change 3c is not in the state: nothing reads it, as the
+// native game has no protection to show (ADR-030). Nothing reads the file (D3, D36), and since D28 it is not in the tree
 // (ADR-020): its load image is checked in (ReferenceImage.h), and ReferenceImageTests holds it to the hash measured from it.
 inline constexpr std::uint16_t D5_OFFSET = 0x25E4;
 
@@ -34,7 +35,7 @@ inline constexpr DosDateTime START_MOMENT = {1980, 1, 1, 0, 0, 0, 0};
 
 /// The game's state as DOS's EXEC leaves the reference's data segment, GameData's bytes: each member the state holds from its
 /// 1987 offset in the load image (ReferenceImage.h) past its code segment, zeros past the image's end, at its place in GameData
-/// (DATA_PLACES, D38); the D5 byte written; and the words the image holds as addresses where the game's state holds a message
+/// (DATA_PLACES, D38); and the words the image holds as addresses where the game's state holds a message
 /// or an index loaded as what they mean (D33, piece 3). The code segment's relocations change only its own words, which the
 /// game's state does not hold. Nothing if the D5 byte did not hold 00, as the file's does, or one of those words did not hold
 /// its address.

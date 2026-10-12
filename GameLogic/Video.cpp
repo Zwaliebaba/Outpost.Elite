@@ -1101,7 +1101,6 @@ struct WordRun
 void TraceClippedFlatEdges(GameState& _state, ClippedEdge _a, bool _subtractA, ClippedEdge _b, bool _subtractB, std::uint16_t _row,
                            std::uint16_t _rows, bool _backward)
 {
-  _state.Data().unused.clippedLastRow = NO_ROW;
   _state.Data().video.clippedFirstRow = NO_ROW;
   TriangleSpans spans;
   std::uint16_t row = _row;
@@ -1121,7 +1120,6 @@ void TraceClippedFlatEdges(GameState& _state, ClippedEdge _a, bool _subtractA, C
     return;
   }
   --row;
-  _state.Data().unused.clippedLastRow = row;
   DrawStackedSpansFromRow(_state, spans, Low(row), _backward);
 }
 
@@ -1218,7 +1216,6 @@ void FillClippedGeneral(GameState& _state, ScreenPoint _a, ScreenPoint _b, Scree
   ClippedEdge longEdge{Signed(_state.Data().video.clippedEdgeStartX), 0};
   ClippedEdge shortEdge = longEdge;
   std::uint16_t row = topRow;
-  _state.Data().unused.clippedLastRow = NO_ROW;
   _state.Data().video.clippedFirstRow = NO_ROW;
   _state.Data().video.clippedRowCount = 0;
   TriangleSpans spans;
@@ -1267,7 +1264,6 @@ void FillClippedGeneral(GameState& _state, ScreenPoint _a, ScreenPoint _b, Scree
     return;
   }
   --row;
-  _state.Data().unused.clippedLastRow = row;
   if (row >= BUFFER_ROWS)
   {
     return;
