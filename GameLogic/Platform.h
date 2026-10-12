@@ -5,6 +5,7 @@
 #include "Cga.h"
 #include "DosFiles.h"
 #include "FileStore.h"
+#include "FlightSnapshot.h"
 #include "GamePort.h"
 #include "InterruptController.h"
 #include "IntervalTimer.h"
@@ -223,6 +224,22 @@ public:
   /// The picture the CGA shows now, from the GameState's video memory.
   void Render(FrameImage& _image) const noexcept;
 
+  /// The snapshot of the last frame of flight the game published (ADR-032), and the one before it: a renderer draws between the
+  /// two. Each is empty, sequence 0, until one is published.
+  [[nodiscard]] const FlightSnapshot& LatestFlightSnapshot() const noexcept
+  {
+    return m_flightSnapshots[1];
+  }
+
+  [[nodiscard]] const FlightSnapshot& PreviousFlightSnapshot() const noexcept
+  {
+    return m_flightSnapshots[0];
+  }
+
+  /// _snapshot published as the latest: numbered, stamped with the clock, and, when _continues, made continuous with the latest
+  /// before it (ContinueFrom), which becomes the previous.
+  void PublishFlightSnapshot(const FlightSnapshot& _snapshot, bool _continues) noexcept;
+
   [[nodiscard]] IntervalTimer& Timer() noexcept
   {
     return m_timer;
@@ -361,6 +378,7 @@ private:
   Keyboard m_keyboard;
   GamePort m_gamePort;
   Cga m_cga;
+  std::array<FlightSnapshot, 2> m_flightSnapshots{}; // the previous and the latest
   Bios m_bios;
   Mouse m_mouse;
   DosFiles m_files;

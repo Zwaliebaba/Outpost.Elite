@@ -27,6 +27,9 @@
     <ClInclude Include="Renderer.h">
       <Filter>Rendering</Filter>
     </ClInclude>
+    <ClInclude Include="SceneSnapshot.h">
+      <Filter>Rendering</Filter>
+    </ClInclude>
     <ClInclude Include="Win32.h">
       <Filter>Platform</Filter>
     </ClInclude>
@@ -42,6 +45,9 @@
       <Filter>Build</Filter>
     </ClCompile>
     <ClCompile Include="Renderer.cpp">
+      <Filter>Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="SceneSnapshot.cpp">
       <Filter>Rendering</Filter>
     </ClCompile>
     <ClCompile Include="Window.cpp">

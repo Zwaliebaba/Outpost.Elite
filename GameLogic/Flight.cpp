@@ -8,6 +8,7 @@
 #include "Docked.h"
 #include "Docking.h"
 #include "Equipment.h"
+#include "FlightSnapshot.h"
 #include "FlightTables.h"
 #include "Galaxy.h"
 #include "Hyperspace.h"
@@ -2424,6 +2425,7 @@ FlightExit RunFlight(GameState& _state, Hardware& _hardware, bool _backward)
   // The tunnel's last FinishSpaceViewFrame: its CLD, and PresentSpaceView's MOV BP,20h.
   backward = false;
   std::uint16_t countLeft = PRESENT_SPACE_VIEW_BP;
+  bool firstFrame = true;
   for (;;)
   {
     // FlightFrameLoop: one frame. The direction flag goes as each routine leaves it: TransformAndDrawObjects', and the CLD of a
@@ -2446,6 +2448,9 @@ FlightExit RunFlight(GameState& _state, Hardware& _hardware, bool _backward)
     UpdateMessageLine(_state, backward);
     PollScreenDumpKey(_state, _hardware);
     FinishSpaceViewFrame(_state, _hardware);
+    // The frame as it was drawn, for a renderer that draws between frames (ADR-032); the first continues nothing before it.
+    _hardware.PublishFlightSnapshot(TakeFlightSnapshot(_state), !firstFrame);
+    firstFrame = false;
     // Its CLD, and PresentSpaceView's MOV BP,20h and MOV DX,1FF0h, which UpdateObjectsAndSpawn hands to its first handler.
     backward = false;
     countLeft = PRESENT_SPACE_VIEW_BP;

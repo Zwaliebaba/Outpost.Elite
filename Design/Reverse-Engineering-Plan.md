@@ -10,7 +10,7 @@
 | 3 — Replace routines with C++ | Exit met 2026-10-10 | ADR-010 |
 | 4 — Detach | Closed 2026-10-10 | ADR-011 to ADR-019 |
 | 5 — The native platform and the natural layout | Closed 2026-10-12: pieces 1 to 3 done, change 3c's four parts with them. The guard D57 deleted is restored (D59). Piece 4 moved to Phase 6 (D52). | ADR-020 to ADR-026, ADR-029, ADR-030 |
-| 6 — The new game | Ruled (D39, D44–D55, D60). Piece 1, the renderer's first part, written (ADR-031). Done ahead of it: D41 (ADR-027), D42 and D48's PerMonitorV2 (ADR-009), and D43 (ADR-030). | ADR-031 |
+| 6 — The new game | Ruled (D39, D44–D55, D60, D61). Piece 1, the renderer's first part, written (ADR-031); piece 2, the flight snapshot, written (ADR-032). Done ahead of it: D41 (ADR-027), D42 and D48's PerMonitorV2 (ADR-009), and D43 (ADR-030). | ADR-031, ADR-032 |
 
 **Play-tests.** The owner played the build with D19 and D3 (`472a6b8`) and reported it good; played main at `7242663`, with the platform swap and change 1, and reported that it works perfectly; and played the game after D7 and reported that it works as designed.
 
@@ -220,7 +220,7 @@ Then come the changes on purpose, from which the game diverges freely (D26). The
    - Until the new screens replace it, the CGA picture is drawn through the renderer as one textured rectangle at whole-number scale (D46), so the game looks as it does now.
 
    *Exit:* the game plays as now at 100 to 200% display scale and at every size above, and every replay, outcome and answer holds.
-2. **A snapshot of the state** (D49, R9). After each update the game fills a neutral snapshot: the camera; each object's kind, position and orientation; the sun and the planet; particles, lasers and stardust; and the HUD's values. The engine knows no game type. The renderer draws at the display's rate between the last two snapshots: positions are interpolated and orientations slerped. This adds up to one update, 50 ms, of latency. The game still updates every 50 ms (D6).
+2. **A snapshot of the state** (D49, R9). After each update the game fills a neutral snapshot: the camera; each object's kind, position and orientation; the sun and the planet; particles, lasers and stardust; and the HUD's values. The engine knows no game type. The renderer draws at the display's rate between the last two snapshots: positions are interpolated and orientations slerped. This adds up to one update, 50 ms, of latency. The game still updates every 50 ms (D6). *D61 (2026-10-12): piece 2 lands as data and tests (ADR-032): the snapshot of each frame of flight, the player's rotation, and continuity inferred from the slot, its kind and its step; the engine's scene and its interpolation. Particles, lasers, stardust, the HUD's values, the objects' rotations, the engine scene's making and tearing come with piece 3.*
 3. **The space view and the HUD** (D39, D45, D50, D51), in either order, each its own change.
    - The ships come from their blueprints, with the station, explosions, lasers and stardust, lit by the sun.
    - Planets and sky come from each system's seed. The parameters are calculated from the seed in integer arithmetic, and the noise per pixel on a sphere impostor. The planet's radius on screen is the radius the game uses for altitude and collision.
@@ -344,6 +344,7 @@ After D44, no replay reaches the docked screens. Their rules are functions with 
 | D58 | Whether `ReplayRunner` is still used, after D57 left it no replay to play (asked by the owner) | Remove it, and the shell's session recording with it, or keep it as a hand-run tool. | **Remove it** (2026-10-11): `ReplayRunner` is deleted, and with it the shell's recording and `ReplayRecorder`, which nothing else used. The replay format stays for the tests. ADR-028 records it. Amends D35 and D57. |
 | D59 | Whether change 3c and Phase 6 can go ahead on what D57 left: no check of flight, combat, docking, hyperspace, missions or saving against anything recorded (raised by the review of this plan, 2026-10-12) | Rebuild the guard before change 3c. Revert the two hand edits to the load image (`3eeaca6`'s docking computer, marked a cheat, and `4450185`'s credits), and every 1987 answer holds again with nothing re-recorded. | **As recommended** (2026-10-12): both edits are reverted and everything D57 deleted is restored; D58 stands. A change to the starting state is a ruling, never an edit to the image. ADR-029 records it. Supersedes D57. |
 | D60 | How much of D47's renderer piece 1 builds, when its exit observes only the CGA picture, and what checks the renderer (raised at the start of Phase 6) | Build what the exit can observe, and test the renderer on WARP now. | **As recommended** (2026-10-12): piece 1 is the device, two frames in flight, the waitable swap chain at a latency of one, the CGA picture through it and a headless capture. The FP16 scene with MSAA, reversed Z and bloom come with the space view; the sRGB 2D layer, the glyph atlas and D48's design units with the HUD; tearing with the snapshot. A new `EngineTests` draws on WARP in CI. ADR-031 records it. Amends D47 and D52's piece list. |
+| D61 | How piece 2 lands, when nothing draws a snapshot until piece 3, and how a slot reused in place is told from the object before it (raised at the start of piece 2) | Data and tests now; continuity inferred in the snapshot from the slot, its kind and a frame's step, not stamped where the game activates a slot. | **As recommended** (2026-10-12): the game publishes a snapshot of each frame of flight and the engine interpolates two, both tested, and nothing on screen changes; continuity is inferred. ADR-032 records it and measures the bounds. Tearing moves on to piece 3. Amends D60. |
 
 ## 9. ADRs this plan produces
 
@@ -381,7 +382,8 @@ After D44, no replay reaches the docked screens. Their rules are functions with 
 | [ADR-030](ADR/ADR-030-change-3c-nothing-by-address.md) | Change 3c: nothing by the original's address; then the layout's clean-up, D37's second round and a loaded commander clamped (D43) | Phase 5, piece 3 — written |
 | [ADR-031](ADR/ADR-031-the-renderer-first-piece.md) | The renderer's first piece: the picture on two frames in flight, and the engine's tests on WARP (D47, D60) | Phase 6, piece 1 — written |
 | — | The renderer's scene, 2D layer, text and design units (D47, D48, D55) | Phase 6, pieces 2 and 3 — to write, or amending ADR-031 |
-| — | The space view: the snapshot, interpolation, the field of view, ships, planets and sky (D45, D49, D50) | Phase 6, pieces 2 and 3 — to write |
+| [ADR-032](ADR/ADR-032-the-flight-snapshot.md) | The flight snapshot, and drawing between two of them (D49, D61) | Phase 6, piece 2 — written |
+| — | The space view: the field of view, ships, planets and sky (D45, D50) | Phase 6, piece 3 — to write |
 | — | The cockpit HUD and its gauges (D39, D51) | Phase 6, piece 3 — to write |
 | — | The native game loop (D40, D52) | Phase 6, piece 4 — to write |
 | — | The docked screens and their guard (D44, D53) | Phase 6, piece 5 — to write |
