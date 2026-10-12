@@ -1,6 +1,6 @@
 # ADR-030 — Change 3c: nothing by the original's address, and the layout's remainder
 
-**Status:** accepted 2026-10-12, with the change that implements it, the first part of change 3c of D33's piece 3 ([Reverse-Engineering-Plan.md §5, Phase 5](../Reverse-Engineering-Plan.md#phase-5--the-native-platform-and-the-natural-layout)). The later parts amend it: the layout's clean-up with one re-base, D37's second round, and D43's clamp at load. It amends ADR-015, ADR-018 and ADR-026. **Amended 2026-10-12 by the second part,** the layout's clean-up and its one re-base, **and by the third part,** D37's second round (below).
+**Status:** accepted 2026-10-12, with the change that implements it, the first part of change 3c of D33's piece 3 ([Reverse-Engineering-Plan.md §5, Phase 5](../Reverse-Engineering-Plan.md#phase-5--the-native-platform-and-the-natural-layout)). The later parts amend it: the layout's clean-up with one re-base, D37's second round, and D43's clamp at load. It amends ADR-015, ADR-018 and ADR-026. **Amended 2026-10-12 by the second part,** the layout's clean-up and its one re-base, **by the third part,** D37's second round, **and by the fourth,** D43's clamp at load (below).
 
 ## Context
 
@@ -131,9 +131,38 @@ All of them are now void, and `PrintTextLines` with them: `PrintCountedTextLines
 | The suite | 141 tests pass under g++ `-O2`, g++ `-O0` and clang++ 18 |
 | Checkers | `CheckProjectFiles`, `CheckFormat`, `GenerateGameData --check` and `GenerateTables --check` are clean; clang-tidy and MSVC run in CI |
 
+## The fourth part: a loaded commander held to what the game writes (2026-10-12)
+
+**13. D43's clamp.** `LoadCommanderFile` now passes what it reads through `ClampLoadedCommander`. This is a change on purpose. Each field D43 names is held to the most the game's own writers leave in it:
+
+| Field | At most | Its writers |
+|---|---|---|
+| `galaxyNumber` | 8, the ninth galaxy | `GalacticJump` |
+| `currentSystemChartY`, `chartCursorY`, `shortRangeCursorY`, `galacticCursorY` | 7Fh, the chart's last row | the arrival and the witch-space midpoint, each from a halved y; `MoveChartCursor`, held below 80h; `MoveCursorToSystem`, only to a system on the chart, which on the short-range chart is within 11h rows of its centre, rows 04h–7Bh |
+| `currentGovernment`, `currentEconomy`, and the selected system's pair they are copied from | 7 | `SelectSystemAtCursor`, masked to three bits |
+| `missileCount` | 4 | the equipment screen's `MISSILE_LIMIT` |
+| `killCount` | FEh | `CreditKill` |
+
+Three texts are written whole:
+
+- **The name.** The ninth byte of `defaultCommanderName` is 0. The image holds a NUL there, and the copy of a typed name writes only the first eight bytes.
+- **The cash.** `FormatCredits` writes `creditBalanceText` again from `creditsTenths`.
+- **The cash's unit and NUL.** The text's last eight bytes are the image's " Credits", and the byte after it, in `gap759A`, is its NUL.
+
+A file the game saved holds all of this already, and a write of an equal value is no change. So a commander the game saved loads exactly as before, and so does every `Replays/*.cdr`. The new test `LoadedCommanderIsHeldToWhatTheGameWrites` saves a commander with every one of these fields out of range, through `PerformDiskRequest`, and loads it back.
+
+### Measured 2026-10-12
+
+| Check | Result |
+|---|---|
+| The gate | every digest, answer, picture and outcome unchanged, in check mode; no re-base |
+| The turn probe | every existing test's sequence of idle and working turns, 73,089,965 turns in all, identical to `main`'s; the new test takes none |
+| The suite | 142 tests pass under g++ `-O2`, g++ `-O0` and clang++ 18 |
+| Checkers | `CheckProjectFiles`, `CheckFormat`, `GenerateGameData --check` and `GenerateTables --check` are clean; clang-tidy and MSVC run in CI |
+
 ## What this forecloses
 
-- **Reaching on past a member.** A path that reads a text or span past its member's end, or its run's, throws `std::out_of_range` where the original would read on. The corpus and the twins reach none. A hand-edited `.cdr` whose name has no NUL now throws on the status screen. D43's clamp, the last part of change 3c, terminates the name at load.
+- **Reaching on past a member.** A path that reads a text or span past its member's end, or its run's, throws `std::out_of_range` where the original would read on. The corpus and the twins reach none. D43's clamp terminates a loaded name and the cash's text and holds the fields it names, so a hand-edited `.cdr` reaches none of those. A field it does not name, edited past what the game writes, can still throw where it is read.
 - **A wait that idles on a turn the original does not.** That cannot come from this change: a place stands for an offset one to one.
 - **A downward string operation outside `MaskOutsideTunnel`'s two instructions.** Should a change on purpose ever set the flag elsewhere, it designs its own copy.
 - **Constant text in the state.** A text the original reads as one, partly constant and partly written, is composed where it is printed; only what the game writes is state.
