@@ -16,27 +16,41 @@ static const float STAR_CORE = 6.0;  // a star's light at its middle, which bloo
 static const float STAR_RIM = 2.0;   // and at its rim
 static const float AMBIENT = 0.04;   // the light on the night side
 static const float3 CLOUD = float3(0.92, 0.93, 0.95);
+static const float CLOUD_OPACITY = 0.75;
+static const float NOISE_MIDDLE = 0.49;
+static const float NOISE_SPREAD = 0.26;
+
+// The noise's value below which a share _share of the sphere lies: Fractal's values on a sphere spread about their middle,
+// NOISE_MIDDLE, with NOISE_SPREAD the slope of their share near it (ADR-035 measures both).
+float NoiseBelow(float _share)
+{
+  return NOISE_MIDDLE + NOISE_SPREAD * (_share - 0.5);
+}
 
 float3 Terrain(float3 _at)
 {
-  const float level = g_shape.x;
-  const float cover = g_shape.y;
+  const float sea = NoiseBelow(g_shape.x);
+  const float cloudFloor = NoiseBelow(1.0 - g_shape.y);
   const float height = Fractal(_at * 1.8, g_seed, 6);
   float3 color;
-  if (height < level)
+  if (height < sea)
   {
-    const float depth = saturate((level - height) / max(level, 0.05) * 3.0);
+    const float depth = saturate((sea - height) * 12.0);
     color = lerp(g_colors[1].rgb, g_colors[0].rgb, depth);
   }
   else
   {
-    const float rise = saturate((height - level) / max(1.0 - level, 0.05) * 1.6);
+    const float rise = saturate((height - sea) * 6.0);
     const float detail = Fractal(_at * 9.0, g_seed + 101u, 3);
     color = lerp(g_colors[2].rgb, g_colors[3].rgb, saturate(rise + (detail - 0.5) * 0.3));
   }
-  const float clouds = Fractal(_at * 2.6 + float3(5.0, 9.0, 13.0), g_seed + 211u, 5);
-  const float cloud = smoothstep(1.0 - cover, 1.0 - cover + 0.15, clouds) * step(0.001, cover);
-  return lerp(color, CLOUD, cloud * 0.85);
+  // Cloud where its noise rises past the floor its cover sets, the noise itself warped so that it streams, and thinned by a finer
+  // noise so that it is wisps rather than blots.
+  const float3 warp = float3(Fractal(_at * 1.3, g_seed + 223u, 3), Fractal(_at * 1.3, g_seed + 227u, 3), 0.0) - 0.5;
+  const float clouds = Fractal(_at * float3(2.6, 5.2, 2.6) + warp * 1.5 + float3(5.0, 9.0, 13.0), g_seed + 211u, 5);
+  const float wisps = 0.45 + 0.55 * Fractal(_at * 11.0, g_seed + 229u, 3);
+  const float cloud = smoothstep(cloudFloor, cloudFloor + 0.12, clouds) * wisps * step(0.001, g_shape.y);
+  return lerp(color, CLOUD, cloud * CLOUD_OPACITY);
 }
 
 float3 Bands(float3 _at)

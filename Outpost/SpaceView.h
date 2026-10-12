@@ -6,6 +6,7 @@
 #include "SceneSnapshot.h"
 #include "ShipModel.h"
 
+#include <array>
 #include <cstdint>
 #include <vector>
 
@@ -18,10 +19,11 @@ struct FlightSnapshot;
 namespace Outpost
 {
 
-/// The space view drawn as a scene in the cockpit's window (ADR-033, ADR-034, D62): the ships the game drew as its blueprints'
-/// models, drawn by the renderer, between the space view's two layers, the game's own pixels of everything else. It draws while the
-/// screen shows the last frame of flight or of the title the game published, and draws nothing otherwise: the tunnels, the jumps
-/// and every other screen keep the CGA picture.
+/// The space view drawn as a scene in the cockpit's window (ADR-033, ADR-034, ADR-035, D62, D65): the ships the game drew as
+/// its blueprints' models, the sun and the planet as spheres, the planet's surface and the sky the system's (PlanetLookOf,
+/// SkyLookOf), the stardust and the beams as strokes, all drawn by the renderer, between the space view's two layers, the game's
+/// own pixels of everything else. It draws while the screen shows the last frame of flight or of the title the game published, and
+/// draws nothing otherwise: the tunnels, the jumps and every other screen keep the CGA picture.
 class SpaceView
 {
 public:
@@ -34,8 +36,13 @@ public:
   [[nodiscard]] const Engine::SceneFrame* Frame(const Elite::Platform& _platform, const Engine::Rect& _place);
 
 private:
-  // The scene of _snapshot: the camera at the origin, turned as the frame's camera was, and each object drawn as a model.
-  [[nodiscard]] Engine::SceneSnapshot SceneOf(const Elite::FlightSnapshot& _snapshot) const;
+  // The scene of _snapshot: the camera at the origin, turned as the frame's camera was, each object drawn as a model, and the
+  // sun, the planet and the title's planet as spheres, the sun in _palette's colour of its disc.
+  [[nodiscard]] Engine::SceneSnapshot SceneOf(const Elite::FlightSnapshot& _snapshot, const std::array<std::uint32_t, 4>& _palette) const;
+
+  // The stardust of _before moved _t of the way to _after's, and _before's beams, as strokes in _palette's colours.
+  void TakeStrokes(const Elite::FlightSnapshot& _before, const Elite::FlightSnapshot& _after, float _t,
+                   const std::array<std::uint32_t, 4>& _palette);
 
   std::vector<Elite::ShipModel> m_models; // by type
   Engine::SceneSnapshot m_before;
@@ -43,6 +50,8 @@ private:
   std::uint64_t m_afterSequence = 0;
   Engine::SceneSnapshot m_drawn;
   Engine::SceneFrame m_frame;
+  std::vector<Engine::SceneStroke> m_dust;
+  std::vector<Engine::SceneStroke> m_beams;
 };
 
 } // namespace Outpost

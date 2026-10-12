@@ -3,6 +3,7 @@
 #include "Cockpit.h"
 
 #include "Gauges.h"
+#include "SpaceViewLayers.h"
 
 #include <algorithm>
 #include <array>
@@ -68,6 +69,16 @@ constexpr Engine::Point CONDITION{.x = 1813.0f, .y = 848.0f};
 constexpr Engine::Point COMPASS{.x = 1813.0f, .y = 972.0f};
 constexpr float COMPASS_RADIUS = 55.0f;
 constexpr float COMPASS_REACH = 7.0f; // the dot's steps from the centre
+
+// The sights (D65): DrawLaserSights' 16 x 16 sprite from the view's pixel 120 and row 55, a sprite pixel there in design units.
+constexpr float SIGHTS_X = 120.0f;
+constexpr float SIGHTS_ROW = 55.0f;
+constexpr float SIGHTS_LINE = 1.0f;               // a stroke of a sight, in sprite pixels
+constexpr std::uint32_t SIGHTS_FILL = 0x8CF5A623; // what the sprite fills in its colour 2: amber, more than half seen through
+constexpr std::uint8_t PULSE = 0;
+constexpr std::uint8_t BEAM = 1;
+constexpr std::uint8_t MILITARY = 2;
+constexpr std::uint8_t MINING = 3;
 
 [[nodiscard]] std::uint32_t LevelColor(Elite::GaugeLevel _level, bool _flashOn) noexcept
 {
@@ -319,14 +330,107 @@ void ConditionAndCompass(const Elite::SnapshotDashboard& _dashboard, const Elite
   Label(_canvas, L"COMPASS", COMPASS.x, 1042.0f, Engine::Align::Center);
 }
 
+// The sights of laser type _sight, the four of DrawLaserSights' sprites traced in the canvas's amber (D65): pulse, two arrows at the
+// middle and ticks at the sides; beam, the same, bolder and filled; military, a pentagon each side of the middle and a foot at each
+// corner; mining, a bracket at each corner, ticks at the sides and a box in the middle with a bar across it.
+void Sights(std::uint8_t _sight, Engine::Canvas& _canvas)
+{
+  const float across = Cockpit::VIEW.width / static_cast<float>(Elite::SPACE_VIEW_WIDTH_PIXELS);
+  const float down = Cockpit::VIEW.height / static_cast<float>(Elite::SPACE_VIEW_HEIGHT_PIXELS);
+  // A point of the sprite, x right and y down from its top left corner, in its pixels.
+  const auto at = [across, down](float _x, float _y)
+  { return Engine::Point{.x = Cockpit::VIEW.left + (SIGHTS_X + _x) * across, .y = Cockpit::VIEW.top + (SIGHTS_ROW + _y) * down}; };
+  const float width = SIGHTS_LINE * across;
+  const auto line = [&_canvas, &at, width](float _fromX, float _fromY, float _toX, float _toY)
+  { _canvas.Line(at(_fromX, _fromY), at(_toX, _toY), width, AMBER); };
+  // A trapezoid, its top edge from _left to _right at _top and its bottom from _bottomLeft to _bottomRight at _bottom.
+  const auto trapezoid =
+    [&_canvas, &at](float _left, float _right, float _top, float _bottomLeft, float _bottomRight, float _bottom, std::uint32_t _color)
+  { _canvas.Quad({at(_left, _top), at(_right, _top), at(_bottomRight, _bottom), at(_bottomLeft, _bottom)}, _color, _color); };
+  // The same, mirrored top to bottom about the sprite's middle.
+  const auto mirrored =
+    [&trapezoid](float _left, float _right, float _top, float _bottomLeft, float _bottomRight, float _bottom, std::uint32_t _color)
+  {
+    constexpr float SIDE = 16.0f;
+    trapezoid(_bottomLeft, _bottomRight, SIDE - _bottom, _left, _right, SIDE - _top, _color);
+  };
+  switch (_sight)
+  {
+  case PULSE:
+    trapezoid(5.0f, 11.0f, 2.0f, 7.0f, 9.0f, 5.0f, AMBER);
+    mirrored(5.0f, 11.0f, 2.0f, 7.0f, 9.0f, 5.0f, AMBER);
+    line(6.5f, 1.0f, 6.5f, 2.0f);
+    line(9.5f, 1.0f, 9.5f, 2.0f);
+    line(6.5f, 14.0f, 6.5f, 15.0f);
+    line(9.5f, 14.0f, 9.5f, 15.0f);
+    for (const float x : {0.5f, 15.5f})
+    {
+      line(x, 3.0f, x, 5.0f);
+      line(x, 11.0f, x, 13.0f);
+    }
+    break;
+  case BEAM:
+    trapezoid(5.0f, 11.0f, 1.0f, 7.0f, 9.0f, 6.0f, SIGHTS_FILL);
+    mirrored(5.0f, 11.0f, 1.0f, 7.0f, 9.0f, 6.0f, SIGHTS_FILL);
+    line(5.0f, 1.0f, 11.0f, 1.0f);
+    line(5.0f, 1.0f, 7.0f, 6.0f);
+    line(11.0f, 1.0f, 9.0f, 6.0f);
+    line(5.0f, 15.0f, 11.0f, 15.0f);
+    line(5.0f, 15.0f, 7.0f, 10.0f);
+    line(11.0f, 15.0f, 9.0f, 10.0f);
+    for (const float x : {1.0f, 15.0f})
+    {
+      _canvas.Box(Engine::Rect{.left = at(x - 1.0f, 2.0f).x, .top = at(0.0f, 2.0f).y, .width = 2.0f * across, .height = 4.0f * down},
+                  AMBER);
+      _canvas.Box(Engine::Rect{.left = at(x - 1.0f, 10.0f).x, .top = at(0.0f, 10.0f).y, .width = 2.0f * across, .height = 4.0f * down},
+                  AMBER);
+    }
+    break;
+  case MILITARY:
+    for (const bool lower : {false, true})
+    {
+      const auto y = [lower](float _y) { return lower ? 16.0f - _y : _y; };
+      line(8.0f, y(1.0f), 10.5f, y(3.5f));
+      line(10.5f, y(3.5f), 10.0f, y(5.5f));
+      line(10.0f, y(5.5f), 6.0f, y(5.5f));
+      line(6.0f, y(5.5f), 5.5f, y(3.5f));
+      line(5.5f, y(3.5f), 8.0f, y(1.0f));
+      line(0.5f, y(1.5f), 2.5f, y(5.5f));
+      line(0.0f, y(6.5f), 3.0f, y(6.5f));
+      line(15.5f, y(1.5f), 13.5f, y(5.5f));
+      line(13.0f, y(6.5f), 16.0f, y(6.5f));
+    }
+    break;
+  case MINING:
+    for (const bool lower : {false, true})
+    {
+      const auto y = [lower](float _y) { return lower ? 16.0f - _y : _y; };
+      line(1.0f, y(1.5f), 4.0f, y(1.5f));
+      line(3.5f, y(1.5f), 3.5f, y(4.0f));
+      line(12.0f, y(1.5f), 15.0f, y(1.5f));
+      line(12.5f, y(1.5f), 12.5f, y(4.0f));
+    }
+    _canvas.BoxEdge(Engine::Rect{.left = at(5.0f, 5.0f).x, .top = at(5.0f, 5.0f).y, .width = 6.0f * across, .height = 6.0f * down}, width,
+                    AMBER);
+    _canvas.Box(Engine::Rect{.left = at(6.0f, 7.0f).x, .top = at(6.0f, 7.0f).y, .width = 4.0f * across, .height = 2.0f * down},
+                SIGHTS_FILL);
+    line(0.5f, 7.0f, 0.5f, 9.0f);
+    line(15.5f, 7.0f, 15.5f, 9.0f);
+    break;
+  default:
+    break;
+  }
+}
+
 } // namespace
 
-void Cockpit::Draw(const Elite::SnapshotDashboard& _dashboard, std::uint64_t _milliseconds, Engine::Renderer& _renderer,
-                   Engine::Canvas& _canvas)
+void Cockpit::Draw(const Elite::SnapshotDashboard& _dashboard, std::uint8_t _sight, std::uint64_t _milliseconds,
+                   Engine::Renderer& _renderer, Engine::Canvas& _canvas)
 {
   const Elite::Gauges gauges = Elite::GaugesOf(_dashboard);
   const bool flashOn = (_milliseconds / FLASH_MILLISECONDS) % 2 == 0;
   _canvas.Clear();
+  Sights(_sight, _canvas);
   Frame(_canvas);
   Title(_dashboard, _renderer, _canvas);
   Indicators(_dashboard, _canvas);

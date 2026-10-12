@@ -282,6 +282,9 @@
     <ClInclude Include="pch.h">
       <Filter>Build</Filter>
     </ClInclude>
+    <ClInclude Include="PlanetLook.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
     <ClInclude Include="Platform.h">
       <Filter>Platform</Filter>
     </ClInclude>
@@ -484,6 +487,9 @@
     </ClCompile>
     <ClCompile Include="pch.cpp">
       <Filter>Build</Filter>
+    </ClCompile>
+    <ClCompile Include="PlanetLook.cpp">
+      <Filter>Scene</Filter>
     </ClCompile>
     <ClCompile Include="Platform.cpp">
       <Filter>Platform</Filter>

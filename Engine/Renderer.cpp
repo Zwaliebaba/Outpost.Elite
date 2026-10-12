@@ -69,7 +69,7 @@ constexpr UINT ROOT_PARAMETER_SPHERE = 1;
 constexpr UINT SPHERE_FRAME_CONSTANT_COUNT = 8;
 constexpr UINT SPHERE_CONSTANT_COUNT = 40;
 constexpr std::uint32_t SURFACE_COUNT = 3;
-constexpr float ATMOSPHERE_STRENGTH = 1.2f; // the haze at a sphere's rim, where it has one
+constexpr float ATMOSPHERE_STRENGTH = 0.7f; // the haze at a sphere's rim, where it has one
 // The strokes: StrokeVS's and StrokePS's constants.
 constexpr UINT ROOT_PARAMETER_STROKE_FRAME = 0;
 constexpr UINT ROOT_PARAMETER_STROKE = 1;
