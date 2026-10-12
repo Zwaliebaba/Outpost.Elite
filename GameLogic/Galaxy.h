@@ -1,6 +1,7 @@
 // GameLogic/Galaxy.h
 #pragma once
 
+#include "Arithmetic.h"
 #include "Docked.h"
 #include "GameState.h"
 #include "Hardware.h"
@@ -46,6 +47,25 @@ struct SystemSeeds
 
 /// systemSeed0-2: the seeds of the system the galaxy's routines are on.
 [[nodiscard]] SystemSeeds ReadSystemSeeds(const GameState& _state);
+
+/// systemX, the high byte of systemSeed1 (DS:2973 in 1987): the x on the galactic chart of the system being generated.
+[[nodiscard]] inline std::uint8_t SystemX(const GameState& _state) noexcept
+{
+  return High(_state.Data().galaxy.systemSeed1);
+}
+
+/// systemY, the high byte of systemSeed0 (DS:2971 in 1987): twice the row on the galactic chart of the system being generated,
+/// and its size's bit.
+[[nodiscard]] inline std::uint8_t SystemY(const GameState& _state) noexcept
+{
+  return High(_state.Data().galaxy.systemSeed0);
+}
+
+/// systemSeed2High, the high byte of systemSeed2 (DS:2975 in 1987).
+[[nodiscard]] inline std::uint8_t SystemSeed2High(const GameState& _state) noexcept
+{
+  return High(_state.Data().galaxy.systemSeed2);
+}
 
 /// A place in the galaxy in chart units: x, and the row, half the galaxy's y.
 struct ChartPoint

@@ -19,54 +19,12 @@ struct GalaxyState
   GalaxyState() noexcept = default;
   explicit GalaxyState(const GalaxyState&) noexcept = default;
 
-  /// systemSeed0's two bytes, as the symbol table names them (DS:2970 in 1987).
-  struct SystemSeed0Bytes
-  {
-    SystemSeed0Bytes() noexcept = default;
-    explicit SystemSeed0Bytes(const SystemSeed0Bytes&) noexcept = default;
-
-    Counted<std::uint8_t> gap2970[1];
-    /// the system's y, 0-255; the charts plot y/2
-    Counted<std::uint8_t> systemY;
-  };
-  union
-  {
-    /// first word of the seeds of the system being generated; its high byte is systemY
-    Counted<std::uint16_t> systemSeed0;
-    SystemSeed0Bytes systemSeed0Bytes;
-  };
-  /// systemSeed1's two bytes, as the symbol table names them (DS:2972 in 1987).
-  struct SystemSeed1Bytes
-  {
-    SystemSeed1Bytes() noexcept = default;
-    explicit SystemSeed1Bytes(const SystemSeed1Bytes&) noexcept = default;
-
-    Counted<std::uint8_t> gap2972[1];
-    /// the system's x, 0-255
-    Counted<std::uint8_t> systemX;
-  };
-  union
-  {
-    /// low byte bits 3-5 are the government; high byte is systemX
-    Counted<std::uint16_t> systemSeed1;
-    SystemSeed1Bytes systemSeed1Bytes;
-  };
-  /// systemSeed2's two bytes, as the symbol table names them (DS:2974 in 1987).
-  struct SystemSeed2Bytes
-  {
-    SystemSeed2Bytes() noexcept = default;
-    explicit SystemSeed2Bytes(const SystemSeed2Bytes&) noexcept = default;
-
-    Counted<std::uint8_t> gap2974[1];
-    /// bits 0-4 pick the name digrams; species bits
-    Counted<std::uint8_t> systemSeed2High;
-  };
-  union
-  {
-    /// low byte bit 7 clear means human colonials; bit 0 adds 1 to the tech level
-    Counted<std::uint16_t> systemSeed2;
-    SystemSeed2Bytes systemSeed2Bytes;
-  };
+  /// first word of the seeds of the system being generated; its high byte is systemY
+  Counted<std::uint16_t> systemSeed0;
+  /// low byte bits 3-5 are the government; high byte is systemX
+  Counted<std::uint16_t> systemSeed1;
+  /// low byte bit 7 clear means human colonials; bit 0 adds 1 to the tech level
+  Counted<std::uint16_t> systemSeed2;
   /// 'Distance: 100.0 Light Years'; ShowNearestSystemDistance patches the digits at +0x0A-0x0C and +0x0E
   Counted<std::uint8_t> distanceText[28];
   /// distanceDigits's fields, DS:29E4-29E8 in 1987, at their places there.

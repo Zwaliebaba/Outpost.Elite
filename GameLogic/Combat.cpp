@@ -258,8 +258,8 @@ FragmentsLeft SpawnFragments(GameState& _state, const SpaceObject& _object, std:
     CopyObject(_object, debris);
     debris.aiState = 0;
     const std::uint16_t spin = NextRandom(_state);
-    debris.spinRoll = Low(spin);
-    debris.spinPitch = High(spin);
+    debris.SpinRoll() = Low(spin);
+    debris.SpinPitch() = High(spin);
     // AND AX,1F1Fh / SUB AH,0Fh / SUB AL,0Fh: x and y; then BX shifted right three times / AND BL,1Fh / SUB BL,0Fh: z.
     const auto scatter = static_cast<std::uint16_t>(spin & FRAGMENT_SCATTER_MASK);
     auto scatterX = static_cast<std::uint8_t>(Low(scatter) - FRAGMENT_SCATTER_CENTER);
@@ -939,8 +939,8 @@ void SpawnPlayerWreckage(GameState& _state)
     ClearObjectSlot(splinter);
     splinter.aiState = 0;
     const std::uint16_t random = NextRandom(_state);
-    splinter.spinRoll = Low(random);
-    splinter.spinPitch = High(random);
+    splinter.SpinRoll() = Low(random);
+    splinter.SpinPitch() = High(random);
     // Each velocity byte from its own bits of the random word: x from BL, y from BH, z from BL shifted right twice.
     splinter.velocityX = Low(WreckScatter(Low(random), SPLINTER_SCATTER_MASK, SPLINTER_SCATTER_CENTER, _state.Data().combat.wreckDriftX));
     splinter.velocityY = Low(WreckScatter(High(random), SPLINTER_SCATTER_MASK, SPLINTER_SCATTER_CENTER, _state.Data().combat.wreckDriftY));

@@ -222,7 +222,7 @@ void RestartInputBlink(GameState& _state, Hardware& _hardware, const TypedLine& 
 // Returns whether it drew the message.
 bool ShowMessage(GameState& _state, bool _backwards)
 {
-  _state.Data().messages.messageFramesBytes.messageDrawn = MESSAGE_DRAWN;
+  _state.Data().messages.messageFrames = WithHigh(_state.Data().messages.messageFrames, MESSAGE_DRAWN);
   const Message message = _state.Data().messages.messagePointer;
   const bool shown = message == _state.Data().messages.messageShown;
   _state.Data().messages.messageShown = message;
@@ -441,7 +441,7 @@ std::string_view MessageText(const GameState& _state, Message _message) noexcept
 void UpdateMessageLine(GameState& _state, bool _backwards)
 {
   UpdateWarnings(_state);
-  if (_state.Data().messages.messageFramesBytes.messageDrawn != 0)
+  if (High(_state.Data().messages.messageFrames) != 0)
   {
     // messageFrames is a byte here, though ShowBountyMessage writes it as a word.
     const std::uint8_t frames = Low(_state.Data().messages.messageFrames);

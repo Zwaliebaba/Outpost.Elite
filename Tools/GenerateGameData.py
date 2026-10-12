@@ -295,7 +295,9 @@ def emit_members(_members: list[Member], _indent: str, _out: list[str]) -> None:
         _out.append(f"{_indent}/// {note}")
       _out.append(f"{_indent}{record_declaration(member)}")
       continue
-    if not member.children:
+    if not member.children or member.is_word():
+      # A word the symbol table also names a byte of is the word alone: no union of two names for one place (change 3c). Its
+      # bytes are read with High and Low, beside the code that reads them.
       if note:
         _out.append(f"{_indent}/// {note}")
       _out.append(f"{_indent}{declaration(member)}")
@@ -331,23 +333,22 @@ def struct_types(_members: list[Member], _scope: str) -> list[tuple[str, int]]:
   """Every struct nested in _members, as its name qualified from _scope and its size, depth first."""
   types = []
   for member in _members:
-    if not member.children or member.name in RECORDS:
+    if not member.children or member.name in RECORDS or member.is_word():
       continue
-    name = f"{_scope}::{type_name(member)}{'Bytes' if member.is_word() else ''}"
+    name = f"{_scope}::{type_name(member)}"
     types.append((name, member.size))
     types += struct_types(member.children, name)
   return types
 
 
 def offset_paths(_members: list[Member], _strip: str, _base: int) -> list[tuple[str, int]]:
-  """Every member's path, less the prefix _strip, and its offset from _base, depth first; a word's bytes struct among them."""
+  """Every member's path, less the prefix _strip, and its offset from _base, depth first; a word's bytes are not members."""
   paths = []
   for member in _members:
     path = member.path.removeprefix(_strip)
     paths.append((path, member.offset - _base))
-    if member.is_word() and member.children:
-      paths.append((f"{path}Bytes", member.offset - _base))
-    paths += offset_paths(member.children, _strip, _base)
+    if not member.is_word():
+      paths += offset_paths(member.children, _strip, _base)
   return paths
 
 

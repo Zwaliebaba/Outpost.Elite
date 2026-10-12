@@ -541,8 +541,8 @@ std::optional<MovedObject> UpdateDebrisAi(GameState& _state, SpaceObject& _slot)
   }
   _slot.age = static_cast<std::uint8_t>(_slot.age + 1);
   // MOV AL,[DI+26h] / CBW / ADD [DI+0Eh],AX, then the same from +27h into the pitch.
-  _slot.roll = Offset(_slot.roll, SignExtend(_slot.spinRoll));
-  _slot.pitch = Offset(_slot.pitch, SignExtend(_slot.spinPitch));
+  _slot.roll = Offset(_slot.roll, SignExtend(_slot.SpinRoll()));
+  _slot.pitch = Offset(_slot.pitch, SignExtend(_slot.SpinPitch()));
   return MoveObject(_state, _slot);
 }
 

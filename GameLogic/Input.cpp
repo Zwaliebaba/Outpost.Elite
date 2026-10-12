@@ -548,7 +548,7 @@ Steering ReadMouseSteering(GameState& _state, Hardware& _hardware)
   (void)_hardware.ReadMousePresses();
   // NEG AH / SAR AL,1 / SAR AH,1: half of each step, the pitch negated, added to the rates the last frame left.
   return Steering{MouseRate(rollStep, Low(_state.Data().playerShip.rollRate)),
-                  MouseRate(Negate(pitchStep), _state.Data().playerShip.rollRateBytes.pitchRate)};
+                  MouseRate(Negate(pitchStep), High(_state.Data().playerShip.rollRate))};
 }
 
 void PollScreenDumpKey(GameState& _state, Hardware& _hardware)

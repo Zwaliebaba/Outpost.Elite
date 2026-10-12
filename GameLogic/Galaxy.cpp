@@ -411,8 +411,7 @@ void DrawGalacticChart(GameState& _state, Hardware& _hardware, bool _backward)
   // XOR AL,AL, then PUSH AX / POP AX round each dot.
   for (std::uint8_t systems = 0;;)
   {
-    PlotPixel(_state, _state.Data().galaxy.systemSeed1Bytes.systemX,
-              static_cast<std::uint8_t>(_state.Data().galaxy.systemSeed0Bytes.systemY >> 1));
+    PlotPixel(_state, SystemX(_state), static_cast<std::uint8_t>(SystemY(_state) >> 1));
     TwistSystemSeeds(_state);
     TwistSystemSeeds(_state);
     TwistSystemSeeds(_state);
@@ -593,7 +592,7 @@ void AddShortRangeSystem(GameState& _state, Hardware& _hardware, std::int16_t _x
   const std::uint16_t itemIndex = _state.Data().galaxy.chartItemEnd;
   const std::span<Counted<std::uint8_t>> item = ChartItem(_state, itemIndex);
   SetWordIn(item, CHART_ITEM_TEXT, Join(centerRow, centerX));
-  const auto radius = static_cast<std::uint16_t>(((_state.Data().galaxy.systemSeed0Bytes.systemY & 1) << 1) + 4);
+  const auto radius = static_cast<std::uint16_t>(((SystemY(_state) & 1) << 1) + 4);
   SetWordIn(item, CHART_ITEM_RADIUS, radius);
   // Its box: half the radius either side, as add al,dl / xchg / sub al,dl / neg al make it.
   const auto half = static_cast<std::uint8_t>(radius >> 1);
@@ -713,10 +712,8 @@ std::uint16_t SearchNearestSystem(GameState& _state, std::uint16_t _countIfNone)
   for (std::uint16_t count = GALAXY_SYSTEMS; count != 0; --count)
   {
     // dx^2 + (dy/2)^2 to the cursor, each square a byte multiply; a sum that carries is passed over.
-    const std::uint16_t across =
-      Square(Low(Magnitude(static_cast<std::uint16_t>(_state.Data().galaxy.systemSeed1Bytes.systemX - cursor.x))));
-    const std::uint16_t down =
-      Square(Low(Magnitude(static_cast<std::uint16_t>((_state.Data().galaxy.systemSeed0Bytes.systemY >> 1) - cursor.row))));
+    const std::uint16_t across = Square(Low(Magnitude(static_cast<std::uint16_t>(SystemX(_state) - cursor.x))));
+    const std::uint16_t down = Square(Low(Magnitude(static_cast<std::uint16_t>((SystemY(_state) >> 1) - cursor.row))));
     const std::uint32_t distance = std::uint32_t{across} + down;
     if (distance <= 0xFFFF && distance < nearest && IsSystemOnChart(_state))
     {
@@ -751,8 +748,8 @@ ScreenKey ShowGalacticChart(GameState& _state, Hardware& _hardware, bool _backwa
 {
   _state.Data().drawing.sunFringeMask = 0;
   LoadSystemSeeds(_state, _state.Data().commander.currentSystemIndex);
-  _state.Data().commander.currentSystemX = std::uint8_t{_state.Data().galaxy.systemSeed1Bytes.systemX};
-  _state.Data().commander.currentSystemChartY = static_cast<std::uint8_t>(_state.Data().galaxy.systemSeed0Bytes.systemY >> 1);
+  _state.Data().commander.currentSystemX = std::uint8_t{SystemX(_state)};
+  _state.Data().commander.currentSystemChartY = static_cast<std::uint8_t>(SystemY(_state) >> 1);
   const std::uint16_t segment = ChartSegment(DrawChartFrame(_state, _hardware, _backward), _segment);
   _state.Data().galaxy.galacticChartNumber = static_cast<std::uint8_t>(_state.Data().commander.galaxyNumber + '1');
   // 'GALACTIC CHART ', the galaxy's digit, and a space and the NUL in gap2A7F after it.
@@ -896,9 +893,9 @@ void DescribeSystem(GameState& _state)
 {
   const std::uint8_t seed1 = Low(_state.Data().galaxy.systemSeed1);
   const std::uint8_t seed2 = Low(_state.Data().galaxy.systemSeed2);
-  const std::uint8_t seed2High = _state.Data().galaxy.systemSeed2Bytes.systemSeed2High;
-  const std::uint8_t x = _state.Data().galaxy.systemSeed1Bytes.systemX;
-  const std::uint8_t y = _state.Data().galaxy.systemSeed0Bytes.systemY;
+  const std::uint8_t seed2High = SystemSeed2High(_state);
+  const std::uint8_t x = SystemX(_state);
+  const std::uint8_t y = SystemY(_state);
 
   const auto government = static_cast<std::uint8_t>((seed1 >> 3) & 7);
   _state.Data().commander.selectedGovernment = government;
@@ -1013,7 +1010,7 @@ std::uint8_t GenerateSystemName(GameState& _state)
   std::uint8_t length = 0;
   for (std::uint16_t pair = 0; pair < SYSTEM_NAME_PAIRS; ++pair)
   {
-    const std::uint8_t pick = _state.Data().galaxy.systemSeed2Bytes.systemSeed2High;
+    const std::uint8_t pick = SystemSeed2High(_state);
     TwistSystemSeeds(_state);
     const std::array<std::uint8_t, 2>& letters = SYSTEM_NAME_DIGRAMS[pick & 0x1F];
     const std::uint16_t digram = MakeWord(letters[0], letters[1]);

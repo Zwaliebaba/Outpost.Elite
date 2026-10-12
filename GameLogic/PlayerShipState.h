@@ -43,22 +43,8 @@ struct PlayerShipState
   Counted<std::uint16_t> playerRollAngle;
   /// set by UpdateMissileAi; CheckMissileWarning clears it
   Counted<std::uint8_t> incomingMissileAlert;
-  /// rollRate's two bytes, as the symbol table names them (DS:A133 in 1987).
-  struct RollRateBytes
-  {
-    RollRateBytes() noexcept = default;
-    explicit RollRateBytes(const RollRateBytes&) noexcept = default;
-
-    Counted<std::uint8_t> gapA133[1];
-    /// signed -23..+23: the input code adds to it with clamping (0x7A09); drawn on the DC row (y=161); written with rollRate as one word...
-    Counted<std::uint8_t> pitchRate;
-  };
-  union
-  {
-    /// signed -23..+23: the input code adds to it with clamping (0x79F9) and the steering code stores it (0x84CC, 0x86DF and later); dra...
-    Counted<std::uint16_t> rollRate;
-    RollRateBytes rollRateBytes;
-  };
+  /// signed -23..+23: the input code adds to it with clamping (0x79F9) and the steering code stores it (0x84CC, 0x86DF and later); drawn...
+  Counted<std::uint16_t> rollRate;
   /// set by ReadScanCode when D (20h) is released while inFlight; ProcessFlightKeys then toggles the docking computer if fitted; cleared...
   Counted<std::uint8_t> dockingKeyReleased;
   /// 80 when the capsule launches (2F14); TickEscapePod counts it down and ends RunFlight; also suppresses enemy fire; while non-zero Ki...

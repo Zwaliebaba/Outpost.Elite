@@ -484,11 +484,11 @@ struct WindingProducts
     return _state.IndexOf(_slot);
   }
   _slot.type = static_cast<std::uint8_t>(_slot.type & SLOT_KEEP_BITS);
-  if (_slot.framesAway != 0 && (_slot.flags & STATE_BLIP_SHOWN) == 0)
+  if (_slot.FramesAway() != 0 && (_slot.flags & STATE_BLIP_SHOWN) == 0)
   {
     // Off the scanner: despawned on the 255th frame.
-    _slot.framesAway = static_cast<std::uint8_t>(_slot.framesAway + 1);
-    if (_slot.framesAway == 0)
+    _slot.FramesAway() = static_cast<std::uint8_t>(_slot.FramesAway() + 1);
+    if (_slot.FramesAway() == 0)
     {
       (void)RemoveObject(_state, _slot);
       return _state.IndexOf(_slot);
@@ -550,13 +550,13 @@ struct WindingProducts
     return false;
   }
   const bool off = (_slot.flags & STATE_FLASH_OFF) != 0;
-  _slot.flashFrames = static_cast<std::uint8_t>(_slot.flashFrames - 1);
-  if (_slot.flashFrames != 0)
+  _slot.FlashFrames() = static_cast<std::uint8_t>(_slot.FlashFrames() - 1);
+  if (_slot.FlashFrames() != 0)
   {
     return off;
   }
   _slot.flags = static_cast<std::uint8_t>(_slot.flags ^ STATE_FLASH_OFF);
-  _slot.flashFrames = off ? FLASH_OFF_FRAMES : FLASH_ON_FRAMES;
+  _slot.FlashFrames() = off ? FLASH_OFF_FRAMES : FLASH_ON_FRAMES;
   return false;
 }
 

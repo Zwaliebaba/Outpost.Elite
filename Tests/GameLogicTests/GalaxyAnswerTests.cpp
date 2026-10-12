@@ -29,8 +29,8 @@ constexpr std::size_t SYSTEMS = 256;
   _state.Data().commander.galaxyNumber = _galaxy;
   _state.Data().commander.chartIsShortRange = 0;
   Elite::LoadSystemSeeds(_state, _system);
-  const std::uint8_t x = _state.Data().galaxy.systemSeed1Bytes.systemX;
-  const std::uint8_t y = _state.Data().galaxy.systemSeed0Bytes.systemY;
+  const std::uint8_t x = Elite::SystemX(_state);
+  const std::uint8_t y = Elite::SystemY(_state);
   Elite::MoveCursorToSystem(_state);
   Elite::DescribeSystem(_state);
 

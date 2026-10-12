@@ -149,8 +149,8 @@ public:
       state.Data().commander.galaxyNumber = chart.galaxy;
       Elite::LoadSystemSeeds(state, chart.system);
       state.Data().commander.currentSystemIndex = chart.system;
-      state.Data().commander.currentSystemX = std::uint8_t{state.Data().galaxy.systemSeed1Bytes.systemX};
-      state.Data().commander.currentSystemChartY = static_cast<std::uint8_t>(state.Data().galaxy.systemSeed0Bytes.systemY >> 1);
+      state.Data().commander.currentSystemX = std::uint8_t{Elite::SystemX(state)};
+      state.Data().commander.currentSystemChartY = static_cast<std::uint8_t>(Elite::SystemY(state) >> 1);
       play("key F6; wait 0.5");
       Assert::IsTrue(std::size_t{state.Data().galaxy.chartItemEnd} <= std::size(state.Data().galaxy.chartItems), L"32 items");
       Assert::IsTrue(std::size_t{state.Data().galaxy.chartLabelCursor} <= sizeof(Elite::GalaxyState::pendingChartLabels),
