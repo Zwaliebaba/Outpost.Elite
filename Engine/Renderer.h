@@ -131,7 +131,7 @@ public:
     std::uint32_t logicalHeight = 0;
   };
 
-  Renderer() noexcept = default;
+  Renderer() = default; // not noexcept: a debug std::map allocates as it is made
   Renderer(const Renderer&) = delete;
   Renderer& operator=(const Renderer&) = delete;
   ~Renderer();

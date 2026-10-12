@@ -9,7 +9,6 @@
 #include <algorithm>
 #include <cstring>
 #include <memory>
-#include <random>
 #include <string>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -22,6 +21,34 @@ namespace
 
 constexpr std::uint32_t SEED = 20261012; // a pinned seed, so the states tried are the same each run
 constexpr int STATES_TRIED = 20000;
+
+// Marsaglia's xorshift32, pinned here so that the states tried are the same on every standard library.
+class Xorshift
+{
+public:
+  explicit Xorshift(std::uint32_t _seed) noexcept
+    : m_state(_seed)
+  {
+  }
+
+  // The next 32 bits.
+  [[nodiscard]] std::uint32_t Next() noexcept
+  {
+    m_state ^= m_state << 13;
+    m_state ^= m_state >> 17;
+    m_state ^= m_state << 5;
+    return m_state;
+  }
+
+  // The next _bits bits, the generator's highest.
+  [[nodiscard]] std::uint32_t Bits(int _bits) noexcept
+  {
+    return Next() >> (32 - _bits);
+  }
+
+private:
+  std::uint32_t m_state;
+};
 
 // The condition light's colour a level stands for: green, yellow, red, flashing.
 [[nodiscard]] Elite::Condition ConditionOf(Elite::GaugeLevel _level) noexcept
@@ -88,19 +115,17 @@ public:
   // temperature and the altitude is the colour the game's own routine gives the condition light.
   TEST_METHOD(LevelsAreTheConditionLights)
   {
-    std::mt19937 random(SEED);
-    std::uniform_int_distribution<int> byte(0, 0xFF);
-    std::uniform_int_distribution<int> energy(0, 0x3FF);
+    Xorshift random(SEED);
     const auto state = std::make_unique<Elite::GameState>();
     for (int tried = 0; tried < STATES_TRIED; ++tried)
     {
       Elite::SnapshotDashboard dashboard;
       // Half the values near the thresholds' ends, so that each is crossed often.
-      dashboard.foreShield = static_cast<std::uint8_t>(tried % 7 == 0 ? 0 : byte(random));
-      dashboard.aftShield = static_cast<std::uint8_t>(byte(random));
-      dashboard.energy = static_cast<std::uint16_t>(energy(random));
-      dashboard.cabinTemperature = static_cast<std::uint8_t>(byte(random));
-      dashboard.altitude = static_cast<std::uint8_t>(byte(random));
+      dashboard.foreShield = static_cast<std::uint8_t>(tried % 7 == 0 ? 0 : random.Bits(8));
+      dashboard.aftShield = static_cast<std::uint8_t>(random.Bits(8));
+      dashboard.energy = static_cast<std::uint16_t>(random.Bits(10));
+      dashboard.cabinTemperature = static_cast<std::uint8_t>(random.Bits(8));
+      dashboard.altitude = static_cast<std::uint8_t>(random.Bits(8));
       state->Data().playerShip.foreShield = dashboard.foreShield;
       state->Data().playerShip.aftShield = dashboard.aftShield;
       state->Data().playerShip.playerEnergy = dashboard.energy;
