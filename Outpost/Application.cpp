@@ -6,8 +6,8 @@
 #include "DirectoryFileStore.h"
 #include "Game.h"
 #include "Platform.h"
-#include "Presenter.h"
 #include "Reference.h"
+#include "Renderer.h"
 #include "Replay.h"
 #include "Window.h"
 
@@ -103,8 +103,13 @@ int Application::Run(HINSTANCE _instance)
     return 1;
   }
   m_window = window.Handle();
-  Engine::Presenter presenter;
-  if (!presenter.Create(window.Handle(), Elite::FrameImage::WIDTH_PIXELS, Elite::FrameImage::HEIGHT_PIXELS, LOGICAL_WIDTH, LOGICAL_HEIGHT))
+  Engine::Renderer renderer;
+  if (!renderer.Create(Engine::Renderer::Desc{.warp = false,
+                                              .sourceWidth = Elite::FrameImage::WIDTH_PIXELS,
+                                              .sourceHeight = Elite::FrameImage::HEIGHT_PIXELS,
+                                              .logicalWidth = LOGICAL_WIDTH,
+                                              .logicalHeight = LOGICAL_HEIGHT}) ||
+      !renderer.AttachWindow(window.Handle()))
   {
     Fail(L"Direct3D 12 is not available on this machine.");
     return 1;
@@ -152,7 +157,7 @@ int Application::Run(HINSTANCE _instance)
         platform->KeyboardController().Inject(static_cast<std::uint8_t>(key.scanCode | (key.down ? 0 : BREAK_BIT)));
       }
     }
-    if (window.TakeResized() && !presenter.Resize())
+    if (window.TakeResized() && !renderer.Resize())
     {
       Fail(L"The display device was lost.");
       return 1;
@@ -186,7 +191,7 @@ int Application::Run(HINSTANCE _instance)
     {
       pixels[index] = rgb(frame->pixels[index]);
     }
-    if (!presenter.Present(pixels, rgb(frame->borderColor)))
+    if (!renderer.Present(pixels, rgb(frame->borderColor)))
     {
       Fail(L"The display device was lost.");
       return 1;

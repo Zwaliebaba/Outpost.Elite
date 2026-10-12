@@ -24,7 +24,7 @@
     <ClInclude Include="pch.h">
       <Filter>Build</Filter>
     </ClInclude>
-    <ClInclude Include="Presenter.h">
+    <ClInclude Include="Renderer.h">
       <Filter>Rendering</Filter>
     </ClInclude>
     <ClInclude Include="Win32.h">
@@ -41,7 +41,7 @@
     <ClCompile Include="pch.cpp">
       <Filter>Build</Filter>
     </ClCompile>
-    <ClCompile Include="Presenter.cpp">
+    <ClCompile Include="Renderer.cpp">
       <Filter>Rendering</Filter>
     </ClCompile>
     <ClCompile Include="Window.cpp">
