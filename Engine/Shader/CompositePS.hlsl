@@ -1,8 +1,9 @@
 // Engine/Shader/CompositePS.hlsl
 // The scene's inset (ADR-033, ADR-035): the over layer's pixel where it holds one; else the resolved scene over the under layer by
 // the scene's coverage, in linear light, the under layer's pixel where it holds one or else the sky, with the scene's bloom added
-// over all of it. Each layer pixel covers its share of the inset, nearest, and the scene is the inset's size on screen, a pixel
-// each. PresentVS covers the inset.
+// over all of it. The layers lie in a rectangle of the inset (D69), all of it by default, each layer pixel its share of it,
+// nearest; beside them only the scene and the sky. The scene is the inset's size on screen, a pixel each. PresentVS covers the
+// inset.
 //
 // The sky is fixed in the scene's frame: a star in a cell of a cube round the camera where the seed's hash says, a dot a pixel or
 // two across, and a nebula of two colours where the seed's noise rises.
@@ -29,6 +30,7 @@ cbuffer Composite : register(b0)
   float g_pixelRadians; // the angle a pixel of the scene spans at the inset's middle
   uint g_skySeed;
   float2 g_compositePadding;
+  float4 g_layersPlace; // where the layers lie in the inset: left, top, width and height, each a share of it (D69)
 };
 
 static const uint CLEAR = 0xFF;
@@ -87,8 +89,14 @@ float3 Sky(float3 _direction)
 
 float4 main(float4 _position : SV_Position, float2 _uv : TEXCOORD0) : SV_Target
 {
-  const uint2 layerAt = min(uint2(_uv * g_layerPixels), uint2(g_layerPixels) - 1);
-  const uint2 layers = g_layers.Load(int3(layerAt, 0));
+  // The layers where they lie; beside them, both clear.
+  const float2 inLayers = (_uv - g_layersPlace.xy) / g_layersPlace.zw;
+  uint2 layers = uint2(CLEAR, CLEAR);
+  if (all(inLayers >= 0.0) && all(inLayers < 1.0))
+  {
+    const uint2 layerAt = min(uint2(inLayers * g_layerPixels), uint2(g_layerPixels) - 1);
+    layers = g_layers.Load(int3(layerAt, 0));
+  }
   if (layers.y != CLEAR)
   {
     return float4(g_palette[layers.y].rgb, 1.0);

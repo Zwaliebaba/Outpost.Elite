@@ -121,8 +121,12 @@ struct SceneInset
   float nearUnits = 1.0f;
   Vector3 towardsLight{.x = 0.0f, .y = 0.0f, .z = -1.0f}; ///< a unit vector towards the light, in the scene's frame
   std::array<std::uint32_t, 4> palette{};                 ///< 0x00RRGGBB, as the picture's pixels
-  std::uint32_t layerWidth = 0;                           ///< the layers' size in their own pixels, which cover the inset
+  std::uint32_t layerWidth = 0;                           ///< the layers' size in their own pixels
   std::uint32_t layerHeight = 0;
+  float layersLeft = 0.0f; ///< where the layers lie in the inset, in its units from its top left; a width of 0 for all of it (D69)
+  float layersTop = 0.0f;
+  float layersWidth = 0.0f;
+  float layersHeight = 0.0f;
   std::span<const std::uint8_t> under; ///< row by row: under the scene, where it draws nothing
   std::span<const std::uint8_t> over;  ///< row by row: over the scene
   std::span<const SceneStroke> dust;   ///< over the spheres and under the models (ADR-035)
@@ -334,9 +338,20 @@ private:
   std::vector<CanvasShape> m_drawnShapes; // a frame's shapes, its text turned to glyphs
   std::vector<PlacedGlyph> m_placedGlyphs;
 
+  // Waits, while frames tear, until the next refresh's start: one refresh past the last frame's, or now if that has gone by.
+  void PaceToRefresh() noexcept;
+
   HWND m_window = nullptr;
   Microsoft::WRL::ComPtr<IDXGISwapChain3> m_swapChain;
   HANDLE m_frameLatencyWaitable = nullptr;
+  // Frames tear where the system allows it (D69), with no vertical sync, one a refresh at most: the output's refresh rate,
+  // looked up again now and then, the timer that waits for the next, and when that is due, in the performance counter's ticks.
+  bool m_tearing = false;
+  UINT m_swapChainFlags = 0;
+  HANDLE m_paceTimer = nullptr;
+  std::uint32_t m_refreshHertz = 0;
+  std::int64_t m_refreshCheckedTicks = 0;
+  std::int64_t m_nextFrameTicks = 0;
   Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> m_renderTargetHeap;
   Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> m_srgbTargetHeap; // the back buffers' sRGB views, for the canvas
   std::array<Microsoft::WRL::ComPtr<ID3D12Resource>, FRAME_COUNT> m_backBuffers;

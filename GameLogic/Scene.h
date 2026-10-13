@@ -6,6 +6,7 @@
 #include "Maths.h"
 #include "SpaceObject.h"
 #include "Ships.h"
+#include "FlightSnapshot.h"
 #include "Video.h"
 
 #include <array>
@@ -177,6 +178,19 @@ void DrawSunOrPlanet(GameState& _state, Hardware& _hardware, SpaceObject& _slot,
 /// DrawDistantStation (CS:45C6): the station in _slot as a disc in colour 3 at its compass position, +20h/+22h/+24h, projected
 /// (ProjectToScreen): radius 7 rows when its depth byte +25h is below 14h, smaller further off, and none from 21h to A5h.
 void DrawDistantStation(GameState& _state, SpaceObject& _slot, bool _backward);
+
+/// Whether _slot is in the view's cone this frame, which the game draws (ClassifyViewPosition): active and visible.
+[[nodiscard]] bool InView(const SpaceObject& _slot) noexcept;
+
+/// Whether _slot flashes, as the object that carries the masking device does (+1Eh bit 5, FlashedOff).
+[[nodiscard]] bool Flashes(const SpaceObject& _slot) noexcept;
+
+/// How DrawObject would draw _slot this frame were it in the view's cone (D69), from what it decides by and writing nothing: the
+/// sun and the planet none, as spheres are the renderer's; a station a model while near (depth 0, or depth 1 and its compass z
+/// below 1B58h) and none as a distant disc; any other object none out of range or in a flashing object's off frames, a dot when
+/// its size (+3Eh) passes its level of detail (+3Fh), else its model. A flashing object's frames are counted only as it is drawn,
+/// so one out of the view keeps its state; for one TransformAndDrawObjects drew, read after it, the count has moved on a frame.
+[[nodiscard]] SnapshotDrawing DrawingOf(const SpaceObject& _slot) noexcept;
 
 /// LoadPlayerAngles (CS:8A16): the player's pitch, yaw and roll into rotation pairs 0-2.
 void LoadPlayerAngles(GameState& _state);

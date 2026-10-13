@@ -24,6 +24,15 @@ struct Orientation
 };
 
 /// One object of a flight snapshot: an active slot of shipSlots as the frame drew it.
+/// How DrawObject would draw an object were it in the view (D69): the decision it makes from all but the view's cone.
+enum class SnapshotDrawing : std::uint8_t
+{
+  None,  ///< nothing the renderer draws: the sun or the planet, which are spheres; a distant station's disc, the game's own
+         ///< pixels; a flashing object in its off frames; a ship out of range
+  Model, ///< its blueprint's model
+  Dot    ///< a dot, as DrawObjectAsDot draws one
+};
+
 struct SnapshotObject
 {
   std::uint8_t slot = 0; ///< its slot number: 0 the sun, 1 the planet, 2 the station, 3-19 the ships, 20-35 the debris
@@ -39,6 +48,9 @@ struct SnapshotObject
   std::int16_t viewZ = 0;
   bool continues = false; ///< the same object as in the snapshot before (ContinueFrom)
   bool model = false;     ///< drawn as its blueprint's model this frame, which a renderer draws in its place (SpaceViewLayers)
+  bool inView = false;    ///< in the 1987 view's cone this frame, which the game draws (ClassifyViewPosition): |x| and |y| at most z / 2
+  bool flashes = false;   ///< it flashes, carrying the masking device (Flashes), its frames counted only as the game draws it
+  SnapshotDrawing drawing = SnapshotDrawing::None; ///< how the game would draw it in the view (DrawingOf), in it or not
 
   friend bool operator==(const SnapshotObject&, const SnapshotObject&) = default;
 };
@@ -147,6 +159,10 @@ struct FlightSnapshot
   bool cameraContinues = false; ///< the camera turned from the snapshot before's, as the player can in one frame (ContinueFrom)
   bool title = false;           ///< a frame of the title's turning ship (RunTitle), not of flight
   bool picture = false;         ///< a frame of the game's own picture of the view, a tunnel's (D68), which the renderer draws none of
+  bool stardust = false;        ///< the frame drew the stardust (UpdateStardust): one of flight, not the title, words or a tunnel
+  std::int16_t velocityX = 0;   ///< the player's velocity (UpdatePlayerVelocity), what every object moves back by in a frame, in
+  std::int16_t velocityY = 0;   ///< the scene's axes: the speed along the heading, 32 times it while the jump drive is engaged
+  std::int16_t velocityZ = 0;
   std::array<SnapshotObject, MOST_OBJECTS> objects{};
   std::size_t objectCount = 0; ///< the active slots, in slot order, at the start of objects
   SnapshotDashboard dashboard;
@@ -239,6 +255,10 @@ inline constexpr float VIEW_FOCAL = 256.0f;
 /// The title's dashboard (RunTitle, D64): the cockpit's picture as ShowCockpitScreen copies it, which UpdateDashboard never draws
 /// over on the title, so nothing on it is live; and _message, the title's ---- E L I T E ----, on the message line.
 [[nodiscard]] SnapshotDashboard TitleDashboard(std::string_view _message);
+
+/// _object's place in the scene's axes from its own coordinates, which the game keeps whether or not it is in the view; within
+/// 2.3 units across the corpus, the rotation's rounding, of ScenePosition's, which holds only for an object the frame drew (D69).
+[[nodiscard]] std::array<float, 3> WorldPosition(const SnapshotObject& _object) noexcept;
 
 /// Whether _after is the object _before was, one frame on: the same slot, the same kind, and no further than MOST_STEP_PER_FRAME
 /// on any axis. A slot freed and filled again within a frame by an object of the same kind within that distance is taken for the

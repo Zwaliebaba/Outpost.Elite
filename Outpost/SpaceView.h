@@ -32,9 +32,10 @@ public:
   [[nodiscard]] bool AddModels(Engine::Renderer& _renderer);
 
   /// The scene to draw now, as _platform's last two flight snapshots make it, a frame drawn one update late between them (D49),
-  /// its view stretched over _place, a place in design units under a canvas (ADR-034). None while the screen does not show the
-  /// last one. It holds until the next call.
-  [[nodiscard]] const Engine::SceneFrame* Frame(const Elite::Platform& _platform, const Engine::Rect& _place);
+  /// its 1987 view stretched over _view and the scene filling _window round it at the same scale (Hor+, D50), places in design
+  /// units under a canvas (ADR-034). The game's layers lie over _view; beside it, the renderer draws by 1987's own rule what the
+  /// game drew nothing of (D69). None while the screen does not show the last one. It holds until the next call.
+  [[nodiscard]] const Engine::SceneFrame* Frame(const Elite::Platform& _platform, const Engine::Rect& _view, const Engine::Rect& _window);
 
   /// The game's words in the frame the screen shows (SpaceViewLayers::HoldsWords), into _canvas over the cockpit, which covers
   /// none of them (D66): each block of lines on a panel in the cockpit's style (D68), and the ink of each, in the screen's
@@ -46,9 +47,16 @@ private:
   // sun, the planet and the title's planet as spheres, the sun in _palette's colour of its disc.
   [[nodiscard]] Engine::SceneSnapshot SceneOf(const Elite::FlightSnapshot& _snapshot, const std::array<std::uint32_t, 4>& _palette) const;
 
-  // The stardust of _before moved _t of the way to _after's, and _before's beams, as strokes in _palette's colours.
-  void TakeStrokes(const Elite::FlightSnapshot& _before, const Elite::FlightSnapshot& _after, float _t,
-                   const std::array<std::uint32_t, 4>& _palette);
+  // _snapshot's objects out of the view's cone that the game would draw as dots (D69), as strokes in _palette's colours with the
+  // stardust.
+  void TakeSideDots(const Elite::FlightSnapshot& _snapshot, const std::array<std::uint32_t, 4>& _palette);
+
+  // _before's beams, as strokes in _palette's colours.
+  void TakeBeams(const Elite::FlightSnapshot& _before, const std::array<std::uint32_t, 4>& _palette);
+
+  // The stardust (D67), moved back by the player's velocity for the paced time since the last call and seen by the camera as it is
+  // drawn now, as strokes in _palette's colour of 1987's dust; none while the frame draws no dust, nor moved.
+  void MoveStardust(const Elite::Platform& _platform, const std::array<std::uint32_t, 4>& _palette);
 
   std::vector<Elite::ShipModel> m_models; // by type
   Engine::SceneSnapshot m_before;
@@ -56,8 +64,10 @@ private:
   std::uint64_t m_afterSequence = 0;
   Engine::SceneSnapshot m_drawn;
   Engine::SceneFrame m_frame;
-  std::vector<Engine::SceneStroke> m_dust;
+  std::vector<Engine::SceneStroke> m_dust; // the stardust's, and the dots beside the view
   std::vector<Engine::SceneStroke> m_beams;
+  std::vector<Engine::Vector3> m_stardust; // the motes, in the scene's axes about the camera
+  std::uint64_t m_stardustClock = 0;       // the paced time they were moved to
 };
 
 } // namespace Outpost

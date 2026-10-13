@@ -3,6 +3,7 @@
 #include "Renderer.h"
 #include "SceneSnapshot.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <string>
 #include <vector>
@@ -105,6 +106,10 @@ struct Rig
                                                           .palette = PALETTE,
                                                           .layerWidth = SIDE,
                                                           .layerHeight = SIDE,
+                                                          .layersLeft = 0.0f,
+                                                          .layersTop = 0.0f,
+                                                          .layersWidth = 0.0f,
+                                                          .layersHeight = 0.0f,
                                                           .under = under,
                                                           .over = over,
                                                           .dust = {},
@@ -244,6 +249,43 @@ public:
     Assert::IsTrue(Brightest(At(rig.Capture(frame), 60, NEAR_ROW)) < 0x04, L"no bloom unless asked for");
     frame.inset.bloom = 1.0f;
     Assert::IsTrue(Brightest(At(rig.Capture(frame), 60, NEAR_ROW)) > 0x10, L"the light past 1 blooms round it");
+  }
+
+  // The layers lie where the inset puts them (D69), here its middle half, each layer pixel a screen pixel: their corners' pixels
+  // at its corners, the under layer filling it and nothing beside it, and a stroke on their grid.
+  TEST_METHOD(TheLayersLieWhereTheInsetPutsThem)
+  {
+    constexpr float LAYERS_FROM = 32.0f; // in the inset's units, two screen pixels each
+    constexpr float LAYERS_SIDE = 64.0f;
+    constexpr std::uint32_t FIRST = 64; // the screen pixels the layers cover, one a layer pixel
+    constexpr std::uint32_t LAST = FIRST + SIDE - 1;
+    Rig rig;
+    Engine::SceneSnapshot scene;
+    std::ranges::fill(rig.under, std::uint8_t{1});
+    rig.over[0] = 3;
+    rig.over[std::size_t{SIDE} * SIDE - 1] = 3;
+    Engine::SceneFrame frame = rig.Frame(scene);
+    frame.inset.layersLeft = LAYERS_FROM;
+    frame.inset.layersTop = LAYERS_FROM;
+    frame.inset.layersWidth = LAYERS_SIDE;
+    frame.inset.layersHeight = LAYERS_SIDE;
+    const std::array<Engine::SceneStroke, 1> stroke = {Engine::SceneStroke{.fromX = 10.0f,
+                                                                           .fromY = 64.0f,
+                                                                           .toX = 118.0f,
+                                                                           .toY = 64.0f,
+                                                                           .fromWidth = 2.0f,
+                                                                           .toWidth = 2.0f,
+                                                                           .color = 0xFFFFFF,
+                                                                           .intensity = 1.0f}};
+    frame.inset.beams = stroke;
+    const std::vector<std::uint32_t> pixels = rig.Capture(frame);
+    Assert::AreEqual(PALETTE[3], At(pixels, FIRST, FIRST), L"the layers' first pixel at their top left");
+    Assert::AreEqual(PALETTE[3], At(pixels, LAST, LAST), L"and their last at their bottom right");
+    Assert::AreEqual(PALETTE[1], At(pixels, 100, 100), L"the under layer within them");
+    Assert::AreEqual(PALETTE[0], At(pixels, FIRST - 1, FIRST - 1), L"nothing beside them, above and left");
+    Assert::AreEqual(PALETTE[0], At(pixels, LAST + 1, LAST + 1), L"nor below and right");
+    Assert::IsTrue(Brightest(At(pixels, 128, 128)) > 0xC0, L"the stroke on their grid, along their middle row");
+    Assert::AreEqual(PALETTE[1], At(pixels, 128, 120), L"and only there");
   }
 
   // The sky is behind the scene and the under layer, fixed in the scene's frame: stars where its seed puts them while it is shown,

@@ -205,7 +205,7 @@ int Application::Run(HINSTANCE _instance)
     {
       Cockpit::Draw(latest.dashboard, latest.sight, elapsedMilliseconds, renderer, canvas);
       SpaceView::DrawWords(*platform, Cockpit::VIEW, canvas);
-      presented = renderer.Present({}, COCKPIT_BACKGROUND, spaceView.Frame(*platform, Cockpit::VIEW), &canvas);
+      presented = renderer.Present({}, COCKPIT_BACKGROUND, spaceView.Frame(*platform, Cockpit::VIEW, Cockpit::WINDOW), &canvas);
     }
     else
     {

@@ -1179,6 +1179,40 @@ void TransformShip(GameState& _state, SpaceObject& _slot)
   ClassifyViewPosition(_state, _slot, view);
 }
 
+bool InView(const SpaceObject& _slot) noexcept
+{
+  return (_slot.type & SLOT_DRAWABLE) == SLOT_DRAWABLE;
+}
+
+bool Flashes(const SpaceObject& _slot) noexcept
+{
+  return (_slot.flags & STATE_FLASHING) != 0;
+}
+
+SnapshotDrawing DrawingOf(const SpaceObject& _slot) noexcept
+{
+  if ((_slot.type & SLOT_ACTIVE) == 0 || IsSunOrPlanet(_slot))
+  {
+    return SnapshotDrawing::None;
+  }
+  if (IsStation(_slot).station)
+  {
+    // DrawStationIfDistant: a model at depth 0, or at depth 1 while its compass z is below 1B58h; else the distant disc.
+    const bool nearby = _slot.depth == 0 || (_slot.depth == 1 && _slot.compassZ < DISTANT_STATION_Z);
+    return nearby ? SnapshotDrawing::Model : SnapshotDrawing::None;
+  }
+  if ((_slot.type & SLOT_IN_RANGE) == 0)
+  {
+    return SnapshotDrawing::None;
+  }
+  // FlashedOff: off while its off frames last; on the last of them it counts down to 0, turns on and is drawn.
+  if ((_slot.flags & STATE_FLASHING) != 0 && (_slot.flags & STATE_FLASH_OFF) != 0 && _slot.FlashFrames() != 1)
+  {
+    return SnapshotDrawing::None;
+  }
+  return _slot.detail < _slot.size ? SnapshotDrawing::Dot : SnapshotDrawing::Model;
+}
+
 bool RunBlueprintHandler(GameState& _state, const Blueprint& _blueprint, bool _backward)
 {
   // PUSH DI and the way back to RenderBlueprintBody (CS:3CF2), then the handler's word, BL into boxHalfWidth with BH 0, and JMP AX
