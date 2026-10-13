@@ -33,10 +33,10 @@ The shell also had no check that it draws at all. CI compiled `Engine` and `Outp
 
 | Part of D47 or D48 | Arrives with | Why there |
 |---|---|---|
-| The scene: FP16 with 4× MSAA, `D32_FLOAT` in reversed Z, the resolve and bloom | piece 3, the space view | the first scene |
-| The 2D layer: an sRGB view of the back buffer and one signed-distance shader | piece 3, the HUD | the first shapes |
-| Text: the DirectWrite glyph atlas and `tnum` (D39, D55) | piece 3, the HUD | the first words |
-| The 1920×1080 design units at one scale (D48) | piece 3, the HUD | the first layout in design units; the CGA picture keeps D46 |
+| The scene: FP16 with 4× MSAA, `D32_FLOAT` in reversed Z, the resolve and bloom | piece 3, the space view | the first scene. *The scene arrived with ADR-033, bloom with ADR-035.* |
+| The 2D layer: an sRGB view of the back buffer and one signed-distance shader | piece 3, the HUD | the first shapes. *Arrived with ADR-034.* |
+| Text: the DirectWrite glyph atlas and `tnum` (D39, D55) | piece 3, the HUD | the first words. *Arrived with ADR-034.* |
+| The 1920×1080 design units at one scale (D48) | piece 3, the HUD | the first layout in design units; the CGA picture keeps D46. *Arrived with ADR-034.* |
 | Tearing where the display supports it | piece 2, the snapshot | the first frames drawn between the game's updates. Tearing means sync interval 0, which at 20 updates a second needs a frame cap, or the loop spins |
 
 PerMonitorV2, the rest of D48 in piece 1, is in already (ADR-009 item 2).

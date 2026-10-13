@@ -49,20 +49,20 @@ Each needs a design of its own before a 3D view can draw it: D45's planets and s
 |---|---|
 | The ships, the station near, the debris of an explosion, the escape pod and the cargo: every object drawn as its blueprint | the scene, between the last two updates |
 | The title's turning ship | the scene, as in flight |
-| The sun, the planet, a far ship's dot, a far station's disc, the stardust, the title's planet | the under layer, the game's pixels of the latest update |
-| The beams, the sights, the title's words | the over layer, likewise |
+| The sun, the planet, a far ship's dot, a far station's disc, the stardust, the title's planet | the under layer, the game's pixels of the latest update. *Since ADR-035, the scene draws the sun, the planet, the stardust and the title's planet; a dot or a disc drawn after them is over.* |
+| The beams, the sights, the title's words | the over layer, likewise. *Since ADR-035, the scene draws the beams and the cockpit the sights.* |
 | The dashboard, the message line, every other screen | the CGA picture, unchanged |
 
 Three artefacts follow from that, and last until the parts that replace each layer:
-- A ship behind the sun or the planet is drawn in front of it, because the under layer is under every model.
-- The layers are the latest update's, while the ships are drawn up to one update behind (D49): a beam ends where the target was one update later than the target is drawn.
+- A ship behind the sun or the planet is drawn in front of it, because the under layer is under every model. *Ended by ADR-035: the spheres have their depth.*
+- The layers are the latest update's, while the ships are drawn up to one update behind (D49): a beam ends where the target was one update later than the target is drawn. *Ended by ADR-035 for the beams and the dust, drawn from the frame the ships are drawn from.*
 - Where a model's CGA silhouette and its scene silhouette differ, the scene's shows. The under layer holds no pixel a model covered, so nothing of the old silhouette is left.
 
 ### What moves on
 
 | Part of D47 or D48 | Arrives with | Why there |
 |---|---|---|
-| Bloom | the sun and the planet as the scene draws them (D45) | nothing the scene draws yet glows |
+| Bloom | the sun and the planet as the scene draws them (D45) | nothing the scene draws yet glows. *Arrived with ADR-035.* |
 | Tearing where the display supports it | the full-window part | the view draws between updates already at the display's rate under sync interval 1; tearing needs a frame cap of its own, and the full window is where it is seen |
 | The 2D layer, text and the design units | the HUD | as ADR-031 has it |
 
