@@ -222,7 +222,10 @@ FlightSnapshot TakeFlightSnapshot(const GameState& _state)
                                                             .viewY = static_cast<std::int16_t>(slot.viewY),
                                                             .viewZ = static_cast<std::int16_t>(slot.viewZ),
                                                             .continues = false,
-                                                            .model = false};
+                                                            .model = false,
+                                                            .inView = InView(slot),
+                                                            .flashes = Flashes(slot),
+                                                            .drawing = DrawingOf(slot)};
     ++snapshot.objectCount;
   }
   snapshot.dashboard = TakeDashboard(_state);
@@ -251,13 +254,23 @@ FlightSnapshot TakeFlightSnapshot(const GameState& _state)
   }
   snapshot.galaxy = data.commander.galaxyNumber;
   snapshot.system = data.commander.currentSystemIndex;
+  snapshot.stardust = true;
+  snapshot.velocityX = static_cast<std::int16_t>(std::uint16_t{data.playerShip.playerVelocityX});
+  snapshot.velocityY = static_cast<std::int16_t>(std::uint16_t{data.playerShip.playerVelocityY});
+  snapshot.velocityZ = static_cast<std::int16_t>(std::uint16_t{data.playerShip.playerVelocityZ});
   return snapshot;
+}
+
+std::array<float, 3> WorldPosition(const SnapshotObject& _object) noexcept
+{
+  return {static_cast<float>(_object.x), static_cast<float>(_object.y), static_cast<float>(_object.z)};
 }
 
 FlightSnapshot TakeTitleSnapshot(const GameState& _state, std::string_view _message, const SnapshotDisc& _planet)
 {
   FlightSnapshot snapshot = TakeFlightSnapshot(_state);
   snapshot.title = true;
+  snapshot.stardust = false;
   snapshot.dashboard = TitleDashboard(_message);
   snapshot.dustCount = 0;
   snapshot.titlePlanet = _planet;
@@ -271,6 +284,7 @@ FlightSnapshot WithoutScene(const FlightSnapshot& _snapshot) noexcept
   snapshot.dustCount = 0;
   snapshot.sight = FlightSnapshot::NO_SIGHT;
   snapshot.titlePlanet = SnapshotDisc{};
+  snapshot.stardust = false;
   return snapshot;
 }
 

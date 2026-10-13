@@ -34,6 +34,8 @@ namespace
 constexpr char REPLAY[] = "combat-orerve.replay";
 // One that pauses in flight (D66).
 constexpr char PAUSE_REPLAY[] = "flight-screens.replay";
+// One where ships come into the view from beside it (D69).
+constexpr char ENTERING_REPLAY[] = "witch-space.replay";
 constexpr std::uint64_t SLICE_MILLISECONDS = 1; // far less than a frame, so a frame's view is still on the screen
 // Within this of the frame before, a frame follows it in the same flight with nothing drawn between: across the corpus a frame
 // follows the one before within 51 ms, or after 1,085 ms or more where a jump, a death or a screen came between (ADR-033).
@@ -97,6 +99,11 @@ struct Seen
   std::size_t wordsFrames = 0; ///< frames of only the game's words: the credits, the pause screen
   std::size_t creditsFrames = 0;
   std::size_t pictureFrames = 0;  ///< frames of a tunnel, the game's own picture (D68)
+  std::size_t ruledModels = 0;    ///< objects in the view the game drew as models, which DrawingOf says it would (D69)
+  std::size_t ruledDots = 0;      ///< and those it did not, which DrawingOf says are dots
+  std::size_t ruledOutside = 0;   ///< objects out of the view's cone that DrawingOf would draw
+  std::size_t ruledFlashing = 0;  ///< flashing objects in the view, not held to the rule
+  std::size_t ruledEntering = 0;  ///< objects that came into the view, which the rule foresaw from beside it
   float worstCenterPixels = 0.0f; ///< the furthest a disc's centre was from its sphere's
   float worstRadiusPixels = 0.0f; ///< the furthest a disc's radius was from its sphere's projected radius
   float leastRadiusShare = 1e9f;  ///< a disc's radius over its sphere's projected radius, at least and at most
@@ -358,6 +365,52 @@ void CheckFrame(ReferenceRig& _rig, Elite::FrameImage& _image, Seen& _seen)
     Assert::AreEqual(std::size_t{0}, snapshot.dashboard.blipCount, L"no blips on the title's scanner");
     ++_seen.titleFrames;
   }
+  // 1987's rule for the view's sides (D69): of every object in the view's cone, DrawingOf says a model exactly where the game
+  // drew one. A flashing object's count has moved on a frame by the time the snapshot reads it, and is not held to it.
+  for (std::size_t index = 0; index < snapshot.objectCount; ++index)
+  {
+    const Elite::SnapshotObject& object = snapshot.objects[index];
+    if (!object.inView)
+    {
+      _seen.ruledOutside += object.drawing != Elite::SnapshotDrawing::None ? 1 : 0;
+      continue;
+    }
+    if (object.flashes)
+    {
+      ++_seen.ruledFlashing;
+      continue;
+    }
+    if ((object.drawing == Elite::SnapshotDrawing::Model) != object.model)
+    {
+      Assert::Fail((L"frame " + std::to_wstring(_seen.frames) + L", slot " + std::to_wstring(object.slot) +
+                    L": DrawingOf says a model where the game drew one, and only there")
+                     .c_str());
+    }
+    _seen.ruledModels += object.model ? 1 : 0;
+    _seen.ruledDots += object.drawing == Elite::SnapshotDrawing::Dot ? 1 : 0;
+  }
+  // And beside it, where the game draws nothing to hold the rule to: an object that comes into the view, from the frame before,
+  // where it was already in a snapshot, is drawn as a model exactly where the rule had it as one. One new in the frame before
+  // the game had not classified yet, and draws no sooner than it does in the view.
+  const Elite::FlightSnapshot& before = _rig.Host().PreviousFlightSnapshot();
+  for (std::size_t index = 0; index < snapshot.objectCount && before.stardust && snapshot.stardust; ++index)
+  {
+    const Elite::SnapshotObject& object = snapshot.objects[index];
+    const auto was = std::ranges::find(before.objects.begin(), before.objects.begin() + static_cast<std::ptrdiff_t>(before.objectCount),
+                                       object.slot, &Elite::SnapshotObject::slot);
+    if (!object.inView || !object.continues || object.flashes ||
+        was == before.objects.begin() + static_cast<std::ptrdiff_t>(before.objectCount) || was->inView || !was->continues)
+    {
+      continue;
+    }
+    ++_seen.ruledEntering;
+    if ((was->drawing == Elite::SnapshotDrawing::Model) != object.model)
+    {
+      Assert::Fail((L"frame " + std::to_wstring(_seen.frames) + L", slot " + std::to_wstring(object.slot) +
+                    L": a model as it came into the view exactly where DrawingOf had one beside it")
+                     .c_str());
+    }
+  }
   for (std::size_t index = 0; index < snapshot.objectCount; ++index)
   {
     _seen.models += snapshot.objects[index].model ? 1 : 0;
@@ -613,9 +666,53 @@ public:
                           std::to_string(seen.overPixels) + ", renderer's " + std::to_string(seen.rendererPixels) + ", dust " +
                           std::to_string(seen.dust) + ", beams " + std::to_string(seen.beams) + ", sights " + std::to_string(seen.sights) +
                           ", discs " + std::to_string(seen.discs) + ", words " + std::to_string(seen.wordPixels) + ", frames of words " +
-                          std::to_string(seen.wordsFrames) + ", frames of tunnels " + std::to_string(seen.pictureFrames) + ", centre off " +
+                          std::to_string(seen.wordsFrames) + ", frames of tunnels " + std::to_string(seen.pictureFrames) +
+                          ", ruled models " + std::to_string(seen.ruledModels) + ", dots " + std::to_string(seen.ruledDots) + ", outside " +
+                          std::to_string(seen.ruledOutside) + ", entering " + std::to_string(seen.ruledEntering) + ", centre off " +
                           std::to_string(seen.worstCenterPixels) + ", radius off " + std::to_string(seen.worstRadiusPixels) +
                           ", radius share " + std::to_string(seen.leastRadiusShare) + "-" + std::to_string(seen.mostRadiusShare))
+                           .c_str());
+  }
+
+  // Ships come into the view from beside it, where the renderer draws them by 1987's rule (D69): each as a model exactly where
+  // the rule had it as one, every frame checked as the fight's are a millisecond after it was published, while it is shown.
+  TEST_METHOD(ShipsComeIntoTheViewAsTheRuleForesaw)
+  {
+    const std::filesystem::path directory = Elite::FindInRepository("Replays");
+    Assert::IsFalse(directory.empty(), L"Replays/ at the repository root");
+    std::vector<Elite::Step> steps;
+    std::string error;
+    Assert::IsTrue(Elite::ParseSteps(ReadText(directory / ENTERING_REPLAY), steps, error), L"the replay parses");
+
+    ReferenceRig rig("SpaceViewEntering");
+    Elite::ReplayPlayer player(rig.Host(), rig.State(), rig.Store(), directory);
+    const auto image = std::make_unique<Elite::FrameImage>();
+    Seen seen;
+    std::uint64_t checkedSequence = 0;
+    for (const Elite::Step& step : steps)
+    {
+      Elite::Checkpoint checkpoint;
+      if (step.kind != Elite::StepKind::Wait)
+      {
+        Assert::IsTrue(player.Play(step, checkpoint) == Elite::ExpectedStop(step), L"the step runs");
+        continue;
+      }
+      Elite::Step slice = step;
+      slice.waitMilliseconds = SLICE_MILLISECONDS;
+      for (std::uint64_t waited = 0; waited < step.waitMilliseconds; waited += SLICE_MILLISECONDS)
+      {
+        Assert::IsTrue(player.Play(slice, checkpoint) == Elite::StopReason::Reached, L"the wait runs");
+        const std::uint64_t sequence = rig.Host().LatestFlightSnapshot().sequence;
+        if (sequence != checkedSequence && rig.Host().SpaceViewShown())
+        {
+          checkedSequence = sequence;
+          CheckFrame(rig, *image, seen);
+        }
+      }
+    }
+    Assert::IsTrue(seen.ruledEntering > 0, L"ships coming into the view");
+    Logger::WriteMessage(("entering " + std::to_string(seen.ruledEntering) + ", ruled models " + std::to_string(seen.ruledModels) +
+                          ", outside " + std::to_string(seen.ruledOutside))
                            .c_str());
   }
 

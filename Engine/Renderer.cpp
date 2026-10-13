@@ -36,6 +36,11 @@ constexpr UINT FRAME_LATENCY = 1;
 constexpr UINT SWAP_CHAIN_FLAGS = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
 constexpr DWORD UNSEEN_FRAME_MILLISECONDS = 16;         // a frame at 60 Hz, when there is no display to wait for
 constexpr DWORD LONGEST_FRAME_WAIT_MILLISECONDS = 1000; // a swap chain that never signals does not hang the game
+// While frames tear (D69): the refresh rate assumed when the output reports none, and how often it is looked up again, as the
+// window may move to another display.
+constexpr std::uint32_t DEFAULT_REFRESH_HERTZ = 60;
+constexpr std::int64_t REFRESH_CHECKS_PER_SECOND = 1;
+constexpr std::int64_t HUNDRED_NANOSECONDS_PER_SECOND = 10'000'000;
 constexpr UINT ROOT_PARAMETER_PICTURE = 0;
 constexpr UINT ROOT_PARAMETER_SCALE = 1;
 constexpr UINT SCALE_CONSTANT_COUNT = 4;
@@ -55,7 +60,7 @@ constexpr UINT OBJECT_CONSTANT_COUNT = 12;
 constexpr UINT PALETTE_CONSTANT_COUNT = 16;
 constexpr UINT ROOT_PARAMETER_COMPOSITE_TEXTURES = 0;
 constexpr UINT ROOT_PARAMETER_COMPOSITE_CONSTANTS = 1;
-constexpr UINT COMPOSITE_CONSTANT_COUNT = 44;
+constexpr UINT COMPOSITE_CONSTANT_COUNT = 48;
 constexpr UINT DESCRIPTOR_SCENE = 1; // then the layers and the bloom, the composite's table
 constexpr UINT DESCRIPTOR_LAYERS = 2;
 constexpr UINT DESCRIPTOR_BLOOM = 3; // the bloom, then its blur
@@ -73,7 +78,7 @@ constexpr float ATMOSPHERE_STRENGTH = 0.7f; // the haze at a sphere's rim, where
 // The strokes: StrokeVS's and StrokePS's constants.
 constexpr UINT ROOT_PARAMETER_STROKE_FRAME = 0;
 constexpr UINT ROOT_PARAMETER_STROKE = 1;
-constexpr UINT STROKE_FRAME_CONSTANT_COUNT = 4;
+constexpr UINT STROKE_FRAME_CONSTANT_COUNT = 8;
 constexpr UINT STROKE_CONSTANT_COUNT = 12;
 constexpr UINT STROKE_VERTICES = 6; // two triangles a stroke
 // The bloom: BloomPS's source and its constants, at a quarter of the scene's size.
@@ -221,6 +226,17 @@ float LinearChannel(std::uint32_t _color, int _shift) noexcept
   return channel <= 0.04045f ? channel / 12.92f : std::pow((channel + 0.055f) / 1.055f, 2.4f);
 }
 
+// Where _inset's layers lie in it, each a share of its width or height: left, top, width and height; all of it by default.
+std::array<float, 4> LayersPlace(const SceneInset& _inset) noexcept
+{
+  if (_inset.layersWidth <= 0.0f || _inset.width <= 0.0f || _inset.height <= 0.0f)
+  {
+    return {0.0f, 0.0f, 1.0f, 1.0f};
+  }
+  return {_inset.layersLeft / _inset.width, _inset.layersTop / _inset.height, _inset.layersWidth / _inset.width,
+          _inset.layersHeight / _inset.height};
+}
+
 Quaternion Product(const Quaternion& _a, const Quaternion& _b) noexcept
 {
   return Quaternion{.x = _a.w * _b.x + _a.x * _b.w + _a.y * _b.z - _a.z * _b.y,
@@ -335,6 +351,10 @@ Renderer::~Renderer()
   if (m_frameLatencyWaitable != nullptr)
   {
     CloseHandle(m_frameLatencyWaitable);
+  }
+  if (m_paceTimer != nullptr)
+  {
+    CloseHandle(m_paceTimer);
   }
 }
 
@@ -898,7 +918,13 @@ bool Renderer::AttachWindow(HWND _window)
   swapDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
   swapDesc.BufferCount = FRAME_COUNT;
   swapDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-  swapDesc.Flags = SWAP_CHAIN_FLAGS;
+  // Tearing where the system supports it (D69): a flip swap chain presented with no vertical sync, its frames paced to the refresh.
+  Microsoft::WRL::ComPtr<IDXGIFactory5> factory5;
+  BOOL tearing = FALSE;
+  m_tearing = SUCCEEDED(m_factory.As(&factory5)) &&
+              SUCCEEDED(factory5->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &tearing, sizeof(tearing))) && tearing != FALSE;
+  m_swapChainFlags = SWAP_CHAIN_FLAGS | (m_tearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0);
+  swapDesc.Flags = m_swapChainFlags;
   Microsoft::WRL::ComPtr<IDXGISwapChain1> swapChain;
   if (FAILED(m_factory->CreateSwapChainForHwnd(m_queue.Get(), _window, &swapDesc, nullptr, nullptr, &swapChain)) ||
       FAILED(swapChain.As(&m_swapChain)) || FAILED(m_swapChain->SetMaximumFrameLatency(FRAME_LATENCY)))
@@ -911,6 +937,14 @@ bool Renderer::AttachWindow(HWND _window)
     return false;
   }
   m_factory->MakeWindowAssociation(_window, DXGI_MWA_NO_ALT_ENTER);
+  if (m_tearing)
+  {
+    m_paceTimer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+    if (m_paceTimer == nullptr)
+    {
+      m_paceTimer = CreateWaitableTimerExW(nullptr, nullptr, 0, TIMER_ALL_ACCESS); // before Windows 10 1803
+    }
+  }
 
   D3D12_DESCRIPTOR_HEAP_DESC targetHeap{};
   targetHeap.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
@@ -964,7 +998,7 @@ bool Renderer::Resize()
   {
     buffer.Reset();
   }
-  if (FAILED(m_swapChain->ResizeBuffers(FRAME_COUNT, width, height, DXGI_FORMAT_UNKNOWN, SWAP_CHAIN_FLAGS)))
+  if (FAILED(m_swapChain->ResizeBuffers(FRAME_COUNT, width, height, DXGI_FORMAT_UNKNOWN, m_swapChainFlags)))
   {
     return false;
   }
@@ -1150,6 +1184,7 @@ bool Renderer::Present(std::span<const std::uint32_t> _pixels, std::uint32_t _bo
   }
   // The swap chain signals when it can take a frame: at most FRAME_LATENCY queued, so what is drawn now is shown next.
   WaitForSingleObjectEx(m_frameLatencyWaitable, LONGEST_FRAME_WAIT_MILLISECONDS, TRUE);
+  PaceToRefresh();
 
   Frame& frame = m_frames[m_nextFrame];
   const UINT index = m_swapChain->GetCurrentBackBufferIndex();
@@ -1169,7 +1204,8 @@ bool Renderer::Present(std::span<const std::uint32_t> _pixels, std::uint32_t _bo
   }
   ID3D12CommandList* lists[] = {m_commands.Get()};
   m_queue->ExecuteCommandLists(1, lists);
-  const HRESULT presented = m_swapChain->Present(PRESENT_SYNC_INTERVAL, 0);
+  const HRESULT presented =
+    m_tearing ? m_swapChain->Present(0, DXGI_PRESENT_ALLOW_TEARING) : m_swapChain->Present(PRESENT_SYNC_INTERVAL, 0);
   if (FAILED(presented) || !Submit(frame))
   {
     return false;
@@ -1179,6 +1215,49 @@ bool Renderer::Present(std::span<const std::uint32_t> _pixels, std::uint32_t _bo
     Sleep(UNSEEN_FRAME_MILLISECONDS);
   }
   return true;
+}
+
+void Renderer::PaceToRefresh() noexcept
+{
+  if (!m_tearing)
+  {
+    return;
+  }
+  LARGE_INTEGER counter{};
+  LARGE_INTEGER frequency{};
+  QueryPerformanceCounter(&counter);
+  QueryPerformanceFrequency(&frequency);
+  const std::int64_t now = counter.QuadPart;
+  const std::int64_t ticksPerSecond = frequency.QuadPart;
+  // The output's refresh rate: the display mode of the monitor the window is on, looked up again each second.
+  if (m_refreshHertz == 0 || now - m_refreshCheckedTicks >= ticksPerSecond / REFRESH_CHECKS_PER_SECOND)
+  {
+    m_refreshCheckedTicks = now;
+    m_refreshHertz = DEFAULT_REFRESH_HERTZ;
+    Microsoft::WRL::ComPtr<IDXGIOutput> output;
+    DXGI_OUTPUT_DESC outputDesc{};
+    DEVMODEW mode{};
+    mode.dmSize = sizeof(mode);
+    if (SUCCEEDED(m_swapChain->GetContainingOutput(&output)) && SUCCEEDED(output->GetDesc(&outputDesc)) &&
+        EnumDisplaySettingsW(outputDesc.DeviceName, ENUM_CURRENT_SETTINGS, &mode) != FALSE && mode.dmDisplayFrequency > 1)
+    {
+      m_refreshHertz = mode.dmDisplayFrequency;
+    }
+  }
+  const std::int64_t refreshTicks = ticksPerSecond / m_refreshHertz;
+  if (m_nextFrameTicks > now && m_nextFrameTicks - now <= refreshTicks)
+  {
+    // Relative, in 100 ns: negative.
+    LARGE_INTEGER due{};
+    due.QuadPart = -((m_nextFrameTicks - now) * HUNDRED_NANOSECONDS_PER_SECOND / ticksPerSecond);
+    if (m_paceTimer != nullptr && SetWaitableTimer(m_paceTimer, &due, 0, nullptr, nullptr, FALSE) != FALSE)
+    {
+      WaitForSingleObject(m_paceTimer, LONGEST_FRAME_WAIT_MILLISECONDS);
+    }
+    m_nextFrameTicks += refreshTicks;
+    return;
+  }
+  m_nextFrameTicks = now + refreshTicks;
 }
 
 bool Renderer::DrawFrame(Frame& _frame, D3D12_CPU_DESCRIPTOR_HANDLE _targetView, D3D12_CPU_DESCRIPTOR_HANDLE _srgbView,
@@ -1628,9 +1707,15 @@ void Renderer::DrawStrokes(const SceneFrame& _scene, std::span<const SceneStroke
   }
   m_commands->SetGraphicsRootSignature(m_strokeSignature.Get());
   m_commands->SetPipelineState(m_strokePipeline.Get());
-  const std::array<float, STROKE_FRAME_CONSTANT_COUNT> frame = {static_cast<float>(m_sceneWidth), static_cast<float>(m_sceneHeight),
+  const std::array<float, 4> place = LayersPlace(_scene.inset);
+  const std::array<float, STROKE_FRAME_CONSTANT_COUNT> frame = {static_cast<float>(m_sceneWidth),
+                                                                static_cast<float>(m_sceneHeight),
                                                                 static_cast<float>(_scene.inset.layerWidth),
-                                                                static_cast<float>(_scene.inset.layerHeight)};
+                                                                static_cast<float>(_scene.inset.layerHeight),
+                                                                place[0],
+                                                                place[1],
+                                                                place[2],
+                                                                place[3]};
   m_commands->SetGraphicsRoot32BitConstants(ROOT_PARAMETER_STROKE_FRAME, STROKE_FRAME_CONSTANT_COUNT, Bits(frame).data(), 0);
   for (const SceneStroke& stroke : _strokes)
   {
@@ -1759,6 +1844,11 @@ void Renderer::DrawComposite(D3D12_CPU_DESCRIPTOR_HANDLE _targetView, const Scre
   // The angle a pixel of the scene spans at the middle: the inset's units a pixel, over its units a unit of y / z.
   put(40, inset.height / static_cast<float>(m_sceneHeight) / inset.focalY);
   constants[41] = inset.sky.seed;
+  const std::array<float, 4> layersPlace = LayersPlace(inset);
+  for (std::size_t share = 0; share < layersPlace.size(); ++share)
+  {
+    put(44 + share, layersPlace[share]);
+  }
   m_commands->SetGraphicsRoot32BitConstants(ROOT_PARAMETER_COMPOSITE_CONSTANTS, COMPOSITE_CONSTANT_COUNT, constants.data(), 0);
   m_commands->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
   m_commands->DrawInstanced(3, 1, 0, 0);

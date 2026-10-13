@@ -21,6 +21,10 @@ public:
   /// filling the window's height and centred across (D63).
   static constexpr Engine::Rect VIEW{.left = 308.0f, .top = 40.0f, .width = 1304.0f, .height = 770.0f};
 
+  /// The frame's window, which the scene fills behind the cockpit at the view's scale, wider at the sides (Hor+, D50): from the top
+  /// bar to the console, across the whole frame, where the side panels cover it.
+  static constexpr Engine::Rect WINDOW{.left = 0.0f, .top = 40.0f, .width = 1920.0f, .height = 770.0f};
+
   /// The cockpit of _dashboard into _canvas, over the view, with the sights of laser type _sight, 0-3, over the view's middle, or
   /// none for FlightSnapshot::NO_SIGHT (D65). _milliseconds is paced time, which a flashing light flashes by; _renderer measures
   /// text.
