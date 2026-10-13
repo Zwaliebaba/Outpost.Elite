@@ -29,6 +29,15 @@ constexpr float NEAR_UNITS = 16.0f;
 constexpr std::uint8_t SUN_SLOT = 0;
 constexpr std::size_t PALETTE_COLORS = 4;
 constexpr std::uint32_t INK_ALPHA = 0xFF000000; // the words' ink on the canvas, opaque
+// The panel each block of the words stands on (D68), in the cockpit's colours (Cockpit.cpp): its console's, nearly opaque, edged in
+// its gold. Lines with no more than a blank line between them, two lines' rows, are one block, and its panel stands out from its
+// ink by a margin, in view pixels and rows.
+constexpr std::uint32_t WORDS_PANEL = 0xE6101418;
+constexpr std::uint32_t WORDS_EDGE = 0xFFB58A36;
+constexpr float WORDS_EDGE_WIDTH = 1.5f;
+constexpr std::size_t WORDS_LINE_GAP_ROWS = 16;
+constexpr float WORDS_MARGIN_PIXELS = 3.0f;
+constexpr float WORDS_MARGIN_ROWS = 2.0f;
 
 // The spheres (ADR-035): the title's planet's key, past every slot's, and how much of a share of 255 is.
 constexpr std::uint32_t TITLE_PLANET_KEY = 0x100;
@@ -357,21 +366,64 @@ void SpaceView::DrawWords(const Elite::Platform& _platform, const Engine::Rect& 
   const Elite::SpaceViewLayers& layers = _platform.SpaceView();
   const float across = _place.width / static_cast<float>(Elite::SPACE_VIEW_WIDTH_PIXELS);
   const float down = _place.height / static_cast<float>(Elite::SPACE_VIEW_HEIGHT_PIXELS);
-  // Each run of a row's ink in one colour, as one box; the paper, 0, is left to what is under it.
+  const auto ink = [&layers](std::size_t _pixel)
+  {
+    const std::uint8_t value = layers.Over()[_pixel];
+    return layers.HoldsWords(_pixel) && value != 0 && value < PALETTE_COLORS;
+  };
+
+  // The blocks of lines first, each on its panel: the rows and pixels its ink spans.
+  struct Block
+  {
+    std::size_t top = 0;
+    std::size_t bottom = 0;
+    std::size_t left = Elite::SPACE_VIEW_WIDTH_PIXELS;
+    std::size_t right = 0;
+  };
+  std::vector<Block> blocks;
+  for (std::size_t row = 0; row < Elite::SPACE_VIEW_HEIGHT_PIXELS; ++row)
+  {
+    for (std::size_t x = 0; x < Elite::SPACE_VIEW_WIDTH_PIXELS; ++x)
+    {
+      if (!ink(row * Elite::SPACE_VIEW_WIDTH_PIXELS + x))
+      {
+        continue;
+      }
+      if (blocks.empty() || row > blocks.back().bottom + WORDS_LINE_GAP_ROWS)
+      {
+        blocks.push_back(Block{.top = row, .bottom = row});
+      }
+      Block& block = blocks.back();
+      block.bottom = row;
+      block.left = std::min(block.left, x);
+      block.right = std::max(block.right, x);
+    }
+  }
+  for (const Block& block : blocks)
+  {
+    const Engine::Rect panel{.left = _place.left + (static_cast<float>(block.left) - WORDS_MARGIN_PIXELS) * across,
+                             .top = _place.top + (static_cast<float>(block.top) - WORDS_MARGIN_ROWS) * down,
+                             .width = (static_cast<float>(block.right - block.left + 1) + 2.0f * WORDS_MARGIN_PIXELS) * across,
+                             .height = (static_cast<float>(block.bottom - block.top + 1) + 2.0f * WORDS_MARGIN_ROWS) * down};
+    _canvas.Box(panel, WORDS_PANEL);
+    _canvas.BoxEdge(panel, WORDS_EDGE_WIDTH, WORDS_EDGE);
+  }
+
+  // Then each run of a row's ink in one colour, as one box; the paper, 0, is the panel's.
   for (std::size_t row = 0; row < Elite::SPACE_VIEW_HEIGHT_PIXELS; ++row)
   {
     std::size_t x = 0;
     while (x < Elite::SPACE_VIEW_WIDTH_PIXELS)
     {
       const std::size_t first = row * Elite::SPACE_VIEW_WIDTH_PIXELS + x;
-      const std::uint8_t value = layers.Over()[first];
-      if (!layers.HoldsWords(first) || value == 0 || value >= PALETTE_COLORS)
+      if (!ink(first))
       {
         ++x;
         continue;
       }
+      const std::uint8_t value = layers.Over()[first];
       std::size_t end = x + 1;
-      while (end < Elite::SPACE_VIEW_WIDTH_PIXELS && layers.HoldsWords(first + end - x) && layers.Over()[first + end - x] == value)
+      while (end < Elite::SPACE_VIEW_WIDTH_PIXELS && ink(first + end - x) && layers.Over()[first + end - x] == value)
       {
         ++end;
       }

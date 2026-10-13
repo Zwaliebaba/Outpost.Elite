@@ -561,6 +561,19 @@ void Platform::PublishFlightSnapshot(const FlightSnapshot& _snapshot, bool _cont
   }
 }
 
+void Platform::PublishSpaceViewPicture(const FlightSnapshot& _snapshot) noexcept
+{
+  m_flightSnapshots[0] = m_flightSnapshots[1];
+  FlightSnapshot& latest = m_flightSnapshots[1];
+  latest = _snapshot;
+  latest.sequence = m_flightSnapshots[0].sequence + 1;
+  latest.pacedTime = m_clock;
+  latest.objectCount = 0;
+  latest.beamCount = 0;
+  latest.picture = true;
+  m_spaceView.FinishPicture(m_state);
+}
+
 void Platform::Render(FrameImage& _image) const noexcept
 {
   m_cga.Render(m_state.VideoBytes(), _image);

@@ -290,7 +290,7 @@ void ShowCredits(GameState& _state, Hardware& _hardware, bool _backward)
   }
   FinishSpaceViewFrame(_state, _hardware);
   // The frame as it was drawn, for a renderer that draws it in the title's cockpit (D64, D66): the words and nothing of the scene.
-  _hardware.PublishFlightSnapshot(WordsOnly(TakeTitleSnapshot(_state, ELITE_TITLE_TEXT, SnapshotDisc{})), false);
+  _hardware.PublishFlightSnapshot(WithoutScene(TakeTitleSnapshot(_state, ELITE_TITLE_TEXT, SnapshotDisc{})), false);
   // WaitForTimerTick keeps every register; the LOOP's turns carry the ticks left.
   for (std::uint16_t ticksLeft = CREDITS_TIMER_TICKS;;)
   {

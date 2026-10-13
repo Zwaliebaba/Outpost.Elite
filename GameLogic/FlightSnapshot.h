@@ -146,6 +146,7 @@ struct FlightSnapshot
   Orientation player;           ///< the player's angles as the rotation RotatePitchYawRoll makes of them (PlayerRotation)
   bool cameraContinues = false; ///< the camera turned from the snapshot before's, as the player can in one frame (ContinueFrom)
   bool title = false;           ///< a frame of the title's turning ship (RunTitle), not of flight
+  bool picture = false;         ///< a frame of the game's own picture of the view, a tunnel's (D68), which the renderer draws none of
   std::array<SnapshotObject, MOST_OBJECTS> objects{};
   std::size_t objectCount = 0; ///< the active slots, in slot order, at the start of objects
   SnapshotDashboard dashboard;
@@ -231,9 +232,9 @@ inline constexpr float VIEW_FOCAL = 256.0f;
 /// dashboard (TitleDashboard), _planet the disc it draws behind its ship, and no stardust, which the title does not draw.
 [[nodiscard]] FlightSnapshot TakeTitleSnapshot(const GameState& _state, std::string_view _message, const SnapshotDisc& _planet);
 
-/// _snapshot of a frame of the view that holds only the game's words, the pause screen's or the credits' (D66): no object, no
-/// stardust, no sights and no title's planet, which neither draws over the cleared view; the dashboard and the system stay.
-[[nodiscard]] FlightSnapshot WordsOnly(const FlightSnapshot& _snapshot) noexcept;
+/// _snapshot of a frame of the view the renderer draws nothing of: the pause screen's or the credits' words (D66), or a tunnel's
+/// picture (D68). No object, no stardust, no sights and no title's planet; the dashboard and the system stay.
+[[nodiscard]] FlightSnapshot WithoutScene(const FlightSnapshot& _snapshot) noexcept;
 
 /// The title's dashboard (RunTitle, D64): the cockpit's picture as ShowCockpitScreen copies it, which UpdateDashboard never draws
 /// over on the title, so nothing on it is live; and _message, the title's ---- E L I T E ----, on the message line.

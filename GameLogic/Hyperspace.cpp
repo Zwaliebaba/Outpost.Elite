@@ -4,6 +4,7 @@
 
 #include "Arithmetic.h"
 #include "Flight.h"
+#include "FlightSnapshot.h"
 #include "Galaxy.h"
 #include "HyperspaceTables.h"
 #include "Maths.h"
@@ -386,6 +387,8 @@ void PlayHyperspaceTunnel(GameState& _state, Hardware& _hardware, bool _backward
     UpdateMessageLine(_state, backward);
     DrawHyperspaceRings(_state);
     FinishSpaceViewFrame(_state, _hardware);
+    // The frame as the game drew it, for a renderer that shows it in the cockpit (D68).
+    _hardware.PublishSpaceViewPicture(WithoutScene(TakeFlightSnapshot(_state)));
     backward = false;
     if (--frames == 0)
     {

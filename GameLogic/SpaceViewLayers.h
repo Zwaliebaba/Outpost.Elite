@@ -70,6 +70,10 @@ public:
   /// objects left them, published for the renderer.
   void Finish(const GameState& _state) noexcept;
 
+  /// The frame in video memory is the game's own picture of the view, a tunnel's, which the renderer draws nothing of (D68): the
+  /// over layer all of it, as the screen shows it, and no model, nothing the renderer's and no words.
+  void FinishPicture(const GameState& _state) noexcept;
+
   /// The last finished frame's layers and models.
   [[nodiscard]] const SpaceViewLayer& Under() const noexcept
   {
@@ -118,6 +122,9 @@ private:
   using Buffer = std::array<std::uint8_t, BUFFER_BYTES>;
   using PixelBits = std::bitset<std::size_t{SPACE_VIEW_WIDTH_PIXELS} * SPACE_VIEW_HEIGHT_PIXELS>;
   using PixelSlots = std::array<std::uint8_t, std::size_t{SPACE_VIEW_WIDTH_PIXELS} * SPACE_VIEW_HEIGHT_PIXELS>;
+
+  // The view's bytes as the screen shows them now, which Shown compares, and the frame finished.
+  void KeepShown(const GameState& _state) noexcept;
 
   // What the object being drawn is.
   enum class Drawing : std::uint8_t
