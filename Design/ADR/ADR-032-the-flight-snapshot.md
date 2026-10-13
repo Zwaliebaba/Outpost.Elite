@@ -45,6 +45,8 @@ The plan's piece 2 listed more than this. Each item arrives with the space view 
 - the conversion of a `FlightSnapshot` into a `SceneSnapshot`, with the objects' rotations;
 - tearing, which D60 put in piece 2 because frames would be drawn between updates. With nothing drawn yet, presenting at sync interval 0 would only spin, so it moves to piece 3 too.
 
+*Since then:* the conversion and the objects' rotations arrived with ADR-033, an explosion's debris drawn as the models it is; the HUD's values with ADR-034; the sun's and the planet's size, the lasers and the stardust with ADR-035. The station's appearance, a far one's disc, and tearing remain for the full window.
+
 ### Measured 2026-10-12
 
 A scratch probe, never committed, hooked every byte write of the counted state to count when a slot's type byte went from inactive to active: the true start of a new object. It then ran the whole `GameLogicTests` suite, the 26 replays of the corpus and every twin, through g++ -O2, and compared each pair of consecutive snapshots.

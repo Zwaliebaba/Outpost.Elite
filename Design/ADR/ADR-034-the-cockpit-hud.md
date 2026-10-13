@@ -62,8 +62,8 @@ The owner played [ADR-033](ADR-033-the-space-view-hybrid.md)'s space view and ru
 
 | Part | Arrives with | Why there |
 |---|---|---|
-| Hor+ (D50) | the scene drawing the sun, the planet, the dust, the beams and the sights | until then the CGA layers cover only the 1987 field |
-| Bloom | the sun and the planet as the scene draws them (D45) | nothing the scene draws yet glows |
+| Hor+ (D50) | the scene drawing the sun, the planet, the dust, the beams and the sights | until then the CGA layers cover only the 1987 field. *ADR-035 draws them; Hor+ comes with the full window, next.* |
+| Bloom | the sun and the planet as the scene draws them (D45) | nothing the scene draws yet glows. *Arrived with ADR-035.* |
 | Tearing | the full window | as ADR-033 has it |
 | The message line's, the ECM's, the missiles' and the other views' own designs | the owner's drawings (D54) | the placeholders stand until then |
 

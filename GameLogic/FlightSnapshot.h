@@ -88,12 +88,54 @@ struct SnapshotDashboard
   bool live = true; ///< the values drawn; false on the title, whose dashboard is the cockpit's picture, never updated (D64)
 };
 
+/// A line the game drew across the view in a frame of flight, a laser's beam (DrawLaserBeams, ApplyEnemyLaserHit): from
+/// (fromX, fromRow) to (toX, toRow) of the drawing buffer's 256 x 128 pixels, whose row 1 is the view's first, in pixel value
+/// color, 0-3.
+struct SnapshotBeam
+{
+  std::int16_t fromX = 0;
+  std::int16_t fromRow = 0;
+  std::int16_t toX = 0;
+  std::int16_t toRow = 0;
+  std::uint8_t color = 0;
+
+  friend bool operator==(const SnapshotBeam&, const SnapshotBeam&) = default;
+};
+
+/// A stardust particle as UpdateStardust drew it (DrawnStardust): a point at (x, row) of the drawing buffer, or, while the jump
+/// drive streaks it, a line to there from (fromX, fromRow).
+struct SnapshotDust
+{
+  std::uint8_t particle = 0; ///< its index of stardust
+  std::int16_t x = 0;
+  std::int16_t row = 0;
+  bool streak = false;
+  std::int16_t fromX = 0;
+  std::int16_t fromRow = 0;
+
+  friend bool operator==(const SnapshotDust&, const SnapshotDust&) = default;
+};
+
+/// A disc the game drew in the view as DrawDisc draws one: centred on (x, row) of the drawing buffer, rows of it each side.
+struct SnapshotDisc
+{
+  bool shown = false;
+  std::int16_t x = 0;
+  std::int16_t row = 0;
+  std::uint16_t rows = 0;
+
+  friend bool operator==(const SnapshotDisc&, const SnapshotDisc&) = default;
+};
+
 /// What one frame of flight drew (ADR-032, D49): the camera and every active object, taken where RunFlight's frame is finished,
 /// so that a renderer can draw between the last two. It is the game's, in the game's units; the space view (Phase 6, piece 3)
 /// makes the engine's scene of it. It is taken outside the game's counted state, and changes nothing the digests or turns see.
 struct FlightSnapshot
 {
   static constexpr std::size_t MOST_OBJECTS = 36; ///< shipSlots' slots
+  static constexpr std::size_t DUST_PARTICLES = 30;
+  static constexpr std::size_t MOST_BEAMS = 8; ///< four of the player's and the enemy's one, a frame, with room
+  static constexpr std::uint8_t NO_SIGHT = 0xFF;
 
   std::uint64_t sequence = 0;    ///< its number: 1 for the first published, 0 for none
   Cycles pacedTime = 0;          ///< the platform's clock when it was published
@@ -107,6 +149,25 @@ struct FlightSnapshot
   std::array<SnapshotObject, MOST_OBJECTS> objects{};
   std::size_t objectCount = 0; ///< the active slots, in slot order, at the start of objects
   SnapshotDashboard dashboard;
+  // What the renderer draws in place of the game's pixels besides the models (ADR-035, D65).
+  std::array<SnapshotDust, DUST_PARTICLES> dust{};
+  std::size_t dustCount = 0;
+  std::uint8_t dustColor = 0; ///< the pixel value the stardust is drawn in
+  std::array<SnapshotBeam, MOST_BEAMS> beams{};
+  std::size_t beamCount = 0;      ///< the beams the frame drew, which the platform hands it (Platform::PublishFlightSnapshot)
+  std::uint8_t sight = NO_SIGHT;  ///< the view's laser type, 0-3, whose sights FinishSpaceViewFrame draws, or NO_SIGHT for none
+  std::uint8_t supernovaHeat = 0; ///< while a supernova burns (SupernovaHeat), the sun's radius in rows; else 0
+  std::uint8_t galaxy = 0;        ///< the system the planet is: galaxyNumber
+  std::uint8_t system = 0;        ///< and currentSystemIndex
+  SnapshotDisc titlePlanet;       ///< the planet the title draws behind its ship (DrawTitlePlanet)
+};
+
+/// A sun or a planet as the renderer draws it (ADR-035, D65): a sphere, its centre in the game's axes as ScenePosition gives a
+/// model's, and its radius, both in the game's units, the slot's position unscaled.
+struct SnapshotSphere
+{
+  std::array<float, 3> position{};
+  float radius = 0.0f;
 };
 
 /// The farthest any object moves against the player in one frame, on any axis, in the slot's units (ADR-032 measures it). A
@@ -138,12 +199,37 @@ inline constexpr float MOST_TURN_PER_FRAME_RADIANS = 0.5f;
 /// by the camera's rotation. A scene's camera, CameraRotation at the origin, sees it where the game drew it.
 [[nodiscard]] std::array<float, 3> ScenePosition(const FlightSnapshot& _snapshot, const SnapshotObject& _object) noexcept;
 
+/// Whether _object is the sun, or the planet (TYPE_SUN, TYPE_PLANET).
+[[nodiscard]] bool IsSun(const SnapshotObject& _object) noexcept;
+[[nodiscard]] bool IsPlanet(const SnapshotObject& _object) noexcept;
+
+/// The sun or the planet _object of _snapshot as a sphere (D65): where the frame put it, its view position times its scale
+/// shift's power of 2 (ClassifySunOrPlanet), turned back by the camera; and the radius whose disc SizePlanet and SizeSun size,
+/// 50 x 256 and 100 x 256 of the game's units, or, while a supernova burns, the heat's rows at its distance.
+[[nodiscard]] SnapshotSphere SphereOf(const FlightSnapshot& _snapshot, const SnapshotObject& _object) noexcept;
+
+/// The title's planet of _snapshot as a sphere (D65), where its disc is in the view, at a depth of TITLE_PLANET_DEPTH.
+[[nodiscard]] SnapshotSphere TitlePlanetSphere(const FlightSnapshot& _snapshot) noexcept;
+
+/// The depth the title's planet is put at: any would do, as the title's camera does not move.
+inline constexpr float TITLE_PLANET_DEPTH = 65536.0f;
+
+/// Where the space view's projection puts the axis (ProjectVertices): pixel 128 of the drawing buffer and its row 64, each at
+/// the middle of its pixel, and 256 of them a unit of x / z and of y / z.
+inline constexpr float VIEW_AXIS_X = 128.5f;
+inline constexpr float VIEW_AXIS_ROW = 64.5f;
+inline constexpr float VIEW_FOCAL = 256.0f;
+
 /// The angle between two rotations, 0 to pi radians.
 [[nodiscard]] float AngleBetween(const Orientation& _a, const Orientation& _b) noexcept;
 
 /// The snapshot of _state as the frame just drawn left it: the player's angles and view, and each active slot. Its sequence,
 /// paced time and continuity are the publisher's (Platform::PublishFlightSnapshot).
 [[nodiscard]] FlightSnapshot TakeFlightSnapshot(const GameState& _state);
+
+/// The snapshot of the title's frame (RunTitle, D64, D65): TakeFlightSnapshot's, marked the title's, with _message on its
+/// dashboard (TitleDashboard), _planet the disc it draws behind its ship, and no stardust, which the title does not draw.
+[[nodiscard]] FlightSnapshot TakeTitleSnapshot(const GameState& _state, std::string_view _message, const SnapshotDisc& _planet);
 
 /// The title's dashboard (RunTitle, D64): the cockpit's picture as ShowCockpitScreen copies it, which UpdateDashboard never draws
 /// over on the title, so nothing on it is live; and _message, the title's ---- E L I T E ----, on the message line.

@@ -70,11 +70,23 @@
     <None Include="Shader\Canvas.hlsli">
       <Filter>Shader</Filter>
     </None>
+    <None Include="Shader\Noise.hlsli">
+      <Filter>Shader</Filter>
+    </None>
     <None Include="Shader\Scene.hlsli">
+      <Filter>Shader</Filter>
+    </None>
+    <None Include="Shader\Sphere.hlsli">
+      <Filter>Shader</Filter>
+    </None>
+    <None Include="Shader\Stroke.hlsli">
       <Filter>Shader</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>
+    <FxCompile Include="Shader\BloomPS.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
     <FxCompile Include="Shader\CanvasPS.hlsl">
       <Filter>Shader</Filter>
     </FxCompile>
@@ -94,6 +106,18 @@
       <Filter>Shader</Filter>
     </FxCompile>
     <FxCompile Include="Shader\SceneVS.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\SphereGlowPS.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\SpherePS.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\StrokePS.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\StrokeVS.hlsl">
       <Filter>Shader</Filter>
     </FxCompile>
   </ItemGroup>

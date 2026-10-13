@@ -21,10 +21,11 @@ public:
   /// filling the window's height and centred across (D63).
   static constexpr Engine::Rect VIEW{.left = 308.0f, .top = 40.0f, .width = 1304.0f, .height = 770.0f};
 
-  /// The cockpit of _dashboard into _canvas, over the view. _milliseconds is paced time, which a flashing light flashes by;
-  /// _renderer measures text.
-  static void Draw(const Elite::SnapshotDashboard& _dashboard, std::uint64_t _milliseconds, Engine::Renderer& _renderer,
-                   Engine::Canvas& _canvas);
+  /// The cockpit of _dashboard into _canvas, over the view, with the sights of laser type _sight, 0-3, over the view's middle, or
+  /// none for FlightSnapshot::NO_SIGHT (D65). _milliseconds is paced time, which a flashing light flashes by; _renderer measures
+  /// text.
+  static void Draw(const Elite::SnapshotDashboard& _dashboard, std::uint8_t _sight, std::uint64_t _milliseconds,
+                   Engine::Renderer& _renderer, Engine::Canvas& _canvas);
 };
 
 } // namespace Outpost

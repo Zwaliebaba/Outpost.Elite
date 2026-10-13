@@ -2,6 +2,7 @@
 
 #include "Renderer.h"
 
+#include "CompiledShader/BloomPS.h"
 #include "CompiledShader/CanvasPS.h"
 #include "CompiledShader/CanvasVS.h"
 #include "CompiledShader/CompositePS.h"
@@ -9,6 +10,10 @@
 #include "CompiledShader/PresentVS.h"
 #include "CompiledShader/ScenePS.h"
 #include "CompiledShader/SceneVS.h"
+#include "CompiledShader/SphereGlowPS.h"
+#include "CompiledShader/SpherePS.h"
+#include "CompiledShader/StrokePS.h"
+#include "CompiledShader/StrokeVS.h"
 
 #include <algorithm>
 #include <bit>
@@ -50,12 +55,33 @@ constexpr UINT OBJECT_CONSTANT_COUNT = 12;
 constexpr UINT PALETTE_CONSTANT_COUNT = 16;
 constexpr UINT ROOT_PARAMETER_COMPOSITE_TEXTURES = 0;
 constexpr UINT ROOT_PARAMETER_COMPOSITE_CONSTANTS = 1;
-constexpr UINT COMPOSITE_CONSTANT_COUNT = 20;
-constexpr UINT DESCRIPTOR_SCENE = 1; // then the layers, in the composite's table
+constexpr UINT COMPOSITE_CONSTANT_COUNT = 44;
+constexpr UINT DESCRIPTOR_SCENE = 1; // then the layers and the bloom, the composite's table
 constexpr UINT DESCRIPTOR_LAYERS = 2;
-constexpr UINT DESCRIPTOR_ATLAS = 3;
-constexpr UINT DESCRIPTOR_SHAPES = 4; // one for each frame in flight
+constexpr UINT DESCRIPTOR_BLOOM = 3; // the bloom, then its blur
+constexpr UINT COMPOSITE_TEXTURES = 3;
+constexpr UINT DESCRIPTOR_ATLAS = 5;
+constexpr UINT DESCRIPTOR_SHAPES = 6; // one for each frame in flight
 constexpr UINT DESCRIPTOR_COUNT = DESCRIPTOR_SHAPES + Renderer::FRAME_COUNT;
+// The spheres (ADR-035): SpherePS's and SphereGlowPS's constants.
+constexpr UINT ROOT_PARAMETER_SPHERE_FRAME = 0;
+constexpr UINT ROOT_PARAMETER_SPHERE = 1;
+constexpr UINT SPHERE_FRAME_CONSTANT_COUNT = 8;
+constexpr UINT SPHERE_CONSTANT_COUNT = 40;
+constexpr std::uint32_t SURFACE_COUNT = 3;
+constexpr float ATMOSPHERE_STRENGTH = 0.7f; // the haze at a sphere's rim, where it has one
+// The strokes: StrokeVS's and StrokePS's constants.
+constexpr UINT ROOT_PARAMETER_STROKE_FRAME = 0;
+constexpr UINT ROOT_PARAMETER_STROKE = 1;
+constexpr UINT STROKE_FRAME_CONSTANT_COUNT = 4;
+constexpr UINT STROKE_CONSTANT_COUNT = 12;
+constexpr UINT STROKE_VERTICES = 6; // two triangles a stroke
+// The bloom: BloomPS's source and its constants, at a quarter of the scene's size.
+constexpr UINT ROOT_PARAMETER_BLOOM_SOURCE = 0;
+constexpr UINT ROOT_PARAMETER_BLOOM = 1;
+constexpr UINT BLOOM_CONSTANT_COUNT = 4;
+constexpr std::uint32_t BLOOM_SHRINK = 4;
+constexpr float BLOOM_STEP_TEXELS = 2.0f; // the blur's step, which doubles its reach
 
 // The 2D layer (ADR-034).
 constexpr DXGI_FORMAT ATLAS_FORMAT = DXGI_FORMAT_R8_UNORM;
@@ -131,6 +157,43 @@ constexpr D3D12_RENDER_TARGET_BLEND_DESC REPLACE_TARGET{.BlendEnable = FALSE,
                                                         .BlendOpAlpha = D3D12_BLEND_OP_ADD,
                                                         .LogicOp = D3D12_LOGIC_OP_NOOP,
                                                         .RenderTargetWriteMask = static_cast<UINT8>(D3D12_COLOR_WRITE_ENABLE_ALL)};
+
+// A target blended by adding to it (the light round a sphere), and one blended under premultiplied colour (a stroke).
+constexpr D3D12_RENDER_TARGET_BLEND_DESC ADD_TO_TARGET{.BlendEnable = TRUE,
+                                                       .LogicOpEnable = FALSE,
+                                                       .SrcBlend = D3D12_BLEND_ONE,
+                                                       .DestBlend = D3D12_BLEND_ONE,
+                                                       .BlendOp = D3D12_BLEND_OP_ADD,
+                                                       .SrcBlendAlpha = D3D12_BLEND_ONE,
+                                                       .DestBlendAlpha = D3D12_BLEND_ONE,
+                                                       .BlendOpAlpha = D3D12_BLEND_OP_ADD,
+                                                       .LogicOp = D3D12_LOGIC_OP_NOOP,
+                                                       .RenderTargetWriteMask = static_cast<UINT8>(D3D12_COLOR_WRITE_ENABLE_ALL)};
+constexpr D3D12_RENDER_TARGET_BLEND_DESC OVER_TARGET{.BlendEnable = TRUE,
+                                                     .LogicOpEnable = FALSE,
+                                                     .SrcBlend = D3D12_BLEND_ONE,
+                                                     .DestBlend = D3D12_BLEND_INV_SRC_ALPHA,
+                                                     .BlendOp = D3D12_BLEND_OP_ADD,
+                                                     .SrcBlendAlpha = D3D12_BLEND_ONE,
+                                                     .DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA,
+                                                     .BlendOpAlpha = D3D12_BLEND_OP_ADD,
+                                                     .LogicOp = D3D12_LOGIC_OP_NOOP,
+                                                     .RenderTargetWriteMask = static_cast<UINT8>(D3D12_COLOR_WRITE_ENABLE_ALL)};
+
+// A sampler of register s0 that blends the four texels round a point, clamped at the texture's edges.
+constexpr D3D12_STATIC_SAMPLER_DESC LINEAR_SAMPLER{.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+                                                   .AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+                                                   .AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+                                                   .AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+                                                   .MipLODBias = 0.0f,
+                                                   .MaxAnisotropy = 1,
+                                                   .ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER,
+                                                   .BorderColor = D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK,
+                                                   .MinLOD = 0.0f,
+                                                   .MaxLOD = D3D12_FLOAT32_MAX,
+                                                   .ShaderRegister = 0,
+                                                   .RegisterSpace = 0,
+                                                   .ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL};
 
 constexpr D3D12_DEPTH_STENCILOP_DESC KEEP_STENCIL{.StencilFailOp = D3D12_STENCIL_OP_KEEP,
                                                   .StencilDepthFailOp = D3D12_STENCIL_OP_KEEP,
@@ -497,7 +560,7 @@ bool Renderer::CreateScenePipelines()
   // The composite: the resolved scene and the layers, read by the pixel shader, and its constants.
   D3D12_DESCRIPTOR_RANGE textures{};
   textures.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-  textures.NumDescriptors = DESCRIPTOR_COUNT - DESCRIPTOR_SCENE;
+  textures.NumDescriptors = COMPOSITE_TEXTURES;
   textures.BaseShaderRegister = 0;
   textures.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
   std::array<D3D12_ROOT_PARAMETER, 2> compositeParameters{};
@@ -509,6 +572,8 @@ bool Renderer::CreateScenePipelines()
   D3D12_ROOT_SIGNATURE_DESC compositeDesc{};
   compositeDesc.NumParameters = static_cast<UINT>(compositeParameters.size());
   compositeDesc.pParameters = compositeParameters.data();
+  compositeDesc.NumStaticSamplers = 1;
+  compositeDesc.pStaticSamplers = &LINEAR_SAMPLER;
   compositeDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
   if (!CreateRootSignature(m_device.Get(), compositeDesc, m_compositeSignature))
   {
@@ -557,6 +622,10 @@ bool Renderer::CreateScenePipelines()
   {
     return false;
   }
+  if (!CreateSpherePipelines(modelDesc) || !CreateBloomPipeline(compositePipelineDesc))
+  {
+    return false;
+  }
 
   D3D12_DESCRIPTOR_HEAP_DESC targetHeap{};
   targetHeap.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
@@ -564,8 +633,94 @@ bool Renderer::CreateScenePipelines()
   D3D12_DESCRIPTOR_HEAP_DESC depthHeap{};
   depthHeap.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
   depthHeap.NumDescriptors = 1;
+  D3D12_DESCRIPTOR_HEAP_DESC bloomHeap = targetHeap;
+  bloomHeap.NumDescriptors = static_cast<UINT>(m_bloomTargets.size());
   return SUCCEEDED(m_device->CreateDescriptorHeap(&targetHeap, IID_PPV_ARGS(&m_sceneTargetHeap))) &&
-         SUCCEEDED(m_device->CreateDescriptorHeap(&depthHeap, IID_PPV_ARGS(&m_sceneDepthHeap)));
+         SUCCEEDED(m_device->CreateDescriptorHeap(&depthHeap, IID_PPV_ARGS(&m_sceneDepthHeap))) &&
+         SUCCEEDED(m_device->CreateDescriptorHeap(&bloomHeap, IID_PPV_ARGS(&m_bloomTargetHeap)));
+}
+
+bool Renderer::CreateSpherePipelines(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& _modelDesc)
+{
+  // The spheres and their glow (ADR-035): two sets of constants for the pixel shader, which traces the sphere over the whole
+  // inset, PresentVS's triangle. A sphere writes its depth; its glow tests against it and adds to the target.
+  const std::array<D3D12_ROOT_PARAMETER, 2> sphereParameters = {Constants(0, SPHERE_FRAME_CONSTANT_COUNT, D3D12_SHADER_VISIBILITY_PIXEL),
+                                                                Constants(1, SPHERE_CONSTANT_COUNT, D3D12_SHADER_VISIBILITY_PIXEL)};
+  D3D12_ROOT_SIGNATURE_DESC sphereDesc{};
+  sphereDesc.NumParameters = static_cast<UINT>(sphereParameters.size());
+  sphereDesc.pParameters = sphereParameters.data();
+  sphereDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+  if (!CreateRootSignature(m_device.Get(), sphereDesc, m_sphereSignature))
+  {
+    return false;
+  }
+  D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = _modelDesc;
+  desc.pRootSignature = m_sphereSignature.Get();
+  desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+  desc.VS = {g_PresentVS, sizeof(g_PresentVS)};
+  desc.PS = {g_SpherePS, sizeof(g_SpherePS)};
+  desc.InputLayout = {};
+  if (FAILED(m_device->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&m_spherePipeline))))
+  {
+    return false;
+  }
+  desc.PS = {g_SphereGlowPS, sizeof(g_SphereGlowPS)};
+  desc.BlendState.RenderTarget[0] = ADD_TO_TARGET;
+  desc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+  if (FAILED(m_device->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&m_glowPipeline))))
+  {
+    return false;
+  }
+
+  // The strokes: two sets of constants for both shaders, laid over what is there with no test of its depth.
+  const std::array<D3D12_ROOT_PARAMETER, 2> strokeParameters = {Constants(0, STROKE_FRAME_CONSTANT_COUNT, D3D12_SHADER_VISIBILITY_ALL),
+                                                                Constants(1, STROKE_CONSTANT_COUNT, D3D12_SHADER_VISIBILITY_ALL)};
+  D3D12_ROOT_SIGNATURE_DESC strokeDesc{};
+  strokeDesc.NumParameters = static_cast<UINT>(strokeParameters.size());
+  strokeDesc.pParameters = strokeParameters.data();
+  strokeDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+  if (!CreateRootSignature(m_device.Get(), strokeDesc, m_strokeSignature))
+  {
+    return false;
+  }
+  desc.pRootSignature = m_strokeSignature.Get();
+  desc.VS = {g_StrokeVS, sizeof(g_StrokeVS)};
+  desc.PS = {g_StrokePS, sizeof(g_StrokePS)};
+  desc.BlendState.RenderTarget[0] = OVER_TARGET;
+  desc.DepthStencilState.DepthEnable = FALSE;
+  desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+  return SUCCEEDED(m_device->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&m_strokePipeline)));
+}
+
+bool Renderer::CreateBloomPipeline(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& _compositeDesc)
+{
+  // The bloom: its source, one texture, its constants, and a sampler that blends texels, into an FP16 target of its own.
+  D3D12_DESCRIPTOR_RANGE source{};
+  source.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+  source.NumDescriptors = 1;
+  source.BaseShaderRegister = 0;
+  source.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+  std::array<D3D12_ROOT_PARAMETER, 2> parameters{};
+  parameters[ROOT_PARAMETER_BLOOM_SOURCE].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+  parameters[ROOT_PARAMETER_BLOOM_SOURCE].DescriptorTable.NumDescriptorRanges = 1;
+  parameters[ROOT_PARAMETER_BLOOM_SOURCE].DescriptorTable.pDescriptorRanges = &source;
+  parameters[ROOT_PARAMETER_BLOOM_SOURCE].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+  parameters[ROOT_PARAMETER_BLOOM] = Constants(0, BLOOM_CONSTANT_COUNT, D3D12_SHADER_VISIBILITY_PIXEL);
+  D3D12_ROOT_SIGNATURE_DESC signatureDesc{};
+  signatureDesc.NumParameters = static_cast<UINT>(parameters.size());
+  signatureDesc.pParameters = parameters.data();
+  signatureDesc.NumStaticSamplers = 1;
+  signatureDesc.pStaticSamplers = &LINEAR_SAMPLER;
+  signatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+  if (!CreateRootSignature(m_device.Get(), signatureDesc, m_bloomSignature))
+  {
+    return false;
+  }
+  D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = _compositeDesc;
+  desc.pRootSignature = m_bloomSignature.Get();
+  desc.PS = {g_BloomPS, sizeof(g_BloomPS)};
+  desc.RTVFormats[0] = SCENE_FORMAT;
+  return SUCCEEDED(m_device->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&m_bloomPipeline)));
 }
 
 bool Renderer::CreatePicture()
@@ -874,6 +1029,10 @@ bool Renderer::SizeSceneTargets(std::uint32_t _width, std::uint32_t _height)
   m_sceneColor.Reset();
   m_sceneDepth.Reset();
   m_sceneResolved.Reset();
+  for (Microsoft::WRL::ComPtr<ID3D12Resource>& target : m_bloomTargets)
+  {
+    target.Reset();
+  }
   const D3D12_HEAP_PROPERTIES defaultHeap = HeapOfType(D3D12_HEAP_TYPE_DEFAULT);
   const D3D12_RESOURCE_DESC colorDesc = MultisampledOfSize(_width, _height, SCENE_FORMAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
   D3D12_CLEAR_VALUE clearColor{};
@@ -904,6 +1063,27 @@ bool Renderer::SizeSceneTargets(std::uint32_t _width, std::uint32_t _height)
   D3D12_CPU_DESCRIPTOR_HANDLE view = m_shaderResourceHeap->GetCPUDescriptorHandleForHeapStart();
   view.ptr += std::size_t{DESCRIPTOR_SCENE} * m_resourceStride;
   m_device->CreateShaderResourceView(m_sceneResolved.Get(), &viewDesc, view);
+
+  // The bloom's two targets, a quarter of the scene's size, between frames where the composite and the blur read them.
+  m_bloomWidth = std::max((_width + BLOOM_SHRINK - 1) / BLOOM_SHRINK, 1U);
+  m_bloomHeight = std::max((_height + BLOOM_SHRINK - 1) / BLOOM_SHRINK, 1U);
+  const D3D12_RESOURCE_DESC bloomDesc = TextureOfSize(m_bloomWidth, m_bloomHeight, SCENE_FORMAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
+  D3D12_CPU_DESCRIPTOR_HANDLE bloomTarget = m_bloomTargetHeap->GetCPUDescriptorHandleForHeapStart();
+  D3D12_CPU_DESCRIPTOR_HANDLE bloomView = m_shaderResourceHeap->GetCPUDescriptorHandleForHeapStart();
+  bloomView.ptr += std::size_t{DESCRIPTOR_BLOOM} * m_resourceStride;
+  for (Microsoft::WRL::ComPtr<ID3D12Resource>& target : m_bloomTargets)
+  {
+    if (FAILED(m_device->CreateCommittedResource(&defaultHeap, D3D12_HEAP_FLAG_NONE, &bloomDesc, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+                                                 &clearColor, IID_PPV_ARGS(&target))))
+    {
+      m_sceneColor.Reset();
+      return false;
+    }
+    m_device->CreateRenderTargetView(target.Get(), nullptr, bloomTarget);
+    m_device->CreateShaderResourceView(target.Get(), &viewDesc, bloomView);
+    bloomTarget.ptr += m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+    bloomView.ptr += m_resourceStride;
+  }
   m_sceneWidth = _width;
   m_sceneHeight = _height;
   return true;
@@ -1317,9 +1497,8 @@ void Renderer::DrawPicture(D3D12_CPU_DESCRIPTOR_HANDLE _targetView, std::uint32_
 bool Renderer::DrawScene(D3D12_CPU_DESCRIPTOR_HANDLE _targetView, const ScreenRect& _place, const SceneFrame& _scene)
 {
   const SceneInset& inset = _scene.inset;
-  const ScreenRect& place = _place;
 
-  // The models, into the scene's targets.
+  // Into the scene's targets: the spheres and the light round them, the dust over them, the models, and the beams over all.
   const std::array<D3D12_RESOURCE_BARRIER, 1> toTarget = {
     Transition(m_sceneColor.Get(), D3D12_RESOURCE_STATE_RESOLVE_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET)};
   m_commands->ResourceBarrier(static_cast<UINT>(toTarget.size()), toTarget.data());
@@ -1336,6 +1515,16 @@ bool Renderer::DrawScene(D3D12_CPU_DESCRIPTOR_HANDLE _targetView, const ScreenRe
   const D3D12_RECT scissor{0, 0, static_cast<LONG>(m_sceneWidth), static_cast<LONG>(m_sceneHeight)};
   m_commands->RSSetViewports(1, &viewport);
   m_commands->RSSetScissorRects(1, &scissor);
+  m_commands->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+  if (!_scene.scene->spheres.empty())
+  {
+    m_commands->SetGraphicsRootSignature(m_sphereSignature.Get());
+    m_commands->SetPipelineState(m_spherePipeline.Get());
+    DrawSpheres(_scene);
+    m_commands->SetPipelineState(m_glowPipeline.Get());
+    DrawSpheres(_scene);
+  }
+  DrawStrokes(_scene, inset.dust);
   m_commands->SetGraphicsRootSignature(m_sceneSignature.Get());
   std::array<float, PALETTE_CONSTANT_COUNT> palette{};
   for (std::size_t color = 0; color < PALETTE_COLORS; ++color)
@@ -1346,13 +1535,14 @@ bool Renderer::DrawScene(D3D12_CPU_DESCRIPTOR_HANDLE _targetView, const ScreenRe
   }
   m_commands->SetGraphicsRoot32BitConstants(ROOT_PARAMETER_PALETTE, PALETTE_CONSTANT_COUNT, Bits(palette).data(), 0);
   m_commands->SetPipelineState(m_trianglePipeline.Get());
-  m_commands->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
   DrawModels(_scene, false);
   m_commands->SetPipelineState(m_linePipeline.Get());
   m_commands->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_LINELIST);
   DrawModels(_scene, true);
+  m_commands->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+  DrawStrokes(_scene, inset.beams);
 
-  // Resolved, for the composite to read.
+  // Resolved, for the bloom and the composite to read.
   const std::array<D3D12_RESOURCE_BARRIER, 2> toResolve = {
     Transition(m_sceneColor.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_RESOLVE_SOURCE),
     Transition(m_sceneResolved.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RESOLVE_DEST)};
@@ -1361,8 +1551,159 @@ bool Renderer::DrawScene(D3D12_CPU_DESCRIPTOR_HANDLE _targetView, const ScreenRe
   const std::array<D3D12_RESOURCE_BARRIER, 1> toRead = {
     Transition(m_sceneResolved.Get(), D3D12_RESOURCE_STATE_RESOLVE_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE)};
   m_commands->ResourceBarrier(static_cast<UINT>(toRead.size()), toRead.data());
+  DrawBloom();
 
-  // The composite, into the inset.
+  DrawComposite(_targetView, _place, _scene);
+  const D3D12_RESOURCE_BARRIER layersToWrite =
+    Transition(m_layers.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
+  m_commands->ResourceBarrier(1, &layersToWrite);
+  return true;
+}
+
+void Renderer::DrawSpheres(const SceneFrame& _scene)
+{
+  const SceneInset& inset = _scene.inset;
+  const SceneSnapshot& scene = *_scene.scene;
+  const std::array<float, SPHERE_FRAME_CONSTANT_COUNT> frame = {
+    inset.width,  inset.height, inset.centerX,   inset.centerY,
+    inset.focalX, inset.focalY, inset.nearUnits, inset.height / static_cast<float>(m_sceneHeight)};
+  m_commands->SetGraphicsRoot32BitConstants(ROOT_PARAMETER_SPHERE_FRAME, SPHERE_FRAME_CONSTANT_COUNT, Bits(frame).data(), 0);
+  const Quaternion toScene = Conjugate(scene.cameraOrientation);
+  const Vector3 light = Rotate(scene.cameraOrientation, inset.towardsLight);
+  for (const SceneSphere& sphere : scene.spheres)
+  {
+    if (sphere.radius <= 0.0f || static_cast<std::uint32_t>(sphere.surface) >= SURFACE_COUNT)
+    {
+      continue;
+    }
+    // Its centre in the camera's frame, in its own radii; none wholly behind the camera.
+    const Vector3 offset{.x = sphere.position.x - scene.cameraPosition.x,
+                         .y = sphere.position.y - scene.cameraPosition.y,
+                         .z = sphere.position.z - scene.cameraPosition.z};
+    const Vector3 at = Rotate(scene.cameraOrientation, offset);
+    const Vector3 center{.x = at.x / sphere.radius, .y = at.y / sphere.radius, .z = at.z / sphere.radius};
+    if (center.z < -1.0f)
+    {
+      continue;
+    }
+    std::array<std::uint32_t, SPHERE_CONSTANT_COUNT> constants{};
+    const auto put = [&constants](std::size_t _at, float _value) { constants[_at] = std::bit_cast<std::uint32_t>(_value); };
+    put(0, center.x);
+    put(1, center.y);
+    put(2, center.z);
+    put(3, sphere.radius);
+    put(4, toScene.x);
+    put(5, toScene.y);
+    put(6, toScene.z);
+    put(7, toScene.w);
+    put(8, light.x);
+    put(9, light.y);
+    put(10, light.z);
+    constants[11] = static_cast<std::uint32_t>(sphere.surface);
+    for (std::size_t color = 0; color < sphere.colors.size(); ++color)
+    {
+      put(12 + 4 * color, LinearChannel(sphere.colors[color], 16));
+      put(13 + 4 * color, LinearChannel(sphere.colors[color], 8));
+      put(14 + 4 * color, LinearChannel(sphere.colors[color], 0));
+    }
+    put(28, LinearChannel(sphere.atmosphere, 16));
+    put(29, LinearChannel(sphere.atmosphere, 8));
+    put(30, LinearChannel(sphere.atmosphere, 0));
+    put(31, sphere.atmosphere != 0 ? ATMOSPHERE_STRENGTH : 0.0f);
+    put(32, sphere.level);
+    put(33, sphere.cover);
+    put(34, sphere.bands);
+    put(35, sphere.turbulence);
+    constants[36] = sphere.seed;
+    m_commands->SetGraphicsRoot32BitConstants(ROOT_PARAMETER_SPHERE, SPHERE_CONSTANT_COUNT, constants.data(), 0);
+    m_commands->DrawInstanced(3, 1, 0, 0);
+  }
+}
+
+void Renderer::DrawStrokes(const SceneFrame& _scene, std::span<const SceneStroke> _strokes)
+{
+  if (_strokes.empty())
+  {
+    return;
+  }
+  m_commands->SetGraphicsRootSignature(m_strokeSignature.Get());
+  m_commands->SetPipelineState(m_strokePipeline.Get());
+  const std::array<float, STROKE_FRAME_CONSTANT_COUNT> frame = {static_cast<float>(m_sceneWidth), static_cast<float>(m_sceneHeight),
+                                                                static_cast<float>(_scene.inset.layerWidth),
+                                                                static_cast<float>(_scene.inset.layerHeight)};
+  m_commands->SetGraphicsRoot32BitConstants(ROOT_PARAMETER_STROKE_FRAME, STROKE_FRAME_CONSTANT_COUNT, Bits(frame).data(), 0);
+  for (const SceneStroke& stroke : _strokes)
+  {
+    const std::array<float, STROKE_CONSTANT_COUNT> constants = {stroke.fromX,
+                                                                stroke.fromY,
+                                                                stroke.toX,
+                                                                stroke.toY,
+                                                                stroke.fromWidth,
+                                                                stroke.toWidth,
+                                                                stroke.intensity,
+                                                                0.0f,
+                                                                LinearChannel(stroke.color, 16),
+                                                                LinearChannel(stroke.color, 8),
+                                                                LinearChannel(stroke.color, 0),
+                                                                1.0f};
+    m_commands->SetGraphicsRoot32BitConstants(ROOT_PARAMETER_STROKE, STROKE_CONSTANT_COUNT, Bits(constants).data(), 0);
+    m_commands->DrawInstanced(STROKE_VERTICES, 1, 0, 0);
+  }
+}
+
+void Renderer::DrawBloom()
+{
+  // Three passes at a quarter of the scene's size: the light past 1 into the first target, across into the second, and down back.
+  D3D12_VIEWPORT viewport{};
+  viewport.Width = static_cast<float>(m_bloomWidth);
+  viewport.Height = static_cast<float>(m_bloomHeight);
+  viewport.MaxDepth = 1.0f;
+  const D3D12_RECT scissor{0, 0, static_cast<LONG>(m_bloomWidth), static_cast<LONG>(m_bloomHeight)};
+  m_commands->RSSetViewports(1, &viewport);
+  m_commands->RSSetScissorRects(1, &scissor);
+  m_commands->SetPipelineState(m_bloomPipeline.Get());
+  m_commands->SetGraphicsRootSignature(m_bloomSignature.Get());
+  ID3D12DescriptorHeap* heaps[] = {m_shaderResourceHeap.Get()};
+  m_commands->SetDescriptorHeaps(1, heaps);
+  const UINT targetStride = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+  struct Pass
+  {
+    UINT source;      // its descriptor
+    std::size_t into; // the bloom's target
+    float sourceWidth;
+    float sourceHeight;
+    float stepX;
+    float stepY;
+  };
+  const std::array<Pass, 3> passes = {
+    Pass{DESCRIPTOR_SCENE, 0, static_cast<float>(m_sceneWidth), static_cast<float>(m_sceneHeight), 0.0f, 0.0f},
+    Pass{DESCRIPTOR_BLOOM, 1, static_cast<float>(m_bloomWidth), static_cast<float>(m_bloomHeight), BLOOM_STEP_TEXELS, 0.0f},
+    Pass{DESCRIPTOR_BLOOM + 1, 0, static_cast<float>(m_bloomWidth), static_cast<float>(m_bloomHeight), 0.0f, BLOOM_STEP_TEXELS}};
+  for (const Pass& pass : passes)
+  {
+    ID3D12Resource* target = m_bloomTargets[pass.into].Get();
+    const D3D12_RESOURCE_BARRIER toTarget =
+      Transition(target, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    m_commands->ResourceBarrier(1, &toTarget);
+    D3D12_CPU_DESCRIPTOR_HANDLE targetView = m_bloomTargetHeap->GetCPUDescriptorHandleForHeapStart();
+    targetView.ptr += pass.into * targetStride;
+    m_commands->OMSetRenderTargets(1, &targetView, FALSE, nullptr);
+    D3D12_GPU_DESCRIPTOR_HANDLE source = m_shaderResourceHeap->GetGPUDescriptorHandleForHeapStart();
+    source.ptr += std::uint64_t{pass.source} * m_resourceStride;
+    m_commands->SetGraphicsRootDescriptorTable(ROOT_PARAMETER_BLOOM_SOURCE, source);
+    const std::array<float, BLOOM_CONSTANT_COUNT> constants = {1.0f / pass.sourceWidth, 1.0f / pass.sourceHeight, pass.stepX, pass.stepY};
+    m_commands->SetGraphicsRoot32BitConstants(ROOT_PARAMETER_BLOOM, BLOOM_CONSTANT_COUNT, Bits(constants).data(), 0);
+    m_commands->DrawInstanced(3, 1, 0, 0);
+    const D3D12_RESOURCE_BARRIER toRead =
+      Transition(target, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    m_commands->ResourceBarrier(1, &toRead);
+  }
+}
+
+void Renderer::DrawComposite(D3D12_CPU_DESCRIPTOR_HANDLE _targetView, const ScreenRect& _place, const SceneFrame& _scene)
+{
+  const SceneInset& inset = _scene.inset;
+  const ScreenRect& place = _place;
   m_commands->OMSetRenderTargets(1, &_targetView, FALSE, nullptr);
   D3D12_VIEWPORT insetViewport{};
   insetViewport.TopLeftX = static_cast<float>(place.left);
@@ -1381,26 +1722,46 @@ bool Renderer::DrawScene(D3D12_CPU_DESCRIPTOR_HANDLE _targetView, const ScreenRe
   D3D12_GPU_DESCRIPTOR_HANDLE textures = m_shaderResourceHeap->GetGPUDescriptorHandleForHeapStart();
   textures.ptr += std::uint64_t{DESCRIPTOR_SCENE} * m_resourceStride;
   m_commands->SetGraphicsRootDescriptorTable(ROOT_PARAMETER_COMPOSITE_TEXTURES, textures);
-  std::array<float, COMPOSITE_CONSTANT_COUNT> constants{};
+  std::array<std::uint32_t, COMPOSITE_CONSTANT_COUNT> constants{};
+  const auto put = [&constants](std::size_t _at, float _value) { constants[_at] = std::bit_cast<std::uint32_t>(_value); };
   for (std::size_t color = 0; color < PALETTE_COLORS; ++color)
   {
-    constants[4 * color] = Channel(inset.palette[color], 16);
-    constants[4 * color + 1] = Channel(inset.palette[color], 8);
-    constants[4 * color + 2] = Channel(inset.palette[color], 0);
-    constants[4 * color + 3] = 1.0f;
+    put(4 * color, Channel(inset.palette[color], 16));
+    put(4 * color + 1, Channel(inset.palette[color], 8));
+    put(4 * color + 2, Channel(inset.palette[color], 0));
+    put(4 * color + 3, 1.0f);
   }
-  constants[16] = static_cast<float>(m_layerWidth);
-  constants[17] = static_cast<float>(m_layerHeight);
-  constants[18] = static_cast<float>(m_sceneWidth);
-  constants[19] = static_cast<float>(m_sceneHeight);
-  m_commands->SetGraphicsRoot32BitConstants(ROOT_PARAMETER_COMPOSITE_CONSTANTS, COMPOSITE_CONSTANT_COUNT, Bits(constants).data(), 0);
+  put(16, static_cast<float>(m_layerWidth));
+  put(17, static_cast<float>(m_layerHeight));
+  put(18, static_cast<float>(m_sceneWidth));
+  put(19, static_cast<float>(m_sceneHeight));
+  put(20, inset.width);
+  put(21, inset.height);
+  put(22, inset.centerX);
+  put(23, inset.centerY);
+  put(24, inset.focalX);
+  put(25, inset.focalY);
+  put(26, inset.bloom);
+  put(27, inset.sky.shown ? 1.0f : 0.0f);
+  const Quaternion toScene = Conjugate(_scene.scene->cameraOrientation);
+  put(28, toScene.x);
+  put(29, toScene.y);
+  put(30, toScene.z);
+  put(31, toScene.w);
+  put(32, LinearChannel(inset.sky.nebula[0], 16));
+  put(33, LinearChannel(inset.sky.nebula[0], 8));
+  put(34, LinearChannel(inset.sky.nebula[0], 0));
+  put(35, inset.sky.nebulaDensity);
+  put(36, LinearChannel(inset.sky.nebula[1], 16));
+  put(37, LinearChannel(inset.sky.nebula[1], 8));
+  put(38, LinearChannel(inset.sky.nebula[1], 0));
+  put(39, inset.sky.starDensity);
+  // The angle a pixel of the scene spans at the middle: the inset's units a pixel, over its units a unit of y / z.
+  put(40, inset.height / static_cast<float>(m_sceneHeight) / inset.focalY);
+  constants[41] = inset.sky.seed;
+  m_commands->SetGraphicsRoot32BitConstants(ROOT_PARAMETER_COMPOSITE_CONSTANTS, COMPOSITE_CONSTANT_COUNT, constants.data(), 0);
   m_commands->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
   m_commands->DrawInstanced(3, 1, 0, 0);
-
-  const D3D12_RESOURCE_BARRIER layersToWrite =
-    Transition(m_layers.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
-  m_commands->ResourceBarrier(1, &layersToWrite);
-  return true;
 }
 
 void Renderer::DrawModels(const SceneFrame& _scene, bool _lines)

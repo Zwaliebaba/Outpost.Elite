@@ -24,16 +24,19 @@ inline constexpr std::uint8_t LAYER_CLEAR = 0xFF;
 /// One layer of the space view, row by row, a pixel value 0-3 or LAYER_CLEAR each.
 using SpaceViewLayer = std::array<std::uint8_t, std::size_t{SPACE_VIEW_WIDTH_PIXELS} * SPACE_VIEW_HEIGHT_PIXELS>;
 
-/// The space view of one frame of flight split by what drew it (ADR-033), for a renderer that draws its ships itself:
-/// - **under**, what each object that is not a blueprint's model drew, in the game's own pixels: the sun and the planet, a
-///   distant station's disc, the dots of far ships; and the stardust, which the game draws after the objects but the owner has
-///   behind them (ADR-033);
-/// - **over**, everything else drawn in the frame: the laser beams, the sights, the title's words;
-/// - and which slots were drawn as a blueprint's model, which the renderer draws in their place.
+/// The space view of one frame of flight split by what drew it (ADR-033, ADR-035), for a renderer that draws much of it itself:
+/// - **what the renderer draws**: the blueprints' models, and the sun, the planet, the stardust, the laser beams and the sights
+///   (NoteModel, NoteRendered), which it draws in their place from the flight snapshot;
+/// - **under**, what each other object drew before the first the renderer draws, in the game's own pixels: a distant station's
+///   disc, the dots of far ships;
+/// - **over**, everything else drawn in the frame: the title's words and the message line, and what other objects drew after one
+///   the renderer draws, which the game's painter's order puts nearer than it;
+/// - which slots were drawn as a blueprint's model, and which object last changed each pixel.
 ///
-/// It watches the drawing buffer round each object TransformAndDrawObjects draws (BeginObject, EndObject), and reads the
-/// finished view from video memory once FinishSpaceViewFrame has copied it (Finish). It reads the game's state and writes none
-/// of it: it is the platform's, outside the counted state, as the flight snapshot is (ADR-032).
+/// It watches the drawing buffer round each object TransformAndDrawObjects draws and round each thing the renderer draws
+/// (BeginObject, EndObject), and reads the finished view from video memory once FinishSpaceViewFrame has copied it (Finish). It
+/// reads the game's state and writes none of it: it is the platform's, outside the counted state, as the flight snapshot is
+/// (ADR-032).
 class SpaceViewLayers
 {
 public:
@@ -51,11 +54,16 @@ public:
   /// The object being drawn is a blueprint's model, which the renderer draws in its place.
   void NoteModel() noexcept;
 
-  /// The object in slot _slot is drawn: what it changed in the buffer is the under layer's, unless it is a model. NO_SLOT for a
-  /// background that is no object's: the stardust, the title's planet.
+  /// What is being drawn is the renderer's to draw in its place, not as a model: the sun, the planet, the stardust, the beams and
+  /// the sights (ADR-035).
+  void NoteRendered() noexcept;
+
+  /// The object in slot _slot is drawn: what it changed in the buffer is the renderer's when it is a model or the renderer's to
+  /// draw; else the under layer's, or the over layer's once the renderer has drawn an object of the frame. NO_SLOT for what is no
+  /// object's: the stardust, the beams, the sights, the title's planet.
   void EndObject(const GameState& _state, std::uint8_t _slot) noexcept;
 
-  /// EndObject's slot for a background drawn like an object, under the models.
+  /// EndObject's slot for what is drawn like an object but is no slot's.
   static constexpr std::uint8_t NO_SLOT = 0xFF;
 
   /// The frame's drawing is finished and in video memory: the over layer of it, and the under layer and the models as the
@@ -83,29 +91,49 @@ public:
   /// work, which paced time does not divide, so between two frames of flight it is true.
   [[nodiscard]] bool Shown(const GameState& _state) const noexcept;
 
-  /// Whether a model was the last object to change pixel _pixel of the last finished frame, row by row: there the renderer's
-  /// model shows, unless the over layer covers it.
-  [[nodiscard]] bool ModelOwns(std::size_t _pixel) const noexcept
+  /// Whether a model or something the renderer draws was the last to change pixel _pixel of the last finished frame, row by row:
+  /// there the renderer's drawing shows, unless the over layer covers it.
+  [[nodiscard]] bool RendererOwns(std::size_t _pixel) const noexcept
   {
-    return _pixel < m_publishedModelOwned.size() && m_publishedModelOwned[_pixel];
+    return _pixel < m_publishedRendererOwned.size() && m_publishedRendererOwned[_pixel];
+  }
+
+  /// The slot of the object that last changed pixel _pixel of the last finished frame, row by row, or NO_SLOT for none or for
+  /// what is no slot's.
+  [[nodiscard]] std::uint8_t OwnerOf(std::size_t _pixel) const noexcept
+  {
+    return _pixel < m_publishedOwners.size() ? m_publishedOwners[_pixel] : NO_SLOT;
   }
 
   static constexpr std::size_t BUFFER_BYTES = 0x2000; ///< the drawing buffer's, DRAWING_BUFFER_BYTES
 
 private:
   using Buffer = std::array<std::uint8_t, BUFFER_BYTES>;
+  using PixelBits = std::bitset<std::size_t{SPACE_VIEW_WIDTH_PIXELS} * SPACE_VIEW_HEIGHT_PIXELS>;
+  using PixelSlots = std::array<std::uint8_t, std::size_t{SPACE_VIEW_WIDTH_PIXELS} * SPACE_VIEW_HEIGHT_PIXELS>;
+
+  // What the object being drawn is.
+  enum class Drawing : std::uint8_t
+  {
+    Plain,
+    Model,
+    Rendered
+  };
 
   Buffer m_before{}; // the buffer as the object being drawn found it
   Buffer m_last{};   // the buffer as the last object left it
   SpaceViewLayer m_under{};
-  SpaceViewLayer m_over{}; // what was drawn between objects and no object painted over since
-  std::bitset<std::size_t{SPACE_VIEW_WIDTH_PIXELS} * SPACE_VIEW_HEIGHT_PIXELS> m_modelOwned;
+  SpaceViewLayer m_over{}; // what was drawn between objects or after one the renderer draws, and no object painted over since
+  PixelBits m_rendererOwned;
+  PixelSlots m_owners{};
   std::bitset<SLOTS> m_models;
-  bool m_drawingModel = false;
+  Drawing m_drawing = Drawing::Plain;
+  bool m_rendererDrew = false; // an object of the frame was the renderer's: what plain objects draw after it is over
 
   SpaceViewLayer m_publishedUnder{};
   SpaceViewLayer m_publishedOver{};
-  std::bitset<std::size_t{SPACE_VIEW_WIDTH_PIXELS} * SPACE_VIEW_HEIGHT_PIXELS> m_publishedModelOwned;
+  PixelBits m_publishedRendererOwned;
+  PixelSlots m_publishedOwners{};
   std::bitset<SLOTS> m_publishedModels;
   std::array<std::uint8_t, std::size_t{SPACE_VIEW_HEIGHT_PIXELS} * SPACE_VIEW_WIDTH_PIXELS / 4> m_publishedShown{}; // its bytes
   bool m_finished = false;

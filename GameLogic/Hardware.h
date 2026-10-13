@@ -101,9 +101,9 @@ public:
     m_platform.PublishFlightSnapshot(_snapshot, _continues);
   }
 
-  /// The space view's layers (ADR-033), which watch the drawing buffer and write no port and no byte of the game's state: a
-  /// frame of flight's drawing begins, an object is about to be drawn, the one being drawn is a blueprint's model, and the
-  /// object in slot _slot is drawn (SpaceViewLayers).
+  /// The space view's layers (ADR-033, ADR-035), which watch the drawing buffer and write no port and no byte of the game's state:
+  /// a frame of flight's drawing begins, an object is about to be drawn, the one being drawn is a blueprint's model or the
+  /// renderer's to draw, and the object in slot _slot is drawn (SpaceViewLayers).
   void BeginSpaceViewFrame() noexcept
   {
     m_platform.BeginSpaceViewFrame();
@@ -119,15 +119,29 @@ public:
     m_platform.NoteSpaceViewModel();
   }
 
+  void NoteSpaceViewRendered() noexcept
+  {
+    m_platform.NoteSpaceViewRendered();
+  }
+
   void EndSpaceViewObject(std::uint8_t _slot) noexcept
   {
     m_platform.EndSpaceViewObject(_slot);
   }
 
-  /// A background drawn between BeginSpaceViewObject and this, the stardust or the title's planet, goes under the models.
-  void EndSpaceViewBackground() noexcept
+  /// What was drawn between BeginSpaceViewObject and this, no slot's, is the renderer's to draw: the stardust, the beams, the
+  /// sights, the title's planet (ADR-035).
+  void EndSpaceViewRendered() noexcept
   {
+    m_platform.NoteSpaceViewRendered();
     m_platform.EndSpaceViewObject(SpaceViewLayers::NO_SLOT);
+  }
+
+  /// A laser's beam drawn across the view, for the frame's snapshot (ADR-035): from (_fromX, _fromRow) to (_toX, _toRow) of the
+  /// drawing buffer, in pixel value _color. No port and no byte of the game's state is written.
+  void NoteSpaceViewBeam(std::int16_t _fromX, std::int16_t _fromRow, std::int16_t _toX, std::int16_t _toRow, std::uint8_t _color) noexcept
+  {
+    m_platform.NoteSpaceViewBeam(SnapshotBeam{.fromX = _fromX, .fromRow = _fromRow, .toX = _toX, .toRow = _toRow, .color = _color});
   }
 
   /// OUT 3D4h,0Eh, then OUT 3D5h,_value: the CRTC's register 14, the high byte of the cursor's address.

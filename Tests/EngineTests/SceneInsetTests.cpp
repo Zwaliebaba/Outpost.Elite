@@ -153,7 +153,11 @@ public:
                                                          .layerWidth = LAYER_WIDTH,
                                                          .layerHeight = LAYER_HEIGHT,
                                                          .under = under,
-                                                         .over = over}};
+                                                         .over = over,
+                                                         .dust = {},
+                                                         .beams = {},
+                                                         .sky = {},
+                                                         .bloom = 0.0f}};
     const std::vector<std::uint32_t> picture(std::size_t{SOURCE_WIDTH} * SOURCE_HEIGHT, PICTURE_COLOR);
 
     // Twice, through both frames in flight.

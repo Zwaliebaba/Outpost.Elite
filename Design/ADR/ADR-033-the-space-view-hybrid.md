@@ -1,6 +1,6 @@
 # ADR-033 — The space view, first part: the ships as models in the CGA picture's view
 
-**Status:** accepted 2026-10-12, with the change that implements it, the first part of piece 3 of Phase 6 ([Reverse-Engineering-Plan.md §5, Phase 6](../Reverse-Engineering-Plan.md#phase-6--the-new-game)). It carries out part of D47 and D49 under the owner's ruling D62. It amends [ADR-031](ADR-031-the-renderer-first-piece.md)'s table of what D60 moved: the scene's targets arrive here, and bloom and tearing move on to the part that goes full-window. It completes [ADR-032](ADR-032-the-flight-snapshot.md)'s list of what D61 left to piece 3, for the ships. **Amended 2026-10-12, after the owner's play test:** the station's slot flickered over its front face, two triangles in one plane at equal depth; a face's items now keep the game's painting order (item 3). The stardust, which the game draws over the ships, is put behind them at the owner's word, and the title's turning ship is drawn as a model as well (item 2).
+**Status:** accepted 2026-10-12, with the change that implements it, the first part of piece 3 of Phase 6 ([Reverse-Engineering-Plan.md §5, Phase 6](../Reverse-Engineering-Plan.md#phase-6--the-new-game)). It carries out part of D47 and D49 under the owner's ruling D62. It amends [ADR-031](ADR-031-the-renderer-first-piece.md)'s table of what D60 moved: the scene's targets arrive here, and bloom and tearing move on to the part that goes full-window. It completes [ADR-032](ADR-032-the-flight-snapshot.md)'s list of what D61 left to piece 3, for the ships. **Amended 2026-10-12, after the owner's play test:** the station's slot flickered over its front face, two triangles in one plane at equal depth; a face's items now keep the game's painting order (item 3). The stardust, which the game draws over the ships, is put behind them at the owner's word, and the title's turning ship is drawn as a model as well (item 2). **Amended by [ADR-035](ADR-035-the-scene-draws-the-sky.md):** the sun, the planet, the stardust, the beams, the sights and the title's planet are the renderer's to draw, and neither layer holds them; a plain object drawn after one the renderer draws goes over, not under.
 
 ## Context
 
@@ -49,20 +49,20 @@ Each needs a design of its own before a 3D view can draw it: D45's planets and s
 |---|---|
 | The ships, the station near, the debris of an explosion, the escape pod and the cargo: every object drawn as its blueprint | the scene, between the last two updates |
 | The title's turning ship | the scene, as in flight |
-| The sun, the planet, a far ship's dot, a far station's disc, the stardust, the title's planet | the under layer, the game's pixels of the latest update |
-| The beams, the sights, the title's words | the over layer, likewise |
+| The sun, the planet, a far ship's dot, a far station's disc, the stardust, the title's planet | the under layer, the game's pixels of the latest update. *Since ADR-035, the scene draws the sun, the planet, the stardust and the title's planet; a dot or a disc drawn after them is over.* |
+| The beams, the sights, the title's words | the over layer, likewise. *Since ADR-035, the scene draws the beams and the cockpit the sights.* |
 | The dashboard, the message line, every other screen | the CGA picture, unchanged |
 
 Three artefacts follow from that, and last until the parts that replace each layer:
-- A ship behind the sun or the planet is drawn in front of it, because the under layer is under every model.
-- The layers are the latest update's, while the ships are drawn up to one update behind (D49): a beam ends where the target was one update later than the target is drawn.
+- A ship behind the sun or the planet is drawn in front of it, because the under layer is under every model. *Ended by ADR-035: the spheres have their depth.*
+- The layers are the latest update's, while the ships are drawn up to one update behind (D49): a beam ends where the target was one update later than the target is drawn. *Ended by ADR-035 for the beams and the dust, drawn from the frame the ships are drawn from.*
 - Where a model's CGA silhouette and its scene silhouette differ, the scene's shows. The under layer holds no pixel a model covered, so nothing of the old silhouette is left.
 
 ### What moves on
 
 | Part of D47 or D48 | Arrives with | Why there |
 |---|---|---|
-| Bloom | the sun and the planet as the scene draws them (D45) | nothing the scene draws yet glows |
+| Bloom | the sun and the planet as the scene draws them (D45) | nothing the scene draws yet glows. *Arrived with ADR-035.* |
 | Tearing where the display supports it | the full-window part | the view draws between updates already at the display's rate under sync interval 1; tearing needs a frame cap of its own, and the full window is where it is seen |
 | The 2D layer, text and the design units | the HUD | as ADR-031 has it |
 

@@ -155,6 +155,9 @@
     <ClCompile Include="pch.cpp">
       <Filter>Build</Filter>
     </ClCompile>
+    <ClCompile Include="PlanetLookTests.cpp">
+      <Filter>Flight</Filter>
+    </ClCompile>
     <ClCompile Include="PlatformTests.cpp">
       <Filter>Platform</Filter>
     </ClCompile>

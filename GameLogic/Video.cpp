@@ -1400,8 +1400,11 @@ void WriteScreenshotFile(GameState& _state, Hardware& _hardware)
 
 void FinishSpaceViewFrame(GameState& _state, Hardware& _hardware)
 {
-  // MOV AX,B800h / MOV ES,AX, the sights, then XOR AL,AL / CLD: the copy and the clear run forwards.
+  // MOV AX,B800h / MOV ES,AX, the sights, then XOR AL,AL / CLD: the copy and the clear run forwards. The sights are watched for
+  // the space view, which the renderer draws in their place (ADR-035).
+  _hardware.BeginSpaceViewObject();
   DrawLaserSights(_state);
+  _hardware.EndSpaceViewRendered();
   PresentSpaceView(_state, _hardware, false);
   ClearDrawBuffer(_state, false);
 }

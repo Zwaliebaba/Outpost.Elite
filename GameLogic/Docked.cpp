@@ -339,12 +339,12 @@ std::uint16_t RunTitle(GameState& _state, Hardware& _hardware, bool _backward)
   bool firstFrame = true;
   for (;;)
   {
-    // The space view's layers watch the frame, the planet a background under the ship (ADR-033).
+    // The space view's layers watch the frame (ADR-033), the planet the renderer's to draw as the system's (ADR-035).
     _hardware.BeginSpaceViewFrame();
     _hardware.BeginSpaceViewObject();
     _state.Data().drawing.drawColor = TITLE_PLANET_COLOR;
     DrawTitlePlanet(_state, TITLE_PLANET_RADIUS, TITLE_PLANET_X, TITLE_PLANET_Y, backward);
-    _hardware.EndSpaceViewBackground();
+    _hardware.EndSpaceViewRendered();
     ship.flags = TITLE_SHIP_FLAGS;
     // MOV BL,titleShipType / SHL BL,1 / XOR BH,BH: the type doubled indexes titleShipDistances, and INC BL makes it the type byte,
     // active. The ship stands at the type's own distance, turned a step on each axis: the roll, the yaw, then the pitch.
@@ -359,12 +359,13 @@ std::uint16_t RunTitle(GameState& _state, Hardware& _hardware, bool _backward)
     DrawViewString(_state, PRESS_ANY_KEY_TEXT, PRESS_ANY_KEY_MASK, PRESS_ANY_KEY_PLACE);
     (void)TransformAndDrawObjects(_state, _hardware, backward);
     FinishSpaceViewFrame(_state, _hardware);
-    // The frame as it was drawn, marked the title's, for a renderer that draws its ship (ADR-033), with the dashboard the title
-    // shows: the cockpit's picture, nothing on it live (D64).
-    FlightSnapshot snapshot = TakeFlightSnapshot(_state);
-    snapshot.title = true;
-    snapshot.dashboard = TitleDashboard(ELITE_TITLE_TEXT);
-    _hardware.PublishFlightSnapshot(snapshot, !firstFrame);
+    // The frame as it was drawn, the title's, for a renderer that draws its ship and its planet (ADR-033, ADR-035), with the
+    // dashboard the title shows: the cockpit's picture, nothing on it live (D64). DrawDisc's radius is twice the disc's rows.
+    const SnapshotDisc planet{.shown = true,
+                              .x = static_cast<std::int16_t>(TITLE_PLANET_X),
+                              .row = static_cast<std::int16_t>(TITLE_PLANET_Y),
+                              .rows = static_cast<std::uint16_t>(TITLE_PLANET_RADIUS >> 1)};
+    _hardware.PublishFlightSnapshot(TakeTitleSnapshot(_state, ELITE_TITLE_TEXT, planet), !firstFrame);
     firstFrame = false;
     backward = false;
     if (const KeyPress key = GetKey(_state, _hardware); key.scanCode != 0)

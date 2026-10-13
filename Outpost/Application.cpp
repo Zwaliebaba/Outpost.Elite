@@ -203,7 +203,7 @@ int Application::Run(HINSTANCE _instance)
     const Elite::FlightSnapshot& latest = platform->LatestFlightSnapshot();
     if (latest.sequence != 0 && platform->SpaceViewShown())
     {
-      Cockpit::Draw(latest.dashboard, elapsedMilliseconds, renderer, canvas);
+      Cockpit::Draw(latest.dashboard, latest.sight, elapsedMilliseconds, renderer, canvas);
       presented = renderer.Present({}, COCKPIT_BACKGROUND, spaceView.Frame(*platform, Cockpit::VIEW), &canvas);
     }
     else

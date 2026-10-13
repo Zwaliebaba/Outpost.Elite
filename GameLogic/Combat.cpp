@@ -382,7 +382,7 @@ bool DestroyTarget(GameState& _state, Hardware& _hardware, SpaceObject& _target,
   const KillCredit credit = CreditKill(_state, _target);
   CheckMissileTargetDestroyed(_state, _target);
   (void)ExplodeObject(_state, _hardware, _target, credit.paidTenths ? std::uint16_t{0} : _bx);
-  const bool filled = DrawLaserBeams(_state);
+  const bool filled = DrawLaserBeams(_state, _hardware);
   _state.Data().combat.miningLaserOnAsteroid = 0;
   _state.Data().playerShip.laserFiring = 0;
   return filled;
@@ -510,7 +510,7 @@ std::optional<std::uint8_t> GetViewLaser(const GameState& _state)
   return static_cast<std::uint8_t>((shift >= 8 ? 0 : types >> shift) & 3);
 }
 
-bool DrawLaserBeams(GameState& _state)
+bool DrawLaserBeams(GameState& _state, Hardware& _hardware)
 {
   // AND AX,303h / ADD AL,7Eh / ADD AH,3Eh: the point the beams end at, its x in the low byte and its row in the high, as DX
   // holds it.
@@ -518,7 +518,15 @@ bool DrawLaserBeams(GameState& _state)
   const std::uint16_t target =
     Join(static_cast<std::uint8_t>(High(scatter) + BEAM_TARGET_ROW), static_cast<std::uint8_t>(Low(scatter) + BEAM_TARGET_X));
   bool filled = false;
-  const auto beam = [&_state, &filled, target](std::uint8_t _x) { filled = DrawBeam(_state, _x, target) || filled; };
+  // Each beam watched for the space view, which the renderer draws in its place (ADR-035); no byte of the state is written.
+  const auto beam = [&_state, &_hardware, &filled, target](std::uint8_t _x)
+  {
+    _hardware.BeginSpaceViewObject();
+    filled = DrawBeam(_state, _x, target) || filled;
+    _hardware.EndSpaceViewRendered();
+    _hardware.NoteSpaceViewBeam(std::int16_t{_x}, std::int16_t{BEAM_ROW}, std::int16_t{Low(target)}, std::int16_t{High(target)},
+                                std::uint8_t{_state.Data().drawing.drawColor});
+  };
   const std::uint8_t type = _state.Data().flight.firingLaserType;
   if ((type & 1) != 0)
   {
@@ -733,7 +741,7 @@ bool ResolveLaserFire(GameState& _state, Hardware& _hardware)
       return DestroyTarget(_state, _hardware, hit, target.bx);
     }
   }
-  const bool filled = DrawLaserBeams(_state);
+  const bool filled = DrawLaserBeams(_state, _hardware);
   if (StartLaserSound(_state))
   {
     _hardware.EnableInterrupts();
@@ -832,7 +840,12 @@ bool ApplyEnemyLaserHit(GameState& _state, Hardware& _hardware)
       edgeX = EDGE_RIGHT_X;
     }
     _state.Data().drawing.drawColor = ENEMY_BEAM_COLOR;
+    // Watched for the space view, which the renderer draws in its place (ADR-035); no byte of the state is written.
+    _hardware.BeginSpaceViewObject();
     filled = DrawClippedLine(_state, static_cast<std::uint16_t>(from.x), static_cast<std::uint16_t>(from.y), edgeX, edgeRow);
+    _hardware.EndSpaceViewRendered();
+    _hardware.NoteSpaceViewBeam(static_cast<std::int16_t>(from.x), static_cast<std::int16_t>(from.y), static_cast<std::int16_t>(edgeX),
+                                static_cast<std::int16_t>(edgeRow), ENEMY_BEAM_COLOR);
   }
   _state.Data().combat.playerHitPending = 0;
   // Bit 7 of the attacker's depth byte: behind, so the aft shield takes it. SUB [shield],0Fh; on a borrow, MOV AL,[shield] and 0

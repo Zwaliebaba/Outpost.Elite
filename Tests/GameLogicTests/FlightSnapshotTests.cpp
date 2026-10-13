@@ -4,6 +4,7 @@
 #include "GameState.h"
 #include "Maths.h"
 #include "PlatformRig.h"
+#include "Ships.h"
 #include "SpaceObject.h"
 
 #include <cmath>
@@ -204,6 +205,63 @@ public:
     after = Elite::TakeFlightSnapshot(*state);
     Elite::ContinueFrom(before, after);
     Assert::IsFalse(after.cameraContinues, L"more than a frame's turn");
+  }
+
+  // The sun and the planet as spheres (D65): where the view put them, times their scale shift's power of 2, and radii of 100 x 256
+  // and 50 x 256 units, which the view sees as the discs SizeSun and SizePlanet size; while a supernova burns, the sun's radius is
+  // its heat's rows wherever it is. The title's planet stands where its disc is, as large.
+  TEST_METHOD(SpheresAreWhereTheDiscsAre)
+  {
+    Elite::FlightSnapshot snapshot;
+    Elite::SnapshotObject planet;
+    planet.slot = 1;
+    planet.kind = Elite::TYPE_PLANET;
+    planet.pitch = 3; // its scale shift
+    planet.viewZ = 0x1000;
+    Assert::IsTrue(Elite::IsPlanet(planet) && !Elite::IsSun(planet));
+    const Elite::SnapshotSphere sphere = Elite::SphereOf(snapshot, planet);
+    Assert::AreEqual(32768.0f, sphere.position[2], L"the view z, unshifted");
+    Assert::AreEqual(50.0f * 256.0f, sphere.radius, L"the planet's radius");
+    Elite::SnapshotObject sun = planet;
+    sun.slot = 0;
+    sun.kind = Elite::TYPE_SUN;
+    Assert::AreEqual(100.0f * 256.0f, Elite::SphereOf(snapshot, sun).radius, L"the sun's radius");
+    snapshot.supernovaHeat = 0x40;
+    const Elite::SnapshotSphere nova = Elite::SphereOf(snapshot, sun);
+    Assert::AreEqual(64.0f * 0x8000 / 256.0f, nova.radius, L"the heat's rows, at the sun's distance");
+    Assert::AreEqual(50.0f * 256.0f, Elite::SphereOf(snapshot, planet).radius, L"the planet does not burn");
+
+    snapshot.titlePlanet = Elite::SnapshotDisc{.shown = true, .x = 200, .row = 50, .rows = 30};
+    const Elite::SnapshotSphere title = Elite::TitlePlanetSphere(snapshot);
+    const float x = Elite::VIEW_AXIS_X + Elite::VIEW_FOCAL * title.position[0] / title.position[2];
+    const float row = Elite::VIEW_AXIS_ROW + Elite::VIEW_FOCAL * title.position[1] / title.position[2];
+    Assert::IsTrue(std::abs(x - 200.5f) < 1e-3f && std::abs(row - 50.5f) < 1e-3f, L"the title's planet at its disc's middle");
+    Assert::IsTrue(std::abs(Elite::VIEW_FOCAL * title.radius / title.position[2] - 30.0f) < 1e-3f, L"its rows");
+  }
+
+  // The snapshot takes a supernova's heat while SupernovaHeat holds supernovaFrames at 1, and none while it counts down; the view's
+  // laser, whose sights are drawn; and the system the planet is.
+  TEST_METHOD(TakesTheSunsHeatTheSightsAndTheSystem)
+  {
+    const auto state = std::make_unique<Elite::GameState>();
+    Elite::GameData& data = state->Data();
+    data.commander.supernovaFrames = 5;
+    data.commander.supernovaHeat = 0x30;
+    Assert::AreEqual(std::uint8_t{0}, Elite::TakeFlightSnapshot(*state).supernovaHeat, L"still counting down");
+    data.commander.supernovaFrames = 1;
+    Assert::AreEqual(std::uint8_t{0x30}, Elite::TakeFlightSnapshot(*state).supernovaHeat, L"burning");
+    Assert::AreEqual(Elite::FlightSnapshot::NO_SIGHT, Elite::TakeFlightSnapshot(*state).sight, L"no laser, no sights");
+    data.commander.laserMountsFitted = 1; // the front mount
+    data.commander.laserMountTypes = 2;   // a military laser there
+    Assert::AreEqual(std::uint8_t{2}, Elite::TakeFlightSnapshot(*state).sight, L"the front laser's sights");
+    data.playerShip.viewAngle = 0x400; // the rear view, with no laser
+    Assert::AreEqual(Elite::FlightSnapshot::NO_SIGHT, Elite::TakeFlightSnapshot(*state).sight, L"none in the rear view");
+    data.commander.galaxyNumber = 3;
+    data.commander.currentSystemIndex = 0x81;
+    const Elite::FlightSnapshot snapshot = Elite::TakeFlightSnapshot(*state);
+    Assert::IsTrue(snapshot.galaxy == 3 && snapshot.system == 0x81, L"the system");
+    const Elite::FlightSnapshot title = Elite::TakeTitleSnapshot(*state, "TITLE", Elite::SnapshotDisc{.shown = true});
+    Assert::IsTrue(title.title && !title.dashboard.live && title.titlePlanet.shown && title.dustCount == 0, L"the title's");
   }
 
   // The platform numbers each snapshot, stamps it with its clock, and links it to the one before unless it starts a flight.

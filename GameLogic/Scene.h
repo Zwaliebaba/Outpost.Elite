@@ -164,6 +164,11 @@ Vector TransformToView(GameState& _state, Vector _position);
 /// returns it as the drawing leaves it.
 bool TransformAndDrawObjects(GameState& _state, Hardware& _hardware, bool _backward);
 
+/// What SizePlanet and SizeSun scale to an object's distance, its disc's radius in rows at 256 of its view units off (MOV DX,32h
+/// and MOV DX,64h), which makes the planet a sphere of 50 x 256 units and the sun one of 100 x 256 (ADR-035).
+inline constexpr std::uint16_t PLANET_DISC_SCALE = 0x32;
+inline constexpr std::uint16_t SUN_DISC_SCALE = 0x64;
+
 /// DrawSunOrPlanet (CS:3F4F): the planet in _slot sized (SizePlanet), with its altitude, or the sun, with the cabin temperature, its
 /// fringe, fuel scooping, death by heat and a supernova's heat; then, in front of the view, its disc. _backward is the direction
 /// flag, which the disc and a supernova's energy bomb go by.
