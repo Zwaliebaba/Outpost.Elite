@@ -12,7 +12,7 @@ namespace Elite
 {
 
 /// The speaker's effects and the music, which Sound starts and the timer's handler steps. Its members are the 1987 data segment's, by their
-/// names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData, in its counted block.
+/// names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData.
 struct AudioState
 {
   AudioState() noexcept = default;

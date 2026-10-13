@@ -172,14 +172,11 @@ public:
     Assert::AreEqual(std::uint64_t{0}, rig.Host().Clock());
   }
 
-  // Two runs of the same program to the same cycle end in the same state: the same interrupts taken, the same counts, the
-  // same game state.
+  // Two runs of the same program to the same cycle end in the same state: the same interrupts taken and the same game state.
   TEST_METHOD(RunsAreIdenticalToTheCycle)
   {
     std::array<std::uint64_t, 2> clocks{};
     std::array<std::uint64_t, 2> interrupts{};
-    std::array<std::uint64_t, 2> changes{};
-    std::array<std::uint64_t, 2> writes{};
     std::array<std::string, 2> digests;
     for (std::size_t run = 0; run < 2; ++run)
     {
@@ -188,15 +185,11 @@ public:
       Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Elite::StopReason::Reached);
       clocks[run] = rig.Host().Clock();
       interrupts[run] = rig.Host().InterruptsTaken();
-      changes[run] = rig.Host().MemoryChanges();
-      writes[run] = rig.Host().PortWrites();
       digests[run] = Elite::GameStateDigest(rig.State(), rig.Host().Video());
     }
     Assert::AreEqual(clocks[0], clocks[1]);
     Assert::AreEqual(std::uint64_t{3}, interrupts[0], L"three ticks in a million cycles");
     Assert::AreEqual(interrupts[0], interrupts[1]);
-    Assert::AreEqual(changes[0], changes[1]);
-    Assert::AreEqual(writes[0], writes[1]);
     Assert::IsTrue(digests[0] == digests[1], L"the same game state");
   }
 
@@ -241,16 +234,14 @@ public:
   }
 
   // An INT goes to the handler its vector names, natively, with IF and TF cleared, and returns as IRET does, the flags as
-  // they were. Setting the vector counts the bytes of the table it changes.
+  // they were.
   TEST_METHOD(AnInterruptRunsTheHandlerItsVectorNames)
   {
     PlatformRig rig("PlatformInterrupts");
     bool enabledInside = true;
     bool enabledAfter = false;
     rig.Host().Hook(HANDLER, [&rig, &enabledInside] { enabledInside = rig.Host().InterruptsEnabled(); });
-    const std::uint64_t changes = rig.Host().MemoryChanges();
     rig.Native().SetInterruptVector(0x60, HANDLER);
-    Assert::AreEqual(changes + 3, rig.Host().MemoryChanges(), L"F000:FD60 to 2000:0010: three bytes changed");
     Assert::IsTrue(rig.Native().InterruptVector(0x60) == HANDLER);
 
     rig.Start(
@@ -358,8 +349,8 @@ public:
 
   // The BIOS's hardware handlers, native in the ROM's place, on each of the paths the ROM's code takes: the timer handler's
   // four (a tick, a tick that carries into the high word, a tick in the hour the day ends in, and the day's last tick), and
-  // the keyboard handler's. The bytes of the data area they change, their port writes and the instruction clock are what the
-  // ROM's code, interpreted from the same state, gave before D7 deleted the interpreter; its stack pushes are gone with the
+  // the keyboard handler's. What they leave and the instruction clock are what the ROM's code, interpreted from the same state,
+  // gave before D7 deleted the interpreter; its stack pushes are gone with the
   // processor (D33).
   TEST_METHOD(BiosHandlersDoWhatTheRomDid)
   {
@@ -367,29 +358,24 @@ public:
     {
       std::uint32_t ticks;
       std::uint32_t ticksAfter;
-      std::uint64_t changes;
       std::uint8_t rolledOver;
       Elite::Cycles instructionCycles;
     };
     const std::array<Case, 4> cases = {{
-      {0x00051000, 0x00051001, 1, 0, 299},
-      {0x0005FFFF, 0x00060000, 3, 0, 316},
-      {0x00180100, 0x00180101, 1, 0, 323},
-      {0x001800AF, 0x00000000, 4, 1, 358},
+      {0x00051000, 0x00051001, 0, 299},
+      {0x0005FFFF, 0x00060000, 0, 316},
+      {0x00180100, 0x00180101, 0, 323},
+      {0x001800AF, 0x00000000, 1, 358},
     }};
     for (const Case& test : cases)
     {
       PlatformRig rig("PlatformBiosTimer");
       Elite::Platform& platform = rig.Host();
       platform.BiosServices().SetClock(test.ticks);
-      const std::uint64_t changes = platform.MemoryChanges();
-      const std::uint64_t writes = platform.PortWrites();
       const Elite::Cycles cycles = platform.InstructionCycles();
       platform.Interrupts().RaiseIrq(0);
       platform.TakeDueInterrupts();
       Assert::AreEqual(test.ticksAfter, platform.BiosServices().Ticks(), L"the count");
-      Assert::AreEqual(test.changes, platform.MemoryChanges() - changes, L"every byte of the data area it changed");
-      Assert::AreEqual(std::uint64_t{1}, platform.PortWrites() - writes, L"one OUT: the end of interrupt");
       Assert::AreEqual(Elite::Platform::HARDWARE_INTERRUPT_CYCLES + test.instructionCycles, platform.InstructionCycles() - cycles,
                        L"the instruction clock: the entry, then the ROM's code to its IRET");
       Assert::AreEqual(0u, std::uint32_t{platform.Interrupts().InServiceRegister()}, L"ended");
@@ -405,14 +391,12 @@ public:
     {
       platform.Idle(Elite::NO_EVENT);
     }
-    const std::uint64_t changes = platform.MemoryChanges();
-    const std::uint64_t writes = platform.PortWrites();
+    const std::string digest = Elite::GameStateDigest(rig.State(), platform.Video());
     const Elite::Cycles cycles = platform.InstructionCycles();
     platform.TakeDueInterrupts();
     Assert::IsFalse(platform.KeyboardController().LatchFull(), L"acknowledged");
     Assert::AreEqual(0x4Cu, std::uint32_t{platform.KeyboardController().SystemControl()}, L"bit 7 high, then low");
-    Assert::AreEqual(std::uint64_t{3}, platform.PortWrites() - writes, L"61h twice, then the end of interrupt");
-    Assert::AreEqual(std::uint64_t{0}, platform.MemoryChanges() - changes, L"nothing buffered");
+    Assert::IsTrue(Elite::GameStateDigest(rig.State(), platform.Video()) == digest, L"nothing buffered");
     Assert::AreEqual(Elite::Platform::HARDWARE_INTERRUPT_CYCLES + 127, platform.InstructionCycles() - cycles);
     Assert::AreEqual(0u, std::uint32_t{platform.Interrupts().InServiceRegister()}, L"ended");
   }

@@ -12,7 +12,7 @@ namespace Elite
 {
 
 /// The docked menus' rows, prices and typed numbers, which the equipment, market and docked screens share. Its members are the 1987 data
-/// segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData, in its counted block.
+/// segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData.
 struct MenusState
 {
   MenusState() noexcept = default;

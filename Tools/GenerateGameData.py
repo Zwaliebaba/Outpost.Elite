@@ -17,8 +17,8 @@ the groups' structs (`GameData::flight`, `GameData::commander`, ...):
   unused               what nothing reads: not in the state, and no table either (change 3c)
 
 A group's members keep their names and their 1987 order. The gaps between them go, but for the ones the partition lists, which
-the game uses. Each byte and word is a `Counted` (Counted.h), which counts its own changes, so that native code writes members
-directly (D33's piece 3):
+the game uses. Each byte and word is a `Counted` (Counted.h), of alignment 1, so that native code writes members directly (D33's
+piece 3):
 
   data, 1 byte         Counted<std::uint8_t>
   data, 2 bytes        Counted<std::uint16_t>
@@ -271,9 +271,8 @@ def declaration(_member: Member) -> str:
 
 
 def emit_copy_rule(_type: str, _indent: str, _out: list[str]) -> None:
-  """A struct's constructors: trivial, so GameData stays trivially copyable, and the copy explicit. A copy is detached from
-  the GameState's block, and a write to one of its Counted members would count into whatever the block's alignment
-  rounds its address down to (Counted.h), so `auto x = member`, a by-value parameter and a return by value do not compile."""
+  """A struct's constructors: trivial, so GameData stays trivially copyable, and the copy explicit, so that every copy of the
+  state is one the code asks for: `auto x = member`, a by-value parameter and a return by value do not compile (Counted.h)."""
   _out.append(f"{_indent}{_type}() noexcept = default;")
   _out.append(f"{_indent}explicit {_type}(const {_type}&) noexcept = default;")
   _out.append("")
@@ -498,7 +497,7 @@ def generate_group(_group: Group) -> str:
     description = (f"What {_group.name}.cpp, alone, writes of the game's state (D38), and its own: read elsewhere at most, never "
                    "written.")
   out += wrap(f"{description} Its members are the 1987 data segment's, by their names, in their order there "
-              "(Design/DataPartition.tsv); the GameState holds it in GameData, in its counted block.", "///")
+              "(Design/DataPartition.tsv); the GameState holds it in GameData.", "///")
   out += [f"struct {_group.type}", "{"]
   emit_copy_rule(_group.type, "  ", out)
   emit_members(_group.members, "  ", out)
@@ -576,9 +575,8 @@ def generate_game_data(_groups: list[Group]) -> str:
     "",
   ]
   out += wrap("The game's state (D19, D38): the reference's data segment distributed, a struct of its groups' structs, each what one "
-              "subsystem writes or what several share (Design/DataPartition.tsv), which the GameState holds in its counted block. "
-              "Every byte and word is a Counted, of alignment 1, which counts its own changes in its GameState's change count: "
-              "native code reads and writes members (`_state.Data().commander.fuel = fuel`), and passes one by reference to a "
+              "subsystem writes or what several share (Design/DataPartition.tsv), which the GameState holds. "
+              "Every byte and word is a Counted, of alignment 1: native code reads and writes members (`_state.Data().commander.fuel = fuel`), and passes one by reference to a "
               "helper that writes it. DATA_PLACES (DataPlaces.h) says where each member of the 1987 data segment is now.", "///")
   out += ["struct GameData", "{"]
   emit_copy_rule("GameData", "  ", out)

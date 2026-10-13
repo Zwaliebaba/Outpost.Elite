@@ -88,34 +88,6 @@ Bios::Bios(GameState& _state, Cga& _cga, std::uint32_t _timerTicks)
   SetMode(POWER_ON_VIDEO_MODE);
 }
 
-void Bios::Store(std::uint8_t& _field, std::uint8_t _value) noexcept
-{
-  if (_field != _value)
-  {
-    _field = _value;
-    ++m_changes;
-  }
-}
-
-void Bios::Store(std::uint16_t& _field, std::uint16_t _value) noexcept
-{
-  if (Low(_field) != Low(_value))
-  {
-    ++m_changes;
-  }
-  if (High(_field) != High(_value))
-  {
-    ++m_changes;
-  }
-  _field = _value;
-}
-
-void Bios::WriteCrtc(std::uint8_t _register, std::uint8_t _value) noexcept
-{
-  m_cga.WriteCrtc(_register, _value);
-  m_portWrites += 2; // OUT 3D4h with the register, then OUT 3D5h with the value
-}
-
 bool Bios::SetMode(std::uint8_t _mode)
 {
   if (_mode >= MODE_COUNT)
@@ -123,11 +95,10 @@ bool Bios::SetMode(std::uint8_t _mode)
     return false;
   }
   m_cga.SetModeControl(0x00);
-  ++m_portWrites;
   const CrtcTable& table = CRTC_TABLES[MODE_CRTC_TABLE[_mode]];
   for (std::size_t index = 0; index < table.size(); ++index)
   {
-    WriteCrtc(static_cast<std::uint8_t>(index), table[index]);
+    m_cga.WriteCrtc(static_cast<std::uint8_t>(index), table[index]);
   }
 
   const bool graphics = _mode >= FIRST_GRAPHICS_MODE;
@@ -139,24 +110,22 @@ bool Bios::SetMode(std::uint8_t _mode)
 
   const std::uint8_t modeControl = MODE_CONTROL_VALUES[_mode];
   m_cga.SetModeControl(modeControl);
-  ++m_portWrites;
   const std::uint8_t colorSelect = _mode == HIGH_RESOLUTION_MODE ? COLOR_SELECT_HIGH_RESOLUTION : COLOR_SELECT_DEFAULT;
   m_cga.SetColorSelect(colorSelect);
-  ++m_portWrites;
 
-  Store(m_videoMode, _mode);
-  Store(m_videoColumns, MODE_COLUMNS[_mode]);
-  Store(m_videoPageBytes, MODE_PAGE_BYTES[_mode]);
-  Store(m_videoStart, 0);
-  Store(m_activePage, 0);
+  m_videoMode = _mode;
+  m_videoColumns = MODE_COLUMNS[_mode];
+  m_videoPageBytes = MODE_PAGE_BYTES[_mode];
+  m_videoStart = 0;
+  m_activePage = 0;
   for (std::uint16_t& position : m_cursorPositions)
   {
-    Store(position, 0);
+    position = 0;
   }
-  Store(m_cursorShape, CURSOR_SHAPE_DEFAULT);
-  Store(m_crtcAddress, CRTC_INDEX_PORT);
-  Store(m_modeControl, modeControl);
-  Store(m_colorSelect, colorSelect);
+  m_cursorShape = CURSOR_SHAPE_DEFAULT;
+  m_crtcAddress = CRTC_INDEX_PORT;
+  m_modeControl = modeControl;
+  m_colorSelect = colorSelect;
   return true;
 }
 
@@ -164,8 +133,7 @@ void Bios::SelectPalette(std::uint8_t _palette)
 {
   const auto colorSelect = static_cast<std::uint8_t>((m_colorSelect & COLOR_SELECT_PALETTE_KEEP) | ((_palette & 0x01) << 5));
   m_cga.SetColorSelect(colorSelect);
-  ++m_portWrites;
-  Store(m_colorSelect, colorSelect);
+  m_colorSelect = colorSelect;
 }
 
 void Bios::WriteTeletype(std::uint8_t _character)
@@ -182,35 +150,35 @@ void Bios::WriteTeletype(std::uint8_t _character)
 
 void Bios::SetCursor(std::uint8_t _row, std::uint8_t _column) noexcept
 {
-  Store(m_cursorPositions[m_activePage % CURSOR_PAGES], Word(_row, _column));
+  m_cursorPositions[m_activePage % CURSOR_PAGES] = Word(_row, _column);
 
   const std::uint32_t columns = m_videoColumns;
   const std::uint32_t address = (m_videoStart + (_row * columns + _column) * 2u) / 2u;
-  WriteCrtc(CRTC_CURSOR_HIGH, static_cast<std::uint8_t>((address >> 8) & 0xFF));
-  WriteCrtc(CRTC_CURSOR_LOW, static_cast<std::uint8_t>(address & 0xFF));
+  m_cga.WriteCrtc(CRTC_CURSOR_HIGH, static_cast<std::uint8_t>((address >> 8) & 0xFF));
+  m_cga.WriteCrtc(CRTC_CURSOR_LOW, static_cast<std::uint8_t>(address & 0xFF));
 }
 
 BiosClock Bios::ReadClock() noexcept
 {
   const BiosClock clock{Ticks(), m_rolledOver};
-  Store(m_rolledOver, 0);
+  m_rolledOver = 0;
   return clock;
 }
 
 void Bios::SetClock(std::uint32_t _ticks) noexcept
 {
-  Store(m_ticksLow, static_cast<std::uint16_t>(_ticks & 0xFFFF));
-  Store(m_ticksHigh, static_cast<std::uint16_t>(_ticks >> 16));
-  Store(m_rolledOver, 0);
+  m_ticksLow = static_cast<std::uint16_t>(_ticks & 0xFFFF);
+  m_ticksHigh = static_cast<std::uint16_t>(_ticks >> 16);
+  m_rolledOver = 0;
 }
 
 Bios::Tick Bios::CountTick() noexcept
 {
   Tick tick{false, false, false};
-  Store(m_ticksLow, static_cast<std::uint16_t>(m_ticksLow + 1));
+  m_ticksLow = static_cast<std::uint16_t>(m_ticksLow + 1);
   if (m_ticksLow == 0)
   {
-    Store(m_ticksHigh, static_cast<std::uint16_t>(m_ticksHigh + 1));
+    m_ticksHigh = static_cast<std::uint16_t>(m_ticksHigh + 1);
     tick.carried = true;
   }
   if (m_ticksHigh == TICKS_PER_DAY_HIGH)
@@ -219,9 +187,9 @@ Bios::Tick Bios::CountTick() noexcept
     if (m_ticksLow == TICKS_PER_DAY_LOW)
     {
       // A day has passed: the count starts again from 0, high word first, and the rollover flag that int 1Ah reports is set.
-      Store(m_ticksHigh, 0);
-      Store(m_ticksLow, 0);
-      Store(m_rolledOver, 1);
+      m_ticksHigh = 0;
+      m_ticksLow = 0;
+      m_rolledOver = 1;
       tick.dayEnded = true;
     }
   }

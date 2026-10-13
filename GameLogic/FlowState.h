@@ -12,8 +12,7 @@ namespace Elite
 {
 
 /// Where the game is, at the title, docked or in flight, and the frame's clock, which several subsystems write. Its members are the 1987
-/// data segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData, in its counted
-/// block.
+/// data segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData.
 struct FlowState
 {
   FlowState() noexcept = default;

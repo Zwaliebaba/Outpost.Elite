@@ -17,10 +17,7 @@ namespace Elite
 /// interrupt controller, the keyboard, the game port, the mouse, the CGA, the BIOS and DOS, named for what it does rather than
 /// by port or vector. Since D33 every operation is the native Platform's (ADR-021), and the routines did not change.
 ///
-/// Each operation counts the port writes the original's own sequence of port accesses made, in the BIOS's and DOS's services as
-/// in the game's own OUTs, and every byte of memory a service changes is counted where it lies, as paced time compared them at
-/// a loop's turn (ADR-015); since the waits are declared (ADR-039), nothing reads the counts. Each service operation returns what the service gives as a
-/// small typed result. Hardware holds no state of its own: a device's state is the platform's.
+/// Each service operation returns what the service gives as a small typed result. Hardware holds no state of its own: a device's state is the platform's.
 class Hardware
 {
 public:

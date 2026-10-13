@@ -13,7 +13,7 @@ namespace Elite
 
 /// What drawing draws into and with, which several subsystems write: the space view buffer, the colour, the paper, the sun's fringe, the
 /// text attribute, the screen's layout and the masking device's background. Its members are the 1987 data segment's, by their names, in
-/// their order there (Design/DataPartition.tsv); the GameState holds it in GameData, in its counted block.
+/// their order there (Design/DataPartition.tsv); the GameState holds it in GameData.
 struct DrawingState
 {
   DrawingState() noexcept = default;

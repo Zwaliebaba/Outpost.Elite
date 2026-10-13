@@ -359,25 +359,13 @@ public:
     m_instructionCycles += _cycles;
   }
 
-  /// _count port writes the original made, for paced time's turn.
-  void NotePortWrites(std::uint32_t _count) noexcept
-  {
-    m_portWrites += _count;
-  }
-
-  /// The bytes of memory that writes changed since power-on: the GameState's, the BIOS's data area's and the vector table's.
-  [[nodiscard]] std::uint64_t MemoryChanges() const noexcept;
-
-  /// The port writes the original made since power-on.
-  [[nodiscard]] std::uint64_t PortWrites() const noexcept;
-
   /// Interrupt _vector's entry in the vector table.
   [[nodiscard]] FarAddress InterruptVector(std::uint8_t _vector) const noexcept
   {
     return m_vectors[_vector];
   }
 
-  /// Interrupt _vector's entry set to _handler, each byte that changes counted.
+  /// Interrupt _vector's entry set to _handler.
   void SetInterruptVector(std::uint8_t _vector, FarAddress _handler) noexcept;
 
   /// Interrupt _vector's entry as the BIOS and DOS set it at power-on, whatever it holds now: the handler a program that
@@ -437,8 +425,6 @@ private:
 
   std::array<FarAddress, 256> m_vectors{};
   std::array<FarAddress, 256> m_powerOnVectors{};
-  std::uint64_t m_vectorChanges = 0;
-  std::uint64_t m_portWrites = 0;
   std::uint16_t m_flags;
   std::string m_commandTail;
 

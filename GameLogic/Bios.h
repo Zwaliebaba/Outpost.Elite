@@ -22,10 +22,7 @@ struct BiosClock
 /// Machine::Firmware the game reads, until D33, with the data area no longer memory: its fields are this class's, and nothing
 /// reads them but the services.
 ///
-/// What the services write is counted as the emulated PC's memory counted it: ChangeCount is the bytes of the data area a
-/// write changed, as Machine::Memory counted a byte write that changed its byte, and PortWrites the OUTs the ROM's code made,
-/// each a write of the CGA's ports; both go into paced time's turn (Platform). Video memory is the GameState's, written
-/// through it, which counts its own changes.
+/// Video memory is the GameState's, written through it.
 ///
 /// The data area starts as the BIOS leaves it for DOS, in video mode 3 (80x25 colour), as SetMode(3) leaves it, with the
 /// tick count _timerTicks: the time of day DOS was given. The keyboard buffer is not kept: the ROM's int 9 handler discards
@@ -48,8 +45,7 @@ public:
   };
 
   /// _state's video memory is what the services clear and write, and _cga the card they program: both must outlive this.
-  /// The data area is set as POST leaves it, and then video mode 3 is set on the card, as the PC's start-up leaves it, with
-  /// its writes counted like any other.
+  /// The data area is set as POST leaves it, and then video mode 3 is set on the card, as the PC's start-up leaves it.
   Bios(GameState& _state, Cga& _cga, std::uint32_t _timerTicks);
   Bios(const Bios&) = delete;
   Bios& operator=(const Bios&) = delete;
@@ -86,35 +82,16 @@ public:
   /// The tick count.
   [[nodiscard]] std::uint32_t Ticks() const noexcept;
 
-  /// The bytes of the data area that the services' writes changed, since construction.
-  [[nodiscard]] std::uint64_t ChangeCount() const noexcept
-  {
-    return m_changes;
-  }
-
-  /// The port writes the services made, since construction.
-  [[nodiscard]] std::uint64_t PortWrites() const noexcept
-  {
-    return m_portWrites;
-  }
-
   /// The BIOS tick count for a time of day: the PC's timer runs at 14.31818 MHz / 12 / 65,536, about 18.2 Hz.
   [[nodiscard]] static std::uint32_t TimerTicksAt(std::uint32_t _centisecondsSinceMidnight) noexcept;
 
 private:
   static constexpr std::size_t CURSOR_PAGES = 8;
 
-  // A write to the data area, counting each byte it changes.
-  void Store(std::uint8_t& _field, std::uint8_t _value) noexcept;
-  void Store(std::uint16_t& _field, std::uint16_t _value) noexcept;
-
-  void WriteCrtc(std::uint8_t _register, std::uint8_t _value) noexcept;
   void SetCursor(std::uint8_t _row, std::uint8_t _column) noexcept;
 
   GameState& m_state;
   Cga& m_cga;
-  std::uint64_t m_changes = 0;
-  std::uint64_t m_portWrites = 0;
 
   // The data area at 0040:0000, with the IBM PC Technical Reference's names.
   std::uint8_t m_videoMode = 0;                                // CRT_MODE, 49h

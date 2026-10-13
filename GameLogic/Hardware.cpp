@@ -31,26 +31,22 @@ std::uint8_t Hardware::SystemControl()
 
 void Hardware::SetSystemControl(std::uint8_t _value)
 {
-  m_platform.NotePortWrites(1);
   m_platform.KeyboardController().SetSystemControl(_value);
 }
 
 void Hardware::SetToneDivisor(std::uint16_t _divisor)
 {
-  m_platform.NotePortWrites(3);
   m_platform.Timer().Program(TIMER_CHANNEL_2_SQUARE_WAVE, _divisor);
 }
 
 void Hardware::SetTickDivisor(std::uint8_t _mode, std::uint16_t _divisor)
 {
-  m_platform.NotePortWrites(3);
   m_platform.Timer().Program(_mode, _divisor);
   m_platform.TakeDueInterrupts();
 }
 
 void Hardware::EndOfInterrupt()
 {
-  m_platform.NotePortWrites(1);
   m_platform.Interrupts().EndOfInterrupt();
   m_platform.TakeDueInterrupts();
 }
@@ -86,7 +82,6 @@ void Hardware::AcknowledgeKeyboard()
   const auto pulse = static_cast<std::uint8_t>(keyboard.SystemControl() | KEYBOARD_ACKNOWLEDGE);
   keyboard.SetSystemControl(pulse);
   keyboard.SetSystemControl(static_cast<std::uint8_t>(pulse & ~KEYBOARD_ACKNOWLEDGE));
-  m_platform.NotePortWrites(2);
 }
 
 std::uint8_t Hardware::GamePortButtons()
@@ -159,19 +154,16 @@ std::uint8_t Hardware::CgaStatus()
 
 void Hardware::SetColorSelect(std::uint8_t _value)
 {
-  m_platform.NotePortWrites(1);
   m_platform.Video().SetColorSelect(_value);
 }
 
 void Hardware::SetCursorAddressHigh(std::uint8_t _value)
 {
-  m_platform.NotePortWrites(2);
   m_platform.Video().WriteCrtc(CRTC_CURSOR_ADDRESS_HIGH, _value);
 }
 
 void Hardware::SetModeControl(std::uint8_t _value)
 {
-  m_platform.NotePortWrites(1);
   m_platform.Video().SetModeControl(_value);
 }
 
@@ -182,7 +174,6 @@ void Hardware::SelectPalette(std::uint8_t _palette)
 
 void Hardware::FireGamePort()
 {
-  m_platform.NotePortWrites(1);
   m_platform.Joystick().Fire();
 }
 

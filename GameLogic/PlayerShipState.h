@@ -13,7 +13,7 @@ namespace Elite
 
 /// The player's ship, which several subsystems write: its energy, shields, temperature, altitude, angles and rates, velocity, missiles,
 /// laser, ECM, escape pod, view and docking computer, and whether it is dead. Its members are the 1987 data segment's, by their names, in
-/// their order there (Design/DataPartition.tsv); the GameState holds it in GameData, in its counted block.
+/// their order there (Design/DataPartition.tsv); the GameState holds it in GameData.
 struct PlayerShipState
 {
   PlayerShipState() noexcept = default;

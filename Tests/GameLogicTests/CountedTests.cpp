@@ -46,90 +46,68 @@ void StoreSeven(Byte& _field)
 TEST_CLASS(CountedTests)
 {
 public:
-  // A member's write counts in its GameState's change count when it changes the value, once for a byte or a word, and a write of the value
-  // already there counts nothing; the bytes are the 8088's, at the member's place in GameData. A GameState on the stack keeps its data
-  // segment on the heap, so its members find its count.
-  TEST_METHOD(AWriteCountsWhenItChangesTheValue)
+  // A member's write stores its bytes as the 8088's, at the member's place in GameData. A GameState on the stack keeps GameData on the
+  // heap.
+  TEST_METHOD(AWriteStoresTheBytesAtTheMembersPlace)
   {
     Elite::GameState state;
     Elite::GameData& data = state.Data();
-    const std::uint64_t changes = state.ChangeCount();
 
     data.commander.fuel = 70;
-    Assert::AreEqual(changes + 1, state.ChangeCount(), L"a byte that changes");
-    data.commander.fuel = 70;
-    Assert::AreEqual(changes + 1, state.ChangeCount(), L"the same byte again");
     Assert::AreEqual(70u, std::uint32_t{state.DataBytes()[GAME_DATA_OFFSET(commander.fuel)]}, L"at its place in GameData");
 
     data.playerShip.playerEnergy = 0x1234;
-    Assert::AreEqual(changes + 2, state.ChangeCount(), L"a word that changes counts once");
-    data.playerShip.playerEnergy = 0x1234;
-    Assert::AreEqual(changes + 2, state.ChangeCount(), L"the same word again");
     const std::size_t energy = GAME_DATA_OFFSET(playerShip.playerEnergy);
     Assert::AreEqual(0x34u, std::uint32_t{state.DataBytes()[energy]}, L"its low byte first in GameData");
     Assert::AreEqual(0x12u, std::uint32_t{state.DataBytes()[energy + 1]}, L"then its high byte");
 
     const std::uint32_t read = std::uint32_t{data.commander.fuel} + data.playerShip.playerEnergy;
     Assert::AreEqual(70u + 0x1234u, read);
-    Assert::AreEqual(changes + 2, state.ChangeCount(), L"a read counts nothing");
 
+    data.commander.legalStatus = 0x40;
     data.commander.fuel = std::uint8_t{data.commander.legalStatus};
-    Assert::AreEqual(changes + 3, state.ChangeCount(), L"a copy from another member, through its value");
+    Assert::AreEqual(0x40u, std::uint32_t{state.DataBytes()[GAME_DATA_OFFSET(commander.fuel)]},
+                     L"a copy from another member, through its value");
   }
 
-  // Every way to reach a member counts: an array's element, a table's, a nested struct's member, a word's high byte, a slot's field by name and by
-  // its number, a buffer's byte, a helper's reference, and video memory.
-  TEST_METHOD(EveryWritePathCounts)
+  // Every way to reach a member writes the state's bytes: an array's element, a table's, a nested struct's member, a word's high byte, a
+  // slot's field by name and by its number, a buffer's byte, a helper's reference, and video memory.
+  TEST_METHOD(EveryWritePathReachesTheState)
   {
     Elite::GameState state;
     Elite::GameData& data = state.Data();
-    std::uint64_t changes = state.ChangeCount();
-    const auto counted = [&state, &changes](const wchar_t* _what)
-    {
-      Assert::AreEqual(changes + 1, state.ChangeCount(), _what);
-      changes = state.ChangeCount();
-    };
+    const auto at = [&state](std::size_t _offset) { return std::uint32_t{state.DataBytes()[_offset]}; };
 
     data.input.keyBuffer[3] = 0x42;
-    counted(L"an array's element");
-    Assert::AreEqual(0x42u, std::uint32_t{state.DataBytes()[GAME_DATA_OFFSET(input.keyBuffer) + 3]});
+    Assert::AreEqual(0x42u, at(GAME_DATA_OFFSET(input.keyBuffer) + 3), L"an array's element");
     data.flight.stardust[2][5] = 9;
-    counted(L"a table's");
+    Assert::AreEqual(9u, std::uint32_t{data.flight.stardust[2][5]}, L"a table's");
     data.commander.cargoHold.cargoAlloysTonnes = 4;
-    counted(L"a nested struct's member");
+    Assert::AreEqual(4u, at(GAME_DATA_OFFSET(commander.cargoHold.cargoAlloysTonnes)), L"a nested struct's member");
     data.galaxy.systemSeed0 = Elite::WithHigh(data.galaxy.systemSeed0, 0x80);
-    counted(L"a word's high byte");
-    Assert::AreEqual(0x80u, std::uint32_t{Elite::SystemY(state)}, L"the byte the original names on its own");
+    Assert::AreEqual(0x80u, std::uint32_t{Elite::SystemY(state)}, L"a word's high byte, the byte the original names on its own");
     data.world.shipSlots[7].flags = 0x21;
-    counted(L"a slot's field");
-    Assert::AreEqual(0x21u, std::uint32_t{state.Slot(Elite::SlotIndex{7}).flags}, L"the same record by its number");
+    Assert::AreEqual(0x21u, std::uint32_t{state.Slot(Elite::SlotIndex{7}).flags}, L"a slot's field, the same record by its number");
     state.Slot(Elite::SlotIndex::Station).yaw = 0x0101;
-    counted(L"a record's word by its number");
-    Assert::AreEqual(0x0101u, std::uint32_t{data.world.shipSlots[2].yaw});
+    Assert::AreEqual(0x0101u, std::uint32_t{data.world.shipSlots[2].yaw}, L"a record's word by its number");
     data.drawing.drawingBuffer[63] = 1;
-    counted(L"a buffer's byte");
+    Assert::AreEqual(1u, at(GAME_DATA_OFFSET(drawing.drawingBuffer) + 63), L"a buffer's byte");
     StoreSeven(data.commander.legalStatus);
-    counted(L"a helper's reference");
-    StoreSeven(data.commander.legalStatus);
-    Assert::AreEqual(changes, state.ChangeCount(), L"which stores the value already there");
+    Assert::AreEqual(7u, at(GAME_DATA_OFFSET(commander.legalStatus)), L"a helper's reference");
     state.SetVideoByte(0x10, 0x20);
-    counted(L"a byte of video memory");
-    state.SetVideoByte(0x10, 0x20);
-    Assert::AreEqual(changes, state.ChangeCount(), L"and the same byte again");
+    Assert::AreEqual(0x20u, std::uint32_t{state.VideoByte(0x10)}, L"a byte of video memory");
   }
 
-  // Each GameState counts its own changes, with nothing shared between them: tests run several games in one process.
-  TEST_METHOD(EachGameStateCountsItsOwn)
+  // Each GameState holds its own state, with nothing shared between them: tests run several games in one process.
+  TEST_METHOD(EachGameStateHoldsItsOwn)
   {
     Elite::GameState first;
     const auto second = std::make_unique<Elite::GameState>();
-    const std::uint64_t firstChanges = first.ChangeCount();
-    const std::uint64_t secondChanges = second->ChangeCount();
     second->Data().commander.fuel = 1;
     second->Data().world.shipSlots[35].detail = 1;
-    Assert::AreEqual(firstChanges, first.ChangeCount(), L"the other's writes are not this one's");
-    Assert::AreEqual(secondChanges + 2, second->ChangeCount());
-    Assert::AreEqual(0u, std::uint32_t{first.Data().commander.fuel});
+    Assert::AreEqual(0u, std::uint32_t{first.Data().commander.fuel}, L"the other's writes are not this one's");
+    Assert::AreEqual(0u, std::uint32_t{first.Data().world.shipSlots[35].detail});
+    Assert::AreEqual(1u, std::uint32_t{second->Data().commander.fuel});
   }
 
   // IndexOf gives a slot's number; a record that is not one of the slots and an offset past video memory are refused (change 3c).

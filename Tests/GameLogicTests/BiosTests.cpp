@@ -24,9 +24,6 @@ constexpr std::array<std::uint8_t, 16> CRTC_80X25 = {0x71, 0x50, 0x5A, 0x0A, 0x1
 constexpr std::array<std::uint8_t, 16> CRTC_GRAPHICS = {0x38, 0x28, 0x2D, 0x0A, 0x7F, 0x06, 0x64, 0x70,
                                                         0x02, 0x01, 0x06, 0x07, 0x00, 0x00, 0x00, 0x00};
 
-// What SET_MODE writes: mode control (video off), the 16 CRTC registers by index and value, mode control, colour select.
-constexpr std::uint64_t MODE_SET_PORT_WRITES = 1 + 16 * 2 + 1 + 1;
-
 // The ticks at noon, the default start moment: 43,200 s at 1,193,181.67 / 65,536 ticks a second.
 constexpr std::uint32_t NOON_TICKS = 0x000C0059;
 
@@ -95,8 +92,7 @@ private:
 } // namespace
 
 // The BIOS's services and its data area (Bios, D33): the emulated PC's int 10h, 16h and 1Ah, and the data area they keep,
-// which is no longer memory. What the ROM's code wrote is counted as the emulated PC counted it: the data area's bytes a
-// write changed, and the OUTs it made.
+// which is no longer memory.
 TEST_CLASS(BiosTests)
 {
 public:
@@ -118,17 +114,13 @@ public:
   {
     BiosRig rig;
     rig.FillVideo(0x55);
-    const std::uint64_t writes = rig.Services().PortWrites();
-    const std::uint64_t changes = rig.Services().ChangeCount();
 
     Assert::IsTrue(rig.Services().SetMode(4));
 
-    Assert::AreEqual(MODE_SET_PORT_WRITES, rig.Services().PortWrites() - writes, L"the CGA register writes");
     Assert::IsTrue(rig.CrtcHolds(CRTC_GRAPHICS), L"the graphics CRTC table");
     Assert::AreEqual(0x2Au, std::uint32_t{rig.Card().ModeControl()});
     Assert::AreEqual(0x30u, std::uint32_t{rig.Card().ColorSelect()});
     Assert::IsTrue(rig.VideoHolds(0x00, 0x00), L"all 16 KiB cleared to zero");
-    Assert::IsTrue(rig.Services().ChangeCount() > changes, L"the data area's mode, columns and page size, counted");
   }
 
   // SetTextMode (CS:7D31): mode 1 for the docked screens.
@@ -138,11 +130,9 @@ public:
     rig.Services().WriteTeletype('O');
     rig.Services().WriteTeletype('K');
     rig.FillVideo(0x55);
-    const std::uint64_t writes = rig.Services().PortWrites();
 
     Assert::IsTrue(rig.Services().SetMode(1));
 
-    Assert::AreEqual(MODE_SET_PORT_WRITES, rig.Services().PortWrites() - writes, L"the CGA register writes");
     Assert::IsTrue(rig.CrtcHolds(CRTC_40X25), L"the 40x25 CRTC table");
     Assert::AreEqual(0x28u, std::uint32_t{rig.Card().ModeControl()});
     Assert::IsTrue(rig.VideoHolds(0x20, 0x07), L"spaces, light grey on black");
@@ -153,11 +143,9 @@ public:
   {
     BiosRig rig;
     Assert::IsTrue(rig.Services().SetMode(4));
-    const std::uint64_t writes = rig.Services().PortWrites();
 
     rig.Services().SelectPalette(0);
     Assert::AreEqual(0x10u, std::uint32_t{rig.Card().ColorSelect()}, L"palette 0: bit 5 cleared");
-    Assert::AreEqual(std::uint64_t{1}, rig.Services().PortWrites() - writes, L"one OUT to 3D9h");
     rig.Services().SelectPalette(1);
     Assert::AreEqual(0x30u, std::uint32_t{rig.Card().ColorSelect()}, L"palette 1: bit 5 set again");
   }
@@ -166,12 +154,9 @@ public:
   TEST_METHOD(UnsupportedModeChangesNothing)
   {
     BiosRig rig;
-    const std::uint64_t writes = rig.Services().PortWrites();
-    const std::uint64_t changes = rig.Services().ChangeCount();
     Assert::IsFalse(rig.Services().SetMode(7));
-    Assert::AreEqual(writes, rig.Services().PortWrites());
-    Assert::AreEqual(changes, rig.Services().ChangeCount());
     Assert::IsTrue(rig.CrtcHolds(CRTC_80X25), L"still mode 3");
+    Assert::IsTrue(rig.VideoHolds(0x20, 0x07), L"and its spaces, light grey on black");
   }
 
   // RestoreTimerInterrupt (CS:016B) reads the count and sets it back a day when it is over one. The timer handler's count

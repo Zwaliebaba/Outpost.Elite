@@ -13,7 +13,7 @@ namespace Elite
 {
 
 /// The objects in space: the 36 ship slots (SpaceObject), and how many of them are in use. Its members are the 1987 data segment's, by
-/// their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData, in its counted block.
+/// their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData.
 struct WorldState
 {
   WorldState() noexcept = default;

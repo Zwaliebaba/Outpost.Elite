@@ -35,7 +35,7 @@ using SpaceViewLayer = std::array<std::uint8_t, std::size_t{SPACE_VIEW_WIDTH_PIX
 ///
 /// It watches the drawing buffer round each object TransformAndDrawObjects draws and round each thing the renderer draws
 /// (BeginObject, EndObject), and reads the finished view from video memory once FinishSpaceViewFrame has copied it (Finish). It
-/// reads the game's state and writes none of it: it is the platform's, outside the counted state, as the flight snapshot is
+/// reads the game's state and writes none of it: it is the platform's, outside the game's state, as the flight snapshot is
 /// (ADR-032).
 class SpaceViewLayers
 {

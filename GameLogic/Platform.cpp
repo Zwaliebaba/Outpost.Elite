@@ -371,10 +371,6 @@ void Platform::RunHandler(FarAddress _handler)
 
 void Platform::SetInterruptVector(std::uint8_t _vector, FarAddress _handler) noexcept
 {
-  const FarAddress old = m_vectors[_vector];
-  const auto changed = [](std::uint16_t _from, std::uint16_t _to)
-  { return static_cast<std::uint64_t>(((_from ^ _to) & 0x00FF) != 0) + static_cast<std::uint64_t>(((_from ^ _to) & 0xFF00) != 0); };
-  m_vectorChanges += changed(old.offset, _handler.offset) + changed(old.segment, _handler.segment);
   m_vectors[_vector] = _handler;
 }
 
@@ -436,7 +432,6 @@ void Platform::RunBiosTimerHandler()
   m_instructionCycles += SOFTWARE_INTERRUPT + INTERRUPT_RETURN;
   // OUT 20h,20h.
   m_controller.EndOfInterrupt();
-  ++m_portWrites;
   m_instructionCycles += MOVE_IMMEDIATE + PORT_ACCESS + 2 * POP_REGISTER + INTERRUPT_RETURN;
 }
 
@@ -449,7 +444,6 @@ void Platform::RunBiosKeyboardHandler()
   m_keyboard.SetSystemControl(cleared);
   m_keyboard.SetSystemControl(static_cast<std::uint8_t>(cleared & ~KEYBOARD_CLEAR));
   m_controller.EndOfInterrupt();
-  m_portWrites += 3;
   m_instructionCycles += STI + PUSH_REGISTER + 2 * PORT_ACCESS + LOGIC_IMMEDIATE + PORT_ACCESS + LOGIC_IMMEDIATE + PORT_ACCESS +
                          MOVE_IMMEDIATE + PORT_ACCESS + POP_REGISTER + INTERRUPT_RETURN;
 }
@@ -507,16 +501,6 @@ void Platform::Spend(Cycles _cycles)
     }
     TakeDueInterrupts();
   }
-}
-
-std::uint64_t Platform::MemoryChanges() const noexcept
-{
-  return m_state.ChangeCount() + m_bios.ChangeCount() + m_vectorChanges;
-}
-
-std::uint64_t Platform::PortWrites() const noexcept
-{
-  return m_portWrites + m_bios.PortWrites();
 }
 
 // ── The picture ──

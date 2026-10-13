@@ -12,7 +12,7 @@ namespace Elite
 {
 
 /// The keys held, which the keyboard's handler writes and flight clears. Its members are the 1987 data segment's, by their names, in their
-/// order there (Design/DataPartition.tsv); the GameState holds it in GameData, in its counted block.
+/// order there (Design/DataPartition.tsv); the GameState holds it in GameData.
 struct KeyboardState
 {
   KeyboardState() noexcept = default;

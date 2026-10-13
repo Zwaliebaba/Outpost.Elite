@@ -28,19 +28,15 @@ class Game;
 /// not here: they are the platform's (Platform, Hardware), and the segments the game was loaded at are kept for the devices that still take
 /// far addresses.
 ///
-/// Every write counts in one change count (ChangeCount) when it changes what it writes, as the emulated PC's memory did until D33: paced
-/// time compared the count at each turn of a loop, and a turn that changed nothing idled (ADR-015). Since the waits are declared
-/// (ADR-039), nothing reads it. A member of GameData counts its own
-/// writes (Counted): the data segment is in a block of its own, aligned to COUNTED_BLOCK_ALIGNMENT, with the count first, where a member
-/// finds it from its own address. Video memory's writes count in the same count. A read changes nothing and counts nothing.
+/// Until the waits were declared (ADR-039), every write counted in a change count that paced time compared at a loop's turn (ADR-015);
+/// nothing counts now. GameData is on the heap, so a GameState can be anywhere, on the stack too.
 class GameState
 {
 public:
   /// The CGA's video memory, which the reference writes directly.
   static constexpr std::uint16_t VIDEO_SEGMENT = 0xB800;
 
-  /// Allocates the data segment's block, zeroed, with a count of 0. The block is on the heap, so a GameState can be anywhere,
-  /// on the stack too.
+  /// Allocates GameData, zeroed.
   GameState();
   GameState(const GameState&) = delete;
   GameState& operator=(const GameState&) = delete;
@@ -55,15 +51,15 @@ public:
     return m_dataSegment;
   }
 
-  /// The game's state by member: `_state.Data().commander.fuel`. Every member counts its own changes (Counted).
+  /// The game's state by member: `_state.Data().commander.fuel`.
   [[nodiscard]] GameData& Data() noexcept
   {
-    return m_block->data;
+    return *m_data;
   }
 
   [[nodiscard]] const GameData& Data() const noexcept
   {
-    return m_block->data;
+    return *m_data;
   }
 
   /// The slot of shipSlots numbered _slot (SpaceObject.h). A number past the last slot throws std::out_of_range.
@@ -96,10 +92,10 @@ public:
     return m_video[CheckedVideo(_offset)];
   }
 
-  /// _value into the byte at B800:_offset, counted when it changes it.
+  /// _value into the byte at B800:_offset.
   void SetVideoByte(std::uint16_t _offset, std::uint8_t _value)
   {
-    Store(m_video[CheckedVideo(_offset)], _value);
+    m_video[CheckedVideo(_offset)] = _value;
   }
 
   /// _value into the word at B800:_offset, low byte first; at offset FFFFh its high byte is at offset 0, as on the 8088.
@@ -112,7 +108,7 @@ public:
   /// GameData's bytes, the game's state: what the state digest hashes (StateDigest.h).
   [[nodiscard]] std::span<const std::uint8_t, sizeof(GameData)> DataBytes() const noexcept
   {
-    return std::span<const std::uint8_t, sizeof(GameData)>(reinterpret_cast<const std::uint8_t*>(&m_block->data), sizeof(GameData));
+    return std::span<const std::uint8_t, sizeof(GameData)>(reinterpret_cast<const std::uint8_t*>(m_data.get()), sizeof(GameData));
   }
 
   /// The CGA's 16 KiB of video memory.
@@ -121,26 +117,18 @@ public:
     return m_video;
   }
 
-  /// Writes that changed a byte, counted since construction. A write of the value already there is not counted, so a loop
-  /// that only stores what it found leaves the count alone: paced time uses that to tell a program that is waiting from one
-  /// that is working (ADR-015).
-  [[nodiscard]] std::uint64_t ChangeCount() const noexcept
-  {
-    return m_block->changes;
-  }
-
 private:
   // Only a Game loads a GameState.
   friend class Game;
 
-  /// Takes the game's state as DOS would have loaded the reference with its code segment at _codeSegment, uncounted: _state,
+  /// Takes the game's state as DOS would have loaded the reference with its code segment at _codeSegment: _state,
   /// GameData's bytes as ReferenceLoadImage lays them out, from the data segment's image. Video memory is left as it is. The
   /// data segment is paragraph DATA_SEGMENT_PARAGRAPH on from _codeSegment.
   void Load(std::uint16_t _codeSegment, std::span<const std::uint8_t> _state) noexcept;
 
   [[nodiscard]] std::span<std::uint8_t, sizeof(GameData)> DataStorage() noexcept
   {
-    return std::span<std::uint8_t, sizeof(GameData)>(reinterpret_cast<std::uint8_t*>(&m_block->data), sizeof(GameData));
+    return std::span<std::uint8_t, sizeof(GameData)>(reinterpret_cast<std::uint8_t*>(m_data.get()), sizeof(GameData));
   }
 
   /// _offset, when it is in video memory; otherwise throws std::out_of_range.
@@ -169,32 +157,7 @@ private:
   /// Throws the std::out_of_range of a slot number past the last slot.
   [[noreturn]] static void RefuseSlot();
 
-  /// The game's state and its change count, in storage aligned to COUNTED_BLOCK_ALIGNMENT, so that a member of GameData finds
-  /// the count by rounding its own address down (ChangeCountAt).
-  struct Block
-  {
-    std::uint64_t changes;
-    GameData data;
-  };
-
-  static_assert(sizeof(Block) <= COUNTED_BLOCK_ALIGNMENT, "a member's address rounded down must find its own block's start");
-
-  /// Frees a Block from its aligned storage.
-  struct FreeBlock
-  {
-    void operator()(Block* _block) const noexcept;
-  };
-
-  void Store(std::uint8_t& _byte, std::uint8_t _value) noexcept
-  {
-    if (_byte != _value)
-    {
-      _byte = _value;
-      ++m_block->changes;
-    }
-  }
-
-  std::unique_ptr<Block, FreeBlock> m_block;
+  std::unique_ptr<GameData> m_data;
   std::array<std::uint8_t, Cga::VIDEO_MEMORY_BYTES> m_video{};
   std::uint16_t m_codeSegment = 0;
   std::uint16_t m_dataSegment = 0;
@@ -212,8 +175,7 @@ private:
   return static_cast<std::uint16_t>(_bytes[_at] | (_bytes[_at + 1] << 8));
 }
 
-/// _value into _bytes[_at] and _bytes[_at + 1], low byte first, each counted when it changes, as GameState::SetWord writes a
-/// word.
+/// _value into _bytes[_at] and _bytes[_at + 1], low byte first, as GameState::SetVideoWord writes a word.
 inline void SetWordIn(std::span<Counted<std::uint8_t>> _bytes, std::size_t _at, std::uint16_t _value) noexcept
 {
   _bytes[_at] = static_cast<std::uint8_t>(_value & 0xFF);
@@ -229,7 +191,7 @@ inline void SetWordIn(std::span<Counted<std::uint8_t>> _bytes, std::size_t _at, 
 }
 
 /// ADD byte,_value / JAE / MOV byte,0FFh on _field: the sum written, and FFh over it on a carry. Those are two writes, as the
-/// original's ADD and MOV are, each counted when it changes the byte (ADR-015).
+/// original's ADD and MOV are.
 inline void AddSaturating(Counted<std::uint8_t>& _field, std::uint8_t _value)
 {
   const unsigned sum = _field + unsigned{_value};

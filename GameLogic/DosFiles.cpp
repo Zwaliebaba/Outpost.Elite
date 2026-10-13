@@ -284,7 +284,7 @@ DosAnswer DosFiles::Read(std::uint16_t _handle, std::span<Counted<std::uint8_t>>
   {
     return Fail(error);
   }
-  // As the emulated DOS laid them down: a byte at a time, from the buffer's first, each counted when it changes.
+  // As the emulated DOS laid them down: a byte at a time, from the buffer's first.
   for (std::uint32_t index = 0; index < count; ++index)
   {
     _buffer[index] = buffer[index];

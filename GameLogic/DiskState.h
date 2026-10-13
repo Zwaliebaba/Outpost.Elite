@@ -12,7 +12,7 @@ namespace Elite
 {
 
 /// The disk operation's error and its file, which saving and loading, the start-up and the screenshot share. Its members are the 1987 data
-/// segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData, in its counted block.
+/// segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData.
 struct DiskState
 {
   DiskState() noexcept = default;

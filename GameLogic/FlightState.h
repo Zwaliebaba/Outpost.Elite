@@ -14,8 +14,7 @@ namespace Elite
 {
 
 /// What Flight.cpp, alone, writes of the game's state (D38), and its own: read elsewhere at most, never written. Its members are the 1987
-/// data segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData, in its counted
-/// block.
+/// data segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData.
 struct FlightState
 {
   FlightState() noexcept = default;

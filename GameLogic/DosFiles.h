@@ -58,10 +58,8 @@ struct DosFileAttributes
 ///
 /// Where the original hands DOS an address in DS:DX, a call takes what is there (D38): the name, up to its NUL, or the buffer, a
 /// span of the member that holds it; and the transfer area is a span of its member too. A byte a call writes is a Counted of
-/// the game's state, so every byte it changes is counted once and paced time's change count sees it as before (ADR-015 item 5); one outside its
-/// GameState would count into whatever its address rounds down to (ADR-024), so a buffer or a transfer area that is not all in
-/// the game's state throws std::out_of_range, and nothing is written. A call takes no time, writes no port and counts no
-/// instruction cycles, as the emulated DOS's calls did not.
+/// the game's state, and a buffer or a transfer area that is not all in the game's state throws std::out_of_range, and nothing is
+/// written, as it did while the state counted its changes (ADR-024). A call takes no time and counts no instruction cycles, as the emulated DOS's calls did not.
 ///
 /// What the emulated DOS refused as a fault, stopping the run, this refuses by throwing std::logic_error: a close, read or
 /// write on a standard handle (0 to 4), and a write of no bytes. So it refuses a search before the program has set a transfer

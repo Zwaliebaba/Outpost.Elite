@@ -328,7 +328,7 @@ void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_
 void ResetHyperspaceRings(GameState& _state)
 {
   // REP MOVSW within the data segment, a word at a time, SI and DI from the tables' starts: hyperspaceRingStart's bytes into
-  // hyperspaceRings, each counted when it changes, upwards, as the direction flag is clear wherever the game calls it: the only STD,
+  // hyperspaceRings, upwards, as the direction flag is clear wherever the game calls it: the only STD,
   // MaskOutsideTunnel's, has its CLD before the routine returns (change 3c).
   static_assert(sizeof(HyperspaceState::hyperspaceRings) == std::size_t{HYPERSPACE_RING_WORDS} * 2);
   for (std::size_t ring = 0; ring < HYPERSPACE_RING_START.size(); ++ring)

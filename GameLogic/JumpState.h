@@ -12,7 +12,7 @@ namespace Elite
 {
 
 /// The hyperspace and galactic jumps under way, which flight starts and Hyperspace counts down. Its members are the 1987 data segment's, by
-/// their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData, in its counted block.
+/// their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData.
 struct JumpState
 {
   JumpState() noexcept = default;

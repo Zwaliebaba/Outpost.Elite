@@ -13,8 +13,7 @@ namespace Elite
 {
 
 /// The message line, which several subsystems post to: what it shows and for how many frames, and the warning's frames. Its members are the
-/// 1987 data segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData, in its counted
-/// block.
+/// 1987 data segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData.
 struct MessagesState
 {
   MessagesState() noexcept = default;
