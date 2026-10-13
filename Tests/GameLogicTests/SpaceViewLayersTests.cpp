@@ -41,6 +41,10 @@ constexpr std::uint64_t MOST_FRAME_GAP_MILLISECONDS = 250;
 // How far a whole disc of the sun or the planet is from its sphere's projection, in centre and in radius: across the corpus at
 // most 2.45 and 2.14 pixels, from SizePlanet's integer square root and its rounding down, and the sun's fringe (ADR-035).
 constexpr float MOST_DISC_PIXELS = 2.5f;
+// Each tunnel's frames, every one published (D68): the station's twenty (PlayStationTunnel), the hyperspace rings' fifty
+// (PlayHyperspaceTunnel).
+constexpr std::size_t STATION_TUNNEL_FRAMES = 20;
+constexpr std::size_t HYPERSPACE_TUNNEL_FRAMES = 50;
 
 [[nodiscard]] std::string ReadText(const std::filesystem::path& _path)
 {
@@ -92,6 +96,7 @@ struct Seen
   std::size_t titleWordPixels = 0;
   std::size_t wordsFrames = 0; ///< frames of only the game's words: the credits, the pause screen
   std::size_t creditsFrames = 0;
+  std::size_t pictureFrames = 0;  ///< frames of a tunnel, the game's own picture (D68)
   float worstCenterPixels = 0.0f; ///< the furthest a disc's centre was from its sphere's
   float worstRadiusPixels = 0.0f; ///< the furthest a disc's radius was from its sphere's projected radius
   float leastRadiusShare = 1e9f;  ///< a disc's radius over its sphere's projected radius, at least and at most
@@ -298,8 +303,8 @@ void CheckFrame(ReferenceRig& _rig, Elite::FrameImage& _image, Seen& _seen)
   }
   // The game's words (D66): the over layer's pixels no object drew, never the renderer's. On the title's turning ship they are
   // its line's; in a frame of words only, the credits' or the pause screen's, they are all it shows.
-  const bool wordsOnly = snapshot.objectCount == 0 && snapshot.dustCount == 0 && snapshot.sight == Elite::FlightSnapshot::NO_SIGHT &&
-                         !snapshot.titlePlanet.shown;
+  const bool wordsOnly = !snapshot.picture && snapshot.objectCount == 0 && snapshot.dustCount == 0 &&
+                         snapshot.sight == Elite::FlightSnapshot::NO_SIGHT && !snapshot.titlePlanet.shown;
   for (std::size_t row = 0; row < Elite::SPACE_VIEW_HEIGHT_PIXELS; ++row)
   {
     for (std::size_t x = 0; x < Elite::SPACE_VIEW_WIDTH_PIXELS; ++x)
@@ -309,6 +314,11 @@ void CheckFrame(ReferenceRig& _rig, Elite::FrameImage& _image, Seen& _seen)
         return L"frame " + std::to_wstring(_seen.frames) + L", row " + std::to_wstring(row) + L", x " + std::to_wstring(x) + L": " + _what;
       };
       const bool ink = layers.HoldsWords(pixel) && layers.Over()[pixel] != 0;
+      // A tunnel's frame is all the over layer's, as the screen shows it, and none of it words or the renderer's (D68).
+      if (snapshot.picture && (layers.Over()[pixel] == Elite::LAYER_CLEAR || layers.HoldsWords(pixel) || layers.RendererOwns(pixel)))
+      {
+        Assert::Fail(where(L"a tunnel's frame is the game's picture").c_str());
+      }
       if (layers.HoldsWords(pixel) && (layers.Over()[pixel] == Elite::LAYER_CLEAR || layers.RendererOwns(pixel)))
       {
         Assert::Fail(where(L"words are the over layer's").c_str());
@@ -330,6 +340,13 @@ void CheckFrame(ReferenceRig& _rig, Elite::FrameImage& _image, Seen& _seen)
   }
   _seen.wordsFrames += wordsOnly ? 1 : 0;
   _seen.creditsFrames += wordsOnly && snapshot.title ? 1 : 0;
+  if (snapshot.picture)
+  {
+    ++_seen.pictureFrames;
+    Assert::IsTrue(snapshot.objectCount == 0 && snapshot.dustCount == 0 && snapshot.beamCount == 0 &&
+                     snapshot.sight == Elite::FlightSnapshot::NO_SIGHT,
+                   L"a tunnel's frame holds nothing the renderer draws");
+  }
   _seen.dust += snapshot.dustCount;
   _seen.beams += snapshot.beamCount;
   _seen.sights += snapshot.sight != Elite::FlightSnapshot::NO_SIGHT ? 1 : 0;
@@ -520,6 +537,8 @@ public:
     std::vector<bool> hidden(1, false);
     std::vector<std::uint64_t> publishedMilliseconds(1, 0);
     std::vector<bool> titles(1, false);
+    std::size_t tunnelRun = 0;
+    std::vector<std::size_t> tunnelRuns;
     std::uint64_t elapsedMilliseconds = 0;
     for (const Elite::Step& step : steps)
     {
@@ -544,12 +563,26 @@ public:
           hidden.push_back(false);
           publishedMilliseconds.push_back(elapsedMilliseconds);
           titles.push_back(rig.Host().LatestFlightSnapshot().title);
+          // The tunnels' runs of frames, as each ends.
+          if (rig.Host().LatestFlightSnapshot().picture)
+          {
+            ++tunnelRun;
+          }
+          else if (tunnelRun != 0)
+          {
+            tunnelRuns.push_back(tunnelRun);
+            tunnelRun = 0;
+          }
         }
         if (sequence != 0 && !rig.Host().SpaceViewShown())
         {
           hidden.back() = true;
         }
       }
+    }
+    if (tunnelRun != 0)
+    {
+      tunnelRuns.push_back(tunnelRun);
     }
     Assert::IsTrue(seen.frames > 0, L"frames of flight");
     // Between two frames of one flight, or of the title, the screen shows the first until the second: a renderer drawing in its
@@ -571,6 +604,8 @@ public:
     Assert::IsTrue(seen.discs > 0, L"whole discs of the sun or the planet");
     Assert::IsTrue(seen.titleWordPixels > 0, L"the title's words");
     Assert::IsTrue(seen.creditsFrames > 0, L"the credits, published and shown");
+    Assert::IsTrue(std::ranges::contains(tunnelRuns, STATION_TUNNEL_FRAMES), L"the station's tunnel, every frame published");
+    Assert::IsTrue(std::ranges::contains(tunnelRuns, HYPERSPACE_TUNNEL_FRAMES), L"the hyperspace rings, every frame published");
     Assert::IsTrue(seen.worstCenterPixels <= MOST_DISC_PIXELS, L"each disc's centre where its sphere's projects");
     Assert::IsTrue(seen.worstRadiusPixels <= MOST_DISC_PIXELS, L"each disc's radius its sphere's, projected");
     Logger::WriteMessage(("frames " + std::to_string(seen.frames) + ", models " + std::to_string(seen.models) + ", model pixels " +
@@ -578,9 +613,9 @@ public:
                           std::to_string(seen.overPixels) + ", renderer's " + std::to_string(seen.rendererPixels) + ", dust " +
                           std::to_string(seen.dust) + ", beams " + std::to_string(seen.beams) + ", sights " + std::to_string(seen.sights) +
                           ", discs " + std::to_string(seen.discs) + ", words " + std::to_string(seen.wordPixels) + ", frames of words " +
-                          std::to_string(seen.wordsFrames) + ", centre off " + std::to_string(seen.worstCenterPixels) + ", radius off " +
-                          std::to_string(seen.worstRadiusPixels) + ", radius share " + std::to_string(seen.leastRadiusShare) + "-" +
-                          std::to_string(seen.mostRadiusShare))
+                          std::to_string(seen.wordsFrames) + ", frames of tunnels " + std::to_string(seen.pictureFrames) + ", centre off " +
+                          std::to_string(seen.worstCenterPixels) + ", radius off " + std::to_string(seen.worstRadiusPixels) +
+                          ", radius share " + std::to_string(seen.leastRadiusShare) + "-" + std::to_string(seen.mostRadiusShare))
                            .c_str());
   }
 

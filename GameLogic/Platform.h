@@ -241,6 +241,10 @@ public:
   /// before it (ContinueFrom), which becomes the previous.
   void PublishFlightSnapshot(const FlightSnapshot& _snapshot, bool _continues) noexcept;
 
+  /// _snapshot published as the latest frame of the game's own picture of the view, a tunnel's (D68): as PublishFlightSnapshot
+  /// publishes it, continuing nothing, with the layers holding the whole view as the screen shows it (SpaceViewLayers::FinishPicture).
+  void PublishSpaceViewPicture(const FlightSnapshot& _snapshot) noexcept;
+
   /// The space view's layers as the last published snapshot's frame drew them (ADR-033): what a renderer that draws the ships
   /// itself draws under and over them. PublishFlightSnapshot finishes them and marks each object drawn as a model.
   [[nodiscard]] const SpaceViewLayers& SpaceView() const noexcept

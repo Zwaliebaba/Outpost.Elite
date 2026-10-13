@@ -264,7 +264,7 @@ FlightSnapshot TakeTitleSnapshot(const GameState& _state, std::string_view _mess
   return snapshot;
 }
 
-FlightSnapshot WordsOnly(const FlightSnapshot& _snapshot) noexcept
+FlightSnapshot WithoutScene(const FlightSnapshot& _snapshot) noexcept
 {
   FlightSnapshot snapshot = _snapshot;
   snapshot.objectCount = 0;

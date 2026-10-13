@@ -101,6 +101,12 @@ public:
     m_platform.PublishFlightSnapshot(_snapshot, _continues);
   }
 
+  /// A frame of a tunnel, which the renderer draws nothing of, to the platform as the game's own picture of the view (D68).
+  void PublishSpaceViewPicture(const FlightSnapshot& _snapshot) noexcept
+  {
+    m_platform.PublishSpaceViewPicture(_snapshot);
+  }
+
   /// The space view's layers (ADR-033, ADR-035), which watch the drawing buffer and write no port and no byte of the game's state:
   /// a frame of flight's drawing begins, an object is about to be drawn, the one being drawn is a blueprint's model or the
   /// renderer's to draw, and the object in slot _slot is drawn (SpaceViewLayers).

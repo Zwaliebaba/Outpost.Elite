@@ -37,8 +37,8 @@ public:
   [[nodiscard]] const Engine::SceneFrame* Frame(const Elite::Platform& _platform, const Engine::Rect& _place);
 
   /// The game's words in the frame the screen shows (SpaceViewLayers::HoldsWords), into _canvas over the cockpit, which covers
-  /// none of them (D66): the ink of each, in the screen's colours, at its pixels of the view stretched over _place. None while
-  /// the screen does not show the last frame.
+  /// none of them (D66): each block of lines on a panel in the cockpit's style (D68), and the ink of each, in the screen's
+  /// colours, at its pixels of the view stretched over _place. None while the screen does not show the last frame.
   static void DrawWords(const Elite::Platform& _platform, const Engine::Rect& _place, Engine::Canvas& _canvas);
 
 private:

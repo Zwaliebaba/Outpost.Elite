@@ -172,6 +172,30 @@ void SpaceViewLayers::Finish(const GameState& _state) noexcept
   m_publishedRendererOwned = m_rendererOwned;
   m_publishedOwners = m_owners;
   m_publishedModels = m_models;
+  KeepShown(_state);
+}
+
+void SpaceViewLayers::FinishPicture(const GameState& _state) noexcept
+{
+  const Cga::VideoMemory video = _state.VideoBytes();
+  for (std::size_t row = 0; row < SPACE_VIEW_HEIGHT_PIXELS; ++row)
+  {
+    for (std::size_t x = 0; x < SPACE_VIEW_WIDTH_PIXELS; ++x)
+    {
+      m_publishedOver[row * SPACE_VIEW_WIDTH_PIXELS + x] = PixelOf(&video[VideoRow(row)], x);
+    }
+  }
+  m_publishedWords.reset();
+  m_publishedUnder.fill(LAYER_CLEAR);
+  m_publishedRendererOwned.reset();
+  m_publishedOwners.fill(NO_SLOT);
+  m_publishedModels.reset();
+  KeepShown(_state);
+}
+
+void SpaceViewLayers::KeepShown(const GameState& _state) noexcept
+{
+  const Cga::VideoMemory video = _state.VideoBytes();
   for (std::size_t row = 0; row < SPACE_VIEW_HEIGHT_PIXELS; ++row)
   {
     const auto shown = video.subspan(VideoRow(row), ROW_BYTES);

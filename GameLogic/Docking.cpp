@@ -5,6 +5,7 @@
 #include "Arithmetic.h"
 #include "DockingTables.h"
 #include "Flight.h"
+#include "FlightSnapshot.h"
 #include "Maths.h"
 #include "Scene.h"
 #include "Ships.h"
@@ -525,6 +526,8 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
       backward = false;
     }
     FinishSpaceViewFrame(_state, _hardware);
+    // The frame as the game drew it, for a renderer that shows it in the cockpit (D68).
+    _hardware.PublishSpaceViewPicture(WithoutScene(TakeFlightSnapshot(_state)));
     backward = false;
     WaitTimerTicks(_state, _hardware, TUNNEL_FRAME_TICKS, FIRST_FRAME_WAIT);
     // INC AX / CMP AL,0Bh.
@@ -561,6 +564,7 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
       backward = false;
     }
     FinishSpaceViewFrame(_state, _hardware);
+    _hardware.PublishSpaceViewPicture(WithoutScene(TakeFlightSnapshot(_state)));
     backward = false;
     ++first;
     if (--frames == 0)
