@@ -264,6 +264,16 @@ FlightSnapshot TakeTitleSnapshot(const GameState& _state, std::string_view _mess
   return snapshot;
 }
 
+FlightSnapshot WordsOnly(const FlightSnapshot& _snapshot) noexcept
+{
+  FlightSnapshot snapshot = _snapshot;
+  snapshot.objectCount = 0;
+  snapshot.dustCount = 0;
+  snapshot.sight = FlightSnapshot::NO_SIGHT;
+  snapshot.titlePlanet = SnapshotDisc{};
+  return snapshot;
+}
+
 bool IsSun(const SnapshotObject& _object) noexcept
 {
   return _object.kind == TYPE_SUN;

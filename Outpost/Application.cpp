@@ -204,6 +204,7 @@ int Application::Run(HINSTANCE _instance)
     if (latest.sequence != 0 && platform->SpaceViewShown())
     {
       Cockpit::Draw(latest.dashboard, latest.sight, elapsedMilliseconds, renderer, canvas);
+      SpaceView::DrawWords(*platform, Cockpit::VIEW, canvas);
       presented = renderer.Present({}, COCKPIT_BACKGROUND, spaceView.Frame(*platform, Cockpit::VIEW), &canvas);
     }
     else

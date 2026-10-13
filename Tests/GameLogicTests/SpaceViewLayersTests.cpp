@@ -32,6 +32,8 @@ namespace
 // The replay the layers are held to, every frame of its flight: a fight, with ships drawn as models, the sun and the planet,
 // stardust, beams and the sights.
 constexpr char REPLAY[] = "combat-orerve.replay";
+// One that pauses in flight (D66).
+constexpr char PAUSE_REPLAY[] = "flight-screens.replay";
 constexpr std::uint64_t SLICE_MILLISECONDS = 1; // far less than a frame, so a frame's view is still on the screen
 // Within this of the frame before, a frame follows it in the same flight with nothing drawn between: across the corpus a frame
 // follows the one before within 51 ms, or after 1,085 ms or more where a jump, a death or a screen came between (ADR-033).
@@ -85,7 +87,11 @@ struct Seen
   std::size_t dust = 0;
   std::size_t beams = 0;
   std::size_t sights = 0;
-  std::size_t discs = 0;          ///< the sun's and the planet's discs measured against their spheres
+  std::size_t discs = 0;      ///< the sun's and the planet's discs measured against their spheres
+  std::size_t wordPixels = 0; ///< the game's words' ink (D66)
+  std::size_t titleWordPixels = 0;
+  std::size_t wordsFrames = 0; ///< frames of only the game's words: the credits, the pause screen
+  std::size_t creditsFrames = 0;
   float worstCenterPixels = 0.0f; ///< the furthest a disc's centre was from its sphere's
   float worstRadiusPixels = 0.0f; ///< the furthest a disc's radius was from its sphere's projected radius
   float leastRadiusShare = 1e9f;  ///< a disc's radius over its sphere's projected radius, at least and at most
@@ -217,6 +223,13 @@ void MeasureDisc(const Elite::SpaceViewLayers& _layers, const Elite::FlightSnaps
   _seen.mostRadiusShare = std::max(_seen.mostRadiusShare, radius / projected);
 }
 
+// "Press any key to start game", where the title draws it in the view (PRESS_ANY_KEY_PLACE, 1C05h of the drawing buffer): buffer
+// row 112, the view's 111, from byte 5, pixel 20, 27 characters of 8 pixels across and 8 rows down.
+constexpr std::size_t PRESS_ANY_KEY_ROW = 111;
+constexpr std::size_t PRESS_ANY_KEY_X = 20;
+constexpr std::size_t PRESS_ANY_KEY_PIXELS = std::size_t{27} * 8;
+constexpr std::size_t GLYPH_ROWS = 8;
+
 // The latest frame's layers explain what the screen shows: where the over layer holds a pixel it is the screen's, where a model
 // drew last the renderer's model shows, and everywhere else the screen shows the under layer, or the background, colour 0, where
 // that is clear. And the screen is what the CGA shows of it, in the colours GraphicsColors names.
@@ -283,6 +296,40 @@ void CheckFrame(ReferenceRig& _rig, Elite::FrameImage& _image, Seen& _seen)
       }
     }
   }
+  // The game's words (D66): the over layer's pixels no object drew, never the renderer's. On the title's turning ship they are
+  // its line's; in a frame of words only, the credits' or the pause screen's, they are all it shows.
+  const bool wordsOnly = snapshot.objectCount == 0 && snapshot.dustCount == 0 && snapshot.sight == Elite::FlightSnapshot::NO_SIGHT &&
+                         !snapshot.titlePlanet.shown;
+  for (std::size_t row = 0; row < Elite::SPACE_VIEW_HEIGHT_PIXELS; ++row)
+  {
+    for (std::size_t x = 0; x < Elite::SPACE_VIEW_WIDTH_PIXELS; ++x)
+    {
+      const std::size_t pixel = row * Elite::SPACE_VIEW_WIDTH_PIXELS + x;
+      const auto where = [&_seen, row, x](const wchar_t* _what) {
+        return L"frame " + std::to_wstring(_seen.frames) + L", row " + std::to_wstring(row) + L", x " + std::to_wstring(x) + L": " + _what;
+      };
+      const bool ink = layers.HoldsWords(pixel) && layers.Over()[pixel] != 0;
+      if (layers.HoldsWords(pixel) && (layers.Over()[pixel] == Elite::LAYER_CLEAR || layers.RendererOwns(pixel)))
+      {
+        Assert::Fail(where(L"words are the over layer's").c_str());
+      }
+      if (wordsOnly && ShownPixel(_rig.State(), row, x) != 0 && !ink)
+      {
+        Assert::Fail(where(L"a frame of words shows only its words").c_str());
+      }
+      if (ink && snapshot.title && !wordsOnly)
+      {
+        ++_seen.titleWordPixels;
+        if (row - PRESS_ANY_KEY_ROW >= GLYPH_ROWS || x - PRESS_ANY_KEY_X >= PRESS_ANY_KEY_PIXELS)
+        {
+          Assert::Fail(where(L"the title's words are its line").c_str());
+        }
+      }
+      _seen.wordPixels += ink ? 1 : 0;
+    }
+  }
+  _seen.wordsFrames += wordsOnly ? 1 : 0;
+  _seen.creditsFrames += wordsOnly && snapshot.title ? 1 : 0;
   _seen.dust += snapshot.dustCount;
   _seen.beams += snapshot.beamCount;
   _seen.sights += snapshot.sight != Elite::FlightSnapshot::NO_SIGHT ? 1 : 0;
@@ -434,7 +481,7 @@ public:
         }
         renderers = renderers || row == BACKGROUND_ROW;
         if (layers.Under()[pixel] != under || layers.Over()[pixel] != over || layers.RendererOwns(pixel) != renderers ||
-            layers.OwnerOf(pixel) != owner || ShownPixel(rig.State(), row, x) != drawn ||
+            layers.OwnerOf(pixel) != owner || layers.HoldsWords(pixel) != (row == EARLY_ROW) || ShownPixel(rig.State(), row, x) != drawn ||
             image->At(static_cast<std::uint32_t>(2 * (Elite::SPACE_VIEW_LEFT_PIXELS + x)),
                       static_cast<std::uint32_t>(Elite::SPACE_VIEW_TOP_LINES + row)) != colors[drawn])
         {
@@ -522,16 +569,73 @@ public:
     Assert::IsTrue(seen.titleFrames > 0, L"frames of the title");
     Assert::IsTrue(seen.dust > 0 && seen.beams > 0 && seen.sights > 0 && seen.rendererPixels > 0, L"stardust, beams and the sights");
     Assert::IsTrue(seen.discs > 0, L"whole discs of the sun or the planet");
+    Assert::IsTrue(seen.titleWordPixels > 0, L"the title's words");
+    Assert::IsTrue(seen.creditsFrames > 0, L"the credits, published and shown");
     Assert::IsTrue(seen.worstCenterPixels <= MOST_DISC_PIXELS, L"each disc's centre where its sphere's projects");
     Assert::IsTrue(seen.worstRadiusPixels <= MOST_DISC_PIXELS, L"each disc's radius its sphere's, projected");
     Logger::WriteMessage(("frames " + std::to_string(seen.frames) + ", models " + std::to_string(seen.models) + ", model pixels " +
                           std::to_string(seen.modelPixels) + ", under " + std::to_string(seen.underPixels) + ", over " +
                           std::to_string(seen.overPixels) + ", renderer's " + std::to_string(seen.rendererPixels) + ", dust " +
                           std::to_string(seen.dust) + ", beams " + std::to_string(seen.beams) + ", sights " + std::to_string(seen.sights) +
-                          ", discs " + std::to_string(seen.discs) + ", centre off " + std::to_string(seen.worstCenterPixels) +
-                          ", radius off " + std::to_string(seen.worstRadiusPixels) + ", radius share " +
-                          std::to_string(seen.leastRadiusShare) + "-" + std::to_string(seen.mostRadiusShare))
+                          ", discs " + std::to_string(seen.discs) + ", words " + std::to_string(seen.wordPixels) + ", frames of words " +
+                          std::to_string(seen.wordsFrames) + ", centre off " + std::to_string(seen.worstCenterPixels) + ", radius off " +
+                          std::to_string(seen.worstRadiusPixels) + ", radius share " + std::to_string(seen.leastRadiusShare) + "-" +
+                          std::to_string(seen.mostRadiusShare))
                            .c_str());
+  }
+
+  // The pause screen (D66) is published as a frame of the game's words, checked as the fight's are a millisecond after it was
+  // published, and shown.
+  TEST_METHOD(ThePauseScreenIsAFrameOfWords)
+  {
+    const std::filesystem::path directory = Elite::FindInRepository("Replays");
+    Assert::IsFalse(directory.empty(), L"Replays/ at the repository root");
+    std::vector<Elite::Step> steps;
+    std::string error;
+    Assert::IsTrue(Elite::ParseSteps(ReadText(directory / PAUSE_REPLAY), steps, error), L"the replay parses");
+
+    ReferenceRig rig("SpaceViewPause");
+    Elite::ReplayPlayer player(rig.Host(), rig.State(), rig.Store(), directory);
+    const auto image = std::make_unique<Elite::FrameImage>();
+    Seen seen;
+    std::uint64_t checkedSequence = 0;
+    std::size_t pausedFrames = 0;
+    for (const Elite::Step& step : steps)
+    {
+      Elite::Checkpoint checkpoint;
+      if (step.kind != Elite::StepKind::Wait)
+      {
+        Assert::IsTrue(player.Play(step, checkpoint) == Elite::ExpectedStop(step), L"the step runs");
+        continue;
+      }
+      Elite::Step slice = step;
+      slice.waitMilliseconds = SLICE_MILLISECONDS;
+      for (std::uint64_t waited = 0; waited < step.waitMilliseconds; waited += SLICE_MILLISECONDS)
+      {
+        Assert::IsTrue(player.Play(slice, checkpoint) == Elite::StopReason::Reached, L"the wait runs");
+        const std::uint64_t sequence = rig.Host().LatestFlightSnapshot().sequence;
+        if (sequence != checkedSequence)
+        {
+          checkedSequence = sequence;
+          const bool paused = rig.State().Data().flight.gamePaused != 0;
+          // A frame of flight a screen replaced within the millisecond is not checked, as ADR-035's sweep found; the pause
+          // screen's, which holds no object, is shown.
+          if (!rig.Host().SpaceViewShown())
+          {
+            Assert::IsTrue(rig.Host().LatestFlightSnapshot().objectCount != 0, L"the pause screen shown");
+            continue;
+          }
+          // Of flight's frames, not the credits'. The frame of flight that saw the key is published paused too.
+          const std::size_t flightWords = seen.wordsFrames - seen.creditsFrames;
+          CheckFrame(rig, *image, seen);
+          const bool words = seen.wordsFrames - seen.creditsFrames > flightWords;
+          Assert::IsTrue(!words || paused, L"a frame of words only while paused");
+          pausedFrames += words ? 1 : 0;
+        }
+      }
+    }
+    Assert::IsTrue(pausedFrames > 0 && seen.wordPixels > 0, L"the pause screen's words");
+    Logger::WriteMessage(("paused frames " + std::to_string(pausedFrames) + ", words " + std::to_string(seen.wordPixels)).c_str());
   }
 };
 

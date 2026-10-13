@@ -940,8 +940,12 @@ PauseExit RunPauseOptions(GameState& _state, Hardware& _hardware, bool _backward
 {
   for (;;)
   {
+    // The space view's layers watch the frame (ADR-033), on the menu DrawPauseMenu drew: only the game's words (D66).
+    _hardware.BeginSpaceViewFrame();
     ShowPauseOptions(_state, _hardware);
     PresentSpaceView(_state, _hardware, _backward);
+    // The frame as it was drawn, for a renderer that draws it in the cockpit, the dashboard live as it was left.
+    _hardware.PublishFlightSnapshot(WordsOnly(TakeFlightSnapshot(_state)), false);
     for (;;)
     {
       const std::uint8_t key = WaitForKey(_state, _hardware, PAUSE_KEY_WAIT).scanCode;
