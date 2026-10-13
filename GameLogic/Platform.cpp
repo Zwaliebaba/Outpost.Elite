@@ -69,7 +69,7 @@ struct NativeAbandoned
 {
   const std::uint32_t centiseconds = (std::uint32_t{_moment.hour} * 60u + _moment.minute) * CENTISECONDS_PER_MINUTE +
                                      std::uint32_t{_moment.second} * 100u + _moment.hundredths;
-  return Bios::TimerTicksAt(centiseconds);
+  return TimeOfDay::TicksAt(centiseconds);
 }
 
 } // namespace
@@ -81,7 +81,8 @@ Platform::Platform(GameState& _state, FileStore& _files, const Desc& _desc)
     m_events(m_clock),
     m_gamePort(m_instructionCycles),
     m_cga(m_clock),
-    m_bios(_state, m_cga, TimerTicksAt(_desc.startMoment)),
+    m_day(TimerTicksAt(_desc.startMoment)),
+    m_modes(_state, m_cga),
     m_mouse(_desc.mousePresent),
     m_files(_state, _files, _desc.startMoment),
     m_mouseDriverLoaded(_desc.mousePresent),
@@ -361,7 +362,7 @@ void Platform::RunBiosTimerHandler()
 {
   m_flags = static_cast<std::uint16_t>(m_flags | FLAG_INTERRUPT);
   Cycles cycles = STI + PUSH_SEGMENT + PUSH_REGISTER + MOVE_IMMEDIATE + MOVE_TO_SEGMENT + INCREMENT_MEMORY;
-  const Bios::Tick tick = m_bios.CountTick();
+  const TimeOfDay::Tick tick = m_day.CountTick();
   cycles += tick.carried ? JUMP_NOT_TAKEN + INCREMENT_MEMORY : JUMP_TAKEN;
   cycles += COMPARE_MEMORY;
   if (!tick.dayCheck)

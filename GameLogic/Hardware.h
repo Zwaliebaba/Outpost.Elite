@@ -167,8 +167,8 @@ public:
   /// time (Platform::CountInstructionCycles): the game port's one-shots, which a stick read measures by counting polls.
   void CountInstructionCycles(Cycles _cycles) noexcept;
 
-  /// Int 1Ah AH=0: the BIOS's clock, its rollover flag cleared.
-  [[nodiscard]] BiosClock ReadBiosClock();
+  /// Int 1Ah AH=0: the time of day, its rollover flag cleared.
+  [[nodiscard]] ClockReading ReadTimeOfDay();
 
   // DOS's file services, int 21h: native, on the platform's DosFiles, which answers as the emulated DOS did. Where the original
   // hands DOS an address in DS:DX, a call takes the name there, up to its NUL, or the buffer there, a span of the member that

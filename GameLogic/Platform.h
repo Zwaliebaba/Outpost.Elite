@@ -1,7 +1,6 @@
 // GameLogic/Platform.h
 #pragma once
 
-#include "Bios.h"
 #include "Cga.h"
 #include "DosFiles.h"
 #include "FileStore.h"
@@ -11,8 +10,10 @@
 #include "Scheduler.h"
 #include "SpaceViewLayers.h"
 #include "Speaker.h"
+#include "TimeOfDay.h"
 #include "Timing.h"
 #include "ToneTimer.h"
+#include "VideoModes.h"
 
 #include <array>
 #include <cstddef>
@@ -43,11 +44,11 @@ using NativeRoutine = std::function<void()>;
 /// game uses them, with no processor and no memory map. A de-assembled routine reaches it only through Hardware, which takes
 /// the platform (ADR-014); the game's memory is the GameState's.
 ///
-/// It holds, each the emulated PC's model moved here without its port bus, its registers or its interrupt-vector plumbing:
-/// the clock and the events it waits for, with the two interrupts they request (Scheduler: the tick, the keys and their
-/// requests, ADR-041); the timer's channel 2 (ToneTimer); the system control port; the speaker (Speaker); the game port (GamePort); the mouse driver (Mouse); the CGA (Cga); the BIOS's video
-/// and clock services and its data area (Bios), and its two hardware interrupt handlers; DOS's file services (DosFiles) and its
-/// print-string; the interrupt vector table; and the ROM bytes the game reads.
+/// It holds, each what the game uses of the PC, without its port bus, its registers or its vector table (ADR-041): the clock and
+/// the events it waits for, with the two interrupts they request (Scheduler: the tick, the keys and their requests); the timer's
+/// channel 2 (ToneTimer); the system control port; the speaker (Speaker); the game port (GamePort); the mouse driver (Mouse);
+/// the CGA (Cga); the BIOS's video services (VideoModes), its time of day (TimeOfDay) and its two hardware interrupt handlers;
+/// and DOS's file services (DosFiles) and its print-string.
 ///
 /// Time is the 8088's cycle count, a third of the crystal (Timing.h), and it is paced (ADR-008): the game's work takes no
 /// time. The clock moves only while the game waits, and then straight to the next thing a device will do: the timer's next
@@ -308,10 +309,16 @@ public:
     return m_tone;
   }
 
-  /// The BIOS's services and its data area.
-  [[nodiscard]] Bios& BiosServices() noexcept
+  /// The time of day, which the BIOS's timer handler counts and int 1Ah reads.
+  [[nodiscard]] TimeOfDay& Day() noexcept
   {
-    return m_bios;
+    return m_day;
+  }
+
+  /// Int 10h's video modes, palette and teletype.
+  [[nodiscard]] VideoModes& Modes() noexcept
+  {
+    return m_modes;
   }
 
   /// DOS's file services.
@@ -415,7 +422,8 @@ private:
   SpaceViewLayers m_spaceView;
   std::array<SnapshotBeam, FlightSnapshot::MOST_BEAMS> m_beams{}; // the frame's beams, since BeginSpaceViewFrame
   std::size_t m_beamCount = 0;
-  Bios m_bios;
+  TimeOfDay m_day;
+  VideoModes m_modes;
   Mouse m_mouse;
   DosFiles m_files;
 

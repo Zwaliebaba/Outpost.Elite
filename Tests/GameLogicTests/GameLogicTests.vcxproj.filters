@@ -80,9 +80,6 @@
     <ClCompile Include="AiTests.cpp">
       <Filter>Ai</Filter>
     </ClCompile>
-    <ClCompile Include="BiosTests.cpp">
-      <Filter>Platform</Filter>
-    </ClCompile>
     <ClCompile Include="CgaFontTests.cpp">
       <Filter>Platform</Filter>
     </ClCompile>
@@ -185,11 +182,17 @@
     <ClCompile Include="TextTests.cpp">
       <Filter>Text</Filter>
     </ClCompile>
+    <ClCompile Include="TimeOfDayTests.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
     <ClCompile Include="ToneTimerTests.cpp">
       <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="TwinRigTests.cpp">
       <Filter>Rigs</Filter>
+    </ClCompile>
+    <ClCompile Include="VideoModesTests.cpp">
+      <Filter>Platform</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

@@ -184,7 +184,7 @@ void InstallTimerInterrupt(GameState& _state, Hardware& _hardware)
   _hardware.EnableInterrupts();
 }
 
-BiosClock RestoreTimerInterrupt(GameState& _state, Hardware& _hardware)
+ClockReading RestoreTimerInterrupt(GameState& _state, Hardware& _hardware)
 {
   _hardware.DisableInterrupts();
   // The BIOS's handler put back, as InstallTimerInterrupt found it.
@@ -192,10 +192,10 @@ BiosClock RestoreTimerInterrupt(GameState& _state, Hardware& _hardware)
   _hardware.SetSystemControl(_state.Data().timer.savedSpeakerPort);
   _hardware.SetTickDivisor(0);
   _hardware.EnableInterrupts();
-  return _hardware.ReadBiosClock();
+  return _hardware.ReadTimeOfDay();
 }
 
-std::uint16_t ClockLessADayHigh(const BiosClock& _clock) noexcept
+std::uint16_t ClockLessADayHigh(const ClockReading& _clock) noexcept
 {
   return static_cast<std::uint16_t>((_clock.ticks - TICKS_PER_DAY) >> 16);
 }

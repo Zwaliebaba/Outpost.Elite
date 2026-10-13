@@ -93,9 +93,6 @@
     <ClInclude Include="AudioState.h">
       <Filter>State</Filter>
     </ClInclude>
-    <ClInclude Include="Bios.h">
-      <Filter>Platform</Filter>
-    </ClInclude>
     <ClInclude Include="Cga.h">
       <Filter>Platform</Filter>
     </ClInclude>
@@ -369,6 +366,9 @@
     <ClInclude Include="TextTables.h">
       <Filter>Text</Filter>
     </ClInclude>
+    <ClInclude Include="TimeOfDay.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
     <ClInclude Include="Timer.h">
       <Filter>Timer</Filter>
     </ClInclude>
@@ -387,6 +387,9 @@
     <ClInclude Include="Video.h">
       <Filter>Video</Filter>
     </ClInclude>
+    <ClInclude Include="VideoModes.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
     <ClInclude Include="VideoState.h">
       <Filter>Video</Filter>
     </ClInclude>
@@ -400,9 +403,6 @@
   <ItemGroup>
     <ClCompile Include="Ai.cpp">
       <Filter>Ai</Filter>
-    </ClCompile>
-    <ClCompile Include="Bios.cpp">
-      <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="Cga.cpp">
       <Filter>Platform</Filter>
@@ -533,6 +533,9 @@
     <ClCompile Include="Text.cpp">
       <Filter>Text</Filter>
     </ClCompile>
+    <ClCompile Include="TimeOfDay.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
     <ClCompile Include="Timer.cpp">
       <Filter>Timer</Filter>
     </ClCompile>
@@ -541,6 +544,9 @@
     </ClCompile>
     <ClCompile Include="Video.cpp">
       <Filter>Video</Filter>
+    </ClCompile>
+    <ClCompile Include="VideoModes.cpp">
+      <Filter>Platform</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

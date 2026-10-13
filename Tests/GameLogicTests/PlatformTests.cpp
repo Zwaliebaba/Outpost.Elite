@@ -1,6 +1,6 @@
 #include "pch.h"
 
-#include "Bios.h"
+#include "TimeOfDay.h"
 #include "Cga.h"
 #include "Hardware.h"
 #include "Input.h"
@@ -44,8 +44,8 @@ void WaitForEver(Elite::Hardware& _hardware)
 void WaitForTick(PlatformRig& _rig)
 {
   _rig.Native().EnableInterrupts();
-  const std::uint32_t ticks = _rig.Host().BiosServices().Ticks();
-  while (_rig.Host().BiosServices().Ticks() == ticks)
+  const std::uint32_t ticks = _rig.Host().Day().Ticks();
+  while (_rig.Host().Day().Ticks() == ticks)
   {
     _rig.Native().Wait();
   }
@@ -87,12 +87,12 @@ public:
   {
     PlatformRig rig("PlatformTimerTick");
     rig.Start([&rig] { WaitForEver(rig.Native()); });
-    const std::uint32_t ticks = rig.Host().BiosServices().Ticks();
+    const std::uint32_t ticks = rig.Host().Day().Ticks();
 
     Assert::IsTrue(rig.Host().RunUntil(262'000) == Elite::StopReason::Reached);
-    Assert::AreEqual(ticks, rig.Host().BiosServices().Ticks(), L"not yet");
+    Assert::AreEqual(ticks, rig.Host().Day().Ticks(), L"not yet");
     Assert::IsTrue(rig.Host().RunUntil(2 * FIRST_TICK + 1'000) == Elite::StopReason::Reached);
-    Assert::AreEqual(ticks + 2, rig.Host().BiosServices().Ticks(), L"two ticks, so the first was ended");
+    Assert::AreEqual(ticks + 2, rig.Host().Day().Ticks(), L"two ticks, so the first was ended");
     Assert::AreEqual(std::uint64_t{2}, rig.Host().InterruptsTaken());
   }
 
@@ -260,7 +260,7 @@ public:
                                 enabledInside = enabledInside || rig.Host().InterruptsEnabled();
                                 rig.Native().EndOfInterrupt();
                               });
-    const std::uint32_t ticks = rig.Host().BiosServices().Ticks();
+    const std::uint32_t ticks = rig.Host().Day().Ticks();
     rig.Start(
       [&rig]
       {
@@ -272,7 +272,7 @@ public:
     Assert::IsFalse(enabledInside, L"IF cleared in the handler");
     Assert::AreEqual(std::uint64_t{3}, rig.Host().InterruptsTaken());
     Assert::AreEqual(3 * Elite::Platform::HARDWARE_INTERRUPT_CYCLES, rig.Host().InstructionCycles(), L"each entry's cycles");
-    Assert::AreEqual(ticks, rig.Host().BiosServices().Ticks(), L"the BIOS's handler did not run");
+    Assert::AreEqual(ticks, rig.Host().Day().Ticks(), L"the BIOS's handler did not run");
     Assert::IsFalse(rig.Host().Events().InService(Elite::Irq::Timer), L"every one ended");
     Assert::AreEqual(std::uint64_t{3}, rig.Host().GameHandler(Elite::Irq::Timer).calls);
   }
@@ -333,15 +333,15 @@ public:
     {
       PlatformRig rig("PlatformBiosTimer");
       Elite::Platform& platform = rig.Host();
-      platform.BiosServices().SetClock(test.ticks);
+      platform.Day().SetClock(test.ticks);
       const Elite::Cycles cycles = platform.InstructionCycles();
       platform.Events().Request(Elite::Irq::Timer);
       platform.TakeDueInterrupts();
-      Assert::AreEqual(test.ticksAfter, platform.BiosServices().Ticks(), L"the count");
+      Assert::AreEqual(test.ticksAfter, platform.Day().Ticks(), L"the count");
       Assert::AreEqual(Elite::Platform::HARDWARE_INTERRUPT_CYCLES + test.instructionCycles, platform.InstructionCycles() - cycles,
                        L"the instruction clock: the entry, then the ROM's code to its IRET");
       Assert::IsFalse(platform.Events().InService(Elite::Irq::Timer) || platform.Events().InService(Elite::Irq::Keyboard), L"ended");
-      Assert::AreEqual(std::uint32_t{test.rolledOver}, std::uint32_t{platform.BiosServices().ReadClock().rolledOver}, L"TIMER_OFL");
+      Assert::AreEqual(std::uint32_t{test.rolledOver}, std::uint32_t{platform.Day().ReadClock().rolledOver}, L"TIMER_OFL");
     }
 
     // The keyboard handler, with a key latched: the scan code read, the key acknowledged on the system control

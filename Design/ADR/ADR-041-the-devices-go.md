@@ -1,6 +1,6 @@
 # ADR-041 — The native game loop, third step: the PC's devices give way to what the game uses of them
 
-**Status:** accepted 2026-10-13 for its first part, with the change that implements it, step c of piece 4 of Phase 6 ([Reverse-Engineering-Plan.md §5, Phase 6](../Reverse-Engineering-Plan.md#phase-6--the-new-game)), under D70. Each later part amends it as it lands. **Amended 2026-10-13, the second part (D72):** the interrupt controller, the timer's channel 0 and the keyboard's latch are one scheduler.
+**Status:** accepted 2026-10-13 for its first part, with the change that implements it, step c of piece 4 of Phase 6 ([Reverse-Engineering-Plan.md §5, Phase 6](../Reverse-Engineering-Plan.md#phase-6--the-new-game)), under D70. Each later part amends it as it lands. **Amended 2026-10-13, the second part (D72):** the interrupt controller, the timer's channel 0 and the keyboard's latch are one scheduler. **The third:** the BIOS is its time of day and its video services.
 
 ## Context
 
@@ -49,8 +49,22 @@ After the first part showed that, with the replays exact, these parts mostly re-
 | The suite | `GameLogicTests` passes under g++, 164 tests, with no re-base |
 | Not run here | the MSVC build and the game: CI builds and runs the tests, and the owner plays it |
 
+## Decision, third part: the BIOS as its time of day and its video services
+
+1. **The BIOS's tick count and rollover flag are the time of day** (`TimeOfDay`), which its timer handler counts and int 1Ah reads and sets; `ClockReading` is what int 1Ah gives (`Hardware::ReadTimeOfDay`).
+2. **Int 10h's mode, palette and teletype are the video services** (`VideoModes`), with the three things of the data area that reach what the game sees: the mode's columns and the cursor, where the teletype writes, and the colour select's copy, which the palette call reads back whatever the game wrote to the card since. The page and the start address, which the game never sets, are 0 throughout; the mode number, the page size, the cursor shape, the CRTC's address and the mode control's copy, which nothing read, go.
+
+### Measured 2026-10-13, the third part
+
+| Check | Result |
+|---|---|
+| The idle trajectory | Every game test identical to the second part's. `BiosTests` is `VideoModesTests`, with its clock's tests in `TimeOfDayTests`. |
+| The speaker | the 158 tests the two trees share identical, event for event |
+| The suite | `GameLogicTests` passes under g++, 165 tests, with no re-base |
+
 ## What this forecloses
 
 - **A far address as the name of a handler.** A handler is the BIOS's, the game's, or stray.
 - **Reading the ROM.** What the game read of it is a question the platform answers.
 - **An 8259 or an 8253 of their own.** What paced time waits for is the scheduler's, with only the two interrupts the game takes.
+- **A BIOS data area.** What the game read back of it is the video services' and the time of day's.

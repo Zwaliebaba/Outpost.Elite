@@ -93,7 +93,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AiTests.cpp" />
-    <ClCompile Include="BiosTests.cpp" />
     <ClCompile Include="CgaFontTests.cpp" />
     <ClCompile Include="CgaTests.cpp" />
     <ClCompile Include="CorpusTests.cpp" />
@@ -130,8 +129,10 @@
     <ClCompile Include="StartUpTests.cpp" />
     <ClCompile Include="StateDigestTests.cpp" />
     <ClCompile Include="TextTests.cpp" />
+    <ClCompile Include="TimeOfDayTests.cpp" />
     <ClCompile Include="ToneTimerTests.cpp" />
     <ClCompile Include="TwinRigTests.cpp" />
+    <ClCompile Include="VideoModesTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="GalaxyAnswers.txt" />

@@ -124,7 +124,7 @@ MouseMotion Hardware::ReadMouseMotion()
 
 void Hardware::SetVideoMode(std::uint8_t _mode)
 {
-  if (!m_platform.BiosServices().SetMode(_mode))
+  if (!m_platform.Modes().SetMode(_mode))
   {
     throw std::logic_error("Hardware::SetVideoMode: a mode the game never sets");
   }
@@ -140,7 +140,7 @@ void Hardware::PrintDosString(std::string_view _text)
   }
   for (const char character : _text.substr(0, end))
   {
-    m_platform.BiosServices().WriteTeletype(static_cast<std::uint8_t>(character));
+    m_platform.Modes().WriteTeletype(static_cast<std::uint8_t>(character));
   }
 }
 
@@ -166,7 +166,7 @@ void Hardware::SetModeControl(std::uint8_t _value)
 
 void Hardware::SelectPalette(std::uint8_t _palette)
 {
-  m_platform.BiosServices().SelectPalette(_palette);
+  m_platform.Modes().SelectPalette(_palette);
 }
 
 void Hardware::FireGamePort()
@@ -184,9 +184,9 @@ void Hardware::CountInstructionCycles(Cycles _cycles) noexcept
   m_platform.CountInstructionCycles(_cycles);
 }
 
-BiosClock Hardware::ReadBiosClock()
+ClockReading Hardware::ReadTimeOfDay()
 {
-  return m_platform.BiosServices().ReadClock();
+  return m_platform.Day().ReadClock();
 }
 
 // DOS's file services, native (D27): the platform's DosFiles. A stamp is DOS's time at the platform's clock, as the emulated

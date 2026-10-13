@@ -177,7 +177,7 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
 
     // HandleDiskRequest (CS:0065): GameLoop comes back only for diskOperation, 0 to leave.
     RestoreDivideAndKeyboardInterrupts(_hardware);
-    const BiosClock clock = RestoreTimerInterrupt(_state, _hardware);
+    const ClockReading clock = RestoreTimerInterrupt(_state, _hardware);
     const std::uint8_t request = _state.Data().saveLoad.diskOperation;
     if (request == 0)
     {
