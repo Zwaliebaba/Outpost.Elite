@@ -54,7 +54,9 @@ The owner played [ADR-033](ADR-033-the-space-view-hybrid.md)'s space view and ru
    - the S and, while the ECM fires, the E.
 
    **The view** is placed in the frame's window (`Cockpit::VIEW`): the 1987 field, 256 × 126 pixels at the CGA's 4:3, about 1.69:1, 1304 × 770 design units from (308, 40). `SpaceView` stretches the view and its projection over any place, in the picture's dots for the title or in design units here.
-6. **The application** draws the cockpit while the screen shows a frame of flight, and the CGA picture, with the title's ship over it, otherwise.
+6. **The application** draws the cockpit while the screen shows a frame of flight or of the title, and the CGA picture otherwise.
+
+   *Amended 2026-10-12 by D64, after the owner's play-test: at first the title kept the CGA picture with its ship over it. The 1987 title is the cockpit screen (`RunTitle` shows screen layout 2), so it is drawn in the cockpit too. Its dashboard is the cockpit's picture, which `UpdateDashboard` never draws over there: `TitleDashboard` marks it not live, so `GaugesOf` gives every bar empty and every number blank, and the cockpit draws no indicator marker, no missile count and the condition light dark. The top bar reads ---- E L I T E ----, which 1987 writes on the message line; Press any key stays the game's pixels in the view. With nothing left to draw over the CGA picture, `SpaceView::PICTURE_PLACE` goes.*
 
 ### What moves on
 
@@ -81,6 +83,7 @@ The owner played [ADR-033](ADR-033-the-space-view-hybrid.md)'s space view and ru
 | The turn probe | each test's sequence of idle and working turns identical to `main`'s |
 | The suite | `GameLogicTests` passes under g++ `-O2` and clang++ 18 |
 | On CI | the MSVC build, clang-tidy 22, and `CanvasTests` on WARP, Bahnschrift among the fonts the runner has; `Capture` gave its sRGB view a descriptor of its own once the tests showed both views on one |
+| The title (D64) | `TheTitlesDashboardIsDark`: every gauge empty, blank and normal, the condition dark, the title on the message line, where the same zeros live would be red. Across the corpus, every frame of the title publishes the title's dashboard and every frame of flight a live one, and none of the title's has a blip; leaving out `RunTitle`'s `TitleDashboard` fails it. The turn probe is unchanged. |
 | Not run here | the game: the owner plays it |
 
 ## What this forecloses

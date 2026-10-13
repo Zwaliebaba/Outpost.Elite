@@ -182,6 +182,14 @@ using Matrix = std::array<std::array<double, 3>, 3>; // rows: where each axis go
 
 } // namespace
 
+SnapshotDashboard TitleDashboard(std::string_view _message)
+{
+  SnapshotDashboard dashboard;
+  dashboard.live = false;
+  std::copy_n(_message.begin(), std::min(_message.size(), dashboard.message.size() - 1), dashboard.message.begin());
+  return dashboard;
+}
+
 FlightSnapshot TakeFlightSnapshot(const GameState& _state)
 {
   FlightSnapshot snapshot;

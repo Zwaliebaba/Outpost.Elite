@@ -73,6 +73,7 @@ struct Seen
   std::size_t overPixels = 0;
   std::size_t modelPixels = 0;
   std::size_t titleModels = 0; ///< the title's turning ship, drawn as a model
+  std::size_t titleFrames = 0;
 };
 
 // The latest frame's layers explain what the screen shows: where the over layer holds a pixel it is the screen's, where a model
@@ -123,6 +124,14 @@ void CheckFrame(ReferenceRig& _rig, Elite::FrameImage& _image, Seen& _seen)
   }
   Assert::IsTrue(_rig.Host().SpaceViewShown(), L"the screen shows the frame just published");
   const Elite::FlightSnapshot& snapshot = _rig.Host().LatestFlightSnapshot();
+  // The title's dashboard is the cockpit's picture, nothing on it live, with the title on its message line; flight's is live (D64).
+  Assert::AreEqual(!snapshot.title, snapshot.dashboard.live, L"the dashboard live in flight and not on the title");
+  if (snapshot.title)
+  {
+    Assert::AreEqual(std::string("---- E L I T E ----"), std::string(snapshot.dashboard.message.data()), L"the title's message line");
+    Assert::AreEqual(std::size_t{0}, snapshot.dashboard.blipCount, L"no blips on the title's scanner");
+    ++_seen.titleFrames;
+  }
   for (std::size_t index = 0; index < snapshot.objectCount; ++index)
   {
     _seen.models += snapshot.objects[index].model ? 1 : 0;
@@ -320,6 +329,7 @@ public:
     Logger::WriteMessage(("frames hidden before a tunnel, a jump or a screen: " + std::to_string(ends)).c_str());
     Assert::IsTrue(seen.models > 0 && seen.modelPixels > 0, L"ships drawn as models");
     Assert::IsTrue(seen.titleModels > 0, L"the title's ship drawn as a model");
+    Assert::IsTrue(seen.titleFrames > 0, L"frames of the title");
     Assert::IsTrue(seen.underPixels > 0, L"under pixels: the sun, the planet or a dot");
     Assert::IsTrue(seen.overPixels > 0, L"over pixels: stardust, beams or the sights");
     Logger::WriteMessage(("frames " + std::to_string(seen.frames) + ", models " + std::to_string(seen.models) + ", model pixels " +

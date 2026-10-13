@@ -63,9 +63,10 @@ struct Gauges
   std::uint8_t missiles = 0;
   MissileState missileState = MissileState::Idle;
   Condition condition = Condition::Green;
+  bool live = true; ///< false for a dashboard with nothing live (the title's, D64): every bar empty, no number, the light dark
 };
 
-/// The gauges of _dashboard.
+/// The gauges of _dashboard; none live, every bar empty and every number blank, for a dashboard that is not.
 [[nodiscard]] Gauges GaugesOf(const SnapshotDashboard& _dashboard);
 
 } // namespace Elite
