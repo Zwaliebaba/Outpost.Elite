@@ -43,13 +43,27 @@ constexpr float WORDS_MARGIN_ROWS = 2.0f;
 constexpr std::uint32_t TITLE_PLANET_KEY = 0x100;
 constexpr float SHARE = 255.0f;
 constexpr float GAS_GIANT_LEVEL = 0.5f; // a gas giant has no sea
-// The strokes, in the view's rows: a dot of dust, and a beam at the gun and at its end; the beam's light, which blooms; and how far a
-// particle moves in a frame and is the same one, past which it was born again elsewhere.
+// The strokes, in the view's rows: a mote of dust, and a beam at the gun and at its end; and the beam's light, which blooms.
 constexpr float DUST_WIDTH_ROWS = 0.45f;
 constexpr float BEAM_GUN_ROWS = 1.8f;
 constexpr float BEAM_END_ROWS = 0.5f;
 constexpr float BEAM_INTENSITY = 2.5f;
-constexpr std::int16_t MOST_DUST_STEP_PIXELS = 12;
+// The stardust (D67), the renderer's own, fixed in the scene's axes in a cube round the camera that each mote wraps round, 2,048
+// units from its middle to a face. 1987's dust moves out from the view's middle by 1/32 of its offset a frame at speed 40, as a
+// mote 32 frames off would, which at 40 units a frame is 1,280 units; the motes in the 1987 field lie 1,470 deep on average. Of
+// 1,650, about 30 are in the 1987 field at once, as 1987 keeps 30. Each is drawn from where it is to where it was an update before,
+// a dot at most speeds and a streak on the jump drive, and fades over the furthest 30% of the cube; one nearer than 64 units is
+// not drawn, to keep a mote passing the camera from sweeping across the view.
+constexpr float STARDUST_REACH = 2048.0f;
+constexpr std::size_t STARDUST_MOTES = 1650;
+constexpr float STARDUST_FADE = 0.3f;
+constexpr float STARDUST_NEAREST = 64.0f;
+constexpr std::uint32_t STARDUST_SEED = 0x2545F491u;
+constexpr float MOST_STARDUST_UPDATES = 4.0f;
+// A far object's dot beside the view (DrawObjectAsDot, D69): three pixels across, a row down, in colour 3.
+constexpr float DOT_HALF_PIXELS = 1.0f;
+constexpr float DOT_ROWS = 1.0f;
+constexpr std::size_t DOT_COLOR = 3;
 // A pixel's middle, and the drawing buffer's row over the view's: row 1 of the buffer is the view's first.
 constexpr float MIDDLE = 0.5f;
 constexpr float FIRST_VIEW_ROW = 1.0f;
@@ -95,6 +109,11 @@ static_assert(Engine::SCENE_LAYER_CLEAR == Elite::LAYER_CLEAR, "the game's layer
 [[nodiscard]] Engine::Quaternion QuaternionOf(const Elite::Orientation& _orientation) noexcept
 {
   return Engine::Quaternion{.x = _orientation.x, .y = _orientation.y, .z = _orientation.z, .w = _orientation.w};
+}
+
+[[nodiscard]] Elite::Orientation OrientationOf(const Engine::Quaternion& _quaternion) noexcept
+{
+  return Elite::Orientation{.x = _quaternion.x, .y = _quaternion.y, .z = _quaternion.z, .w = _quaternion.w};
 }
 
 // A unit vector along (_x, _y, _z), or none for none.
@@ -214,11 +233,14 @@ Engine::SceneSnapshot SpaceView::SceneOf(const Elite::FlightSnapshot& _snapshot,
                                                   .continues = object.continues});
       continue;
     }
-    if (!object.model || object.kind >= m_models.size())
+    // What the game drew as a model, and beside its view's cone what it would (D69).
+    const bool drawn = object.model || (!object.inView && object.drawing == Elite::SnapshotDrawing::Model);
+    if (!drawn || object.kind >= m_models.size())
     {
       continue;
     }
-    const std::array<float, 3> position = Elite::ScenePosition(_snapshot, object);
+    // Where the frame drew it; one it did not draw, by its own coordinates (D69).
+    const std::array<float, 3> position = object.model ? Elite::ScenePosition(_snapshot, object) : Elite::WorldPosition(object);
     scene.objects.push_back(
       Engine::SceneObject{.key = object.slot,
                           .model = object.kind,
@@ -233,44 +255,119 @@ Engine::SceneSnapshot SpaceView::SceneOf(const Elite::FlightSnapshot& _snapshot,
   return scene;
 }
 
-void SpaceView::TakeStrokes(const Elite::FlightSnapshot& _before, const Elite::FlightSnapshot& _after, float _t,
-                            const std::array<std::uint32_t, 4>& _palette)
+void SpaceView::TakeSideDots(const Elite::FlightSnapshot& _snapshot, const std::array<std::uint32_t, 4>& _palette)
 {
-  // The dust a frame drew, where it was, moved toward where the next frame drew the same particle, unless it was born again there.
-  m_dust.clear();
-  const std::uint32_t dustColor = _palette.at(_before.dustColor & (PALETTE_COLORS - 1));
-  for (std::size_t index = 0; index < _before.dustCount; ++index)
+  // DrawObjectAsDot: a disc of radius 2 in colour 3 at its projection, one row of three pixels.
+  const Elite::Orientation camera = Elite::CameraRotation(_snapshot);
+  for (std::size_t index = 0; index < _snapshot.objectCount; ++index)
   {
-    const Elite::SnapshotDust& dust = _before.dust[index];
-    Engine::SceneStroke stroke{.fromX = LayerX(dust.x),
-                               .fromY = LayerY(dust.row),
-                               .toX = LayerX(dust.x),
-                               .toY = LayerY(dust.row),
-                               .fromWidth = DUST_WIDTH_ROWS,
-                               .toWidth = DUST_WIDTH_ROWS,
-                               .color = dustColor,
-                               .intensity = 1.0f};
-    if (dust.streak)
+    const Elite::SnapshotObject& object = _snapshot.objects[index];
+    if (object.inView || object.drawing != Elite::SnapshotDrawing::Dot)
     {
-      stroke.fromX = LayerX(dust.fromX);
-      stroke.fromY = LayerY(dust.fromRow);
+      continue;
     }
-    else
+    const std::array<float, 3> position = Elite::WorldPosition(object);
+    const Engine::Vector3 seen = Rotate(camera, Engine::Vector3{.x = position[0], .y = position[1], .z = position[2]});
+    if (seen.z <= NEAR_UNITS)
     {
-      const auto later = std::ranges::find(_after.dust.begin(), _after.dust.begin() + static_cast<std::ptrdiff_t>(_after.dustCount),
-                                           dust.particle, &Elite::SnapshotDust::particle);
-      const bool moved = later != _after.dust.begin() + static_cast<std::ptrdiff_t>(_after.dustCount) && !later->streak &&
-                         std::abs(later->x - dust.x) <= MOST_DUST_STEP_PIXELS && std::abs(later->row - dust.row) <= MOST_DUST_STEP_PIXELS;
-      if (moved)
-      {
-        stroke.fromX += (LayerX(later->x) - stroke.fromX) * _t;
-        stroke.fromY += (LayerY(later->row) - stroke.fromY) * _t;
-        stroke.toX = stroke.fromX;
-        stroke.toY = stroke.fromY;
-      }
+      continue;
     }
-    m_dust.push_back(stroke);
+    const float x = Elite::VIEW_AXIS_X + Elite::VIEW_FOCAL * seen.x / seen.z;
+    const float y = Elite::VIEW_AXIS_ROW - FIRST_VIEW_ROW + Elite::VIEW_FOCAL * seen.y / seen.z;
+    m_dust.push_back(Engine::SceneStroke{.fromX = x - DOT_HALF_PIXELS,
+                                         .fromY = y,
+                                         .toX = x + DOT_HALF_PIXELS,
+                                         .toY = y,
+                                         .fromWidth = DOT_ROWS,
+                                         .toWidth = DOT_ROWS,
+                                         .color = _palette.at(DOT_COLOR),
+                                         .intensity = 1.0f});
   }
+}
+
+void SpaceView::MoveStardust(const Elite::Platform& _platform, const std::array<std::uint32_t, 4>& _palette)
+{
+  m_dust.clear();
+  const Elite::FlightSnapshot& latest = _platform.LatestFlightSnapshot();
+  const Elite::FlightSnapshot& previous = _platform.PreviousFlightSnapshot();
+  const std::uint64_t now = _platform.Clock();
+  if (!latest.stardust)
+  {
+    m_stardustClock = now;
+    return;
+  }
+  if (m_stardust.empty())
+  {
+    // Spread through the cube by a fixed xorshift, the same every run.
+    std::uint32_t random = STARDUST_SEED;
+    const auto next = [&random]
+    {
+      random ^= random << 13;
+      random ^= random >> 17;
+      random ^= random << 5;
+      return (static_cast<float>(random) / 4294967296.0f * 2.0f - 1.0f) * STARDUST_REACH;
+    };
+    m_stardust.resize(STARDUST_MOTES);
+    for (Engine::Vector3& mote : m_stardust)
+    {
+      mote = Engine::Vector3{.x = next(), .y = next(), .z = next()};
+    }
+  }
+  // The velocity moves the world back once an update, which the latest two snapshots time; at most a few updates at once, so a
+  // stall does not sweep the dust away.
+  const Engine::Vector3 velocity{
+    .x = static_cast<float>(latest.velocityX), .y = static_cast<float>(latest.velocityY), .z = static_cast<float>(latest.velocityZ)};
+  float updates = 0.0f;
+  if (previous.sequence != 0 && latest.pacedTime > previous.pacedTime && m_stardustClock != 0 && now > m_stardustClock)
+  {
+    updates = std::min(static_cast<float>(now - m_stardustClock) / static_cast<float>(latest.pacedTime - previous.pacedTime),
+                       MOST_STARDUST_UPDATES);
+  }
+  m_stardustClock = now;
+  const auto wrap = [](float _coordinate)
+  {
+    const float span = 2.0f * STARDUST_REACH;
+    return _coordinate - span * std::floor((_coordinate + STARDUST_REACH) / span);
+  };
+  for (Engine::Vector3& mote : m_stardust)
+  {
+    mote = Engine::Vector3{
+      .x = wrap(mote.x - velocity.x * updates), .y = wrap(mote.y - velocity.y * updates), .z = wrap(mote.z - velocity.z * updates)};
+  }
+  // Each seen as the camera is drawn now, from where it was an update before, in the layers' pixels.
+  const Elite::Orientation camera = OrientationOf(m_drawn.cameraOrientation);
+  const std::uint32_t color = _palette.at(latest.dustColor & (PALETTE_COLORS - 1));
+  for (const Engine::Vector3& mote : m_stardust)
+  {
+    const Engine::Vector3 seen = Rotate(camera, mote);
+    if (seen.z < STARDUST_NEAREST)
+    {
+      continue;
+    }
+    const float distance = std::sqrt(seen.x * seen.x + seen.y * seen.y + seen.z * seen.z);
+    const float fade = std::clamp((STARDUST_REACH - distance) / (STARDUST_FADE * STARDUST_REACH), 0.0f, 1.0f);
+    if (fade <= 0.0f)
+    {
+      continue;
+    }
+    const Engine::Vector3 before =
+      Rotate(camera, Engine::Vector3{.x = mote.x + velocity.x, .y = mote.y + velocity.y, .z = mote.z + velocity.z});
+    const float x = AXIS_PIXEL + FOCAL * seen.x / seen.z;
+    const float y = AXIS_ROW + FOCAL * seen.y / seen.z;
+    const bool trails = before.z >= STARDUST_NEAREST;
+    m_dust.push_back(Engine::SceneStroke{.fromX = trails ? AXIS_PIXEL + FOCAL * before.x / before.z : x,
+                                         .fromY = trails ? AXIS_ROW + FOCAL * before.y / before.z : y,
+                                         .toX = x,
+                                         .toY = y,
+                                         .fromWidth = DUST_WIDTH_ROWS,
+                                         .toWidth = DUST_WIDTH_ROWS,
+                                         .color = color,
+                                         .intensity = fade});
+  }
+}
+
+void SpaceView::TakeBeams(const Elite::FlightSnapshot& _before, const std::array<std::uint32_t, 4>& _palette)
+{
   // The frame's beams, for the update it is shown, from the gun's end, wide, to the target's, narrow.
   m_beams.clear();
   for (std::size_t index = 0; index < _before.beamCount; ++index)
@@ -287,7 +384,7 @@ void SpaceView::TakeStrokes(const Elite::FlightSnapshot& _before, const Elite::F
   }
 }
 
-const Engine::SceneFrame* SpaceView::Frame(const Elite::Platform& _platform, const Engine::Rect& _place)
+const Engine::SceneFrame* SpaceView::Frame(const Elite::Platform& _platform, const Engine::Rect& _view, const Engine::Rect& _window)
 {
   const Elite::FlightSnapshot& latest = _platform.LatestFlightSnapshot();
   if (latest.sequence == 0 || !_platform.SpaceViewShown())
@@ -303,8 +400,10 @@ const Engine::SceneFrame* SpaceView::Frame(const Elite::Platform& _platform, con
   }
   const float blend = Engine::BlendFactor(m_before.time, m_after.time, _platform.Clock());
   m_drawn = Engine::Interpolate(m_before, m_after, blend);
-  // The strokes of the frame before, unless the latest starts a flight or a view, which continues nothing before it.
-  TakeStrokes(latest.cameraContinues ? _platform.PreviousFlightSnapshot() : latest, latest, blend, rgb);
+  // The beams of the frame before, unless the latest starts a flight or a view, which continues nothing before it.
+  TakeBeams(latest.cameraContinues ? _platform.PreviousFlightSnapshot() : latest, rgb);
+  MoveStardust(_platform, rgb);
+  TakeSideDots(latest, rgb);
 
   // The sun's way, in the game's axes, which the scene's are; with no sun, from behind the camera.
   Engine::Vector3 towardsLight = Engine::Vector3{};
@@ -326,17 +425,21 @@ const Engine::SceneFrame* SpaceView::Frame(const Elite::Platform& _platform, con
 
   Engine::SceneInset& inset = m_frame.inset;
   inset.palette = rgb;
-  // The view's 256 x 126 pixels stretched over _place, and the projection with them.
-  const float across = _place.width / static_cast<float>(Elite::SPACE_VIEW_WIDTH_PIXELS);
-  const float down = _place.height / static_cast<float>(Elite::SPACE_VIEW_HEIGHT_PIXELS);
-  inset.left = _place.left;
-  inset.top = _place.top;
-  inset.width = _place.width;
-  inset.height = _place.height;
+  // The view's 256 x 126 pixels stretched over _view, and the projection with them over the whole of _window.
+  const float across = _view.width / static_cast<float>(Elite::SPACE_VIEW_WIDTH_PIXELS);
+  const float down = _view.height / static_cast<float>(Elite::SPACE_VIEW_HEIGHT_PIXELS);
+  inset.left = _window.left;
+  inset.top = _window.top;
+  inset.width = _window.width;
+  inset.height = _window.height;
   inset.focalX = FOCAL * across;
   inset.focalY = FOCAL * down;
-  inset.centerX = AXIS_PIXEL * across;
-  inset.centerY = AXIS_ROW * down;
+  inset.centerX = _view.left - _window.left + AXIS_PIXEL * across;
+  inset.centerY = _view.top - _window.top + AXIS_ROW * down;
+  inset.layersLeft = _view.left - _window.left;
+  inset.layersTop = _view.top - _window.top;
+  inset.layersWidth = _view.width;
+  inset.layersHeight = _view.height;
   inset.nearUnits = NEAR_UNITS;
   inset.towardsLight = towardsLight;
   inset.layerWidth = Elite::SPACE_VIEW_WIDTH_PIXELS;
@@ -346,7 +449,8 @@ const Engine::SceneFrame* SpaceView::Frame(const Elite::Platform& _platform, con
   inset.dust = m_dust;
   inset.beams = m_beams;
   const Elite::SkyLook sky = Elite::SkyLookOf(latest.galaxy, latest.system);
-  inset.sky = Engine::SceneSky{.shown = true,
+  // A tunnel's picture is black round its rings, and so is the window beside it (D68).
+  inset.sky = Engine::SceneSky{.shown = !latest.picture,
                                .seed = sky.seed,
                                .nebula = sky.nebula,
                                .nebulaDensity = static_cast<float>(sky.nebulaDensity) / SHARE,

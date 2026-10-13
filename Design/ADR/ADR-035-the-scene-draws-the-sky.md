@@ -64,9 +64,9 @@ Where the reference is silent, or where the canvas and the reference differ, the
 
 | Part | Arrives with | Why there |
 |---|---|---|
-| Hor+ (D50) | the full window, next | nothing the view needs is left only in the 1987 field but the game's words, which stay at its middle |
-| Tearing | the full window | as ADR-033 has it |
-| 3D stardust | the full window | 1987's dust is 2D, in the view's pixels; a wider view needs dust beyond them, which is a change of its own |
+| Hor+ (D50) | the full window, next | nothing the view needs is left only in the 1987 field but the game's words, which stay at its middle. *Arrived with ADR-037, which found the ships beside the view left too, and draws them by 1987's rule (D69).* |
+| Tearing | the full window | as ADR-033 has it. *Arrived with ADR-037.* |
+| 3D stardust | the full window | 1987's dust is 2D, in the view's pixels; a wider view needs dust beyond them, which is a change of its own. *Arrived with ADR-037 (D67).* |
 | The planets' and the sky's own looks | the owner's drawings | the palettes here are interim (D64) |
 
 ### Measured 2026-10-12
