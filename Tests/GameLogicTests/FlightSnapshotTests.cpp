@@ -1,5 +1,6 @@
 #include "pch.h"
 
+#include "Flight.h"
 #include "FlightSnapshot.h"
 #include "GameState.h"
 #include "Maths.h"
@@ -88,6 +89,34 @@ public:
                                                          L", roll " + std::to_wstring(roll) + L", axis " + std::to_wstring(axis))
                                                           .c_str());
           }
+        }
+      }
+    }
+  }
+
+  // PlayerHeading is the way UpdatePlayerVelocity turns the speed, exactly, at angles round the whole turn and speeds up to the jump
+  // drive's (D67): what the stardust follows while the velocity itself is stale, after a jump, until the player steers.
+  TEST_METHOD(TheHeadingIsTheWayTheVelocityGoes)
+  {
+    const auto state = std::make_unique<Elite::GameState>();
+    for (std::uint16_t pitch = 0; pitch < 0x800; pitch += 0x05B)
+    {
+      for (std::uint16_t yaw = 0x11; yaw < 0x800; yaw += 0x067)
+      {
+        for (const std::uint16_t speed : {std::uint16_t{1}, std::uint16_t{0x14}, std::uint16_t{0x28}, std::uint16_t{0x28 << 5}})
+        {
+          state->Data().playerShip.playerPitchAngle = pitch;
+          state->Data().playerShip.playerYawAngle = yaw;
+          state->Data().playerShip.playerSpeed = speed;
+          state->Data().playerShip.velocityDirty = 1;
+          Elite::UpdatePlayerVelocity(*state);
+          const std::array<std::int16_t, 3> heading = Elite::PlayerHeading(pitch, yaw, static_cast<std::int16_t>(speed));
+          const auto velocity = [&state](std::uint16_t _word) { return static_cast<std::int16_t>(_word); };
+          Assert::IsTrue(
+            heading[0] == velocity(state->Data().playerShip.playerVelocityX) &&
+              heading[1] == velocity(state->Data().playerShip.playerVelocityY) &&
+              heading[2] == velocity(state->Data().playerShip.playerVelocityZ),
+            (L"pitch " + std::to_wstring(pitch) + L", yaw " + std::to_wstring(yaw) + L", speed " + std::to_wstring(speed)).c_str());
         }
       }
     }
