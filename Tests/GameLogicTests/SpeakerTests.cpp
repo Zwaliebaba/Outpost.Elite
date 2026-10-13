@@ -1,7 +1,6 @@
 #include "pch.h"
 
-#include "InterruptController.h"
-#include "IntervalTimer.h"
+#include "ToneTimer.h"
 #include "Speaker.h"
 #include "Timing.h"
 
@@ -22,13 +21,13 @@ constexpr std::uint8_t GATE_AND_DATA = 0x4F; // bits 0 and 1: channel 2's wave
 constexpr std::int32_t FULL = Elite::Speaker::FULL_LEVEL;
 
 // The speaker as it is wired: channel 2 through the timer, and the system control port as the keyboard's 8255 passes it on
-// (bit 0 to channel 2's gate, the byte to the speaker), which KeyboardTests checks.
+// (bit 0 to channel 2's gate, the byte to the speaker), which PlatformTests checks.
 class SpeakerRig
 {
 public:
   SpeakerRig()
     : m_speaker(m_clock),
-      m_timer(m_clock, m_controller, m_speaker)
+      m_tone(m_clock, m_speaker)
   {
   }
 
@@ -40,7 +39,7 @@ public:
   void SetSystemControl(Elite::Cycles _cycle, std::uint8_t _value)
   {
     m_clock = _cycle;
-    m_timer.SetChannel2Gate((_value & 0x01) != 0);
+    m_tone.SetGate((_value & 0x01) != 0);
     m_speaker.SetSystemControl(_value);
   }
 
@@ -48,7 +47,7 @@ public:
   void PlayTone(Elite::Cycles _cycle, std::uint16_t _divisor)
   {
     m_clock = _cycle;
-    m_timer.Program(0xB6, _divisor);
+    m_tone.Program(_divisor);
   }
 
   [[nodiscard]] std::vector<std::int16_t> Render(Elite::Cycles _from, Elite::Cycles _to, std::uint32_t _sampleRate) const
@@ -61,9 +60,8 @@ public:
 
 private:
   Elite::Cycles m_clock = 0;
-  Elite::InterruptController m_controller;
   Elite::Speaker m_speaker;
-  Elite::IntervalTimer m_timer;
+  Elite::ToneTimer m_tone;
 };
 
 [[nodiscard]] std::int32_t Spread(const std::vector<std::int16_t>& _samples, std::size_t _skip)

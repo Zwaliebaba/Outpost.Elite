@@ -7,13 +7,12 @@
 #include "FileStore.h"
 #include "FlightSnapshot.h"
 #include "GamePort.h"
-#include "InterruptController.h"
-#include "IntervalTimer.h"
-#include "Keyboard.h"
 #include "Mouse.h"
+#include "Scheduler.h"
 #include "SpaceViewLayers.h"
 #include "Speaker.h"
 #include "Timing.h"
+#include "ToneTimer.h"
 
 #include <array>
 #include <cstddef>
@@ -37,22 +36,6 @@ enum class StopReason : std::uint8_t
   Spinning    ///< The program ran SpinLimit() turns without waiting once.
 };
 
-/// The two hardware interrupts the game takes (ADR-041): the timer's, IRQ 0 on int 8, and the keyboard's, IRQ 1 on int 9.
-enum class Irq : std::uint8_t
-{
-  Timer,
-  Keyboard
-};
-
-/// What serves an interrupt: the BIOS's handler, the game's own, or a vector that names code no routine stands in for, as int 8
-/// does once the game writes its segment again while the BIOS's handler is there; one taken there throws std::logic_error.
-enum class IrqHandler : std::uint8_t
-{
-  Bios,
-  Game,
-  Stray
-};
-
 /// A routine in C++ that stands in for the program's own code (ADR-010): its start, or one of its interrupt handlers.
 using NativeRoutine = std::function<void()>;
 
@@ -61,8 +44,8 @@ using NativeRoutine = std::function<void()>;
 /// the platform (ADR-014); the game's memory is the GameState's.
 ///
 /// It holds, each the emulated PC's model moved here without its port bus, its registers or its interrupt-vector plumbing:
-/// the clock and its scheduler; the 8259 and the 8253 (InterruptController, IntervalTimer); the keyboard and the system control
-/// port (Keyboard); the speaker (Speaker); the game port (GamePort); the mouse driver (Mouse); the CGA (Cga); the BIOS's video
+/// the clock and the events it waits for, with the two interrupts they request (Scheduler: the tick, the keys and their
+/// requests, ADR-041); the timer's channel 2 (ToneTimer); the system control port; the speaker (Speaker); the game port (GamePort); the mouse driver (Mouse); the CGA (Cga); the BIOS's video
 /// and clock services and its data area (Bios), and its two hardware interrupt handlers; DOS's file services (DosFiles) and its
 /// print-string; the interrupt vector table; and the ROM bytes the game reads.
 ///
@@ -106,6 +89,9 @@ public:
     NativeRoutine routine;
     std::uint64_t calls = 0;
   };
+
+  /// The system control port at power-on (SystemControl).
+  static constexpr std::uint8_t POWER_ON_SYSTEM_CONTROL = 0x4C;
 
   /// What DOS leaves in BP for the program it starts, as MS-DOS does and DOSBox-X copies (ADR-006 item 4).
   static constexpr std::uint16_t ENTRY_BASE_POINTER = 0x091C;
@@ -198,10 +184,23 @@ public:
 
   // ── The devices, for the hosts: the keys, the stick, the mouse, the picture and the sound ──
 
-  [[nodiscard]] Keyboard& KeyboardController() noexcept
+  /// The tick, the keys and the two interrupts' requests: where a host injects the keyboard's codes (Scheduler::Inject).
+  [[nodiscard]] Scheduler& Events() noexcept
   {
-    return m_keyboard;
+    return m_events;
   }
+
+  /// IN AL,61h: the system control port, as last written: bit 0 is the tone timer's gate, bit 1 the speaker's data, and bit 7
+  /// high holds the keyboard clear. At power-on it holds 4Ch, what the XT BIOS's keyboard reset writes last (keyboard enabled,
+  /// clock not held, speaker and gate off).
+  [[nodiscard]] std::uint8_t SystemControl() const noexcept
+  {
+    return m_systemControl;
+  }
+
+  /// OUT 61h,_value: the tone timer's gate and the speaker take bits 0 and 1, and bit 7 holds the keyboard (Scheduler::HoldKeyboard).
+  /// Not noexcept: the speaker logs a change.
+  void SetSystemControl(std::uint8_t _value);
 
   [[nodiscard]] GamePort& Joystick() noexcept
   {
@@ -304,14 +303,9 @@ public:
     return m_cga.GraphicsColors();
   }
 
-  [[nodiscard]] IntervalTimer& Timer() noexcept
+  [[nodiscard]] ToneTimer& Tone() noexcept
   {
-    return m_timer;
-  }
-
-  [[nodiscard]] InterruptController& Interrupts() noexcept
-  {
-    return m_controller;
+    return m_tone;
   }
 
   /// The BIOS's services and its data area.
@@ -396,7 +390,7 @@ public:
 
 private:
   [[nodiscard]] StopReason Stopped() const noexcept;
-  void Interrupt(std::uint8_t _vector);
+  void Interrupt(Irq _irq);
   void EndTurn();
   void StartNative();
   void ResumeNative();
@@ -411,10 +405,10 @@ private:
   // Declared in the order they are built: each device holds references to the ones above it.
   Cycles m_clock = 0;
   Cycles m_instructionCycles = 0;
-  InterruptController m_controller;
   Speaker m_speaker;
-  IntervalTimer m_timer;
-  Keyboard m_keyboard;
+  ToneTimer m_tone;
+  Scheduler m_events;
+  std::uint8_t m_systemControl = POWER_ON_SYSTEM_CONTROL;
   GamePort m_gamePort;
   Cga m_cga;
   std::array<FlightSnapshot, 2> m_flightSnapshots{}; // the previous and the latest

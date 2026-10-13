@@ -12,8 +12,7 @@ namespace Elite
 namespace
 {
 
-constexpr std::uint8_t PIT_CHANNEL0_SQUARE_WAVE = 0x36; // channel 0, both bytes, mode 3
-constexpr std::uint16_t TICK_DIVISOR = 0x04A9;          // about 1000.15 Hz
+constexpr std::uint16_t TICK_DIVISOR = 0x04A9; // channel 0 in mode 3: about 1000.15 Hz
 constexpr std::uint32_t TICKS_PER_DAY = 0x1800B0;
 constexpr std::uint8_t SPEAKER_BITS = 0x03; // gate and data, cleared at start-up
 constexpr std::uint8_t SPEAKER_DATA = 0x02;
@@ -173,7 +172,7 @@ void TickSoundEffects(GameState& _state, Hardware& _hardware)
 
 void InstallTimerInterrupt(GameState& _state, Hardware& _hardware)
 {
-  _hardware.SetTickDivisor(PIT_CHANNEL0_SQUARE_WAVE, TICK_DIVISOR);
+  _hardware.SetTickDivisor(TICK_DIVISOR);
   const std::uint8_t speaker = _hardware.SystemControl();
   _state.Data().timer.savedSpeakerPort = speaker;
   const auto image = static_cast<std::uint8_t>(speaker & ~SPEAKER_BITS);
@@ -191,7 +190,7 @@ BiosClock RestoreTimerInterrupt(GameState& _state, Hardware& _hardware)
   // The BIOS's handler put back, as InstallTimerInterrupt found it.
   _hardware.SetHandler(Irq::Timer, IrqHandler::Bios);
   _hardware.SetSystemControl(_state.Data().timer.savedSpeakerPort);
-  _hardware.SetTickDivisor(PIT_CHANNEL0_SQUARE_WAVE, 0);
+  _hardware.SetTickDivisor(0);
   _hardware.EnableInterrupts();
   return _hardware.ReadBiosClock();
 }

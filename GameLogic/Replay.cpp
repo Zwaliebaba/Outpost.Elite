@@ -425,14 +425,14 @@ StopReason ReplayPlayer::Play(const Step& _step, Checkpoint& _checkpoint)
     m_elapsedMilliseconds += _step.waitMilliseconds;
     return m_platform.RunUntil(ReplayCycle(m_start, m_elapsedMilliseconds));
   case StepKind::Key:
-    m_platform.KeyboardController().Inject(_step.scanCode);
-    m_platform.KeyboardController().Inject(static_cast<std::uint8_t>(_step.scanCode | BREAK_BIT));
+    m_platform.Events().Inject(_step.scanCode);
+    m_platform.Events().Inject(static_cast<std::uint8_t>(_step.scanCode | BREAK_BIT));
     break;
   case StepKind::Down:
-    m_platform.KeyboardController().Inject(_step.scanCode);
+    m_platform.Events().Inject(_step.scanCode);
     break;
   case StepKind::Up:
-    m_platform.KeyboardController().Inject(static_cast<std::uint8_t>(_step.scanCode | BREAK_BIT));
+    m_platform.Events().Inject(static_cast<std::uint8_t>(_step.scanCode | BREAK_BIT));
     break;
   case StepKind::Digest:
     _checkpoint = TakeCheckpoint(m_state, m_platform.Video());

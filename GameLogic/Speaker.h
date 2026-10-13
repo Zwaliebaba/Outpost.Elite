@@ -1,7 +1,7 @@
 // GameLogic/Speaker.h
 #pragma once
 
-#include "IntervalTimer.h"
+#include "SquareWave.h"
 #include "Timing.h"
 
 #include <cstddef>
@@ -50,7 +50,7 @@ public:
     Cycles at = 0;
     bool gate = false; // port 0x61 bit 0
     bool data = false; // port 0x61 bit 1
-    IntervalTimer::Channel channel2;
+    SquareWave channel2;
   };
 
   /// Starts with both bits clear and a default channel 2, which the interval timer replaces when it is built.
@@ -60,8 +60,8 @@ public:
   /// The system control port (61h) as written; bits 0 and 1 are the ones that matter here.
   void SetSystemControl(std::uint8_t _value);
 
-  /// Channel 2's state after a change. The interval timer calls this.
-  void SetChannel2(const IntervalTimer::Channel& _channel);
+  /// Channel 2's state after a change. The tone timer calls this.
+  void SetChannel2(const SquareWave& _channel);
 
   /// The number of samples RenderSamples produces for the same arguments: those whose interval
   /// ends in (_from, _to].

@@ -222,17 +222,8 @@
     <ClInclude Include="InputState.h">
       <Filter>Input</Filter>
     </ClInclude>
-    <ClInclude Include="InterruptController.h">
-      <Filter>Platform</Filter>
-    </ClInclude>
-    <ClInclude Include="IntervalTimer.h">
-      <Filter>Platform</Filter>
-    </ClInclude>
     <ClInclude Include="JumpState.h">
       <Filter>State</Filter>
-    </ClInclude>
-    <ClInclude Include="Keyboard.h">
-      <Filter>Platform</Filter>
     </ClInclude>
     <ClInclude Include="KeyboardState.h">
       <Filter>State</Filter>
@@ -318,6 +309,9 @@
     <ClInclude Include="SceneTables.h">
       <Filter>Scene</Filter>
     </ClInclude>
+    <ClInclude Include="Scheduler.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
     <ClInclude Include="Sha256.h">
       <Filter>Replay</Filter>
     </ClInclude>
@@ -351,6 +345,9 @@
     <ClInclude Include="Speaker.h">
       <Filter>Platform</Filter>
     </ClInclude>
+    <ClInclude Include="SquareWave.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
     <ClInclude Include="StartUp.h">
       <Filter>StartUp</Filter>
     </ClInclude>
@@ -382,6 +379,9 @@
       <Filter>Timer</Filter>
     </ClInclude>
     <ClInclude Include="Timing.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
+    <ClInclude Include="ToneTimer.h">
       <Filter>Platform</Filter>
     </ClInclude>
     <ClInclude Include="Video.h">
@@ -461,15 +461,6 @@
     <ClCompile Include="Input.cpp">
       <Filter>Input</Filter>
     </ClCompile>
-    <ClCompile Include="InterruptController.cpp">
-      <Filter>Platform</Filter>
-    </ClCompile>
-    <ClCompile Include="IntervalTimer.cpp">
-      <Filter>Platform</Filter>
-    </ClCompile>
-    <ClCompile Include="Keyboard.cpp">
-      <Filter>Platform</Filter>
-    </ClCompile>
     <ClCompile Include="Market.cpp">
       <Filter>Market</Filter>
     </ClCompile>
@@ -509,6 +500,9 @@
     <ClCompile Include="Scene.cpp">
       <Filter>Scene</Filter>
     </ClCompile>
+    <ClCompile Include="Scheduler.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
     <ClCompile Include="Sha256.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
@@ -527,6 +521,9 @@
     <ClCompile Include="Speaker.cpp">
       <Filter>Platform</Filter>
     </ClCompile>
+    <ClCompile Include="SquareWave.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
     <ClCompile Include="StartUp.cpp">
       <Filter>StartUp</Filter>
     </ClCompile>
@@ -538,6 +535,9 @@
     </ClCompile>
     <ClCompile Include="Timer.cpp">
       <Filter>Timer</Filter>
+    </ClCompile>
+    <ClCompile Include="ToneTimer.cpp">
+      <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="Video.cpp">
       <Filter>Video</Filter>

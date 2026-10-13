@@ -12,8 +12,7 @@ namespace Elite
 namespace
 {
 
-constexpr std::uint8_t TIMER_CHANNEL_2_SQUARE_WAVE = 0xB6; // channel 2, low then high byte, mode 3
-constexpr std::uint8_t KEYBOARD_ACKNOWLEDGE = 0x80;        // port 61h bit 7, the XT's PB7
+constexpr std::uint8_t KEYBOARD_ACKNOWLEDGE = 0x80; // port 61h bit 7, the XT's PB7
 
 constexpr std::uint16_t MOUSE_BUTTON_PRESSES = 0x0005;
 
@@ -25,28 +24,28 @@ constexpr char DOS_STRING_TERMINATOR = '$'; // int 21h AH=09h's
 
 std::uint8_t Hardware::SystemControl()
 {
-  return m_platform.KeyboardController().SystemControl();
+  return m_platform.SystemControl();
 }
 
 void Hardware::SetSystemControl(std::uint8_t _value)
 {
-  m_platform.KeyboardController().SetSystemControl(_value);
+  m_platform.SetSystemControl(_value);
 }
 
 void Hardware::SetToneDivisor(std::uint16_t _divisor)
 {
-  m_platform.Timer().Program(TIMER_CHANNEL_2_SQUARE_WAVE, _divisor);
+  m_platform.Tone().Program(_divisor);
 }
 
-void Hardware::SetTickDivisor(std::uint8_t _mode, std::uint16_t _divisor)
+void Hardware::SetTickDivisor(std::uint16_t _divisor)
 {
-  m_platform.Timer().Program(_mode, _divisor);
+  m_platform.Events().SetTickDivisor(_divisor);
   m_platform.TakeDueInterrupts();
 }
 
 void Hardware::EndOfInterrupt()
 {
-  m_platform.Interrupts().EndOfInterrupt();
+  m_platform.Events().EndOfInterrupt();
   m_platform.TakeDueInterrupts();
 }
 
@@ -72,15 +71,14 @@ void Hardware::Spin()
 
 std::uint8_t Hardware::KeyboardData()
 {
-  return m_platform.KeyboardController().Data();
+  return m_platform.Events().ScanCode();
 }
 
 void Hardware::AcknowledgeKeyboard()
 {
-  Keyboard& keyboard = m_platform.KeyboardController();
-  const auto pulse = static_cast<std::uint8_t>(keyboard.SystemControl() | KEYBOARD_ACKNOWLEDGE);
-  keyboard.SetSystemControl(pulse);
-  keyboard.SetSystemControl(static_cast<std::uint8_t>(pulse & ~KEYBOARD_ACKNOWLEDGE));
+  const auto pulse = static_cast<std::uint8_t>(m_platform.SystemControl() | KEYBOARD_ACKNOWLEDGE);
+  m_platform.SetSystemControl(pulse);
+  m_platform.SetSystemControl(static_cast<std::uint8_t>(pulse & ~KEYBOARD_ACKNOWLEDGE));
 }
 
 std::uint8_t Hardware::GamePortButtons()

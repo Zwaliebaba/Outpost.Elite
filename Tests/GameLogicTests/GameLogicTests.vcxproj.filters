@@ -128,15 +128,6 @@
     <ClCompile Include="InputTests.cpp">
       <Filter>Input</Filter>
     </ClCompile>
-    <ClCompile Include="InterruptControllerTests.cpp">
-      <Filter>Platform</Filter>
-    </ClCompile>
-    <ClCompile Include="IntervalTimerTests.cpp">
-      <Filter>Platform</Filter>
-    </ClCompile>
-    <ClCompile Include="KeyboardTests.cpp">
-      <Filter>Platform</Filter>
-    </ClCompile>
     <ClCompile Include="MarketAnswerTests.cpp">
       <Filter>Market</Filter>
     </ClCompile>
@@ -170,6 +161,9 @@
     <ClCompile Include="SaveLoadTests.cpp">
       <Filter>SaveLoad</Filter>
     </ClCompile>
+    <ClCompile Include="SchedulerTests.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
     <ClCompile Include="Sha256Tests.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
@@ -190,6 +184,9 @@
     </ClCompile>
     <ClCompile Include="TextTests.cpp">
       <Filter>Text</Filter>
+    </ClCompile>
+    <ClCompile Include="ToneTimerTests.cpp">
+      <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="TwinRigTests.cpp">
       <Filter>Rigs</Filter>

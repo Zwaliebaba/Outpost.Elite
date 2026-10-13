@@ -109,9 +109,6 @@
     <ClCompile Include="GaugesTests.cpp" />
     <ClCompile Include="HyperspaceTests.cpp" />
     <ClCompile Include="InputTests.cpp" />
-    <ClCompile Include="InterruptControllerTests.cpp" />
-    <ClCompile Include="IntervalTimerTests.cpp" />
-    <ClCompile Include="KeyboardTests.cpp" />
     <ClCompile Include="MarketAnswerTests.cpp" />
     <ClCompile Include="MarketTests.cpp" />
     <ClCompile Include="MathsAnswerTests.cpp" />
@@ -125,6 +122,7 @@
     <ClCompile Include="ReferenceImageTests.cpp" />
     <ClCompile Include="ReplayTests.cpp" />
     <ClCompile Include="SaveLoadTests.cpp" />
+    <ClCompile Include="SchedulerTests.cpp" />
     <ClCompile Include="Sha256Tests.cpp" />
     <ClCompile Include="ShipModelTests.cpp" />
     <ClCompile Include="SpaceViewLayersTests.cpp" />
@@ -132,6 +130,7 @@
     <ClCompile Include="StartUpTests.cpp" />
     <ClCompile Include="StateDigestTests.cpp" />
     <ClCompile Include="TextTests.cpp" />
+    <ClCompile Include="ToneTimerTests.cpp" />
     <ClCompile Include="TwinRigTests.cpp" />
   </ItemGroup>
   <ItemGroup>

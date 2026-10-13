@@ -165,7 +165,7 @@ int Application::Run(HINSTANCE _instance)
       // keys they copy. A key the XT does not have is not sent.
       if (Elite::KeyNameOf(key.scanCode))
       {
-        platform->KeyboardController().Inject(static_cast<std::uint8_t>(key.scanCode | (key.down ? 0 : BREAK_BIT)));
+        platform->Events().Inject(static_cast<std::uint8_t>(key.scanCode | (key.down ? 0 : BREAK_BIT)));
       }
     }
     if (window.TakeResized() && !renderer.Resize())

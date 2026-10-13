@@ -121,10 +121,7 @@
     <ClInclude Include="HyperspaceTables.h" />
     <ClInclude Include="Input.h" />
     <ClInclude Include="InputState.h" />
-    <ClInclude Include="InterruptController.h" />
-    <ClInclude Include="IntervalTimer.h" />
     <ClInclude Include="JumpState.h" />
-    <ClInclude Include="Keyboard.h" />
     <ClInclude Include="KeyboardState.h" />
     <ClInclude Include="Market.h" />
     <ClInclude Include="MarketState.h" />
@@ -153,6 +150,7 @@
     <ClInclude Include="Scene.h" />
     <ClInclude Include="SceneState.h" />
     <ClInclude Include="SceneTables.h" />
+    <ClInclude Include="Scheduler.h" />
     <ClInclude Include="Sha256.h" />
     <ClInclude Include="SharedTables.h" />
     <ClInclude Include="ShipModel.h" />
@@ -164,6 +162,7 @@
     <ClInclude Include="SpaceObject.h" />
     <ClInclude Include="SpaceViewLayers.h" />
     <ClInclude Include="Speaker.h" />
+    <ClInclude Include="SquareWave.h" />
     <ClInclude Include="StartUp.h" />
     <ClInclude Include="StartUpState.h" />
     <ClInclude Include="StartUpTables.h" />
@@ -175,6 +174,7 @@
     <ClInclude Include="TimerState.h" />
     <ClInclude Include="TimerTables.h" />
     <ClInclude Include="Timing.h" />
+    <ClInclude Include="ToneTimer.h" />
     <ClInclude Include="Video.h" />
     <ClInclude Include="VideoState.h" />
     <ClInclude Include="VideoTables.h" />
@@ -202,9 +202,6 @@
     <ClCompile Include="Hardware.cpp" />
     <ClCompile Include="Hyperspace.cpp" />
     <ClCompile Include="Input.cpp" />
-    <ClCompile Include="InterruptController.cpp" />
-    <ClCompile Include="IntervalTimer.cpp" />
-    <ClCompile Include="Keyboard.cpp" />
     <ClCompile Include="Market.cpp" />
     <ClCompile Include="Maths.cpp" />
     <ClCompile Include="Mouse.cpp" />
@@ -220,16 +217,19 @@
     <ClCompile Include="Replay.cpp" />
     <ClCompile Include="SaveLoad.cpp" />
     <ClCompile Include="Scene.cpp" />
+    <ClCompile Include="Scheduler.cpp" />
     <ClCompile Include="Sha256.cpp" />
     <ClCompile Include="ShipModel.cpp" />
     <ClCompile Include="Ships.cpp" />
     <ClCompile Include="Sound.cpp" />
     <ClCompile Include="SpaceViewLayers.cpp" />
     <ClCompile Include="Speaker.cpp" />
+    <ClCompile Include="SquareWave.cpp" />
     <ClCompile Include="StartUp.cpp" />
     <ClCompile Include="StateDigest.cpp" />
     <ClCompile Include="Text.cpp" />
     <ClCompile Include="Timer.cpp" />
+    <ClCompile Include="ToneTimer.cpp" />
     <ClCompile Include="Video.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -273,7 +273,7 @@ public:
     Assert::AreEqual(std::uint64_t{3}, rig.Host().InterruptsTaken());
     Assert::AreEqual(3 * Elite::Platform::HARDWARE_INTERRUPT_CYCLES, rig.Host().InstructionCycles(), L"each entry's cycles");
     Assert::AreEqual(ticks, rig.Host().BiosServices().Ticks(), L"the BIOS's handler did not run");
-    Assert::AreEqual(0u, std::uint32_t{rig.Host().Interrupts().InServiceRegister()}, L"every one ended");
+    Assert::IsFalse(rig.Host().Events().InService(Elite::Irq::Timer), L"every one ended");
     Assert::AreEqual(std::uint64_t{3}, rig.Host().GameHandler(Elite::Irq::Timer).calls);
   }
 
@@ -335,32 +335,60 @@ public:
       Elite::Platform& platform = rig.Host();
       platform.BiosServices().SetClock(test.ticks);
       const Elite::Cycles cycles = platform.InstructionCycles();
-      platform.Interrupts().RaiseIrq(0);
+      platform.Events().Request(Elite::Irq::Timer);
       platform.TakeDueInterrupts();
       Assert::AreEqual(test.ticksAfter, platform.BiosServices().Ticks(), L"the count");
       Assert::AreEqual(Elite::Platform::HARDWARE_INTERRUPT_CYCLES + test.instructionCycles, platform.InstructionCycles() - cycles,
                        L"the instruction clock: the entry, then the ROM's code to its IRET");
-      Assert::AreEqual(0u, std::uint32_t{platform.Interrupts().InServiceRegister()}, L"ended");
+      Assert::IsFalse(platform.Events().InService(Elite::Irq::Timer) || platform.Events().InService(Elite::Irq::Keyboard), L"ended");
       Assert::AreEqual(std::uint32_t{test.rolledOver}, std::uint32_t{platform.BiosServices().ReadClock().rolledOver}, L"TIMER_OFL");
     }
 
-    // The keyboard handler, with a key latched in the 8255: the scan code read, the key acknowledged on the system control
+    // The keyboard handler, with a key latched: the scan code read, the key acknowledged on the system control
     // port, and the interrupt ended; the key is not buffered.
     PlatformRig rig("PlatformBiosKeyboard");
     Elite::Platform& platform = rig.Host();
-    platform.KeyboardController().Inject(0x1E);
-    while (!platform.KeyboardController().LatchFull())
+    platform.Events().Inject(0x1E);
+    while (!platform.Events().LatchFull())
     {
       platform.Idle(Elite::NO_EVENT);
     }
     const std::string digest = Elite::GameStateDigest(rig.State(), platform.Video());
     const Elite::Cycles cycles = platform.InstructionCycles();
     platform.TakeDueInterrupts();
-    Assert::IsFalse(platform.KeyboardController().LatchFull(), L"acknowledged");
-    Assert::AreEqual(0x4Cu, std::uint32_t{platform.KeyboardController().SystemControl()}, L"bit 7 high, then low");
+    Assert::IsFalse(platform.Events().LatchFull(), L"acknowledged");
+    Assert::AreEqual(0x4Cu, std::uint32_t{platform.SystemControl()}, L"bit 7 high, then low");
     Assert::IsTrue(Elite::GameStateDigest(rig.State(), platform.Video()) == digest, L"nothing buffered");
     Assert::AreEqual(Elite::Platform::HARDWARE_INTERRUPT_CYCLES + 127, platform.InstructionCycles() - cycles);
-    Assert::AreEqual(0u, std::uint32_t{platform.Interrupts().InServiceRegister()}, L"ended");
+    Assert::IsFalse(platform.Events().InService(Elite::Irq::Timer) || platform.Events().InService(Elite::Irq::Keyboard), L"ended");
+  }
+
+  // The system control port reads back what was written; bit 0 gates the tone timer and bits 0-1 reach the speaker, and bit 7
+  // holds the keyboard without touching either.
+  TEST_METHOD(SystemControlReadsBackAndDrivesGateAndSpeaker)
+  {
+    PlatformRig rig("PlatformSystemControl");
+    Elite::Platform& platform = rig.Host();
+    Assert::AreEqual(0x4Cu, std::uint32_t{platform.SystemControl()}, L"power-on value");
+    const std::size_t events = platform.Sound().Events().size();
+
+    platform.Idle(1000);
+    platform.SetSystemControl(0x4F);
+    Assert::AreEqual(0x4Fu, std::uint32_t{platform.SystemControl()});
+    Assert::IsTrue(platform.Tone().State().gate);
+    const Elite::Speaker::Event& on = platform.Sound().Events().back();
+    Assert::AreEqual(platform.Clock(), on.at);
+    Assert::IsTrue(on.gate && on.data);
+    Assert::AreEqual(events + 1, platform.Sound().Events().size(), L"the gate and the bits at one cycle are one event");
+
+    platform.Idle(2000);
+    platform.SetSystemControl(0xCF);
+    platform.SetSystemControl(0x4F);
+    Assert::AreEqual(events + 1, platform.Sound().Events().size(), L"the acknowledge pulse leaves the speaker alone");
+
+    platform.SetSystemControl(0x4D);
+    Assert::IsTrue(platform.Tone().State().gate);
+    Assert::IsFalse(platform.Sound().Events().back().data);
   }
 
   // ExitToDos (CS:00AD) prints the exit message in mode 2 through DOS's int 21h AH=09h, which writes through the BIOS's

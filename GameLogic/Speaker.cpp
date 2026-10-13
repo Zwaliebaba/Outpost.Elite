@@ -65,7 +65,7 @@ void Speaker::SetSystemControl(std::uint8_t _value)
   Append(event);
 }
 
-void Speaker::SetChannel2(const IntervalTimer::Channel& _channel)
+void Speaker::SetChannel2(const SquareWave& _channel)
 {
   Event event = m_events.back();
   event.at = m_clock;

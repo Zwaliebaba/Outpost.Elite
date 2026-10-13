@@ -20,10 +20,6 @@ constexpr std::uint16_t FLAG_INTERRUPT = 0x0200;
 // DOS starts a program with FLAGS F202h: interrupts on and the direction flag clear (ADR-006 item 4).
 constexpr std::uint16_t ENTRY_FLAGS = 0xF202;
 
-// The interrupt controller's vectors for the timer's and the keyboard's requests, IRQ 0 and IRQ 1.
-constexpr std::uint8_t VECTOR_TIMER = 0x08;
-constexpr std::uint8_t VECTOR_KEYBOARD = 0x09;
-
 // What the 8088 takes over the ROM's IRET, as the interpreter charged it until D7: Intel's 8086 figure and three words popped
 // over the 8-bit bus.
 constexpr Cycles IRET_CYCLES = 24 + 3 * 4;
@@ -47,7 +43,10 @@ constexpr Cycles PORT_ACCESS = 10;    // IN AL,imm8 and OUT imm8,AL
 constexpr Cycles LOGIC_IMMEDIATE = 4; // OR AL,imm8 and AND AL,imm8
 constexpr Cycles POP_REGISTER = 12;   // POP AX and POP DS
 
-// The system control port's bit 7, which the XT's keyboard is acknowledged by.
+// The system control port: bit 0 the tone timer's gate, bit 1 the speaker's data, and bit 7, which the XT's keyboard is
+// acknowledged by, its hold.
+constexpr std::uint8_t TONE_GATE = 0x01;
+constexpr std::uint8_t SPEAKER_BITS = 0x03;
 constexpr std::uint8_t KEYBOARD_CLEAR = 0x80;
 
 // DOS's print string: its end.
@@ -78,8 +77,8 @@ struct NativeAbandoned
 Platform::Platform(GameState& _state, FileStore& _files, const Desc& _desc)
   : m_state(_state),
     m_speaker(m_clock),
-    m_timer(m_clock, m_controller, m_speaker),
-    m_keyboard(m_clock, m_controller, m_timer, m_speaker),
+    m_tone(m_clock, m_speaker),
+    m_events(m_clock),
     m_gamePort(m_instructionCycles),
     m_cga(m_clock),
     m_bios(_state, m_cga, TimerTicksAt(_desc.startMoment)),
@@ -89,6 +88,8 @@ Platform::Platform(GameState& _state, FileStore& _files, const Desc& _desc)
     m_flags(ENTRY_FLAGS),
     m_commandTail(_desc.commandTail)
 {
+  // The system control port's power-on value reaches the speaker like any other write; the tone timer's gate is low already.
+  m_speaker.SetSystemControl(m_systemControl);
 }
 
 Platform::~Platform()
@@ -271,19 +272,34 @@ bool Platform::InterruptsEnabled() const noexcept
 
 void Platform::TakeDueInterrupts()
 {
-  while (InterruptsEnabled() && m_controller.InterruptPending())
+  while (InterruptsEnabled() && m_events.InterruptPending())
   {
     // The acknowledge cycle, then the entry the 8088 makes, which the instruction clock counts.
-    const std::uint8_t vector = m_controller.Acknowledge();
+    const Irq irq = m_events.Take();
     m_instructionCycles += HARDWARE_INTERRUPT_CYCLES;
     ++m_stepsSinceIdle;
     ++m_interruptsTaken;
-    Interrupt(vector);
+    Interrupt(irq);
     if (Stopped() != StopReason::Reached)
     {
       throw ProgramStopped{};
     }
   }
+}
+
+void Platform::SetSystemControl(std::uint8_t _value)
+{
+  const auto changed = static_cast<std::uint8_t>(m_systemControl ^ _value);
+  m_systemControl = _value;
+  if ((changed & TONE_GATE) != 0)
+  {
+    m_tone.SetGate((_value & TONE_GATE) != 0);
+  }
+  if ((changed & SPEAKER_BITS) != 0)
+  {
+    m_speaker.SetSystemControl(_value);
+  }
+  m_events.HoldKeyboard((_value & KEYBOARD_CLEAR) != 0);
 }
 
 void Platform::CallAbsentMouse()
@@ -302,18 +318,11 @@ void Platform::CallAbsentMouse()
 }
 
 // As the 8088 enters a handler: IF cleared, the handler its vector names run, and its IRET putting the flags back as they were.
-// Only the timer's and the keyboard's requests are unmasked and raised; another's vector names the ROM's IRET.
-void Platform::Interrupt(std::uint8_t _vector)
+void Platform::Interrupt(Irq _irq)
 {
+  const Irq irq = _irq;
   const std::uint16_t flags = m_flags;
   m_flags = static_cast<std::uint16_t>(m_flags & ~FLAG_INTERRUPT);
-  if (_vector != VECTOR_TIMER && _vector != VECTOR_KEYBOARD)
-  {
-    m_instructionCycles += IRET_CYCLES;
-    m_flags = flags;
-    return;
-  }
-  const Irq irq = _vector == VECTOR_TIMER ? Irq::Timer : Irq::Keyboard;
   switch (Handler(irq))
   {
   case IrqHandler::Bios:
@@ -368,7 +377,7 @@ void Platform::RunBiosTimerHandler()
   // INT 1Ch: the ROM's IRET, as the program leaves the vector.
   m_instructionCycles += SOFTWARE_INTERRUPT + INTERRUPT_RETURN;
   // OUT 20h,20h.
-  m_controller.EndOfInterrupt();
+  m_events.EndOfInterrupt();
   m_instructionCycles += MOVE_IMMEDIATE + PORT_ACCESS + 2 * POP_REGISTER + INTERRUPT_RETURN;
 }
 
@@ -376,11 +385,11 @@ void Platform::RunBiosTimerHandler()
 void Platform::RunBiosKeyboardHandler()
 {
   m_flags = static_cast<std::uint16_t>(m_flags | FLAG_INTERRUPT);
-  (void)m_keyboard.Data();
-  const auto cleared = static_cast<std::uint8_t>(m_keyboard.SystemControl() | KEYBOARD_CLEAR);
-  m_keyboard.SetSystemControl(cleared);
-  m_keyboard.SetSystemControl(static_cast<std::uint8_t>(cleared & ~KEYBOARD_CLEAR));
-  m_controller.EndOfInterrupt();
+  (void)m_events.ScanCode();
+  const auto cleared = static_cast<std::uint8_t>(m_systemControl | KEYBOARD_CLEAR);
+  SetSystemControl(cleared);
+  SetSystemControl(static_cast<std::uint8_t>(cleared & ~KEYBOARD_CLEAR));
+  m_events.EndOfInterrupt();
   m_instructionCycles += STI + PUSH_REGISTER + 2 * PORT_ACCESS + LOGIC_IMMEDIATE + PORT_ACCESS + LOGIC_IMMEDIATE + PORT_ACCESS +
                          MOVE_IMMEDIATE + PORT_ACCESS + POP_REGISTER + INTERRUPT_RETURN;
 }
@@ -389,15 +398,14 @@ void Platform::RunBiosKeyboardHandler()
 
 void Platform::Idle(Cycles _limit)
 {
-  Cycles next = std::min({m_timer.NextInterruptAt(), m_keyboard.NextDeliveryAt(), m_cga.NextStatusChangeAt(), _limit});
+  Cycles next = std::min({m_events.NextEventAt(), m_cga.NextStatusChangeAt(), _limit});
   if (next <= m_clock)
   {
     next = m_clock + 1;
   }
   m_clock = next;
   m_stepsSinceIdle = 0;
-  m_timer.Advance();
-  m_keyboard.Advance();
+  m_events.Advance();
 }
 
 void Platform::Wait()

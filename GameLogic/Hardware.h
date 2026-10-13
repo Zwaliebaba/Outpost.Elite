@@ -35,9 +35,9 @@ public:
   /// The speaker's tone: OUT 43h,B6h, then _divisor's low and high bytes to the timer's channel 2 at 42h.
   void SetToneDivisor(std::uint16_t _divisor);
 
-  /// The timer's tick: OUT 43h,_mode, then _divisor's low and high bytes to the timer's channel 0 at 40h. A control word can
+  /// The timer's tick: OUT 43h,36h, then _divisor's low and high bytes to the timer's channel 0 at 40h. The control word can
   /// raise IRQ 0 at once: with interrupts on, it is taken here, as the CPU takes it at the next instruction.
-  void SetTickDivisor(std::uint8_t _mode, std::uint16_t _divisor);
+  void SetTickDivisor(std::uint16_t _divisor);
 
   /// OUT 20h,20h: the end of an interrupt, to the interrupt controller. With interrupts on, one it held back is taken here.
   void EndOfInterrupt();
