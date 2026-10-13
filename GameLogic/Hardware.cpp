@@ -15,7 +15,6 @@ namespace
 constexpr std::uint8_t TIMER_CHANNEL_2_SQUARE_WAVE = 0xB6; // channel 2, low then high byte, mode 3
 constexpr std::uint8_t KEYBOARD_ACKNOWLEDGE = 0x80;        // port 61h bit 7, the XT's PB7
 
-constexpr std::uint8_t MOUSE_VECTOR = 0x33;
 constexpr std::uint16_t MOUSE_BUTTON_PRESSES = 0x0005;
 
 constexpr std::uint8_t CRTC_CURSOR_ADDRESS_HIGH = 0x0E;
@@ -89,15 +88,15 @@ std::uint8_t Hardware::GamePortButtons()
   return m_platform.Joystick().Read();
 }
 
-// The mouse driver's calls: the driver's when one is loaded; otherwise int 33h reaches what its vector names, the ROM's IRET,
-// and the registers come back as they went.
+// The mouse driver's calls: the driver's when a mouse is there; otherwise int 33h reaches what its vector names, the ROM's IRET,
+// and the registers come back as they went (Platform::CallAbsentMouse).
 
 void Hardware::ResetMouse()
 {
   Mouse& mouse = m_platform.MouseDriver();
   if (!mouse.Present())
   {
-    m_platform.SoftwareInterrupt(MOUSE_VECTOR);
+    m_platform.CallAbsentMouse();
     return;
   }
   mouse.Reset();
@@ -108,7 +107,7 @@ std::uint16_t Hardware::ReadMousePresses()
   const Mouse& mouse = m_platform.MouseDriver();
   if (!mouse.Present())
   {
-    m_platform.SoftwareInterrupt(MOUSE_VECTOR);
+    m_platform.CallAbsentMouse();
     return MOUSE_BUTTON_PRESSES;
   }
   return mouse.Buttons();
@@ -119,7 +118,7 @@ MouseMotion Hardware::ReadMouseMotion()
   Mouse& mouse = m_platform.MouseDriver();
   if (!mouse.Present())
   {
-    m_platform.SoftwareInterrupt(MOUSE_VECTOR);
+    m_platform.CallAbsentMouse();
     return MouseMotion{0, 0};
   }
   return mouse.Motion();
@@ -257,29 +256,19 @@ void Hardware::Spend(const PacingPoint& _point)
 
 // ── What the emulated PC kept in memory, outside the game's (D33) ──
 
-FarAddress Hardware::InterruptVector(std::uint8_t _vector)
+IrqHandler Hardware::Handler(Irq _irq) const noexcept
 {
-  return m_platform.InterruptVector(_vector);
+  return m_platform.Handler(_irq);
 }
 
-void Hardware::SetInterruptVector(std::uint8_t _vector, FarAddress _handler)
+void Hardware::SetHandler(Irq _irq, IrqHandler _handler) noexcept
 {
-  m_platform.SetInterruptVector(_vector, _handler);
+  m_platform.SetHandler(_irq, _handler);
 }
 
-FarAddress Hardware::BiosInterruptVector(std::uint8_t _vector) const noexcept
+bool Hardware::MouseDriverLoaded() const noexcept
 {
-  return m_platform.PowerOnInterruptVector(_vector);
-}
-
-std::uint8_t Hardware::RomByte(std::uint16_t _segment, std::uint16_t _offset)
-{
-  return m_platform.RomByte(FarAddress{_segment, _offset});
-}
-
-std::uint8_t Hardware::HandlerOpcode(FarAddress _handler)
-{
-  return m_platform.HandlerOpcode(_handler);
+  return m_platform.MouseDriverLoaded();
 }
 
 std::string_view Hardware::CommandTail() const noexcept

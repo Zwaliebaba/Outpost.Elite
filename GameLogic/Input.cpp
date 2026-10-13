@@ -13,8 +13,6 @@ namespace Elite
 namespace
 {
 
-constexpr std::uint8_t MOUSE_VECTOR = 0x33;
-constexpr std::uint8_t IRET_OPCODE = 0xCF;
 constexpr std::uint8_t MOST_MOUSE_STEP = 0x3F; // mickeys / 8, either way
 constexpr std::uint16_t MOUSE_STEP_LIMIT = 0x40;
 
@@ -261,10 +259,8 @@ void KeyboardInterrupt(GameState& _state, Hardware& _hardware)
 
 MouseDriver IsMouseDriverInstalled(Hardware& _hardware)
 {
-  // The int 33h vector: installed when it is set and does not point at an IRET.
-  const FarAddress vector = _hardware.InterruptVector(MOUSE_VECTOR);
-  const bool set = (vector.offset | vector.segment) != 0;
-  return MouseDriver{set && _hardware.HandlerOpcode(vector) != IRET_OPCODE};
+  // The int 33h vector: installed when it is set and does not point at an IRET, as a loaded driver's does.
+  return MouseDriver{_hardware.MouseDriverLoaded()};
 }
 
 void WaitForKeyPress(GameState& _state, Hardware& _hardware)
@@ -601,7 +597,7 @@ namespace
 {
 
 constexpr std::array ENTRIES = {
-  NativeEntry{0x0201, &KeyboardInterruptEntry, EntryReturn::Interrupt},
+  NativeEntry{EntryKind::KeyboardHandler, &KeyboardInterruptEntry}, // CS:0201
 };
 
 } // namespace

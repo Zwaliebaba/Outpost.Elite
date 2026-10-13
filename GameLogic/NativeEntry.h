@@ -8,21 +8,21 @@
 namespace Elite
 {
 
-/// How the original leaves a hooked entry, which says what the entry is.
-enum class EntryReturn : std::uint8_t
+/// What an entry the platform reaches is (ADR-041): the program's start, which leaves by RETF to the far return to PSP:0000 it
+/// pushed, where DOS's int 20h ends the program; or the game's handler of an interrupt, which leaves by IRET.
+enum class EntryKind : std::uint8_t
 {
-  Far,      ///< RETF: Start's, to the far return to PSP:0000 it pushed, where DOS's int 20h ends the program
-  Interrupt ///< IRET: offset, segment, then flags; an interrupt handler's
+  Start,
+  TimerHandler,
+  KeyboardHandler
 };
 
-/// One entry of the reference that the platform reaches (ADR-010): where it is, the native body, and how the original
-/// returns. Each subsystem's file lists its own, and InstallNativeRoutines hands them all to the platform: the program's
-/// start, and the interrupt handlers its vectors name.
+/// One entry of the reference that the platform reaches (ADR-010): what it is, and the native body. Each subsystem's file lists
+/// its own, and InstallNativeRoutines hands them all to the platform.
 struct NativeEntry
 {
-  std::uint16_t offset;
+  EntryKind kind;
   void (*body)(Guest&);
-  EntryReturn exit;
 };
 
 } // namespace Elite

@@ -216,25 +216,21 @@ public:
 
   // ── What the emulated PC kept in memory, outside the game's (D33) ──
 
-  /// Interrupt _vector's entry in the vector table, at 0000:_vector*4 on the PC: the handler an INT or an IRQ reaches.
-  [[nodiscard]] FarAddress InterruptVector(std::uint8_t _vector);
+  /// What serves _irq now (Platform::Handler): the BIOS's handler, the game's own, or a stray vector.
+  [[nodiscard]] IrqHandler Handler(Irq _irq) const noexcept;
 
-  /// Interrupt _vector's entry set to _handler: how the game installs its own handlers and puts the BIOS's back.
-  void SetInterruptVector(std::uint8_t _vector, FarAddress _handler);
+  /// _handler serves _irq from now on: how the game installs its own handlers and puts the BIOS's back, where the original
+  /// writes the interrupt's vector (ADR-041).
+  void SetHandler(Irq _irq, IrqHandler _handler) noexcept;
 
-  /// Interrupt _vector's entry as the BIOS set it at power-on (Platform::PowerOnInterruptVector): the handler the game puts
-  /// back when it leaves, where the original puts back the entry it kept in its own memory before it installed its own (D33,
-  /// piece 3). The game's handlers are the only ones it replaces, and it puts each back before it installs it again, so the
-  /// entry it kept was always this one.
-  [[nodiscard]] FarAddress BiosInterruptVector(std::uint8_t _vector) const noexcept;
+  /// Whether a mouse driver is loaded (Platform::MouseDriverLoaded): what the game's test of int 33h's vector finds.
+  [[nodiscard]] bool MouseDriverLoaded() const noexcept;
 
-  /// The byte of the BIOS's ROM at _segment:_offset (Platform::RomByte): where the game looks for an Amstrad's name, and
-  /// where a vector the BIOS serves points.
-  [[nodiscard]] std::uint8_t RomByte(std::uint16_t _segment, std::uint16_t _offset);
-
-  /// The first byte of the code a vector names (Platform::HandlerOpcode): whether a driver is behind int 33h, or the ROM's
-  /// IRET.
-  [[nodiscard]] std::uint8_t HandlerOpcode(FarAddress _handler);
+  /// Whether the ROM is an Amstrad's, with its name at FC00:0016 where the game looks: never, as the platform is an IBM PC (D12).
+  [[nodiscard]] static constexpr bool AmstradRom() noexcept
+  {
+    return false;
+  }
 
   /// The command tail DOS gave the program, which its PSP held at 81h, its length at 80h: what the program was started with.
   [[nodiscard]] std::string_view CommandTail() const noexcept;

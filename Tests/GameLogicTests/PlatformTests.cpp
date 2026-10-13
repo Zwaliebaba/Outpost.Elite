@@ -3,6 +3,7 @@
 #include "Bios.h"
 #include "Cga.h"
 #include "Hardware.h"
+#include "Input.h"
 #include "Platform.h"
 #include "PlatformRig.h"
 #include "StateDigest.h"
@@ -24,9 +25,6 @@ namespace
 
 // The first IRQ 0 after power-on, at the BIOS's 18.2 Hz.
 constexpr Elite::Cycles FIRST_TICK = 65536 * Elite::CYCLES_PER_PIT_TICK; // 262,144
-
-// A handler's address in the program's code, which a vector can name and a native routine stand in for.
-constexpr Elite::FarAddress HANDLER{0x2000, 0x0010};
 
 // What the 8088 takes over the ROM's IRET: Intel's 8086 figure and three words popped over the 8-bit bus.
 constexpr Elite::Cycles IRET_CYCLES = 24 + 3 * 4;
@@ -227,34 +225,24 @@ public:
   TEST_METHOD(TwoRoutinesAtOneEntryAreRefused)
   {
     PlatformRig rig("PlatformTwice");
-    rig.Host().Hook(HANDLER, [] {});
-    Assert::ExpectException<std::logic_error>([&rig] { rig.Host().Hook(HANDLER, [] {}); }, L"a handler");
+    rig.Host().SetGameHandler(Elite::Irq::Timer, [] {});
+    Assert::ExpectException<std::logic_error>([&rig] { rig.Host().SetGameHandler(Elite::Irq::Timer, [] {}); }, L"a handler");
     rig.Start([] {});
     Assert::ExpectException<std::logic_error>([&rig] { rig.Start([] {}); }, L"the program's start");
   }
 
-  // An INT goes to the handler its vector names, natively, with IF and TF cleared, and returns as IRET does, the flags as
-  // they were.
-  TEST_METHOD(AnInterruptRunsTheHandlerItsVectorNames)
+  // A vector that names code no routine stands in for, as int 8 does once the game writes its segment again while the BIOS's
+  // handler is there: the first interrupt taken there is refused.
+  TEST_METHOD(AStrayHandlerIsRefused)
   {
-    PlatformRig rig("PlatformInterrupts");
-    bool enabledInside = true;
-    bool enabledAfter = false;
-    rig.Host().Hook(HANDLER, [&rig, &enabledInside] { enabledInside = rig.Host().InterruptsEnabled(); });
-    rig.Native().SetInterruptVector(0x60, HANDLER);
-    Assert::IsTrue(rig.Native().InterruptVector(0x60) == HANDLER);
-
+    PlatformRig rig("PlatformStray");
     rig.Start(
-      [&rig, &enabledAfter]
+      [&rig]
       {
-        rig.Native().EnableInterrupts();
-        rig.Host().SoftwareInterrupt(0x60);
-        enabledAfter = rig.Host().InterruptsEnabled();
+        rig.Native().SetHandler(Elite::Irq::Timer, Elite::IrqHandler::Stray);
+        WaitForEver(rig.Native());
       });
-    Assert::IsTrue(rig.Host().RunUntil(1'000) == Elite::StopReason::Terminated);
-    Assert::IsFalse(enabledInside, L"IF cleared in the handler");
-    Assert::IsTrue(enabledAfter, L"and back after its IRET");
-    Assert::AreEqual(std::uint64_t{1}, rig.Host().Hooks().at(0x20010).calls);
+    Assert::ExpectException<std::logic_error>([&rig] { (void)rig.Host().RunUntil(1'000'000); }, L"at the first IRQ 0");
   }
 
   // The game's own timer handler in vector 8: IRQ 0 is taken as the 8088 takes one, at each rising edge of channel 0 while
@@ -265,18 +253,18 @@ public:
     PlatformRig rig("PlatformIrq");
     std::vector<Elite::Cycles> taken;
     bool enabledInside = false;
-    rig.Host().Hook(HANDLER,
-                    [&rig, &taken, &enabledInside]
-                    {
-                      taken.push_back(rig.Host().Clock());
-                      enabledInside = enabledInside || rig.Host().InterruptsEnabled();
-                      rig.Native().EndOfInterrupt();
-                    });
+    rig.Host().SetGameHandler(Elite::Irq::Timer,
+                              [&rig, &taken, &enabledInside]
+                              {
+                                taken.push_back(rig.Host().Clock());
+                                enabledInside = enabledInside || rig.Host().InterruptsEnabled();
+                                rig.Native().EndOfInterrupt();
+                              });
     const std::uint32_t ticks = rig.Host().BiosServices().Ticks();
     rig.Start(
       [&rig]
       {
-        rig.Native().SetInterruptVector(0x08, HANDLER);
+        rig.Native().SetHandler(Elite::Irq::Timer, Elite::IrqHandler::Game);
         WaitForEver(rig.Native());
       });
     Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Elite::StopReason::Reached);
@@ -286,55 +274,29 @@ public:
     Assert::AreEqual(3 * Elite::Platform::HARDWARE_INTERRUPT_CYCLES, rig.Host().InstructionCycles(), L"each entry's cycles");
     Assert::AreEqual(ticks, rig.Host().BiosServices().Ticks(), L"the BIOS's handler did not run");
     Assert::AreEqual(0u, std::uint32_t{rig.Host().Interrupts().InServiceRegister()}, L"every one ended");
+    Assert::AreEqual(std::uint64_t{3}, rig.Host().GameHandler(Elite::Irq::Timer).calls);
   }
 
-  // Every vector as the BIOS leaves it: each at its own IRET in the ROM, F000:FD00 + n, but the timer's and the keyboard's,
-  // which name the BIOS's handlers, and DOS's terminate address. The ROM is an IBM PC's, with no Amstrad's name where Start
-  // looks for one.
-  TEST_METHOD(TheVectorTableIsAsTheBiosLeavesIt)
+  // The BIOS's handlers serve the timer's and the keyboard's interrupts at power-on, as its vectors leave them, and the ROM is
+  // an IBM PC's, with no Amstrad's name where Start looks for one.
+  TEST_METHOD(TheBiosServesBothInterruptsAtPowerOn)
   {
     PlatformRig rig("PlatformVectors");
-    Elite::Hardware& hardware = rig.Native();
-    for (std::uint32_t vector = 0; vector < 256; ++vector)
-    {
-      const Elite::FarAddress handler = hardware.InterruptVector(static_cast<std::uint8_t>(vector));
-      Assert::AreEqual(0xF000u, std::uint32_t{handler.segment});
-      if (vector == 0x08 || vector == 0x09 || vector == 0x22)
-      {
-        continue;
-      }
-      Assert::AreEqual(0xFD00u + vector, std::uint32_t{handler.offset});
-      Assert::AreEqual(0xCFu, std::uint32_t{hardware.HandlerOpcode(handler)}, L"an IRET");
-    }
-    Assert::AreEqual(0xE000u, std::uint32_t{hardware.InterruptVector(0x08).offset}, L"the BIOS's timer handler");
-    Assert::AreEqual(0xE040u, std::uint32_t{hardware.InterruptVector(0x09).offset}, L"the BIOS's keyboard handler");
-    Assert::AreEqual(0xE070u, std::uint32_t{hardware.InterruptVector(0x22).offset}, L"the terminate address");
-
-    Assert::AreEqual(0xFFu, std::uint32_t{hardware.RomByte(0xF000, 0xFFFE)}, L"the model byte: an IBM PC");
-    // Start's check: repe cmpsb of "Amstrad" against FC00:0016.
-    constexpr std::string_view AMSTRAD = "Amstrad";
-    bool same = true;
-    for (std::size_t index = 0; index < AMSTRAD.size(); ++index)
-    {
-      same = same && hardware.RomByte(0xFC00, static_cast<std::uint16_t>(0x16 + index)) == static_cast<std::uint8_t>(AMSTRAD[index]);
-    }
-    Assert::IsFalse(same, L"FC00:0016 must not hold \"Amstrad\"");
-    Assert::ExpectException<std::out_of_range>([&hardware] { (void)hardware.RomByte(0x1000, 0); }, L"the ROM is F000:0000 on");
+    Assert::IsTrue(rig.Native().Handler(Elite::Irq::Timer) == Elite::IrqHandler::Bios, L"the BIOS's timer handler");
+    Assert::IsTrue(rig.Native().Handler(Elite::Irq::Keyboard) == Elite::IrqHandler::Bios, L"the BIOS's keyboard handler");
+    Assert::IsFalse(Elite::Hardware::AmstradRom(), L"FC00:0016 must not hold \"Amstrad\"");
   }
 
-  // What the game's own test, IsMouseDriverInstalled (CS:02D4), reads: the int 33h vector, and the first byte of the code it
-  // names, an IRET when no driver is loaded.
+  // What the game's own test, IsMouseDriverInstalled (CS:02D4), finds: whether a driver is loaded, as int 33h's vector says.
   TEST_METHOD(TheGamesMouseCheckSeesWhetherADriverIsLoaded)
   {
     PlatformRig none("PlatformNoMouse", false);
-    const Elite::FarAddress absent = none.Native().InterruptVector(0x33);
-    Assert::IsTrue(absent == Elite::FarAddress{0xF000, 0xFD33});
-    Assert::AreEqual(0xCFu, std::uint32_t{none.Native().HandlerOpcode(absent)}, L"no driver");
+    Assert::IsFalse(none.Native().MouseDriverLoaded(), L"no driver");
+    Assert::IsFalse(Elite::IsMouseDriverInstalled(none.Native()).installed);
 
     PlatformRig loaded("PlatformMouse", true);
-    const Elite::FarAddress present = loaded.Native().InterruptVector(0x33);
-    Assert::IsTrue(present == Elite::FarAddress{0xF000, 0xE060});
-    Assert::IsTrue(loaded.Native().HandlerOpcode(present) != 0xCF, L"the driver's entry is not an IRET");
+    Assert::IsTrue(loaded.Native().MouseDriverLoaded(), L"a driver");
+    Assert::IsTrue(Elite::IsMouseDriverInstalled(loaded.Native()).installed);
   }
 
   // An interrupt nothing serves goes to the ROM's IRET, which returns at once and costs the 8088 its cycles: int 33h with no

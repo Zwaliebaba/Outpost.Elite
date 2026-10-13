@@ -20,7 +20,6 @@
 #include <cstdint>
 #include <exception>
 #include <functional>
-#include <map>
 #include <semaphore>
 #include <string>
 #include <thread>
@@ -38,16 +37,23 @@ enum class StopReason : std::uint8_t
   Spinning    ///< The program ran SpinLimit() turns without waiting once.
 };
 
-/// A far address, segment and offset: what an interrupt vector holds. A plain record (R8).
-struct FarAddress
+/// The two hardware interrupts the game takes (ADR-041): the timer's, IRQ 0 on int 8, and the keyboard's, IRQ 1 on int 9.
+enum class Irq : std::uint8_t
 {
-  std::uint16_t segment = 0;
-  std::uint16_t offset = 0;
-
-  [[nodiscard]] bool operator==(const FarAddress&) const noexcept = default;
+  Timer,
+  Keyboard
 };
 
-/// A routine in C++ that stands in for the program's own code (ADR-010): its start, or an interrupt handler a vector names.
+/// What serves an interrupt: the BIOS's handler, the game's own, or a vector that names code no routine stands in for, as int 8
+/// does once the game writes its segment again while the BIOS's handler is there; one taken there throws std::logic_error.
+enum class IrqHandler : std::uint8_t
+{
+  Bios,
+  Game,
+  Stray
+};
+
+/// A routine in C++ that stands in for the program's own code (ADR-010): its start, or one of its interrupt handlers.
 using NativeRoutine = std::function<void()>;
 
 /// The native platform the game runs on (D23, D27, D33): the IBM PC's devices and the services of its ROM and DOS, as the
@@ -137,9 +143,9 @@ public:
   /// ended. Throws std::logic_error if the program has one already.
   void SetEntry(NativeRoutine _routine);
 
-  /// From now on an interrupt whose vector names _address runs _routine, which stands in for the program's code there, and
-  /// returns from it as IRET does. Throws std::logic_error if a routine is there already.
-  void Hook(FarAddress _address, NativeRoutine _routine);
+  /// _routine is the game's own handler of _irq, which runs whenever it is the handler there (SetHandler) and the interrupt is
+  /// taken, and returns from it as IRET does. Throws std::logic_error if the game has one there already.
+  void SetGameHandler(Irq _irq, NativeRoutine _routine);
 
   /// The program's start routine, and how often it ran.
   [[nodiscard]] const HookedRoutine& Entry() const noexcept
@@ -147,10 +153,10 @@ public:
     return m_entry;
   }
 
-  /// Every interrupt handler, by the 20-bit address of its entry.
-  [[nodiscard]] const std::map<std::uint32_t, HookedRoutine>& Hooks() const noexcept
+  /// The game's own handler of _irq, and how often it ran.
+  [[nodiscard]] const HookedRoutine& GameHandler(Irq _irq) const noexcept
   {
-    return m_hooks;
+    return m_gameHandlers[static_cast<std::size_t>(_irq)];
   }
 
   // ── Running ──
@@ -359,42 +365,38 @@ public:
     m_instructionCycles += _cycles;
   }
 
-  /// Interrupt _vector's entry in the vector table.
-  [[nodiscard]] FarAddress InterruptVector(std::uint8_t _vector) const noexcept
+  /// What serves _irq now. At power-on the BIOS's handlers serve both.
+  [[nodiscard]] IrqHandler Handler(Irq _irq) const noexcept
   {
-    return m_vectors[_vector];
+    return m_handlers[static_cast<std::size_t>(_irq)];
   }
 
-  /// Interrupt _vector's entry set to _handler.
-  void SetInterruptVector(std::uint8_t _vector, FarAddress _handler) noexcept;
-
-  /// Interrupt _vector's entry as the BIOS and DOS set it at power-on, whatever it holds now: the handler a program that
-  /// installs its own puts back when it is done.
-  [[nodiscard]] FarAddress PowerOnInterruptVector(std::uint8_t _vector) const noexcept
+  /// _handler serves _irq from now on: how the game installs its own handlers and puts the BIOS's back.
+  void SetHandler(Irq _irq, IrqHandler _handler) noexcept
   {
-    return m_powerOnVectors[_vector];
+    m_handlers[static_cast<std::size_t>(_irq)] = _handler;
   }
 
-  /// The byte of the BIOS's ROM, F000:0000-FFFF, at _address: the IRET at F000:FD00 + n that each vector the BIOS does not
-  /// serve names, the mouse driver's entry at F000:E060 (a NOP and an IRET), the model byte FFh at F000:FFFE, and zero
-  /// everywhere else, FC00:0016 included, where an Amstrad's ROM has its name (D12). The BIOS's handlers are native, so their
-  /// code is not there. Throws std::out_of_range for an address outside the ROM.
-  [[nodiscard]] std::uint8_t RomByte(FarAddress _address) const;
+  /// Whether a mouse driver is loaded, which int 33h's vector says on the PC: set from Desc::mousePresent at power-on.
+  [[nodiscard]] bool MouseDriverLoaded() const noexcept
+  {
+    return m_mouseDriverLoaded;
+  }
 
-  /// The first byte of the code at _handler, which a vector names: the ROM's (RomByte). The game asks only of int 33h's vector, which
-  /// nothing points into its own code (change 3c). Throws std::out_of_range for an address outside the ROM.
-  [[nodiscard]] std::uint8_t HandlerOpcode(FarAddress _handler) const;
+  /// A mouse driver loaded or not, whatever the mouse is: a test's driver with no mouse behind it, whose calls throw
+  /// std::logic_error, as a driver no routine stands in for did.
+  void SetMouseDriverLoaded(bool _loaded) noexcept
+  {
+    m_mouseDriverLoaded = _loaded;
+  }
 
-  /// INT _vector, to the handler its vector names, which runs to its IRET: a native routine (Hook), or the ROM's IRET.
-  void SoftwareInterrupt(std::uint8_t _vector);
-
-  /// The handler at _handler, run to its IRET as INT runs one, with the interrupt's frame in place.
-  void CallHandler(FarAddress _handler);
+  /// Int 33h with no mouse behind it: the ROM's IRET, with its cycles, when no driver is loaded; a driver loaded with no mouse
+  /// behind it throws std::logic_error.
+  void CallAbsentMouse();
 
 private:
   [[nodiscard]] StopReason Stopped() const noexcept;
   void Interrupt(std::uint8_t _vector);
-  void RunHandler(FarAddress _handler);
   void EndTurn();
   void StartNative();
   void ResumeNative();
@@ -423,13 +425,13 @@ private:
   Mouse m_mouse;
   DosFiles m_files;
 
-  std::array<FarAddress, 256> m_vectors{};
-  std::array<FarAddress, 256> m_powerOnVectors{};
+  std::array<IrqHandler, 2> m_handlers{IrqHandler::Bios, IrqHandler::Bios};
+  bool m_mouseDriverLoaded = false;
   std::uint16_t m_flags;
   std::string m_commandTail;
 
   HookedRoutine m_entry;
-  std::map<std::uint32_t, HookedRoutine> m_hooks;
+  std::array<HookedRoutine, 2> m_gameHandlers{};
   std::uint64_t m_interruptsTaken = 0;
 
   std::uint64_t m_spinLimit = DEFAULT_SPIN_LIMIT;

@@ -20,27 +20,9 @@ constexpr std::uint16_t FLAG_INTERRUPT = 0x0200;
 // DOS starts a program with FLAGS F202h: interrupts on and the direction flag clear (ADR-006 item 4).
 constexpr std::uint16_t ENTRY_FLAGS = 0xF202;
 
-// The vector table as the BIOS leaves it (ADR-006 item 3): every vector at its own IRET in the ROM, F000:FD00 + n, but the
-// timer's and the keyboard's, which name the BIOS's handlers, DOS's terminate address, which names the ROM's halt, and the
-// mouse's, which names the driver's entry when one is loaded.
-constexpr std::uint16_t ROM_SEGMENT = 0xF000;
-constexpr std::uint16_t TIMER_HANDLER_OFFSET = 0xE000;
-constexpr std::uint16_t KEYBOARD_HANDLER_OFFSET = 0xE040;
-constexpr std::uint16_t MOUSE_DRIVER_OFFSET = 0xE060;
-constexpr std::uint16_t HALT_OFFSET = 0xE070;
-constexpr std::uint16_t IRET_STUBS_OFFSET = 0xFD00;
-constexpr std::uint16_t IRET_STUBS_END = 0xFE00;
-constexpr std::uint16_t MODEL_OFFSET = 0xFFFE;
-constexpr std::uint8_t MODEL_IBM_PC = 0xFF;
-constexpr std::uint8_t OPCODE_NOP = 0x90;
-constexpr std::uint8_t OPCODE_IRET = 0xCF;
-constexpr std::uint32_t ROM_LINEAR = static_cast<std::uint32_t>(ROM_SEGMENT) << 4;
-constexpr std::uint32_t ADDRESS_MASK = 0xFFFFF;
-
+// The interrupt controller's vectors for the timer's and the keyboard's requests, IRQ 0 and IRQ 1.
 constexpr std::uint8_t VECTOR_TIMER = 0x08;
 constexpr std::uint8_t VECTOR_KEYBOARD = 0x09;
-constexpr std::uint8_t VECTOR_TERMINATE = 0x22;
-constexpr std::uint8_t VECTOR_MOUSE = 0x33;
 
 // What the 8088 takes over the ROM's IRET, as the interpreter charged it until D7: Intel's 8086 figure and three words popped
 // over the 8-bit bus.
@@ -83,11 +65,6 @@ struct NativeAbandoned
 {
 };
 
-[[nodiscard]] constexpr std::uint32_t Linear(FarAddress _address) noexcept
-{
-  return ((static_cast<std::uint32_t>(_address.segment) << 4) + _address.offset) & ADDRESS_MASK;
-}
-
 // The BIOS's tick count for DOS's time of day.
 [[nodiscard]] std::uint32_t TimerTicksAt(const DosDateTime& _moment) noexcept
 {
@@ -108,25 +85,10 @@ Platform::Platform(GameState& _state, FileStore& _files, const Desc& _desc)
     m_bios(_state, m_cga, TimerTicksAt(_desc.startMoment)),
     m_mouse(_desc.mousePresent),
     m_files(_state, _files, _desc.startMoment),
+    m_mouseDriverLoaded(_desc.mousePresent),
     m_flags(ENTRY_FLAGS),
     m_commandTail(_desc.commandTail)
 {
-  for (std::size_t vector = 0; vector < m_vectors.size(); ++vector)
-  {
-    m_vectors[vector] = FarAddress{ROM_SEGMENT, static_cast<std::uint16_t>(IRET_STUBS_OFFSET + vector)};
-  }
-  m_vectors[VECTOR_TIMER] = FarAddress{ROM_SEGMENT, TIMER_HANDLER_OFFSET};
-  m_vectors[VECTOR_KEYBOARD] = FarAddress{ROM_SEGMENT, KEYBOARD_HANDLER_OFFSET};
-  m_vectors[VECTOR_TERMINATE] = FarAddress{ROM_SEGMENT, HALT_OFFSET};
-  if (_desc.mousePresent)
-  {
-    m_vectors[VECTOR_MOUSE] = FarAddress{ROM_SEGMENT, MOUSE_DRIVER_OFFSET};
-  }
-  m_powerOnVectors = m_vectors;
-  // The BIOS's two hardware handlers are native, and run whenever the program has put the BIOS's vectors back and an
-  // interrupt falls due (ADR-011 item 3).
-  Hook(FarAddress{ROM_SEGMENT, TIMER_HANDLER_OFFSET}, [this] { RunBiosTimerHandler(); });
-  Hook(FarAddress{ROM_SEGMENT, KEYBOARD_HANDLER_OFFSET}, [this] { RunBiosKeyboardHandler(); });
 }
 
 Platform::~Platform()
@@ -161,15 +123,14 @@ void Platform::SetEntry(NativeRoutine _routine)
   m_entry.routine = std::move(_routine);
 }
 
-void Platform::Hook(FarAddress _address, NativeRoutine _routine)
+void Platform::SetGameHandler(Irq _irq, NativeRoutine _routine)
 {
-  // Made in place, in a node the map never moves.
-  const auto [found, added] = m_hooks.try_emplace(Linear(_address));
-  if (!added)
+  HookedRoutine& handler = m_gameHandlers[static_cast<std::size_t>(_irq)];
+  if (handler.routine)
   {
     throw std::logic_error("Platform: two native routines at one entry");
   }
-  found->second.routine = std::move(_routine);
+  handler.routine = std::move(_routine);
 }
 
 // ── Running ──
@@ -325,85 +286,61 @@ void Platform::TakeDueInterrupts()
   }
 }
 
-void Platform::SoftwareInterrupt(std::uint8_t _vector)
+void Platform::CallAbsentMouse()
 {
-  CallHandler(m_vectors[_vector]);
-}
-
-void Platform::CallHandler(FarAddress _handler)
-{
+  // INT 33h, as the 8088 runs it, to what its vector names, the interrupt's frame in place and IF cleared until its IRET.
   ++m_stepsSinceIdle;
-  const std::uint16_t flags = m_flags;
-  m_flags = static_cast<std::uint16_t>(m_flags & ~FLAG_INTERRUPT);
-  RunHandler(_handler);
-  m_flags = flags;
+  if (m_mouseDriverLoaded)
+  {
+    throw std::logic_error("Platform: an interrupt to code no native routine stands in for");
+  }
+  m_instructionCycles += IRET_CYCLES; // the ROM's IRET, which int 33h names with no driver loaded
   if (Stopped() != StopReason::Reached)
   {
     throw ProgramStopped{};
   }
 }
 
-// As the 8088 enters a handler: IF cleared, the handler run, and its IRET putting the flags back as they were.
+// As the 8088 enters a handler: IF cleared, the handler its vector names run, and its IRET putting the flags back as they were.
+// Only the timer's and the keyboard's requests are unmasked and raised; another's vector names the ROM's IRET.
 void Platform::Interrupt(std::uint8_t _vector)
 {
   const std::uint16_t flags = m_flags;
   m_flags = static_cast<std::uint16_t>(m_flags & ~FLAG_INTERRUPT);
-  RunHandler(m_vectors[_vector]);
+  if (_vector != VECTOR_TIMER && _vector != VECTOR_KEYBOARD)
+  {
+    m_instructionCycles += IRET_CYCLES;
+    m_flags = flags;
+    return;
+  }
+  const Irq irq = _vector == VECTOR_TIMER ? Irq::Timer : Irq::Keyboard;
+  switch (Handler(irq))
+  {
+  case IrqHandler::Bios:
+    if (irq == Irq::Timer)
+    {
+      RunBiosTimerHandler();
+    }
+    else
+    {
+      RunBiosKeyboardHandler();
+    }
+    break;
+  case IrqHandler::Game:
+  {
+    HookedRoutine& handler = m_gameHandlers[static_cast<std::size_t>(irq)];
+    if (!handler.routine)
+    {
+      throw std::logic_error("Platform: an interrupt to code no native routine stands in for");
+    }
+    ++handler.calls;
+    handler.routine();
+    break;
+  }
+  case IrqHandler::Stray:
+    throw std::logic_error("Platform: an interrupt to code no native routine stands in for");
+  }
   m_flags = flags;
-}
-
-void Platform::RunHandler(FarAddress _handler)
-{
-  const auto found = m_hooks.find(Linear(_handler));
-  if (found != m_hooks.end())
-  {
-    ++found->second.calls;
-    found->second.routine();
-    return;
-  }
-  if (_handler.segment == ROM_SEGMENT && RomByte(_handler) == OPCODE_IRET)
-  {
-    m_instructionCycles += IRET_CYCLES; // the ROM's IRET, which the stubs nothing serves point to
-    return;
-  }
-  throw std::logic_error("Platform: an interrupt to code no native routine stands in for");
-}
-
-void Platform::SetInterruptVector(std::uint8_t _vector, FarAddress _handler) noexcept
-{
-  m_vectors[_vector] = _handler;
-}
-
-std::uint8_t Platform::RomByte(FarAddress _address) const
-{
-  const std::uint32_t linear = Linear(_address);
-  if (linear < ROM_LINEAR)
-  {
-    throw std::out_of_range("Platform::RomByte: an address outside the BIOS's ROM");
-  }
-  const auto offset = static_cast<std::uint16_t>(linear - ROM_LINEAR);
-  if (offset >= IRET_STUBS_OFFSET && offset < IRET_STUBS_END)
-  {
-    return OPCODE_IRET;
-  }
-  if (offset == MOUSE_DRIVER_OFFSET)
-  {
-    return OPCODE_NOP; // anything but an IRET: IsMouseDriverInstalled takes it as a driver
-  }
-  if (offset == MOUSE_DRIVER_OFFSET + 1)
-  {
-    return OPCODE_IRET;
-  }
-  if (offset == MODEL_OFFSET)
-  {
-    return MODEL_IBM_PC;
-  }
-  return 0;
-}
-
-std::uint8_t Platform::HandlerOpcode(FarAddress _handler) const
-{
-  return RomByte(_handler);
 }
 
 // ── The BIOS's hardware interrupt handlers (ADR-011 item 3) ──

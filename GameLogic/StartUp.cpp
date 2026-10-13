@@ -25,16 +25,6 @@ namespace Elite
 namespace
 {
 
-// The game's int 0 handler, the divide trap. Nothing raises int 0 here: no divide runs on the CPU, and each divide calls
-// DivideOverflowInterrupt itself when its quotient overflows. So no native routine stands at the vector's address.
-constexpr std::uint16_t DIVIDE_OVERFLOW_INTERRUPT = 0x025E;
-constexpr std::uint16_t KEYBOARD_INTERRUPT = 0x0201;
-
-// The vectors the game installs its own handlers on: the divide trap, the timer's tick and the keyboard.
-constexpr std::uint8_t DIVIDE_VECTOR = 0x00;
-constexpr std::uint8_t TIMER_VECTOR = 0x08;
-constexpr std::uint8_t KEYBOARD_VECTOR = 0x09;
-
 constexpr std::uint8_t CHEAT_KEY = 0xAA;
 constexpr std::uint8_t CHEAT_ARGUMENT_BYTES = 6; // ' cheat'
 
@@ -43,14 +33,6 @@ constexpr std::uint8_t FULL_SHIELD = 0xFF;
 constexpr std::uint8_t NEW_GAME_CABIN_TEMPERATURE = 0x0C;
 constexpr std::uint8_t NEW_GAME_ALTITUDE = 0xFF;
 
-// The game's int 24h handler, which Start puts in the interrupt table round a disk request. Nothing raises int 24h here: DOS
-// answers a failed call with CF set and an error. So no native routine stands at the vector's address.
-constexpr std::uint16_t CRITICAL_ERROR_INTERRUPT = 0x02F0;
-
-constexpr std::uint8_t CRITICAL_ERROR_VECTOR = 0x24;
-constexpr std::uint16_t AMSTRAD_ROM_SEGMENT = 0xFC00;
-constexpr std::uint16_t AMSTRAD_ROM_SIGNATURE = 0x0016;
-constexpr std::uint16_t AMSTRAD_SIGNATURE_BYTES = 7;
 constexpr std::uint8_t VIDEO_MODE_TEXT_80 = 0x02; // 80x25 text
 
 constexpr std::uint16_t CREDITS_FIRST_LINE = 0x202;
@@ -87,22 +69,24 @@ void InstallDivideAndKeyboardInterrupts(GameState& _state, Hardware& _hardware)
 {
   // The original keeps the BIOS's int 0 and int 9 in savedDivideVector and savedKeyboardVector to put back; native code puts
   // back the BIOS's own (RestoreDivideAndKeyboardInterrupts).
-  // With interrupts off, the game's own handlers installed, and int 8's segment written again.
+  // With interrupts off, the game's own handlers installed, and int 8's segment written again. Nothing raises int 0 (the
+  // divide trap at CS:025E), so its vector goes nowhere; the keyboard's handler is CS:0201. Int 8's segment written as the code
+  // segment keeps the game's handler there; the BIOS's, moved into the code segment, would name code no routine stands in for.
   _hardware.DisableInterrupts();
-  const std::uint16_t code = _state.CodeSegment();
-  _hardware.SetInterruptVector(DIVIDE_VECTOR, FarAddress{code, DIVIDE_OVERFLOW_INTERRUPT});
-  _hardware.SetInterruptVector(KEYBOARD_VECTOR, FarAddress{code, KEYBOARD_INTERRUPT});
-  _hardware.SetInterruptVector(TIMER_VECTOR, FarAddress{code, _hardware.InterruptVector(TIMER_VECTOR).offset});
+  _hardware.SetHandler(Irq::Keyboard, IrqHandler::Game);
+  if (_hardware.Handler(Irq::Timer) != IrqHandler::Game)
+  {
+    _hardware.SetHandler(Irq::Timer, IrqHandler::Stray);
+  }
   _hardware.EnableInterrupts();
   ResetKeyboard(_state, _hardware);
 }
 
 void RestoreDivideAndKeyboardInterrupts(Hardware& _hardware)
 {
-  // With interrupts off, the BIOS's int 9 and int 0 put back.
+  // With interrupts off, the BIOS's int 9 and int 0 put back; int 0's goes nowhere, as nothing raises it.
   _hardware.DisableInterrupts();
-  _hardware.SetInterruptVector(KEYBOARD_VECTOR, _hardware.BiosInterruptVector(KEYBOARD_VECTOR));
-  _hardware.SetInterruptVector(DIVIDE_VECTOR, _hardware.BiosInterruptVector(DIVIDE_VECTOR));
+  _hardware.SetHandler(Irq::Keyboard, IrqHandler::Bios);
   _hardware.EnableInterrupts();
 }
 
@@ -171,19 +155,9 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
   // (ADR-006 item 3): the platform gives the tail (CheckCheatArgument), and DOS 1's refusal never comes.
   SaveStartupCommander(_state);
 
-  // CLD / REPE CMPSB of amstradSignature against the ROM at FC00:0016: not an Amstrad if a byte before the last differs.
-  std::uint16_t bytesLeft = AMSTRAD_SIGNATURE_BYTES;
-  for (std::uint16_t at = 0; bytesLeft != 0;)
-  {
-    const bool same = AMSTRAD_SIGNATURE[at] == _hardware.RomByte(AMSTRAD_ROM_SEGMENT, Offset(AMSTRAD_ROM_SIGNATURE, at));
-    ++at;
-    --bytesLeft;
-    if (!same)
-    {
-      break;
-    }
-  }
-  if (bytesLeft != 0)
+  // CLD / REPE CMPSB of amstradSignature against the ROM at FC00:0016: not an Amstrad if a byte before the last differs, as one
+  // does on the platform's IBM PC (Hardware::AmstradRom).
+  if (!Hardware::AmstradRom())
   {
     _state.Data().startUp.amstradPresent = 0;
   }
@@ -211,13 +185,11 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
       ExitToDos(_hardware);
       return;
     }
-    // The request, with the game's own critical-error handler on int 24h, and the handler that was there put back after it.
-    // A listing searches with the attributes RestoreTimerInterrupt leaves in CX.
+    // The request, which the original makes with its own critical-error handler, CS:02F0, on int 24h, and the handler that was
+    // there put back after it. Nothing raises int 24h: DOS answers a failed call with CF set and an error. A listing searches
+    // with the attributes RestoreTimerInterrupt leaves in CX.
     _state.Data().disk.diskError = 0;
-    const FarAddress criticalError = _hardware.InterruptVector(CRITICAL_ERROR_VECTOR);
-    _hardware.SetInterruptVector(CRITICAL_ERROR_VECTOR, FarAddress{_state.CodeSegment(), CRITICAL_ERROR_INTERRUPT});
     PerformDiskRequest(_state, _hardware, request, ClockLessADayHigh(clock));
-    _hardware.SetInterruptVector(CRITICAL_ERROR_VECTOR, criticalError);
     // JMP RestartPlay: GameLoop reads BP before it writes it.
   }
 }
@@ -329,7 +301,7 @@ namespace
 {
 
 constexpr std::array ENTRIES = {
-  NativeEntry{0x0000, &StartEntry, EntryReturn::Far},
+  NativeEntry{EntryKind::Start, &StartEntry}, // CS:0000
 };
 
 } // namespace

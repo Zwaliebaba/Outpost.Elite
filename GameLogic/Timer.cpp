@@ -12,10 +12,6 @@ namespace Elite
 namespace
 {
 
-constexpr std::uint16_t TIMER_INTERRUPT = 0x0215;
-
-constexpr std::uint8_t TIMER_VECTOR = 0x08;
-
 constexpr std::uint8_t PIT_CHANNEL0_SQUARE_WAVE = 0x36; // channel 0, both bytes, mode 3
 constexpr std::uint16_t TICK_DIVISOR = 0x04A9;          // about 1000.15 Hz
 constexpr std::uint32_t TICKS_PER_DAY = 0x1800B0;
@@ -183,9 +179,9 @@ void InstallTimerInterrupt(GameState& _state, Hardware& _hardware)
   const auto image = static_cast<std::uint8_t>(speaker & ~SPEAKER_BITS);
   _state.Data().audio.speakerPortImage = image;
   _hardware.SetSystemControl(image);
-  // The game's own handler installed in place of the BIOS's, which the original keeps in savedTimerVector and native code takes
-  // from the BIOS (RestoreTimerInterrupt).
-  _hardware.SetInterruptVector(TIMER_VECTOR, FarAddress{_state.CodeSegment(), TIMER_INTERRUPT});
+  // The game's own handler, at CS:0215, installed in place of the BIOS's, which the original keeps in savedTimerVector and
+  // native code puts back by name (RestoreTimerInterrupt).
+  _hardware.SetHandler(Irq::Timer, IrqHandler::Game);
   _hardware.EnableInterrupts();
 }
 
@@ -193,7 +189,7 @@ BiosClock RestoreTimerInterrupt(GameState& _state, Hardware& _hardware)
 {
   _hardware.DisableInterrupts();
   // The BIOS's handler put back, as InstallTimerInterrupt found it.
-  _hardware.SetInterruptVector(TIMER_VECTOR, _hardware.BiosInterruptVector(TIMER_VECTOR));
+  _hardware.SetHandler(Irq::Timer, IrqHandler::Bios);
   _hardware.SetSystemControl(_state.Data().timer.savedSpeakerPort);
   _hardware.SetTickDivisor(PIT_CHANNEL0_SQUARE_WAVE, 0);
   _hardware.EnableInterrupts();
@@ -255,7 +251,7 @@ namespace
 {
 
 constexpr std::array ENTRIES = {
-  NativeEntry{TIMER_INTERRUPT, &TimerInterruptEntry, EntryReturn::Interrupt},
+  NativeEntry{EntryKind::TimerHandler, &TimerInterruptEntry}, // CS:0215
 };
 
 } // namespace
