@@ -1,6 +1,6 @@
 # ADR-041 — The native game loop, third step: the PC's devices give way to what the game uses of them
 
-**Status:** accepted 2026-10-13 for its first part, with the change that implements it, step c of piece 4 of Phase 6 ([Reverse-Engineering-Plan.md §5, Phase 6](../Reverse-Engineering-Plan.md#phase-6--the-new-game)), under D70. Each later part amends it as it lands. **Amended 2026-10-13, the second part (D72):** the interrupt controller, the timer's channel 0 and the keyboard's latch are one scheduler. **The third:** the BIOS is its time of day and its video services.
+**Status:** accepted 2026-10-13 for its first part, with the change that implements it, step c of piece 4 of Phase 6 ([Reverse-Engineering-Plan.md §5, Phase 6](../Reverse-Engineering-Plan.md#phase-6--the-new-game)), under D70. Each later part amends it as it lands. **Amended 2026-10-13, the second part (D72):** the interrupt controller, the timer's channel 0 and the keyboard's latch are one scheduler. **The third:** the BIOS is its time of day and its video services. **The fourth:** DOS's file services stay as D27 made them, already native.
 
 ## Context
 
@@ -61,6 +61,10 @@ After the first part showed that, with the replays exact, these parts mostly re-
 | The idle trajectory | Every game test identical to the second part's. `BiosTests` is `VideoModesTests`, with its clock's tests in `TimeOfDayTests`. |
 | The speaker | the 158 tests the two trees share identical, event for event |
 | The suite | `GameLogicTests` passes under g++, 165 tests, with no re-base |
+
+## Decision, fourth part: DOS's file services are native already
+
+`DosFiles` has been native since D27: DOS's file half ported call for call over the `FileStore`, with no interrupt, port or memory of the PC's left in it. What it gives is what the game observes, so under D70 all of it stays: the handles from 5, CF and AX on every path, the transfer area's 2Bh bytes, which the disc menu reads back from the game's state (the found name at 1Eh, its attributes at 15h), and the files' stamps from DOS's clock. Its names (`DosFiles`, `DosAnswer`, `DosDateTime`) say what it answers like; renaming them would change no behaviour, so they stay. Step c is done.
 
 ## What this forecloses
 
