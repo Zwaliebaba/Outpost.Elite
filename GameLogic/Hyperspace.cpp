@@ -22,13 +22,6 @@ namespace Elite
 namespace
 {
 
-// The backward jumps the jump and the tunnel take: CompleteHyperspaceJump's tail, which GalacticJump jumps back to, and its copy's
-// loop; the mis-jump, which a forced one jumps back to; and the tunnel's frames.
-constexpr std::uint16_t DESTINATION_COPY = 0x4733;
-constexpr std::uint16_t DESTINATION_COPY_LOOP = 0x474C;
-constexpr std::uint16_t MIS_JUMP = 0x4781;
-constexpr std::uint16_t TUNNEL_FRAME_LOOP = 0x4909;
-
 // IsMassLocked: the ships that do not lock the jump drive, by type, and the slot flag of a ship on the
 // scanner.
 constexpr std::array<std::uint8_t, 4> UNLOCKING_TYPES = {5, 0x11, 6, 0x0B}; // Asteroid, Boulder, Barrel, Splinter
@@ -249,8 +242,7 @@ void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_
   if (_state.Data().jump.galacticJumpPending == 1)
   {
     GalacticJump(_state, _countIfNone);
-    // JMP 4733h, back into the shared tail below: not a loop, so its turn carries nothing.
-    _hardware.LoopTurn(DESTINATION_COPY, {});
+    // JMP 4733h, back into the shared tail below.
   }
   else
   {
@@ -265,7 +257,7 @@ void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_
   }
 
   // 0x4733: the destination becomes the current system, a byte at a time, LOOP from CX = systemRecordBytes: a count of 0 copies
-  // 65,536. Each turn carries the count, SI and DI.
+  // 65,536.
   _state.Data().commander.selectedDistanceTenthsLy = 0;
   const bool galactic = _state.Data().jump.galacticJumpPending == 1;
   const std::uint32_t bytes = LoopCount(SYSTEM_RECORD_BYTES);
@@ -282,8 +274,6 @@ void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_
     {
       break;
     }
-    _hardware.LoopTurn(DESTINATION_COPY_LOOP,
-                       {static_cast<std::uint16_t>(bytes - copied), _state.PlaceOf(from[copied]), _state.PlaceOf(to[copied])});
   }
   _state.Data().commander.marketQuantitiesSet = 0;
   CommanderState& commander = _state.Data().commander;
@@ -297,8 +287,7 @@ void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_
   }
   if (!misjump && _state.Data().jump.forceMisjump == 1)
   {
-    // JE MisJump, back into the code above: not a loop, so its turn carries nothing.
-    _hardware.LoopTurn(MIS_JUMP, {});
+    // JE MisJump, back into the code above.
     misjump = true;
   }
   if (misjump)
@@ -379,7 +368,7 @@ void DrawHyperspaceRings(GameState& _state)
 
 void PlayHyperspaceTunnel(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  // PUSH CX / POP CX keep the frames left round the frame's work, and each turn carries them. Every frame ends with
+  // PUSH CX / POP CX keep the frames left round the frame's work. Every frame ends with
   // FinishSpaceViewFrame's CLD, so only the first message line runs by _backward.
   bool backward = _backward;
   for (std::uint16_t frames = HYPERSPACE_TUNNEL_FRAMES;;)
@@ -394,7 +383,6 @@ void PlayHyperspaceTunnel(GameState& _state, Hardware& _hardware, bool _backward
     {
       return;
     }
-    _hardware.LoopTurn(TUNNEL_FRAME_LOOP, {frames});
   }
 }
 

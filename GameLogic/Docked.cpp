@@ -51,24 +51,8 @@ constexpr std::uint16_t TEXT_ROW_BYTES = 0x50;
 
 // Where the original jumps back (Hardware::LoopTurn, ADR-015).
 constexpr std::uint16_t DOCKED_KEY_DISPATCH = 0x0B40;
-constexpr std::uint16_t DOCKED_KEY_TEST = 0x0B45; // after a screen, the key it returned
-constexpr std::uint16_t DOCKED_STATUS_ENTRY = 0x0B96;
-constexpr std::uint16_t DOCKED_DISK_MENU_ENTRY = 0x0BAC;
-constexpr std::uint16_t SELL_CARGO_ROW = 0x5A75;
-constexpr std::uint16_t BUY_CARGO_ROW = 0x5B40;
-constexpr std::uint16_t BUY_CARGO_ROW_END = 0x5BBA;
-constexpr std::uint16_t STATUS_CASH_SPACE = 0x5F32;
-constexpr std::uint16_t STATUS_RATING = 0x5F70;
-constexpr std::uint16_t STATUS_EQUIPMENT_ROW = 0x5FAD;
-constexpr std::uint16_t STATUS_LASER_MOUNT = 0x5FD4;
-constexpr std::uint16_t INVENTORY_CASH_SPACE = 0x6051;
-constexpr std::uint16_t INVENTORY_ROW = 0x6066;
-constexpr std::uint16_t INVENTORY_ROW_END = 0x60A1;
 constexpr std::uint16_t WAIT_FOR_SCREEN_EXIT_KEY = 0x60B4;
 constexpr std::uint16_t SUPERNOVA_ANSWER = 0x6E23;
-constexpr std::uint16_t EVACUATE_CARGO = 0x6E4A;
-constexpr std::uint16_t MASK_DEBRIEFING_TEXT = 0x6F52;
-constexpr std::uint16_t TITLE_FRAME_LOOP = 0x7DF1;
 
 // Scan codes.
 constexpr std::uint8_t SCAN_ESCAPE = 0x01;
@@ -190,9 +174,9 @@ static_assert(COMMANDER_STATE_OFFSET(gap75CC) == COMMANDER_STATE_OFFSET(selected
   return BytesThrough(_state.Data().commander.selectedSystemName, _state.Data().commander.gap75CC);
 }
 
-// The cash without its leading spaces: INC SI from the byte before creditBalanceText while it is on a space, each turn of the
-// scan jumping back to _loop with SI. Returns the cash from the first character that is not a space.
-std::string_view SkipCashSpaces(const GameState& _state, Hardware& _hardware, std::uint16_t _loop)
+// The cash without its leading spaces: INC SI from the byte before creditBalanceText while it is on a space. Returns the cash
+// from the first character that is not a space.
+std::string_view SkipCashSpaces(const GameState& _state)
 {
   const Counted<std::uint8_t>(&cash)[sizeof(CommanderState::creditBalanceText)] = _state.Data().commander.creditBalanceText;
   for (std::size_t first = 0;; ++first)
@@ -201,7 +185,6 @@ std::string_view SkipCashSpaces(const GameState& _state, Hardware& _hardware, st
     {
       return TextWithin(CashRun(_state), first);
     }
-    _hardware.LoopTurn(_loop, {_state.PlaceOf(cash[first])});
   }
 }
 
@@ -223,12 +206,6 @@ void FormatQuantity(std::uint16_t _quantity, std::span<Counted<std::uint8_t>> _t
 {
   const DockedState& docked = _state.Data().docked;
   return JoinTexts({CharText(docked.data83F7), FUEL_TEXT_POINT, CharText(docked.data83F9), FUEL_TEXT_SUFFIX});
-}
-
-// The first byte of product _product's row of productNames: its name, a space and its unit.
-[[nodiscard]] const Counted<std::uint8_t>& ProductNameRow(const GameState& _state, std::uint16_t _product) noexcept
-{
-  return _state.Data().docked.productNames[std::size_t{_product} * PRODUCT_NAME_BYTES];
 }
 
 // Product _product's name and unit, up to its NUL.
@@ -256,7 +233,7 @@ void DrawTradeScreenHeader(GameState& _state, Hardware& _hardware, const Frame& 
 
 // A trade screen's row: the rows left, the product, and the row's place on the text page. The original holds the rows left in
 // CX, the product's name in SI, the place in DI and its prices in screenPrices in BX, and pushes them at the start of each
-// row (TradeRowTurn).
+// row.
 struct TradeRow
 {
   std::uint16_t left;
@@ -265,19 +242,6 @@ struct TradeRow
 };
 
 constexpr TradeRow FIRST_TRADE_ROW{TRADE_ROWS, 0, LINE_6};
-
-// The place in GameData of _row's prices in screenPrices, which a turn carries where the original's BX holds their address (PlaceOf).
-[[nodiscard]] std::uint16_t TradePricesPlace(const GameState& _state, const TradeRow& _row)
-{
-  return Offset(_state.PlaceOf(_state.Data().menus.screenPrices), static_cast<std::uint16_t>(_row.product * TRADE_PRICES_BYTES));
-}
-
-// A turn of a trade screen's rows, the jump back to _loop: it carries the rows left, the name, the place and the prices, as the
-// original holds them.
-void TradeRowTurn(const GameState& _state, Hardware& _hardware, std::uint16_t _loop, const TradeRow& _row)
-{
-  _hardware.LoopTurn(_loop, {_row.left, _state.PlaceOf(ProductNameRow(_state, _row.product)), _row.cell, TradePricesPlace(_state, _row)});
-}
 
 // A trade row's product name and price (PrintNameAndPrice): the price word _price bytes into the row's prices, four cells after
 // the name. Returns where the price's print stops.
@@ -309,8 +273,8 @@ void PrintUnit(GameState& _state, const TradeRow& _row, std::uint16_t _cell)
 // direction flag clear), the message line cleared and ---- E L I T E ---- on it; then the planet and the turning ship of type
 // titleShipType, in stationSlot at its titleShipDistances, until a key: F9 and F10 step the type through 2-29, any other ends it
 // with the music off, the credits and a new game. ES is B800h throughout, from its MOV ES,AX. TitleFrameLoop (CS:7DF1) is one
-// frame; its turns carry nothing, as the frame loads every register it reads. Returns what it leaves in BP, PresentSpaceView's 20h
-// from the credits; the direction flag is clear, from their FinishSpaceViewFrame.
+// frame. Returns what it leaves in BP, PresentSpaceView's 20h from the credits; the direction flag is clear, from their
+// FinishSpaceViewFrame.
 std::uint16_t RunTitle(GameState& _state, Hardware& _hardware, bool _backward)
 {
   ClearAllObjects(_state);
@@ -391,7 +355,6 @@ std::uint16_t RunTitle(GameState& _state, Hardware& _hardware, bool _backward)
         break;
       }
     }
-    _hardware.LoopTurn(TITLE_FRAME_LOOP, {});
   }
   StopAllSound(_state, _hardware);
   ShowCredits(_state, _hardware, backward);
@@ -438,8 +401,8 @@ constexpr std::array<DockedScreen, 9> DOCKED_SCREENS = {{
 // DockedKeyDispatch (CS:0B40), from the arm that shows the screen for _screenKey: F9's status screen (CS:0B96), or Esc's disc menu
 // (CS:0BAC). Each screen returns the key that closed it, which picks the next screen, until F1 leaves; Esc is the disc menu, and
 // any other key waits for one (CS:0B40). _countIfNone is BP and _backward the direction flag as RunTitleAndDocked leaves them,
-// carried from screen to screen as the original's registers carry them. Every jump back to the tests carries the key and BP,
-// which the next screen reads; the wait's turns carry nothing, as WaitForKey's do.
+// carried from screen to screen as the original's registers carry them, with the key and BP, which the next screen reads; the
+// wait's turns carry nothing, as WaitForKey's do.
 DockedExit DispatchDockedKeys(GameState& _state, Hardware& _hardware, std::uint8_t _screenKey, std::uint16_t _countIfNone, bool _backward)
 {
   std::uint8_t screenKey = _screenKey;
@@ -464,7 +427,6 @@ DockedExit DispatchDockedKeys(GameState& _state, Hardware& _hardware, std::uint8
       backward = backward && !screen->clearsDirection;
     }
     countLeft = key.countLeft.value_or(countLeft);
-    _hardware.LoopTurn(DOCKED_KEY_TEST, {Join(key.scanCode, key.al), countLeft});
     for (;;)
     {
       if (key.scanCode == SCAN_F1)
@@ -482,7 +444,6 @@ DockedExit DispatchDockedKeys(GameState& _state, Hardware& _hardware, std::uint8
         screenKey = SCAN_ESCAPE;
         break;
       }
-      _hardware.LoopTurn(DOCKED_KEY_DISPATCH, {});
       const KeyPress next = WaitForKey(_state, _hardware, DOCKED_KEY_DISPATCH);
       key = ScreenKey{next.scanCode, AlAfterKey(key.al, next), std::nullopt};
     }
@@ -624,7 +585,6 @@ ScreenKey ShowSellCargoScreen(GameState& _state, Hardware& _hardware, bool _back
     {
       break;
     }
-    TradeRowTurn(_state, _hardware, SELL_CARGO_ROW, row);
   }
   _state.Data().docked.tradeScreenIsBuy = 0;
   return RunCargoTradeMenu(_state, _hardware);
@@ -670,14 +630,12 @@ ScreenKey ShowBuyCargoScreen(GameState& _state, Hardware& _hardware, bool _backw
       Hold(_state)[std::size_t{product} * 2 + 1] = 0;
       _state.Data().docked.cargoRowPointer = static_cast<std::uint16_t>(product + 1);
       // The jump back into the row's end, with CX the count and BX the next prices.
-      _hardware.LoopTurn(BUY_CARGO_ROW_END, {row.left, Offset(TradePricesPlace(_state, row), TRADE_PRICES_BYTES)});
     }
     row = EndTradeRow(row);
     if (row.left == 0)
     {
       break;
     }
-    TradeRowTurn(_state, _hardware, BUY_CARGO_ROW, row);
   }
   _state.Data().docked.tradeScreenIsBuy = 1;
   _state.Data().commander.marketQuantitiesSet = 1;
@@ -712,20 +670,18 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
   FormatFuelLightYears(_state);
   PrintTextModeString(_state, JoinTexts({FUEL_TEXT_PREFIX, FuelLightYearsText(_state)}), LINE_5);
   printed = PrintTextModeString(_state, CASH_LABEL_TEXT, LINE_6);
-  PrintTextModeString(_state, SkipCashSpaces(_state, _hardware, STATUS_CASH_SPACE), printed);
+  PrintTextModeString(_state, SkipCashSpaces(_state), printed);
   printed = PrintTextModeString(_state, LEGAL_STATUS_LABEL_TEXT, LINE_7);
   const std::uint8_t legal = _state.Data().commander.legalStatus;
   const std::uint16_t standing = legal < LEGAL_STATUS_OFFENDER ? 0 : legal < LEGAL_STATUS_FUGITIVE ? 1 : 2;
   PrintTextModeString(_state, LEGAL_STATUS_NAMES[standing], printed);
   printed = PrintTextModeString(_state, RATING_LABEL_TEXT, LINE_8);
-  // The rating: the first threshold above the kill count, each turn of the search carrying the threshold's place, SI, as its
-  // index in the table (D38), and the rating. The last threshold is above any kill count (killCount stops at FEh), so the rating
-  // is one of the nine.
+  // The rating: the first threshold above the kill count. The last threshold is above any kill count (killCount stops at FEh),
+  // so the rating is one of the nine.
   const std::uint8_t kills = _state.Data().commander.killCount;
   std::uint16_t rating = 0;
   while (kills >= RATING_THRESHOLDS[rating])
   {
-    _hardware.LoopTurn(STATUS_RATING, {rating, rating});
     ++rating;
   }
   PrintTextModeString(_state, RATING_NAMES[rating], printed);
@@ -736,9 +692,7 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
   auto al = static_cast<std::uint8_t>(_state.Data().commander.missileCount + DIGIT_ZERO);
   _state.Data().docked.data84F5 = al;
 
-  // One row for each item fitted, and after a laser the mounts it is fitted to. Each turn carries the count, the row's place,
-  // the item's count and its name's pointer: where the original holds them, the pointer the place of the item's entry in
-  // equipmentNames, as its index in the table (D38).
+  // One row for each item fitted, and after a laser the mounts it is fitted to.
   std::uint16_t row = LINE_10;
   const std::span<const Counted<std::uint8_t>> fitted =
     BytesWithin(BytesOf(std::as_const(_state).Data().commander), COMMANDER_STATE_OFFSET(missileCount), EQUIPMENT_ROWS);
@@ -757,9 +711,7 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
       if (SelectLaserType(_state))
       {
         std::uint16_t cell = PrintTextModeString(_state, MOUNTS_OPEN_TEXT, named);
-        // Each mount with this type of laser, from laserMountsFitted in DL and laserMountTypes in DH, which each turn carries
-        // with the mount name's pointer, the place of its entry in laserMountNames as its index (D38), the count and where the
-        // next name prints.
+        // Each mount with this type of laser, from laserMountsFitted in DL and laserMountTypes in DH.
         std::uint8_t mounts = _state.Data().commander.laserMountsFitted;
         std::uint8_t types = _state.Data().commander.laserMountTypes;
         std::size_t mountName = 0;
@@ -777,7 +729,6 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
           {
             break;
           }
-          _hardware.LoopTurn(STATUS_LASER_MOUNT, {Join(types, mounts), static_cast<std::uint16_t>(mountName), mount, cell});
         }
         PrintTextModeString(_state, MOUNTS_CLOSE_TEXT, static_cast<std::uint16_t>(cell - 2));
       }
@@ -789,7 +740,6 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
     {
       break;
     }
-    _hardware.LoopTurn(STATUS_EQUIPMENT_ROW, {left, row, _state.PlaceOf(fitted[item]), static_cast<std::uint16_t>(item)});
   }
   return WaitForScreenExitKey(_state, _hardware, SCAN_F9, al, _countIfNone);
 }
@@ -804,27 +754,17 @@ ScreenKey ShowInventoryScreen(GameState& _state, Hardware& _hardware, bool _back
   PrintTextModeString(_state, FuelLightYearsText(_state), labelEnd);
   const std::uint16_t cash = PrintTextModeString(_state, CASH_LABEL_TEXT, LINE_4);
   const auto cashCell = static_cast<std::uint16_t>(cash - INVENTORY_CASH_BACK);
-  PrintTextModeString(_state, SkipCashSpaces(_state, _hardware, INVENTORY_CASH_SPACE), cashCell);
+  PrintTextModeString(_state, SkipCashSpaces(_state), cashCell);
 
-  // Every product held, and the refugees: name, quantity, unit, a row each. Each turn carries the count, the name, the amount's
-  // place and the row's place, which an empty row does not move on.
+  // Every product held, and the refugees: name, quantity, unit, a row each; an empty row does not move the place on.
   const std::span<Counted<std::uint8_t>> quantityText =
     std::span<Counted<std::uint8_t>>(_state.Data().docked.productNames).subspan(INVENTORY_QUANTITY_IN_NAMES, QUANTITY_TEXT_BYTES);
   std::uint16_t row = LINE_6;
   std::uint16_t product = 0;
-  const auto turn = [&_state, &_hardware, &row, &product](std::uint16_t _loop, std::uint16_t _left)
-  {
-    _hardware.LoopTurn(
-      _loop, {_left, _state.PlaceOf(ProductNameRow(_state, product)), _state.PlaceOf(Hold(_state)[std::size_t{product} * 2]), row});
-  };
   for (std::uint16_t left = INVENTORY_ROWS;;)
   {
     const std::uint8_t amount = Hold(_state)[std::size_t{product} * 2];
-    if (amount == 0)
-    {
-      turn(INVENTORY_ROW_END, left);
-    }
-    else
+    if (amount != 0)
     {
       // The name cut at its twelfth character by a NUL, which becomes a space again before the unit after it.
       const std::span<Counted<std::uint8_t>> name =
@@ -843,7 +783,6 @@ ScreenKey ShowInventoryScreen(GameState& _state, Hardware& _hardware, bool _back
     {
       break;
     }
-    turn(INVENTORY_ROW, left);
   }
   // The last row leaves AL 0: an empty one its amount, a printed one the NUL its last print stops at.
   return WaitForScreenExitKey(_state, _hardware, SCAN_F10, 0, _countIfNone);
@@ -866,13 +805,11 @@ void ShowMissionBriefing(GameState& _state, Hardware& _hardware, bool _backward)
       {
         break;
       }
-      _hardware.LoopTurn(SUPERNOVA_ANSWER, {});
     }
     std::span<const std::string_view> reply = SUPERNOVA_REFUSED_LINES;
     if (answer == SCAN_Y)
     {
-      // The hold emptied for the refugees: MOV [DI],CH, which is 0, at each of the 17 amounts, the LOOP's turns carrying DI
-      // and CX.
+      // The hold emptied for the refugees: MOV [DI],CH, which is 0, at each of the 17 amounts.
       const std::span<Counted<std::uint8_t>> hold = Hold(_state);
       for (std::uint16_t product = 0, left = TRADE_ROWS;;)
       {
@@ -882,7 +819,6 @@ void ShowMissionBriefing(GameState& _state, Hardware& _hardware, bool _backward)
         {
           break;
         }
-        _hardware.LoopTurn(EVACUATE_CARGO, {_state.PlaceOf(hold[std::size_t{product} * 2]), left});
       }
       _state.Data().commander.cargoHold.cargoUsedTonnes = REFUGEE_TONNES;
       if (_state.Data().commander.largeCargoBayFitted == 1)
@@ -947,7 +883,6 @@ void ShowMissionDebriefing(GameState& _state, Hardware& _hardware, bool _backwar
     {
       _state.Data().commander.maskingDeviceFitted = 1;
       text = MASK_RECOVERED_LINES;
-      _hardware.LoopTurn(MASK_DEBRIEFING_TEXT, {}); // the JMP back to the print the other two run on into
     }
     else if (_state.Data().commander.fledMaskShip == 1)
     {
@@ -984,14 +919,12 @@ DockedExit RunTitleAndDocked(GameState& _state, Hardware& _hardware, std::uint16
     countIfNone = RunTitle(_state, _hardware, _backward);
     backward = false;
   }
-  // JMP into DockedKeyDispatch: back from a disk request, at the disc menu (CS:0BAC); otherwise at the status screen (CS:0B96). The
-  // jumps back carry BP, which the status screen reads, as the dispatch's own turns do.
+  // JMP into DockedKeyDispatch: back from a disk request, at the disc menu (CS:0BAC); otherwise at the status screen (CS:0B96),
+  // with BP, which the status screen reads.
   if (_state.Data().saveLoad.resumeAtDiskMenu == 1)
   {
-    _hardware.LoopTurn(DOCKED_DISK_MENU_ENTRY, {countIfNone});
     return DispatchDockedKeys(_state, _hardware, SCAN_ESCAPE, countIfNone, backward);
   }
-  _hardware.LoopTurn(DOCKED_STATUS_ENTRY, {countIfNone});
   return DispatchDockedKeys(_state, _hardware, SCAN_F9, countIfNone, backward);
 }
 

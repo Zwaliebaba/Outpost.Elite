@@ -21,12 +21,6 @@ namespace Elite
 namespace
 {
 
-// Where ReadTextLine's loop jumps back to: the blink restarted, a key read, the blink counted, the line
-// redrawn (Hardware::LoopTurn).
-constexpr std::uint16_t INPUT_RESTART_BLINK = 0x76A3;
-constexpr std::uint16_t INPUT_READ_KEY = 0x76AF;
-constexpr std::uint16_t INPUT_COUNT_BLINK = 0x76B7;
-constexpr std::uint16_t INPUT_REDRAW = 0x76FF;
 constexpr std::uint16_t CURSOR_BLINK_TICKS = 300;
 constexpr std::uint8_t FIRST_UNMAPPED_SCAN = 0x54; // scanCodeToAscii's length
 constexpr std::uint8_t NO_CHARACTER = 0xFF;        // in scanCodeToAscii: a key that types nothing
@@ -194,27 +188,18 @@ struct TypedLine
   std::uint16_t cell;
 };
 
-// ReadTextLine's turns carry the length typed, in BX: the one value its registers hold at a backward jump that the next turn
-// reads and that changes. AL, which GetKey shifts each code it takes into, reaches no write, no branch and no turn that does
-// not change memory: every turn writes cursorBlinkTicks or takes a code from keyBuffer.
-void TypedLineTurn(Hardware& _hardware, std::uint16_t _loop, std::uint16_t _length)
-{
-  _hardware.LoopTurn(_loop, {_length});
-}
-
 // ReadTextLine's redraw (0x76FF): the line typed and the cursor printed, then the JMP back to counting the blink.
-void RedrawTypedLine(GameState& _state, Hardware& _hardware, const TypedLine& _line, std::uint16_t _length)
+void RedrawTypedLine(GameState& _state, const TypedLine& _line, std::uint16_t _length)
 {
   RedrawInputLine(_state, _line.buffer, _length, _line.segment, _line.cell);
-  TypedLineTurn(_hardware, INPUT_COUNT_BLINK, _length);
 }
 
 // ReadTextLine's blink (0x76A3): 300 ticks to the next, the cursor flipped, and the line redrawn.
-void RestartInputBlink(GameState& _state, Hardware& _hardware, const TypedLine& _line, std::uint16_t _length)
+void RestartInputBlink(GameState& _state, const TypedLine& _line, std::uint16_t _length)
 {
   _state.Data().text.cursorBlinkTicks = CURSOR_BLINK_TICKS;
   ToggleInputCursor(_state);
-  RedrawTypedLine(_state, _hardware, _line, _length);
+  RedrawTypedLine(_state, _line, _length);
 }
 
 // MessageLine's second half (0x35B9): the message in messagePointer, unless it is already shown, on the message line,
@@ -611,18 +596,16 @@ void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<Counted<std:
   _state.Data().drawing.textPaperPattern = 0;
   _state.Data().text.inputCharsLeft = _most;
   std::uint16_t length = 0;
-  RestartInputBlink(_state, _hardware, line, length);
+  RestartInputBlink(_state, line, length);
   for (;;)
   {
     const auto blink = static_cast<std::uint16_t>(_state.Data().text.cursorBlinkTicks - 1);
     _state.Data().text.cursorBlinkTicks = blink;
     if (blink == 0)
     {
-      TypedLineTurn(_hardware, INPUT_RESTART_BLINK, length);
-      RestartInputBlink(_state, _hardware, line, length);
+      RestartInputBlink(_state, line, length);
       continue;
     }
-    TypedLineTurn(_hardware, INPUT_READ_KEY, length);
     WaitForTimerTick(_state, _hardware);
     const KeyPress key = GetKey(_state, _hardware);
     if (key.scanCode == 0)
@@ -631,13 +614,11 @@ void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<Counted<std:
     }
     if (key.scanCode >= FIRST_UNMAPPED_SCAN)
     {
-      TypedLineTurn(_hardware, INPUT_COUNT_BLINK, length);
       continue;
     }
     std::uint8_t character = SCAN_CODE_TO_ASCII[key.scanCode];
     if (character == NO_CHARACTER)
     {
-      TypedLineTurn(_hardware, INPUT_COUNT_BLINK, length);
       continue;
     }
     if (character == ENTER_KEY)
@@ -657,7 +638,6 @@ void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<Counted<std:
         _state.Data().text.inputCharsLeft = static_cast<std::uint8_t>(_state.Data().text.inputCharsLeft + 1);
         RedrawInputLine(_state, _buffer, length, _segment, _cell);
       }
-      TypedLineTurn(_hardware, INPUT_COUNT_BLINK, length);
       continue;
     }
     if (character >= 'A' && character <= 'Z')
@@ -678,9 +658,8 @@ void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<Counted<std:
       // No room: the character is taken back.
       --length;
       _state.Data().text.inputCharsLeft = static_cast<std::uint8_t>(left + 1);
-      TypedLineTurn(_hardware, INPUT_REDRAW, length);
     }
-    RedrawTypedLine(_state, _hardware, line, length);
+    RedrawTypedLine(_state, line, length);
   }
 }
 

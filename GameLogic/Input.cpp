@@ -30,10 +30,8 @@ constexpr std::uint16_t STICK_STEP_LIMIT = 0x80; // (count - centre) * 128 / cen
 constexpr std::uint8_t MOST_STICK_STEP = 0x7F;
 constexpr std::uint8_t STICK_DEAD_ZONE = 4; // after the step's division by 8
 
-// ReadJoystickAxes's backward jumps: the X count's, the wait for both bits, and the Y count's (Hardware::LoopTurn).
-constexpr std::uint16_t X_COUNT_TURN = 0x778F;
+// ReadJoystickAxes's wait for both bits, where it jumps back (Hardware::LoopTurn).
 constexpr std::uint16_t BOTH_DOWN_TURN = 0x7797;
-constexpr std::uint16_t Y_COUNT_TURN = 0x779D;
 
 // The cycles the 8088 model (the interpreter, until D7) charged for ReadJoystickAxes's instructions: the game port times its one-shots by
 // them, and the stick is read by counting turns of the polling loops, so native code counts them where the original runs them.
@@ -402,9 +400,7 @@ StickAxes ReadJoystickAxes(Hardware& _hardware)
 {
   // With interrupts off, the one-shots fired, and each axis's polls counted until its bit drops. The game port times its one-shots
   // by the instructions executed, so each of the original's is counted (CountInstructionCycles) before the port access after it.
-  // At each of its backward jumps the original holds in BX or CX the count the next turn goes on with, and in AL the bits it
-  // read; the wait for both bits, which reads no other register before it writes it but DX, the port, idles as the original's
-  // does.
+  // The wait for both bits, which reads no register before it writes it but DX, the port, idles as the original's does.
   _hardware.DisableInterrupts();
   std::uint16_t x = AXIS_COUNT_START;
   std::uint16_t y = x;
@@ -440,7 +436,6 @@ StickAxes ReadJoystickAxes(Hardware& _hardware)
       break;
     }
     _hardware.CountInstructionCycles(TAKEN_CYCLES);
-    _hardware.LoopTurn(X_COUNT_TURN, {x, bits});
   }
   _hardware.CountInstructionCycles(NOT_TAKEN_CYCLES);
   // Both bits down before the one-shots fire again: a wait when X's drops first.
@@ -474,7 +469,6 @@ StickAxes ReadJoystickAxes(Hardware& _hardware)
       break;
     }
     _hardware.CountInstructionCycles(TAKEN_CYCLES);
-    _hardware.LoopTurn(Y_COUNT_TURN, {y, bits});
   }
   _hardware.CountInstructionCycles(NOT_TAKEN_CYCLES);
   _hardware.EnableInterrupts();

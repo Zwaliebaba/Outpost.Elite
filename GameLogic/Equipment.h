@@ -109,7 +109,7 @@ struct MenuLoop
 /// the original leaves it: the roll, or once the cursor moved, the attribute ToggleMenuRowHighlight left.
 MenuLoop SteerMenuCursor(GameState& _state, Hardware& _hardware, MenuLoop _loop);
 
-/// 100 timer ticks, each turn of the LOOP jumping back to CS:_tickLoop with its count (ADR-015), then GetKey. Returns the key.
-KeyPress PollMenuKey(GameState& _state, Hardware& _hardware, std::uint16_t _tickLoop);
+/// 100 timer ticks, then GetKey. Returns the key.
+KeyPress PollMenuKey(GameState& _state, Hardware& _hardware);
 
 } // namespace Elite
