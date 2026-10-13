@@ -22,7 +22,6 @@
 #include <functional>
 #include <map>
 #include <semaphore>
-#include <span>
 #include <string>
 #include <thread>
 
@@ -66,13 +65,11 @@ using NativeRoutine = std::function<void()>;
 /// interrupt, the keyboard's next delivery or the CGA's next change of status, or the end of the run. So interrupts land only
 /// inside the game's waits, at the same points however long its work took.
 ///
-/// Waiting is recognised, not declared (ADR-015). Every loop of the game that can wait tells the platform where each of its
-/// turns ends, with a signature of the values it carries (LoopTurn). A turn with the same signature as the last that changed
-/// no byte and wrote no port idles: the clock moves to the next device event. The bytes changed are the GameState's, the
-/// BIOS's data area's and the vector table's, each counted where it is written; the ports written are the OUTs the original
-/// made, each device operation counting its own.
+/// Waiting is declared (ADR-039). Each wait of the game polls for what it waits for, and when a poll finds nothing it says
+/// so (Wait): the clock moves to the next device event. A poll that took something it does not want, and a loop that never
+/// ends, say that instead (Spin), and the clock stands still.
 ///
-/// Interrupts are taken where they fall due, as the 8088 takes them: at the end of a loop's turn and of a wait, and when
+/// Interrupts are taken where they fall due, as the 8088 takes them: at the end of a wait's poll and of a spin, and when
 /// native code lets them in (EnableInterrupts), ends one (Hardware::EndOfInterrupt) or reprograms the timer
 /// (Hardware::SetTickDivisor). The interrupt controller's rules hold: in service, end of interrupt, masking. The handler is
 /// the one the vector table names: the game's own, the BIOS's, or the ROM's IRET.
@@ -110,9 +107,6 @@ public:
   /// Steps the default spin limit allows: far more than the longest stretch of work the game does between two waits, far
   /// fewer than a host would run before someone notices.
   static constexpr std::uint64_t DEFAULT_SPIN_LIMIT = 50'000'000;
-
-  /// The most words a loop's turn signature holds (LoopTurn).
-  static constexpr std::size_t MOST_TURN_WORDS = 16;
 
   /// What a hardware interrupt's entry costs the 8088, on the instruction clock: Intel's 8086 figure plus five word transfers
   /// over the 8-bit bus (three pushes, two vector reads).
@@ -164,8 +158,9 @@ public:
   /// Runs until the clock reaches _cycle, or until the program can go no further.
   [[nodiscard]] StopReason RunUntil(Cycles _cycle);
 
-  /// The number of turns the program may run without waiting before RunUntil stops with StopReason::Spinning. A loop that
-  /// waits for time without ever completing an idle turn would otherwise run for ever with the clock standing still.
+  /// The number of steps the program may run without waiting before RunUntil stops with StopReason::Spinning: its spins
+  /// (Spin), and the interrupts and handlers it runs. A loop that spins for ever would otherwise run with the clock standing
+  /// still.
   void SetSpinLimit(std::uint64_t _turns) noexcept
   {
     m_spinLimit = _turns;
@@ -335,12 +330,14 @@ public:
 
   [[nodiscard]] bool InterruptsEnabled() const noexcept;
 
-  /// One turn of a loop that can wait, ending where the original's backward jump is (ADR-015). _signature stands for the
-  /// original's registers there: the loop's address and the values it carries from one turn to the next. A turn with the same
-  /// signature as the last that changed no byte and wrote no port idles to the next device event. Then the run ends there if
-  /// that is its end, and any interrupt now due is taken. A loop that never idles stops the run as Spinning, as the original's
-  /// would. At most MOST_TURN_WORDS words; more throws std::logic_error.
-  void LoopTurn(std::span<const std::uint16_t> _signature);
+  /// A wait's poll that found nothing (ADR-039): the clock moves to the next device event, the run ends there if that is its
+  /// end, and the interrupts now due are taken.
+  void Wait();
+
+  /// A turn of a loop that waits for nothing: a wait's poll that took something it does not want, or a loop that never ends.
+  /// The clock stands still. Past SpinLimit() such steps with no wait between, the run stops as Spinning, as the original's
+  /// would never end.
+  void Spin();
 
   /// _cycles pass as they pass in a wait, a step at a time to each device event, the run ending there if that is its end and
   /// the interrupts that fall due taken: paced time's charge for work the 8088 took time over where the program sets no pace
@@ -407,20 +404,9 @@ public:
   void CallHandler(FarAddress _handler);
 
 private:
-  // The state at a loop's turn, kept to tell whether the next turn changed anything.
-  struct Turn
-  {
-    std::array<std::uint16_t, MOST_TURN_WORDS> signature{};
-    std::size_t signatureWords = 0;
-    std::uint64_t memoryChanges = 0;
-    std::uint64_t portWrites = 0;
-    bool valid = false;
-  };
-
   [[nodiscard]] StopReason Stopped() const noexcept;
   void Interrupt(std::uint8_t _vector);
   void RunHandler(FarAddress _handler);
-  void NoteTurn(const Turn& _turn);
   void EndTurn();
   void StartNative();
   void ResumeNative();
@@ -463,7 +449,6 @@ private:
   std::uint64_t m_spinLimit = DEFAULT_SPIN_LIMIT;
   std::uint64_t m_stepsSinceIdle = 0;
   Cycles m_runLimit = NO_EVENT;
-  Turn m_lastTurn{};
 
   bool m_started = false;    // the program's start routine has been begun
   bool m_terminated = false; // and it has returned

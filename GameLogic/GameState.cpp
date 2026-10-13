@@ -34,11 +34,6 @@ void GameState::RefuseVideo()
   throw std::out_of_range("GameState: an offset past the CGA's 16 KiB of video memory");
 }
 
-void GameState::RefusePlace()
-{
-  throw std::out_of_range("GameState: a place outside GameData");
-}
-
 void GameState::RefuseSlot()
 {
   throw std::out_of_range("a slot number past shipSlots' last");

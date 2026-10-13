@@ -22,9 +22,6 @@ namespace
 // hands ShowNearestSystemDistance, FindSystemByName and SelectSystemAtCursor for when no system is on the chart.
 constexpr std::uint16_t PRESENT_CHART_FRAME_BP = 0x20;
 
-// Where the short-range chart's label loop jumps back to while it moves a label down from the top (Hardware::LoopTurn).
-constexpr std::uint16_t SHORT_RANGE_LABEL_BELOW_TOP = 0x0F23;
-
 // Scan codes the charts and the data screen read.
 constexpr std::uint8_t SCAN_ESCAPE = 0x01;
 constexpr std::uint8_t SCAN_D = 0x20;
@@ -533,8 +530,7 @@ void DrawChartTitle(GameState& _state, std::string_view _title, std::uint16_t _s
 // ShowShortRangeChart's item for the system in systemSeeds (CS:0E9F), _x and _row its offsets from the current system: a
 // disc of radius 4 or 6 at 3.5 times them about the centre, and a label to place to its right, the name GenerateSystemName
 // makes. The seeds are left on the next system. The disc's centre, which the original keeps on the stack for the label
-// (PUSH CX / PUSH DX, then POP DX / POP BX), is a local; the label's loop down from the top reports its turns to _hardware
-// (ADR-015).
+// (PUSH CX / PUSH DX, then POP DX / POP BX), is a local; the label's endless loop down from the top spins on _hardware.
 void AddShortRangeSystem(GameState& _state, Hardware& _hardware, std::int16_t _x, std::int16_t _row)
 {
   const std::uint8_t centerX = Low(GalaxyToChart(Word(_x), SHORT_RANGE_CENTER_X));
@@ -574,13 +570,13 @@ void AddShortRangeSystem(GameState& _state, Hardware& _hardware, std::int16_t _x
   ChartSpan rows{static_cast<std::uint8_t>(centerRow - LABEL_ABOVE), centerRow};
   if ((rows.first & 0x80) != 0)
   {
-    // A label above the chart's top would loop here for ever: the jump goes back past the test. No system on the chart is
-    // near enough the top (its rows are 4-7Bh).
+    // A label above the chart's top would loop here for ever, at 0F23h: the jump goes back past the test. No system on the
+    // chart is near enough the top (its rows are 4-7Bh). Its turns spin, so the run stops (Hardware::Spin).
     for (;;)
     {
       rows.last = static_cast<std::uint8_t>(rows.last + 1);
       rows.first = static_cast<std::uint8_t>(rows.first + 1);
-      _hardware.LoopTurn(SHORT_RANGE_LABEL_BELOW_TOP, {Word(rows)});
+      _hardware.Spin();
     }
   }
   rows.last = static_cast<std::uint8_t>(rows.last + LABEL_BELOW);

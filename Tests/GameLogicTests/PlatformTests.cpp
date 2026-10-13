@@ -25,34 +25,31 @@ namespace
 // The first IRQ 0 after power-on, at the BIOS's 18.2 Hz.
 constexpr Elite::Cycles FIRST_TICK = 65536 * Elite::CYCLES_PER_PIT_TICK; // 262,144
 
-// A loop's address, for its turn signature (ADR-015).
-constexpr std::uint16_t WAIT_LOOP = 0x0100;
-
 // A handler's address in the program's code, which a vector can name and a native routine stand in for.
 constexpr Elite::FarAddress HANDLER{0x2000, 0x0010};
 
 // What the 8088 takes over the ROM's IRET: Intel's 8086 figure and three words popped over the 8-bit bus.
 constexpr Elite::Cycles IRET_CYCLES = 24 + 3 * 4;
 
-// sti; then wait for ever, a turn at the loop's backward jump, carrying nothing: what the program's idle loop does.
+// sti; then wait for ever, each poll finding nothing: what the program's idle loop does.
 void WaitForEver(Elite::Hardware& _hardware)
 {
   _hardware.EnableInterrupts();
   for (;;)
   {
-    _hardware.LoopTurn(WAIT_LOOP, {});
+    _hardware.Wait();
   }
 }
 
-// Waits for the BIOS's tick count to change, with interrupts on, a turn at a time carrying the count it started from: sti;
-// mov bx,es:[6Ch]; wait: cmp bx,es:[6Ch]; je wait.
+// Waits for the BIOS's tick count to change, with interrupts on, a poll at a time: sti; mov bx,es:[6Ch]; wait: cmp bx,es:[6Ch];
+// je wait.
 void WaitForTick(PlatformRig& _rig)
 {
   _rig.Native().EnableInterrupts();
   const std::uint32_t ticks = _rig.Host().BiosServices().Ticks();
   while (_rig.Host().BiosServices().Ticks() == ticks)
   {
-    _rig.Native().LoopTurn(WAIT_LOOP, {static_cast<std::uint16_t>(ticks & 0xFFFF)});
+    _rig.Native().Wait();
   }
 }
 
@@ -112,8 +109,8 @@ public:
     Assert::IsTrue(rig.Host().RunUntil(2'000'000) == Elite::StopReason::Terminated, L"and stays ended");
   }
 
-  // Paced time (ADR-008): a loop that counts is work, and work takes no time: a turn whose signature changed never idles.
-  // mov cx,1000; loop $, a turn at each LOOP carrying CX.
+  // Paced time (ADR-008): a loop that counts is work, and work takes no time: a turn that waits for nothing never idles.
+  // mov cx,1000; loop $, each LOOP a spin.
   TEST_METHOD(PacedWorkTakesNoTime)
   {
     PlatformRig rig("PlatformPacedWork");
@@ -123,15 +120,15 @@ public:
         for (std::uint16_t count = 1000; count != 0;)
         {
           --count;
-          rig.Native().LoopTurn(WAIT_LOOP, {count});
+          rig.Native().Spin();
         }
       });
     Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Elite::StopReason::Terminated);
     Assert::AreEqual(std::uint64_t{0}, rig.Host().Clock(), L"no time passed");
   }
 
-  // A loop that waits for the BIOS's tick count to change changes nothing on its turns, so the clock moves from event to
-  // event until the first IRQ 0, at cycle 262,144, and the loop ends right there.
+  // A loop that waits for the BIOS's tick count to change finds nothing at each poll, so the clock moves from event to event
+  // until the first IRQ 0, at cycle 262,144, and the loop ends right there.
   TEST_METHOD(PacedWaitEndsAtTheEventItWaitsFor)
   {
     PlatformRig rig("PlatformPacedWait");
@@ -150,14 +147,14 @@ public:
         rig.Native().DisableInterrupts();
         for (;;)
         {
-          rig.Native().LoopTurn(WAIT_LOOP, {});
+          rig.Native().Wait();
         }
       });
     Assert::IsTrue(rig.Host().RunUntil(500'000) == Elite::StopReason::Reached);
     Assert::AreEqual(std::uint64_t{500'000}, rig.Host().Clock());
   }
 
-  // A loop whose turns never repeat never waits, so paced time would stand still for ever: the run stops as Spinning.
+  // A loop that never waits would hold paced time still for ever: the run stops as Spinning.
   TEST_METHOD(PacedSpinIsStopped)
   {
     PlatformRig rig("PlatformPacedSpin");
@@ -165,9 +162,9 @@ public:
       [&rig]
       {
         rig.Native().EnableInterrupts();
-        for (std::uint16_t turn = 0;; ++turn)
+        for (;;)
         {
-          rig.Native().LoopTurn(WAIT_LOOP, {turn});
+          rig.Native().Spin();
         }
       });
     rig.Host().SetSpinLimit(10'000);

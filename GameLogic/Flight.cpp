@@ -170,11 +170,6 @@ constexpr std::uint16_t PAUSE_OPTIONS = 5;
 constexpr std::uint16_t PAUSE_FIRST_OPTION = 0x0C08; // in spaceViewBuffer
 constexpr std::uint16_t PAUSE_OPTION_STEP = 0x200;
 
-// Where the flight keys' waits for a key jump back, which a de-assembled wait reports as its turns (ADR-015): the function keys'
-// screens', the Ctrl+Esc freeze's and the pause screen's.
-constexpr std::uint16_t FLIGHT_SCREEN_KEY_WAIT = 0x0BF3;
-constexpr std::uint16_t FREEZE_KEY_WAIT = 0x8153;
-constexpr std::uint16_t PAUSE_KEY_WAIT = 0x8DC7;
 constexpr std::uint16_t FUNCTION_KEYS = 10; // F1-F10
 
 // E: the ECM's energy.
@@ -780,11 +775,10 @@ struct LaunchDi
   return di;
 }
 
-// CALL GetKey / JE back to it, at _call, de-assembled: GetKey until a key comes, each empty turn ending at the jump back (ADR-015):
-// the waits at 0x0BF3 (FlightScreenDispatch), 0x8153 (ProcessFlightKeys' Ctrl+Esc) and 0x8DC7 (RunPauseScreen). The turns carry
-// nothing, as WaitForKeyPress's do: GetKey writes AH before it reads it, and reads AL only when it takes a code, which changes
-// keyBuffer's count. Returns the key, with screenshot set if any of its GetKeys saved one, which leaves ES on the video segment.
-KeyPress WaitForKey(GameState& _state, Hardware& _hardware, std::uint16_t _call)
+// CALL GetKey / JE back to it, de-assembled: GetKey until a key comes (ADR-039), the waits at 0x0BF3 (FlightScreenDispatch),
+// 0x8153 (ProcessFlightKeys' Ctrl+Esc) and 0x8DC7 (RunPauseScreen). Returns the key, with screenshot set if any of its GetKeys
+// saved one, which leaves ES on the video segment.
+KeyPress WaitForKey(GameState& _state, Hardware& _hardware)
 {
   bool screenshot = false;
   for (;;)
@@ -796,7 +790,7 @@ KeyPress WaitForKey(GameState& _state, Hardware& _hardware, std::uint16_t _call)
       key.screenshot = screenshot;
       return key;
     }
-    _hardware.LoopTurn(_call, {});
+    AwaitNextKey(_hardware, key);
   }
 }
 
@@ -926,7 +920,7 @@ PauseExit RunPauseOptions(GameState& _state, Hardware& _hardware, bool _backward
     _hardware.PublishFlightSnapshot(WithoutScene(TakeFlightSnapshot(_state)), false);
     for (;;)
     {
-      const std::uint8_t key = WaitForKey(_state, _hardware, PAUSE_KEY_WAIT).scanCode;
+      const std::uint8_t key = WaitForKey(_state, _hardware).scanCode;
       if (key == SCAN_SPACE)
       {
         // Resume, with the space that did it not fired.
@@ -1107,7 +1101,7 @@ FlightScreens DispatchFlightScreens(GameState& _state, Hardware& _hardware, std:
       continue;
     }
     // JMP 0BF3h, and GetKey until a key comes: a screenshot taken there leaves ES on the video segment (SaveScreenshot).
-    const KeyPress next = WaitForKey(_state, _hardware, FLIGHT_SCREEN_KEY_WAIT);
+    const KeyPress next = WaitForKey(_state, _hardware);
     key = next.scanCode;
     if (next.screenshot)
     {
@@ -2584,7 +2578,7 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, SlotInd
     {
       // Ctrl+Esc freezes the game until a key, without the menu.
       ResetKeyboard(_state, _hardware);
-      (void)WaitForKey(_state, _hardware, FREEZE_KEY_WAIT);
+      (void)WaitForKey(_state, _hardware);
     }
     else
     {

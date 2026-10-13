@@ -24,13 +24,13 @@ class Game;
 ///
 /// The host makes one for the whole run, inside a Game, which loads the reference's image into it (Game::Load). Since change 3c of D38
 /// nothing reaches the state by the original's addresses: native code names a member, a run of members that followed one another in 1987
-/// (BytesThrough, Text.h), or a byte within either. The loops that wait carry a member's place in GameData in their turns where the
-/// original holds its address in a register (PlaceOf, ADR-015). The code segment, the vector table, the BIOS's data area and the PSP are
+/// (BytesThrough, Text.h), or a byte within either. The code segment, the vector table, the BIOS's data area and the PSP are
 /// not here: they are the platform's (Platform, Hardware), and the segments the game was loaded at are kept for the devices that still take
 /// far addresses.
 ///
 /// Every write counts in one change count (ChangeCount) when it changes what it writes, as the emulated PC's memory did until D33: paced
-/// time compares the count at each turn of a loop, and a turn that changed nothing idles (ADR-015). A member of GameData counts its own
+/// time compared the count at each turn of a loop, and a turn that changed nothing idled (ADR-015). Since the waits are declared
+/// (ADR-039), nothing reads it. A member of GameData counts its own
 /// writes (Counted): the data segment is in a block of its own, aligned to COUNTED_BLOCK_ALIGNMENT, with the count first, where a member
 /// finds it from its own address. Video memory's writes count in the same count. A read changes nothing and counts nothing.
 class GameState
@@ -90,21 +90,6 @@ public:
     return static_cast<SlotIndex>((address - first) / sizeof(SpaceObject));
   }
 
-  /// The place in GameData of _member, a member of Data() at any depth or a byte of one: its offset from GameData's first byte. A loop that
-  /// waits carries it in its turns where the original holds the member's address in a register (ADR-015): a turn's signature is only ever
-  /// compared with the last turn's, so a place stands in for the address as well as the address did. Anything outside GameData throws
-  /// std::out_of_range.
-  template <typename Member> [[nodiscard]] std::uint16_t PlaceOf(const Member& _member) const
-  {
-    const auto address = reinterpret_cast<std::uintptr_t>(&_member);
-    const auto first = reinterpret_cast<std::uintptr_t>(DataBytes().data());
-    if (address < first || address - first + sizeof(Member) > sizeof(GameData))
-    {
-      RefusePlace();
-    }
-    return static_cast<std::uint16_t>(address - first);
-  }
-
   /// The byte at B800:_offset, in the CGA's video memory, which must be in its 16 KiB; any other throws std::out_of_range.
   [[nodiscard]] std::uint8_t VideoByte(std::uint16_t _offset) const
   {
@@ -148,8 +133,6 @@ private:
   // Only a Game loads a GameState.
   friend class Game;
 
-  static_assert(sizeof(GameData) <= 0xFFFF, "a place in GameData is a word (PlaceOf)");
-
   /// Takes the game's state as DOS would have loaded the reference with its code segment at _codeSegment, uncounted: _state,
   /// GameData's bytes as ReferenceLoadImage lays them out, from the data segment's image. Video memory is left as it is. The
   /// data segment is paragraph DATA_SEGMENT_PARAGRAPH on from _codeSegment.
@@ -172,9 +155,6 @@ private:
 
   /// Throws the std::out_of_range of an offset past video memory's end.
   [[noreturn]] static void RefuseVideo();
-
-  /// Throws the std::out_of_range of a member outside GameData.
-  [[noreturn]] static void RefusePlace();
 
   /// _slot, when it is one of shipSlots' 36; otherwise throws std::out_of_range.
   [[nodiscard]] static SlotIndex CheckedSlot(SlotIndex _slot)

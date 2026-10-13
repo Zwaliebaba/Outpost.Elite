@@ -7,7 +7,6 @@
 #include "Timing.h"
 
 #include <cstdint>
-#include <initializer_list>
 #include <span>
 #include <string_view>
 
@@ -18,9 +17,9 @@ namespace Elite
 /// interrupt controller, the keyboard, the game port, the mouse, the CGA, the BIOS and DOS, named for what it does rather than
 /// by port or vector. Since D33 every operation is the native Platform's (ADR-021), and the routines did not change.
 ///
-/// What paced time sees is kept: each operation counts the port writes the original's own sequence of port accesses made, in
-/// the BIOS's and DOS's services as in the game's own OUTs, and every byte of memory a service changes is counted where it
-/// lies, so a loop's turn idles exactly where it did (ADR-015). Each service operation returns what the service gives as a
+/// Each operation counts the port writes the original's own sequence of port accesses made, in the BIOS's and DOS's services as
+/// in the game's own OUTs, and every byte of memory a service changes is counted where it lies, as paced time compared them at
+/// a loop's turn (ADR-015); since the waits are declared (ADR-039), nothing reads the counts. Each service operation returns what the service gives as a
 /// small typed result. Hardware holds no state of its own: a device's state is the platform's.
 class Hardware
 {
@@ -53,12 +52,13 @@ public:
   /// CLI.
   void DisableInterrupts() noexcept;
 
-  /// One turn of a loop that can wait, where the original jumps back to CS:_loop (ADR-015). _carried are values the
-  /// original holds in registers there: every one the next turn reads before it writes it, and every one the turn read
-  /// from a device; one that cannot change between turns may be left out. A turn that changed no byte and no port, with
-  /// the same values as the last, idles to the next device event, as the original's would; then the interrupts that fall
-  /// due are taken.
-  void LoopTurn(std::uint16_t _loop, std::initializer_list<std::uint16_t> _carried);
+  /// A wait's poll that found what it waits for missing (ADR-039): the clock moves to the next device event, as the original's
+  /// loop idles there; then the interrupts that fall due are taken.
+  void Wait();
+
+  /// A turn of a loop that waits for nothing at that turn: a poll that took something it does not want, or a loop the original
+  /// never leaves. The clock stands still, and a run that does nothing else stops as Spinning (Platform::Spin).
+  void Spin();
 
   /// IN AL,60h: the scan code the keyboard sent.
   [[nodiscard]] std::uint8_t KeyboardData();

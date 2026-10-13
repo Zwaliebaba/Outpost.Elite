@@ -2,8 +2,6 @@
 
 #include "Hardware.h"
 
-#include <algorithm>
-#include <array>
 #include <span>
 #include <stdexcept>
 #include <string_view>
@@ -67,16 +65,14 @@ void Hardware::DisableInterrupts() noexcept
   m_platform.DisableInterrupts();
 }
 
-void Hardware::LoopTurn(std::uint16_t _loop, std::initializer_list<std::uint16_t> _carried)
+void Hardware::Wait()
 {
-  std::array<std::uint16_t, Platform::MOST_TURN_WORDS> signature{};
-  if (_carried.size() >= signature.size())
-  {
-    throw std::logic_error("Hardware::LoopTurn: more carried values than a turn signature holds");
-  }
-  signature[0] = _loop;
-  std::ranges::copy(_carried, signature.begin() + 1);
-  m_platform.LoopTurn(std::span<const std::uint16_t>(signature.data(), _carried.size() + 1));
+  m_platform.Wait();
+}
+
+void Hardware::Spin()
+{
+  m_platform.Spin();
 }
 
 std::uint8_t Hardware::KeyboardData()

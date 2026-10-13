@@ -469,39 +469,19 @@ void Platform::Idle(Cycles _limit)
   m_keyboard.Advance();
 }
 
-void Platform::LoopTurn(std::span<const std::uint16_t> _signature)
+void Platform::Wait()
 {
-  if (_signature.size() > MOST_TURN_WORDS)
-  {
-    throw std::logic_error("Platform::LoopTurn: a turn signature of more than MOST_TURN_WORDS words");
-  }
-  ++m_stepsSinceIdle;
-  Turn turn;
-  std::ranges::copy(_signature, turn.signature.begin());
-  turn.signatureWords = _signature.size();
-  turn.memoryChanges = MemoryChanges();
-  turn.portWrites = PortWrites();
-  turn.valid = true;
-  NoteTurn(turn);
+  Idle(m_runLimit);
   EndTurn();
 }
 
-// A turn that changed nothing since the last idles: no byte, no port, and the same signature.
-void Platform::NoteTurn(const Turn& _turn)
+void Platform::Spin()
 {
-  const bool same = _turn.signatureWords == m_lastTurn.signatureWords &&
-                    std::equal(_turn.signature.begin(), _turn.signature.begin() + static_cast<std::ptrdiff_t>(_turn.signatureWords),
-                               m_lastTurn.signature.begin());
-  const bool idle =
-    m_lastTurn.valid && same && _turn.memoryChanges == m_lastTurn.memoryChanges && _turn.portWrites == m_lastTurn.portWrites;
-  m_lastTurn = _turn;
-  if (idle)
-  {
-    Idle(m_runLimit);
-  }
+  ++m_stepsSinceIdle;
+  EndTurn();
 }
 
-// After a turn is noted: the run's end if the clock reached it, and the interrupts now due.
+// After a wait or a spin: the run's end if the clock reached it, and the interrupts now due.
 void Platform::EndTurn()
 {
   if (m_clock >= m_runLimit)

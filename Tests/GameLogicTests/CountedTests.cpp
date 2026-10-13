@@ -132,8 +132,7 @@ public:
     Assert::AreEqual(0u, std::uint32_t{first.Data().commander.fuel});
   }
 
-  // IndexOf gives a slot's number, and PlaceOf a member's place in GameData, which a waiting loop's turns carry; a record that is not one
-  // of the slots, a member of another GameState and an offset past video memory are refused (change 3c).
+  // IndexOf gives a slot's number; a record that is not one of the slots and an offset past video memory are refused (change 3c).
   TEST_METHOD(SlotsAndPlacesAreFoundByMember)
   {
     Elite::GameState state;
@@ -144,13 +143,6 @@ public:
     Assert::ExpectException<std::out_of_range>([&state, &outside] { (void)state.IndexOf(outside); }, L"a record that is no slot");
     Assert::ExpectException<std::out_of_range>([&state] { (void)state.Slot(Elite::SlotIndex::End); }, L"a number past the last");
 
-    Assert::AreEqual(std::uint32_t{GAME_DATA_OFFSET(commander.fuel)}, std::uint32_t{state.PlaceOf(state.Data().commander.fuel)},
-                     L"a member's place");
-    Assert::AreEqual(std::uint32_t{GAME_DATA_OFFSET(input.keyBuffer) + 3}, std::uint32_t{state.PlaceOf(state.Data().input.keyBuffer[3])},
-                     L"an element's");
-    const Elite::GameState other;
-    Assert::ExpectException<std::out_of_range>([&state, &other] { (void)state.PlaceOf(other.Data().commander.fuel); },
-                                               L"another state's member");
     Assert::ExpectException<std::out_of_range>([&state] { (void)state.VideoByte(0x4000); }, L"past video memory");
   }
 };

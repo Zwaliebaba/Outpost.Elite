@@ -49,11 +49,6 @@ constexpr std::uint16_t FRAME_SIDE_ROWS = 0x17;
 constexpr std::uint16_t FRAME_RIGHT_SIDE = 0x4E; // column 39
 constexpr std::uint16_t TEXT_ROW_BYTES = 0x50;
 
-// Where the original jumps back (Hardware::LoopTurn, ADR-015).
-constexpr std::uint16_t DOCKED_KEY_DISPATCH = 0x0B40;
-constexpr std::uint16_t WAIT_FOR_SCREEN_EXIT_KEY = 0x60B4;
-constexpr std::uint16_t SUPERNOVA_ANSWER = 0x6E23;
-
 // Scan codes.
 constexpr std::uint8_t SCAN_ESCAPE = 0x01;
 constexpr std::uint8_t SCAN_Y = 0x15;
@@ -142,9 +137,8 @@ constexpr std::uint16_t TITLE_YAW_STEP = 0x14;
 constexpr std::uint16_t TITLE_ROLL_STEP = 0x1E;
 constexpr std::uint8_t TITLE_SHIP_FLAGS = 2;
 
-// CALL GetKey; JE _loop, de-assembled: GetKey until a key comes, each empty turn ending at the jump back (ADR-015). The turns
-// carry nothing, as WaitForKeyPress's do. Returns the key.
-KeyPress WaitForKey(GameState& _state, Hardware& _hardware, std::uint16_t _loop)
+// CALL GetKey; JE back to it, de-assembled: GetKey until a key comes (ADR-039). Returns the key.
+KeyPress WaitForKey(GameState& _state, Hardware& _hardware)
 {
   for (;;)
   {
@@ -153,7 +147,7 @@ KeyPress WaitForKey(GameState& _state, Hardware& _hardware, std::uint16_t _loop)
     {
       return key;
     }
-    _hardware.LoopTurn(_loop, {});
+    AwaitNextKey(_hardware, key);
   }
 }
 
@@ -444,7 +438,8 @@ DockedExit DispatchDockedKeys(GameState& _state, Hardware& _hardware, std::uint8
         screenKey = SCAN_ESCAPE;
         break;
       }
-      const KeyPress next = WaitForKey(_state, _hardware, DOCKED_KEY_DISPATCH);
+      // Back to the GetKey at 0B40h.
+      const KeyPress next = WaitForKey(_state, _hardware);
       key = ScreenKey{next.scanCode, AlAfterKey(key.al, next), std::nullopt};
     }
   }
@@ -533,8 +528,7 @@ std::uint8_t AlAfterKey(std::uint8_t _al, const KeyPress& _key) noexcept
 
 ScreenKey WaitForScreenExitKey(GameState& _state, Hardware& _hardware, std::uint8_t _ownKey, std::uint8_t _al, std::uint16_t _countIfNone)
 {
-  // GetKey until Esc or another screen's F-key, every other turn ending at the jump back to 60B4. The turns carry nothing, as
-  // WaitForKeyPress's do: GetKey writes AH before it reads it, and reads AL only when it takes a code, which changes keyBuffer.
+  // GetKey until Esc or another screen's F-key, every other key and an empty poll going back to 60B4h.
   std::uint8_t al = _al;
   for (;;)
   {
@@ -546,7 +540,7 @@ ScreenKey WaitForScreenExitKey(GameState& _state, Hardware& _hardware, std::uint
       const std::uint16_t countLeft = SelectSystemAtCursor(_state, _countIfNone);
       return ScreenKey{scanCode, al, countLeft};
     }
-    _hardware.LoopTurn(WAIT_FOR_SCREEN_EXIT_KEY, {});
+    AwaitNextKey(_hardware, key);
   }
 }
 
@@ -800,7 +794,7 @@ void ShowMissionBriefing(GameState& _state, Hardware& _hardware, bool _backward)
     std::uint8_t answer = 0;
     for (;;)
     {
-      answer = WaitForKey(_state, _hardware, SUPERNOVA_ANSWER).scanCode;
+      answer = WaitForKey(_state, _hardware).scanCode;
       if (answer == SCAN_Y || answer == SCAN_N)
       {
         break;

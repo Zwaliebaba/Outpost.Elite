@@ -13,9 +13,6 @@ namespace Elite
 namespace
 {
 
-// WaitForKeyPress's loop: GetKey, and JE back to it while there is no key (Hardware::LoopTurn).
-constexpr std::uint16_t WAIT_FOR_KEY_PRESS = 0x6DEC;
-
 constexpr std::uint8_t MOUSE_VECTOR = 0x33;
 constexpr std::uint8_t IRET_OPCODE = 0xCF;
 constexpr std::uint8_t MOST_MOUSE_STEP = 0x3F; // mickeys / 8, either way
@@ -29,9 +26,6 @@ constexpr std::uint8_t BOTH_AXES = X_AXIS | Y_AXIS;
 constexpr std::uint16_t STICK_STEP_LIMIT = 0x80; // (count - centre) * 128 / centre saturates at 127
 constexpr std::uint8_t MOST_STICK_STEP = 0x7F;
 constexpr std::uint8_t STICK_DEAD_ZONE = 4; // after the step's division by 8
-
-// ReadJoystickAxes's wait for both bits, where it jumps back (Hardware::LoopTurn).
-constexpr std::uint16_t BOTH_DOWN_TURN = 0x7797;
 
 // The cycles the 8088 model (the interpreter, until D7) charged for ReadJoystickAxes's instructions: the game port times its one-shots by
 // them, and the stick is read by counting turns of the polling loops, so native code counts them where the original runs them.
@@ -275,16 +269,26 @@ MouseDriver IsMouseDriverInstalled(Hardware& _hardware)
 
 void WaitForKeyPress(GameState& _state, Hardware& _hardware)
 {
-  // GetKey until a key comes: each empty turn ends at the original's JE back to the entry. The turn carries nothing: GetKey
-  // writes AH before it reads it and keeps BX, and it reads AL only when it takes a code, which changes keyBuffer's count.
+  // GetKey until a key comes, the JE back to the entry at 6DECh.
   for (;;)
   {
-    if (GetKey(_state, _hardware).scanCode != 0)
+    const KeyPress key = GetKey(_state, _hardware);
+    if (key.scanCode != 0)
     {
       return;
     }
-    _hardware.LoopTurn(WAIT_FOR_KEY_PRESS, {});
+    AwaitNextKey(_hardware, key);
   }
+}
+
+void AwaitNextKey(Hardware& _hardware, const KeyPress& _key)
+{
+  if (_key.taken || _key.screenshot)
+  {
+    _hardware.Spin();
+    return;
+  }
+  _hardware.Wait();
 }
 
 Steering ReadSteering(GameState& _state, Hardware& _hardware)
@@ -400,7 +404,8 @@ StickAxes ReadJoystickAxes(Hardware& _hardware)
 {
   // With interrupts off, the one-shots fired, and each axis's polls counted until its bit drops. The game port times its one-shots
   // by the instructions executed, so each of the original's is counted (CountInstructionCycles) before the port access after it.
-  // The wait for both bits, which reads no register before it writes it but DX, the port, idles as the original's does.
+  // The wait for both bits at 7797h idles as the original's does: from its second poll, as its first follows the last change, the
+  // port written to fire the one-shots.
   _hardware.DisableInterrupts();
   std::uint16_t x = AXIS_COUNT_START;
   std::uint16_t y = x;
@@ -439,6 +444,7 @@ StickAxes ReadJoystickAxes(Hardware& _hardware)
   }
   _hardware.CountInstructionCycles(NOT_TAKEN_CYCLES);
   // Both bits down before the one-shots fire again: a wait when X's drops first.
+  bool polled = false;
   for (;;)
   {
     bits = static_cast<std::uint8_t>(_hardware.GamePortOneShots() & BOTH_AXES);
@@ -448,7 +454,15 @@ StickAxes ReadJoystickAxes(Hardware& _hardware)
       break;
     }
     _hardware.CountInstructionCycles(TAKEN_CYCLES);
-    _hardware.LoopTurn(BOTH_DOWN_TURN, {bits});
+    if (polled)
+    {
+      _hardware.Wait();
+    }
+    else
+    {
+      _hardware.Spin();
+      polled = true;
+    }
   }
   _hardware.CountInstructionCycles(NOT_TAKEN_CYCLES);
   _hardware.FireGamePort();

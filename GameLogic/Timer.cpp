@@ -30,9 +30,6 @@ constexpr std::uint8_t NOTE_TICKS_PER_BEAT = 0x24;
 constexpr std::uint8_t NOTE_BASE = 0x0C;    // notePeriods starts an octave up
 constexpr std::uint16_t REST_PERIOD = 0x32; // inaudible
 
-// Where WaitForTimerTick's loop jumps back to: the compare.
-constexpr std::uint16_t TIMER_TICK_COMPARE = 0x7776;
-
 // The byte at _field less one, stored back: DEC BYTE PTR. Returns what it leaves.
 std::uint8_t Decrement(Counted<std::uint8_t>& _field)
 {
@@ -237,12 +234,12 @@ void TimerTick(GameState& _state, Hardware& _hardware)
 
 void WaitForTimerTick(GameState& _state, Hardware& _hardware)
 {
-  // PUSH AX, MOV AX,[timerTicks], then the compare at 7776 and JE back to it, and POP AX: the loop carries in AX the
-  // tick it started at. The stack the PUSH used is not state the game reads, nor the digest (ADR-008 item 5).
+  // PUSH AX, MOV AX,[timerTicks], then the compare at 7776 and JE back to it, and POP AX: AX holds the tick it started at. The
+  // stack the PUSH used is not state the game reads, nor the digest (ADR-008 item 5).
   const std::uint16_t ticks = _state.Data().timer.timerTicks;
   while (ticks == _state.Data().timer.timerTicks)
   {
-    _hardware.LoopTurn(TIMER_TICK_COMPARE, {ticks});
+    _hardware.Wait();
   }
 }
 

@@ -69,10 +69,6 @@ constexpr std::uint8_t ODD_ROW_BIT = 0x40;
 
 // The frame routines wait on the CGA's status port, whose bit 3 is the vertical retrace.
 constexpr std::uint8_t STATUS_VERTICAL_RETRACE = 0x08;
-// Where their waits jump back to: PresentSpaceView's wait for the frame's time is to its start.
-constexpr std::uint16_t PRESENT_SPACE_VIEW = 0x0599;
-constexpr std::uint16_t CHART_RETRACE_LOOP = 0x05D0;
-constexpr std::uint16_t SPACE_VIEW_RETRACE_LOOP = 0x4602;
 // The drawing buffer's 64-byte lines onto the screen, a pair of lines (one in each bank) a turn.
 constexpr std::uint16_t BUFFER_LINE_WORDS = 0x20;
 constexpr std::uint16_t TO_ODD_LINE = 0x1FC0;              // from the end of an even line to the odd line below it
@@ -1259,10 +1255,9 @@ void FillClippedGeneral(GameState& _state, ScreenPoint _a, ScreenPoint _b, Scree
 
 // ---- Frames ----
 
-// IN AL,DX / AND AL,8 / JZ: the CGA's status until it reports a vertical retrace, the loop at CS:_loop. A read
-// that sees a retrace uses it up (Cga::SetRetraceSeenOnce), so these are the original's reads, one a turn. Each turn
-// carries the bit AL holds at the jump, what it read.
-void WaitForRetrace(Hardware& _hardware, std::uint16_t _loop)
+// IN AL,DX / AND AL,8 / JZ: the CGA's status until it reports a vertical retrace. A read that sees a retrace uses it up
+// (Cga::SetRetraceSeenOnce), so these are the original's reads, one a poll, and a poll that sees none waits (ADR-039).
+void WaitForRetrace(Hardware& _hardware)
 {
   for (;;)
   {
@@ -1271,7 +1266,7 @@ void WaitForRetrace(Hardware& _hardware, std::uint16_t _loop)
     {
       return;
     }
-    _hardware.LoopTurn(_loop, {retrace});
+    _hardware.Wait();
   }
 }
 
@@ -1398,11 +1393,11 @@ void PresentChartFrame(GameState& _state, Hardware& _hardware)
 
 void PresentSpaceView(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  // MOV AL,[msSinceFrame] / CMP AL,[minimumFrameMs] / JB back to the start, while the timer interrupt counts msSinceFrame up.
-  // Each turn loads AL before it reads it, so the loop carries nothing.
+  // MOV AL,[msSinceFrame] / CMP AL,[minimumFrameMs] / JB back to the start at 0599h, while the timer interrupt counts
+  // msSinceFrame up.
   while (_state.Data().flow.msSinceFrame < _state.Data().flight.minimumFrameMs)
   {
-    _hardware.LoopTurn(PRESENT_SPACE_VIEW, {});
+    _hardware.Wait();
   }
   _state.Data().flow.msSinceFrame = 0;
   WaitRetraceThenDelay(_hardware);
@@ -1413,7 +1408,7 @@ void CopyChartBufferToScreen(GameState& _state, Hardware& _hardware, std::uint8_
 {
   // MOV DX,3DAh / PUSH AX, the retrace's loop at 05D0 and the delay's at 05D8, then POP AX: the bands are a value, not a word on
   // the stack. The delay, MOV AX,2BCh / DEC AX / JNZ, is the 8088's speed and takes no paced time.
-  WaitForRetrace(_hardware, CHART_RETRACE_LOOP);
+  WaitForRetrace(_hardware);
   // _bandsSkipped bands of 8 lines: SHL BL,1 twice / SUB BL,40h / NEG BL, so 64 - 4 * the bands line pairs as a byte, from
   // DS:the bands * 512, as SHL AH,1 leaves the bands doubled in AH.
   const auto linePairs = static_cast<std::uint8_t>(CHART_LINE_PAIRS - static_cast<std::uint8_t>(_bandsSkipped << 2));
@@ -1879,7 +1874,7 @@ void WaitRetraceThenDelay(Hardware& _hardware)
 {
   // MOV DX,3DAh and the retrace's loop at 4602, then MOV AX,7D0h and the delay's at 460A, which counts AX down to 0: the
   // 8088's speed, which takes no paced time.
-  WaitForRetrace(_hardware, SPACE_VIEW_RETRACE_LOOP);
+  WaitForRetrace(_hardware);
 }
 
 ScreenChange ShowCockpitScreen(GameState& _state, Hardware& _hardware, bool _backward)

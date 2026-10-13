@@ -30,14 +30,6 @@ constexpr std::uint8_t MOST_COMMANDER_FILES = 0x28;
 
 // ---- The disc menu ----
 
-// Where its loops jump back to (Hardware::LoopTurn).
-constexpr std::uint16_t RETRY_KEY_LOOP = 0x6625;
-constexpr std::uint16_t DISC_CONTROL_KEY_LOOP = 0x665E;
-constexpr std::uint16_t EXIT_KEY_LOOP = 0x66C3;
-constexpr std::uint16_t JOYSTICK_KEY_LOOP = 0x6752;
-constexpr std::uint16_t AMSTRAD_KEY_LOOP = 0x6777;
-constexpr std::uint16_t CENTER_KEY_LOOP = 0x67B2;
-
 // ".CDR" and its NUL, which PromptCommanderFileName appends to a name: DS:8697 in 1987, a text no symbol starts and nothing
 // writes, whose bytes the reference's image holds there.
 constexpr std::array<std::uint8_t, 5> COMMANDER_EXTENSION = {'.', 'C', 'D', 'R', 0};
@@ -301,9 +293,8 @@ std::uint16_t PrintAt(GameState& _state, std::string_view _text, std::uint16_t _
   return PrintTextModeString(_state, _text, _position);
 }
 
-// CALL GetKey / JZ back: GetKey until a key comes, each empty turn ending at the jump back to CS:_loop (ADR-015). The turns carry
-// nothing, as WaitForKeyPress's do. Returns the key.
-KeyPress WaitForKey(GameState& _state, Hardware& _hardware, std::uint16_t _loop)
+// CALL GetKey / JZ back: GetKey until a key comes (ADR-039). Returns the key.
+KeyPress WaitForKey(GameState& _state, Hardware& _hardware)
 {
   for (;;)
   {
@@ -312,16 +303,16 @@ KeyPress WaitForKey(GameState& _state, Hardware& _hardware, std::uint16_t _loop)
     {
       return key;
     }
-    _hardware.LoopTurn(_loop, {});
+    AwaitNextKey(_hardware, key);
   }
 }
 
-// WaitForKey at CS:_loop until one of _first and _second comes, every other key going back there too. Returns it.
-std::uint8_t WaitForEitherKey(GameState& _state, Hardware& _hardware, std::uint16_t _loop, std::uint8_t _first, std::uint8_t _second)
+// WaitForKey until one of _first and _second comes, every other key going back to it too. Returns it.
+std::uint8_t WaitForEitherKey(GameState& _state, Hardware& _hardware, std::uint8_t _first, std::uint8_t _second)
 {
   for (;;)
   {
-    const std::uint8_t scan = WaitForKey(_state, _hardware, _loop).scanCode;
+    const std::uint8_t scan = WaitForKey(_state, _hardware).scanCode;
     if (scan == _first || scan == _second)
     {
       return scan;
@@ -381,7 +372,7 @@ void ShowNoJoystick(GameState& _state)
 {
   PrintAt(_state, JOYSTICK_TYPE_TEXT, STATUS_POSITION);
   // I or A, then the title over the question: the original sets SI and DI for it before the wait.
-  const bool amstrad = WaitForEitherKey(_state, _hardware, JOYSTICK_KEY_LOOP, SCAN_I, SCAN_A) == SCAN_A;
+  const bool amstrad = WaitForEitherKey(_state, _hardware, SCAN_I, SCAN_A) == SCAN_A;
   PrintAt(_state, JOYSTICK_TITLE_TEXT, STATUS_POSITION);
   if (amstrad)
   {
@@ -391,7 +382,7 @@ void ShowNoJoystick(GameState& _state)
     _state.Data().saveLoad.amstradJoystickMoved = 0;
     for (;;)
     {
-      const std::uint8_t scan = WaitForKey(_state, _hardware, AMSTRAD_KEY_LOOP).scanCode;
+      const std::uint8_t scan = WaitForKey(_state, _hardware).scanCode;
       if (scan < SCAN_PAST_KEYBOARD)
       {
         break;
@@ -406,7 +397,7 @@ void ShowNoJoystick(GameState& _state)
   // The IBM's: its centre read once a key says the stick is let go.
   _state.Data().saveLoad.joystickIsAmstrad = 0;
   PrintAt(_state, CENTER_JOYSTICK_TEXT, HELP_POSITION);
-  (void)WaitForKey(_state, _hardware, CENTER_KEY_LOOP);
+  (void)WaitForKey(_state, _hardware);
   const StickAxes center = ReadJoystickAxes(_hardware);
   _state.Data().saveLoad.joystickCenterX = center.x;
   _state.Data().saveLoad.joystickCenterY = center.y;
@@ -437,7 +428,7 @@ DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _sh
       al = 0; // the print's NUL
       showDevice = false;
     }
-    const KeyPress key = WaitForKey(_state, _hardware, DISC_CONTROL_KEY_LOOP);
+    const KeyPress key = WaitForKey(_state, _hardware);
     al = AlAfterKey(al, key);
     // PUSH AX and POP AX round it.
     BlankHelpRows(_state);
@@ -445,7 +436,7 @@ DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _sh
     if (scan == SCAN_E)
     {
       PrintAt(_state, EXIT_QUESTION_TEXT, STATUS_POSITION);
-      if (WaitForEitherKey(_state, _hardware, EXIT_KEY_LOOP, SCAN_N, SCAN_Y) == SCAN_N)
+      if (WaitForEitherKey(_state, _hardware, SCAN_N, SCAN_Y) == SCAN_N)
       {
         showDevice = true;
         continue;
@@ -631,7 +622,7 @@ DiscMenuExit ShowDiscControlScreen(GameState& _state, Hardware& _hardware, bool 
     return RunDiscControlKeys(_state, _hardware, false, al);
   }
   PrintAt(_state, RETRY_TEXT, STATUS_POSITION);
-  if (WaitForEitherKey(_state, _hardware, RETRY_KEY_LOOP, SCAN_N, SCAN_Y) == SCAN_N)
+  if (WaitForEitherKey(_state, _hardware, SCAN_N, SCAN_Y) == SCAN_N)
   {
     return RunDiscControlKeys(_state, _hardware, true, 0);
   }
