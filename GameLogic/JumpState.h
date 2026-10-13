@@ -3,7 +3,7 @@
 // them and run the tool again (D38).
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 
 #include <cstdint>
 #include <type_traits>
@@ -19,15 +19,15 @@ struct JumpState
   explicit JumpState(const JumpState&) noexcept = default;
 
   /// set by ReadScanCode when W (11h) is pressed while Alt is held; on hyperspace arrival (478C) it forces EnterWitchSpace, which puts t...
-  Counted<std::uint8_t> forceMisjump;
+  Field<std::uint8_t> forceMisjump;
   /// set when H is pressed inside the galactic drive window; CompleteHyperspaceJump then makes a galactic jump
-  Counted<std::uint8_t> galacticJumpPending;
+  Field<std::uint8_t> galacticJumpPending;
   /// 40 when G arms the galactic drive; H within that window starts a galactic jump
-  Counted<std::uint8_t> galacticDriveReadyFrames;
+  Field<std::uint8_t> galacticDriveReadyFrames;
   /// 10 when the countdown starts, -1 every 10 frames; arrival at 0
-  Counted<std::uint8_t> hyperspaceCountdown;
+  Field<std::uint8_t> hyperspaceCountdown;
   /// frames left in the current countdown step (10)
-  Counted<std::uint8_t> hyperspaceCountdownFrames;
+  Field<std::uint8_t> hyperspaceCountdownFrames;
 };
 
 static_assert(std::is_trivially_copyable_v<JumpState> && std::is_standard_layout_v<JumpState>);

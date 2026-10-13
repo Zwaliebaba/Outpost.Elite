@@ -174,7 +174,7 @@ void AddToCoordinate(SpaceObject& _slot, int _axis, std::int16_t _value)
 void ClearObjectSlot(SpaceObject& _slot)
 {
   // MOV [SI],CH while CX counts down from 40h: CH is 0 throughout.
-  for (Counted<std::uint8_t>& byte : BytesOf(_slot))
+  for (Field<std::uint8_t>& byte : BytesOf(_slot))
   {
     byte = 0;
   }
@@ -522,8 +522,8 @@ void CopyObject(const SpaceObject& _source, SpaceObject& _destination)
   // REP MOVSW from DS:SI to ES:DI, ES = DS: 32 words, word by word as the 8088 does it, each read whole and then written, from the first,
   // upwards, as the direction flag is clear wherever the game calls it: the only STD, MaskOutsideTunnel's, has its CLD before the routine
   // returns (change 3c).
-  const std::span<const Counted<std::uint8_t>> source = BytesOf(std::as_const(_source));
-  const std::span<Counted<std::uint8_t>> destination = BytesOf(_destination);
+  const std::span<const Field<std::uint8_t>> source = BytesOf(std::as_const(_source));
+  const std::span<Field<std::uint8_t>> destination = BytesOf(_destination);
   for (std::size_t word = 0; word < SpaceObject::BYTES; word += 2)
   {
     SetWordIn(destination, word, WordIn(source, word));

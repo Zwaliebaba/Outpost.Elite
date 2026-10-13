@@ -70,10 +70,10 @@ def read_partition() -> dict[str, str]:
 
 
 def read_slot_fields() -> dict[str, tuple[int, int]]:
-  """SpaceObject's fields: the offset SpaceObject.h asserts for each, and its size, a byte for a Counted<std::uint8_t> and a
-  word for any other Counted."""
+  """SpaceObject's fields: the offset SpaceObject.h asserts for each, and its size, a byte for a Field<std::uint8_t> and a
+  word for any other Field."""
   text = SPACE_OBJECT.read_text(encoding="utf-8")
-  sizes = {name: 1 if kind == "std::uint8_t" else 2 for kind, name in re.findall(r"Counted<([\w:]+)> (\w+);", text)}
+  sizes = {name: 1 if kind == "std::uint8_t" else 2 for kind, name in re.findall(r"Field<([\w:]+)> (\w+);", text)}
   fields = {}
   for assertion in re.findall(r"static_assert\(([^;]*)\);", text):
     for name, offset in re.findall(r"SPACE_OBJECT_OFFSET\((\w+)\) == (0x[0-9A-Fa-f]+)", assertion):

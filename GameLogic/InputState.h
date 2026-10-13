@@ -3,7 +3,7 @@
 // them and run the tool again (D38).
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 
 #include <cstdint>
 #include <type_traits>
@@ -19,33 +19,33 @@ struct InputState
   explicit InputState(const InputState&) noexcept = default;
 
   /// ring buffer of make codes, written by ReadScanCode
-  Counted<std::uint8_t> keyBuffer[16];
+  Field<std::uint8_t> keyBuffer[16];
   /// next write address in keyBuffer
-  Counted<std::uint16_t> keyBufferWrite;
+  Field<std::uint16_t> keyBufferWrite;
   /// next read address in keyBuffer; GetKey advances it, ResetKeyboard resets it to DS:A0B0
-  Counted<std::uint16_t> keyBufferRead;
+  Field<std::uint16_t> keyBufferRead;
   /// keys waiting in keyBuffer; ReadScanCode drops a key when it reaches 16
-  Counted<std::uint8_t> keyBufferCount;
+  Field<std::uint8_t> keyBufferCount;
   /// last frame's roll direction (-1, 0, +1; 7Fh in the file); ReadKeyboardSteering
-  Counted<std::uint8_t> keyboardLastRollKey;
+  Field<std::uint8_t> keyboardLastRollKey;
   /// last frame's pitch direction (7Fh in the file)
-  Counted<std::uint8_t> keyboardLastPitchKey;
+  Field<std::uint8_t> keyboardLastPitchKey;
   /// grows by 1 a frame while the same roll key is held, inside +-23; reset to 0 on any change
-  Counted<std::uint8_t> keyboardRollRamp;
+  Field<std::uint8_t> keyboardRollRamp;
   /// as keyboardRollRamp, for pitch
-  Counted<std::uint8_t> keyboardPitchRamp;
+  Field<std::uint8_t> keyboardPitchRamp;
   /// as keyboardLastRollKey, for the Amstrad joystick key codes (ReadJoystickSteering)
-  Counted<std::uint8_t> amstradStickLastRoll;
+  Field<std::uint8_t> amstradStickLastRoll;
   /// as keyboardLastPitchKey, for the Amstrad joystick
-  Counted<std::uint8_t> amstradStickLastPitch;
+  Field<std::uint8_t> amstradStickLastPitch;
   /// as keyboardRollRamp, for the Amstrad joystick
-  Counted<std::uint8_t> amstradStickRollRamp;
+  Field<std::uint8_t> amstradStickRollRamp;
   /// as keyboardPitchRamp, for the Amstrad joystick
-  Counted<std::uint8_t> amstradStickPitchRamp;
+  Field<std::uint8_t> amstradStickPitchRamp;
   /// integrated roll for the keyboard and the Amstrad joystick, +-23; ReadSteering stores AX here (word with keyboardPitchRate)
-  Counted<std::uint8_t> keyboardRollRate;
+  Field<std::uint8_t> keyboardRollRate;
   /// integrated pitch, as keyboardRollRate
-  Counted<std::uint8_t> keyboardPitchRate;
+  Field<std::uint8_t> keyboardPitchRate;
 };
 
 static_assert(std::is_trivially_copyable_v<InputState> && std::is_standard_layout_v<InputState>);

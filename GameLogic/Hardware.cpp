@@ -195,7 +195,7 @@ BiosClock Hardware::ReadBiosClock()
 // DOS's file services, native (D27): the platform's DosFiles. A stamp is DOS's time at the platform's clock, as the emulated
 // DOS's was.
 
-void Hardware::SetDiskTransferArea(std::span<Counted<std::uint8_t>> _area)
+void Hardware::SetDiskTransferArea(std::span<Field<std::uint8_t>> _area)
 {
   m_platform.Files().SetTransferArea(_area);
 }
@@ -220,7 +220,7 @@ DosAnswer Hardware::OpenFile(std::string_view _name, std::uint8_t _access)
   return m_platform.Files().Open(_name, _access);
 }
 
-DosAnswer Hardware::ReadFile(std::uint16_t _handle, std::span<Counted<std::uint8_t>> _buffer)
+DosAnswer Hardware::ReadFile(std::uint16_t _handle, std::span<Field<std::uint8_t>> _buffer)
 {
   return m_platform.Files().Read(_handle, _buffer);
 }

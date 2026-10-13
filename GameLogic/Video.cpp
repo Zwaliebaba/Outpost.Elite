@@ -149,13 +149,13 @@ constexpr std::uint16_t SPACE_VIEW_BUFFER_START = 64;
 // spans, discs and triangles are clipped to its 256x128 pixels, and the direction flag is clear wherever the original runs them
 // (its one STD, at CS:2E4A, is cleared at CS:2E5C with no call between), so no string instruction runs down past its start. A
 // byte off it, which the original would reach in the data segment around the buffer, throws std::out_of_range.
-[[nodiscard]] Counted<std::uint8_t>& BufferByte(GameState& _state, std::uint16_t _offset)
+[[nodiscard]] Field<std::uint8_t>& BufferByte(GameState& _state, std::uint16_t _offset)
 {
   return ByteWithin(DrawingBuffer(_state), _offset);
 }
 
 // The word of the drawing buffer at _offset, as BufferByte finds its bytes.
-[[nodiscard]] std::span<Counted<std::uint8_t>> BufferWord(GameState& _state, std::uint16_t _offset)
+[[nodiscard]] std::span<Field<std::uint8_t>> BufferWord(GameState& _state, std::uint16_t _offset)
 {
   return BytesWithin(DrawingBuffer(_state), _offset, 2);
 }
@@ -163,7 +163,7 @@ constexpr std::uint16_t SPACE_VIEW_BUFFER_START = 64;
 // AND [_offset],_keep / OR [_offset],_color: the pixels _keep clears, then _color's set, two writes.
 void Plot(GameState& _state, std::uint16_t _offset, std::uint8_t _keep, std::uint8_t _color)
 {
-  Counted<std::uint8_t>& pixels = BufferByte(_state, _offset);
+  Field<std::uint8_t>& pixels = BufferByte(_state, _offset);
   const auto kept = static_cast<std::uint8_t>(pixels & _keep);
   pixels = kept;
   pixels = static_cast<std::uint8_t>(kept | _color);
@@ -679,7 +679,7 @@ void DrawSmallDisc(GameState& _state, const SmallDiscPlace& _place)
         // Both bytes, as a word, the sprite's left byte at the lower address: AND WORD [DI] with the bits' complement,
         // then OR WORD [DI] with the bits in the fill.
         const std::uint16_t word = SwapBytes(bits);
-        const std::span<Counted<std::uint8_t>> pixels = BufferWord(_state, at);
+        const std::span<Field<std::uint8_t>> pixels = BufferWord(_state, at);
         const auto kept = static_cast<std::uint16_t>(WordIn(pixels, 0) & ~word);
         SetWordIn(pixels, 0, kept);
         SetWordIn(pixels, 0, static_cast<std::uint16_t>(kept | (word & Join(fill, fill))));
@@ -971,8 +971,8 @@ struct ClippedEdge
 };
 
 // ADD fraction,[m] / ADC whole,[m], or SUB / SBB: _edge stepped by the slope at _wholeSlope and _fractionSlope.
-[[nodiscard]] ClippedEdge StepClippedEdge(ClippedEdge _edge, const Counted<std::uint16_t>& _wholeSlope,
-                                          const Counted<std::uint16_t>& _fractionSlope, bool _subtract)
+[[nodiscard]] ClippedEdge StepClippedEdge(ClippedEdge _edge, const Field<std::uint16_t>& _wholeSlope,
+                                          const Field<std::uint16_t>& _fractionSlope, bool _subtract)
 {
   const std::uint16_t slopeFraction = _fractionSlope;
   const std::uint16_t slopeWhole = _wholeSlope;
@@ -1007,7 +1007,7 @@ struct ClippedEdge
 // XOR DX,DX / DIV _rows / store / XOR AX,AX / DIV _rows / store: _pixels over _rows rows as 16.16, the whole part stored first.
 // Every caller's rows are at least 1, and the first divide's high word is 0 and the second's the remainder, so neither
 // overflows into the trap.
-void ClippedSlope(std::uint16_t _pixels, std::uint16_t _rows, Counted<std::uint16_t>& _whole, Counted<std::uint16_t>& _fraction)
+void ClippedSlope(std::uint16_t _pixels, std::uint16_t _rows, Field<std::uint16_t>& _whole, Field<std::uint16_t>& _fraction)
 {
   _whole = static_cast<std::uint16_t>(_pixels / _rows);
   _fraction = static_cast<std::uint16_t>((std::uint32_t{static_cast<std::uint16_t>(_pixels % _rows)} << 16) / _rows);
@@ -1307,7 +1307,7 @@ ScreenChange MakeGraphicsScreen(GameState& _state, Hardware& _hardware, std::uin
 
 } // namespace
 
-std::span<Counted<std::uint8_t>, DRAWING_BUFFER_BYTES> DrawingBuffer(GameState& _state) noexcept
+std::span<Field<std::uint8_t>, DRAWING_BUFFER_BYTES> DrawingBuffer(GameState& _state) noexcept
 {
   return BytesOf(_state.Data().drawing.drawingBuffer);
 }
@@ -1673,7 +1673,7 @@ void FillSpan(GameState& _state, std::uint8_t _left, std::uint8_t _right, std::u
 void DrawCircle(GameState& _state, std::uint8_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow)
 {
   // circlePoints: 32 points of four bytes, x and row words; each loop holds a point as the byte it starts at.
-  const std::span<Counted<std::uint8_t>> points = BytesOf(_state.Data().video.circlePoints);
+  const std::span<Field<std::uint8_t>> points = BytesOf(_state.Data().video.circlePoints);
   // PUSH CX / PUSH DX keep the centre. The first octant, circleOctant's eight bytes scaled by the radius / 128 (MUL BL / SHL AX,1 /
   // MOV AL,AH), a byte of 0 staying 0, as four points of words.
   const std::span<const std::uint8_t> octant(CIRCLE_OCTANT);

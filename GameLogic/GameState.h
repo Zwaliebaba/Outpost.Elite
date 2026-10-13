@@ -2,7 +2,7 @@
 #pragma once
 
 #include "Cga.h"
-#include "Counted.h"
+#include "Field.h"
 #include "GameData.h"
 #include "Reference.h"
 #include "SpaceObject.h"
@@ -164,7 +164,7 @@ private:
 };
 
 /// The little-endian word at _bytes[_at] and _bytes[_at + 1].
-[[nodiscard]] inline std::uint16_t WordIn(std::span<const Counted<std::uint8_t>> _bytes, std::size_t _at) noexcept
+[[nodiscard]] inline std::uint16_t WordIn(std::span<const Field<std::uint8_t>> _bytes, std::size_t _at) noexcept
 {
   return static_cast<std::uint16_t>(_bytes[_at] | (_bytes[_at + 1] << 8));
 }
@@ -176,14 +176,14 @@ private:
 }
 
 /// _value into _bytes[_at] and _bytes[_at + 1], low byte first, as GameState::SetVideoWord writes a word.
-inline void SetWordIn(std::span<Counted<std::uint8_t>> _bytes, std::size_t _at, std::uint16_t _value) noexcept
+inline void SetWordIn(std::span<Field<std::uint8_t>> _bytes, std::size_t _at, std::uint16_t _value) noexcept
 {
   _bytes[_at] = static_cast<std::uint8_t>(_value & 0xFF);
   _bytes[_at + 1] = static_cast<std::uint8_t>(_value >> 8);
 }
 
 /// The text in _bytes up to its first NUL, or all of them when none is: a buffer's text as a text routine reads it.
-[[nodiscard]] inline std::string_view TextIn(std::span<const Counted<std::uint8_t>> _bytes) noexcept
+[[nodiscard]] inline std::string_view TextIn(std::span<const Field<std::uint8_t>> _bytes) noexcept
 {
   const auto* const first = reinterpret_cast<const char*>(_bytes.data());
   const std::string_view all(first, _bytes.size());
@@ -192,7 +192,7 @@ inline void SetWordIn(std::span<Counted<std::uint8_t>> _bytes, std::size_t _at, 
 
 /// ADD byte,_value / JAE / MOV byte,0FFh on _field: the sum written, and FFh over it on a carry. Those are two writes, as the
 /// original's ADD and MOV are.
-inline void AddSaturating(Counted<std::uint8_t>& _field, std::uint8_t _value)
+inline void AddSaturating(Field<std::uint8_t>& _field, std::uint8_t _value)
 {
   const unsigned sum = _field + unsigned{_value};
   _field = static_cast<std::uint8_t>(sum);

@@ -1,7 +1,7 @@
 // GameLogic/Hardware.h
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 #include "Pacing.h"
 #include "Platform.h"
 #include "Timing.h"
@@ -175,7 +175,7 @@ public:
   // holds it (D38).
 
   /// Int 21h AH=1Ah: DOS's disk transfer area, where find-first and find-next leave what they find: _area, of the game's state.
-  void SetDiskTransferArea(std::span<Counted<std::uint8_t>> _area);
+  void SetDiskTransferArea(std::span<Field<std::uint8_t>> _area);
 
   /// Int 21h AX=4300h: the attributes of the file _name names.
   [[nodiscard]] DosFileAttributes ReadFileAttributes(std::string_view _name);
@@ -191,7 +191,7 @@ public:
   [[nodiscard]] DosAnswer OpenFile(std::string_view _name, std::uint8_t _access);
 
   /// Int 21h AH=3Fh: up to all of _buffer's bytes, of the game's state, from the file _handle into it; AX the count read.
-  [[nodiscard]] DosAnswer ReadFile(std::uint16_t _handle, std::span<Counted<std::uint8_t>> _buffer);
+  [[nodiscard]] DosAnswer ReadFile(std::uint16_t _handle, std::span<Field<std::uint8_t>> _buffer);
 
   /// Int 21h AH=40h: _buffer's bytes written to the file _handle, stamped with DOS's time at the platform's clock; AX the count
   /// written.

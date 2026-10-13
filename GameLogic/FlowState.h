@@ -3,7 +3,7 @@
 // them and run the tool again (D38).
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 
 #include <cstdint>
 #include <type_traits>
@@ -19,11 +19,11 @@ struct FlowState
   explicit FlowState(const FlowState&) noexcept = default;
 
   /// incremented every tick; compared with minimumFrameMs and cleared by PresentSpaceView
-  Counted<std::uint8_t> msSinceFrame;
+  Field<std::uint8_t> msSinceFrame;
   /// 1 while RunFlight's loop owns the screen (GameLoop), 0 on the title and docked screens and while HandleFlightFunctionKeys runs a sc...
-  Counted<std::uint8_t> inFlight;
+  Field<std::uint8_t> inFlight;
   /// 1 once the title has run; cleared on death (GameLoop) and by Abort on the pause screen, so the title runs again
-  Counted<std::uint8_t> titleShown;
+  Field<std::uint8_t> titleShown;
 };
 
 static_assert(std::is_trivially_copyable_v<FlowState> && std::is_standard_layout_v<FlowState>);

@@ -3,7 +3,7 @@
 // them and run the tool again (D38).
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -30,224 +30,224 @@ struct CommanderState
   CommanderState() noexcept = default;
   explicit CommanderState(const CommanderState&) noexcept = default;
 
-  Counted<std::uint8_t> gap756B[15];
+  Field<std::uint8_t> gap756B[15];
   /// frame bytes 0x0F 0x0D then "COMMANDER " (ShowCommanderStatusScreen)
-  Counted<std::uint8_t> commanderTitle[2];
+  Field<std::uint8_t> commanderTitle[2];
   /// 'COMMANDER', the rank inside commanderTitle (DS:757A, frame bytes first); AwardArchangelTitle overwrites it
-  Counted<std::uint8_t> commanderRankText[9];
-  Counted<std::uint8_t> gap7585[2];
+  Field<std::uint8_t> commanderRankText[9];
+  Field<std::uint8_t> gap7585[2];
   /// cash as text, " 100.0 Credits", written by FormatCredits
-  Counted<std::uint8_t> creditBalanceText[19];
-  Counted<std::uint8_t> gap759A[1];
+  Field<std::uint8_t> creditBalanceText[19];
+  Field<std::uint8_t> gap759A[1];
   /// with randomState1-2 three words stepped by NextRandom (a,b,c -> b,c,c+a+b); ShowBuyCargoScreen copies all three to marketRandomState
-  Counted<std::uint16_t> randomState0;
-  Counted<std::uint16_t> randomState1;
-  Counted<std::uint16_t> randomState2;
+  Field<std::uint16_t> randomState0;
+  Field<std::uint16_t> randomState1;
+  Field<std::uint16_t> randomState2;
   /// 0-7, index into galaxySeeds
-  Counted<std::uint8_t> galaxyNumber;
+  Field<std::uint8_t> galaxyNumber;
   /// 0x14 (Lave) in the file
-  Counted<std::uint8_t> currentSystemX;
+  Field<std::uint8_t> currentSystemX;
   /// the current system's y/2; 0x56 (Lave) in the file
-  Counted<std::uint8_t> currentSystemChartY;
-  Counted<std::uint8_t> chartCursorX;
+  Field<std::uint8_t> currentSystemChartY;
+  Field<std::uint8_t> chartCursorX;
   /// 0-0x7F
-  Counted<std::uint8_t> chartCursorY;
+  Field<std::uint8_t> chartCursorY;
   /// the short-range chart's cursor kept between visits
-  Counted<std::uint8_t> shortRangeCursorX;
-  Counted<std::uint8_t> shortRangeCursorY;
+  Field<std::uint8_t> shortRangeCursorX;
+  Field<std::uint8_t> shortRangeCursorY;
   /// the galactic chart's cursor kept between visits
-  Counted<std::uint8_t> galacticCursorX;
-  Counted<std::uint8_t> galacticCursorY;
+  Field<std::uint8_t> galacticCursorX;
+  Field<std::uint8_t> galacticCursorY;
   /// 0 galactic chart, 1 short-range
-  Counted<std::uint8_t> chartIsShortRange;
+  Field<std::uint8_t> chartIsShortRange;
   /// start of the current system's 25-byte record DS:75AB-71F3, laid out like the selected one from DS:75C4: name (9), name length (+9),...
-  Counted<std::uint8_t> currentSystemName[9];
-  Counted<std::uint8_t> gap75B4[1];
+  Field<std::uint8_t> currentSystemName[9];
+  Field<std::uint8_t> gap75B4[1];
   /// 7 (Lave) in the file; DS:75AB-71F3 is the current system's record, laid out as the selected one at DS:75C4
-  Counted<std::uint8_t> currentSystemIndex;
-  Counted<std::uint8_t> gap75B6[2];
+  Field<std::uint8_t> currentSystemIndex;
+  Field<std::uint8_t> gap75B6[2];
   /// 0-7, names DS:7CBD; equipment and market prices, ship spawn tables (0x4A86)
-  Counted<std::uint8_t> currentGovernment;
+  Field<std::uint8_t> currentGovernment;
   /// 0-7, names DS:7C0C; equipment and market prices
-  Counted<std::uint8_t> currentEconomy;
+  Field<std::uint8_t> currentEconomy;
   /// 0-based; equipment for sale has tech byte < this+2; market prices use min(this,9); 9+ makes the station a Dodo (0x2ADE)
-  Counted<std::uint8_t> currentTechLevel;
-  Counted<std::uint8_t> gap75BB[1];
-  Counted<std::uint8_t> data75BC;
-  Counted<std::uint8_t> gap75BD[2];
-  Counted<std::uint8_t> data75BF;
-  Counted<std::uint8_t> gap75C0[4];
+  Field<std::uint8_t> currentTechLevel;
+  Field<std::uint8_t> gap75BB[1];
+  Field<std::uint8_t> data75BC;
+  Field<std::uint8_t> gap75BD[2];
+  Field<std::uint8_t> data75BF;
+  Field<std::uint8_t> gap75C0[4];
   /// selectedSystemName's fields, DS:75C4-75CB in 1987, at their places there.
   struct SelectedSystemName
   {
     SelectedSystemName() noexcept = default;
     explicit SelectedSystemName(const SelectedSystemName&) noexcept = default;
 
-    Counted<std::uint8_t> gap75C4[4];
+    Field<std::uint8_t> gap75C4[4];
     /// characters 5-6 of selectedSystemName; GenerateSystemName blanks them
-    Counted<std::uint16_t> data75C8;
+    Field<std::uint16_t> data75C8;
     /// characters 7-8 of selectedSystemName; GenerateSystemName blanks them
-    Counted<std::uint16_t> data75CA;
+    Field<std::uint16_t> data75CA;
   };
   /// start of the selected (hyperspace target) system's record, filled by SelectSystemAtCursor and rebuilt at every WaitForScreenExitKey...
   SelectedSystemName selectedSystemName;
-  Counted<std::uint8_t> gap75CC[1];
+  Field<std::uint8_t> gap75CC[1];
   /// written by GenerateSystemName; TerminateSelectedSystemName puts the NUL here
-  Counted<std::uint8_t> selectedSystemNameLength;
+  Field<std::uint8_t> selectedSystemNameLength;
   /// 0-255 in the galaxy
-  Counted<std::uint8_t> selectedSystemIndex;
+  Field<std::uint8_t> selectedSystemIndex;
   /// printed as nnn.n Light Years; 0 = none selected (No System Selected), 47h or more = out of range; compared with fuel*10/36 by H
-  Counted<std::uint16_t> selectedDistanceTenthsLy;
+  Field<std::uint16_t> selectedDistanceTenthsLy;
   /// index into DS:7CBD names (Anarchy ... Corporate State)
-  Counted<std::uint8_t> selectedGovernment;
+  Field<std::uint8_t> selectedGovernment;
   /// index into DS:7C0C names (Poor Agricultural ... Rich Industrial)
-  Counted<std::uint8_t> selectedEconomy;
+  Field<std::uint8_t> selectedEconomy;
   /// shown +1
-  Counted<std::uint8_t> selectedTechLevel;
+  Field<std::uint8_t> selectedTechLevel;
   /// tenths of a billion
-  Counted<std::uint8_t> selectedPopulationTenthsBillion;
+  Field<std::uint8_t> selectedPopulationTenthsBillion;
   /// 0xFF = Human Colonials; otherwise size adjective index (DS:7D9E)
-  Counted<std::uint8_t> selectedSpeciesAdjective1;
+  Field<std::uint8_t> selectedSpeciesAdjective1;
   /// index into DS:7DC5
-  Counted<std::uint8_t> selectedSpeciesAdjective2;
+  Field<std::uint8_t> selectedSpeciesAdjective2;
   /// index into DS:7E01
-  Counted<std::uint8_t> selectedSpeciesAdjective3;
+  Field<std::uint8_t> selectedSpeciesAdjective3;
   /// index into DS:7E3D (Rodents ... Insects)
-  Counted<std::uint8_t> selectedSpeciesType;
+  Field<std::uint8_t> selectedSpeciesType;
   /// millions of credits
-  Counted<std::uint16_t> selectedProductivityMillionCredits;
+  Field<std::uint16_t> selectedProductivityMillionCredits;
   /// shown in km
-  Counted<std::uint16_t> selectedRadiusKm;
+  Field<std::uint16_t> selectedRadiusKm;
   /// with descriptionSeed1 (DS:75DF) stepped by NextDescriptionRandom; set by SelectSystemAtCursor (0x1284)
-  Counted<std::uint16_t> descriptionSeed0;
+  Field<std::uint16_t> descriptionSeed0;
   /// descriptionSeed0 XOR systemSeed2
-  Counted<std::uint16_t> descriptionSeed1;
-  Counted<std::uint8_t> gap75E1[1];
+  Field<std::uint16_t> descriptionSeed1;
+  Field<std::uint8_t> gap75E1[1];
   /// 255 = full; light years = value/36 (255 shows 7.0); equipment item 1
-  Counted<std::uint8_t> fuel;
+  Field<std::uint8_t> fuel;
   /// equipment item 2, at most 4
-  Counted<std::uint8_t> missileCount;
+  Field<std::uint8_t> missileCount;
   /// item 3; hold 35 t instead of 20
-  Counted<std::uint8_t> largeCargoBayFitted;
+  Field<std::uint8_t> largeCargoBayFitted;
   /// item 4 (by the order of DS:7EC4 and DS:84D2)
-  Counted<std::uint8_t> ecmFitted;
+  Field<std::uint8_t> ecmFitted;
   /// item 5; one per mount fitted
-  Counted<std::uint8_t> pulseLaserCount;
+  Field<std::uint8_t> pulseLaserCount;
   /// item 6
-  Counted<std::uint8_t> beamLaserCount;
+  Field<std::uint8_t> beamLaserCount;
   /// item 7; needed before mining lasers
-  Counted<std::uint8_t> fuelScoopsFitted;
+  Field<std::uint8_t> fuelScoopsFitted;
   /// item 8
-  Counted<std::uint8_t> escapePodFitted;
+  Field<std::uint8_t> escapePodFitted;
   /// item 9
-  Counted<std::uint8_t> energyBombFitted;
+  Field<std::uint8_t> energyBombFitted;
   /// item 10
-  Counted<std::uint8_t> energyUnitFitted;
+  Field<std::uint8_t> energyUnitFitted;
   /// item 11
-  Counted<std::uint8_t> dockingComputerFitted;
+  Field<std::uint8_t> dockingComputerFitted;
   /// item 12; cleared at 0x4802
-  Counted<std::uint8_t> galacticHyperdriveFitted;
+  Field<std::uint8_t> galacticHyperdriveFitted;
   /// item 13; one more rock may spawn while it is 1 (0x4AB2)
-  Counted<std::uint8_t> miningLaserCount;
+  Field<std::uint8_t> miningLaserCount;
   /// item 14
-  Counted<std::uint8_t> militaryLaserCount;
+  Field<std::uint8_t> militaryLaserCount;
   /// mission 2 reward, 'N' in flight (0x836F)
-  Counted<std::uint8_t> maskingDeviceFitted;
+  Field<std::uint8_t> maskingDeviceFitted;
   /// bits 0-3: fore, aft, right, left hold a laser
-  Counted<std::uint8_t> laserMountsFitted;
+  Field<std::uint8_t> laserMountsFitted;
   /// 2 bits per mount, mount 0 lowest: 0 pulse, 1 beam, 2 mining, 3 military
-  Counted<std::uint8_t> laserMountTypes;
+  Field<std::uint8_t> laserMountTypes;
   /// creditsTenths's fields, DS:75F3-75F6 in 1987, at their places there.
   struct CreditsTenths
   {
     CreditsTenths() noexcept = default;
     explicit CreditsTenths(const CreditsTenths&) noexcept = default;
 
-    Counted<std::uint8_t> gap75F3[2];
-    Counted<std::uint16_t> data75F5;
+    Field<std::uint8_t> gap75F3[2];
+    Field<std::uint16_t> data75F5;
   };
   /// 32-bit cash in tenths of a credit, low word first
   CreditsTenths creditsTenths;
   /// 0 clean, 1-39 offender, 40+ fugitive (DS:842A); saturates at 255; -5 per jump (0x4727)
-  Counted<std::uint8_t> legalStatus;
+  Field<std::uint8_t> legalStatus;
   /// incremented by CreditKill for kills with a bounty, saturates at 254; rating = first DS:8457 threshold above it; enemy missiles need...
-  Counted<std::uint8_t> killCount;
+  Field<std::uint8_t> killCount;
   /// JAMESON
-  Counted<std::uint8_t> defaultCommanderName[9];
+  Field<std::uint8_t> defaultCommanderName[9];
   /// cargoHold's fields, DS:7602-7625 in 1987, at their places there.
   struct CargoHold
   {
     CargoHold() noexcept = default;
     explicit CargoHold(const CargoHold&) noexcept = default;
 
-    Counted<std::uint8_t> gap7602[6];
+    Field<std::uint8_t> gap7602[6];
     /// product 3; escape pods
-    Counted<std::uint8_t> cargoSlavesTonnes;
-    Counted<std::uint8_t> gap7609[11];
+    Field<std::uint8_t> cargoSlavesTonnes;
+    Field<std::uint8_t> gap7609[11];
     /// product 9
-    Counted<std::uint8_t> cargoAlloysTonnes;
-    Counted<std::uint8_t> gap7615[5];
+    Field<std::uint8_t> cargoAlloysTonnes;
+    Field<std::uint8_t> gap7615[5];
     /// product 12
-    Counted<std::uint8_t> cargoMineralsTonnes;
-    Counted<std::uint8_t> gap761B[1];
+    Field<std::uint8_t> cargoMineralsTonnes;
+    Field<std::uint8_t> gap761B[1];
     /// product 13; capped at 0xFA when scooped
-    Counted<std::uint8_t> cargoGoldKg;
-    Counted<std::uint8_t> gap761D[1];
+    Field<std::uint8_t> cargoGoldKg;
+    Field<std::uint8_t> gap761D[1];
     /// product 14
-    Counted<std::uint8_t> cargoPlatinumKg;
-    Counted<std::uint8_t> gap761F[1];
+    Field<std::uint8_t> cargoPlatinumKg;
+    Field<std::uint8_t> gap761F[1];
     /// product 15
-    Counted<std::uint8_t> cargoGemStonesGrams;
-    Counted<std::uint8_t> gap7621[1];
+    Field<std::uint8_t> cargoGemStonesGrams;
+    Field<std::uint8_t> gap7621[1];
     /// product 16; Thargons
-    Counted<std::uint8_t> cargoAlienItemsTonnes;
-    Counted<std::uint8_t> gap7623[1];
+    Field<std::uint8_t> cargoAlienItemsTonnes;
+    Field<std::uint8_t> gap7623[1];
     /// mission 1 refugees aboard (20 or 35), shown as "Refugees" by ShowInventoryScreen
-    Counted<std::uint8_t> refugeesTonnes;
+    Field<std::uint8_t> refugeesTonnes;
     /// tonnes in the hold (gold, platinum and gems excluded); capacity 20, 35 with the extension
-    Counted<std::uint8_t> cargoUsedTonnes;
+    Field<std::uint8_t> cargoUsedTonnes;
   };
   /// byte pair; per commodity: units held, units on sale here; entry 17 is refugeesTonnes/cargoUsedTonnes
   CargoHold cargoHold;
   /// 0 after an arrival (0x4754); ShowBuyCargoScreen then rolls the quantities on sale and sets 1
-  Counted<std::uint8_t> marketQuantitiesSet;
+  Field<std::uint8_t> marketQuantitiesSet;
   /// jumps counted by UpdateMissionSchedule
-  Counted<std::uint8_t> missionJumpCount;
+  Field<std::uint8_t> missionJumpCount;
   /// 0 none, 1 supernova refugees, 2 masking device, 3 Thargoid invasion; set at 0x499B, cleared by ShowMissionDebriefing
-  Counted<std::uint8_t> missionNumber;
-  Counted<std::uint8_t> data7629;
+  Field<std::uint8_t> missionNumber;
+  Field<std::uint8_t> data7629;
   /// nonzero in witch space: 100 on entry (0x4917), lowered by Thargoid kills (0x8C03); the status screen shows WITCH SPACE
-  Counted<std::uint8_t> witchspaceCountdown;
+  Field<std::uint8_t> witchspaceCountdown;
   /// frames before a fuel leak starts; 50 set on arrival in missions 1 and 3
-  Counted<std::uint8_t> fuelLeakDelayFrames;
+  Field<std::uint8_t> fuelLeakDelayFrames;
   /// 51 when a leak starts; frames of leak left
-  Counted<std::uint8_t> fuelLeakFrames;
+  Field<std::uint8_t> fuelLeakFrames;
   /// set when the ship carrying the masking device is destroyed
-  Counted<std::uint8_t> maskShipDestroyed;
+  Field<std::uint8_t> maskShipDestroyed;
   /// set by TryScoopObject (0x447A); mission 2 debrief fits the cloaking device
-  Counted<std::uint8_t> maskingDeviceRecovered;
+  Field<std::uint8_t> maskingDeviceRecovered;
   /// 5 at the mission 2 briefing; decremented by TallyMaskMissionKill; mask spawning runs while nonzero
-  Counted<std::uint8_t> maskMissionShipsLeft;
+  Field<std::uint8_t> maskMissionShipsLeft;
   /// mission 3: set by ShowMissionBriefing; ships may fire in the safe zone, docking is refused (0x2C32), missiles damage the station; c...
-  Counted<std::uint8_t> thargoidInvasionActive;
+  Field<std::uint8_t> thargoidInvasionActive;
   /// set at 0x5589 and 0x8B46
-  Counted<std::uint8_t> invadedStationDestroyed;
+  Field<std::uint8_t> invadedStationDestroyed;
   /// mission 3 reward, 'L' in flight (0x8385) toggles DS:AC0E
-  Counted<std::uint8_t> antiEcmEmulatorFitted;
+  Field<std::uint8_t> antiEcmEmulatorFitted;
   /// 0 until supernovaFrames runs out; then starts from cabinTemperature and grows by max(1, h/4) a frame, killing on overflow (0x3F68-0...
-  Counted<std::uint8_t> supernovaHeat;
+  Field<std::uint8_t> supernovaHeat;
   /// 400 after the supernova briefing (0x6E77); counts down at 0x3F5E and stays 1; cleared on arrival
-  Counted<std::uint16_t> supernovaFrames;
+  Field<std::uint16_t> supernovaFrames;
   /// 0 not briefed, 1 briefed, 2 debriefing on screen
-  Counted<std::uint8_t> missionStage;
+  Field<std::uint8_t> missionStage;
   /// set on every hyperspace arrival (0x47E1), cleared at a briefing; mission 1 completes only after a jump
-  Counted<std::uint8_t> jumpedSinceBriefing;
+  Field<std::uint8_t> jumpedSinceBriefing;
   /// set at 0x4968; mission 2 debrief "Running away from the mask ship..."
-  Counted<std::uint8_t> fledMaskShip;
+  Field<std::uint8_t> fledMaskShip;
   /// 2 at the mission 2 briefing; -1 per arrival; 1 means the mask ship's system
-  Counted<std::uint8_t> maskSystemJumps;
+  Field<std::uint8_t> maskSystemJumps;
   /// selectedSystemIndex latched when the countdown starts
-  Counted<std::uint8_t> hyperspaceTargetIndex;
+  Field<std::uint8_t> hyperspaceTargetIndex;
 };
 
 #pragma pack(pop)

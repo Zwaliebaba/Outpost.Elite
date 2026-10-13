@@ -3,7 +3,7 @@
 // them and run the tool again (D38).
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 
 #include <cstdint>
 #include <type_traits>
@@ -19,31 +19,31 @@ struct SaveLoadState
   explicit SaveLoadState(const SaveLoadState&) noexcept = default;
 
   /// what ShowDiscControlScreen asks Start to do, written at 0x7E90: 0 Exit to DOS (Start calls WipeProgram at 0x0072, then exits), 1 lo...
-  Counted<std::uint8_t> diskOperation;
+  Field<std::uint8_t> diskOperation;
   /// int 21h AH=1Ah buffer; find-first/next put the attribute at DS:2084 and the name at DS:208D
-  Counted<std::uint8_t> diskTransferArea[43];
+  Field<std::uint8_t> diskTransferArea[43];
   /// file names without extension, NUL-terminated, written by PerformDiskRequest's catalogue
-  Counted<std::uint8_t> commanderFileList[370];
+  Field<std::uint8_t> commanderFileList[370];
   /// names in commanderFileList, capped at 40 (0x03E3)
-  Counted<std::uint8_t> commanderFileCount;
+  Field<std::uint8_t> commanderFileCount;
   /// write pointer into commanderFileList
-  Counted<std::uint16_t> commanderFileListNext;
+  Field<std::uint16_t> commanderFileListNext;
   /// copy of commanderBlock taken by SaveStartupCommander
-  Counted<std::uint8_t> startupCommander[208];
+  Field<std::uint8_t> startupCommander[208];
   /// '12345678.CDR' template; load, save and delete use it
-  Counted<std::uint8_t> commanderFileName[13];
+  Field<std::uint8_t> commanderFileName[13];
   /// 1 after Esc, J, A: the Amstrad joystick, whose moves arrive as scan codes 0x77-0x7C; ReadSteering tests it at 0x7607
-  Counted<std::uint8_t> joystickIsAmstrad;
+  Field<std::uint8_t> joystickIsAmstrad;
   /// 0 keyboard, 1 joystick, 2 mouse (names DS:8670)
-  Counted<std::uint8_t> inputDevice;
+  Field<std::uint8_t> inputDevice;
   /// set when a scan code 0x77-0x7C arrives during Amstrad joystick detection
-  Counted<std::uint8_t> amstradJoystickMoved;
+  Field<std::uint8_t> amstradJoystickMoved;
   /// ReadJoystickAxes' X count with the stick centred, taken at selection (67BA); ReadJoystickSteering scales against it
-  Counted<std::uint16_t> joystickCenterX;
+  Field<std::uint16_t> joystickCenterX;
   /// as joystickCenterX, for Y
-  Counted<std::uint16_t> joystickCenterY;
+  Field<std::uint16_t> joystickCenterY;
   /// 1 after 0x7E90; makes RunTitleAndDocked reopen ShowDiscControlScreen to show the result; cleared when an F-key leaves it
-  Counted<std::uint8_t> resumeAtDiskMenu;
+  Field<std::uint8_t> resumeAtDiskMenu;
 };
 
 static_assert(std::is_trivially_copyable_v<SaveLoadState> && std::is_standard_layout_v<SaveLoadState>);

@@ -191,14 +191,14 @@ static_assert(BEFORE_DESCRIPTION_BUFFER == '\0');
 }
 
 // The two bytes of a span at _bytes[_at], the first below the last.
-[[nodiscard]] ChartSpan SpanIn(std::span<const Counted<std::uint8_t>> _bytes, std::size_t _at) noexcept
+[[nodiscard]] ChartSpan SpanIn(std::span<const Field<std::uint8_t>> _bytes, std::size_t _at) noexcept
 {
   return ChartSpan{_bytes[_at], _bytes[_at + 1]};
 }
 
 // The loop of byte moves (mov al,[si]; mov [di],al; inc si; inc di; loop) some routines make: each of _from's bytes to the
 // same place of _to, in order.
-void CopyBytes(std::span<const Counted<std::uint8_t>> _from, std::span<Counted<std::uint8_t>> _to)
+void CopyBytes(std::span<const Field<std::uint8_t>> _from, std::span<Field<std::uint8_t>> _to)
 {
   for (std::size_t done = 0; done < _from.size(); ++done)
   {
@@ -207,7 +207,7 @@ void CopyBytes(std::span<const Counted<std::uint8_t>> _from, std::span<Counted<s
 }
 
 // CopyBytes from a constant's table (D38).
-void CopyBytes(std::span<const std::uint8_t> _from, std::span<Counted<std::uint8_t>> _to)
+void CopyBytes(std::span<const std::uint8_t> _from, std::span<Field<std::uint8_t>> _to)
 {
   for (std::size_t done = 0; done < _from.size(); ++done)
   {
@@ -229,7 +229,7 @@ template <typename State> [[nodiscard]] auto SystemNameField(State& _state)
 }
 
 // _digits' characters, a field of the data screen the game writes, as a text (JoinTexts).
-[[nodiscard]] std::string_view DigitsText(std::span<const Counted<std::uint8_t>> _digits) noexcept
+[[nodiscard]] std::string_view DigitsText(std::span<const Field<std::uint8_t>> _digits) noexcept
 {
   return std::string_view(reinterpret_cast<const char*>(_digits.data()), _digits.size());
 }
@@ -406,9 +406,9 @@ struct ChartKeys
   PacingPoint pacing;  // the IBM PC's redraw (D18), paid before PresentChartFrame
   std::uint8_t ownKey; // the chart's own F key, which leaves it open
   void (*recenter)(GameState&);
-  bool recenterThroughAl;                             // the recentring goes through AL, and leaves the cursor's row there
-  Counted<std::uint8_t> CommanderState::*keptCursorX; // where the cursor is kept while the chart is closed
-  Counted<std::uint8_t> CommanderState::*keptCursorY;
+  bool recenterThroughAl;                           // the recentring goes through AL, and leaves the cursor's row there
+  Field<std::uint8_t> CommanderState::*keptCursorX; // where the cursor is kept while the chart is closed
+  Field<std::uint8_t> CommanderState::*keptCursorY;
 };
 
 // The galactic chart's cursor back on the current system (CS:0E19).
@@ -536,7 +536,7 @@ void AddShortRangeSystem(GameState& _state, Hardware& _hardware, std::int16_t _x
   const std::uint8_t centerX = Low(GalaxyToChart(Word(_x), SHORT_RANGE_CENTER_X));
   const std::uint8_t centerRow = Low(GalaxyToChart(Word(_row), SHORT_RANGE_CENTER_ROW));
   const std::uint16_t itemIndex = _state.Data().galaxy.chartItemEnd;
-  const std::span<Counted<std::uint8_t>> item = ChartItem(_state, itemIndex);
+  const std::span<Field<std::uint8_t>> item = ChartItem(_state, itemIndex);
   SetWordIn(item, CHART_ITEM_TEXT, Join(centerRow, centerX));
   const auto radius = static_cast<std::uint16_t>(((SystemY(_state) & 1) << 1) + 4);
   SetWordIn(item, CHART_ITEM_RADIUS, radius);
@@ -564,8 +564,8 @@ void AddShortRangeSystem(GameState& _state, Hardware& _hardware, std::int16_t _x
   {
     return;
   }
-  const std::span<const Counted<std::uint8_t>> name = BytesWithin(SystemNameField(std::as_const(_state)), 0, letters);
-  const std::span<Counted<std::uint8_t>> label = LabelBytes(_state, cursor, CHART_LABEL_NAME + letters + 1);
+  const std::span<const Field<std::uint8_t>> name = BytesWithin(SystemNameField(std::as_const(_state)), 0, letters);
+  const std::span<Field<std::uint8_t>> label = LabelBytes(_state, cursor, CHART_LABEL_NAME + letters + 1);
   SetWordIn(label, CHART_ITEM_X, Word(x));
   ChartSpan rows{static_cast<std::uint8_t>(centerRow - LABEL_ABOVE), centerRow};
   if ((rows.first & 0x80) != 0)
@@ -611,8 +611,8 @@ struct ByteComparison
 // _backwards, until two differ. A count of 0 compares nothing, and the flags keep what they held. Its one use compares a name with
 // what was typed, forwards (FindSystemByName); a byte before either, where the original would compare on backwards, throws
 // std::out_of_range.
-[[nodiscard]] ByteComparison CompareBytes(std::span<const Counted<std::uint8_t>> _source,
-                                          std::span<const Counted<std::uint8_t>> _destination, std::uint16_t _count, bool _backwards)
+[[nodiscard]] ByteComparison CompareBytes(std::span<const Field<std::uint8_t>> _source, std::span<const Field<std::uint8_t>> _destination,
+                                          std::uint16_t _count, bool _backwards)
 {
   const std::size_t step = _backwards ? SIZE_MAX : 1;
   ByteComparison comparison{0, true};
@@ -676,7 +676,7 @@ std::uint16_t SelectNearestSystem(GameState& _state, std::uint16_t _countIfNone)
 {
   const std::uint16_t countLeft = SearchNearestSystem(_state, _countIfNone);
   ComputeDistanceToSystem(_state);
-  const std::span<Counted<std::uint8_t>> digits = BytesOf(_state.Data().galaxy.distanceDigits);
+  const std::span<Field<std::uint8_t>> digits = BytesOf(_state.Data().galaxy.distanceDigits);
   FormatDecimal5(_state.Data().commander.selectedDistanceTenthsLy, digits);
   BlankLeadingZeros(digits, DISTANCE_ZEROS_BLANKED);
   return countLeft;
@@ -902,7 +902,7 @@ void ShowNearestSystemDistance(GameState& _state, std::uint16_t _countIfNone, st
   (void)SelectNearestSystem(_state, _countIfNone);
   // The distance's four digits into distanceText, either side of its point.
   constexpr std::array<std::size_t, 4> PLACES = {DISTANCE_TEXT_HUNDREDS, DISTANCE_TEXT_TENS, DISTANCE_TEXT_UNITS, DISTANCE_TEXT_TENTHS};
-  constexpr std::array<Counted<std::uint8_t> GalaxyState::DistanceDigits::*, 4> DIGITS = {
+  constexpr std::array<Field<std::uint8_t> GalaxyState::DistanceDigits::*, 4> DIGITS = {
     &GalaxyState::DistanceDigits::distanceHundredsDigit, &GalaxyState::DistanceDigits::distanceTensDigit,
     &GalaxyState::DistanceDigits::distanceUnitsDigit, &GalaxyState::DistanceDigits::distanceTenthsDigit};
   for (std::size_t digit = 0; digit < DIGITS.size(); ++digit)
@@ -940,7 +940,7 @@ std::uint8_t GenerateSystemName(GameState& _state)
   _state.Data().commander.selectedSystemName.data75C8 = 0x2020;
   // The fourth pair only when bit 6 of systemSeed0 was set.
   const bool fourPairs = (_state.Data().galaxy.systemSeed0 & SYSTEM_NAME_FOURTH_PAIR) != 0;
-  const std::span<Counted<std::uint8_t>> name = BytesOf(_state.Data().commander.selectedSystemName);
+  const std::span<Field<std::uint8_t>> name = BytesOf(_state.Data().commander.selectedSystemName);
   std::size_t at = 0;
   std::uint8_t length = 0;
   for (std::uint16_t pair = 0; pair < SYSTEM_NAME_PAIRS; ++pair)
@@ -975,7 +975,7 @@ void FindSystemByName(GameState& _state, Hardware& _hardware, std::uint16_t _seg
   LoadGalaxySeeds(_state);
   DrawScreenString(_state, FIND_PROMPT, INK_1, _segment, CHART_TEXT_LINE_1);
   DrawScreenString(_state, BLANK_CHART_LINE, INK_1, _segment, CHART_TEXT_LINE_2);
-  const std::span<Counted<std::uint8_t>> typed(_state.Data().galaxy.findInput);
+  const std::span<Field<std::uint8_t>> typed(_state.Data().galaxy.findInput);
   for (std::size_t word = 0; word < SYSTEM_NAME_BYTES; word += 2)
   {
     SetWordIn(typed, word, 0);
@@ -991,7 +991,7 @@ void FindSystemByName(GameState& _state, Hardware& _hardware, std::uint16_t _seg
 
   // The name echoed for the error message and upper-cased in place, a space after it; the count to compare its length,
   // counting the space when there is room for it. ReadTextLine leaves a NUL within findInput's nine bytes.
-  const std::span<Counted<std::uint8_t>> echo(_state.Data().galaxy.findInputEcho);
+  const std::span<Field<std::uint8_t>> echo(_state.Data().galaxy.findInputEcho);
   std::uint16_t length = 0;
   for (;;)
   {
@@ -1046,7 +1046,7 @@ void DrawChartItems(GameState& _state, bool _backward)
   std::size_t index = 0;
   for (std::uint8_t itemsLeft = items; itemsLeft != 0; --itemsLeft)
   {
-    const std::span<const Counted<std::uint8_t>> item = ChartItem(_state, index);
+    const std::span<const Field<std::uint8_t>> item = ChartItem(_state, index);
     const std::uint16_t mark = WordIn(item, CHART_ITEM_RADIUS);
     if (High(mark) != 0)
     {
@@ -1087,7 +1087,7 @@ void PlaceChartLabels(GameState& _state)
     }
     // The label's x range and rows, then its name.
     const std::uint16_t cursor = _state.Data().galaxy.chartLabelCursor;
-    const std::span<const Counted<std::uint8_t>> label = LabelBytes(_state, cursor, CHART_LABEL_NAME);
+    const std::span<const Field<std::uint8_t>> label = LabelBytes(_state, cursor, CHART_LABEL_NAME);
     const ChartSpan x = SpanIn(label, CHART_ITEM_X);
     ChartSpan rows = SpanIn(label, CHART_ITEM_ROWS);
     _state.Data().galaxy.chartLabelCursor = static_cast<std::uint16_t>(cursor + 4);
@@ -1109,7 +1109,7 @@ void PlaceChartLabels(GameState& _state)
 void AddChartLabel(GameState& _state, ChartSpan _x, ChartSpan _rows)
 {
   const std::uint16_t itemIndex = _state.Data().galaxy.chartItemEnd;
-  const std::span<Counted<std::uint8_t>> item = ChartItem(_state, itemIndex);
+  const std::span<Field<std::uint8_t>> item = ChartItem(_state, itemIndex);
   SetWordIn(item, CHART_ITEM_X, Word(_x));
   SetWordIn(item, CHART_ITEM_ROWS, Word(_rows));
   const std::uint16_t name = _state.Data().galaxy.chartLabelCursor;
@@ -1157,7 +1157,7 @@ LabelNudge NudgeChartLabel(GameState& _state, ChartSpan _rows)
 
 bool ChartItemOverlaps(const GameState& _state, std::size_t _item, ChartSpan _x, ChartSpan _rows)
 {
-  const std::span<const Counted<std::uint8_t>> item = ChartItem(_state, _item);
+  const std::span<const Field<std::uint8_t>> item = ChartItem(_state, _item);
   const ChartSpan itemX = SpanIn(item, CHART_ITEM_X);
   const ChartSpan itemRows = SpanIn(item, CHART_ITEM_ROWS);
   return itemX.last >= _x.first && _x.last >= itemX.first && itemRows.last >= _rows.first && _rows.last >= itemRows.first;
@@ -1197,7 +1197,7 @@ ScreenKey ShowSystemDataScreen(GameState& _state, Hardware& _hardware, bool _bac
   PrintTextModeString(_state, JoinTexts({CharText(_state.Data().galaxy.data7D48), CharText(_state.Data().galaxy.data7D49)}), cell);
 
   // The population in tenths of a billion, its last two digits about a point.
-  const std::span<Counted<std::uint8_t>> population = BytesOf(_state.Data().galaxy.populationDigits);
+  const std::span<Field<std::uint8_t>> population = BytesOf(_state.Data().galaxy.populationDigits);
   FormatDecimal5(_state.Data().commander.selectedPopulationTenthsBillion, population);
   printed = PrintTextModeString(_state, POPULATION_LABEL_TEXT, POPULATION_ROW);
   population[POPULATION_SHOWN] = std::uint8_t{population[POPULATION_SHOWN + 1]};
@@ -1250,8 +1250,8 @@ std::string_view FormatSelectedSystemDistance(GameState& _state)
   // SI and DI, backwards: the copy runs until it has copied a space, which SelectNearestSystem leaves before the digits: the
   // distance is below 10000 tenths of a light year (it is at most four times the root of 255^2 + 127^2), so its first digit is a
   // zero BlankLeadingZeros blanks, and the copy stops there at the latest.
-  const std::span<const Counted<std::uint8_t>> digits = BytesOf(_state.Data().galaxy.distanceDigits);
-  const std::span<Counted<std::uint8_t>> texts = BytesOf(_state.Data().galaxy.selectedDistanceText);
+  const std::span<const Field<std::uint8_t>> digits = BytesOf(_state.Data().galaxy.distanceDigits);
+  const std::span<Field<std::uint8_t>> texts = BytesOf(_state.Data().galaxy.selectedDistanceText);
   std::size_t from = digits.size() - 1;
   std::size_t to = texts.size() - 1;
   ByteWithin(texts, to) = std::uint8_t{ByteWithin(digits, from)};
@@ -1273,7 +1273,7 @@ void ShowSystemDescription(GameState& _state, bool _backward)
 {
   // REP STOSW of zeros over descriptionBuffer, ES = DS, forwards or, _backward, down from its start: DI, a byte of it. The
   // direction flag is clear wherever the original runs it, and a word down past its start throws std::out_of_range.
-  const std::span<Counted<std::uint8_t>> buffer(_state.Data().galaxy.descriptionBuffer);
+  const std::span<Field<std::uint8_t>> buffer(_state.Data().galaxy.descriptionBuffer);
   std::uint16_t word = 0;
   for (std::uint16_t words = DESCRIPTION_BUFFER_WORDS; words != 0; --words)
   {
@@ -1308,7 +1308,7 @@ void ShowSystemDescription(GameState& _state, bool _backward)
 
 std::uint16_t ExpandDescriptionText(GameState& _state, std::string_view _text, std::uint16_t _output)
 {
-  const std::span<Counted<std::uint8_t>> buffer(_state.Data().galaxy.descriptionBuffer);
+  const std::span<Field<std::uint8_t>> buffer(_state.Data().galaxy.descriptionBuffer);
   std::uint16_t next = _output;
   for (const char letter : _text)
   {
@@ -1358,7 +1358,7 @@ std::uint16_t InsertSystemAdjective(GameState& _state, std::uint16_t _output)
 {
   // The name has a first letter: CopySelectedNameLower copies it whatever it is.
   std::size_t suffix = CopySelectedNameLower(_state);
-  const std::span<Counted<std::uint8_t>> name =
+  const std::span<Field<std::uint8_t>> name =
     BytesWithin(std::span(_state.Data().galaxy.descriptionNameBuffer), 0, suffix + ADJECTIVE_SUFFIX_BYTES);
   const std::uint8_t last = name[suffix - 1];
   if (last == 'a' || last == 'e' || last == 'i' || last == 'o' || last == 'u')
@@ -1371,8 +1371,8 @@ std::uint16_t InsertSystemAdjective(GameState& _state, std::uint16_t _output)
 
 std::uint16_t InsertRandomName(GameState& _state, std::uint16_t _output)
 {
-  const std::span<Counted<std::uint8_t>> selected = BytesOf(_state.Data().commander.selectedSystemName);
-  const std::span<Counted<std::uint8_t>> saved =
+  const std::span<Field<std::uint8_t>> selected = BytesOf(_state.Data().commander.selectedSystemName);
+  const std::span<Field<std::uint8_t>> saved =
     std::span(_state.Data().galaxy.invasionDebriefText).subspan(SAVED_SYSTEM_NAME, SYSTEM_NAME_BYTES);
   CopyBytes(selected, saved);
   const std::uint16_t seed0 = _state.Data().commander.descriptionSeed0;
@@ -1415,10 +1415,10 @@ std::size_t CopySelectedNameLower(GameState& _state)
 {
   TerminateSelectedSystemName(_state);
   // The first byte whatever it is, then each up to the NUL, which is looked for from the second.
-  const std::span<const Counted<std::uint8_t>> selected = SystemNameField(std::as_const(_state));
+  const std::span<const Field<std::uint8_t>> selected = SystemNameField(std::as_const(_state));
   const std::size_t length = 1 + TextWithin(selected, 1).size();
-  const std::span<const Counted<std::uint8_t>> from = BytesWithin(selected, 0, length);
-  const std::span<Counted<std::uint8_t>> to = BytesWithin(std::span(_state.Data().galaxy.descriptionNameBuffer), 0, length + 2);
+  const std::span<const Field<std::uint8_t>> from = BytesWithin(selected, 0, length);
+  const std::span<Field<std::uint8_t>> to = BytesWithin(std::span(_state.Data().galaxy.descriptionNameBuffer), 0, length + 2);
   to[0] = std::uint8_t{from[0]};
   for (std::size_t letter = 1; letter < length; ++letter)
   {

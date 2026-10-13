@@ -3,7 +3,7 @@
 // them and run the tool again (D38).
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 
 #include <cstdint>
 #include <type_traits>
@@ -24,37 +24,37 @@ struct MenusState
     PriceText() noexcept = default;
     explicit PriceText(const PriceText&) noexcept = default;
 
-    Counted<std::uint8_t> gap803C[4];
-    Counted<std::uint8_t> data8040;
-    Counted<std::uint8_t> data8041;
-    Counted<std::uint8_t> gap8042[1];
+    Field<std::uint8_t> gap803C[4];
+    Field<std::uint8_t> data8040;
+    Field<std::uint8_t> data8041;
+    Field<std::uint8_t> gap8042[1];
   };
   /// FormatTenths output, "nnnn.n"
   PriceText priceText;
   /// the price ComputeResalePrice reads
-  Counted<std::uint16_t> resalePriceInput;
+  Field<std::uint16_t> resalePriceInput;
   /// rows in the current cursor menu (17 for cargo, the listed equipment)
-  Counted<std::uint8_t> menuRowCount;
+  Field<std::uint8_t> menuRowCount;
   /// text-memory address of the first row's first attribute byte
-  Counted<std::uint16_t> menuFirstRowAttr;
+  Field<std::uint16_t> menuFirstRowAttr;
   /// 1-based; also the item index SelectLaserType tests
-  Counted<std::uint8_t> menuSelectedRow;
+  Field<std::uint8_t> menuSelectedRow;
   /// screenPrices's fields, DS:823B-827E in 1987, at their places there.
   struct ScreenPrices
   {
     ScreenPrices() noexcept = default;
     explicit ScreenPrices(const ScreenPrices&) noexcept = default;
 
-    Counted<std::uint8_t> gap823B[4];
-    Counted<std::uint16_t> data823F;
-    Counted<std::uint8_t> gap8241[4];
-    Counted<std::uint16_t> data8245;
-    Counted<std::uint8_t> gap8247[56];
+    Field<std::uint8_t> gap823B[4];
+    Field<std::uint16_t> data823F;
+    Field<std::uint8_t> gap8241[4];
+    Field<std::uint16_t> data8245;
+    Field<std::uint8_t> gap8247[56];
   };
   /// word pair; cargo rows from 0: buy price, sell price; equipment rows from index 1: price, resale price; tenths of credits
   ScreenPrices screenPrices;
   /// number text for the trade screens and the typed quantity
-  Counted<std::uint8_t> quantityText[6];
+  Field<std::uint8_t> quantityText[6];
 };
 
 static_assert(std::is_trivially_copyable_v<MenusState> && std::is_standard_layout_v<MenusState>);

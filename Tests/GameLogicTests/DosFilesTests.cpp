@@ -59,7 +59,7 @@ constexpr std::uint32_t START_TIME = 0x645C; // 12 << 11 | 34 << 5 | 56 / 2
 constexpr Elite::Cycles TWO_SECONDS = 9'545'454;
 constexpr std::uint32_t TWO_SECONDS_LATER_TIME = 0x645D;
 
-using Bytes = std::span<Elite::Counted<std::uint8_t>>;
+using Bytes = std::span<Elite::Field<std::uint8_t>>;
 using Snapshot = std::vector<std::uint8_t>;
 
 [[nodiscard]] std::wstring Widen(std::string_view _text)
@@ -654,7 +654,7 @@ public:
 
     DosRig::Put(twin.Block(), std::string(0x10, '\0'), false);
     Assert::IsFalse(twin.Open(twin.Name(), 0).failed);
-    std::array<Elite::Counted<std::uint8_t>, Elite::DosFiles::TRANSFER_AREA_BYTES> outside{};
+    std::array<Elite::Field<std::uint8_t>, Elite::DosFiles::TRANSFER_AREA_BYTES> outside{};
     const Snapshot before = twin.Memory();
     Assert::ExpectException<std::out_of_range>([&] { (void)twin.Files().Read(5, outside); }, L"a buffer outside the state is refused");
     Assert::IsTrue(twin.Memory() == before, L"and nothing changed");

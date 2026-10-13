@@ -114,7 +114,7 @@
     <ClInclude Include="CommanderState.h">
       <Filter>State</Filter>
     </ClInclude>
-    <ClInclude Include="Counted.h">
+    <ClInclude Include="Field.h">
       <Filter>State</Filter>
     </ClInclude>
     <ClInclude Include="DataPlaces.h">

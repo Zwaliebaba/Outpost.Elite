@@ -3,7 +3,7 @@
 // them and run the tool again (D38).
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 
 #include <cstdint>
 #include <type_traits>
@@ -24,10 +24,10 @@ struct VideoState
     ScreenshotTextFileName() noexcept = default;
     explicit ScreenshotTextFileName(const ScreenshotTextFileName&) noexcept = default;
 
-    Counted<std::uint8_t> gap2273[5];
+    Field<std::uint8_t> gap2273[5];
     /// the two digits in screenshotTextFileName
-    Counted<std::uint16_t> screenshotTextFileDigits;
-    Counted<std::uint8_t> gap227A[4];
+    Field<std::uint16_t> screenshotTextFileDigits;
+    Field<std::uint8_t> gap227A[4];
   };
   /// 'elite' + two digits + '.lo', for the text layout
   ScreenshotTextFileName screenshotTextFileName;
@@ -37,81 +37,81 @@ struct VideoState
     ScreenshotGraphicsFileName() noexcept = default;
     explicit ScreenshotGraphicsFileName(const ScreenshotGraphicsFileName&) noexcept = default;
 
-    Counted<std::uint8_t> gap227E[5];
+    Field<std::uint8_t> gap227E[5];
     /// the two digits in screenshotGraphicsFileName
-    Counted<std::uint16_t> screenshotGraphicsFileDigits;
-    Counted<std::uint8_t> gap2285[4];
+    Field<std::uint16_t> screenshotGraphicsFileDigits;
+    Field<std::uint8_t> gap2285[4];
   };
   /// 'elite' + two digits + '.hi', for the graphics layouts
   ScreenshotGraphicsFileName screenshotGraphicsFileName;
   /// two ASCII digits, '00' in the file, incremented before each screenshot
-  Counted<std::uint16_t> screenshotNumber;
+  Field<std::uint16_t> screenshotNumber;
   /// colorFillBytes[drawColor], set by DrawDisc for FillSpan
-  Counted<std::uint8_t> discFillByte;
+  Field<std::uint8_t> discFillByte;
   /// DrawDisc's centre x
-  Counted<std::uint16_t> discCenterX;
+  Field<std::uint16_t> discCenterX;
   /// DrawDisc's radius/2: the rows above and below the centre
-  Counted<std::uint8_t> discRadiusRows;
+  Field<std::uint8_t> discRadiusRows;
   /// DrawDisc's row counter
-  Counted<std::uint8_t> discRowsLeft;
+  Field<std::uint8_t> discRowsLeft;
   /// fractional step through circleProfile per row (0x20000/rows)
-  Counted<std::uint16_t> discProfileStepFraction;
+  Field<std::uint16_t> discProfileStepFraction;
   /// whole-byte step through circleProfile per row
-  Counted<std::uint16_t> discProfileStepWhole;
+  Field<std::uint16_t> discProfileStepWhole;
   /// Fibonacci generator state with fringeRandomB: (a,b) becomes (b,a+b)
-  Counted<std::uint16_t> fringeRandomA;
+  Field<std::uint16_t> fringeRandomA;
   /// its high byte AND sunFringeMask is added to each half-width
-  Counted<std::uint16_t> fringeRandomB;
+  Field<std::uint16_t> fringeRandomB;
   /// circlePoints's fields, DS:2EFC-2F7B in 1987, at their places there.
   struct CirclePoints
   {
     CirclePoints() noexcept = default;
     explicit CirclePoints(const CirclePoints&) noexcept = default;
 
-    Counted<std::uint8_t> gap2EFC[2];
-    Counted<std::uint16_t> data2EFE;
-    Counted<std::uint8_t> gap2F00[124];
+    Field<std::uint8_t> gap2EFC[2];
+    Field<std::uint16_t> data2EFE;
+    Field<std::uint8_t> gap2F00[124];
   };
   /// 2 words: x, y; DrawCircle's polygon
   CirclePoints circlePoints;
   /// FillTriangle: apex x (flat bottom), B.x (flat top) or top x (general)
-  Counted<std::uint8_t> triangleEdgeStartX;
+  Field<std::uint8_t> triangleEdgeStartX;
   /// FillTriangle: apex x, C.x, or top x
-  Counted<std::uint8_t> triangleEdgeStartX2;
+  Field<std::uint8_t> triangleEdgeStartX2;
   /// the lowest row, where DrawStackedSpans starts; FillClippedOneRow writes the row byte too
-  Counted<std::uint8_t> triangleBottomRow;
+  Field<std::uint8_t> triangleBottomRow;
   /// rows from top to the lower vertex (flat) or to the middle vertex (general)
-  Counted<std::uint8_t> triangleUpperRows;
+  Field<std::uint8_t> triangleUpperRows;
   /// general triangle: rows from top to bottom
-  Counted<std::uint8_t> triangleTotalRows;
+  Field<std::uint8_t> triangleTotalRows;
   /// general triangle: middle vertex x
-  Counted<std::uint8_t> triangleMiddleX;
+  Field<std::uint8_t> triangleMiddleX;
   /// general triangle: bottom vertex x
-  Counted<std::uint8_t> triangleBottomX;
+  Field<std::uint8_t> triangleBottomX;
   /// FillClippedTriangle: first edge start x (apex, B.x or top)
-  Counted<std::uint16_t> clippedEdgeStartX;
+  Field<std::uint16_t> clippedEdgeStartX;
   /// FillClippedTriangle: second edge start x (apex, C.x or top)
-  Counted<std::uint16_t> clippedEdgeStartX2;
+  Field<std::uint16_t> clippedEdgeStartX2;
   /// rows to the lower (flat) or middle (general) vertex
-  Counted<std::uint16_t> clippedUpperRows;
+  Field<std::uint16_t> clippedUpperRows;
   /// general: rows top to bottom
-  Counted<std::uint16_t> clippedTotalRows;
+  Field<std::uint16_t> clippedTotalRows;
   /// first drawn row; 0x8000 = none yet
-  Counted<std::uint16_t> clippedFirstRow;
+  Field<std::uint16_t> clippedFirstRow;
   /// 16.16 slope of edge A or the long edge, fraction word (second div)
-  Counted<std::uint16_t> clippedSlopeAFraction;
+  Field<std::uint16_t> clippedSlopeAFraction;
   /// its integer word (first div)
-  Counted<std::uint16_t> clippedSlopeAWhole;
+  Field<std::uint16_t> clippedSlopeAWhole;
   /// 16.16 slope of edge B or the short edge, fraction word
-  Counted<std::uint16_t> clippedSlopeBFraction;
+  Field<std::uint16_t> clippedSlopeBFraction;
   /// its integer word
-  Counted<std::uint16_t> clippedSlopeBWhole;
+  Field<std::uint16_t> clippedSlopeBWhole;
   /// general: middle vertex x
-  Counted<std::uint16_t> clippedMiddleX;
+  Field<std::uint16_t> clippedMiddleX;
   /// general: bottom vertex x
-  Counted<std::uint16_t> clippedBottomX;
+  Field<std::uint16_t> clippedBottomX;
   /// general: rows drawn, the span count for DrawStackedSpansFromRow
-  Counted<std::uint8_t> clippedRowCount;
+  Field<std::uint8_t> clippedRowCount;
 };
 
 static_assert(std::is_trivially_copyable_v<VideoState> && std::is_standard_layout_v<VideoState>);

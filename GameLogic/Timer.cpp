@@ -31,7 +31,7 @@ constexpr std::uint8_t NOTE_BASE = 0x0C;    // notePeriods starts an octave up
 constexpr std::uint16_t REST_PERIOD = 0x32; // inaudible
 
 // The byte at _field less one, stored back: DEC BYTE PTR. Returns what it leaves.
-std::uint8_t Decrement(Counted<std::uint8_t>& _field)
+std::uint8_t Decrement(Field<std::uint8_t>& _field)
 {
   const auto value = static_cast<std::uint8_t>(_field - 1);
   _field = value;
@@ -122,7 +122,7 @@ using SweepSample = std::uint8_t (*)(GameState&, Hardware&);
 
 // The noise and tone sweeps (0x7215, 0x7289): every sweepPeriodTicks ticks one sample, by _sample; every
 // sweepStepLength samples a longer period and a shorter step, until the period reaches 7.
-void TickSweep(GameState& _state, Hardware& _hardware, SweepSample _sample, Counted<std::uint8_t>& _active)
+void TickSweep(GameState& _state, Hardware& _hardware, SweepSample _sample, Field<std::uint8_t>& _active)
 {
   if (Decrement(_state.Data().audio.sweepTickCounter) != 0)
   {

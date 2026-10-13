@@ -1,7 +1,7 @@
 // GameLogic/DosFiles.h
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 #include "FileStore.h"
 #include "Timing.h"
 
@@ -57,7 +57,7 @@ struct DosFileAttributes
 /// its reserved bytes 00h-14h, as DOS keeps it: find-next reads it from there, as DOS did.
 ///
 /// Where the original hands DOS an address in DS:DX, a call takes what is there (D38): the name, up to its NUL, or the buffer, a
-/// span of the member that holds it; and the transfer area is a span of its member too. A byte a call writes is a Counted of
+/// span of the member that holds it; and the transfer area is a span of its member too. A byte a call writes is a Field of
 /// the game's state, and a buffer or a transfer area that is not all in the game's state throws std::out_of_range, and nothing is
 /// written, as it did while the state counted its changes (ADR-024). A call takes no time and counts no instruction cycles, as the emulated DOS's calls did not.
 ///
@@ -84,7 +84,7 @@ public:
 
   /// Int 21h AH=1Ah: the transfer area, where find-first and find-next leave what they find: the first TRANSFER_AREA_BYTES of
   /// _area, which must be in the game's state. A shorter one throws std::logic_error.
-  void SetTransferArea(std::span<Counted<std::uint8_t>> _area);
+  void SetTransferArea(std::span<Field<std::uint8_t>> _area);
 
   /// Int 21h AX=4300h: the attributes of the file _name names. A name, here and in every call that takes one, is DOS's ASCIIZ
   /// name: up to its first NUL, or all of it, and PathNotFound when no NUL ends it in DOS's 128 bytes.
@@ -104,7 +104,7 @@ public:
   /// Int 21h AH=3Fh: up to all of _buffer's bytes from the file _handle into it, from its first; the value the count read, 0
   /// at the end of the file. A buffer that is not all in the game's state, or longer than CX counts, throws std::out_of_range,
   /// and nothing is read.
-  [[nodiscard]] DosAnswer Read(std::uint16_t _handle, std::span<Counted<std::uint8_t>> _buffer);
+  [[nodiscard]] DosAnswer Read(std::uint16_t _handle, std::span<Field<std::uint8_t>> _buffer);
 
   /// Int 21h AH=40h: _buffer's bytes written to the file _handle, which is stamped with DOS's time at _clock; the value the
   /// count written. A buffer longer than CX counts throws std::out_of_range, and nothing is written.
@@ -143,14 +143,14 @@ private:
   // Throws std::logic_error when the program has set no transfer area.
   void RefuseNoTransferArea() const;
   // Throws std::out_of_range when _bytes are not all in the game's state, where their writes count.
-  void RefuseOutsideState(std::span<const Counted<std::uint8_t>> _bytes) const;
+  void RefuseOutsideState(std::span<const Field<std::uint8_t>> _bytes) const;
 
   GameState& m_state;
   FileStore& m_files;
   DosDateTime m_startMoment;
   std::array<std::unique_ptr<OpenFile>, HANDLE_COUNT> m_handles;
   /// The transfer area's TRANSFER_AREA_BYTES, empty until the program sets one.
-  std::span<Counted<std::uint8_t>> m_transferArea;
+  std::span<Field<std::uint8_t>> m_transferArea;
 };
 
 } // namespace Elite

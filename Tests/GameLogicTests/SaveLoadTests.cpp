@@ -234,10 +234,10 @@ public:
         commander.selectedEconomy = 0x80;
         commander.missileCount = 9;
         commander.killCount = 0xFF;
-        for (Elite::Counted<std::uint8_t>& letter : commander.defaultCommanderName)
+        for (Elite::Field<std::uint8_t>& letter : commander.defaultCommanderName)
           letter = 'A';
         Elite::SetWordIn(Elite::BytesOf(commander.creditsTenths), 0, 1234);
-        for (Elite::Counted<std::uint8_t>& character : commander.creditBalanceText)
+        for (Elite::Field<std::uint8_t>& character : commander.creditBalanceText)
           character = 'X';
         commander.gap759A[0] = 'Y';
         Elite::PerformDiskRequest(state, rig.Native(), SAVE_COMMANDER, 0);

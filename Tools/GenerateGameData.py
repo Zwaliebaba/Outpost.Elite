@@ -17,21 +17,21 @@ the groups' structs (`GameData::flight`, `GameData::commander`, ...):
   unused               what nothing reads: not in the state, and no table either (change 3c)
 
 A group's members keep their names and their 1987 order. The gaps between them go, but for the ones the partition lists, which
-the game uses. Each byte and word is a `Counted` (Counted.h), of alignment 1, so that native code writes members directly (D33's
+the game uses. Each byte and word is a `Field` (Field.h), of alignment 1, so that native code writes members directly (D33's
 piece 3):
 
-  data, 1 byte         Counted<std::uint8_t>
-  data, 2 bytes        Counted<std::uint16_t>
-  table of words       Counted<std::uint16_t>[entries], for an element of "word", "pointer" or "code"
-  table, other         Counted<std::uint8_t>[entries][element bytes], or Counted<std::uint8_t>[entries] for bytes
-  anything else        Counted<std::uint8_t>[bytes]
+  data, 1 byte         Field<std::uint8_t>
+  data, 2 bytes        Field<std::uint16_t>
+  table of words       Field<std::uint16_t>[entries], for an element of "word", "pointer" or "code"
+  table, other         Field<std::uint8_t>[entries][element bytes], or Field<std::uint8_t>[entries] for bytes
+  anything else        Field<std::uint8_t>[bytes]
 
 A table's element is sized from the element type its contract column gives, when it is one this tool
 can size: "byte", "word", "pointer", "code", "dword", "N-byte ...", "N bytes", "N words",
 "N characters", "byte pair", "word pair", or a record of words and bytes such as "word sin, word cos".
 
 A word in WORD_TYPES, where the original stores an address and native code an index or a message (D33, piece 3), is a
-Counted of the enumeration it names instead, from the header that declares it.
+Field of the enumeration it names instead, from the header that declares it.
 
 A container in RECORDS is an array of records of a type written by hand, which the symbol table does not describe field by
 field: the ship slots are one array of SpaceObject.
@@ -71,8 +71,8 @@ GAME_DATA = ROOT / "GameLogic" / "GameData.h"
 IDENTIFIER = re.compile(r"[a-z][A-Za-z0-9]*")
 SEGMENT_BYTES = 0x10000
 FIELD_BYTES = {"word": 2, "byte": 1}
-BYTE = "Counted<std::uint8_t>"
-WORD = "Counted<std::uint16_t>"
+BYTE = "Field<std::uint8_t>"
+WORD = "Field<std::uint16_t>"
 # Containers of records native code reads by field: the container, the record's type, its header and its size. The slots'
 # fields are not rows of the symbol table, which holds one row per address; SpaceObject.h names them, at their offsets. Each is one
 # array of its records.
@@ -256,7 +256,7 @@ def declaration(_member: Member) -> str:
   if row is None:
     return f"{BYTE} {_member.name}[{_member.size}];"
   if row["kind"] == "data" and _member.size == 2 and _member.name in WORD_TYPES:
-    return f"Counted<{WORD_TYPES[_member.name][0]}> {_member.name};"
+    return f"Field<{WORD_TYPES[_member.name][0]}> {_member.name};"
   if row["kind"] == "data" and _member.size in (1, 2):
     return f"{BYTE if _member.size == 1 else WORD} {_member.name};"
   if row["kind"] == "table" and byte_size(row) is not None:
@@ -272,7 +272,7 @@ def declaration(_member: Member) -> str:
 
 def emit_copy_rule(_type: str, _indent: str, _out: list[str]) -> None:
   """A struct's constructors: trivial, so GameData stays trivially copyable, and the copy explicit, so that every copy of the
-  state is one the code asks for: `auto x = member`, a by-value parameter and a return by value do not compile (Counted.h)."""
+  state is one the code asks for: `auto x = member`, a by-value parameter and a return by value do not compile (Field.h)."""
   _out.append(f"{_indent}{_type}() noexcept = default;")
   _out.append(f"{_indent}explicit {_type}(const {_type}&) noexcept = default;")
   _out.append("")
@@ -452,7 +452,7 @@ def build_groups(_members: list[Member]) -> list[Group]:
 
 
 def includes(_members: list[Member]) -> list[str]:
-  """The headers the members' types need, besides Counted.h."""
+  """The headers the members' types need, besides Field.h."""
   headers = set()
   for member in walk(_members):
     if member.name in RECORDS:
@@ -489,7 +489,7 @@ def generate_group(_group: Group) -> str:
   if _group.is_commander():
     return generate_commander(_group.members[0])
   out = preamble(f"{_group.type}.h")
-  out += [f'#include "{header}"' for header in ["Counted.h", *includes(_group.members)]]
+  out += [f'#include "{header}"' for header in ["Field.h", *includes(_group.members)]]
   out += ["", "#include <cstdint>", "#include <type_traits>", "", "namespace Elite", "{", ""]
   if _group.name in SHARED:
     description = SHARED[_group.name]
@@ -515,7 +515,7 @@ def generate_group(_group: Group) -> str:
 def generate_commander(_block: Member) -> str:
   """CommanderState: commanderBlock, whole, at its 1987 layout, each member's offset in it asserted."""
   out = preamble("CommanderState.h")
-  out += ['#include "Counted.h"', "", "#include <cstddef>", "#include <cstdint>", "#include <type_traits>", ""]
+  out += ['#include "Field.h"', "", "#include <cstddef>", "#include <cstdint>", "#include <type_traits>", ""]
   out += [
     "// A member's offset in CommanderState, as a constant expression wherever this header is read; under Clang the builtin, for",
     "// the reason GameData.h gives for GAME_DATA_OFFSET.",
@@ -576,7 +576,7 @@ def generate_game_data(_groups: list[Group]) -> str:
   ]
   out += wrap("The game's state (D19, D38): the reference's data segment distributed, a struct of its groups' structs, each what one "
               "subsystem writes or what several share (Design/DataPartition.tsv), which the GameState holds. "
-              "Every byte and word is a Counted, of alignment 1: native code reads and writes members (`_state.Data().commander.fuel = fuel`), and passes one by reference to a "
+              "Every byte and word is a Field, of alignment 1: native code reads and writes members (`_state.Data().commander.fuel = fuel`), and passes one by reference to a "
               "helper that writes it. DATA_PLACES (DataPlaces.h) says where each member of the 1987 data segment is now.", "///")
   out += ["struct GameData", "{"]
   emit_copy_rule("GameData", "  ", out)

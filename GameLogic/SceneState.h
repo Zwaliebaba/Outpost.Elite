@@ -3,7 +3,7 @@
 // them and run the tool again (D38).
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 
 #include <cstdint>
 #include <type_traits>
@@ -19,33 +19,33 @@ struct SceneState
   explicit SceneState(const SceneState&) noexcept = default;
 
   /// written by DrawVisibleFaces (0x3B38) from faceFillPatterns, read by DrawStackedSpansFromRow (0x1CDD): low byte on even rows, high b...
-  Counted<std::uint16_t> triangleFillPattern;
+  Field<std::uint16_t> triangleFillPattern;
   /// vertexBuffer's fields, DS:7230-732B in 1987, at their places there.
   struct VertexBuffer
   {
     VertexBuffer() noexcept = default;
     explicit VertexBuffer(const VertexBuffer&) noexcept = default;
 
-    Counted<std::uint8_t> gap7230[204];
+    Field<std::uint8_t> gap7230[204];
     /// vertices 34-41 inside vertexBuffer, written by BuildBoxCornerVertices
-    Counted<std::uint8_t> boxCornerVertices[48];
+    Field<std::uint8_t> boxCornerVertices[48];
   };
   /// 6-byte x,y,z words; model vertices 0-41 in view space; ProjectVertices projects the first projectedVertexCount in place into 4-byte...
   VertexBuffer vertexBuffer;
   /// read by ProjectVertices
-  Counted<std::uint16_t> projectedVertexCount;
+  Field<std::uint16_t> projectedVertexCount;
   /// blueprint byte +2 (RunBlueprintHandler); 15 to 200; BuildDodoVertices ignores it
-  Counted<std::uint16_t> boxHalfWidth;
+  Field<std::uint16_t> boxHalfWidth;
   /// object +0x0A for the blueprint handler (0x3E5A)
-  Counted<std::uint16_t> drawPitchAngle;
+  Field<std::uint16_t> drawPitchAngle;
   /// object +0x0C
-  Counted<std::uint16_t> drawYawAngle;
+  Field<std::uint16_t> drawYawAngle;
   /// object +0x0E
-  Counted<std::uint16_t> drawRollAngle;
+  Field<std::uint16_t> drawRollAngle;
   /// view-space centre of the object being drawn; ReflectVertexAboutCenter and OffsetVertexByCenter
-  Counted<std::uint16_t> drawCenterX;
-  Counted<std::uint16_t> drawCenterY;
-  Counted<std::uint16_t> drawCenterZ;
+  Field<std::uint16_t> drawCenterX;
+  Field<std::uint16_t> drawCenterY;
+  Field<std::uint16_t> drawCenterZ;
 };
 
 static_assert(std::is_trivially_copyable_v<SceneState> && std::is_standard_layout_v<SceneState>);

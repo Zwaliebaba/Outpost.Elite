@@ -74,7 +74,7 @@ void StartMarketRandom(GameState& _state);
 
 /// ParseQuantity (CS:6A99): the decimal number in _text, a buffer typed into, spaces around it allowed. The buffer holds a NUL
 /// after what was typed, where the reading stops.
-[[nodiscard]] Quantity ParseQuantity(std::span<const Counted<std::uint8_t>> _text);
+[[nodiscard]] Quantity ParseQuantity(std::span<const Field<std::uint8_t>> _text);
 
 /// PrintCargoQuantity (CS:6AD9): _quantity, or "-" for 0, in the quantity column of menuSelectedRow's row, in its
 /// attribute, and textAttribute put back.

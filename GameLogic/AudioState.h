@@ -3,7 +3,7 @@
 // them and run the tool again (D38).
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 
 #include <cstdint>
 #include <type_traits>
@@ -19,30 +19,30 @@ struct AudioState
   explicit AudioState(const AudioState&) noexcept = default;
 
   /// the value last written to port 0x61; the timer handler toggles bit 1 for sound effects
-  Counted<std::uint8_t> speakerPortImage;
+  Field<std::uint8_t> speakerPortImage;
   /// counts down from 70 (StartBeep); speaker bit 1 = bit 0 of the count, so 500 Hz for 70 ms
-  Counted<std::uint8_t> beepTicks;
+  Field<std::uint8_t> beepTicks;
   /// counts down from 70 (StartLowBeep); speaker bit 1 = bit 1 of the count, 250 Hz
-  Counted<std::uint8_t> lowBeepTicks;
+  Field<std::uint8_t> lowBeepTicks;
   /// sweep that toggles the speaker (ToggleSpeaker); started by 0x7B71
-  Counted<std::uint8_t> toneSweepActive;
+  Field<std::uint8_t> toneSweepActive;
   /// sweep that plays noiseSource samples (EmitNoiseSample); started by 0x7AC3, 0x7AFC, 0x7B09
-  Counted<std::uint8_t> noiseSweepActive;
+  Field<std::uint8_t> noiseSweepActive;
   /// samples per step; falls by sweepStepShrink each step
-  Counted<std::uint8_t> sweepStepLength;
+  Field<std::uint8_t> sweepStepLength;
   /// ticks to the next sample
-  Counted<std::uint8_t> sweepTickCounter;
+  Field<std::uint8_t> sweepTickCounter;
   /// samples left in this step
-  Counted<std::uint8_t> sweepStepCounter;
+  Field<std::uint8_t> sweepStepCounter;
   /// ticks between samples; +1 a step, the sweep ends at 7
-  Counted<std::uint8_t> sweepPeriodTicks;
+  Field<std::uint8_t> sweepPeriodTicks;
   /// one noise sample a tick while nonzero; 100 from 0x7B96
-  Counted<std::uint8_t> noiseBurstTicks;
+  Field<std::uint8_t> noiseBurstTicks;
   /// silent tail of the current note
-  Counted<std::uint16_t> noteGapTicks;
-  Counted<std::uint16_t> noteTicksLeft;
+  Field<std::uint16_t> noteGapTicks;
+  Field<std::uint16_t> noteTicksLeft;
   /// next note; 0x47 restarts at DS:A1B4
-  Counted<std::uint16_t> musicPointer;
+  Field<std::uint16_t> musicPointer;
 };
 
 static_assert(std::is_trivially_copyable_v<AudioState> && std::is_standard_layout_v<AudioState>);

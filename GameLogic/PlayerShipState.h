@@ -3,7 +3,7 @@
 // them and run the tool again (D38).
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 
 #include <cstdint>
 #include <type_traits>
@@ -20,53 +20,53 @@ struct PlayerShipState
   explicit PlayerShipState(const PlayerShipState&) noexcept = default;
 
   /// set to 1 when an ECM goes off: NPC (0x566E) or the player's E key with ecmFitted (0x82AD); read and cleared at 0x257D, which picks...
-  Counted<std::uint8_t> ecmFired;
+  Field<std::uint8_t> ecmFired;
   /// the sun's apparent radius from DrawSunOrPlanet; CheckTemperatureWarning at >= 0xE1
-  Counted<std::uint8_t> cabinTemperature;
+  Field<std::uint8_t> cabinTemperature;
   /// 2*min(127, 255 - planet radius) from DrawSunOrPlanet; 0xFF at launch (29D0); CheckAltitudeWarning below 0x32
-  Counted<std::uint8_t> altitude;
+  Field<std::uint8_t> altitude;
   /// drawn on the top dashboard bar (2614, cell 368Ch, the FORE-SHIELD row); ApplyEnemyLaserHit takes 15 off it
-  Counted<std::uint8_t> foreShield;
+  Field<std::uint8_t> foreShield;
   /// drawn on the AFT-SHIELD bar (2623, cell 37CCh)
-  Counted<std::uint8_t> aftShield;
+  Field<std::uint8_t> aftShield;
   /// 0-3FFh; DrainEnergy, UseMaskingDevice and ApplyEnemyLaserHit take from it, below 0 sets playerDead; CheckEnergyWarning below 0x100;...
-  Counted<std::uint16_t> playerEnergy;
+  Field<std::uint16_t> playerEnergy;
   /// 0 idle, 1 primed and looking for a target (T or I), 2 locked on missileTarget; also the colour index DrawMissileLockIndicator draws
-  Counted<std::uint8_t> missileState;
+  Field<std::uint8_t> missileState;
   /// set when playerEnergy goes below 0 (DrainEnergy, ApplyEnemyLaserHit) or by KillPlayer; GameLoop then reruns the title
-  Counted<std::uint8_t> playerDead;
+  Field<std::uint8_t> playerDead;
   /// orientation angle, 800h per turn; with playerYawAngle sets the velocity direction (UpdatePlayerVelocity); re-derived after each pit...
-  Counted<std::uint16_t> playerPitchAngle;
+  Field<std::uint16_t> playerPitchAngle;
   /// orientation angle, 800h per turn; see playerPitchAngle
-  Counted<std::uint16_t> playerYawAngle;
+  Field<std::uint16_t> playerYawAngle;
   /// 800h per turn; the roll input is added to it directly; the docking computer matches it to the station's spin
-  Counted<std::uint16_t> playerRollAngle;
+  Field<std::uint16_t> playerRollAngle;
   /// set by UpdateMissileAi; CheckMissileWarning clears it
-  Counted<std::uint8_t> incomingMissileAlert;
+  Field<std::uint8_t> incomingMissileAlert;
   /// signed -23..+23: the input code adds to it with clamping (0x79F9) and the steering code stores it (0x84CC, 0x86DF and later); drawn...
-  Counted<std::uint16_t> rollRate;
+  Field<std::uint16_t> rollRate;
   /// set by ReadScanCode when D (20h) is released while inFlight; ProcessFlightKeys then toggles the docking computer if fitted; cleared...
-  Counted<std::uint8_t> dockingKeyReleased;
+  Field<std::uint8_t> dockingKeyReleased;
   /// 80 when the capsule launches (2F14); TickEscapePod counts it down and ends RunFlight; also suppresses enemy fire; while non-zero Ki...
-  Counted<std::uint8_t> escapePodFrames;
+  Field<std::uint8_t> escapePodFrames;
   /// 1 while the docking computer flies the ship (UpdatePlayerMotion calls RunDockingComputer)
-  Counted<std::uint8_t> dockingComputerOn;
+  Field<std::uint8_t> dockingComputerOn;
   /// per-frame displacement subtracted from every object by MoveObjectsByVelocity
-  Counted<std::uint16_t> playerVelocityX;
+  Field<std::uint16_t> playerVelocityX;
   /// see playerVelocityX
-  Counted<std::uint16_t> playerVelocityY;
+  Field<std::uint16_t> playerVelocityY;
   /// see playerVelocityX
-  Counted<std::uint16_t> playerVelocityZ;
+  Field<std::uint16_t> playerVelocityZ;
   /// 4-48 in steps of 4 (. and ,), 0 while the docking computer stops the ship; the jump drive needs 48
-  Counted<std::uint16_t> playerSpeed;
+  Field<std::uint16_t> playerSpeed;
   /// 1 makes UpdatePlayerVelocity recompute the velocity
-  Counted<std::uint8_t> velocityDirty;
+  Field<std::uint8_t> velocityDirty;
   /// F1 0, F2 400h, F3 200h, F4 600h (800h per turn); 0 front, 0x200 left, 0x400 rear, 0x600 right; RotateToViewDirection
-  Counted<std::uint16_t> viewAngle;
+  Field<std::uint16_t> viewAngle;
   /// set by the docking computer's final approach; F1-F4 are ignored while 1
-  Counted<std::uint8_t> viewLocked;
+  Field<std::uint8_t> viewLocked;
   /// 1 for the frame the laser fires; ResolveLaserFire clears it
-  Counted<std::uint8_t> laserFiring;
+  Field<std::uint8_t> laserFiring;
 };
 
 static_assert(std::is_trivially_copyable_v<PlayerShipState> && std::is_standard_layout_v<PlayerShipState>);

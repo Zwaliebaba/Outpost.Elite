@@ -1,4 +1,4 @@
-// GameLogic/Counted.h
+// GameLogic/Field.h
 #pragma once
 
 #include <bit>
@@ -9,9 +9,9 @@
 namespace Elite
 {
 
-/// Whether T is what a Counted holds: a byte, a word, or an enumeration whose values are one, as the game's stored indexes and
+/// Whether T is what a Field holds: a byte, a word, or an enumeration whose values are one, as the game's stored indexes and
 /// messages are where the original stored an address (D33, piece 3).
-template <typename T> [[nodiscard]] consteval bool IsCountedValue() noexcept
+template <typename T> [[nodiscard]] consteval bool IsFieldValue() noexcept
 {
   if constexpr (std::is_enum_v<T>)
   {
@@ -37,15 +37,15 @@ template <typename T> [[nodiscard]] consteval bool IsCountedValue() noexcept
 /// It can be copied, as GameData must be trivially copyable for the reference's image to load into it as bytes, but only
 /// explicitly, as GameData's structs' and SpaceObject's copy constructors are: `auto x = member`, a capture by copy, a by-value
 /// parameter and a return by value do not compile. Read a value as `T x = member`.
-template <typename T> class Counted
+template <typename T> class Field
 {
-  static_assert(IsCountedValue<T>(), "a byte or a word of the 8088's memory");
+  static_assert(IsFieldValue<T>(), "a byte or a word of the 8088's memory");
   static_assert(std::endian::native == std::endian::little, "the reference's words are little-endian, and are copied as they are");
 
 public:
-  Counted() noexcept = default;
-  explicit Counted(const Counted&) noexcept = default;
-  Counted& operator=(const Counted&) = delete;
+  Field() noexcept = default;
+  explicit Field(const Field&) noexcept = default;
+  Field& operator=(const Field&) = delete;
 
   /// The value stored.
   operator T() const noexcept
@@ -56,7 +56,7 @@ public:
   }
 
   /// Stores _value.
-  Counted& operator=(T _value) noexcept
+  Field& operator=(T _value) noexcept
   {
     std::memcpy(m_bytes, &_value, sizeof(T));
     return *this;
@@ -66,9 +66,9 @@ private:
   std::uint8_t m_bytes[sizeof(T)];
 };
 
-static_assert(sizeof(Counted<std::uint8_t>) == 1 && alignof(Counted<std::uint8_t>) == 1);
-static_assert(sizeof(Counted<std::uint16_t>) == 2 && alignof(Counted<std::uint16_t>) == 1);
-static_assert(std::is_trivially_copyable_v<Counted<std::uint16_t>> && std::is_standard_layout_v<Counted<std::uint16_t>>);
-static_assert(!std::is_convertible_v<const Counted<std::uint8_t>&, Counted<std::uint8_t>>, "a copy is only ever explicit");
+static_assert(sizeof(Field<std::uint8_t>) == 1 && alignof(Field<std::uint8_t>) == 1);
+static_assert(sizeof(Field<std::uint16_t>) == 2 && alignof(Field<std::uint16_t>) == 1);
+static_assert(std::is_trivially_copyable_v<Field<std::uint16_t>> && std::is_standard_layout_v<Field<std::uint16_t>>);
+static_assert(!std::is_convertible_v<const Field<std::uint8_t>&, Field<std::uint8_t>>, "a copy is only ever explicit");
 
 } // namespace Elite

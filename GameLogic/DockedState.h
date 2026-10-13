@@ -3,7 +3,7 @@
 // them and run the tool again (D38).
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 
 #include <cstdint>
 #include <type_traits>
@@ -18,21 +18,21 @@ struct DockedState
   DockedState() noexcept = default;
   explicit DockedState(const DockedState&) noexcept = default;
 
-  Counted<std::uint8_t> data83F7;
-  Counted<std::uint8_t> data83F9;
+  Field<std::uint8_t> data83F7;
+  Field<std::uint8_t> data83F9;
   /// the five digits FormatDecimal5 writes for the fuel, of which the last two are shown (change 3c names it)
-  Counted<std::uint8_t> fuelDigits[5];
-  Counted<std::uint8_t> data84F5;
+  Field<std::uint8_t> fuelDigits[5];
+  Field<std::uint8_t> data84F5;
   /// text; 17-byte rows: name, unit (t, kg, g); the 18th is Refugees
-  Counted<std::uint8_t> productNames[312];
+  Field<std::uint8_t> productNames[312];
   /// walks cargoHold while the trade screens draw
-  Counted<std::uint16_t> cargoRowPointer;
+  Field<std::uint16_t> cargoRowPointer;
   /// 0 sell screen (F2), 1 buy screen (F3); RunCargoTradeMenu ignores the screen's own F-key (0x3C+this), B on the sell screen and S on...
-  Counted<std::uint8_t> tradeScreenIsBuy;
+  Field<std::uint8_t> tradeScreenIsBuy;
   /// '0' or '4' patched into "Please accept 1000 Credits!"
-  Counted<std::uint8_t> refugeeRewardDigit;
+  Field<std::uint8_t> refugeeRewardDigit;
   /// ship type shown on the title (1Ah in the file), F9/F10 step it through 2-29
-  Counted<std::uint8_t> titleShipType;
+  Field<std::uint8_t> titleShipType;
 };
 
 static_assert(std::is_trivially_copyable_v<DockedState> && std::is_standard_layout_v<DockedState>);

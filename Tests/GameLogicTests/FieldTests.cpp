@@ -15,20 +15,20 @@ namespace GameLogicTests
 namespace
 {
 
-using Byte = Elite::Counted<std::uint8_t>;
-using Word = Elite::Counted<std::uint16_t>;
+using Byte = Elite::Field<std::uint8_t>;
+using Word = Elite::Field<std::uint16_t>;
 
 // A copy from one member to another does not compile, nor do compound assignment and increment: the only write is an
 // assignment from a value, which counts.
 static_assert(!std::is_assignable_v<Byte&, const Byte&>);
 static_assert(!std::is_assignable_v<Word&, Word&&>);
 static_assert(std::is_assignable_v<Byte&, std::uint8_t> && std::is_assignable_v<Word&, std::uint16_t>);
-template <typename Field>
-concept CompoundAssignable = requires(Field& _field) { _field += 1; };
-template <typename Field>
-concept Incrementable = requires(Field& _field) { ++_field; };
-template <typename Field>
-concept Decrementable = requires(Field& _field) { _field--; };
+template <typename Member>
+concept CompoundAssignable = requires(Member& _field) { _field += 1; };
+template <typename Member>
+concept Incrementable = requires(Member& _field) { ++_field; };
+template <typename Member>
+concept Decrementable = requires(Member& _field) { _field--; };
 static_assert(!CompoundAssignable<Byte> && !Incrementable<Byte> && !Decrementable<Word>);
 
 // The image still loads into the struct as bytes.
@@ -43,7 +43,7 @@ void StoreSeven(Byte& _field)
 
 } // namespace
 
-TEST_CLASS(CountedTests)
+TEST_CLASS(FieldTests)
 {
 public:
   // A member's write stores its bytes as the 8088's, at the member's place in GameData. A GameState on the stack keeps GameData on the
@@ -111,7 +111,7 @@ public:
   }
 
   // IndexOf gives a slot's number; a record that is not one of the slots and an offset past video memory are refused (change 3c).
-  TEST_METHOD(SlotsAndPlacesAreFoundByMember)
+  TEST_METHOD(SlotsAreFoundByMember)
   {
     Elite::GameState state;
     const Elite::GameState& view = state;

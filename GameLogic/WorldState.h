@@ -3,7 +3,7 @@
 // them and run the tool again (D38).
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 #include "SpaceObject.h"
 
 #include <cstdint>
@@ -20,7 +20,7 @@ struct WorldState
   explicit WorldState(const WorldState&) noexcept = default;
 
   /// 36 (0x24) from SetUpLocalSpace: object slots then debris slots
-  Counted<std::uint8_t> shipSlotCount;
+  Field<std::uint8_t> shipSlotCount;
   /// 36 64-byte records: slot 0 sun, 1 planet (planetSlot), 2 station (stationSlot), 3-19 ships (firstShipSlot), 20-35 debris (debrisSlots)
   SpaceObject shipSlots[36];
 };

@@ -21,9 +21,10 @@ ADR-024 made each byte and word of the game's state a `Counted`: a write that ch
 
 | Check | Result |
 |---|---|
-| The idle trajectory | The probe of ADR-038 on the tree with no counting: 166 tests, 43,158,003 idles, each test's count and hash identical to ADR-038's. |
+| The idle trajectory | The probe of ADR-038 on the tree with no counting: 166 tests, 43,158,003 idles, each test's count and hash identical to ADR-038's. After the rename: identical again, but for the order the renamed `FieldTests` run in. |
 | The suite | `GameLogicTests` passes under g++, 166 tests, the corpus's digests, pictures, outcomes and answers among them, with no re-base |
-| `GameData` | `Tools/GenerateGameData.py --check`: up to date after regenerating; the headers' only change is their words about the count |
+| `GameData` | `Tools/GenerateGameData.py --check`: up to date after regenerating, after each commit; the headers change only in their words and in `Field` for `Counted` |
+| The rename | `Counted` is gone from `GameLogic`, `Tests`, `Outpost`, `Engine`, `Tools` and `Build`; the checkers, clang-format and clang 18's warnings over `GameLogic` are clean |
 | Not run here | the MSVC build and the game: CI builds and runs the tests, and the owner plays it |
 
 ## What this forecloses

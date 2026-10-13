@@ -92,7 +92,7 @@
     <ClCompile Include="CorpusTests.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
-    <ClCompile Include="CountedTests.cpp">
+    <ClCompile Include="FieldTests.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
     <ClCompile Include="DockedTests.cpp">

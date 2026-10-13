@@ -3,7 +3,7 @@
 // them and run the tool again (D38).
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 
 #include <cstdint>
 #include <type_traits>
@@ -19,15 +19,15 @@ struct TextState
   explicit TextState(const TextState&) noexcept = default;
 
   /// 'BOUNTY:000000 Cr'; ShowBountyMessage writes the digits at DS:4B12
-  Counted<std::uint8_t> bountyText[17];
+  Field<std::uint8_t> bountyText[17];
   /// 'CLASS: 1234567 TYPE: 12345678901'; ShowShipIdentity fills the fields at DS:4B23 (7) and DS:4B31 (11)
-  Counted<std::uint8_t> shipIdentityText[33];
+  Field<std::uint8_t> shipIdentityText[33];
   /// cursor glyph, a space and a zero: printed after the text by RedrawInputLine; ToggleInputCursor flips the first byte
-  Counted<std::uint8_t> inputCursorText[3];
+  Field<std::uint8_t> inputCursorText[3];
   /// ReadTextLine's countdown, 300 timer ticks per cursor toggle
-  Counted<std::uint16_t> cursorBlinkTicks;
+  Field<std::uint16_t> cursorBlinkTicks;
   /// characters ReadTextLine may still accept
-  Counted<std::uint8_t> inputCharsLeft;
+  Field<std::uint8_t> inputCharsLeft;
 };
 
 static_assert(std::is_trivially_copyable_v<TextState> && std::is_standard_layout_v<TextState>);

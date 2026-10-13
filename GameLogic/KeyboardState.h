@@ -3,7 +3,7 @@
 // them and run the tool again (D38).
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 
 #include <cstdint>
 #include <type_traits>
@@ -24,98 +24,98 @@ struct KeyboardState
     KeyDown() noexcept = default;
     explicit KeyDown(const KeyDown&) noexcept = default;
 
-    Counted<std::uint8_t> gapA030[1];
+    Field<std::uint8_t> gapA030[1];
     /// keyDown entry for scan code 01h: pauses the game in flight (ProcessFlightKeys 813D)
-    Counted<std::uint8_t> keyDownEsc;
-    Counted<std::uint8_t> gapA032[14];
+    Field<std::uint8_t> keyDownEsc;
+    Field<std::uint8_t> gapA032[14];
     /// keyDown entry for scan code 10h: pitch -1 (ReadKeyboardSteering)
-    Counted<std::uint8_t> keyDownQ;
-    Counted<std::uint8_t> gapA041[1];
+    Field<std::uint8_t> keyDownQ;
+    Field<std::uint8_t> gapA041[1];
     /// keyDown entry for scan code 12h: ECM (ProcessFlightKeys 829F)
-    Counted<std::uint8_t> keyDownE;
-    Counted<std::uint8_t> gapA043[1];
+    Field<std::uint8_t> keyDownE;
+    Field<std::uint8_t> gapA043[1];
     /// keyDown entry for scan code 14h: primes a missile (8171)
-    Counted<std::uint8_t> keyDownT;
-    Counted<std::uint8_t> gapA045[1];
+    Field<std::uint8_t> keyDownT;
+    Field<std::uint8_t> gapA045[1];
     /// keyDown entry for scan code 16h: unarms the missile (81FB)
-    Counted<std::uint8_t> keyDownU;
+    Field<std::uint8_t> keyDownU;
     /// keyDown entry for scan code 17h: ID indicator: identifies the ship in the sights (82FE)
-    Counted<std::uint8_t> keyDownI;
+    Field<std::uint8_t> keyDownI;
     /// keyDown entry for scan code 18h: roll -1 (ReadKeyboardSteering)
-    Counted<std::uint8_t> keyDownO;
+    Field<std::uint8_t> keyDownO;
     /// keyDown entry for scan code 19h: roll +1 (ReadKeyboardSteering)
-    Counted<std::uint8_t> keyDownP;
-    Counted<std::uint8_t> gapA04A[3];
+    Field<std::uint8_t> keyDownP;
+    Field<std::uint8_t> gapA04A[3];
     /// keyDown entry for scan code 1Dh: with Esc, a freeze without the pause menu (8149)
-    Counted<std::uint8_t> keyDownCtrl;
+    Field<std::uint8_t> keyDownCtrl;
     /// keyDown entry for scan code 1Eh: pitch +1 (ReadKeyboardSteering)
-    Counted<std::uint8_t> keyDownA;
-    Counted<std::uint8_t> gapA04F[3];
+    Field<std::uint8_t> keyDownA;
+    Field<std::uint8_t> gapA04F[3];
     /// keyDown entry for scan code 22h: arms the galactic hyperdrive (802E)
-    Counted<std::uint8_t> keyDownG;
+    Field<std::uint8_t> keyDownG;
     /// keyDown entry for scan code 23h: hyperspace (805E)
-    Counted<std::uint8_t> keyDownH;
+    Field<std::uint8_t> keyDownH;
     /// keyDown entry for scan code 24h: jump drive (8133)
-    Counted<std::uint8_t> keyDownJ;
-    Counted<std::uint8_t> gapA055[1];
+    Field<std::uint8_t> keyDownJ;
+    Field<std::uint8_t> gapA055[1];
     /// keyDown entry for scan code 26h: anti-ECM emulator while held (837E)
-    Counted<std::uint8_t> keyDownL;
-    Counted<std::uint8_t> gapA057[3];
+    Field<std::uint8_t> keyDownL;
+    Field<std::uint8_t> gapA057[3];
     /// keyDown entry for scan code 2Ah: makes ReadScanCode OR 80h into the buffered code
-    Counted<std::uint8_t> keyDownLeftShift;
-    Counted<std::uint8_t> gapA05B[3];
+    Field<std::uint8_t> keyDownLeftShift;
+    Field<std::uint8_t> gapA05B[3];
     /// keyDown entry for scan code 2Eh: launches the escape capsule (82DC)
-    Counted<std::uint8_t> keyDownC;
-    Counted<std::uint8_t> gapA05F[1];
+    Field<std::uint8_t> keyDownC;
+    Field<std::uint8_t> gapA05F[1];
     /// keyDown entry for scan code 30h: energy bomb (82C6)
-    Counted<std::uint8_t> keyDownB;
+    Field<std::uint8_t> keyDownB;
     /// keyDown entry for scan code 31h: masking device while held (8368)
-    Counted<std::uint8_t> keyDownN;
+    Field<std::uint8_t> keyDownN;
     /// keyDown entry for scan code 32h: launches a locked missile (8222)
-    Counted<std::uint8_t> keyDownM;
+    Field<std::uint8_t> keyDownM;
     /// keyDown entry for scan code 33h: playerSpeed -4 (84B2)
-    Counted<std::uint8_t> keyDownComma;
+    Field<std::uint8_t> keyDownComma;
     /// keyDown entry for scan code 34h: playerSpeed +4 (849E)
-    Counted<std::uint8_t> keyDownPeriod;
-    Counted<std::uint8_t> gapA065[1];
+    Field<std::uint8_t> keyDownPeriod;
+    Field<std::uint8_t> gapA065[1];
     /// keyDown entry for scan code 36h: makes ReadScanCode OR 80h into the buffered code
-    Counted<std::uint8_t> keyDownRightShift;
+    Field<std::uint8_t> keyDownRightShift;
     /// keyDown entry for scan code 37h: with Alt, the screen dump (GetKey, PollScreenDumpKey); scan code 37h is */PrtSc
-    Counted<std::uint8_t> keyDownPrintScreen;
+    Field<std::uint8_t> keyDownPrintScreen;
     /// keyDown entry for scan code 38h: with PrtSc the screen dump; with W the mis-jump latch
-    Counted<std::uint8_t> keyDownAlt;
+    Field<std::uint8_t> keyDownAlt;
     /// keyDown entry for scan code 39h: fire on the keyboard (ReadFireButton); the pause screen clears it on resume
-    Counted<std::uint8_t> keyDownSpace;
-    Counted<std::uint8_t> gapA06A[14];
+    Field<std::uint8_t> keyDownSpace;
+    Field<std::uint8_t> gapA06A[14];
     /// keyDown entry for scan code 48h: pitch -1 (ReadKeyboardSteering)
-    Counted<std::uint8_t> keyDownUp;
-    Counted<std::uint8_t> gapA079[2];
+    Field<std::uint8_t> keyDownUp;
+    Field<std::uint8_t> gapA079[2];
     /// keyDown entry for scan code 4Bh: roll -1 (ReadKeyboardSteering)
-    Counted<std::uint8_t> keyDownLeft;
-    Counted<std::uint8_t> gapA07C[1];
+    Field<std::uint8_t> keyDownLeft;
+    Field<std::uint8_t> gapA07C[1];
     /// keyDown entry for scan code 4Dh: roll +1 (ReadKeyboardSteering)
-    Counted<std::uint8_t> keyDownRight;
-    Counted<std::uint8_t> gapA07E[2];
+    Field<std::uint8_t> keyDownRight;
+    Field<std::uint8_t> gapA07E[2];
     /// keyDown entry for scan code 50h: pitch +1 (ReadKeyboardSteering)
-    Counted<std::uint8_t> keyDownDown;
-    Counted<std::uint8_t> gapA081[38];
+    Field<std::uint8_t> keyDownDown;
+    Field<std::uint8_t> gapA081[38];
     /// keyDown entry for scan code 77h: Amstrad joystick fire, key code 77h (ReadFireButton)
-    Counted<std::uint8_t> keyDownAmstradFire1;
+    Field<std::uint8_t> keyDownAmstradFire1;
     /// keyDown entry for scan code 78h: Amstrad joystick fire, key code 78h (ReadFireButton)
-    Counted<std::uint8_t> keyDownAmstradFire2;
+    Field<std::uint8_t> keyDownAmstradFire2;
     /// keyDown entry for scan code 79h: Amstrad joystick, key code 79h: roll +1 (ReadJoystickSteering)
-    Counted<std::uint8_t> keyDownAmstradRight;
+    Field<std::uint8_t> keyDownAmstradRight;
     /// keyDown entry for scan code 7Ah: Amstrad joystick, key code 7Ah: roll -1
-    Counted<std::uint8_t> keyDownAmstradLeft;
+    Field<std::uint8_t> keyDownAmstradLeft;
     /// keyDown entry for scan code 7Bh: Amstrad joystick, key code 7Bh: pitch +1
-    Counted<std::uint8_t> keyDownAmstradDown;
+    Field<std::uint8_t> keyDownAmstradDown;
     /// keyDown entry for scan code 7Ch: Amstrad joystick, key code 7Ch: pitch -1
-    Counted<std::uint8_t> keyDownAmstradUp;
+    Field<std::uint8_t> keyDownAmstradUp;
     /// keyDown entry for scan code 7Dh: Amstrad mouse button, key code 7Dh (bit 1 of mouseButtons)
-    Counted<std::uint8_t> keyDownAmstradMouseRight;
+    Field<std::uint8_t> keyDownAmstradMouseRight;
     /// keyDown entry for scan code 7Eh: Amstrad mouse button, key code 7Eh (bit 0 of mouseButtons, the fire latch)
-    Counted<std::uint8_t> keyDownAmstradMouseLeft;
-    Counted<std::uint8_t> gapA0AF[1];
+    Field<std::uint8_t> keyDownAmstradMouseLeft;
+    Field<std::uint8_t> gapA0AF[1];
   };
   /// 1 while the key is held, indexed by the scan code itself (entry 0 unused; the map's 'scan code - 1' misses the inc ah at 7452); wri...
   KeyDown keyDown;
