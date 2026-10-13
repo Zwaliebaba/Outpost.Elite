@@ -44,9 +44,11 @@ float FirstHit(float3 _ray)
   const float b = dot(_ray, g_center);
   const float c = dot(g_center, g_center) - 1.0;
   const float discriminant = b * b - a * c;
-  if (discriminant < 0.0)
+  // One return, which FXC can see is always reached with its value set.
+  float hit = -1.0;
+  if (discriminant >= 0.0)
   {
-    return -1.0;
+    hit = (b - sqrt(discriminant)) / a;
   }
-  return (b - sqrt(discriminant)) / a;
+  return hit;
 }

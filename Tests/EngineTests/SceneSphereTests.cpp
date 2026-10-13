@@ -187,7 +187,9 @@ public:
     const std::vector<std::uint32_t> pixels = rig.Capture(rig.Frame(scene));
     Assert::IsTrue(CloseTo(At(pixels, MIDDLE, MIDDLE), 0xFFFFFF), L"white at its middle");
     Assert::IsTrue(Channel(At(pixels, MIDDLE + BEYOND_PIXELS, MIDDLE), 16) > 0x20, L"its corona, past its rim");
-    Assert::IsTrue(Brightest(At(pixels, 4, 4)) < 0x08, L"dark far from it");
+    // The inset's corner is three radii past its rim, where the corona's faint part is 0.5% of its colour's light: 15 of 255 once
+    // encoded for display.
+    Assert::IsTrue(Brightest(At(pixels, 4, 4)) < 0x18, L"dim far from it");
     scene.spheres = {Planet()};
     Assert::AreEqual(PALETTE[0], At(rig.Capture(rig.Frame(scene)), MIDDLE + BEYOND_PIXELS, MIDDLE), L"a planet does not glow");
   }
