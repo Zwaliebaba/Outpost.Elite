@@ -12,7 +12,6 @@
 #include "Speaker.h"
 #include "TimeOfDay.h"
 #include "Timing.h"
-#include "ToneTimer.h"
 #include "VideoModes.h"
 
 #include <array>
@@ -46,7 +45,7 @@ using NativeRoutine = std::function<void()>;
 ///
 /// It holds, each what the game uses of the PC, without its port bus, its registers or its vector table (ADR-041): the clock and
 /// the events it waits for, with the two interrupts they request (Scheduler: the tick, the keys and their requests); the timer's
-/// channel 2 (ToneTimer); the system control port; the speaker (Speaker); the game port (GamePort); the mouse driver (Mouse);
+/// the system control port; the sound, the tone and its bits (Speaker); the game port (GamePort); the mouse driver (Mouse);
 /// the CGA (Cga); the BIOS's video services (VideoModes), its time of day (TimeOfDay) and its two hardware interrupt handlers;
 /// and DOS's file services (DosFiles) and its print-string.
 ///
@@ -191,7 +190,7 @@ public:
     return m_events;
   }
 
-  /// IN AL,61h: the system control port, as last written: bit 0 is the tone timer's gate, bit 1 the speaker's data, and bit 7
+  /// IN AL,61h: the system control port, as last written: bit 0 is the tone's gate, bit 1 the speaker's data, and bit 7
   /// high holds the keyboard clear. At power-on it holds 4Ch, what the XT BIOS's keyboard reset writes last (keyboard enabled,
   /// clock not held, speaker and gate off).
   [[nodiscard]] std::uint8_t SystemControl() const noexcept
@@ -199,7 +198,7 @@ public:
     return m_systemControl;
   }
 
-  /// OUT 61h,_value: the tone timer's gate and the speaker take bits 0 and 1, and bit 7 holds the keyboard (Scheduler::HoldKeyboard).
+  /// OUT 61h,_value: the speaker takes bits 0 and 1, the tone's gate and its data, and bit 7 holds the keyboard (Scheduler::HoldKeyboard).
   /// Not noexcept: the speaker logs a change.
   void SetSystemControl(std::uint8_t _value);
 
@@ -302,11 +301,6 @@ public:
   [[nodiscard]] std::array<std::uint8_t, 4> GraphicsColors() const noexcept
   {
     return m_cga.GraphicsColors();
-  }
-
-  [[nodiscard]] ToneTimer& Tone() noexcept
-  {
-    return m_tone;
   }
 
   /// The time of day, which the BIOS's timer handler counts and int 1Ah reads.
@@ -413,7 +407,6 @@ private:
   Cycles m_clock = 0;
   Cycles m_instructionCycles = 0;
   Speaker m_speaker;
-  ToneTimer m_tone;
   Scheduler m_events;
   std::uint8_t m_systemControl = POWER_ON_SYSTEM_CONTROL;
   GamePort m_gamePort;

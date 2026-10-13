@@ -43,9 +43,10 @@ constexpr Cycles PORT_ACCESS = 10;    // IN AL,imm8 and OUT imm8,AL
 constexpr Cycles LOGIC_IMMEDIATE = 4; // OR AL,imm8 and AND AL,imm8
 constexpr Cycles POP_REGISTER = 12;   // POP AX and POP DS
 
-// The system control port: bit 0 the tone timer's gate, bit 1 the speaker's data, and bit 7, which the XT's keyboard is
+// The system control port: bit 0 the tone's gate, bit 1 the speaker's data, and bit 7, which the XT's keyboard is
 // acknowledged by, its hold.
 constexpr std::uint8_t TONE_GATE = 0x01;
+constexpr std::uint8_t SPEAKER_DATA = 0x02;
 constexpr std::uint8_t SPEAKER_BITS = 0x03;
 constexpr std::uint8_t KEYBOARD_CLEAR = 0x80;
 
@@ -77,7 +78,6 @@ struct NativeAbandoned
 Platform::Platform(GameState& _state, FileStore& _files, const Desc& _desc)
   : m_state(_state),
     m_speaker(m_clock),
-    m_tone(m_clock, m_speaker),
     m_events(m_clock),
     m_gamePort(m_instructionCycles),
     m_cga(m_clock),
@@ -89,8 +89,6 @@ Platform::Platform(GameState& _state, FileStore& _files, const Desc& _desc)
     m_flags(ENTRY_FLAGS),
     m_commandTail(_desc.commandTail)
 {
-  // The system control port's power-on value reaches the speaker like any other write; the tone timer's gate is low already.
-  m_speaker.SetSystemControl(m_systemControl);
 }
 
 Platform::~Platform()
@@ -292,13 +290,9 @@ void Platform::SetSystemControl(std::uint8_t _value)
 {
   const auto changed = static_cast<std::uint8_t>(m_systemControl ^ _value);
   m_systemControl = _value;
-  if ((changed & TONE_GATE) != 0)
-  {
-    m_tone.SetGate((_value & TONE_GATE) != 0);
-  }
   if ((changed & SPEAKER_BITS) != 0)
   {
-    m_speaker.SetSystemControl(_value);
+    m_speaker.SetBits((_value & TONE_GATE) != 0, (_value & SPEAKER_DATA) != 0);
   }
   m_events.HoldKeyboard((_value & KEYBOARD_CLEAR) != 0);
 }

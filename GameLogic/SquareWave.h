@@ -13,8 +13,8 @@ namespace Elite
 /// ADR-041): its programming and phase, from which its output at any tick follows directly rather than by simulating the ticks
 /// in between. The timer is clocked at a twelfth of the crystal: one tick every CYCLES_PER_PIT_TICK cycles, tick k at cycle
 /// k * CYCLES_PER_PIT_TICK counted from power-on, so the ticks by a cycle are a division of the platform's own clock and nothing
-/// drifts. A plain aggregate (R8): the scheduler keeps channel 0's, the tone timer channel 2's, and the speaker logs copies of
-/// channel 2's.
+/// drifts. A plain aggregate (R8): the scheduler keeps channel 0's, the tick, and the speaker channel 2's, the tone, in each
+/// event of its log.
 ///
 /// A count is loaded into the counting element on the tick after it is written. With an odd count N the output is high for
 /// (N+1)/2 ticks and low for (N-1)/2. A low gate holds the output high. BCD counting counts in binary; nothing the game does uses

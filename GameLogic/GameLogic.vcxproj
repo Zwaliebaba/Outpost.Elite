@@ -174,7 +174,6 @@
     <ClInclude Include="TimerState.h" />
     <ClInclude Include="TimerTables.h" />
     <ClInclude Include="Timing.h" />
-    <ClInclude Include="ToneTimer.h" />
     <ClInclude Include="Video.h" />
     <ClInclude Include="VideoModes.h" />
     <ClInclude Include="VideoState.h" />
@@ -230,7 +229,6 @@
     <ClCompile Include="Text.cpp" />
     <ClCompile Include="TimeOfDay.cpp" />
     <ClCompile Include="Timer.cpp" />
-    <ClCompile Include="ToneTimer.cpp" />
     <ClCompile Include="Video.cpp" />
     <ClCompile Include="VideoModes.cpp" />
   </ItemGroup>

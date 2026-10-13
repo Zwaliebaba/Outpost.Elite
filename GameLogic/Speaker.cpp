@@ -17,8 +17,8 @@ namespace
 // cycle's, a timer tick's or a sample's, falls on a whole unit and nothing is rounded.
 constexpr std::uint64_t UNITS_PER_SAMPLE = CRYSTAL_HZ;
 
-constexpr std::uint8_t SYSTEM_CONTROL_GATE = 0x01;
-constexpr std::uint8_t SYSTEM_CONTROL_DATA = 0x02;
+// The BIOS's programming of the tone, which is its power-on state (Speaker.h).
+constexpr std::uint16_t BEEP_DIVISOR = 0x0533;
 
 [[nodiscard]] constexpr std::uint64_t UnitsPerCycle(std::uint32_t _sampleRate) noexcept
 {
@@ -46,30 +46,43 @@ Speaker::Speaker(const Cycles& _clock)
 {
   Event initial;
   initial.at = m_clock;
+  initial.tone.loaded = true;
+  initial.tone.reload = BEEP_DIVISOR;
+  initial.tone.gate = false;
   m_events.push_back(initial);
 }
 
-void Speaker::SetSystemControl(std::uint8_t _value)
+void Speaker::SetBits(bool _gate, bool _data)
 {
-  const bool gate = (_value & SYSTEM_CONTROL_GATE) != 0;
-  const bool data = (_value & SYSTEM_CONTROL_DATA) != 0;
   const Event& last = m_events.back();
-  if (last.gate == gate && last.data == data)
+  if (last.gate == _gate && last.data == _data)
   {
     return;
   }
   Event event = last;
   event.at = m_clock;
-  event.gate = gate;
-  event.data = data;
+  if (event.tone.gate != _gate)
+  {
+    event.tone.gate = _gate;
+    if (_gate && event.tone.loaded)
+    {
+      event.tone.reload = event.tone.CountRegister();
+      event.tone.originTick = SquareWave::TickAt(m_clock) + 1;
+    }
+  }
+  event.gate = _gate;
+  event.data = _data;
   Append(event);
 }
 
-void Speaker::SetChannel2(const SquareWave& _channel)
+void Speaker::SetTone(std::uint16_t _divisor)
 {
+  // The control word, which leaves the tone unloaded until its count, then the count: both at one cycle, so one event.
   Event event = m_events.back();
   event.at = m_clock;
-  event.channel2 = _channel;
+  event.tone.reload = SquareWave::Reload(_divisor);
+  event.tone.originTick = SquareWave::TickAt(m_clock) + 1;
+  event.tone.loaded = true;
   Append(event);
 }
 
@@ -140,7 +153,7 @@ std::size_t Speaker::RenderSamples(Cycles _from, Cycles _to, std::uint32_t _samp
       }
       else if (state.data)
       {
-        area += state.channel2.Integral(position, end, unitsPerTick, averageBelowTicks);
+        area += state.tone.Integral(position, end, unitsPerTick, averageBelowTicks);
       }
       position = end;
     }

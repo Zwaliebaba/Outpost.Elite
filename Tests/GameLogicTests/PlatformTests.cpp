@@ -363,7 +363,7 @@ public:
     Assert::IsFalse(platform.Events().InService(Elite::Irq::Timer) || platform.Events().InService(Elite::Irq::Keyboard), L"ended");
   }
 
-  // The system control port reads back what was written; bit 0 gates the tone timer and bits 0-1 reach the speaker, and bit 7
+  // The system control port reads back what was written; bits 0-1 reach the speaker, the tone's gate and its data, and bit 7
   // holds the keyboard without touching either.
   TEST_METHOD(SystemControlReadsBackAndDrivesGateAndSpeaker)
   {
@@ -375,7 +375,7 @@ public:
     platform.Idle(1000);
     platform.SetSystemControl(0x4F);
     Assert::AreEqual(0x4Fu, std::uint32_t{platform.SystemControl()});
-    Assert::IsTrue(platform.Tone().State().gate);
+    Assert::IsTrue(platform.Sound().Now().tone.gate);
     const Elite::Speaker::Event& on = platform.Sound().Events().back();
     Assert::AreEqual(platform.Clock(), on.at);
     Assert::IsTrue(on.gate && on.data);
@@ -387,7 +387,7 @@ public:
     Assert::AreEqual(events + 1, platform.Sound().Events().size(), L"the acknowledge pulse leaves the speaker alone");
 
     platform.SetSystemControl(0x4D);
-    Assert::IsTrue(platform.Tone().State().gate);
+    Assert::IsTrue(platform.Sound().Now().tone.gate);
     Assert::IsFalse(platform.Sound().Events().back().data);
   }
 

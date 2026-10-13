@@ -381,9 +381,6 @@
     <ClInclude Include="Timing.h">
       <Filter>Platform</Filter>
     </ClInclude>
-    <ClInclude Include="ToneTimer.h">
-      <Filter>Platform</Filter>
-    </ClInclude>
     <ClInclude Include="Video.h">
       <Filter>Video</Filter>
     </ClInclude>
@@ -538,9 +535,6 @@
     </ClCompile>
     <ClCompile Include="Timer.cpp">
       <Filter>Timer</Filter>
-    </ClCompile>
-    <ClCompile Include="ToneTimer.cpp">
-      <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="Video.cpp">
       <Filter>Video</Filter>

@@ -34,7 +34,7 @@ void Hardware::SetSystemControl(std::uint8_t _value)
 
 void Hardware::SetToneDivisor(std::uint16_t _divisor)
 {
-  m_platform.Tone().Program(_divisor);
+  m_platform.Sound().SetTone(_divisor);
 }
 
 void Hardware::SetTickDivisor(std::uint16_t _divisor)
