@@ -231,6 +231,10 @@ inline constexpr float VIEW_FOCAL = 256.0f;
 /// dashboard (TitleDashboard), _planet the disc it draws behind its ship, and no stardust, which the title does not draw.
 [[nodiscard]] FlightSnapshot TakeTitleSnapshot(const GameState& _state, std::string_view _message, const SnapshotDisc& _planet);
 
+/// _snapshot of a frame of the view that holds only the game's words, the pause screen's or the credits' (D66): no object, no
+/// stardust, no sights and no title's planet, which neither draws over the cleared view; the dashboard and the system stay.
+[[nodiscard]] FlightSnapshot WordsOnly(const FlightSnapshot& _snapshot) noexcept;
+
 /// The title's dashboard (RunTitle, D64): the cockpit's picture as ShowCockpitScreen copies it, which UpdateDashboard never draws
 /// over on the title, so nothing on it is live; and _message, the title's ---- E L I T E ----, on the message line.
 [[nodiscard]] SnapshotDashboard TitleDashboard(std::string_view _message);

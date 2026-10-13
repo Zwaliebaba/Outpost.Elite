@@ -30,7 +30,7 @@ using SpaceViewLayer = std::array<std::uint8_t, std::size_t{SPACE_VIEW_WIDTH_PIX
 /// - **under**, what each other object drew before the first the renderer draws, in the game's own pixels: a distant station's
 ///   disc, the dots of far ships;
 /// - **over**, everything else drawn in the frame: the title's words and the message line, and what other objects drew after one
-///   the renderer draws, which the game's painter's order puts nearer than it;
+///   the renderer draws, which the game's painter's order puts nearer than it; of it, which pixels no object drew, the game's words;
 /// - which slots were drawn as a blueprint's model, and which object last changed each pixel.
 ///
 /// It watches the drawing buffer round each object TransformAndDrawObjects draws and round each thing the renderer draws
@@ -98,6 +98,13 @@ public:
     return _pixel < m_publishedRendererOwned.size() && m_publishedRendererOwned[_pixel];
   }
 
+  /// Whether pixel _pixel of the last finished frame's over layer, row by row, was drawn by no object and painted over by none: the
+  /// game's words, the title's, the pause screen's, the credits', which the cockpit does not cover (D66).
+  [[nodiscard]] bool HoldsWords(std::size_t _pixel) const noexcept
+  {
+    return _pixel < m_publishedWords.size() && m_publishedWords[_pixel];
+  }
+
   /// The slot of the object that last changed pixel _pixel of the last finished frame, row by row, or NO_SLOT for none or for
   /// what is no slot's.
   [[nodiscard]] std::uint8_t OwnerOf(std::size_t _pixel) const noexcept
@@ -125,6 +132,7 @@ private:
   SpaceViewLayer m_under{};
   SpaceViewLayer m_over{}; // what was drawn between objects or after one the renderer draws, and no object painted over since
   PixelBits m_rendererOwned;
+  PixelBits m_words; // over, drawn by no object
   PixelSlots m_owners{};
   std::bitset<SLOTS> m_models;
   Drawing m_drawing = Drawing::Plain;
@@ -133,6 +141,7 @@ private:
   SpaceViewLayer m_publishedUnder{};
   SpaceViewLayer m_publishedOver{};
   PixelBits m_publishedRendererOwned;
+  PixelBits m_publishedWords;
   PixelSlots m_publishedOwners{};
   std::bitset<SLOTS> m_publishedModels;
   std::array<std::uint8_t, std::size_t{SPACE_VIEW_HEIGHT_PIXELS} * SPACE_VIEW_WIDTH_PIXELS / 4> m_publishedShown{}; // its bytes

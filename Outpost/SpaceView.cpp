@@ -28,6 +28,7 @@ constexpr float NEAR_UNITS = 16.0f;
 
 constexpr std::uint8_t SUN_SLOT = 0;
 constexpr std::size_t PALETTE_COLORS = 4;
+constexpr std::uint32_t INK_ALPHA = 0xFF000000; // the words' ink on the canvas, opaque
 
 // The spheres (ADR-035): the title's planet's key, past every slot's, and how much of a share of 255 is.
 constexpr std::uint32_t TITLE_PLANET_KEY = 0x100;
@@ -108,6 +109,19 @@ static_assert(Engine::SCENE_LAYER_CLEAR == Elite::LAYER_CLEAR, "the game's layer
 [[nodiscard]] std::uint32_t Rgb(const Elite::RgbColor& _color) noexcept
 {
   return (std::uint32_t{_color.red} << 16) | (std::uint32_t{_color.green} << 8) | _color.blue;
+}
+
+// The screen's four colours in its graphics mode, 0x00RRGGBB.
+[[nodiscard]] std::array<std::uint32_t, PALETTE_COLORS> PaletteOf(const Elite::Platform& _platform) noexcept
+{
+  const std::array<std::uint8_t, 4> colors = _platform.GraphicsColors();
+  const auto palette = Elite::CgaPalette();
+  std::array<std::uint32_t, PALETTE_COLORS> rgb{};
+  for (std::size_t color = 0; color < PALETTE_COLORS; ++color)
+  {
+    rgb.at(color) = Rgb(palette[colors[color] & 0x0F]);
+  }
+  return rgb;
 }
 
 } // namespace
@@ -271,13 +285,7 @@ const Engine::SceneFrame* SpaceView::Frame(const Elite::Platform& _platform, con
   {
     return nullptr;
   }
-  const std::array<std::uint8_t, 4> colors = _platform.GraphicsColors();
-  const auto palette = Elite::CgaPalette();
-  std::array<std::uint32_t, PALETTE_COLORS> rgb{};
-  for (std::size_t color = 0; color < PALETTE_COLORS; ++color)
-  {
-    rgb.at(color) = Rgb(palette[colors[color] & 0x0F]);
-  }
+  const std::array<std::uint32_t, PALETTE_COLORS> rgb = PaletteOf(_platform);
   if (latest.sequence != m_afterSequence)
   {
     m_before = SceneOf(_platform.PreviousFlightSnapshot(), rgb);
@@ -337,6 +345,44 @@ const Engine::SceneFrame* SpaceView::Frame(const Elite::Platform& _platform, con
   inset.bloom = BLOOM_SHARE;
   m_frame.scene = &m_drawn;
   return &m_frame;
+}
+
+void SpaceView::DrawWords(const Elite::Platform& _platform, const Engine::Rect& _place, Engine::Canvas& _canvas)
+{
+  if (_platform.LatestFlightSnapshot().sequence == 0 || !_platform.SpaceViewShown())
+  {
+    return;
+  }
+  const std::array<std::uint32_t, PALETTE_COLORS> rgb = PaletteOf(_platform);
+  const Elite::SpaceViewLayers& layers = _platform.SpaceView();
+  const float across = _place.width / static_cast<float>(Elite::SPACE_VIEW_WIDTH_PIXELS);
+  const float down = _place.height / static_cast<float>(Elite::SPACE_VIEW_HEIGHT_PIXELS);
+  // Each run of a row's ink in one colour, as one box; the paper, 0, is left to what is under it.
+  for (std::size_t row = 0; row < Elite::SPACE_VIEW_HEIGHT_PIXELS; ++row)
+  {
+    std::size_t x = 0;
+    while (x < Elite::SPACE_VIEW_WIDTH_PIXELS)
+    {
+      const std::size_t first = row * Elite::SPACE_VIEW_WIDTH_PIXELS + x;
+      const std::uint8_t value = layers.Over()[first];
+      if (!layers.HoldsWords(first) || value == 0 || value >= PALETTE_COLORS)
+      {
+        ++x;
+        continue;
+      }
+      std::size_t end = x + 1;
+      while (end < Elite::SPACE_VIEW_WIDTH_PIXELS && layers.HoldsWords(first + end - x) && layers.Over()[first + end - x] == value)
+      {
+        ++end;
+      }
+      _canvas.Box(Engine::Rect{.left = _place.left + static_cast<float>(x) * across,
+                               .top = _place.top + static_cast<float>(row) * down,
+                               .width = static_cast<float>(end - x) * across,
+                               .height = down},
+                  INK_ALPHA | rgb.at(value));
+      x = end;
+    }
+  }
 }
 
 } // namespace Outpost

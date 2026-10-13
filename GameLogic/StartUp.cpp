@@ -5,6 +5,7 @@
 #include "Arithmetic.h"
 #include "Docked.h"
 #include "Flight.h"
+#include "FlightSnapshot.h"
 #include "Input.h"
 #include "SaveLoad.h"
 #include "SharedTables.h"
@@ -264,6 +265,8 @@ GameLoopExit GameLoop(GameState& _state, Hardware& _hardware, std::uint16_t _cou
 
 void ShowCredits(GameState& _state, Hardware& _hardware, bool _backward)
 {
+  // The space view's layers watch the frame (ADR-033), which holds only the credits' words (D66).
+  _hardware.BeginSpaceViewFrame();
   ClearDrawBuffer(_state, _backward);
   // Each line from SI, one past the last line's NUL, at DI, a row of characters below the last line's start. The original pushes
   // and pops the count and the place round the print; its LOOP's turns carry the count, the text and the place, SI as the
@@ -286,6 +289,8 @@ void ShowCredits(GameState& _state, Hardware& _hardware, bool _backward)
     _hardware.LoopTurn(CREDITS_LINE, {linesLeft, static_cast<std::uint16_t>(line), place});
   }
   FinishSpaceViewFrame(_state, _hardware);
+  // The frame as it was drawn, for a renderer that draws it in the title's cockpit (D64, D66): the words and nothing of the scene.
+  _hardware.PublishFlightSnapshot(WordsOnly(TakeTitleSnapshot(_state, ELITE_TITLE_TEXT, SnapshotDisc{})), false);
   // WaitForTimerTick keeps every register; the LOOP's turns carry the ticks left.
   for (std::uint16_t ticksLeft = CREDITS_TIMER_TICKS;;)
   {

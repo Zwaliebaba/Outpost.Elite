@@ -1,6 +1,7 @@
 // Outpost/SpaceView.h
 #pragma once
 
+#include "Canvas.h"
 #include "Cga.h"
 #include "Renderer.h"
 #include "SceneSnapshot.h"
@@ -34,6 +35,11 @@ public:
   /// its view stretched over _place, a place in design units under a canvas (ADR-034). None while the screen does not show the
   /// last one. It holds until the next call.
   [[nodiscard]] const Engine::SceneFrame* Frame(const Elite::Platform& _platform, const Engine::Rect& _place);
+
+  /// The game's words in the frame the screen shows (SpaceViewLayers::HoldsWords), into _canvas over the cockpit, which covers
+  /// none of them (D66): the ink of each, in the screen's colours, at its pixels of the view stretched over _place. None while
+  /// the screen does not show the last frame.
+  static void DrawWords(const Elite::Platform& _platform, const Engine::Rect& _place, Engine::Canvas& _canvas);
 
 private:
   // The scene of _snapshot: the camera at the origin, turned as the frame's camera was, each object drawn as a model, and the

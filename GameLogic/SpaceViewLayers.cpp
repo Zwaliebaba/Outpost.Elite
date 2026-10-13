@@ -91,6 +91,7 @@ void SpaceViewLayers::BeginFrame() noexcept
   m_under.fill(LAYER_CLEAR);
   m_over.fill(LAYER_CLEAR);
   m_rendererOwned.reset();
+  m_words.reset();
   m_owners.fill(NO_SLOT);
   m_models.reset();
   m_drawing = Drawing::Plain;
@@ -102,7 +103,12 @@ void SpaceViewLayers::BeginObject(const GameState& _state) noexcept
   // What was drawn since the last object, the title's words or anything between two objects, is over, unless an object paints
   // over it later.
   const std::span<const std::uint8_t> buffer = BufferOf(_state);
-  ForEachChanged(m_last, buffer, [this](std::size_t _pixel, std::uint8_t _value) { m_over[_pixel] = _value; });
+  ForEachChanged(m_last, buffer,
+                 [this](std::size_t _pixel, std::uint8_t _value)
+                 {
+                   m_over[_pixel] = _value;
+                   m_words.set(_pixel);
+                 });
   std::ranges::copy(buffer, m_before.begin());
   m_drawing = Drawing::Plain;
 }
@@ -131,6 +137,7 @@ void SpaceViewLayers::EndObject(const GameState& _state, std::uint8_t _slot) noe
                  [this, _slot, renderers, over](std::size_t _pixel, std::uint8_t _value)
                  {
                    m_rendererOwned[_pixel] = renderers;
+                   m_words.reset(_pixel);
                    m_owners[_pixel] = _slot;
                    m_over[_pixel] = over ? _value : LAYER_CLEAR;
                    if (!renderers && !over)
@@ -154,9 +161,13 @@ void SpaceViewLayers::Finish(const GameState& _state) noexcept
     {
       const std::uint8_t now = PixelOf(shown, x);
       const std::size_t pixel = row * SPACE_VIEW_WIDTH_PIXELS + x;
-      m_publishedOver[pixel] = now == PixelOf(last, x) ? m_over[pixel] : now;
+      // What changed after the last object, and before FinishSpaceViewFrame copied the view, no object drew.
+      const bool after = now != PixelOf(last, x);
+      m_publishedOver[pixel] = after ? now : m_over[pixel];
+      m_words[pixel] = m_words[pixel] || after;
     }
   }
+  m_publishedWords = m_words;
   m_publishedUnder = m_under;
   m_publishedRendererOwned = m_rendererOwned;
   m_publishedOwners = m_owners;
