@@ -63,9 +63,6 @@ public:
   /// OUT 61h with it clear.
   void AcknowledgeKeyboard();
 
-  /// IN AL,201h: the game port, the sticks' buttons in bits 4 to 7, each low while pressed.
-  [[nodiscard]] std::uint8_t GamePortButtons();
-
   /// Int 33h AX=0: the mouse driver reset. With no driver, int 33h is the ROM's IRET. The game reads nothing it answers.
   void ResetMouse();
 
@@ -154,17 +151,6 @@ public:
 
   /// Int 10h AH=0Bh, BH=1, BL=_palette: the BIOS selects mode 4's palette.
   void SelectPalette(std::uint8_t _palette);
-
-  /// OUT 201h,AL: fires the game port's one-shots, each high until its stick's resistance times it out. The port does not
-  /// read the byte written, so none is passed.
-  void FireGamePort();
-
-  /// IN AL,201h: the game port, its one-shots in bits 0 to 3, each high while it runs, and the buttons in bits 4 to 7.
-  [[nodiscard]] std::uint8_t GamePortOneShots();
-
-  /// The 8088's cycles over instructions that native code stands in for, counted for the devices the instructions executed
-  /// time (Platform::CountInstructionCycles): the game port's one-shots, which a stick read measures by counting polls.
-  void CountInstructionCycles(Cycles _cycles) noexcept;
 
   /// Int 1Ah AH=0: the time of day, its rollover flag cleared.
   [[nodiscard]] ClockReading ReadTimeOfDay();

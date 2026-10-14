@@ -81,11 +81,6 @@ void Hardware::AcknowledgeKeyboard()
   m_platform.SetSystemControl(static_cast<std::uint8_t>(pulse & ~KEYBOARD_ACKNOWLEDGE));
 }
 
-std::uint8_t Hardware::GamePortButtons()
-{
-  return m_platform.Joystick().Read();
-}
-
 // The mouse driver's calls: the driver's when a mouse is there; otherwise int 33h reaches what its vector names, the ROM's IRET,
 // and the registers come back as they went (Platform::CallAbsentMouse).
 
@@ -167,21 +162,6 @@ void Hardware::SetModeControl(std::uint8_t _value)
 void Hardware::SelectPalette(std::uint8_t _palette)
 {
   m_platform.Modes().SelectPalette(_palette);
-}
-
-void Hardware::FireGamePort()
-{
-  m_platform.Joystick().Fire();
-}
-
-std::uint8_t Hardware::GamePortOneShots()
-{
-  return m_platform.Joystick().Read();
-}
-
-void Hardware::CountInstructionCycles(Cycles _cycles) noexcept
-{
-  m_platform.CountInstructionCycles(_cycles);
 }
 
 ClockReading Hardware::ReadTimeOfDay()

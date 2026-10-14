@@ -357,7 +357,7 @@ The steps, each its own change and ADR, in this order:
 5. **The tables as source.** The `*Tables.h` stop being generated; `ReferenceImage.cpp`, both generators, the two `.tsv` files and their CI steps go (D79). *Done (ADR-044), with the state's headers, which stop being generated here rather than at step 3, and `Tools/MapReference.py` and `Tools/PrepareCommanders.py`, which read the same files.*
 6. **No 8086 in the game's code.** The direction flag, the BP and AL carry-throughs and the line records go, and the drawing routines take a CGA buffer, not a segment. Where a carried value reached the state, what it changes is reported and re-recorded.
 7. **The native host** (D77). `Hardware.h`, `Platform`, the game thread and `Cycles` go. Time is milliseconds, and the timer's 1 kHz work, the music, the effects and the counters, is a tick the host runs; keys arrive as the game's own key events; the sound routines drive the synth; the mouse is read natively; the commander files go through `FileStore` and step 1's serializer (D78); the video modes are set on `Cga` directly; D80's counterparts land. Keeping the millisecond clock and the frames' pacing should keep most replays exact; key delivery, which the PC delays a millisecond after its latch empties, is where they may move.
-8. **The joystick goes** (D81): the IBM game port, its calibration and the instruction cycles it counted, the Amstrad's stick, and the input device's choice of them. The twins and replays that fly by stick are re-recorded or retired.
+8. **The joystick goes** (D81): the IBM game port, its calibration and the instruction cycles it counted, the Amstrad's stick, and the input device's choice of them. The twins and replays that fly by stick are re-recorded or retired. *Done (ADR-045), before steps 6 and 7: the three stick twins retired, every digest re-recorded after a comparison by member, one member moved where the Amstrad's stick was chosen.*
 9. **No 1987 in the comments.** The addresses go from the code; `Reference-Map.md` and the ADRs keep them, as history.
 10. **The tests on native rigs.** `ReferenceRig` and `TwinRig` become native, the tests that read the image go, and AGENTS.md is brought up to date: its CI steps, and D79.
 
@@ -536,4 +536,5 @@ After D44, no replay reaches the docked screens. Their rules are functions with 
 | [ADR-043](ADR/ADR-043-the-docked-rules.md) | The docked screens, first step: the rules as functions with no screen code, with known answers (D53, D74) | Phase 6, piece 5 — written |
 | — | The docked screens themselves and their golden images (D44, D53, D75) | Phase 6, piece 5 — to write |
 | [ADR-044](ADR/ADR-044-wholly-native-state.md) | Wholly native, the state: written by name, then free of the 1987 layout (D76, D78) | Phase 7, steps 1 to 5 — written in part |
-| — | Wholly native: the steps after the state (D76–D81) | Phase 7 — to write |
+| [ADR-045](ADR/ADR-045-the-joystick-goes.md) | The joystick goes: the keyboard and the mouse fly the game (D81) | Phase 7, step 8 — written |
+| — | Wholly native: the other steps after the state (D76–D80) | Phase 7 — to write |

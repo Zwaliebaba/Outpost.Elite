@@ -106,7 +106,6 @@
     <ClCompile Include="FlightTests.cpp" />
     <ClCompile Include="GalaxyAnswerTests.cpp" />
     <ClCompile Include="GalaxyTests.cpp" />
-    <ClCompile Include="GamePortTests.cpp" />
     <ClCompile Include="GaugesTests.cpp" />
     <ClCompile Include="HyperspaceTests.cpp" />
     <ClCompile Include="InputTests.cpp" />

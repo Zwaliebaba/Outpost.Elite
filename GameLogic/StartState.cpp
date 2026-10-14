@@ -144,8 +144,6 @@ void SetStartState(GameData& _data) noexcept
   FillText(_data.hyperspace.arrivalGalaxyText, "Hyperspaced into galaxy ");
   _data.input.keyboardLastRollKey = 0x7F;
   _data.input.keyboardLastPitchKey = 0x7F;
-  _data.input.amstradStickLastRoll = 0x7F;
-  _data.input.amstradStickLastPitch = 0x7F;
   Fill(_data.market.marketRandomState, {0x007B, 0x01C8, 0x0315});
   FillText(_data.saveLoad.commanderFileName, "12345678.CDR");
   _data.scene.triangleFillPattern = 0xFFFF;

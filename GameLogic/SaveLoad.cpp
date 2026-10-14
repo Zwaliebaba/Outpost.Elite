@@ -48,11 +48,8 @@ constexpr std::uint16_t TEXT_ROW_BYTES = 0x50;
 // The keys it reads, as scan codes.
 constexpr std::uint8_t SCAN_E = 0x12;
 constexpr std::uint8_t SCAN_Y = 0x15;
-constexpr std::uint8_t SCAN_I = 0x17;
-constexpr std::uint8_t SCAN_A = 0x1E;
 constexpr std::uint8_t SCAN_S = 0x1F;
 constexpr std::uint8_t SCAN_D = 0x20;
-constexpr std::uint8_t SCAN_J = 0x24;
 constexpr std::uint8_t SCAN_K = 0x25;
 constexpr std::uint8_t SCAN_L = 0x26;
 constexpr std::uint8_t SCAN_C = 0x2E;
@@ -61,10 +58,6 @@ constexpr std::uint8_t SCAN_N = 0x31;
 constexpr std::uint8_t SCAN_M = 0x32;
 constexpr std::uint8_t SCAN_F1 = 0x3B;
 constexpr std::uint8_t SCAN_PAST_F10 = 0x45;
-// The Amstrad's joystick sends 77h-7Ch; a code below 54h ends the wait for it.
-constexpr std::uint8_t SCAN_PAST_KEYBOARD = 0x54;
-constexpr std::uint8_t SCAN_AMSTRAD_JOYSTICK = 0x77;
-constexpr std::uint8_t SCAN_PAST_AMSTRAD_JOYSTICK = 0x7D;
 
 // diskOperation, what Start does on the menu's behalf.
 constexpr std::uint8_t EXIT_TO_DOS = 0;
@@ -73,9 +66,8 @@ constexpr std::uint8_t SAVE_COMMANDER = 2;
 constexpr std::uint8_t DELETE_COMMANDER = 3;
 constexpr std::uint8_t CATALOGUE_COMMANDERS = 4;
 
-// inputDevice.
+// inputDevice: the keyboard or the mouse, as 1987 numbered them; its 1, the joystick, went with D81.
 constexpr std::uint8_t KEYBOARD_DEVICE = 0;
-constexpr std::uint8_t JOYSTICK_DEVICE = 1;
 constexpr std::uint8_t MOUSE_DEVICE = 2;
 
 constexpr std::uint8_t MOST_NAME_CHARACTERS = 8;
@@ -354,10 +346,10 @@ DiscMenuExit LeaveGameLoopForDisk(GameState& _state, std::uint8_t _operation)
   return DiscMenuExit{true, 0, 0};
 }
 
-// The input device's name, which ShowControlDevice reads from inputDeviceNames: the disc menu sets inputDevice to 0, 1 or 2.
+// The input device's name, which ShowControlDevice reads from inputDeviceNames: the disc menu sets inputDevice to 0 or 2.
 [[nodiscard]] std::string_view InputDeviceName(const GameState& _state)
 {
-  return INPUT_DEVICE_NAMES[_state.Data().saveLoad.inputDevice];
+  return _state.Data().saveLoad.inputDevice == MOUSE_DEVICE ? MOUSE_DEVICE_NAME : KEYBOARD_DEVICE_NAME;
 }
 
 // ShowControlDevice (CS:6705): "DEVICE:" and the input device's name, and the help rows blanked.
@@ -366,62 +358,6 @@ void ShowControlDevice(GameState& _state)
   const std::uint16_t label = PrintAt(_state, DEVICE_TEXT, STATUS_POSITION);
   PrintTextModeString(_state, InputDeviceName(_state), label);
   BlankHelpRows(_state);
-}
-
-// The joystick could not be read (CS:67C4), or the Amstrad's never moved: the error, and the help's two lines, or only its
-// first for the Amstrad's.
-void ShowNoJoystick(GameState& _state)
-{
-  PrintAt(_state, NO_JOYSTICK_TEXT, STATUS_POSITION);
-  PrintAt(_state, JOYSTICK_HELP_LINES[0], HELP_POSITION);
-  if (_state.Data().saveLoad.joystickIsAmstrad == 1)
-  {
-    return;
-  }
-  // INC SI: the second line starts after the first's NUL.
-  PrintAt(_state, JOYSTICK_HELP_LINES[1], SECOND_HELP_POSITION);
-}
-
-// J (CS:6743): which joystick, then the Amstrad's moves or the IBM's centre. True when it is selected, and the menu goes on at
-// ShowControlDevice; false when it could not be read.
-[[nodiscard]] bool ChooseJoystick(GameState& _state, Hardware& _hardware)
-{
-  PrintAt(_state, JOYSTICK_TYPE_TEXT, STATUS_POSITION);
-  // I or A, then the title over the question: the original sets SI and DI for it before the wait.
-  const bool amstrad = WaitForEitherKey(_state, _hardware, SCAN_I, SCAN_A) == SCAN_A;
-  PrintAt(_state, JOYSTICK_TITLE_TEXT, STATUS_POSITION);
-  if (amstrad)
-  {
-    // The Amstrad's: a key from it, one of 77h-7Ch, until a key from the keyboard, below 54h, ends the wait.
-    _state.Data().saveLoad.joystickIsAmstrad = 1;
-    PrintAt(_state, MOVE_JOYSTICK_TEXT, HELP_POSITION);
-    _state.Data().saveLoad.amstradJoystickMoved = 0;
-    for (;;)
-    {
-      const std::uint8_t scan = WaitForKey(_state, _hardware).scanCode;
-      if (scan < SCAN_PAST_KEYBOARD)
-      {
-        break;
-      }
-      if (scan >= SCAN_AMSTRAD_JOYSTICK && scan < SCAN_PAST_AMSTRAD_JOYSTICK)
-      {
-        _state.Data().saveLoad.amstradJoystickMoved = 1;
-      }
-    }
-    return _state.Data().saveLoad.amstradJoystickMoved == 1;
-  }
-  // The IBM's: its centre read once a key says the stick is let go.
-  _state.Data().saveLoad.joystickIsAmstrad = 0;
-  PrintAt(_state, CENTER_JOYSTICK_TEXT, HELP_POSITION);
-  (void)WaitForKey(_state, _hardware);
-  const StickAxes center = ReadJoystickAxes(_hardware);
-  _state.Data().saveLoad.joystickCenterX = center.x;
-  _state.Data().saveLoad.joystickCenterY = center.y;
-  if (center.timedOut)
-  {
-    return false;
-  }
-  return true;
 }
 
 // RejectFileName (CS:68AD), after a bad name: "FILENAME ERROR", and the jump back to the menu's keys.
@@ -491,18 +427,6 @@ DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _sh
       PrintAt(_state, NO_MOUSE_TEXT, STATUS_POSITION);
       PrintAt(_state, MOUSE_HELP_LINES[0], HELP_POSITION);
       PrintAt(_state, MOUSE_HELP_LINES[1], SECOND_HELP_POSITION); // INC SI: the second line
-      al = 0;
-      continue;
-    }
-    if (scan == SCAN_J)
-    {
-      if (ChooseJoystick(_state, _hardware))
-      {
-        _state.Data().saveLoad.inputDevice = JOYSTICK_DEVICE;
-        showDevice = true;
-        continue;
-      }
-      ShowNoJoystick(_state);
       al = 0;
       continue;
     }

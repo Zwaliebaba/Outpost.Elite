@@ -27,16 +27,8 @@ struct SaveLoadState
   CommanderState startupCommander;
   /// '12345678.CDR' template; load, save and delete use it
   std::uint8_t commanderFileName[13];
-  /// 1 after Esc, J, A: the Amstrad joystick, whose moves arrive as scan codes 0x77-0x7C; ReadSteering tests it at 0x7607
-  std::uint8_t joystickIsAmstrad;
-  /// 0 keyboard, 1 joystick, 2 mouse (names DS:8670)
+  /// 0 keyboard, 2 mouse (names DS:8670); 1987's 1, the joystick, went with D81
   std::uint8_t inputDevice;
-  /// set when a scan code 0x77-0x7C arrives during Amstrad joystick detection
-  std::uint8_t amstradJoystickMoved;
-  /// ReadJoystickAxes' X count with the stick centred, taken at selection (67BA); ReadJoystickSteering scales against it
-  std::uint16_t joystickCenterX;
-  /// as joystickCenterX, for Y
-  std::uint16_t joystickCenterY;
   /// 1 after 0x7E90; makes RunTitleAndDocked reopen ShowDiscControlScreen to show the result; cleared when an F-key leaves it
   std::uint8_t resumeAtDiskMenu;
 
@@ -50,11 +42,7 @@ struct SaveLoadState
     _visitor("commanderFileListNext", _self.commanderFileListNext);
     _visitor("startupCommander", _self.startupCommander);
     _visitor("commanderFileName", _self.commanderFileName);
-    _visitor("joystickIsAmstrad", _self.joystickIsAmstrad);
     _visitor("inputDevice", _self.inputDevice);
-    _visitor("amstradJoystickMoved", _self.amstradJoystickMoved);
-    _visitor("joystickCenterX", _self.joystickCenterX);
-    _visitor("joystickCenterY", _self.joystickCenterY);
     _visitor("resumeAtDiskMenu", _self.resumeAtDiskMenu);
   }
 

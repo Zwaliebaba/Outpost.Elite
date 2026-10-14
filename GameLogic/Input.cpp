@@ -16,31 +16,6 @@ namespace
 constexpr std::uint8_t MOST_MOUSE_STEP = 0x3F; // mickeys / 8, either way
 constexpr std::uint16_t MOUSE_STEP_LIMIT = 0x40;
 
-// ReadJoystickAxes counts its polls up from 60000, so that a count that wraps is a time-out after 5536.
-constexpr std::uint16_t AXIS_COUNT_START = 0xEA60;
-constexpr std::uint8_t X_AXIS = 0x01;
-constexpr std::uint8_t Y_AXIS = 0x02;
-constexpr std::uint8_t BOTH_AXES = X_AXIS | Y_AXIS;
-constexpr std::uint16_t STICK_STEP_LIMIT = 0x80; // (count - centre) * 128 / centre saturates at 127
-constexpr std::uint8_t MOST_STICK_STEP = 0x7F;
-constexpr std::uint8_t STICK_DEAD_ZONE = 4; // after the step's division by 8
-
-// The cycles the 8088 model (the interpreter, until D7) charged for ReadJoystickAxes's instructions: the game port times its one-shots by
-// them, and the stick is read by counting turns of the polling loops, so native code counts them where the original runs them.
-constexpr Cycles BEFORE_FIRING_CYCLES = 12;    // CLI 2, MOV BX,imm16 4, MOV CX,BX 2, MOV DX,imm16 4
-constexpr Cycles OUT_CYCLES = 8;               // OUT DX,AL
-constexpr Cycles IN_CYCLES = 8;                // IN AL,DX
-constexpr Cycles AND_CYCLES = 4;               // AND AL,imm8
-constexpr Cycles CMP_CYCLES = 4;               // CMP AL,imm8
-constexpr Cycles INC_CYCLES = 2;               // INC r16
-constexpr Cycles TAKEN_CYCLES = 16;            // a conditional short jump taken
-constexpr Cycles NOT_TAKEN_CYCLES = 4;         // and not taken
-constexpr Cycles TIME_OUT_CYCLES = 14;         // STC 2, RET 12
-constexpr Cycles BEFORE_LAST_READ_CYCLES = 14; // STI 2, SUB CX,imm16 4, SUB BX,imm16 4, MOV DX,imm16 4
-constexpr Cycles STORE_CYCLES = 10;            // MOV [joystickPortByte],AL
-constexpr Cycles LATCH_CYCLES = 16;            // MOV byte [fireLatch],1: 10, and 6 for the direct address
-constexpr Cycles RET_CYCLES = 12;              // RET: 8, and 4 for the word popped over the 8-bit bus
-
 constexpr std::uint8_t OVERRUN_CODE = 0xFF;
 constexpr std::uint8_t BREAK_BIT = 0x80;
 constexpr std::uint8_t SHIFT_BIT = 0x80; // on a code in keyBuffer
@@ -56,10 +31,7 @@ constexpr std::uint16_t KEY_BUFFER_WRAP = 0x0F; // keyBuffer is a ring of 16: an
 }
 
 constexpr std::uint8_t KEYBOARD_DEVICE = 0;
-constexpr std::uint8_t JOYSTICK_DEVICE = 1;
 constexpr std::uint8_t MOUSE_DEVICE = 2;
-constexpr std::uint8_t STICK_BUTTON_A = 0x20; // low while pressed
-constexpr std::uint8_t STICK_BUTTON_B = 0x10;
 
 constexpr std::int8_t MOST_RATE = 23;             // either way
 constexpr std::uint8_t MOST_NEGATIVE_RATE = 0xE9; // -23
@@ -159,67 +131,6 @@ void RampAxis(std::uint8_t _key, std::uint8_t& _lastKey, std::uint8_t& _ramp)
   }
 }
 
-// ReadJoystickSteering's Amstrad stick (787D): its four key codes ramped as the keyboard's cursor keys are. Returns the
-// roll ramp and the pitch ramp negated.
-Steering ReadAmstradStick(GameState& _state)
-{
-  std::uint8_t roll = 0;
-  std::uint8_t pitch = 0;
-  if (_state.Data().keyboard.keyDown[Keys::AMSTRAD_UP] == 1)
-  {
-    --pitch;
-  }
-  if (_state.Data().keyboard.keyDown[Keys::AMSTRAD_DOWN] == 1)
-  {
-    ++pitch;
-  }
-  if (_state.Data().keyboard.keyDown[Keys::AMSTRAD_LEFT] == 1)
-  {
-    --roll;
-  }
-  if (_state.Data().keyboard.keyDown[Keys::AMSTRAD_RIGHT] == 1)
-  {
-    ++roll;
-  }
-  RampAxis(roll, _state.Data().input.amstradStickLastRoll, _state.Data().input.amstradStickRollRamp);
-  RampAxis(pitch, _state.Data().input.amstradStickLastPitch, _state.Data().input.amstradStickPitchRamp);
-  return Steering{_state.Data().input.amstradStickRollRamp, Negate(_state.Data().input.amstradStickPitchRamp)};
-}
-
-// One axis of ReadJoystickSteering: (_count - centre) * 256 / centre by a DIV that can overflow into the game's trap; halved and
-// saturated at 127, over 8, less a dead zone of 4, with the sign put back.
-[[nodiscard]] std::uint8_t StickAxis(std::uint16_t _count, const std::uint16_t& _center)
-{
-  auto difference = static_cast<std::uint16_t>(_count - _center);
-  const bool negative = (difference & 0x8000) != 0;
-  if (negative)
-  {
-    difference = Negate(difference);
-  }
-  // XOR DH,DH / MOV DL,AH / MOV AH,AL / XOR AL,AL: DX:AX = the difference * 256.
-  const std::uint32_t dividend = std::uint32_t{difference} << 8;
-  const auto halved = static_cast<std::uint16_t>(DivideWord(dividend, _center).quotient >> 1);
-  const std::uint8_t saturated = halved >= STICK_STEP_LIMIT ? MOST_STICK_STEP : Low(halved);
-  const auto step = static_cast<std::uint8_t>(saturated >> 3);
-  const std::uint8_t value = step >= STICK_DEAD_ZONE ? static_cast<std::uint8_t>(step - STICK_DEAD_ZONE) : std::uint8_t{0};
-  return negative ? Negate(value) : value;
-}
-
-// ClampJoystickSteering (7A3C) on one byte: within -23..23.
-[[nodiscard]] std::uint8_t ClampRate(std::uint8_t _rate) noexcept
-{
-  const auto value = static_cast<std::int8_t>(_rate);
-  if (value < -MOST_RATE)
-  {
-    return MOST_NEGATIVE_RATE;
-  }
-  if (value > MOST_RATE)
-  {
-    return static_cast<std::uint8_t>(MOST_RATE);
-  }
-  return _rate;
-}
-
 // One axis of ReadMouseSteering: a motion counter over 8, saturated at 63 either way.
 [[nodiscard]] std::uint8_t MouseAxis(std::uint16_t _mickeys) noexcept
 {
@@ -292,11 +203,6 @@ Steering ReadSteering(GameState& _state, Hardware& _hardware)
   if (device == KEYBOARD_DEVICE)
   {
     return ApplyKeyboardRates(_state, ReadKeyboardSteering(_state));
-  }
-  if (device == JOYSTICK_DEVICE)
-  {
-    const Steering stick = ReadJoystickSteering(_state, _hardware);
-    return _state.Data().saveLoad.joystickIsAmstrad == 1 ? ApplyKeyboardRates(_state, stick) : stick;
   }
   return ReadMouseSteering(_state, _hardware);
 }
@@ -381,140 +287,8 @@ bool ReadFireButton(const GameState& _state, Hardware& _hardware)
   {
     return Pressed(_state.Data().keyboard.keyDown[Keys::SPACE]);
   }
-  if (device == JOYSTICK_DEVICE)
-  {
-    if (_state.Data().saveLoad.joystickIsAmstrad == 1)
-    {
-      return Pressed(static_cast<std::uint8_t>(_state.Data().keyboard.keyDown[Keys::AMSTRAD_FIRE_1] |
-                                               _state.Data().keyboard.keyDown[Keys::AMSTRAD_FIRE_2]));
-    }
-    // Each button shifted left into CF and inverted, bit 5 and then bit 4: pressed reads 0.
-    const std::uint8_t buttons = _hardware.GamePortButtons();
-    return (buttons & STICK_BUTTON_A) == 0 || (buttons & STICK_BUTTON_B) == 0;
-  }
   // SHR AL,1 twice: the left button, then the right.
   return (Low(_hardware.ReadMousePresses()) & MOUSE_LEFT_AND_RIGHT) != 0;
-}
-
-StickAxes ReadJoystickAxes(Hardware& _hardware)
-{
-  // With interrupts off, the one-shots fired, and each axis's polls counted until its bit drops. The game port times its one-shots
-  // by the instructions executed, so each of the original's is counted (CountInstructionCycles) before the port access after it.
-  // The wait for both bits at 7797h idles as the original's does: from its second poll, as its first follows the last change, the
-  // port written to fire the one-shots.
-  _hardware.DisableInterrupts();
-  std::uint16_t x = AXIS_COUNT_START;
-  std::uint16_t y = x;
-  _hardware.CountInstructionCycles(BEFORE_FIRING_CYCLES);
-  _hardware.FireGamePort();
-  _hardware.CountInstructionCycles(OUT_CYCLES);
-  std::uint8_t bits = static_cast<std::uint8_t>(_hardware.GamePortOneShots() & BOTH_AXES);
-  _hardware.CountInstructionCycles(IN_CYCLES + AND_CYCLES + CMP_CYCLES);
-  // A time-out leaves interrupts off, and the counts as they stand.
-  const auto timeOut = [&]()
-  {
-    _hardware.CountInstructionCycles(TAKEN_CYCLES + TIME_OUT_CYCLES);
-    return StickAxes{true, x, y};
-  };
-  if (bits != BOTH_AXES)
-  {
-    return timeOut();
-  }
-  _hardware.CountInstructionCycles(NOT_TAKEN_CYCLES);
-  for (;;)
-  {
-    x = static_cast<std::uint16_t>(x + 1);
-    _hardware.CountInstructionCycles(INC_CYCLES);
-    if (x == 0)
-    {
-      return timeOut();
-    }
-    _hardware.CountInstructionCycles(NOT_TAKEN_CYCLES);
-    bits = static_cast<std::uint8_t>(_hardware.GamePortOneShots() & X_AXIS);
-    _hardware.CountInstructionCycles(IN_CYCLES + AND_CYCLES);
-    if (bits == 0)
-    {
-      break;
-    }
-    _hardware.CountInstructionCycles(TAKEN_CYCLES);
-  }
-  _hardware.CountInstructionCycles(NOT_TAKEN_CYCLES);
-  // Both bits down before the one-shots fire again: a wait when X's drops first.
-  bool polled = false;
-  for (;;)
-  {
-    bits = static_cast<std::uint8_t>(_hardware.GamePortOneShots() & BOTH_AXES);
-    _hardware.CountInstructionCycles(IN_CYCLES + AND_CYCLES);
-    if (bits == 0)
-    {
-      break;
-    }
-    _hardware.CountInstructionCycles(TAKEN_CYCLES);
-    if (polled)
-    {
-      _hardware.Wait();
-    }
-    else
-    {
-      _hardware.Spin();
-      polled = true;
-    }
-  }
-  _hardware.CountInstructionCycles(NOT_TAKEN_CYCLES);
-  _hardware.FireGamePort();
-  _hardware.CountInstructionCycles(OUT_CYCLES);
-  for (;;)
-  {
-    y = static_cast<std::uint16_t>(y + 1);
-    _hardware.CountInstructionCycles(INC_CYCLES);
-    if (y == 0)
-    {
-      return timeOut();
-    }
-    _hardware.CountInstructionCycles(NOT_TAKEN_CYCLES);
-    bits = static_cast<std::uint8_t>(_hardware.GamePortOneShots() & Y_AXIS);
-    _hardware.CountInstructionCycles(IN_CYCLES + AND_CYCLES);
-    if (bits == 0)
-    {
-      break;
-    }
-    _hardware.CountInstructionCycles(TAKEN_CYCLES);
-  }
-  _hardware.CountInstructionCycles(NOT_TAKEN_CYCLES);
-  _hardware.EnableInterrupts();
-  y = static_cast<std::uint16_t>(y - AXIS_COUNT_START);
-  x = static_cast<std::uint16_t>(x - AXIS_COUNT_START);
-  _hardware.CountInstructionCycles(BEFORE_LAST_READ_CYCLES);
-  const std::uint8_t port = _hardware.GamePortButtons();
-  // Bit 4, the stick's first button, low while pressed.
-  _hardware.CountInstructionCycles(IN_CYCLES + STORE_CYCLES + AND_CYCLES);
-  if ((port & STICK_BUTTON_B) == 0)
-  {
-    _hardware.CountInstructionCycles(NOT_TAKEN_CYCLES + LATCH_CYCLES);
-  }
-  else
-  {
-    _hardware.CountInstructionCycles(TAKEN_CYCLES);
-  }
-  _hardware.CountInstructionCycles(RET_CYCLES);
-  return StickAxes{false, x, y};
-}
-
-Steering ReadJoystickSteering(GameState& _state, Hardware& _hardware)
-{
-  if (_state.Data().saveLoad.joystickIsAmstrad == 1)
-  {
-    return ReadAmstradStick(_state);
-  }
-  const StickAxes axes = ReadJoystickAxes(_hardware);
-  if (axes.timedOut)
-  {
-    return Steering{0, 0};
-  }
-  const std::uint8_t roll = StickAxis(axes.x, _state.Data().saveLoad.joystickCenterX);
-  const std::uint8_t pitch = StickAxis(axes.y, _state.Data().saveLoad.joystickCenterY);
-  // ClampJoystickSteering (7A3C): the roll, then the pitch negated.
-  return Steering{ClampRate(roll), ClampRate(Negate(pitch))};
 }
 
 Steering ReadKeyboardSteering(GameState& _state)

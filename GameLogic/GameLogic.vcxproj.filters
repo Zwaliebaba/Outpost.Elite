@@ -183,9 +183,6 @@
     <ClInclude Include="GameData.h">
       <Filter>State</Filter>
     </ClInclude>
-    <ClInclude Include="GamePort.h">
-      <Filter>Platform</Filter>
-    </ClInclude>
     <ClInclude Include="GameState.h">
       <Filter>State</Filter>
     </ClInclude>
@@ -436,9 +433,6 @@
     </ClCompile>
     <ClCompile Include="Game.cpp">
       <Filter>Reference</Filter>
-    </ClCompile>
-    <ClCompile Include="GamePort.cpp">
-      <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="GameState.cpp">
       <Filter>State</Filter>

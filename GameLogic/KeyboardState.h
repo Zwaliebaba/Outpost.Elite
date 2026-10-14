@@ -69,22 +69,6 @@ inline constexpr std::uint8_t LEFT = 0x4B;
 inline constexpr std::uint8_t RIGHT = 0x4D;
 /// pitch +1 (ReadKeyboardSteering)
 inline constexpr std::uint8_t DOWN = 0x50;
-/// Amstrad joystick fire, key code 77h (ReadFireButton)
-inline constexpr std::uint8_t AMSTRAD_FIRE_1 = 0x77;
-/// Amstrad joystick fire, key code 78h (ReadFireButton)
-inline constexpr std::uint8_t AMSTRAD_FIRE_2 = 0x78;
-/// Amstrad joystick, key code 79h: roll +1 (ReadJoystickSteering)
-inline constexpr std::uint8_t AMSTRAD_RIGHT = 0x79;
-/// Amstrad joystick, key code 7Ah: roll -1
-inline constexpr std::uint8_t AMSTRAD_LEFT = 0x7A;
-/// Amstrad joystick, key code 7Bh: pitch +1
-inline constexpr std::uint8_t AMSTRAD_DOWN = 0x7B;
-/// Amstrad joystick, key code 7Ch: pitch -1
-inline constexpr std::uint8_t AMSTRAD_UP = 0x7C;
-/// Amstrad mouse button, key code 7Dh (bit 1 of mouseButtons)
-inline constexpr std::uint8_t AMSTRAD_MOUSE_RIGHT = 0x7D;
-/// Amstrad mouse button, key code 7Eh (bit 0 of mouseButtons, the fire latch)
-inline constexpr std::uint8_t AMSTRAD_MOUSE_LEFT = 0x7E;
 
 } // namespace Keys
 

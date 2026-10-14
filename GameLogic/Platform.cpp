@@ -20,29 +20,6 @@ constexpr std::uint16_t FLAG_INTERRUPT = 0x0200;
 // DOS starts a program with FLAGS F202h: interrupts on and the direction flag clear (ADR-006 item 4).
 constexpr std::uint16_t ENTRY_FLAGS = 0xF202;
 
-// What the 8088 takes over the ROM's IRET, as the interpreter charged it until D7: Intel's 8086 figure and three words popped
-// over the 8-bit bus.
-constexpr Cycles IRET_CYCLES = 24 + 3 * 4;
-
-// What the 8088 takes over each instruction of the BIOS's two hardware handlers, as the interpreter charged them until D7.
-constexpr Cycles STI = 2;
-constexpr Cycles PUSH_SEGMENT = 14;
-constexpr Cycles PUSH_REGISTER = 15;
-constexpr Cycles MOVE_IMMEDIATE = 4; // MOV AX,imm16 and MOV AL,imm8
-constexpr Cycles MOVE_TO_SEGMENT = 2;
-constexpr Cycles INCREMENT_MEMORY = 29;
-constexpr Cycles JUMP_TAKEN = 16;
-constexpr Cycles JUMP_NOT_TAKEN = 4;
-constexpr Cycles COMPARE_MEMORY = 20;
-constexpr Cycles XOR_REGISTERS = 3;
-constexpr Cycles STORE_WORD = 14;
-constexpr Cycles STORE_IMMEDIATE_BYTE = 16;
-constexpr Cycles SOFTWARE_INTERRUPT = 71;
-constexpr Cycles INTERRUPT_RETURN = 36;
-constexpr Cycles PORT_ACCESS = 10;    // IN AL,imm8 and OUT imm8,AL
-constexpr Cycles LOGIC_IMMEDIATE = 4; // OR AL,imm8 and AND AL,imm8
-constexpr Cycles POP_REGISTER = 12;   // POP AX and POP DS
-
 // The system control port: bit 0 the tone's gate, bit 1 the speaker's data, and bit 7, which the XT's keyboard is
 // acknowledged by, its hold.
 constexpr std::uint8_t TONE_GATE = 0x01;
@@ -79,7 +56,6 @@ Platform::Platform(GameState& _state, FileStore& _files, const Desc& _desc)
   : m_state(_state),
     m_speaker(m_clock),
     m_events(m_clock),
-    m_gamePort(m_instructionCycles),
     m_cga(m_clock),
     m_day(TimerTicksAt(_desc.startMoment)),
     m_modes(_state, m_cga),
@@ -273,9 +249,7 @@ void Platform::TakeDueInterrupts()
 {
   while (InterruptsEnabled() && m_events.InterruptPending())
   {
-    // The acknowledge cycle, then the entry the 8088 makes, which the instruction clock counts.
     const Irq irq = m_events.Take();
-    m_instructionCycles += HARDWARE_INTERRUPT_CYCLES;
     ++m_stepsSinceIdle;
     ++m_interruptsTaken;
     Interrupt(irq);
@@ -305,7 +279,6 @@ void Platform::CallAbsentMouse()
   {
     throw std::logic_error("Platform: an interrupt to code no native routine stands in for");
   }
-  m_instructionCycles += IRET_CYCLES; // the ROM's IRET, which int 33h names with no driver loaded
   if (Stopped() != StopReason::Reached)
   {
     throw ProgramStopped{};
@@ -349,31 +322,14 @@ void Platform::Interrupt(Irq _irq)
 
 // ── The BIOS's hardware interrupt handlers (ADR-011 item 3) ──
 
-// F000:E000: counts the tick, starts again from 0 once a day has passed, calls int 1Ch and sends EOI; and the 8088's cycles
-// over each of the ROM's instructions on the way. The ROM's PUSH and POP of DS and AX, and its own STI, act on the 8088's
+// F000:E000: counts the tick, starts again from 0 once a day has passed, calls int 1Ch and sends EOI. The ROM's PUSH and POP of DS and AX, and its own STI, act on the 8088's
 // registers and stack, which the platform does not have: nothing reads them, and the handler's IRET puts the flags back.
 void Platform::RunBiosTimerHandler()
 {
   m_flags = static_cast<std::uint16_t>(m_flags | FLAG_INTERRUPT);
-  Cycles cycles = STI + PUSH_SEGMENT + PUSH_REGISTER + MOVE_IMMEDIATE + MOVE_TO_SEGMENT + INCREMENT_MEMORY;
-  const TimeOfDay::Tick tick = m_day.CountTick();
-  cycles += tick.carried ? JUMP_NOT_TAKEN + INCREMENT_MEMORY : JUMP_TAKEN;
-  cycles += COMPARE_MEMORY;
-  if (!tick.dayCheck)
-  {
-    cycles += JUMP_TAKEN;
-  }
-  else
-  {
-    cycles += JUMP_NOT_TAKEN + COMPARE_MEMORY;
-    cycles += tick.dayEnded ? JUMP_NOT_TAKEN + XOR_REGISTERS + 2 * STORE_WORD + STORE_IMMEDIATE_BYTE : JUMP_TAKEN;
-  }
-  m_instructionCycles += cycles;
-  // INT 1Ch: the ROM's IRET, as the program leaves the vector.
-  m_instructionCycles += SOFTWARE_INTERRUPT + INTERRUPT_RETURN;
-  // OUT 20h,20h.
+  (void)m_day.CountTick();
+  // INT 1Ch reaches the ROM's IRET, as the program leaves the vector; then OUT 20h,20h.
   m_events.EndOfInterrupt();
-  m_instructionCycles += MOVE_IMMEDIATE + PORT_ACCESS + 2 * POP_REGISTER + INTERRUPT_RETURN;
 }
 
 // F000:E040: reads the scan code and discards it, pulses the system control port's bit 7 to acknowledge it, and sends EOI.
@@ -385,8 +341,6 @@ void Platform::RunBiosKeyboardHandler()
   SetSystemControl(cleared);
   SetSystemControl(static_cast<std::uint8_t>(cleared & ~KEYBOARD_CLEAR));
   m_events.EndOfInterrupt();
-  m_instructionCycles += STI + PUSH_REGISTER + 2 * PORT_ACCESS + LOGIC_IMMEDIATE + PORT_ACCESS + LOGIC_IMMEDIATE + PORT_ACCESS +
-                         MOVE_IMMEDIATE + PORT_ACCESS + POP_REGISTER + INTERRUPT_RETURN;
 }
 
 // ── Paced time ──

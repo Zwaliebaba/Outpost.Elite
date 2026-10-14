@@ -14,12 +14,9 @@ namespace Elite
 namespace
 {
 
-/// inputDeviceNames (DS:8670): each pointer's text, up to its NUL.
-constexpr std::array<std::string_view, 3> INPUT_DEVICE_NAMES = {
-  std::string_view{"Keyboard    "}, // DS:85E9
-  std::string_view{"Joystick    "}, // DS:8635
-  std::string_view{"Mouse       "}, // DS:860F
-};
+/// inputDeviceNames (DS:8670): the keyboard's and the mouse's; the joystick's went with D81.
+constexpr std::string_view KEYBOARD_DEVICE_NAME = "Keyboard    "; // DS:85E9
+constexpr std::string_view MOUSE_DEVICE_NAME = "Mouse       ";    // DS:860F
 
 /// diskOperationNames (DS:86D9): each pointer's text, up to its NUL.
 constexpr std::array<std::string_view, 4> DISK_OPERATION_NAMES = {
@@ -56,29 +53,8 @@ constexpr std::array<std::string_view, 2> MOUSE_HELP_LINES = {
   std::string_view{"Exit to DOS and install a driver.   "}, // DS:873A
 };
 
-/// DS:875F
-constexpr std::string_view NO_JOYSTICK_TEXT = "ERROR: No Joystick! ";
-
-/// DS:8774: 2 texts, each after the one before's NUL.
-constexpr std::array<std::string_view, 2> JOYSTICK_HELP_LINES = {
-  std::string_view{"Can not find/read joystick      "},     // DS:8774
-  std::string_view{"Either no card or stick not centred."}, // DS:8795
-};
-
-/// DS:87BA
-constexpr std::string_view JOYSTICK_TITLE_TEXT = "Joystick Detection  ";
-
-/// DS:87CF
-constexpr std::string_view MOVE_JOYSTICK_TEXT = "Move joystick then press a key. ";
-
-/// DS:87F0
-constexpr std::string_view CENTER_JOYSTICK_TEXT = "Centre joystick and press a key.";
-
 /// DS:8811
 constexpr std::string_view BLANK_LINE_TEXT = "                                    ";
-
-/// DS:8838
-constexpr std::string_view JOYSTICK_TYPE_TEXT = "I..IBM  A..Amstrad ?";
 
 /// DS:884E
 constexpr std::string_view FILE_NAME_ERROR_TEXT = "FILENAME ERROR      ";
@@ -103,7 +79,7 @@ constexpr std::array<std::string_view, 6> DISC_MENU_TEXT = {
   std::string_view{},                                        // DS:85CF
   std::string_view{"L...Load Commander   K...Keyboard    "}, // DS:85D0
   std::string_view{"S...Save Commander   M...Mouse       "}, // DS:85F6
-  std::string_view{"D...Delete Commander J...Joystick    "}, // DS:861C
+  std::string_view{"D...Delete Commander                "},  // DS:861C, its J...Joystick gone with D81
   std::string_view{"C...Catalogue Disc   E...Exit to DOS"},  // DS:8642
 };
 

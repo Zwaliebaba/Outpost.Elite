@@ -5,7 +5,6 @@
 #include "DosFiles.h"
 #include "FileStore.h"
 #include "FlightSnapshot.h"
-#include "GamePort.h"
 #include "Mouse.h"
 #include "Scheduler.h"
 #include "SpaceViewLayers.h"
@@ -45,7 +44,7 @@ using NativeRoutine = std::function<void()>;
 ///
 /// It holds, each what the game uses of the PC, without its port bus, its registers or its vector table (ADR-041): the clock and
 /// the events it waits for, with the two interrupts they request (Scheduler: the tick, the keys and their requests); the timer's
-/// the system control port; the sound, the tone and its bits (Speaker); the game port (GamePort); the mouse driver (Mouse);
+/// the system control port; the sound, the tone and its bits (Speaker); the mouse driver (Mouse);
 /// the CGA (Cga); the BIOS's video services (VideoModes), its time of day (TimeOfDay) and its two hardware interrupt handlers;
 /// and DOS's file services (DosFiles) and its print-string.
 ///
@@ -68,10 +67,6 @@ using NativeRoutine = std::function<void()>;
 /// platform back and RunUntil returns; the next RunUntil carries on where it stopped. The host thread and the native thread
 /// take turns through two semaphores, so only one runs at a time, and a run is a function of the program, its start moment
 /// and its inputs: there is no wall clock anywhere.
-///
-/// The game port is timed differently: its one-shots are measured against the cycles of the instructions the original
-/// executed (InstructionCycles), because the program reads a stick by counting polling loops with interrupts off; native code
-/// counts the cycles of the instructions it stands in for.
 class Platform
 {
 public:
@@ -99,10 +94,6 @@ public:
   /// Steps the default spin limit allows: far more than the longest stretch of work the game does between two waits, far
   /// fewer than a host would run before someone notices.
   static constexpr std::uint64_t DEFAULT_SPIN_LIMIT = 50'000'000;
-
-  /// What a hardware interrupt's entry costs the 8088, on the instruction clock: Intel's 8086 figure plus five word transfers
-  /// over the 8-bit bus (three pushes, two vector reads).
-  static constexpr Cycles HARDWARE_INTERRUPT_CYCLES = 61 + 5 * 4;
 
   /// Powers on: every device in its power-on state, the time of day and the video services as the BIOS leaves them for
   /// DOS, video mode 3 set on the CGA and in _state's video memory, and the BIOS's two hardware interrupt handlers in place.
@@ -169,13 +160,6 @@ public:
     return m_clock;
   }
 
-  /// The cycles of every instruction the original executed that native code stands in for, and of the interrupts it took,
-  /// since power-on: the game port's clock.
-  [[nodiscard]] Cycles InstructionCycles() const noexcept
-  {
-    return m_instructionCycles;
-  }
-
   /// The hardware interrupts taken since power-on.
   [[nodiscard]] std::uint64_t InterruptsTaken() const noexcept
   {
@@ -201,11 +185,6 @@ public:
   /// OUT 61h,_value: the speaker takes bits 0 and 1, the tone's gate and its data, and bit 7 holds the keyboard (Scheduler::HoldKeyboard).
   /// Not noexcept: the speaker logs a change.
   void SetSystemControl(std::uint8_t _value);
-
-  [[nodiscard]] GamePort& Joystick() noexcept
-  {
-    return m_gamePort;
-  }
 
   [[nodiscard]] Mouse& MouseDriver() noexcept
   {
@@ -354,12 +333,6 @@ public:
   /// what paced time does when the program waits.
   void Idle(Cycles _limit);
 
-  /// Adds the cycles the 8088 takes over instructions native code stands in for to InstructionCycles: the game port's clock.
-  void CountInstructionCycles(Cycles _cycles) noexcept
-  {
-    m_instructionCycles += _cycles;
-  }
-
   /// What serves _irq now. At power-on the BIOS's handlers serve both.
   [[nodiscard]] IrqHandler Handler(Irq _irq) const noexcept
   {
@@ -405,11 +378,9 @@ private:
 
   // Declared in the order they are built: each device holds references to the ones above it.
   Cycles m_clock = 0;
-  Cycles m_instructionCycles = 0;
   Speaker m_speaker;
   Scheduler m_events;
   std::uint8_t m_systemControl = POWER_ON_SYSTEM_CONTROL;
-  GamePort m_gamePort;
   Cga m_cga;
   std::array<FlightSnapshot, 2> m_flightSnapshots{}; // the previous and the latest
   SpaceViewLayers m_spaceView;

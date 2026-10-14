@@ -27,15 +27,7 @@ struct InputState
   std::uint8_t keyboardRollRamp;
   /// as keyboardRollRamp, for pitch
   std::uint8_t keyboardPitchRamp;
-  /// as keyboardLastRollKey, for the Amstrad joystick key codes (ReadJoystickSteering)
-  std::uint8_t amstradStickLastRoll;
-  /// as keyboardLastPitchKey, for the Amstrad joystick
-  std::uint8_t amstradStickLastPitch;
-  /// as keyboardRollRamp, for the Amstrad joystick
-  std::uint8_t amstradStickRollRamp;
-  /// as keyboardPitchRamp, for the Amstrad joystick
-  std::uint8_t amstradStickPitchRamp;
-  /// integrated roll for the keyboard and the Amstrad joystick, +-23; ReadSteering stores AX here (word with keyboardPitchRate)
+  /// integrated roll for the keyboard, +-23; ReadSteering stores AX here (word with keyboardPitchRate)
   std::uint8_t keyboardRollRate;
   /// integrated pitch, as keyboardRollRate
   std::uint8_t keyboardPitchRate;
@@ -51,10 +43,6 @@ struct InputState
     _visitor("keyboardLastPitchKey", _self.keyboardLastPitchKey);
     _visitor("keyboardRollRamp", _self.keyboardRollRamp);
     _visitor("keyboardPitchRamp", _self.keyboardPitchRamp);
-    _visitor("amstradStickLastRoll", _self.amstradStickLastRoll);
-    _visitor("amstradStickLastPitch", _self.amstradStickLastPitch);
-    _visitor("amstradStickRollRamp", _self.amstradStickRollRamp);
-    _visitor("amstradStickPitchRamp", _self.amstradStickPitchRamp);
     _visitor("keyboardRollRate", _self.keyboardRollRate);
     _visitor("keyboardPitchRate", _self.keyboardPitchRate);
   }
