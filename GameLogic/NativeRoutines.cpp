@@ -15,7 +15,7 @@ namespace
 using EntryList = std::span<const NativeEntry> (*)() noexcept;
 
 // The lists of the subsystems with an entry the program reaches: the program's own, and the timer's and the keyboard's interrupt
-// handlers, which the vector table names (int 8 and int 9).
+// handlers (int 8 and int 9), which the platform knows by what they are (EntryKind).
 constexpr std::array<EntryList, 3> SUBSYSTEMS = {&InputEntries, &StartUpEntries, &TimerEntries};
 
 } // namespace

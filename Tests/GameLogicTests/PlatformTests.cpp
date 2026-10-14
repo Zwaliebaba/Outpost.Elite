@@ -74,8 +74,8 @@ private:
 
 } // namespace
 
-// The native platform (Platform, D33): paced time, interrupts, the native thread, the vector table and the ROM's bytes, the
-// BIOS's two hardware handlers, and DOS's console. What the emulated PC's tests held of the Pc, its Dispatcher, its native
+// The native platform (Platform, D33): paced time, interrupts, the native thread, the handlers by identity and the ROM's two
+// answers, the BIOS's two hardware handlers, and DOS's console. What the emulated PC's tests held of the Pc, its Dispatcher, its native
 // code and its firmware, held of the platform that replaced them.
 TEST_CLASS(PlatformTests)
 {

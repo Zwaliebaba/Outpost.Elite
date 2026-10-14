@@ -24,9 +24,9 @@ class Game;
 ///
 /// The host makes one for the whole run, inside a Game, which loads the reference's image into it (Game::Load). Since change 3c of D38
 /// nothing reaches the state by the original's addresses: native code names a member, a run of members that followed one another in 1987
-/// (BytesThrough, Text.h), or a byte within either. The code segment, the vector table, the BIOS's data area and the PSP are
-/// not here: they are the platform's (Platform, Hardware), and the segments the game was loaded at are kept for the devices that still take
-/// far addresses.
+/// (BytesThrough, Text.h), or a byte within either. The code segment and the PSP are not here, nor what the game
+/// used of the vector table and the BIOS's data area, which is the platform's (Platform, Hardware, ADR-041); the segments the game was
+/// loaded at are kept for the values that still carry them.
 ///
 /// Until the waits were declared (ADR-039), every write counted in a change count that paced time compared at a loop's turn (ADR-015);
 /// nothing counts now. GameData is on the heap, so a GameState can be anywhere, on the stack too.
