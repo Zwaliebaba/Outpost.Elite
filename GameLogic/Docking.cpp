@@ -30,14 +30,6 @@ constexpr std::uint8_t TUNNEL_COLOR = 3;
 constexpr std::uint16_t DOCKED_FIRST_TICKS = 0x19;
 constexpr std::uint16_t TUNNEL_FRAME_TICKS = 0x14;
 constexpr std::uint16_t DOCKING_MESSAGE_FRAMES = 0x19;
-// Where PlayStationTunnel jumps back (ADR-015): its two frame loops, their rectangles' loops and their waits for the timer.
-constexpr std::uint16_t FIRST_TUNNEL_FRAME = 0x2D7A;
-constexpr std::uint16_t DOCKED_FIRST_WAIT = 0x2D9A;
-constexpr std::uint16_t FIRST_RECTANGLES = 0x2DA1;
-constexpr std::uint16_t FIRST_FRAME_WAIT = 0x2DB8;
-constexpr std::uint16_t LAST_TUNNEL_FRAME = 0x2DC9;
-constexpr std::uint16_t LAST_FRAME_WAIT = 0x2DE7;
-constexpr std::uint16_t LAST_RECTANGLES = 0x2DEE;
 
 // The station's slot, whose fields SLOT_X, SLOT_Y, SLOT_Z and SLOT_FLAGS name (Ships.h).
 constexpr std::uint8_t STATION_SHOT = 0x01; // in the slot's flags: docking is refused
@@ -125,8 +117,7 @@ std::uint16_t Store(GameState& _state, std::uint16_t _offset, std::uint16_t _cou
 }
 
 // Rectangle _rectangle of tunnelRectangles, its five points of two signed bytes, x and y. The original holds the rectangle's
-// address in SI, which the loops' turns carry as its number (D38). No loop reaches the one past the last: each turn carries a
-// rectangle the frame draws, and the last frames draw from 0-9 to the tenth.
+// address in SI. No loop reaches the one past the last: the last frames draw from 0-9 to the tenth.
 [[nodiscard]] std::span<const std::uint8_t> TunnelRectangle(std::size_t _rectangle)
 {
   return std::span<const std::uint8_t>(TUNNEL_RECTANGLES).subspan(_rectangle * TUNNEL_RECTANGLE_BYTES, TUNNEL_RECTANGLE_BYTES);
@@ -139,9 +130,8 @@ struct TunnelDrawn
   bool filled;      // a DrawLine filled bytes with REP STOSB
 };
 
-// _count of tunnelRectangles from _first, each by DrawTunnelRectangle in the tunnel's colour, and the LOOP back to CS:_loop
-// (2DA1, 2DEE), which carries the count and the next rectangle, by its number (ADR-015, D38).
-TunnelDrawn DrawTunnelRectangles(GameState& _state, Hardware& _hardware, std::size_t _first, std::uint16_t _count, std::uint16_t _loop)
+// _count of tunnelRectangles from _first, each by DrawTunnelRectangle in the tunnel's colour, in the LOOP at CS:2DA1 or CS:2DEE.
+TunnelDrawn DrawTunnelRectangles(GameState& _state, std::size_t _first, std::uint16_t _count)
 {
   TunnelDrawn drawn{_first, false};
   std::uint16_t count = _count;
@@ -154,13 +144,11 @@ TunnelDrawn DrawTunnelRectangles(GameState& _state, Hardware& _hardware, std::si
     {
       return drawn;
     }
-    _hardware.LoopTurn(_loop, {count, static_cast<std::uint16_t>(drawn.next)});
   }
 }
 
-// MOV CX,_ticks, then WaitForTimerTick at CS:_loop and the LOOP back there, which carries the count (ADR-015): about _ticks
-// milliseconds. The original leaves CX = 0.
-void WaitTimerTicks(GameState& _state, Hardware& _hardware, std::uint16_t _ticks, std::uint16_t _loop)
+// MOV CX,_ticks, then WaitForTimerTick and the LOOP back to it: about _ticks milliseconds. The original leaves CX = 0.
+void WaitTimerTicks(GameState& _state, Hardware& _hardware, std::uint16_t _ticks)
 {
   std::uint16_t count = _ticks;
   for (;;)
@@ -170,7 +158,6 @@ void WaitTimerTicks(GameState& _state, Hardware& _hardware, std::uint16_t _ticks
     {
       return;
     }
-    _hardware.LoopTurn(_loop, {count});
   }
 }
 
@@ -499,8 +486,7 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
   UpdateMessageLine(_state, _backward);
   UpdateDashboard(_state);
 
-  // Frame n of the first ten draws the first n rectangles, n in AX, pushed round the frame and popped for its INC; the turns carry
-  // it. Leaving, the world moves on behind the tunnel, which masks the view outside the first rectangle; docking, each frame waits
+  // Frame n of the first ten draws the first n rectangles, n in AX, pushed round the frame and popped for its INC. Leaving, the world moves on behind the tunnel, which masks the view outside the first rectangle; docking, each frame waits
   // for the timer first. The direction flag goes as the original's does: a DrawLine that fills clears it, and so do
   // MaskOutsideTunnel's and FinishSpaceViewFrame's CLD.
   bool backward = _backward;
@@ -519,9 +505,9 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
     }
     else
     {
-      WaitTimerTicks(_state, _hardware, DOCKED_FIRST_TICKS, DOCKED_FIRST_WAIT);
+      WaitTimerTicks(_state, _hardware, DOCKED_FIRST_TICKS);
     }
-    if (DrawTunnelRectangles(_state, _hardware, 0, frame, FIRST_RECTANGLES).filled)
+    if (DrawTunnelRectangles(_state, 0, frame).filled)
     {
       backward = false;
     }
@@ -529,18 +515,17 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
     // The frame as the game drew it, for a renderer that shows it in the cockpit (D68).
     _hardware.PublishSpaceViewPicture(WithoutScene(TakeFlightSnapshot(_state)));
     backward = false;
-    WaitTimerTicks(_state, _hardware, TUNNEL_FRAME_TICKS, FIRST_FRAME_WAIT);
+    WaitTimerTicks(_state, _hardware, TUNNEL_FRAME_TICKS);
     // INC AX / CMP AL,0Bh.
     frame = Offset(frame, 1);
     if (Low(frame) == TUNNEL_FRAMES + 1)
     {
       break;
     }
-    _hardware.LoopTurn(FIRST_TUNNEL_FRAME, {frame});
   }
 
   // The last ten draw ten rectangles less one each frame, from one further along each time: CX and SI, pushed twice round the
-  // frame, which the turns carry, SI as the rectangle's number (D38).
+  // frame.
   std::size_t first = 0;
   for (std::uint16_t frames = TUNNEL_FRAMES;;)
   {
@@ -557,9 +542,9 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
     }
     else
     {
-      WaitTimerTicks(_state, _hardware, TUNNEL_FRAME_TICKS, LAST_FRAME_WAIT);
+      WaitTimerTicks(_state, _hardware, TUNNEL_FRAME_TICKS);
     }
-    if (DrawTunnelRectangles(_state, _hardware, first, frames, LAST_RECTANGLES).filled)
+    if (DrawTunnelRectangles(_state, first, frames).filled)
     {
       backward = false;
     }
@@ -571,7 +556,6 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
     {
       return;
     }
-    _hardware.LoopTurn(LAST_TUNNEL_FRAME, {frames, static_cast<std::uint16_t>(first)});
   }
 }
 

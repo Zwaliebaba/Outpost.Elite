@@ -69,17 +69,10 @@ constexpr std::uint8_t ODD_ROW_BIT = 0x40;
 
 // The frame routines wait on the CGA's status port, whose bit 3 is the vertical retrace.
 constexpr std::uint8_t STATUS_VERTICAL_RETRACE = 0x08;
-// Where their loops jump back to: PresentSpaceView's wait for the frame's time is to its start.
+// Where their waits jump back to: PresentSpaceView's wait for the frame's time is to its start.
 constexpr std::uint16_t PRESENT_SPACE_VIEW = 0x0599;
-constexpr std::uint16_t SPACE_VIEW_COPY_LOOP = 0x05BC;
 constexpr std::uint16_t CHART_RETRACE_LOOP = 0x05D0;
-constexpr std::uint16_t CHART_DELAY_LOOP = 0x05D8;
-constexpr std::uint16_t CHART_COPY_LOOP = 0x05FD;
 constexpr std::uint16_t SPACE_VIEW_RETRACE_LOOP = 0x4602;
-constexpr std::uint16_t SPACE_VIEW_DELAY_LOOP = 0x460A;
-// The delays after a retrace, in DEC/JNZ turns.
-constexpr std::uint16_t CHART_DELAY_TURNS = 0x2BC;
-constexpr std::uint16_t SPACE_VIEW_DELAY_TURNS = 0x7D0;
 // The drawing buffer's 64-byte lines onto the screen, a pair of lines (one in each bank) a turn.
 constexpr std::uint16_t BUFFER_LINE_WORDS = 0x20;
 constexpr std::uint16_t TO_ODD_LINE = 0x1FC0;              // from the end of an even line to the odd line below it
@@ -1282,23 +1275,10 @@ void WaitForRetrace(Hardware& _hardware, std::uint16_t _loop)
   }
 }
 
-// MOV AX,_turns / DEC AX / JNZ at CS:_loop: a delay the 8088's speed made. Each turn carries AX, the count, so paced
-// time never idles in it.
-void SpinDelay(Hardware& _hardware, std::uint16_t _turns, std::uint16_t _loop)
-{
-  std::uint16_t count = _turns;
-  while (--count != 0)
-  {
-    _hardware.LoopTurn(_loop, {count});
-  }
-}
-
-// The copy loop at CS:_loop: _linePairs line pairs of a 64-byte buffer line from DS:_source to B800:_destination, the even
+// The copy loop at 05BC or 05FD: _linePairs line pairs of a 64-byte buffer line from DS:_source to B800:_destination, the even
 // line, then the odd one below it, then back to the next even line: MOV CX,BP / REP MOVSW / ADD DI,AX / MOV CX,BP /
-// REP MOVSW / SUB DI,DX / DEC BX / JNZ, with BP, AX and DX the steps SetLinePairSteps gives. Each turn carries what the
-// next reads and changes: SI, DI and BX.
-void CopyLinePairs(GameState& _state, Hardware& _hardware, std::uint16_t _loop, std::uint16_t _source, std::uint16_t _destination,
-                   std::uint16_t _linePairs, bool _backward)
+// REP MOVSW / SUB DI,DX / DEC BX / JNZ, with BP, AX and DX the steps SetLinePairSteps gives.
+void CopyLinePairs(GameState& _state, std::uint16_t _source, std::uint16_t _destination, std::uint16_t _linePairs, bool _backward)
 {
   StringOffsets at{_source, _destination};
   std::uint16_t pairs = _linePairs;
@@ -1312,7 +1292,6 @@ void CopyLinePairs(GameState& _state, Hardware& _hardware, std::uint16_t _loop, 
     {
       return;
     }
-    _hardware.LoopTurn(_loop, {at.source, at.destination, pairs});
   }
 }
 
@@ -1427,21 +1406,19 @@ void PresentSpaceView(GameState& _state, Hardware& _hardware, bool _backward)
   }
   _state.Data().flow.msSinceFrame = 0;
   WaitRetraceThenDelay(_hardware);
-  CopyLinePairs(_state, _hardware, SPACE_VIEW_COPY_LOOP, SPACE_VIEW_BUFFER_START, SPACE_VIEW_SCREEN_OFFSET, SPACE_VIEW_LINE_PAIRS,
-                _backward);
+  CopyLinePairs(_state, SPACE_VIEW_BUFFER_START, SPACE_VIEW_SCREEN_OFFSET, SPACE_VIEW_LINE_PAIRS, _backward);
 }
 
 void CopyChartBufferToScreen(GameState& _state, Hardware& _hardware, std::uint8_t _bandsSkipped, bool _backward)
 {
   // MOV DX,3DAh / PUSH AX, the retrace's loop at 05D0 and the delay's at 05D8, then POP AX: the bands are a value, not a word on
-  // the stack.
+  // the stack. The delay, MOV AX,2BCh / DEC AX / JNZ, is the 8088's speed and takes no paced time.
   WaitForRetrace(_hardware, CHART_RETRACE_LOOP);
-  SpinDelay(_hardware, CHART_DELAY_TURNS, CHART_DELAY_LOOP);
   // _bandsSkipped bands of 8 lines: SHL BL,1 twice / SUB BL,40h / NEG BL, so 64 - 4 * the bands line pairs as a byte, from
   // DS:the bands * 512, as SHL AH,1 leaves the bands doubled in AH.
   const auto linePairs = static_cast<std::uint8_t>(CHART_LINE_PAIRS - static_cast<std::uint8_t>(_bandsSkipped << 2));
   const std::uint16_t source = Join(static_cast<std::uint8_t>(_bandsSkipped << 1), 0);
-  CopyLinePairs(_state, _hardware, CHART_COPY_LOOP, source, CHART_SCREEN_OFFSET, linePairs, _backward);
+  CopyLinePairs(_state, source, CHART_SCREEN_OFFSET, linePairs, _backward);
 }
 
 void ClearDrawBuffer(GameState& _state, bool _backward)
@@ -1900,9 +1877,9 @@ void FillClippedTriangle(GameState& _state, Triangle _doubled, bool _backward)
 
 void WaitRetraceThenDelay(Hardware& _hardware)
 {
-  // MOV DX,3DAh and the retrace's loop at 4602, then MOV AX,7D0h and the delay's at 460A, which counts AX down to 0.
+  // MOV DX,3DAh and the retrace's loop at 4602, then MOV AX,7D0h and the delay's at 460A, which counts AX down to 0: the
+  // 8088's speed, which takes no paced time.
   WaitForRetrace(_hardware, SPACE_VIEW_RETRACE_LOOP);
-  SpinDelay(_hardware, SPACE_VIEW_DELAY_TURNS, SPACE_VIEW_DELAY_LOOP);
 }
 
 ScreenChange ShowCockpitScreen(GameState& _state, Hardware& _hardware, bool _backward)

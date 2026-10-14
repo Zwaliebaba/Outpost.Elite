@@ -47,12 +47,6 @@ constexpr std::uint8_t NEW_GAME_ALTITUDE = 0xFF;
 // answers a failed call with CF set and an error. So no native routine stands at the vector's address.
 constexpr std::uint16_t CRITICAL_ERROR_INTERRUPT = 0x02F0;
 
-// Where the original jumps back (Hardware::LoopTurn).
-constexpr std::uint16_t RESTART_PLAY = 0x003B;
-constexpr std::uint16_t GAME_LOOP = 0x7D30;
-constexpr std::uint16_t CREDITS_LINE = 0x8F0E;
-constexpr std::uint16_t CREDITS_WAIT = 0x8F2B;
-
 constexpr std::uint8_t CRITICAL_ERROR_VECTOR = 0x24;
 constexpr std::uint16_t AMSTRAD_ROM_SEGMENT = 0xFC00;
 constexpr std::uint16_t AMSTRAD_ROM_SIGNATURE = 0x0016;
@@ -224,8 +218,7 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
     _hardware.SetInterruptVector(CRITICAL_ERROR_VECTOR, FarAddress{_state.CodeSegment(), CRITICAL_ERROR_INTERRUPT});
     PerformDiskRequest(_state, _hardware, request, ClockLessADayHigh(clock));
     _hardware.SetInterruptVector(CRITICAL_ERROR_VECTOR, criticalError);
-    // JMP RestartPlay: the next turn reads BP, in GameLoop, before it writes it.
-    _hardware.LoopTurn(RESTART_PLAY, {countIfNone});
+    // JMP RestartPlay: GameLoop reads BP before it writes it.
   }
 }
 
@@ -258,8 +251,7 @@ GameLoopExit GameLoop(GameState& _state, Hardware& _hardware, std::uint16_t _cou
     {
       _state.Data().flow.titleShown = 0;
     }
-    // JMP GameLoop: the next turn reads BP, in RunTitleAndDocked, before it writes it.
-    _hardware.LoopTurn(GAME_LOOP, {countIfNone});
+    // JMP GameLoop: RunTitleAndDocked reads BP before it writes it.
   }
 }
 
@@ -269,8 +261,7 @@ void ShowCredits(GameState& _state, Hardware& _hardware, bool _backward)
   _hardware.BeginSpaceViewFrame();
   ClearDrawBuffer(_state, _backward);
   // Each line from SI, one past the last line's NUL, at DI, a row of characters below the last line's start. The original pushes
-  // and pops the count and the place round the print; its LOOP's turns carry the count, the text and the place, SI as the
-  // line's place in the table (D38).
+  // and pops the count and the place round the print.
   std::size_t line = 0;
   std::string_view text = CreditsLine(line);
   std::uint16_t place = CREDITS_FIRST_LINE;
@@ -286,12 +277,11 @@ void ShowCredits(GameState& _state, Hardware& _hardware, bool _backward)
     // SI past the line's NUL; past the last line, the table's end, nothing reads it.
     line += text.size() + 1;
     text = CreditsLine(line);
-    _hardware.LoopTurn(CREDITS_LINE, {linesLeft, static_cast<std::uint16_t>(line), place});
   }
   FinishSpaceViewFrame(_state, _hardware);
   // The frame as it was drawn, for a renderer that draws it in the title's cockpit (D64, D66): the words and nothing of the scene.
   _hardware.PublishFlightSnapshot(WithoutScene(TakeTitleSnapshot(_state, ELITE_TITLE_TEXT, SnapshotDisc{})), false);
-  // WaitForTimerTick keeps every register; the LOOP's turns carry the ticks left.
+  // WaitForTimerTick keeps every register; the LOOP counts the ticks left.
   for (std::uint16_t ticksLeft = CREDITS_TIMER_TICKS;;)
   {
     WaitForTimerTick(_state, _hardware);
@@ -299,7 +289,6 @@ void ShowCredits(GameState& _state, Hardware& _hardware, bool _backward)
     {
       break;
     }
-    _hardware.LoopTurn(CREDITS_WAIT, {ticksLeft});
   }
 }
 

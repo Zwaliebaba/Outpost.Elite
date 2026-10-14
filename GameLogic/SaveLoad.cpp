@@ -34,15 +34,9 @@ constexpr std::uint8_t MOST_COMMANDER_FILES = 0x28;
 constexpr std::uint16_t RETRY_KEY_LOOP = 0x6625;
 constexpr std::uint16_t DISC_CONTROL_KEY_LOOP = 0x665E;
 constexpr std::uint16_t EXIT_KEY_LOOP = 0x66C3;
-constexpr std::uint16_t SHOW_CONTROL_DEVICE = 0x6705;
 constexpr std::uint16_t JOYSTICK_KEY_LOOP = 0x6752;
 constexpr std::uint16_t AMSTRAD_KEY_LOOP = 0x6777;
-constexpr std::uint16_t SELECT_JOYSTICK = 0x6799;
 constexpr std::uint16_t CENTER_KEY_LOOP = 0x67B2;
-constexpr std::uint16_t FIND_NAME_EXTENSION = 0x681C;
-constexpr std::uint16_t COPY_LOADED_NAME = 0x683B;
-constexpr std::uint16_t NEXT_NAME_CHARACTER = 0x688C;
-constexpr std::uint16_t APPEND_EXTENSION = 0x68C4;
 
 // ".CDR" and its NUL, which PromptCommanderFileName appends to a name: DS:8697 in 1987, a text no symbol starts and nothing
 // writes, whose bytes the reference's image holds there.
@@ -332,7 +326,6 @@ std::uint8_t WaitForEitherKey(GameState& _state, Hardware& _hardware, std::uint1
     {
       return scan;
     }
-    _hardware.LoopTurn(_loop, {});
   }
 }
 
@@ -407,7 +400,6 @@ void ShowNoJoystick(GameState& _state)
       {
         _state.Data().saveLoad.amstradJoystickMoved = 1;
       }
-      _hardware.LoopTurn(AMSTRAD_KEY_LOOP, {});
     }
     return _state.Data().saveLoad.amstradJoystickMoved == 1;
   }
@@ -422,19 +414,17 @@ void ShowNoJoystick(GameState& _state)
   {
     return false;
   }
-  _hardware.LoopTurn(SELECT_JOYSTICK, {});
   return true;
 }
 
 // RejectFileName (CS:68AD), after a bad name: "FILENAME ERROR", and the jump back to the menu's keys.
-void RejectFileName(GameState& _state, Hardware& _hardware)
+void RejectFileName(GameState& _state)
 {
   PrintAt(_state, FILE_NAME_ERROR_TEXT, STATUS_POSITION);
-  _hardware.LoopTurn(DISC_CONTROL_KEY_LOOP, {});
 }
 
 // The disc menu's keys: DiscControlKeyLoop (CS:665E), with AL _al there, or ShowControlDevice before it when _showDevice; and
-// everything they run until the menu is left. Each turn back to the keys carries nothing, as WaitForKey's turns do.
+// everything they run until the menu is left.
 DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _showDevice, std::uint8_t _al)
 {
   std::uint8_t al = _al;
@@ -444,7 +434,6 @@ DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _sh
     if (showDevice)
     {
       ShowControlDevice(_state);
-      _hardware.LoopTurn(DISC_CONTROL_KEY_LOOP, {});
       al = 0; // the print's NUL
       showDevice = false;
     }
@@ -458,7 +447,6 @@ DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _sh
       PrintAt(_state, EXIT_QUESTION_TEXT, STATUS_POSITION);
       if (WaitForEitherKey(_state, _hardware, EXIT_KEY_LOOP, SCAN_N, SCAN_Y) == SCAN_N)
       {
-        _hardware.LoopTurn(SHOW_CONTROL_DEVICE, {});
         showDevice = true;
         continue;
       }
@@ -469,7 +457,7 @@ DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _sh
       if (!PromptCommanderFileName(_state, _hardware))
       {
         // The prompt's return address dropped, and the menu's keys read on in its place.
-        RejectFileName(_state, _hardware);
+        RejectFileName(_state);
         al = 0;
         continue;
       }
@@ -490,14 +478,12 @@ DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _sh
       if (IsMouseDriverInstalled(_hardware).installed)
       {
         _state.Data().saveLoad.inputDevice = MOUSE_DEVICE;
-        _hardware.LoopTurn(SHOW_CONTROL_DEVICE, {});
         showDevice = true;
         continue;
       }
       PrintAt(_state, NO_MOUSE_TEXT, STATUS_POSITION);
       PrintAt(_state, MOUSE_HELP_LINES[0], HELP_POSITION);
       PrintAt(_state, MOUSE_HELP_LINES[1], SECOND_HELP_POSITION); // INC SI: the second line
-      _hardware.LoopTurn(DISC_CONTROL_KEY_LOOP, {});
       al = 0;
       continue;
     }
@@ -506,25 +492,21 @@ DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _sh
       if (ChooseJoystick(_state, _hardware))
       {
         _state.Data().saveLoad.inputDevice = JOYSTICK_DEVICE;
-        _hardware.LoopTurn(SHOW_CONTROL_DEVICE, {});
         showDevice = true;
         continue;
       }
       ShowNoJoystick(_state);
-      _hardware.LoopTurn(DISC_CONTROL_KEY_LOOP, {});
       al = 0;
       continue;
     }
     if (scan == SCAN_V)
     {
       PrintAt(_state, VERSION_STRING, HELP_POSITION);
-      _hardware.LoopTurn(DISC_CONTROL_KEY_LOOP, {});
       al = 0;
       continue;
     }
     if (scan < SCAN_F1 || scan >= SCAN_PAST_F10)
     {
-      _hardware.LoopTurn(DISC_CONTROL_KEY_LOOP, {});
       continue;
     }
     _state.Data().saveLoad.resumeAtDiskMenu = 0;
@@ -534,7 +516,7 @@ DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _sh
 
 // What the disk operation Start did came to (CS:67E7): LOADED:, SAVED:, DELETED: and the name, or CATALOGUED and the catalogue;
 // a loaded name becomes the default. Returns AL as it leaves it: its last print's NUL, or once a name is copied, its last byte.
-std::uint8_t ShowDiskResult(GameState& _state, Hardware& _hardware)
+std::uint8_t ShowDiskResult(GameState& _state)
 {
   PrintAt(_state, BLANK_STATUS_TEXT, STATUS_POSITION);
   // BL = diskOperation - 1, BH = 0, doubled: the operation's name in diskOperationNames. Only operations 1-4 come back to the
@@ -547,12 +529,11 @@ std::uint8_t ShowDiskResult(GameState& _state, Hardware& _hardware)
     PrintCommanderCatalogue(_state);
     return 0;
   }
-  // The name without its extension: a NUL over its '.', which each turn of the search, carrying SI, looks for.
+  // The name without its extension: a NUL over its '.', which the search, SI going up, looks for.
   const std::span<Counted<std::uint8_t>> name(_state.Data().saveLoad.commanderFileName);
   std::size_t letter = 1;
   for (; name[letter] != '.'; ++letter)
   {
-    _hardware.LoopTurn(FIND_NAME_EXTENSION, {_state.PlaceOf(name[letter])});
   }
   name[letter] = 0;
   PrintAt(_state, TextIn(name), result);
@@ -560,7 +541,7 @@ std::uint8_t ShowDiskResult(GameState& _state, Hardware& _hardware)
   {
     return 0;
   }
-  // Its eight bytes copied to defaultCommanderName, the LOOP's turns carrying both places and the count.
+  // Its eight bytes copied to defaultCommanderName by a LOOP.
   const std::span<Counted<std::uint8_t>> commander(_state.Data().commander.defaultCommanderName);
   std::size_t from = 0;
   std::uint8_t copied = 0;
@@ -573,7 +554,6 @@ std::uint8_t ShowDiskResult(GameState& _state, Hardware& _hardware)
     {
       return copied;
     }
-    _hardware.LoopTurn(COPY_LOADED_NAME, {_state.PlaceOf(name[from]), _state.PlaceOf(commander[from]), left});
   }
 }
 
@@ -647,8 +627,7 @@ DiscMenuExit ShowDiscControlScreen(GameState& _state, Hardware& _hardware, bool 
   // Back from Start's disk work.
   if (_state.Data().disk.diskError == 0)
   {
-    const std::uint8_t al = ShowDiskResult(_state, _hardware);
-    _hardware.LoopTurn(DISC_CONTROL_KEY_LOOP, {});
+    const std::uint8_t al = ShowDiskResult(_state);
     return RunDiscControlKeys(_state, _hardware, false, al);
   }
   PrintAt(_state, RETRY_TEXT, STATUS_POSITION);
@@ -665,7 +644,7 @@ bool PromptCommanderFileName(GameState& _state, Hardware& _hardware)
   PrintAt(_state, FILE_NAME_PROMPT_TEXT, STATUS_POSITION);
   const std::span<Counted<std::uint8_t>> name(_state.Data().saveLoad.commanderFileName);
   ReadTextLine(_state, _hardware, name, MOST_NAME_CHARACTERS, GameState::VIDEO_SEGMENT, NAME_POSITION);
-  // A letter, then letters and digits, folded to upper case, each turn of the check carrying its place.
+  // A letter, then letters and digits, folded to upper case.
   std::size_t letter = 0;
   auto character = static_cast<std::uint8_t>(name[letter] & LOWER_CASE_BIT_CLEAR);
   if (name[letter] == 0 || character < 'A' || character > 'Z')
@@ -690,10 +669,8 @@ bool PromptCommanderFileName(GameState& _state, Hardware& _hardware)
       return false;
     }
     name[letter] = character;
-    _hardware.LoopTurn(NEXT_NAME_CHARACTER, {_state.PlaceOf(name[letter])});
   }
-  // ".CDR" and its NUL after the name, the LOOP's turns carrying both places, SI and DI, and the count. SI goes through the
-  // constant, whose place the turns carry as its index (D38).
+  // ".CDR" and its NUL after the name by a LOOP, SI through the constant and DI through the name.
   for (std::size_t from = 0, left = EXTENSION_BYTES;;)
   {
     name[letter] = COMMANDER_EXTENSION[from];
@@ -703,8 +680,6 @@ bool PromptCommanderFileName(GameState& _state, Hardware& _hardware)
     {
       return true;
     }
-    _hardware.LoopTurn(APPEND_EXTENSION,
-                       {static_cast<std::uint16_t>(from), _state.PlaceOf(name[letter]), static_cast<std::uint16_t>(left)});
   }
 }
 

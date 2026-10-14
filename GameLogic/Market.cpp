@@ -14,20 +14,6 @@ namespace Elite
 namespace
 {
 
-// Where the original's backward jumps land, for the turns of its loops (Hardware::LoopTurn).
-constexpr std::uint16_t SYSTEM_NAME_SCAN = 0x5E39;
-constexpr std::uint16_t PRICE_ROW = 0x5E69;
-constexpr std::uint16_t CARGO_STEER = 0x6B43;
-constexpr std::uint16_t CARGO_CURSOR_UP = 0x6B4E;
-constexpr std::uint16_t CARGO_CURSOR_DOWN = 0x6B7D;
-constexpr std::uint16_t CARGO_TICK_LOOP = 0x6BA5;
-constexpr std::uint16_t CARGO_MESSAGE = 0x6BE8;
-constexpr std::uint16_t NOT_ENOUGH_TO_SELL = 0x6C50;
-constexpr std::uint16_t CARGO_MESSAGE_JUMP = 0x6CA6;
-constexpr std::uint16_t BUY_REFUSED = 0x6D37;
-constexpr std::uint16_t BUY_PAYMENT = 0x6D6A;
-constexpr std::uint16_t BUY_MESSAGE_JUMP = 0x6DA2;
-
 constexpr std::uint8_t SCAN_S = 0x1F;
 constexpr std::uint8_t SCAN_B = 0x30;
 constexpr std::uint8_t SCAN_F2 = 0x3C;
@@ -105,12 +91,6 @@ constexpr std::uint8_t QUANTITY_BASE = 10; // ParseQuantity's decimal, which the
   return BytesOf(_state.Data().menus.screenPrices);
 }
 
-// The first byte of product _product's row of productNames: its name, a space and its unit.
-[[nodiscard]] const Counted<std::uint8_t>& ProductNameRow(const GameState& _state, std::uint16_t _product) noexcept
-{
-  return _state.Data().docked.productNames[std::size_t{_product} * PRODUCT_NAME_BYTES];
-}
-
 // Product _product's name and unit, up to its NUL.
 [[nodiscard]] std::string_view ProductName(const GameState& _state, std::uint16_t _product)
 {
@@ -143,37 +123,29 @@ void ShowCargoMessage(GameState& _state, std::string_view _text, std::uint8_t _s
   return ParseQuantity(_state.Data().menus.quantityText);
 }
 
-// The jump back to 6BE8 that ends each of the trade's paths, with the message it shows.
-[[nodiscard]] std::string_view ToCargoMessage(Hardware& _hardware, std::string_view _text)
-{
-  _hardware.LoopTurn(CARGO_MESSAGE, {});
-  return _text;
-}
-
 // 6C0F: S on the sell screen, once OpenCargoMessage has saved the attribute: a typed quantity from the hold to the market, for
 // the sell price. Returns the message for ShowCargoMessage, after the jumps back the original takes to it.
 [[nodiscard]] std::string_view SellCargo(GameState& _state, Hardware& _hardware)
 {
   if (Hold(_state)[HoldEntry(_state)] == 0)
   {
-    return ToCargoMessage(_hardware, NOTHING_TO_SELL_TEXT);
+    return NOTHING_TO_SELL_TEXT;
   }
   const Quantity quantity = ReadQuantity(_state, _hardware);
   if (!quantity.valid)
   {
-    return ToCargoMessage(_hardware, QUANTITY_ERROR_TEXT);
+    return QUANTITY_ERROR_TEXT;
   }
   if (quantity.value == 0)
   {
-    return ToCargoMessage(_hardware, NOTHING_SOLD_TEXT);
+    return NOTHING_SOLD_TEXT;
   }
   Counted<std::uint8_t>& held = Hold(_state)[HoldEntry(_state)];
   Counted<std::uint8_t>& market = Hold(_state)[HoldEntry(_state) + 1];
   const std::uint8_t amount = Low(quantity.value);
   if (held < amount)
   {
-    _hardware.LoopTurn(NOT_ENOUGH_TO_SELL, {});
-    return ToCargoMessage(_hardware, NOT_ENOUGH_TO_SELL_TEXT);
+    return NOT_ENOUGH_TO_SELL_TEXT;
   }
   held = static_cast<std::uint8_t>(held - amount);
   // The market's amount goes up, and is put at FFh if that carries.
@@ -194,14 +166,7 @@ void ShowCargoMessage(GameState& _state, std::string_view _text, std::uint8_t _s
   // The quantity times the sell price, the word after the row's buy price, by MUL into DX:AX.
   const std::size_t price = (std::size_t{_state.Data().menus.menuSelectedRow} * 2 - 1) * 2;
   AddCredits(_state, std::uint32_t{quantity.value} * WordIn(ScreenPrices(_state), price));
-  return ToCargoMessage(_hardware, SOLD_TEXT);
-}
-
-// 6D37, reached by a jump back: a refusal, by way of the jump back to 6BE8.
-[[nodiscard]] std::string_view RefuseBuy(Hardware& _hardware, std::string_view _text)
-{
-  _hardware.LoopTurn(BUY_REFUSED, {});
-  return ToCargoMessage(_hardware, _text);
+  return SOLD_TEXT;
 }
 
 // 6CBD: B on the buy screen, once OpenCargoMessage has saved the attribute: a typed quantity from the market into the hold, if
@@ -211,41 +176,39 @@ void ShowCargoMessage(GameState& _state, std::string_view _text, std::uint8_t _s
 {
   if (Hold(_state)[HoldEntry(_state) + 1] == 0)
   {
-    _hardware.LoopTurn(CARGO_MESSAGE_JUMP, {});
-    return ToCargoMessage(_hardware, NOTHING_TO_BUY_TEXT);
+    return NOTHING_TO_BUY_TEXT;
   }
   const std::uint8_t bay = _state.Data().commander.largeCargoBayFitted == 1 ? LARGE_CARGO_BAY_TONNES : CARGO_BAY_TONNES;
   if (_state.Data().menus.menuSelectedRow == ALIEN_ITEMS_ROW)
   {
-    return ToCargoMessage(_hardware, CANNOT_BUY_TEXT);
+    return CANNOT_BUY_TEXT;
   }
   if (_state.Data().menus.menuSelectedRow >= FIRST_PRECIOUS_ROW)
   {
     if (Hold(_state)[HoldEntry(_state)] == PRECIOUS_MOST)
     {
-      return ToCargoMessage(_hardware, FULL_TO_CAPACITY_TEXT);
+      return FULL_TO_CAPACITY_TEXT;
     }
   }
   else if (_state.Data().commander.cargoHold.cargoUsedTonnes == bay)
   {
-    _hardware.LoopTurn(CARGO_MESSAGE_JUMP, {});
-    return ToCargoMessage(_hardware, CARGO_BAY_FULL_TEXT);
+    return CARGO_BAY_FULL_TEXT;
   }
   const Quantity quantity = ReadQuantity(_state, _hardware);
   if (!quantity.valid)
   {
-    return ToCargoMessage(_hardware, QUANTITY_ERROR_TEXT);
+    return QUANTITY_ERROR_TEXT;
   }
   if (quantity.value == 0)
   {
-    return ToCargoMessage(_hardware, NOTHING_BOUGHT_TEXT);
+    return NOTHING_BOUGHT_TEXT;
   }
   Counted<std::uint8_t>& held = Hold(_state)[HoldEntry(_state)];
   Counted<std::uint8_t>& market = Hold(_state)[HoldEntry(_state) + 1];
   const std::uint8_t amount = Low(quantity.value);
   if (market < amount)
   {
-    return RefuseBuy(_hardware, NOT_ENOUGH_TO_BUY_TEXT);
+    return NOT_ENOUGH_TO_BUY_TEXT;
   }
   if (_state.Data().menus.menuSelectedRow >= FIRST_PRECIOUS_ROW)
   {
@@ -253,7 +216,7 @@ void ShowCargoMessage(GameState& _state, std::string_view _text, std::uint8_t _s
     const auto after = static_cast<std::uint16_t>(held + amount);
     if (after > PRECIOUS_MOST) // a carry, or more than 250
     {
-      return RefuseBuy(_hardware, CANNOT_CARRY_TEXT);
+      return CANNOT_CARRY_TEXT;
     }
   }
   else
@@ -264,16 +227,14 @@ void ShowCargoMessage(GameState& _state, std::string_view _text, std::uint8_t _s
       static_cast<std::uint8_t>((_state.Data().commander.largeCargoBayFitted == 1 ? LARGE_CARGO_BAY_TONNES : CARGO_BAY_TONNES) + 1);
     if (tonnes >= limit)
     {
-      _hardware.LoopTurn(BUY_MESSAGE_JUMP, {});
-      return ToCargoMessage(_hardware, CANNOT_CARRY_TEXT);
+      return CANNOT_CARRY_TEXT;
     }
-    _hardware.LoopTurn(BUY_PAYMENT, {});
   }
   // The quantity times the buy price, by MUL into DX:AX, the original pushing the quantity and the entry round SpendCredits.
   const std::size_t price = (std::size_t{_state.Data().menus.menuSelectedRow} - 1) * 4;
   if (!SpendCredits(_state, std::uint32_t{quantity.value} * WordIn(ScreenPrices(_state), price)))
   {
-    return RefuseBuy(_hardware, NOT_ENOUGH_CREDITS_TEXT);
+    return NOT_ENOUGH_CREDITS_TEXT;
   }
   held = static_cast<std::uint8_t>(held + amount);
   if (_state.Data().menus.menuSelectedRow < FIRST_PRECIOUS_ROW)
@@ -284,7 +245,7 @@ void ShowCargoMessage(GameState& _state, std::string_view _text, std::uint8_t _s
   const auto left = static_cast<std::uint8_t>(market - amount);
   market = left;
   PrintCargoQuantity(_state, left);
-  return ToCargoMessage(_hardware, BOUGHT_TEXT);
+  return BOUGHT_TEXT;
 }
 
 } // namespace
@@ -292,7 +253,7 @@ void ShowCargoMessage(GameState& _state, std::string_view _text, std::uint8_t _s
 ScreenKey ShowMarketPricesScreen(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _countIfNone)
 {
   const std::string_view title = DrawDockedFrame(_state, _hardware, MARKET_PRICES_FRAME, _backward);
-  // The system's name, cut for good at its first space after the first letter; each turn of the scan carries its place, SI.
+  // The system's name, cut for good at its first space after the first letter.
   const std::span<Counted<std::uint8_t>> name(_state.Data().commander.currentSystemName);
   for (std::size_t letter = 1;; ++letter)
   {
@@ -306,15 +267,13 @@ ScreenKey ShowMarketPricesScreen(GameState& _state, Hardware& _hardware, bool _b
       name[letter] = 0;
       break;
     }
-    _hardware.LoopTurn(SYSTEM_NAME_SCAN, {_state.PlaceOf(name[letter])});
   }
   const std::uint16_t named = PrintTextModeString(_state, TextIn(name), TITLE_OFFSET);
   PrintTextModeString(_state, title, named);
   PrintTextModeString(_state, PRICES_HEADER_TEXT, PRICES_HEADER_OFFSET);
   ComputeMarketPrices(_state);
 
-  // Each commodity's name, buy price and sell price. Each turn carries the count, and the name, the row and the prices as the
-  // original holds them in SI, DI and BX.
+  // Each commodity's name, buy price and sell price, the original holding the name, the row and the prices in SI, DI and BX.
   const std::span<Counted<std::uint8_t>> prices = ScreenPrices(_state);
   std::uint16_t row = FIRST_PRODUCT_OFFSET;
   for (std::uint16_t product = 0, left = COMMODITY_COUNT;;)
@@ -331,8 +290,6 @@ ScreenKey ShowMarketPricesScreen(GameState& _state, Hardware& _hardware, bool _b
     {
       break;
     }
-    _hardware.LoopTurn(PRICE_ROW, {left, _state.PlaceOf(ProductNameRow(_state, product)), row,
-                                   _state.PlaceOf(prices[std::size_t{product} * TRADE_PRICES_BYTES])});
   }
   // The last print leaves AL 0.
   return WaitForScreenExitKey(_state, _hardware, SCAN_F8, 0, _countIfNone);
@@ -531,17 +488,15 @@ ScreenKey RunCargoTradeMenu(GameState& _state, Hardware& _hardware)
   loop.al = _state.Data().drawing.textAttribute;
   for (;;)
   {
-    // 6B43: the steering; then the keys, each turn to the steering carrying the cursor and AL, each to a cursor's move the
-    // cursor.
+    // 6B43: the steering; then the keys.
     loop = SteerMenuCursor(_state, _hardware, loop);
     for (;;)
     {
-      const KeyPress key = PollMenuKey(_state, _hardware, CARGO_TICK_LOOP);
+      const KeyPress key = PollMenuKey(_state, _hardware);
       loop.al = AlAfterKey(loop.al, key);
       const std::uint8_t code = key.scanCode;
       if (code == 0)
       {
-        _hardware.LoopTurn(CARGO_STEER, {loop.row, loop.al});
         break;
       }
       // PUSH AX and POP AX round it.
@@ -557,12 +512,10 @@ ScreenKey RunCargoTradeMenu(GameState& _state, Hardware& _hardware)
           ShowCargoMessage(_state, buy ? BuyCargo(_state, _hardware) : SellCargo(_state, _hardware), saved);
           loop.al = saved;
         }
-        _hardware.LoopTurn(CARGO_STEER, {loop.row, loop.al});
         break;
       }
       if (code == SCAN_UP || code == SCAN_DOWN)
       {
-        _hardware.LoopTurn(code == SCAN_UP ? CARGO_CURSOR_UP : CARGO_CURSOR_DOWN, {loop.row});
         loop.row = (code == SCAN_UP ? MoveMenuCursorUp(_state, loop.row) : MoveMenuCursorDown(_state, loop.row)).row;
         loop.al = _state.Data().drawing.textAttribute;
         continue;
@@ -573,7 +526,6 @@ ScreenKey RunCargoTradeMenu(GameState& _state, Hardware& _hardware)
       {
         return ScreenKey{code, loop.al, std::nullopt};
       }
-      _hardware.LoopTurn(CARGO_STEER, {loop.row, loop.al});
       break;
     }
   }
