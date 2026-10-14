@@ -66,6 +66,19 @@ constexpr std::uint32_t BACKGROUND = 0x070605;
   return picture;
 }
 
+// The market as drawn, with computers selected, 12 asked for, both trades refused and the strip saying why.
+[[nodiscard]] Elite::MarketView Refusing()
+{
+  Elite::MarketView view = AsDrawn();
+  view.selected = 7;
+  view.quantity = 12;
+  view.buyAllowed = false;
+  view.sellAllowed = false;
+  view.message = Elite::MarketMessage{
+    .notice = Elite::MarketNotice::NotEnoughCredits, .commodity = 7, .amount = 12, .tenths = 11244, .creditsTenths = 12500};
+  return view;
+}
+
 [[nodiscard]] bool Is(const std::optional<Elite::MarketClick>& _click, Elite::MarketControl _control, std::uint8_t _row = 0)
 {
   return _click && _click->control == _control && _click->row == _row;
@@ -84,18 +97,17 @@ public:
     GoldenImage::Check("D01-Market", Drawn(AsDrawn(), std::nullopt));
   }
 
-  // What the drawing leaves to build: a refusal's strip, [B] BUY off for a trade it would refuse, the pointer on [S] SELL, and a
-  // row under the pointer.
-  TEST_METHOD(TheMarketsStates)
+  // What the drawing leaves to build: a refusal's strip, [B] BUY and [S] SELL off for a trade they would refuse, and the pointer
+  // on [S] SELL.
+  TEST_METHOD(TheMarketRefusing)
   {
-    Elite::MarketView view = AsDrawn();
-    view.selected = 7;
-    view.quantity = 12;
-    view.buyAllowed = false;
-    view.sellAllowed = false;
-    view.message = Elite::MarketMessage{
-      .notice = Elite::MarketNotice::NotEnoughCredits, .commodity = 7, .amount = 12, .tenths = 11244, .creditsTenths = 12500};
-    GoldenImage::Check("D01-Market-States", Drawn(view, Engine::Point{.x = 1700.0f, .y = 460.0f}));
+    GoldenImage::Check("D01-Market-States", Drawn(Refusing(), Engine::Point{.x = 1700.0f, .y = 460.0f}));
+  }
+
+  // A purchase's strip, and a row under the pointer.
+  TEST_METHOD(TheMarketBought)
+  {
+    Elite::MarketView view = Refusing();
     view.message = Elite::MarketMessage{.notice = Elite::MarketNotice::Bought, .commodity = 0, .amount = 3, .tenths = 84};
     GoldenImage::Check("D01-Market-Bought", Drawn(view, Engine::Point{.x = 300.0f, .y = 400.0f}));
   }
