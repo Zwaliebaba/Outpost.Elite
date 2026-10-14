@@ -633,7 +633,7 @@ MovedObject TraderBreakOff(GameState& _state, SpaceObject& _slot)
 
 // CALL [BX+behaviorHandlers] (4A41): the handler of class _behavior for _slot. The table's eight words, which nothing writes, name
 // these eight handlers; a class of 8 or more, which no template gives, would run data as code, and runs nothing.
-void RunBehaviorHandler(GameState& _state, Host& _host, SpaceObject& _slot, std::uint8_t _behavior)
+void RunBehaviorHandler(GameState& _state, SpaceObject& _slot, std::uint8_t _behavior)
 {
   switch (_behavior)
   {
@@ -641,7 +641,7 @@ void RunBehaviorHandler(GameState& _state, Host& _host, SpaceObject& _slot, std:
     UpdateStationAi(_state, _slot);
     return;
   case MISSILE_CLASS:
-    UpdateMissileAi(_state, _host, _slot);
+    UpdateMissileAi(_state, _slot);
     return;
   case DRIFTING_CLASS:
     (void)UpdateDriftingObjectAi(_state, _slot);
@@ -671,7 +671,7 @@ void RunBehaviorHandler(GameState& _state, Host& _host, SpaceObject& _slot, std:
 
 } // namespace
 
-void UpdateObjectsAndSpawn(GameState& _state, Host& _host)
+void UpdateObjectsAndSpawn(GameState& _state)
 {
   // PUSH DS / POP ES / MOV DI,activeObjectCount / XOR AL,AL / MOV CX,9 / REP STOSB: activeObjectCount and the eight behaviorClassCounts
   // cleared, a byte at a time, upwards, as the direction flag is clear wherever the game calls it: the only STD, MaskOutsideTunnel's, has
@@ -698,7 +698,7 @@ void UpdateObjectsAndSpawn(GameState& _state, Host& _host)
       // slot's is a template's, one of the eight, or copied from another slot's.
       std::uint8_t& classCount = ClassCounts(_state)[behavior];
       classCount = static_cast<std::uint8_t>(classCount + 1);
-      RunBehaviorHandler(_state, _host, object, behavior);
+      RunBehaviorHandler(_state, object, behavior);
     }
     slot = SlotAfter(slot);
   }

@@ -514,9 +514,8 @@ void SubtractFloored(std::uint8_t& _field, std::uint8_t _value)
 // within 100 (CheckDockingAlignment), inside a box of 90 about its x and y, not invaded and not hostile; nearly aligned, within
 // 250, it scrapes for 30 inside a box of 110 and crashes for 400 outside it; otherwise, or when it has collided already, it
 // costs 1500 and is removed. Each hit is credited (CreditKill), unlocks a missile on it (CheckMissileTargetDestroyed), takes
-// the damage (TakeDamage) and starts the impact sound, whose STI the hit's every path ends with, as KillPlayer's does when it
-// kills.
-void CheckCollision(GameState& _state, Host& _host, SpaceObject& _slot)
+// the damage (TakeDamage) and starts the impact sound.
+void CheckCollision(GameState& _state, SpaceObject& _slot)
 {
   // MOV BL,[DI] / AND BX,3Eh: the type, doubled, indexes the box's half sizes.
   const std::uint16_t range = COLLISION_RANGES[(_slot.type & 0x3E) >> 1];
@@ -571,12 +570,8 @@ void CheckCollision(GameState& _state, Host& _host, SpaceObject& _slot)
   {
     (void)RemoveObject(_state, _slot);
   }
-  if (TakeDamage(_state, damage))
-  {
-    _host.EnableInterrupts();
-  }
+  TakeDamage(_state, damage);
   StartImpactSound(_state);
-  _host.EnableInterrupts();
 }
 
 // ---- The warnings ---------------------------------------------------------------------------------
@@ -666,7 +661,7 @@ constexpr std::array<DotStep, 8> COMPASS_RING = {
 {
   for (;;)
   {
-    const KeyPress key = GetKey(_state, _host);
+    const KeyPress key = GetKey(_state);
     if (key.scanCode != 0)
     {
       co_return key;
@@ -806,7 +801,7 @@ void SetFrameTime(GameState& _state, std::uint8_t _key)
       {
         // Resume, with the space that did it not fired.
         StartBeep(_state);
-        ResetKeyboard(_state, _host);
+        ResetKeyboard(_state);
         ClearDrawBuffer(_state);
         _state.Data().flight.gamePaused = 0;
         _state.Data().drawing.textPaperPattern = 0;
@@ -819,12 +814,11 @@ void SetFrameTime(GameState& _state, std::uint8_t _key)
       }
       if (key == SCAN_A)
       {
-        // Abort to the title: StopSoundEffects' CLI round its writes, which nothing interrupts in native code, then its STI.
-        ResetKeyboard(_state, _host);
+        // Abort to the title.
+        ResetKeyboard(_state);
         ClearMessageLine(_state);
         ClearDrawBuffer(_state);
         StopSoundEffects(_state);
-        _host.EnableInterrupts();
         _state.Data().flight.gamePaused = 0;
         _state.Data().drawing.textPaperPattern = 0;
         _state.Data().flow.titleShown = 0;
@@ -848,7 +842,7 @@ std::optional<ScreenChange> LeaveFlightScreens(GameState& _state, Host& _host)
   if (_state.Data().flight.flightScreenShown != 0)
   {
     change = RestoreFlightScreen(_state, _host);
-    ResetKeyboard(_state, _host);
+    ResetKeyboard(_state);
   }
   _state.Data().flow.inFlight = 1;
   return change;
@@ -937,7 +931,7 @@ bool EraseForFlightScreen(GameState& _state)
     // 0x0C45: F9 and F10; any other key the screens return is waited past.
     if (key == SCAN_F9)
     {
-      ResetKeyboard(_state, _host);
+      ResetKeyboard(_state);
       _state.Data().flow.inFlight = 1;
       const ScreenKey closed = co_await ShowCommanderStatusScreen(_state, _host);
       _state.Data().flow.inFlight = 0;
@@ -1571,7 +1565,7 @@ void SaveStardustPositions(GameState& _state)
     if (ByteWithin(BytesOf(_state.Data().keyboard.keyDown), scan) == 1)
     {
       // MOV AH,BL, and PUSH AX / CALL ResetKeyboard / POP AX keep it.
-      ResetKeyboard(_state, _host);
+      ResetKeyboard(_state);
       _state.Data().flight.flightScreenShown = 0;
       co_return co_await DispatchFlightScreens(_state, _host, Low(scan));
     }
@@ -1928,7 +1922,7 @@ ScreenChange SetUpLocalSpace(GameState& _state, Host& _host)
   return change;
 }
 
-void CheckCollisions(GameState& _state, Host& _host)
+void CheckCollisions(GameState& _state)
 {
   // MOV CL,objectSlotCount / XOR CH,CH, PUSH CX and POP CX round each slot, then DEC CX / JE: a count of 0 runs 65,536 times.
   SlotIndex slot = SlotIndex::Sun;
@@ -1937,7 +1931,7 @@ void CheckCollisions(GameState& _state, Host& _host)
     SpaceObject& object = _state.Slot(slot);
     if ((object.type & SpaceObject::ACTIVE) != 0)
     {
-      CheckCollision(_state, _host, object);
+      CheckCollision(_state, object);
     }
     slot = SlotAfter(slot);
   }
@@ -2272,14 +2266,14 @@ void UpdateFuelLeak(GameState& _state, Host& _host)
     // The frame as it was drawn, for a renderer that draws between frames (ADR-032); the first continues nothing before it.
     _host.PublishFlightSnapshot(TakeFlightSnapshot(_state), !firstFrame);
     firstFrame = false;
-    UpdateObjectsAndSpawn(_state, _host);
+    UpdateObjectsAndSpawn(_state);
     UpdatePlayerMotion(_state, _host);
     // DI past the slots, from which M's launch copies the missile unless a routine before it moves DI (ProcessFlightKeys).
-    CheckCollisions(_state, _host);
+    CheckCollisions(_state);
     if (_state.Data().flight.playerDocked == 1)
     {
       co_await PlayStationTunnel(_state, _host);
-      ResetKeyboard(_state, _host);
+      ResetKeyboard(_state);
       StopSoundEffects(_state);
       StopAllSound(_state, _host);
       co_return;
@@ -2312,7 +2306,7 @@ void UpdateFuelLeak(GameState& _state, Host& _host)
     {
       continue;
     }
-    ResetKeyboard(_state, _host);
+    ResetKeyboard(_state);
     // MOV AX,0B800h / MOV ES,AX for the message line and the title.
     ClearMessageLine(_state);
     _state.Data().drawing.textPaperPattern = 0;
@@ -2382,7 +2376,7 @@ bool TickEscapePod(GameState& _state)
     if (_state.Data().keyboard.keyDown[Keys::CTRL] == 1)
     {
       // Ctrl+Esc freezes the game until a key, without the menu.
-      ResetKeyboard(_state, _host);
+      ResetKeyboard(_state);
       (void)co_await WaitForKey(_state, _host);
     }
     else
@@ -2408,7 +2402,7 @@ bool TickEscapePod(GameState& _state)
   if (_state.Data().keyboard.keyDown[Keys::B] == 1 && _state.Data().commander.energyBombFitted == 1)
   {
     _state.Data().commander.energyBombFitted = 0;
-    DetonateEnergyBomb(_state, _host);
+    DetonateEnergyBomb(_state);
   }
   if (_state.Data().keyboard.keyDown[Keys::C] == 1 && _state.Data().commander.escapePodFitted == 1 &&
       _state.Data().playerShip.escapePodFrames == 0)
@@ -2580,7 +2574,7 @@ void MoveObjectsByVelocity(GameState& _state)
   for (;;)
   {
     DrawPauseMenu(_state);
-    ResetKeyboard(_state, _host);
+    ResetKeyboard(_state);
     const PauseExit exit = co_await RunPauseOptions(_state, _host);
     if (exit != PauseExit::NewFrameRate)
     {

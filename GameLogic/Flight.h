@@ -225,8 +225,8 @@ void UpdateSafeZone(GameState& _state);
 [[nodiscard]] Vector ComputeDeathDebrisVector(GameState& _state);
 
 /// CheckCollisions (CS:2BC5): the player against each active one of objectSlotCount slots from shipSlots: inside its type's collisionRanges
-/// box, a ship's damage, or the station's docking, scrape or crash, the impact sound's STI on each.
-void CheckCollisions(GameState& _state, Host& _host);
+/// box, a ship's damage, or the station's docking, scrape or crash, the impact sound on each.
+void CheckCollisions(GameState& _state);
 
 /// UpdateWarnings (CS:36B6): unless the game is over, the current warning posted again while warningFrames lasts, else the
 /// four warning checks from the one after the last warning.

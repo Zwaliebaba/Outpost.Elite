@@ -21,7 +21,7 @@ constexpr std::uint8_t BEEP_TICKS = 70;
 constexpr std::uint8_t LOW_BEEP_TICKS = 70;
 constexpr std::uint8_t NOISE_BURST_TICKS = 100;
 
-// BeginSweep (CS:7ADD), the tail every sweep starter shares, but its STI. Returns the step length it starts the step
+// BeginSweep (CS:7ADD), the tail every sweep starter shares. Returns the step length it starts the step
 // counter at, which the original leaves in AL.
 [[nodiscard]] std::uint8_t BeginSweep(GameState& _state)
 {
@@ -49,7 +49,7 @@ void StartMusic(GameState& _state, Host& _host)
 {
   SilenceSpeakerTimer(_host);
   // The gate and data on in the port, but not in speakerPortImage.
-  _host.SetSystemControl(static_cast<std::uint8_t>(_state.Data().audio.speakerPortImage | SPEAKER_GATE_AND_DATA));
+  _host.SetSpeakerBits(static_cast<std::uint8_t>(_state.Data().audio.speakerPortImage | SPEAKER_GATE_AND_DATA));
   _state.Data().audio.noteTicksLeft = 0;
   _state.Data().audio.noteGapTicks = 0;
   _state.Data().audio.musicPointer = 0;
@@ -58,13 +58,11 @@ void StartMusic(GameState& _state, Host& _host)
 
 void StopAllSound(GameState& _state, Host& _host)
 {
-  // StopSoundEffects clears the effects under CLI and ends with STI.
   StopSoundEffects(_state);
-  _host.EnableInterrupts();
   _state.Data().sound.musicPlaying = 0;
   const auto port = static_cast<std::uint8_t>(_state.Data().audio.speakerPortImage & ~SPEAKER_GATE_AND_DATA);
   _state.Data().audio.speakerPortImage = port;
-  _host.SetSystemControl(port);
+  _host.SetSpeakerBits(port);
 }
 
 void SilenceSpeakerTimer(Host& _host)
@@ -98,7 +96,7 @@ std::uint8_t EmitNoiseSample(GameState& _state, Host& _host)
   const auto image = static_cast<std::uint8_t>(_state.Data().audio.speakerPortImage & ~SPEAKER_DATA);
   _state.Data().audio.speakerPortImage = image;
   const auto port = static_cast<std::uint8_t>((sample & SPEAKER_DATA) | image);
-  _host.SetSystemControl(port);
+  _host.SetSpeakerBits(port);
   _state.Data().audio.speakerPortImage = port;
   return port;
 }
@@ -107,7 +105,7 @@ std::uint8_t ToggleSpeaker(GameState& _state, Host& _host)
 {
   const auto port = static_cast<std::uint8_t>(_state.Data().audio.speakerPortImage ^ SPEAKER_DATA);
   _state.Data().audio.speakerPortImage = port;
-  _host.SetSystemControl(port);
+  _host.SetSpeakerBits(port);
   return port;
 }
 
@@ -126,18 +124,18 @@ std::uint8_t StartPlayerDeathSound(GameState& _state)
   return StartNoiseSweep(_state, 60, 7);
 }
 
-std::optional<std::uint8_t> StartLaserSound(GameState& _state)
+void StartLaserSound(GameState& _state)
 {
   if (_state.Data().audio.noiseSweepActive == 1)
   {
-    return std::nullopt;
+    return;
   }
   _state.Data().audio.noiseSweepActive = 0;
   _state.Data().audio.toneSweepActive = 1;
   _state.Data().audio.sweepStepLength = 20;
   _state.Data().sound.sweepStepShrink = 2;
   _state.Data().audio.sweepPeriodTicks = 2;
-  return BeginSweep(_state);
+  static_cast<void>(BeginSweep(_state));
 }
 
 void StartPlayerHitSound(GameState& _state)

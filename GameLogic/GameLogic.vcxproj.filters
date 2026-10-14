@@ -279,9 +279,6 @@
     <ClInclude Include="SceneTables.h">
       <Filter>Scene</Filter>
     </ClInclude>
-    <ClInclude Include="Scheduler.h">
-      <Filter>Platform</Filter>
-    </ClInclude>
     <ClInclude Include="Sha256.h">
       <Filter>Replay</Filter>
     </ClInclude>
@@ -457,9 +454,6 @@
     </ClCompile>
     <ClCompile Include="Scene.cpp">
       <Filter>Scene</Filter>
-    </ClCompile>
-    <ClCompile Include="Scheduler.cpp">
-      <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="Sha256.cpp">
       <Filter>Replay</Filter>

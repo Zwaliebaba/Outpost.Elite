@@ -144,7 +144,7 @@ constexpr std::uint8_t TITLE_SHIP_FLAGS = 2;
 {
   for (;;)
   {
-    const KeyPress key = GetKey(_state, _host);
+    const KeyPress key = GetKey(_state);
     if (key.scanCode != 0)
     {
       co_return key;
@@ -345,7 +345,7 @@ void PrintUnit(GameState& _state, const TradeRow& _row, std::uint16_t _cell)
                               .rows = static_cast<std::uint16_t>(TITLE_PLANET_RADIUS >> 1)};
     _host.PublishFlightSnapshot(TakeTitleSnapshot(_state, ELITE_TITLE_TEXT, planet), !firstFrame);
     firstFrame = false;
-    if (const KeyPress key = GetKey(_state, _host); key.scanCode != 0)
+    if (const KeyPress key = GetKey(_state); key.scanCode != 0)
     {
       if (key.scanCode == SCAN_F9)
       {
@@ -394,7 +394,7 @@ constexpr std::array<DockedScreen, 9> DOCKED_SCREENS = {{
   {SCAN_F9,
    [](GameState& _state, Host& _host)
    {
-     ResetKeyboard(_state, _host);
+     ResetKeyboard(_state);
      return ShowCommanderStatusScreen(_state, _host);
    }},
   {SCAN_F10, &ShowInventoryScreen},
@@ -527,7 +527,7 @@ void DrawFrameRow(GameState& _state, std::uint16_t _cell, std::uint16_t _value)
   // GetKey until Esc or another screen's F-key, every other key and an empty poll going back to 60B4h.
   for (;;)
   {
-    const KeyPress key = GetKey(_state, _host);
+    const KeyPress key = GetKey(_state);
     const std::uint8_t scanCode = key.scanCode;
     if (scanCode != 0 && scanCode != _ownKey && (scanCode == SCAN_ESCAPE || (scanCode >= SCAN_F1 && scanCode <= SCAN_F10)))
     {

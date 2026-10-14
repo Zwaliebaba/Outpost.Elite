@@ -5,7 +5,7 @@
 #include "FileStore.h"
 #include "FlightSnapshot.h"
 #include "Mouse.h"
-#include "Scheduler.h"
+#include "KeyboardState.h"
 #include "SpaceViewLayers.h"
 #include "Speaker.h"
 #include "Task.h"
@@ -15,6 +15,7 @@
 #include <coroutine>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <optional>
 #include <string>
@@ -32,33 +33,33 @@ enum class StopReason : std::uint8_t
   Spinning    ///< The program ran SpinLimit() turns without waiting once.
 };
 
-/// A routine in C++ that stands in for one of the program's interrupt handlers (ADR-010), which run to their end.
-using NativeRoutine = std::function<void()>;
+/// The game's tick: its 1 kHz work, the music, the effects and the counters (TimerInterrupt), run to its end.
+using TickRoutine = std::function<void()>;
 
-/// The program's start (ADR-010), a coroutine that waits (D77): the platform resumes it each run until it ends.
+/// The game's handler of a key event (KeyboardInterrupt), run to its end.
+using KeyRoutine = std::function<void(const KeyEvent&)>;
+
+/// The program's start (ADR-010), a coroutine that waits (D77): the Host resumes it each run until it ends.
 using ProgramRoutine = std::function<Task<void>()>;
 
 /// The host the game runs on (D90): its clock and its waits, the keys and the mouse, the sound, the CGA and the files. Every
 /// routine that waits or drives a device is given it beside the GameState, which holds the game's memory.
 ///
-/// It holds, each what the game uses of the PC, without its port bus, its registers or its vector table (ADR-041): the clock and
-/// the events it waits for, with the two interrupts they request (Scheduler: the tick, the keys and their requests); the system
-/// control port; the sound, the tone and its bits (Speaker); the mouse (Mouse); the CGA (Cga), whose modes the game sets on it;
-/// what runs when the game has no handler of its own; and the file store that holds the commander files (FileStore, D78).
+/// It holds the clock and what it waits for: the game's tick, the keys the host queues, and the CGA's retrace; the sound, the
+/// tone and its two bits (Speaker); the mouse (Mouse); the CGA (Cga), whose modes the game sets on it; and the file store that
+/// holds the commander files (FileStore, D78).
 ///
 /// Time is whole milliseconds (Timing.h, D87), and it is paced (ADR-008): the game's work takes no time. The clock moves only
-/// while the game waits, and then straight to the next thing a device will do: the next tick, the next key's delivery or the
-/// CGA's next change of status, or the end of the run. So interrupts land only inside the game's waits, at the same points
-/// however long its work took.
+/// while the game waits, and then straight to the next thing that falls due: the next tick, the next key or the CGA's next
+/// change of status, or the end of the run.
 ///
 /// Waiting is declared (ADR-039). Each wait of the game polls for what it waits for, and when a poll finds nothing it says
-/// so (Wait): the clock moves to the next device event. A poll that took something it does not want, and a loop that never
-/// ends, say that instead (Spin), and the clock stands still.
+/// so (Wait): the clock moves to the next event. A poll that took something it does not want, and a loop that never ends, say
+/// that instead (Spin), and the clock stands still.
 ///
-/// Interrupts are taken where they fall due, as the 8088 takes them: at the end of a wait's poll and of a spin, and when
-/// native code lets them in (EnableInterrupts), ends one (Host::EndOfInterrupt) or reprograms the timer
-/// (Host::SetTickRunning). The interrupt controller's rules hold: in service and end of interrupt (Scheduler). The handler
-/// is the one installed by name: the game's own, the BIOS's, or a stray one, which throws.
+/// What falls due runs when the wait goes on, and only then (D91): the game's tick work, while the tick runs (SetTickRunning),
+/// and then one key event, to the game's handler while it takes them (SetKeysToGame) and dropped otherwise. There are no
+/// interrupts: nothing runs inside the game's work, so nothing of it needs guarding.
 ///
 /// The game runs as a coroutine on the host's thread (D77): the program's start routine, and every routine it calls that waits,
 /// each a Task that co_awaits the next. When the clock reaches the end of a run inside a wait, the wait suspends the game and
@@ -67,7 +68,7 @@ using ProgramRoutine = std::function<Task<void>()>;
 class Host
 {
 public:
-  /// How the platform powers on.
+  /// How the Host powers on.
   struct Desc
   {
     DosDateTime startMoment;   ///< The date and time at power-on, which the commander files' stamps count from.
@@ -81,48 +82,46 @@ public:
     Routine routine;
     std::uint64_t calls = 0;
   };
-  using HookedRoutine = Hooked<NativeRoutine>;
+  using HookedTick = Hooked<TickRoutine>;
+  using HookedKeys = Hooked<KeyRoutine>;
   using HookedProgram = Hooked<ProgramRoutine>;
 
   /// What a wait's poll that found nothing gives the routine that waits (Wait), to co_await: ready, unless the clock reached the
-  /// run's end, when the game is suspended until the next RunUntil. Once it goes on, the interrupts now due are taken.
+  /// run's end, when the game is suspended until the next RunUntil. Once it goes on, what fell due runs.
   class [[nodiscard]] RunAwaiter
   {
   public:
-    explicit RunAwaiter(Host& _platform) noexcept
-      : m_platform(_platform)
+    explicit RunAwaiter(Host& _host) noexcept
+      : m_host(_host)
     {
     }
 
     [[nodiscard]] bool await_ready() const noexcept
     {
-      return m_platform.m_clock < m_platform.m_runLimit;
+      return m_host.m_clock < m_host.m_runLimit;
     }
 
     void await_suspend(std::coroutine_handle<> _waiting) noexcept
     {
-      m_platform.m_suspended = _waiting;
+      m_host.m_suspended = _waiting;
     }
 
     void await_resume() const
     {
-      m_platform.EndTurn();
+      m_host.RunDue();
     }
 
   private:
-    Host& m_platform;
+    Host& m_host;
   };
-
-  /// The system control port at power-on (SystemControl).
-  static constexpr std::uint8_t POWER_ON_SYSTEM_CONTROL = 0x4C;
 
   /// Steps the default spin limit allows: far more than the longest stretch of work the game does between two waits, far
   /// fewer than a host would run before someone notices.
   static constexpr std::uint64_t DEFAULT_SPIN_LIMIT = 50'000'000;
 
   /// Powers on: every device in its power-on state, the CGA with every register clear until the game sets its mode, the tick
-  /// stopped, and none of the game's handlers in place. _state is the game's memory and _files where the commander files are;
-  /// both must outlive the platform. Not noexcept: the devices allocate.
+  /// stopped, and the keys not yet the game's. _state is the game's memory and _files where the commander files are;
+  /// both must outlive the Host. Not noexcept: the devices allocate.
   Host(GameState& _state, FileStore& _files, const Desc& _desc);
   Host(const Host&) = delete;
   Host& operator=(const Host&) = delete;
@@ -136,13 +135,17 @@ public:
     return m_cheat;
   }
 
-  /// _routine is the program's start, where DOS starts it: the platform makes the coroutine at the first RunUntil and resumes
+  /// _routine is the program's start: the Host makes the coroutine at the first RunUntil and resumes
   /// it each run; when it returns, the program has ended. Throws std::logic_error if the program has one already.
   void SetEntry(ProgramRoutine _routine);
 
-  /// _routine is the game's own handler of _irq, which runs whenever it is the handler there (SetHandler) and the interrupt is
-  /// taken, and returns from it as IRET does. Throws std::logic_error if the game has one there already.
-  void SetGameHandler(Irq _irq, NativeRoutine _routine);
+  /// _routine is the game's tick work, run at each tick while the tick runs (SetTickRunning). Throws std::logic_error if the
+  /// game has one already.
+  void SetTickHandler(TickRoutine _routine);
+
+  /// _routine is the game's handler of a key event, run with each event while the keys are the game's (SetKeysToGame). Throws
+  /// std::logic_error if the game has one already.
+  void SetKeyHandler(KeyRoutine _routine);
 
   /// The program's start routine, and how often it ran.
   [[nodiscard]] const HookedProgram& Entry() const noexcept
@@ -150,10 +153,16 @@ public:
     return m_entry;
   }
 
-  /// The game's own handler of _irq, and how often it ran.
-  [[nodiscard]] const HookedRoutine& GameHandler(Irq _irq) const noexcept
+  /// The game's tick work, and how often it ran.
+  [[nodiscard]] const HookedTick& TickHandler() const noexcept
   {
-    return m_gameHandlers[static_cast<std::size_t>(_irq)];
+    return m_tickHandler;
+  }
+
+  /// The game's handler of key events, and how often it ran.
+  [[nodiscard]] const HookedKeys& KeyHandler() const noexcept
+  {
+    return m_keyHandler;
   }
 
   // ── Running ──
@@ -162,7 +171,7 @@ public:
   [[nodiscard]] StopReason RunUntil(Milliseconds _time);
 
   /// The number of steps the program may run without waiting before RunUntil stops with StopReason::Spinning: its spins
-  /// (Spin), and the interrupts and handlers it runs. A loop that spins for ever would otherwise run with the clock standing
+  /// (Spin). A loop that spins for ever would otherwise run with the clock standing
   /// still.
   void SetSpinLimit(std::uint64_t _turns) noexcept
   {
@@ -174,48 +183,46 @@ public:
     return m_spinLimit;
   }
 
-  /// The platform's clock.
+  /// The Host's clock.
   [[nodiscard]] Milliseconds Clock() const noexcept
   {
     return m_clock;
   }
 
-  /// The hardware interrupts taken since power-on.
-  [[nodiscard]] std::uint64_t InterruptsTaken() const noexcept
+  /// The ticks that have fallen due since power-on.
+  [[nodiscard]] std::uint64_t TicksRun() const noexcept
   {
-    return m_interruptsTaken;
+    return m_ticksRun;
   }
 
-  // ── The devices, for the hosts: the keys, the stick, the mouse, the picture and the sound ──
+  // ── The devices, for the hosts: the keys, the mouse, the picture and the sound ──
 
-  /// The tick, the keys and the two interrupts' requests: where a host gives the game its key events (Scheduler::Inject).
-  [[nodiscard]] Scheduler& Events() noexcept
+  /// A key event from the host, queued: one is delivered each millisecond, in order (D88).
+  void Inject(const KeyEvent& _event);
+
+  /// The key events queued and not yet delivered.
+  [[nodiscard]] std::size_t QueuedKeys() const noexcept
   {
-    return m_events;
+    return m_keys.size();
   }
 
-  /// The system control port, as last written: bit 0 is the tone's gate and bit 1 the speaker's data. At power-on
-  /// it holds 4Ch, what the XT BIOS's keyboard reset writes last (speaker and gate off).
-  [[nodiscard]] std::uint8_t SystemControl() const noexcept
+  /// The speaker's two bits as last set: bit 0 the tone's gate, bit 1 its data. Both clear at power-on.
+  [[nodiscard]] std::uint8_t SpeakerBits() const noexcept
   {
-    return m_systemControl;
+    return m_speakerBits;
   }
 
-  /// OUT 61h,_value: the speaker takes bits 0 and 1, the tone's gate and its data. Not noexcept: the speaker logs a change.
-  void SetSystemControl(std::uint8_t _value);
+  /// Bits 0 and 1 of _bits to the speaker, the tone's gate and its data; the other bits are not the speaker's. Not noexcept:
+  /// the speaker logs a change.
+  void SetSpeakerBits(std::uint8_t _bits);
 
-  /// The game's tick started, a millisecond from now and every millisecond after (D87), or stopped. With interrupts on, one
-  /// now due is taken here.
-  void SetTickRunning(bool _running);
+  /// The game's tick started, a millisecond from now and every millisecond after (D87), or stopped.
+  void SetTickRunning(bool _running) noexcept;
 
-  /// The end of an interrupt. With interrupts on, one held back is taken here.
-  void EndOfInterrupt();
-
-  /// The key event the keyboard's interrupt delivered (D88), taken: the next one can then arrive. Only inside the keyboard's
-  /// handler.
-  [[nodiscard]] KeyEvent TakeKey() noexcept
+  /// The keys given to the game's handler from now on, or dropped as they come.
+  void SetKeysToGame(bool _toGame) noexcept
   {
-    return m_events.TakeKey();
+    m_keysToGame = _toGame;
   }
 
   /// The mouse, which the host moves and the game reads (ADR-051).
@@ -334,16 +341,8 @@ public:
 
   // ── For the game's routines ──
 
-  /// STI: interrupts are taken again when they fall due, and those due now are taken here.
-  void EnableInterrupts();
-
-  /// CLI.
-  void DisableInterrupts() noexcept;
-
-  [[nodiscard]] bool InterruptsEnabled() const noexcept;
-
   /// A wait's poll that found nothing (ADR-039): the clock moves to the next device event; the game co_awaits what this gives,
-  /// which suspends it there if that is the run's end; then the interrupts now due are taken.
+  /// which suspends it there if that is the run's end; then what fell due runs (RunDue).
   [[nodiscard]] RunAwaiter Wait();
 
   /// A turn of a loop that waits for nothing: a wait's poll that took something it does not want, or a loop that never ends.
@@ -352,47 +351,28 @@ public:
   void Spin();
 
   /// _duration passes as it passes in a wait, a step at a time to each device event, the game suspended there if that is the
-  /// run's end and the interrupts that fall due taken: paced time's charge for work the 8088 took time over where the program
+  /// run's end and what falls due run: paced time's charge for work the 8088 took time over where the program
   /// sets no pace of its own (ADR-013).
   [[nodiscard]] Task<void> Spend(Milliseconds _duration);
 
-  /// The interrupts now due are taken, each handler run to its return, as the 8088 takes them at the next instruction once
-  /// interrupts are on. If the program stops on the way, the game is abandoned by an exception that leaves its coroutines, and
-  /// RunUntil reports the stop.
-  void TakeDueInterrupts();
+  /// What fell due when the clock last moved, run: the tick's work, then a key. If the program stops on the way, the game is
+  /// abandoned by an exception that leaves its coroutines, and RunUntil reports the stop.
+  void RunDue();
 
-  /// Moves the clock to the next device event, or to _limit if that comes first, and lets the devices raise what falls due:
-  /// what paced time does when the program waits.
+  /// Moves the clock to the next event, or to _limit if that comes first, and marks what falls due there: what paced time
+  /// does when the program waits.
   void Idle(Milliseconds _limit);
-
-  /// What serves _irq now. At power-on the host's default serves both (IrqHandler::Bios): it ends the interrupt, and takes and
-  /// drops a key.
-  [[nodiscard]] IrqHandler Handler(Irq _irq) const noexcept
-  {
-    return m_handlers[static_cast<std::size_t>(_irq)];
-  }
-
-  /// _handler serves _irq from now on: how the game installs its own handlers and puts the BIOS's back.
-  void SetHandler(Irq _irq, IrqHandler _handler) noexcept
-  {
-    m_handlers[static_cast<std::size_t>(_irq)] = _handler;
-  }
 
 private:
   [[nodiscard]] StopReason Stopped() const noexcept;
-  void Interrupt(Irq _irq);
-  void EndTurn();
   void Resume();
-  void RunBiosTimerHandler();
-  void RunBiosKeyboardHandler();
 
   GameState& m_state;
 
   // Declared in the order they are built: each device holds references to the ones above it.
   Milliseconds m_clock = 0;
   Speaker m_speaker;
-  Scheduler m_events;
-  std::uint8_t m_systemControl = POWER_ON_SYSTEM_CONTROL;
+  std::uint8_t m_speakerBits = 0;
   Cga m_cga;
   std::array<FlightSnapshot, 2> m_flightSnapshots{}; // the previous and the latest
   SpaceViewLayers m_spaceView;
@@ -402,13 +382,20 @@ private:
   FileStore& m_files;
   DosDateTime m_startMoment;
 
-  std::array<IrqHandler, 2> m_handlers{IrqHandler::Bios, IrqHandler::Bios};
-  std::uint16_t m_flags;
   bool m_cheat = false;
 
+  // The tick and the keys (D87, D88): when each next falls due, and what has fallen due for RunDue.
+  Milliseconds m_nextTickAt = NO_EVENT;
+  std::deque<KeyEvent> m_keys;
+  Milliseconds m_nextKeyAt = NO_EVENT;
+  bool m_keysToGame = false;
+  bool m_tickDue = false;
+  std::optional<KeyEvent> m_keyDue;
+  std::uint64_t m_ticksRun = 0;
+
   HookedProgram m_entry;
-  std::array<HookedRoutine, 2> m_gameHandlers{};
-  std::uint64_t m_interruptsTaken = 0;
+  HookedTick m_tickHandler;
+  HookedKeys m_keyHandler;
 
   std::uint64_t m_spinLimit = DEFAULT_SPIN_LIMIT;
   std::uint64_t m_stepsSinceIdle = 0;
@@ -417,7 +404,7 @@ private:
   bool m_terminated = false; // the program's start routine has returned
 
   // The program's coroutine (D77), made at the first RunUntil, and the wait it is suspended in, if it is. Destroying the
-  // platform destroys the coroutine, and every routine it was waiting in, as a host's Game ends.
+  // Host destroys the coroutine, and every routine it was waiting in, as a host's Game ends.
   std::optional<Task<void>> m_program;
   std::coroutine_handle<> m_suspended;
 };

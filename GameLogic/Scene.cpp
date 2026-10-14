@@ -583,7 +583,7 @@ void DrawObject(GameState& _state, Host& _host, SpaceObject& _slot)
   if (IsSunOrPlanet(_slot))
   {
     _host.NoteSpaceViewRendered(); // the renderer draws it as a sphere (ADR-035); no byte of the state is written
-    DrawSunOrPlanet(_state, _host, _slot);
+    DrawSunOrPlanet(_state, _slot);
     return;
   }
   if (IsStation(_slot).station && DrawStationIfDistant(_state, _slot))
@@ -697,9 +697,9 @@ struct SupernovaGlow
 
 // SupernovaHeat (CS:3F57): once supernovaFrames has counted down to 1, where an INC keeps it, the sun's heat is supernovaHeat, first the
 // cabin temperature, growing by a quarter of itself (at least 1) a frame; when it overflows a byte, the player is killed (KillPlayer, with
-// StartPlayerDeathSound's STI) and an energy bomb goes off (DetonateEnergyBomb), and the heat is FFh. None while the countdown runs, or
+// StartPlayerDeathSound) and an energy bomb goes off (DetonateEnergyBomb), and the heat is FFh. None while the countdown runs, or
 // when it is 0. _slot is the sun's slot, DI.
-[[nodiscard]] std::optional<SupernovaGlow> SupernovaHeat(GameState& _state, Host& _host, SlotIndex _slot)
+[[nodiscard]] std::optional<SupernovaGlow> SupernovaHeat(GameState& _state, SlotIndex _slot)
 {
   if (_state.Data().commander.supernovaFrames == 0)
   {
@@ -724,15 +724,12 @@ struct SupernovaGlow
   SupernovaGlow glow{static_cast<std::uint8_t>(sum), _slot};
   if (sum > 0xFF)
   {
-    if (KillPlayer(_state))
-    {
-      _host.EnableInterrupts();
-    }
+    static_cast<void>(KillPlayer(_state));
     // DetonateEnergyBomb's LOOP leaves DI past the ship slots, by the count it loads: objectSlotCount less 3, a byte, 0 for
     // 65,536, which DI's 64 KiB wrap brings back to the first ship's slot: the slot that many on from the first ship's. In flight
     // objectSlotCount is 14h, as SetUpLocalSpace sets it and nothing else writes it, so that is the first debris slot, 17 on.
     const auto ships = static_cast<std::uint8_t>(_state.Data().flight.objectSlotCount - BOMB_FIRST_SLOT);
-    DetonateEnergyBomb(_state, _host);
+    DetonateEnergyBomb(_state);
     glow.slot = SlotAfter(SlotIndex::FirstShip, ships);
     glow.heat = 0xFF;
   }
@@ -753,10 +750,10 @@ struct SunDisc
 // over it on a carry, with FUEL SCOOPS ACTIVE for 5 frames; from FDh, KillPlayer, whose StartPlayerDeathSound leaves its step length
 // in AL over the radius's low byte, as there is no PUSH AX round it here, and a radius past a byte held to FFh. Returns the disc
 // in front of the view.
-[[nodiscard]] std::optional<SunDisc> SizeSun(GameState& _state, Host& _host, SpaceObject& _slot)
+[[nodiscard]] std::optional<SunDisc> SizeSun(GameState& _state, SpaceObject& _slot)
 {
   SunDisc disc{0, _state.IndexOf(_slot)};
-  if (const std::optional<SupernovaGlow> glow = SupernovaHeat(_state, _host, _state.IndexOf(_slot)))
+  if (const std::optional<SupernovaGlow> glow = SupernovaHeat(_state, _state.IndexOf(_slot)))
   {
     disc = SunDisc{glow->heat, glow->slot};
   }
@@ -801,7 +798,6 @@ struct SunDisc
     if (const std::optional<std::uint8_t> stepLength = KillPlayer(_state))
     {
       SetLow(disc.radius, *stepLength);
-      _host.EnableInterrupts();
     }
     if (High(disc.radius) != 0)
     {
@@ -813,8 +809,8 @@ struct SunDisc
 
 // SizePlanet (CS:3FF6): sunFringeMask cleared, the radius ScaleByInverseDistance makes of 50 at _slot's distance, and the
 // altitude, twice 255 less that radius held to 127. In front of the view, a radius of FDh or more kills the player, with
-// StartPlayerDeathSound's STI, and one past a byte draws as FFh. Returns the disc's radius in front of the view.
-std::optional<std::uint16_t> SizePlanet(GameState& _state, Host& _host, SpaceObject& _slot)
+// StartPlayerDeathSound, and one past a byte draws as FFh. Returns the disc's radius in front of the view.
+std::optional<std::uint16_t> SizePlanet(GameState& _state, SpaceObject& _slot)
 {
   _state.Data().drawing.sunFringeMask = FRINGE_NONE;
   // MOV DX,32h / XOR AX,AX: DX:AX = 50 * 65536.
@@ -834,10 +830,7 @@ std::optional<std::uint16_t> SizePlanet(GameState& _state, Host& _host, SpaceObj
   if (radius >= FATAL_RADIUS)
   {
     // PUSH AX / CALL KillPlayer / POP AX.
-    if (KillPlayer(_state))
-    {
-      _host.EnableInterrupts();
-    }
+    static_cast<void>(KillPlayer(_state));
     if (High(radius) != 0)
     {
       radius = RADIUS_LIMIT;
@@ -1278,11 +1271,11 @@ Vector TransformToView(GameState& _state, Vector _position)
   return RotateToViewDirection(_state, RotatePitchYawRoll(_state, _position));
 }
 
-void DrawSunOrPlanet(GameState& _state, Host& _host, SpaceObject& _slot)
+void DrawSunOrPlanet(GameState& _state, SpaceObject& _slot)
 {
   if (IsPlanet(_slot))
   {
-    if (const std::optional<std::uint16_t> radius = SizePlanet(_state, _host, _slot))
+    if (const std::optional<std::uint16_t> radius = SizePlanet(_state, _slot))
     {
       DrawSunOrPlanetDisc(_state, _slot, *radius);
     }
@@ -1290,7 +1283,7 @@ void DrawSunOrPlanet(GameState& _state, Host& _host, SpaceObject& _slot)
   }
   // The disc is the slot's that SizeSun leaves DI on: the sun's, or, once a supernova's heat killed and its energy bomb's LOOP moved
   // DI, that slot's, as the original draws it.
-  if (const std::optional<SunDisc> disc = SizeSun(_state, _host, _slot))
+  if (const std::optional<SunDisc> disc = SizeSun(_state, _slot))
   {
     DrawSunOrPlanetDisc(_state, _state.Slot(disc->slot), disc->radius);
   }

@@ -163,7 +163,7 @@ inline constexpr std::uint16_t SUN_DISC_SCALE = 0x64;
 
 /// DrawSunOrPlanet (CS:3F4F): the planet in _slot sized (SizePlanet), with its altitude, or the sun, with the cabin temperature, its
 /// fringe, fuel scooping, death by heat and a supernova's heat; then, in front of the view, its disc.
-void DrawSunOrPlanet(GameState& _state, Host& _host, SpaceObject& _slot);
+void DrawSunOrPlanet(GameState& _state, SpaceObject& _slot);
 
 /// DrawDistantStation (CS:45C6): the station in _slot as a disc in colour 3 at its compass position, +20h/+22h/+24h, projected
 /// (ProjectToScreen): radius 7 rows when its depth byte +25h is below 14h, smaller further off, and none from 21h to A5h.

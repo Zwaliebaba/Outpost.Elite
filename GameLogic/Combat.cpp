@@ -329,13 +329,13 @@ void DestroyTarget(GameState& _state, Host& _host, SpaceObject& _target)
 {
   (void)CreditKill(_state, _target);
   CheckMissileTargetDestroyed(_state, _target);
-  ExplodeObject(_state, _host, _target);
+  ExplodeObject(_state, _target);
   DrawLaserBeams(_state, _host);
   _state.Data().combat.miningLaserOnAsteroid = 0;
   _state.Data().playerShip.laserFiring = 0;
 }
 
-// From 8AD2: the player's laser hits _target, which is marked hostile, with the impact's sound and its STI; the damage is the
+// From 8AD2: the player's laser hits _target, which is marked hostile, with the impact's sound; the damage is the
 // laser's type + 1, and a mining laser marks an asteroid mined. A station's hit cancels the docking computer and is a crime of
 // 28h, added to legalStatus up to FFh, or in an invasion does half the damage, rounded up (NEG AL / SAR AL,1 / NEG AL). The
 // damage goes on the aggression, up to FFh, and off the energy, each written and then FFh or nothing over it. Returns whether
@@ -345,7 +345,6 @@ void DestroyTarget(GameState& _state, Host& _host, SpaceObject& _target)
 {
   _target.flags = static_cast<std::uint8_t>(_target.flags | FLAG_HOSTILE);
   StartImpactSound(_state);
-  _host.EnableInterrupts();
   const std::uint8_t laser = _state.Data().flight.firingLaserType;
   if (laser == MINING_LASER && TypeOf(_target) == TYPE_ASTEROID)
   {
@@ -515,7 +514,7 @@ void DrawLaserBeams(GameState& _state, Host& _host)
   beam(BEAM_INNER_RIGHT);
 }
 
-void ExplodeObject(GameState& _state, Host& _host, SpaceObject& _object)
+void ExplodeObject(GameState& _state, SpaceObject& _object)
 {
   TallyMaskMissionKill(_state, _object);
   const bool drawn = (_object.type & SLOT_DRAWN) != 0;
@@ -526,7 +525,6 @@ void ExplodeObject(GameState& _state, Host& _host, SpaceObject& _object)
     return;
   }
   StartExplosionSound(_state);
-  _host.EnableInterrupts();
   _state.Data().combat.explodingStation = 1;
   if (!IsStation(_object).station)
   {
@@ -677,10 +675,7 @@ void ResolveLaserFire(GameState& _state, Host& _host)
     }
   }
   DrawLaserBeams(_state, _host);
-  if (StartLaserSound(_state))
-  {
-    _host.EnableInterrupts();
-  }
+  StartLaserSound(_state);
   _state.Data().combat.miningLaserOnAsteroid = 0;
   _state.Data().playerShip.laserFiring = 0;
 }
@@ -740,9 +735,7 @@ void ApplyEnemyLaserHit(GameState& _state, Host& _host)
   {
     return;
   }
-  // StartPlayerHitSound's CLI round its writes, which nothing interrupts in native code, then its STI.
   StartPlayerHitSound(_state);
-  _host.EnableInterrupts();
   const SpaceObject& attacker = _state.Slot(_state.Data().combat.playerHitBy);
   if ((attacker.type & SLOT_DRAWN) != 0)
   {
@@ -807,11 +800,11 @@ void ApplyEnemyLaserHit(GameState& _state, Host& _host)
   _state.Data().playerShip.playerDead = 1;
 }
 
-std::optional<std::uint8_t> TakeDamage(GameState& _state, std::uint16_t _damage)
+void TakeDamage(GameState& _state, std::uint16_t _damage)
 {
   if (_state.Data().playerShip.escapePodFrames != 0)
   {
-    return std::nullopt;
+    return;
   }
   std::uint16_t excess = 0;
   if (_damage >= OVERWHELMING_DAMAGE)
@@ -829,7 +822,7 @@ std::optional<std::uint8_t> TakeDamage(GameState& _state, std::uint16_t _damage)
     _state.Data().playerShip.foreShield = left;
     if (shield >= damage)
     {
-      return std::nullopt;
+      return;
     }
     _state.Data().playerShip.foreShield = 0;
     excess = SignExtend(Negate(left));
@@ -838,14 +831,13 @@ std::optional<std::uint8_t> TakeDamage(GameState& _state, std::uint16_t _damage)
   _state.Data().playerShip.playerEnergy = static_cast<std::uint16_t>(energy - excess);
   if (energy >= excess)
   {
-    return std::nullopt;
+    return;
   }
-  const std::optional<std::uint8_t> stepLength = KillPlayer(_state);
+  static_cast<void>(KillPlayer(_state));
   _state.Data().playerShip.playerEnergy = 0;
-  return stepLength;
 }
 
-void DetonateEnergyBomb(GameState& _state, Host& _host)
+void DetonateEnergyBomb(GameState& _state)
 {
   if (InSafeZone(_state).inside)
   {
@@ -861,7 +853,7 @@ void DetonateEnergyBomb(GameState& _state, Host& _host)
     if ((ship.type & SLOT_ACTIVE) != 0 && (ship.flags & FLAG_BLIP_DRAWN) != 0)
     {
       ship.cargo = 0;
-      ExplodeObject(_state, _host, ship);
+      ExplodeObject(_state, ship);
     }
     slot = SlotAfter(slot);
   }
@@ -1023,7 +1015,7 @@ std::optional<SlotIndex> LaunchShipFromObject(GameState& _state, const SpaceObje
   return free.slot;
 }
 
-void UpdateMissileAi(GameState& _state, Host& _host, SpaceObject& _missile)
+void UpdateMissileAi(GameState& _state, SpaceObject& _missile)
 {
   _state.Data().playerShip.incomingMissileAlert = 0;
   _missile.roll = Offset(_missile.roll, MISSILE_SPIN);
@@ -1041,7 +1033,7 @@ void UpdateMissileAi(GameState& _state, Host& _host, SpaceObject& _missile)
     if ((aimed.type & SLOT_ACTIVE) == 0)
     {
       // JMP ExplodeObject: its target is gone.
-      ExplodeObject(_state, _host, _missile);
+      ExplodeObject(_state, _missile);
       return;
     }
     const auto difference = [&aimed, &_missile](ObjectWord _axis) { return static_cast<std::int16_t>(aimed.*_axis - _missile.*_axis); };
@@ -1056,15 +1048,12 @@ void UpdateMissileAi(GameState& _state, Host& _host, SpaceObject& _missile)
     return;
   }
   // It explodes, and strikes its target.
-  ExplodeObject(_state, _host, _missile);
+  ExplodeObject(_state, _missile);
   const SlotIndex struckSlot = target;
   if (struckSlot == SlotIndex::Player)
   {
-    // The player, with TakeDamage's STI when it kills.
-    if (TakeDamage(_state, MISSILE_DAMAGE))
-    {
-      _host.EnableInterrupts();
-    }
+    // The player.
+    TakeDamage(_state, MISSILE_DAMAGE);
     return;
   }
   SpaceObject& struck = _state.Slot(struckSlot);
@@ -1076,7 +1065,7 @@ void UpdateMissileAi(GameState& _state, Host& _host, SpaceObject& _missile)
     {
       return;
     }
-    ExplodeObject(_state, _host, struck);
+    ExplodeObject(_state, struck);
     return;
   }
   if (_state.Data().commander.thargoidInvasionActive != 1)
@@ -1091,7 +1080,7 @@ void UpdateMissileAi(GameState& _state, Host& _host, SpaceObject& _missile)
   {
     return;
   }
-  ExplodeObject(_state, _host, struck);
+  ExplodeObject(_state, struck);
   _state.Data().commander.invadedStationDestroyed = 1;
   _state.Data().commander.thargoidInvasionActive = 0;
 }

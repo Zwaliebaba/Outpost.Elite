@@ -825,7 +825,7 @@ std::uint16_t SteerMenuCursor(GameState& _state, Host& _host, std::uint16_t _row
       break;
     }
   }
-  co_return GetKey(_state, _host);
+  co_return GetKey(_state);
 }
 
 // ── The shipyard's rules ──

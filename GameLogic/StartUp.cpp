@@ -53,27 +53,16 @@ constexpr std::uint16_t CREDITS_TIMER_TICKS = 3000; // 3 s
 
 void InstallDivideAndKeyboardInterrupts(GameState& _state, Host& _host)
 {
-  // The original keeps the BIOS's int 0 and int 9 in savedDivideVector and savedKeyboardVector to put back; native code puts
-  // back the BIOS's own (RestoreDivideAndKeyboardInterrupts).
-  // With interrupts off, the game's own handlers installed, and int 8's segment written again. Nothing raises int 0 (the
-  // divide trap at CS:025E), so its vector goes nowhere; the keyboard's handler is CS:0201. Int 8's segment written as the code
-  // segment keeps the game's handler there; the BIOS's, moved into the code segment, would name code no routine stands in for.
-  _host.DisableInterrupts();
-  _host.SetHandler(Irq::Keyboard, IrqHandler::Game);
-  if (_host.Handler(Irq::Timer) != IrqHandler::Game)
-  {
-    _host.SetHandler(Irq::Timer, IrqHandler::Stray);
-  }
-  _host.EnableInterrupts();
-  ResetKeyboard(_state, _host);
+  // The keys to the game's handler (KeyboardInterrupt, D91), where the original installed it on int 9. Nothing raises int 0,
+  // the divide trap, which the original installs too.
+  _host.SetKeysToGame(true);
+  ResetKeyboard(_state);
 }
 
 void RestoreDivideAndKeyboardInterrupts(Host& _host)
 {
-  // With interrupts off, the BIOS's int 9 and int 0 put back; int 0's goes nowhere, as nothing raises it.
-  _host.DisableInterrupts();
-  _host.SetHandler(Irq::Keyboard, IrqHandler::Bios);
-  _host.EnableInterrupts();
+  // The keys no longer the game's, where the original put the BIOS's int 9 back.
+  _host.SetKeysToGame(false);
 }
 
 void CheckCheatArgument(GameState& _state, const Host& _host)
@@ -136,7 +125,6 @@ void StartNewGame(GameState& _state)
     if (request == 0)
     {
       // Exit to DOS is a quit (D80): the program ends, with no farewell.
-      WipeProgram(_host);
       co_return;
     }
     // The request, through the platform's file store (D78), where the original went through DOS with its own critical-error
@@ -145,11 +133,6 @@ void StartNewGame(GameState& _state)
     PerformDiskRequest(_state, _host, request);
     // JMP RestartPlay.
   }
-}
-
-void WipeProgram(Host& _host)
-{
-  _host.DisableInterrupts();
 }
 
 [[nodiscard]] Task<void> GameLoop(GameState& _state, Host& _host)

@@ -161,7 +161,7 @@ int Application::Run(HINSTANCE _instance, bool _cheat)
       // keys they copy. A key the XT does not have is not sent.
       if (Elite::KeyNameOf(key.scanCode))
       {
-        platform->Events().Inject(Elite::KeyEvent{.key = key.scanCode, .down = key.down});
+        platform->Inject(Elite::KeyEvent{.key = key.scanCode, .down = key.down});
       }
     }
     if (window.TakeResized() && !renderer.Resize())

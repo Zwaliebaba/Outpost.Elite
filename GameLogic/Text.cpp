@@ -573,7 +573,7 @@ void PrintTextLines(GameState& _state, std::string_view _texts, std::uint16_t _c
                                       std::uint16_t _cell)
 {
   const TypedLine line{_buffer, _cell};
-  ResetKeyboard(_state, _host);
+  ResetKeyboard(_state);
   _state.Data().drawing.textPaperPattern = 0;
   _state.Data().text.inputCharsLeft = _most;
   std::uint16_t length = 0;
@@ -588,7 +588,7 @@ void PrintTextLines(GameState& _state, std::string_view _texts, std::uint16_t _c
       continue;
     }
     co_await WaitForTimerTick(_state, _host);
-    const KeyPress key = GetKey(_state, _host);
+    const KeyPress key = GetKey(_state);
     if (key.scanCode == 0)
     {
       continue;

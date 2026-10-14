@@ -439,7 +439,7 @@ constexpr ChartKeys SHORT_RANGE_CHART_KEYS{.drawFrame = &DrawShortRangeChart,
 // CS:0F60).
 [[nodiscard]] Task<std::optional<ScreenKey>> ReadChartKey(GameState& _state, Host& _host, const ChartKeys& _chart)
 {
-  const KeyPress key = GetKey(_state, _host);
+  const KeyPress key = GetKey(_state);
   const std::uint8_t scanCode = key.scanCode;
   if (scanCode == 0)
   {

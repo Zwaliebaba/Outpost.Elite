@@ -15,17 +15,16 @@ namespace Elite
 
 // ── The routines de-assembled (ADR-012), on the GameState and the devices (ADR-014) ──
 
-/// TimerInterrupt (CS:0215): int 8's handler, without the IRET: TimerTick, then the end of the interrupt. The original's chain
+/// TimerInterrupt (CS:0215): the game's tick work, which the host runs at each tick (D91): TimerTick. The original's chain
 /// to the BIOS's handler on an Amstrad (biosTimerChainCountdown) is not taken: the game runs as on an IBM PC (D12).
 void TimerInterrupt(GameState& _state, Host& _host);
 
-/// InstallTimerInterrupt (CS:00C6): the PIT at about 1 kHz, port 61h saved and the speaker's gate and data cleared,
-/// TimerInterrupt installed on int 8 in place of the BIOS's handler, which the original keeps in its code segment
-/// (savedTimerVector) and native code takes from the BIOS, and interrupts enabled.
+/// InstallTimerInterrupt (CS:00C6): the tick started, every millisecond (Host::SetTickRunning, D87), and the speaker's bits
+/// saved and cleared, where the original programmed the PIT to about 1 kHz and installed TimerInterrupt on int 8.
 void InstallTimerInterrupt(GameState& _state, Host& _host);
 
-/// RestoreTimerInterrupt (CS:016B): with interrupts off, the BIOS's handler put back on int 8, port 61h as
-/// InstallTimerInterrupt found it, and the PIT's tick as the BIOS has it; then interrupts on. The original's Amstrad rate is not
+/// RestoreTimerInterrupt (CS:016B): the speaker's bits as InstallTimerInterrupt found them, and the tick stopped, where the
+/// original put the BIOS's int 8 handler and tick back. The original's Amstrad rate is not
 /// taken (D12); its reading of the clock by int 1Ah, which only its catalogue's search attributes took (ADR-012 item 14), went
 /// with the files' DOS (ADR-049).
 void RestoreTimerInterrupt(GameState& _state, Host& _host);

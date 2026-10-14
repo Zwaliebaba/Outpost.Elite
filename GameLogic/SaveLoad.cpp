@@ -257,7 +257,7 @@ std::uint16_t PrintAt(GameState& _state, std::string_view _text, std::uint16_t _
 {
   for (;;)
   {
-    const KeyPress key = GetKey(_state, _host);
+    const KeyPress key = GetKey(_state);
     if (key.scanCode != 0)
     {
       co_return key;

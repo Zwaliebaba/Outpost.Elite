@@ -30,23 +30,17 @@ namespace Elite
 /// Waits as a rule (ADR-015).
 [[nodiscard]] Task<void> GameLoop(GameState& _state, Host& _host);
 
-/// InstallDivideAndKeyboardInterrupts (CS:0105): with interrupts off, the game's int 0 and int 9 handlers installed in the
-/// BIOS's place, int 8's segment rewritten; then interrupts on, and ResetKeyboard. The original first keeps the BIOS's two
-/// in the data segment, which native code does not need (RestoreDivideAndKeyboardInterrupts).
+/// InstallDivideAndKeyboardInterrupts (CS:0105): the keys to the game's handler (Host::SetKeysToGame, D91), where the original
+/// installed its int 9 handler, and ResetKeyboard.
 void InstallDivideAndKeyboardInterrupts(GameState& _state, Host& _host);
 
-/// RestoreDivideAndKeyboardInterrupts (CS:0148): with interrupts off, the BIOS's int 9 and int 0 handlers put back
-/// (Host::BiosInterruptVector), where the original puts back what InstallDivideAndKeyboardInterrupts kept; then interrupts
-/// on.
+/// RestoreDivideAndKeyboardInterrupts (CS:0148): the keys no longer the game's, where the original put the BIOS's int 9
+/// handler back.
 void RestoreDivideAndKeyboardInterrupts(Host& _host);
 
 /// CheckCheatArgument (CS:02A5): cheatEnabled=1 when the game was started with the cheat on (Host::CheatRequested, D80), 0
 /// otherwise.
 void CheckCheatArgument(GameState& _state, const Host& _host);
-
-/// WipeProgram (CS:0554): interrupts off. The original then fills CS:0564-8F30 with the code segment's low byte, which nothing
-/// reads: the code segment is not the game's memory.
-void WipeProgram(Host& _host);
 
 /// StartNewGame (CS:4671): the start-up commander copied back over the commander, a byte at a time, going up as REP MOVSB does (the
 /// direction flag is clear wherever the game calls it, change 3c), and the per-game state reset.

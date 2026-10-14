@@ -14,13 +14,7 @@ namespace Elite
 namespace
 {
 
-// The bit of the 8088's FLAGS that the platform keeps: the interrupt flag. The rest of FLAGS is the processor's, and there is
-// none: nothing sets the trap flag, and native code runs its string work forwards (ADR-046).
-constexpr std::uint16_t FLAG_INTERRUPT = 0x0200;
-// DOS starts a program with FLAGS F202h: interrupts on and the direction flag clear (ADR-006 item 4).
-constexpr std::uint16_t ENTRY_FLAGS = 0xF202;
-
-// The system control port: bit 0 the tone's gate, bit 1 the speaker's data.
+// The speaker's two bits: bit 0 the tone's gate, bit 1 its data.
 constexpr std::uint8_t TONE_GATE = 0x01;
 constexpr std::uint8_t SPEAKER_DATA = 0x02;
 constexpr std::uint8_t SPEAKER_BITS = 0x03;
@@ -38,12 +32,10 @@ struct ProgramStopped
 Host::Host(GameState& _state, FileStore& _files, const Desc& _desc)
   : m_state(_state),
     m_speaker(m_clock),
-    m_events(m_clock),
     m_cga(m_clock),
     m_mouse(_desc.mousePresent),
     m_files(_files),
     m_startMoment(_desc.startMoment),
-    m_flags(ENTRY_FLAGS),
     m_cheat(_desc.cheat)
 {
 }
@@ -61,14 +53,22 @@ void Host::SetEntry(ProgramRoutine _routine)
   m_entry.routine = std::move(_routine);
 }
 
-void Host::SetGameHandler(Irq _irq, NativeRoutine _routine)
+void Host::SetTickHandler(TickRoutine _routine)
 {
-  HookedRoutine& handler = m_gameHandlers[static_cast<std::size_t>(_irq)];
-  if (handler.routine)
+  if (m_tickHandler.routine)
   {
-    throw std::logic_error("Host: two native routines at one entry");
+    throw std::logic_error("Host: the game has a tick handler already");
   }
-  handler.routine = std::move(_routine);
+  m_tickHandler.routine = std::move(_routine);
+}
+
+void Host::SetKeyHandler(KeyRoutine _routine)
+{
+  if (m_keyHandler.routine)
+  {
+    throw std::logic_error("Host: the game has a key handler already");
+  }
+  m_keyHandler.routine = std::move(_routine);
 }
 
 // ── Running ──
@@ -143,123 +143,54 @@ void Host::Resume()
   }
 }
 
-// ── Interrupts ──
+// ── The tick, the keys and the speaker ──
 
-void Host::EnableInterrupts()
+void Host::SetTickRunning(bool _running) noexcept
 {
-  m_flags = static_cast<std::uint16_t>(m_flags | FLAG_INTERRUPT);
-  TakeDueInterrupts();
+  m_nextTickAt = _running ? m_clock + TICK_MILLISECONDS : NO_EVENT;
 }
 
-void Host::DisableInterrupts() noexcept
+void Host::Inject(const KeyEvent& _event)
 {
-  m_flags = static_cast<std::uint16_t>(m_flags & ~FLAG_INTERRUPT);
-}
-
-bool Host::InterruptsEnabled() const noexcept
-{
-  return (m_flags & FLAG_INTERRUPT) != 0;
-}
-
-void Host::TakeDueInterrupts()
-{
-  while (InterruptsEnabled() && m_events.InterruptPending())
+  m_keys.push_back(_event);
+  if (m_nextKeyAt == NO_EVENT)
   {
-    const Irq irq = m_events.Take();
-    ++m_stepsSinceIdle;
-    ++m_interruptsTaken;
-    Interrupt(irq);
-    if (Stopped() != StopReason::Reached)
-    {
-      throw ProgramStopped{};
-    }
+    m_nextKeyAt = m_clock + 1;
   }
 }
 
-void Host::SetTickRunning(bool _running)
+void Host::SetSpeakerBits(std::uint8_t _bits)
 {
-  m_events.SetTickRunning(_running);
-  TakeDueInterrupts();
-}
-
-void Host::EndOfInterrupt()
-{
-  m_events.EndOfInterrupt();
-  TakeDueInterrupts();
-}
-
-void Host::SetSystemControl(std::uint8_t _value)
-{
-  const auto changed = static_cast<std::uint8_t>(m_systemControl ^ _value);
-  m_systemControl = _value;
-  if ((changed & SPEAKER_BITS) != 0)
+  const auto bits = static_cast<std::uint8_t>(_bits & SPEAKER_BITS);
+  if (bits != m_speakerBits)
   {
-    m_speaker.SetBits((_value & TONE_GATE) != 0, (_value & SPEAKER_DATA) != 0);
+    m_speakerBits = bits;
+    m_speaker.SetBits((bits & TONE_GATE) != 0, (bits & SPEAKER_DATA) != 0);
   }
-}
-
-// As the 8088 enters a handler: IF cleared, the handler its vector names run, and its IRET putting the flags back as they were.
-void Host::Interrupt(Irq _irq)
-{
-  const Irq irq = _irq;
-  const std::uint16_t flags = m_flags;
-  m_flags = static_cast<std::uint16_t>(m_flags & ~FLAG_INTERRUPT);
-  switch (Handler(irq))
-  {
-  case IrqHandler::Bios:
-    if (irq == Irq::Timer)
-    {
-      RunBiosTimerHandler();
-    }
-    else
-    {
-      RunBiosKeyboardHandler();
-    }
-    break;
-  case IrqHandler::Game:
-  {
-    HookedRoutine& handler = m_gameHandlers[static_cast<std::size_t>(irq)];
-    if (!handler.routine)
-    {
-      throw std::logic_error("Host: an interrupt to code no native routine stands in for");
-    }
-    ++handler.calls;
-    handler.routine();
-    break;
-  }
-  case IrqHandler::Stray:
-    throw std::logic_error("Host: an interrupt to code no native routine stands in for");
-  }
-  m_flags = flags;
-}
-
-// ── The host's defaults, where the game has no handler of its own ──
-
-// A tick that came before the game stopped it: the interrupt ended.
-void Host::RunBiosTimerHandler()
-{
-  m_events.EndOfInterrupt();
-}
-
-// A key before the game's handler is in place, or after it is taken out: dropped, and the interrupt ended.
-void Host::RunBiosKeyboardHandler()
-{
-  (void)m_events.TakeKey();
-  m_events.EndOfInterrupt();
 }
 
 // ── Paced time ──
 
 void Host::Idle(Milliseconds _limit)
 {
-  Milliseconds next = std::min({m_events.NextEventAt(), m_cga.NextStatusChangeAt(), _limit});
+  Milliseconds next = std::min({m_nextTickAt, m_nextKeyAt, m_cga.NextStatusChangeAt(), _limit});
   if (next <= m_clock)
   {
     next = m_clock + 1;
   }
   m_clock = next;
   m_stepsSinceIdle = 0;
-  m_events.Advance();
+  if (m_clock >= m_nextTickAt)
+  {
+    m_tickDue = true;
+    m_nextTickAt = m_clock + TICK_MILLISECONDS;
+  }
+  if (m_clock >= m_nextKeyAt && !m_keyDue)
+  {
+    m_keyDue = m_keys.front();
+    m_keys.pop_front();
+    m_nextKeyAt = m_keys.empty() ? NO_EVENT : m_clock + 1;
+  }
 }
 
 Host::RunAwaiter Host::Wait()
@@ -272,13 +203,35 @@ void Host::Spin()
 {
   // The clock stands still, below the run's end, where the last wait left it.
   ++m_stepsSinceIdle;
-  EndTurn();
+  if (Stopped() != StopReason::Reached)
+  {
+    throw ProgramStopped{};
+  }
 }
 
-// After a wait or a spin, and the game resumed if the wait reached the run's end: the interrupts now due.
-void Host::EndTurn()
+// After a wait, and the game resumed if the wait reached the run's end: the tick's work, then a key (D91).
+void Host::RunDue()
 {
-  TakeDueInterrupts();
+  if (m_tickDue)
+  {
+    m_tickDue = false;
+    ++m_ticksRun;
+    if (m_tickHandler.routine)
+    {
+      ++m_tickHandler.calls;
+      m_tickHandler.routine();
+    }
+  }
+  if (m_keyDue)
+  {
+    const KeyEvent key = *m_keyDue;
+    m_keyDue.reset();
+    if (m_keysToGame && m_keyHandler.routine)
+    {
+      ++m_keyHandler.calls;
+      m_keyHandler.routine(key);
+    }
+  }
   if (Stopped() != StopReason::Reached)
   {
     throw ProgramStopped{};
@@ -296,7 +249,7 @@ Task<void> Host::Spend(Milliseconds _duration)
       co_await RunAwaiter(*this);
       continue;
     }
-    TakeDueInterrupts();
+    RunDue();
   }
 }
 

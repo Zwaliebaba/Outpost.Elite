@@ -148,9 +148,9 @@ void RampAxis(std::uint8_t _key, std::uint8_t& _lastKey, std::uint8_t& _ramp)
 
 } // namespace
 
-void KeyboardInterrupt(GameState& _state, Host& _host)
+void KeyboardInterrupt(GameState& _state, const KeyEvent& _event)
 {
-  ReadScanCode(_state, _host);
+  ReadScanCode(_state, _event);
 }
 
 bool IsMouseDriverInstalled(Host& _host)
@@ -163,7 +163,7 @@ bool IsMouseDriverInstalled(Host& _host)
   // GetKey until a key comes, the JE back to the entry at 6DECh.
   for (;;)
   {
-    const KeyPress key = GetKey(_state, _host);
+    const KeyPress key = GetKey(_state);
     if (key.scanCode != 0)
     {
       co_return;
@@ -192,9 +192,8 @@ Steering ReadSteering(GameState& _state, Host& _host)
   return ReadMouseSteering(_state, _host);
 }
 
-KeyPress GetKey(GameState& _state, Host& _host)
+KeyPress GetKey(GameState& _state)
 {
-  _host.DisableInterrupts();
   KeyPress key{false, 0, false};
   const std::uint8_t count = _state.Data().input.keyBufferCount;
   if (count != 0)
@@ -205,13 +204,11 @@ KeyPress GetKey(GameState& _state, Host& _host)
     _state.Data().input.keyBufferCount = static_cast<std::uint8_t>(count - 1);
     key = KeyPress{true, static_cast<std::uint8_t>(code & ~SHIFT_BIT), (code & SHIFT_BIT) != 0};
   }
-  _host.EnableInterrupts();
   return key;
 }
 
-void ResetKeyboard(GameState& _state, Host& _host)
+void ResetKeyboard(GameState& _state)
 {
-  _host.DisableInterrupts();
   // REP STOSW: every key released, two at a time.
   for (std::uint8_t& key : KeyDown(_state))
   {
@@ -221,12 +218,11 @@ void ResetKeyboard(GameState& _state, Host& _host)
   _state.Data().input.keyBufferWrite = 0;
   _state.Data().input.keyBufferRead = 0;
   _state.Data().playerShip.rollRate = 0;
-  _host.EnableInterrupts();
 }
 
-void ReadScanCode(GameState& _state, Host& _host)
+void ReadScanCode(GameState& _state, const KeyEvent& _event)
 {
-  const KeyEvent event = _host.TakeKey();
+  const KeyEvent event = _event;
   const auto key = static_cast<std::uint8_t>(event.key & ~SHIFT_BIT);
   if (!event.down)
   {
@@ -257,7 +253,6 @@ void ReadScanCode(GameState& _state, Host& _host)
       _state.Data().input.keyBufferCount = static_cast<std::uint8_t>(count + 1);
     }
   }
-  _host.EndOfInterrupt();
 }
 
 bool ReadFireButton(const GameState& _state, Host& _host)

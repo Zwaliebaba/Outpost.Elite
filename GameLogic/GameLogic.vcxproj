@@ -140,7 +140,6 @@
     <ClInclude Include="Scene.h" />
     <ClInclude Include="SceneState.h" />
     <ClInclude Include="SceneTables.h" />
-    <ClInclude Include="Scheduler.h" />
     <ClInclude Include="Sha256.h" />
     <ClInclude Include="SharedTables.h" />
     <ClInclude Include="ShipModel.h" />
@@ -203,7 +202,6 @@
     <ClCompile Include="Replay.cpp" />
     <ClCompile Include="SaveLoad.cpp" />
     <ClCompile Include="Scene.cpp" />
-    <ClCompile Include="Scheduler.cpp" />
     <ClCompile Include="Sha256.cpp" />
     <ClCompile Include="ShipModel.cpp" />
     <ClCompile Include="Ships.cpp" />

@@ -20,8 +20,8 @@ void Game::Start(std::uint16_t _pspSegment)
   GameState* const state = &m_state;
   Elite::Host* const host = &m_host;
   m_host.SetEntry([state, host]() -> Task<void> { co_await Elite::Start(*state, *host); });
-  m_host.SetGameHandler(Irq::Timer, [state, host] { TimerInterrupt(*state, *host); });
-  m_host.SetGameHandler(Irq::Keyboard, [state, host] { KeyboardInterrupt(*state, *host); });
+  m_host.SetTickHandler([state, host] { TimerInterrupt(*state, *host); });
+  m_host.SetKeyHandler([state](const KeyEvent& _event) { KeyboardInterrupt(*state, _event); });
 }
 
 } // namespace Elite

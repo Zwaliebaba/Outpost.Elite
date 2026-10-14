@@ -158,9 +158,6 @@
     <ClCompile Include="SaveLoadTests.cpp">
       <Filter>SaveLoad</Filter>
     </ClCompile>
-    <ClCompile Include="SchedulerTests.cpp">
-      <Filter>Platform</Filter>
-    </ClCompile>
     <ClCompile Include="Sha256Tests.cpp">
       <Filter>Replay</Filter>
     </ClCompile>

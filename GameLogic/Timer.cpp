@@ -35,7 +35,7 @@ std::uint8_t Decrement(std::uint8_t& _field)
 void OutSpeaker(GameState& _state, Host& _host, std::uint8_t _image)
 {
   _state.Data().audio.speakerPortImage = _image;
-  _host.SetSystemControl(_image);
+  _host.SetSpeakerBits(_image);
 }
 
 // A beep's square wave: bit 1 of _bit replaces the speaker's data bit.
@@ -171,33 +171,22 @@ void TickSoundEffects(GameState& _state, Host& _host)
 void InstallTimerInterrupt(GameState& _state, Host& _host)
 {
   _host.SetTickRunning(true);
-  const std::uint8_t speaker = _host.SystemControl();
+  const std::uint8_t speaker = _host.SpeakerBits();
   _state.Data().timer.savedSpeakerPort = speaker;
   const auto image = static_cast<std::uint8_t>(speaker & ~SPEAKER_BITS);
   _state.Data().audio.speakerPortImage = image;
-  _host.SetSystemControl(image);
-  // The game's own handler, at CS:0215, installed in place of the BIOS's, which the original keeps in savedTimerVector and
-  // native code puts back by name (RestoreTimerInterrupt).
-  _host.SetHandler(Irq::Timer, IrqHandler::Game);
-  _host.EnableInterrupts();
+  _host.SetSpeakerBits(image);
 }
 
 void RestoreTimerInterrupt(GameState& _state, Host& _host)
 {
-  _host.DisableInterrupts();
-  // The BIOS's handler put back, as InstallTimerInterrupt found it.
-  _host.SetHandler(Irq::Timer, IrqHandler::Bios);
-  _host.SetSystemControl(_state.Data().timer.savedSpeakerPort);
+  _host.SetSpeakerBits(_state.Data().timer.savedSpeakerPort);
   _host.SetTickRunning(false);
-  _host.EnableInterrupts();
 }
 
 void TimerInterrupt(GameState& _state, Host& _host)
 {
-  // PUSH AX / PUSH DS / PUSH ES, and their POPs before the IRET or the chain: what it loads into them, the data segment, B800h
-  // and the end of the interrupt's 20h, goes no further.
   TimerTick(_state, _host);
-  _host.EndOfInterrupt();
 }
 
 void TimerTick(GameState& _state, Host& _host)
