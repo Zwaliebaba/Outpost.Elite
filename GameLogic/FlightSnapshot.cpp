@@ -3,6 +3,7 @@
 #include "FlightSnapshot.h"
 
 #include "Arithmetic.h"
+#include "Maths.h"
 #include "Combat.h"
 #include "Flight.h"
 #include "GameState.h"
@@ -26,8 +27,10 @@ namespace
 constexpr std::uint8_t TYPE_BITS = 0x3E; // bits 1-5 of a slot's type byte
 constexpr std::int32_t SIGN_24 = 0x800000;
 constexpr std::int32_t WRAP_24 = 0x1000000;
-constexpr std::uint16_t TURN = 0x800;     // a whole turn, in the game's angles
-constexpr unsigned MOST_SCALE_SHIFT = 24; // a scale shift past a 24-bit position's width scales nothing more
+constexpr std::uint16_t TURN = 0x800;                 // a whole turn, in the game's angles
+constexpr std::uint16_t HEADING_ANGLE_OFFSET = 0x400; // what UpdatePlayerVelocity adds to the pitch and the yaw
+constexpr std::int16_t HEADING_LENGTH = 10000;        // the heading's length, as ApplyPitch's axes are long
+constexpr unsigned MOST_SCALE_SHIFT = 24;             // a scale shift past a 24-bit position's width scales nothing more
 
 // The dashboard as UpdateDashboard and its routines keep it (Flight.cpp).
 constexpr std::uint8_t FLAG_HOSTILE = 0x01;
@@ -258,7 +261,21 @@ FlightSnapshot TakeFlightSnapshot(const GameState& _state)
   snapshot.velocityX = static_cast<std::int16_t>(std::uint16_t{data.playerShip.playerVelocityX});
   snapshot.velocityY = static_cast<std::int16_t>(std::uint16_t{data.playerShip.playerVelocityY});
   snapshot.velocityZ = static_cast<std::int16_t>(std::uint16_t{data.playerShip.playerVelocityZ});
+  const std::array<std::int16_t, 3> heading = PlayerHeading(snapshot.playerPitch, snapshot.playerYaw, HEADING_LENGTH);
+  snapshot.headingX = heading[0];
+  snapshot.headingY = heading[1];
+  snapshot.headingZ = heading[2];
   return snapshot;
+}
+
+std::array<std::int16_t, 3> PlayerHeading(std::uint16_t _pitch, std::uint16_t _yaw, std::int16_t _length)
+{
+  // SetSinCos 6 and 7 as UpdatePlayerVelocity sets them, and its two turns.
+  const SinCos pitch = SinCosOf(Negate(static_cast<std::uint16_t>(_pitch + HEADING_ANGLE_OFFSET)));
+  const SinCos yaw = SinCosOf(static_cast<std::uint16_t>(_yaw + HEADING_ANGLE_OFFSET));
+  const Pair yawed = RotateBySinCos(Pair{0, _length}, yaw);
+  const Pair pitched = RotateBySinCos(Pair{0, yawed.second}, pitch);
+  return {yawed.first, pitched.first, pitched.second};
 }
 
 std::array<float, 3> WorldPosition(const SnapshotObject& _object) noexcept

@@ -163,6 +163,9 @@ struct FlightSnapshot
   std::int16_t velocityX = 0;   ///< the player's velocity (UpdatePlayerVelocity), what every object moves back by in a frame, in
   std::int16_t velocityY = 0;   ///< the scene's axes: the speed along the heading, 32 times it while the jump drive is engaged
   std::int16_t velocityZ = 0;
+  std::int16_t headingX = 0; ///< the way the player heads, 10000 long in the scene's axes, as UpdatePlayerVelocity turns the
+  std::int16_t headingY = 0; ///< speed now: the velocity's way while it is fresh, which arriving from a jump leaves stale
+  std::int16_t headingZ = 0; ///< until the player steers, and the docking computer replaces with its approach (PlayerHeading)
   std::array<SnapshotObject, MOST_OBJECTS> objects{};
   std::size_t objectCount = 0; ///< the active slots, in slot order, at the start of objects
   SnapshotDashboard dashboard;
@@ -255,6 +258,10 @@ inline constexpr float VIEW_FOCAL = 256.0f;
 /// The title's dashboard (RunTitle, D64): the cockpit's picture as ShowCockpitScreen copies it, which UpdateDashboard never draws
 /// over on the title, so nothing on it is live; and _message, the title's ---- E L I T E ----, on the message line.
 [[nodiscard]] SnapshotDashboard TitleDashboard(std::string_view _message);
+
+/// The way UpdatePlayerVelocity would turn the player's speed now, _length long: (0, _length) turned by the yaw plus 400h, then
+/// what that leaves of it by the pitch plus 400h, negated, with the game's sine table and rounding. It writes nothing.
+[[nodiscard]] std::array<std::int16_t, 3> PlayerHeading(std::uint16_t _pitch, std::uint16_t _yaw, std::int16_t _length);
 
 /// _object's place in the scene's axes from its own coordinates, which the game keeps whether or not it is in the view; within
 /// 2.3 units across the corpus, the rotation's rounding, of ScenePosition's, which holds only for an object the frame drew (D69).

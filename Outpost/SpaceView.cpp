@@ -313,10 +313,16 @@ void SpaceView::MoveStardust(const Elite::Platform& _platform, const std::array<
       mote = Engine::Vector3{.x = next(), .y = next(), .z = next()};
     }
   }
-  // The velocity moves the world back once an update, which the latest two snapshots time; at most a few updates at once, so a
+  // The world moves back by the velocity's length once an update, which the latest two snapshots time, and the dust with it, along
+  // the player's heading, as 1987's dust streams from the view's middle whatever the velocity's way: arriving from a jump leaves
+  // the velocity stale until the player steers, and the docking computer flies its approach. At most a few updates at once, so a
   // stall does not sweep the dust away.
-  const Engine::Vector3 velocity{
-    .x = static_cast<float>(latest.velocityX), .y = static_cast<float>(latest.velocityY), .z = static_cast<float>(latest.velocityZ)};
+  const float speed = std::sqrt(static_cast<float>(latest.velocityX) * static_cast<float>(latest.velocityX) +
+                                static_cast<float>(latest.velocityY) * static_cast<float>(latest.velocityY) +
+                                static_cast<float>(latest.velocityZ) * static_cast<float>(latest.velocityZ));
+  const Engine::Vector3 heading =
+    Unit(static_cast<float>(latest.headingX), static_cast<float>(latest.headingY), static_cast<float>(latest.headingZ));
+  const Engine::Vector3 velocity{.x = heading.x * speed, .y = heading.y * speed, .z = heading.z * speed};
   float updates = 0.0f;
   if (previous.sequence != 0 && latest.pacedTime > previous.pacedTime && m_stardustClock != 0 && now > m_stardustClock)
   {
