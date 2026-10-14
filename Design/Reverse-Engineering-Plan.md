@@ -1,6 +1,6 @@
 # ELITES.EXE — reverse-engineering and native port plan
 
-**Status:** proposed 2026-10-09. The owner's rulings are D1 to D59 in §8. A ruling becomes a decision when the ADR in §9 records it (AGENTS.md §6). Each phase's section in §5 says how its exit was met.
+**Status:** proposed 2026-10-09. The owner's rulings are D1 to D73 in §8. A ruling becomes a decision when the ADR in §9 records it (AGENTS.md §6). Each phase's section in §5 says how its exit was met.
 
 | Phase | State | Recorded in |
 |---|---|---|
@@ -254,7 +254,7 @@ Then come the changes on purpose, from which the game diverges freely (D26). The
    - *e. The shell drives the game from a frame tick, wall time mapped to ticks at one seam (R16). How the replays are driven then is measured with the step and brought to the owner before it lands. Met already: the shell maps the wall clock's milliseconds to paced cycles at one seam (`ReplayCycle`), catching up no more than a moment, and the replays are driven by the same mapping, so nothing changes for them.*
 
    *What `DataPlaces.h` and the re-base checks become is ruled at the end of the piece. D73 (2026-10-14): both stay until piece 5, which changes the docked state and so ends its match with 1987's; then they are ruled again. Piece 4 is done.*
-5. **The docked screens** (D44, D53): the six screens of `docked/` and their keys, F1 to F6, as new game code. The rules (prices, credit, cargo space, tech level, resale and laser mounts) are functions with no screen code, and known answers test them. Each screen is drawn on WARP and compared with a golden image (§6.5). The docked gaps below are drawn first.
+5. **The docked screens** (D44, D53): the five screens of `docked/` and the six keys, F1 to F6, F1 the launch, as new game code. The rules (prices, credit, cargo space, tech level, resale and laser mounts) are functions with no screen code, and known answers test them. Each screen is drawn on WARP and compared with a golden image (§6.5). The docked gaps below are drawn first.
 
 **What the canvas does not show yet (D54).** Each item is in the 1987 game (Reference-Map.md, `UpdateDashboard`, `Message.h`). The owner draws it before the piece that needs it.
 
@@ -427,7 +427,6 @@ After D44, no replay reaches the docked screens. Their rules are functions with 
 | [ADR-038](ADR/ADR-038-the-turns-that-never-wait.md) | The native game loop, first step: the loop turns that never wait go (D70) | Phase 6, piece 4 — written |
 | [ADR-039](ADR/ADR-039-the-waits-are-declared.md) | The native game loop, second step: the waits are declared (D70) | Phase 6, piece 4 — written |
 | [ADR-040](ADR/ADR-040-the-fields-stop-counting.md) | The native game loop, second step's end: the fields stop counting, and `Counted` becomes `Field` (D70, D71) | Phase 6, piece 4 — written |
-| [ADR-042](ADR/ADR-042-the-sound-is-the-games.md) | The native game loop, fourth step: the sound synthesised from what the game's sound routines set (D70) | Phase 6, piece 4 — written |
 | [ADR-041](ADR/ADR-041-the-devices-go.md) | The native game loop, third step: the PC's devices give way to what the game uses of them, a part at a time (D70) | Phase 6, piece 4 — written |
-| — | The native game loop, its later steps (D40, D52, D70) | Phase 6, piece 4 — to write |
+| [ADR-042](ADR/ADR-042-the-sound-is-the-games.md) | The native game loop, fourth step: the sound synthesised from what the game's sound routines set (D70) | Phase 6, piece 4 — written |
 | — | The docked screens and their guard (D44, D53) | Phase 6, piece 5 — to write |
