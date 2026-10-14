@@ -118,13 +118,12 @@ public:
   }
 
 private:
-  // Only a Game loads a GameState.
+  // Only a Game starts a GameState.
   friend class Game;
 
-  /// Takes the game's state as DOS would have loaded the reference with its code segment at _codeSegment: _state,
-  /// GameData's bytes as ReferenceLoadImage lays them out, from the data segment's image. Video memory is left as it is. The
-  /// data segment is paragraph DATA_SEGMENT_PARAGRAPH on from _codeSegment.
-  void Load(std::uint16_t _codeSegment, std::span<const std::uint8_t> _state) noexcept;
+  /// Takes the game's state as the program starts (SetStartState), with its code segment at _codeSegment and its data segment
+  /// DATA_SEGMENT_PARAGRAPH paragraphs on. Video memory is left as it is.
+  void Start(std::uint16_t _codeSegment) noexcept;
 
   [[nodiscard]] std::span<std::uint8_t, sizeof(GameData)> DataStorage() noexcept
   {

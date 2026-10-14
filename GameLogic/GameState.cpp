@@ -2,6 +2,8 @@
 
 #include "GameState.h"
 
+#include "StartState.h"
+
 #include <algorithm>
 #include <stdexcept>
 
@@ -13,13 +15,12 @@ GameState::GameState()
 {
 }
 
-void GameState::Load(std::uint16_t _codeSegment, std::span<const std::uint8_t> _state) noexcept
+void GameState::Start(std::uint16_t _codeSegment) noexcept
 {
   m_codeSegment = _codeSegment;
   m_dataSegment = static_cast<std::uint16_t>(_codeSegment + DATA_SEGMENT_PARAGRAPH);
-  const std::span<std::uint8_t, sizeof(GameData)> data = DataStorage();
-  std::ranges::fill(data, std::uint8_t{0});
-  std::ranges::copy(_state.first(std::min<std::size_t>(_state.size(), data.size())), data.begin());
+  std::ranges::fill(DataStorage(), std::uint8_t{0});
+  SetStartState(*m_data);
 }
 
 void GameState::RefuseVideo()

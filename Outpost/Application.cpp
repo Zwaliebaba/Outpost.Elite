@@ -135,11 +135,7 @@ int Application::Run(HINSTANCE _instance)
   // Every routine is native, in place of the original (ADR-010): the native platform runs them over the memory the GameState
   // owns (D19, D33).
   const auto game = std::make_unique<Elite::Game>(files, desc);
-  if (!game->Load(Elite::PSP_SEGMENT))
-  {
-    Fail(L"The game would not load.");
-    return 1;
-  }
+  game->Start(Elite::PSP_SEGMENT);
   Elite::Platform* const platform = &game->Host();
 
   const Elite::Cycles start = platform->Clock();

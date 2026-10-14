@@ -1,6 +1,6 @@
 # ADR-044 — Wholly native, the state: written by name, then free of the 1987 layout
 
-**Status:** accepted 2026-10-14, with the change that implements it, step 1 of Phase 7 ([Reverse-Engineering-Plan.md §5, Phase 7](../Reverse-Engineering-Plan.md#phase-7--wholly-native)), under the owner's rulings D76 and D78. Each later step of 2 to 5 amends it as it lands.
+**Status:** accepted 2026-10-14, with the change that implements it, step 1 of Phase 7 ([Reverse-Engineering-Plan.md §5, Phase 7](../Reverse-Engineering-Plan.md#phase-7--wholly-native)), under the owner's rulings D76 and D78. Each later step of 2 to 5 amends it as it lands. **Amended 2026-10-14, step 4:** the start state is set in C++, and nothing loads the 1987 image. The steps land in the order 1, 4, 5, 2, 3: once the digest no longer depends on the layout, the generators can go before the layout changes, and steps 2 and 3 are then edits of plain source.
 
 ## Context
 
@@ -24,6 +24,21 @@ While the structs lay their members out as the 1987 data segment did, the state 
 | The suite | `GameLogicTests` passes under g++, 185 tests, every digest, picture, outcome and answer of the corpus among them, with no re-base |
 | Not run here | the MSVC build and the game: CI builds and runs the tests |
 
+## Decision, step 4: the start state in C++
+
+1. **`SetStartState` sets the state as the program starts** (`StartState.cpp`): each member the image's load left other than 0, by name, a text as its characters and a buffer as its bytes, written once from the image's load (1,066 of 14,420 bytes) and kept as source. `GameState::Start` zeroes the state and calls it; `Game::Start` takes the place of `Game::Load`, which could fail only if the image did.
+2. **`ReferenceLoadImage` and `DataPlaces.h` go**, with the D5 byte and the image's three stored addresses the load translated; their meanings are in the start state already. `Tools/GenerateGameData.py` no longer writes `DataPlaces.h`.
+3. **The re-base checks compare by member, not by 1987 offset** (`StateDumps.h`): a dump is each byte and word of the state, its path from GameData and its value (`StateLeaves`), and a re-base holds every one to the dump before the change by its path. `Tools/CompareStateValues.py`, which read the 1987-offset dumps, goes. This supersedes D73.
+
+### Measured 2026-10-14, step 4
+
+| Check | Result |
+|---|---|
+| The start state | the state `SetStartState` sets, written by its members, hashes to `b5d7f036…b397`, the hash of the state the image loaded, measured before the loader went; `StateDigestTests.TheGameStateHoldsTheGamesMemory` holds it there |
+| The suite | `GameLogicTests` passes under g++, 185 tests, the corpus's digests among them, with no re-base |
+| The re-base checks | a dump of the corpus by member (26 replays, 13,747 values a point) and a re-base against it pass, and leave every replay as it was |
+
 ## What this forecloses
 
 - **The state's layout as a format.** What the digest and the commander file hold is the members in their order; a struct may lay them out as it likes.
+- **Loading the state from the 1987 image.** The start state is source.

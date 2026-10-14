@@ -85,7 +85,6 @@
     <ClInclude Include="CombatTables.h" />
     <ClInclude Include="CommanderState.h" />
     <ClInclude Include="Field.h" />
-    <ClInclude Include="DataPlaces.h" />
     <ClInclude Include="DirectoryFileStore.h" />
     <ClInclude Include="DiskState.h" />
     <ClInclude Include="Docked.h" />
@@ -162,6 +161,7 @@
     <ClInclude Include="SpaceViewLayers.h" />
     <ClInclude Include="Speaker.h" />
     <ClInclude Include="SquareWave.h" />
+    <ClInclude Include="StartState.h" />
     <ClInclude Include="StartUp.h" />
     <ClInclude Include="StartUpState.h" />
     <ClInclude Include="StartUpTables.h" />
@@ -225,6 +225,7 @@
     <ClCompile Include="SpaceViewLayers.cpp" />
     <ClCompile Include="Speaker.cpp" />
     <ClCompile Include="SquareWave.cpp" />
+    <ClCompile Include="StartState.cpp" />
     <ClCompile Include="StartUp.cpp" />
     <ClCompile Include="StateDigest.cpp" />
     <ClCompile Include="Text.cpp" />

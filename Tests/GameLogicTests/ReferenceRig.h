@@ -64,8 +64,7 @@ public:
       m_files(m_directory.Path()),
       m_game(std::make_unique<Elite::Game>(m_files, Desc(_startMoment, _mousePresent)))
   {
-    using Microsoft::VisualStudio::CppUnitTestFramework::Assert;
-    Assert::IsTrue(m_game->Load(Elite::PSP_SEGMENT), L"the reference loads from its generated image");
+    m_game->Start(Elite::PSP_SEGMENT);
   }
 
   /// The platform the game runs on.

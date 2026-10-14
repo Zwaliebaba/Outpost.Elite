@@ -1,7 +1,7 @@
 #include "pch.h"
 
 #include "ReferenceRig.h"
-#include "SharedTables.h"
+#include "Sha256.h"
 #include "StateDigest.h"
 #include "StateWriter.h"
 
@@ -9,6 +9,7 @@
 #include <cstring>
 #include <memory>
 #include <stdexcept>
+#include <utility>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
@@ -17,6 +18,9 @@ namespace GameLogicTests
 
 namespace
 {
+
+// The .cdr file's size: the commander's bytes (D78).
+constexpr std::size_t COMMANDER_FILE_BYTES = 208;
 
 // A byte unlike its neighbours for every place in a struct of _bytes bytes: what fills one before it is written by its members.
 [[nodiscard]] std::vector<std::uint8_t> Pattern(std::size_t _bytes)
@@ -50,7 +54,7 @@ public:
     Assert::AreEqual(0, std::memcmp(read.get(), pattern.data(), pattern.size()), L"and read back over it, the same bytes");
 
     // The commander file (D78) is the commander's 208 bytes.
-    Assert::AreEqual(std::size_t{Elite::COMMANDER_FILE_BYTES}, Elite::StateBytes(data->commander).size(), L"the .cdr file's size");
+    Assert::AreEqual(COMMANDER_FILE_BYTES, Elite::StateBytes(data->commander).size(), L"the .cdr file's size");
 
     // A shorter list of bytes than the state is an error.
     const std::span<const std::uint8_t> shorter(pattern.data(), pattern.size() - 1);
@@ -82,8 +86,9 @@ public:
     Assert::AreNotEqual(videoMemory.c_str(), Elite::GameStateDigest(state, video).c_str(), false, L"and the CGA's registers");
   }
 
-  // The GameState owns the game's memory (D19), loaded from the checked-in image at the segments DOS would have used (D33): the load's
-  // bytes are its own, a write to a member or to video memory lands in its bytes, and an offset past video memory is refused. Nothing reaches the state by the original's addresses (change 3c).
+  // The GameState owns the game's memory (D19), started at the segments DOS would have used (D33) as SetStartState sets it: the
+  // state the 1987 image loaded, whose hash this was measured as when the image still loaded it (Phase 7, step 4); a write to a member
+  // or to video memory lands there, and an offset past video memory is refused.
   TEST_METHOD(TheGameStateHoldsTheGamesMemory)
   {
     ReferenceRig rig("GameState");
@@ -92,11 +97,11 @@ public:
     Assert::AreEqual(std::uint32_t{state.CodeSegment()} + Elite::DATA_SEGMENT_PARAGRAPH, std::uint32_t{state.DataSegment()},
                      L"the data segment");
 
-    // The state as the image loads it; and video memory as mode 3 leaves it.
-    const std::vector<std::uint8_t> image = Elite::ReferenceLoadImage().value_or(std::vector<std::uint8_t>{});
-    Assert::IsFalse(image.empty(), L"the image loads");
-    const std::span<const std::uint8_t> data(image);
-    Assert::IsTrue(std::ranges::equal(state.DataBytes(), data), L"the state, from the data segment's image");
+    // The state as the 1987 image loaded it; and video memory as mode 3 leaves it.
+    Elite::Sha256 start;
+    start.Update(Elite::StateBytes(std::as_const(state).Data()));
+    Assert::AreEqual("b5d7f036b6d00efc0b0577a649849247ef94250101dcdce4ec1bb897e613b397", Elite::Sha256::ToHex(start.Finish()).c_str(),
+                     L"the start state, as the image loaded it");
     for (std::uint16_t offset = 0; offset < Elite::Cga::VIDEO_MEMORY_BYTES; offset += 2)
     {
       if (state.VideoByte(offset) != 0x20 || state.VideoByte(static_cast<std::uint16_t>(offset + 1)) != 0x07)
@@ -105,8 +110,7 @@ public:
 
     const std::uint8_t fuel = state.Data().commander.fuel;
     state.Data().commander.fuel = static_cast<std::uint8_t>(fuel ^ 0xFF);
-    Assert::AreEqual(std::uint32_t{fuel ^ 0xFFu}, std::uint32_t{state.DataBytes()[GAME_DATA_OFFSET(commander.fuel)]},
-                     L"the member's byte is the state's");
+    Assert::AreEqual(std::uint32_t{fuel ^ 0xFFu}, std::uint32_t{std::as_const(state).Data().commander.fuel}, L"the member is the state's");
 
     state.SetVideoWord(0x10, 0xF820);
     Assert::AreEqual(0x20u, std::uint32_t{state.VideoByte(0x10)}, L"a word into video memory, low byte first");

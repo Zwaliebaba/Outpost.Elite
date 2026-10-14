@@ -25,12 +25,10 @@ public:
   Game(const Game&) = delete;
   Game& operator=(const Game&) = delete;
 
-  /// Loads the reference once, as DOS would with the PSP at _pspSegment: its data segment from the checked-in image (D3) straight
-  /// into the GameState, its code segment's paragraph the PSP plus 10h, with the D5 byte and its stored addresses as what they
-  /// mean (ReferenceLoadImage). Then the platform starts
-  /// the program as DOS does, and the native routines go where the original's entries are (InstallNativeRoutines). False on
-  /// failure, and then nothing is loaded and nothing is started.
-  [[nodiscard]] bool Load(std::uint16_t _pspSegment);
+  /// Starts the game once, with the PSP at _pspSegment: the GameState as the program starts (SetStartState), its code
+  /// segment's paragraph the PSP plus 10h. Then the platform starts the program as DOS does, and the native routines go where
+  /// the original's entries are (InstallNativeRoutines).
+  void Start(std::uint16_t _pspSegment);
 
   /// The platform the game runs on: its clock, its devices and its picture.
   [[nodiscard]] Platform& Host() noexcept

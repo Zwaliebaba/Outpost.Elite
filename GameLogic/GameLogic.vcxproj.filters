@@ -114,9 +114,6 @@
     <ClInclude Include="Field.h">
       <Filter>State</Filter>
     </ClInclude>
-    <ClInclude Include="DataPlaces.h">
-      <Filter>State</Filter>
-    </ClInclude>
     <ClInclude Include="DirectoryFileStore.h">
       <Filter>Platform</Filter>
     </ClInclude>
@@ -345,6 +342,9 @@
     <ClInclude Include="SquareWave.h">
       <Filter>Platform</Filter>
     </ClInclude>
+    <ClInclude Include="StartState.h">
+      <Filter>State</Filter>
+    </ClInclude>
     <ClInclude Include="StartUp.h">
       <Filter>StartUp</Filter>
     </ClInclude>
@@ -523,6 +523,9 @@
     </ClCompile>
     <ClCompile Include="SquareWave.cpp">
       <Filter>Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="StartState.cpp">
+      <Filter>State</Filter>
     </ClCompile>
     <ClCompile Include="StartUp.cpp">
       <Filter>StartUp</Filter>
