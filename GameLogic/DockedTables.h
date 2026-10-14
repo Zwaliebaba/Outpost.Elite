@@ -67,13 +67,9 @@ constexpr std::array<std::string_view, 13> EQUIPMENT_NAMES = {
   std::string_view{"Military Laser"},      // [12]
 };
 
-constexpr std::string_view TRADE_HEADER_TEXT = "PRODUCT    UNIT    PRICE    QTY";
-
 constexpr std::string_view MOUNTS_OPEN_TEXT = " (";
 
 constexpr std::string_view MOUNTS_CLOSE_TEXT = ")";
-
-constexpr std::string_view NO_QUANTITY_TEXT = "     -";
 
 constexpr std::string_view SYSTEM_LABEL_TEXT = "System:       ";
 
@@ -86,18 +82,6 @@ constexpr std::string_view LEGAL_STATUS_LABEL_TEXT = "Legal Status: ";
 constexpr std::string_view RATING_LABEL_TEXT = "Rating:       ";
 
 constexpr std::string_view EQUIPMENT_HEADING_TEXT = "EQUIPMENT:";
-
-/// 2 texts, each after the one before's NUL.
-constexpr std::array<std::string_view, 2> BUY_CARGO_HELP_LINES = {
-  std::string_view{"Use control keys or device to select"}, // [0]
-  std::string_view{"item. Press 'B' to buy the item."},     // [1]
-};
-
-/// 2 texts, each after the one before's NUL.
-constexpr std::array<std::string_view, 2> SELL_CARGO_HELP_LINES = {
-  std::string_view{"Use control keys or device to select"}, // [0]
-  std::string_view{"item. Press 'S' to sell the item."},    // [1]
-};
 
 constexpr std::string_view WITCH_SPACE_TEXT = "WITCH SPACE";
 
@@ -172,12 +156,6 @@ constexpr std::array<std::uint8_t, 9> ARCHANGEL_TITLE = {
   0x41, 0x52, 0x43, 0x48, 0x41, 0x4E, 0x47, 0x45, // [0]
   0x4C,                                           // [8]
 };
-
-/// sellCargoFrame: frame bytes, then "SELL CARGO"
-constexpr std::string_view SELL_CARGO_FRAME = "OOSELL CARGO";
-
-/// buyCargoFrame: frame bytes, then "BUY CARGO"
-constexpr std::string_view BUY_CARGO_FRAME = "ONBUY CARGO";
 
 /// inventoryFrame: frame bytes, then "INVENTORY"
 constexpr std::string_view INVENTORY_FRAME = "pxINVENTORY";

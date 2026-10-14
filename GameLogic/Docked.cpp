@@ -9,6 +9,7 @@
 #include "Galaxy.h"
 #include "Input.h"
 #include "Market.h"
+#include "MarketScreen.h"
 #include "SaveLoad.h"
 #include "Scene.h"
 #include "SharedTables.h"
@@ -76,17 +77,11 @@ constexpr std::uint16_t LINE_7 = 0x234;
 constexpr std::uint16_t LINE_8 = 0x284;
 constexpr std::uint16_t LINE_9 = 0x2D4;
 constexpr std::uint16_t LINE_10 = 0x324;
-constexpr std::uint8_t HEADER_ATTRIBUTE = 0x4E;
-constexpr std::uint8_t ROW_ATTRIBUTE = 0x4F;
 constexpr std::uint8_t STATUS_ATTRIBUTE = 0x0F;
 constexpr std::uint8_t EQUIPMENT_HEADING_ATTRIBUTE = 0x0D;
 constexpr std::uint16_t PRODUCT_NAME_END = 0x0C; // a product name's 12 characters, then a space
-constexpr std::uint16_t UNIT_AFTER_NAME = 0x0D;  // and then its unit
 constexpr std::uint16_t PRODUCT_NAME_BYTES = 0x11;
 constexpr std::uint16_t TRADE_ROWS = 0x11;
-// A trade row's price in screenPrices: a product's buy price, then its sell price.
-constexpr std::uint16_t MenusState::ScreenPrice::*BUY_PRICE = &MenusState::ScreenPrice::price;
-constexpr std::uint16_t MenusState::ScreenPrice::*SELL_PRICE = &MenusState::ScreenPrice::resale;
 constexpr std::uint16_t INVENTORY_ROWS = 0x12; // the 17 products and the refugees
 constexpr std::uint16_t QUANTITY_DIGITS_BLANKED = 4;
 constexpr std::uint8_t LEGAL_STATUS_OFFENDER = 1;
@@ -227,63 +222,6 @@ void FormatQuantity(std::uint16_t _quantity, std::span<std::uint8_t> _text)
   return JoinTexts({CharText(docked.fuelUnitsDigit), FUEL_TEXT_POINT, CharText(docked.fuelTenthsDigit), FUEL_TEXT_SUFFIX});
 }
 
-// Product _product's name and unit, up to its NUL.
-[[nodiscard]] std::string_view ProductName(const GameState& _state, std::uint16_t _product)
-{
-  return TextWithin(BytesOf(_state.Data().docked.productNames), std::size_t{_product} * PRODUCT_NAME_BYTES);
-}
-
-// What both trade screens start with: the frame from the descriptor _frame and its title, the two lines of help _help, the
-// header in its attribute, the rows' attribute, and the prices; cargoRowPointer on the first product, 0.
-template <typename Frame>
-void DrawTradeScreenHeader(GameState& _state, Host& _host, const Frame& _frame, std::span<const std::string_view> _help)
-{
-  PrintTextModeString(_state, DrawDockedFrame(_state, _host, _frame), TITLE_CELL);
-  PrintTextModeString(_state, _help[0], LINE_3);
-  PrintTextModeString(_state, _help[1], LINE_4); // INC SI: the second line, after the first's NUL
-  _state.Data().drawing.textAttribute = HEADER_ATTRIBUTE;
-  PrintTextModeString(_state, TRADE_HEADER_TEXT, LINE_5);
-  _state.Data().drawing.textAttribute = ROW_ATTRIBUTE;
-  ComputeMarketPrices(_state);
-  _state.Data().docked.cargoRowPointer = 0;
-}
-
-// A trade screen's row: the rows left, the product, and the row's place on the text page. The original holds the rows left in
-// CX, the product's name in SI, the place in DI and its prices in screenPrices in BX, and pushes them at the start of each
-// row.
-struct TradeRow
-{
-  std::uint16_t left;
-  std::uint16_t product;
-  std::uint16_t cell;
-};
-
-constexpr TradeRow FIRST_TRADE_ROW{TRADE_ROWS, 0, LINE_6};
-
-// A trade row's product name and price (PrintNameAndPrice): the price _price of the row's prices, four cells after the name.
-// Returns where the price's print stops.
-std::uint16_t PrintNameAndPrice(GameState& _state, const TradeRow& _row, std::uint16_t MenusState::ScreenPrice::*_price)
-{
-  const std::uint16_t named = PrintTextModeString(_state, ProductName(_state, _row.product), _row.cell);
-  FormatTenths(_state, ElementWithin(std::span(_state.Data().menus.screenPrices), _row.product).*_price);
-  return PrintTextModeString(_state, TextWithin(_state.Data().menus.priceText, 0), Offset(named, 4));
-}
-
-// After a row's quantity, printed up to _cell (PrintUnit): the unit after the row's product name.
-void PrintUnit(GameState& _state, const TradeRow& _row, std::uint16_t _cell)
-{
-  PrintTextModeString(
-    _state, TextWithin(BytesOf(_state.Data().docked.productNames), std::size_t{_row.product} * PRODUCT_NAME_BYTES + UNIT_AFTER_NAME),
-    _cell);
-}
-
-// The end of a trade row (EndTradeRow): the next prices, then the next row's place and product, and the count.
-[[nodiscard]] TradeRow EndTradeRow(const TradeRow& _row) noexcept
-{
-  return TradeRow{static_cast<std::uint16_t>(_row.left - 1), static_cast<std::uint16_t>(_row.product + 1),
-                  Offset(_row.cell, TEXT_ROW_BYTES)};
-}
-
 // RunTitle, the title: the ship slots cleared (ClearAllObjects), the music on, the
 // player's angles, the view and the lasers zeroed, the cockpit shown (screenLayout 2, which ShowCockpitScreen copies over with the
 // direction flag clear), the message line cleared and ---- E L I T E ---- on it; then the planet and the turning ship of type
@@ -384,13 +322,13 @@ struct DockedScreen
 };
 
 constexpr std::array<DockedScreen, 9> DOCKED_SCREENS = {{
-  {SCAN_F2, &ShowSellCargoScreen},
-  {SCAN_F3, &ShowBuyCargoScreen},
+  {SCAN_F2, &ShowMarketScreen},
+  {SCAN_F3, &ShowMarketScreen},
   {SCAN_F4, &ShowEquipShipScreen},
   {SCAN_F5, &ShowGalacticChart},
   {SCAN_F6, &ShowShortRangeChart},
   {SCAN_F7, &ShowSystemDataScreen},
-  {SCAN_F8, &ShowMarketPricesScreen},
+  {SCAN_F8, &ShowMarketScreen},
   {SCAN_F9,
    [](GameState& _state, Host& _host)
    {
@@ -544,90 +482,6 @@ void AwardArchangelTitle(GameState& _state)
   {
     _state.Data().commander.commanderRankText[letter] = std::uint8_t{ARCHANGEL_TITLE[letter]};
   }
-}
-
-[[nodiscard]] Task<ScreenKey> ShowSellCargoScreen(GameState& _state, Host& _host)
-{
-  DrawTradeScreenHeader(_state, _host, SELL_CARGO_FRAME, SELL_CARGO_HELP_LINES);
-  TradeRow row = FIRST_TRADE_ROW;
-  for (;;)
-  {
-    const std::uint16_t price = PrintNameAndPrice(_state, row, SELL_PRICE);
-    // The units held, from the cargoHold entry of the product cargoRowPointer numbers, which moves on to the next.
-    const std::uint16_t product = _state.Data().docked.cargoRowPointer;
-    const std::uint8_t held = LotOf(_state, product).held;
-    _state.Data().docked.cargoRowPointer = static_cast<std::uint16_t>(product + 1);
-    if (held != 0)
-    {
-      FormatQuantity(held, _state.Data().menus.quantityText);
-      const std::uint16_t quantity =
-        PrintTextModeString(_state, TextWithin(BytesOf(_state.Data().menus.quantityText), 0), Offset(price, 2));
-      PrintUnit(_state, row, quantity);
-    }
-    else
-    {
-      PrintTextModeString(_state, NO_QUANTITY_TEXT, price);
-    }
-    row = EndTradeRow(row);
-    if (row.left == 0)
-    {
-      break;
-    }
-  }
-  _state.Data().docked.tradeScreenIsBuy = 0;
-  co_return co_await RunCargoTradeMenu(_state, _host);
-}
-
-[[nodiscard]] Task<ScreenKey> ShowBuyCargoScreen(GameState& _state, Host& _host)
-{
-  StartMarketRandom(_state);
-  DrawTradeScreenHeader(_state, _host, BUY_CARGO_FRAME, BUY_CARGO_HELP_LINES);
-  TradeRow row = FIRST_TRADE_ROW;
-  for (;;)
-  {
-    const std::uint16_t price = PrintNameAndPrice(_state, row, BUY_PRICE);
-    std::optional<std::uint8_t> onSale;
-    if (_state.Data().commander.marketQuantitiesSet == 0)
-    {
-      // The quantity on sale, the first time after an arrival.
-      onSale = RollQuantityOnSale(_state);
-    }
-    else
-    {
-      const std::uint8_t drawn = LotOf(_state, _state.Data().docked.cargoRowPointer).onSale;
-      if (drawn != 0)
-      {
-        onSale = drawn;
-      }
-    }
-    // The quantity into the market's byte of the product's cargoHold entry, and cargoRowPointer on to the next product.
-    if (onSale)
-    {
-      FormatQuantity(*onSale, _state.Data().menus.quantityText);
-      const std::uint16_t quantity =
-        PrintTextModeString(_state, TextWithin(BytesOf(_state.Data().menus.quantityText), 0), Offset(price, 2));
-      const std::uint16_t product = _state.Data().docked.cargoRowPointer;
-      LotOf(_state, product).onSale = *onSale;
-      _state.Data().docked.cargoRowPointer = static_cast<std::uint16_t>(product + 1);
-      PrintUnit(_state, row, quantity);
-    }
-    else
-    {
-      PrintTextModeString(_state, NO_QUANTITY_TEXT, price);
-      const std::uint16_t product = _state.Data().docked.cargoRowPointer;
-      LotOf(_state, product).onSale = 0;
-      _state.Data().docked.cargoRowPointer = static_cast<std::uint16_t>(product + 1);
-      // The jump back into the row's end, with CX the count and BX the next prices.
-    }
-    row = EndTradeRow(row);
-    if (row.left == 0)
-    {
-      break;
-    }
-  }
-  _state.Data().docked.tradeScreenIsBuy = 1;
-  _state.Data().commander.marketQuantitiesSet = 1;
-  co_return co_await RunCargoTradeMenu(_state, _host);
 }
 
 [[nodiscard]] Task<ScreenKey> ShowCommanderStatusScreen(GameState& _state, Host& _host)

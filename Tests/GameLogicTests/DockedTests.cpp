@@ -75,9 +75,8 @@ template <typename Struct> [[nodiscard]] std::uint8_t TwinByte(TwinRig& _rig, Da
 TEST_CLASS(DockedTests)
 {
 public:
-  // Cargo held: the sell screen's quantities, the buy screen a second time (quantities already drawn), the
-  // inventory's rows; then the status screen in witch space, an offender with the last equipment item
-  // fitted, and a fugitive.
+  // Cargo held: the inventory's rows; then the status screen in witch space, an offender with the last equipment item
+  // fitted, and a fugitive. The trade screens it once visited are the market's now (D01, D92).
   TEST_METHOD(TradeInventoryAndStatusScreensAgreeWithCargoAndARecord)
   {
     TwinRig rig("TwinDockedCargo");
@@ -86,8 +85,7 @@ public:
     SetHeld(rig, 6, 1);
     SetHeld(rig, 16, 2);
     SetBoth(rig, &Commander::CargoHold::refugeesTonnes, 3);
-    rig.Play("key F2; wait 0.2\ndigest sell\nkey F3; wait 0.2\nkey F2; wait 0.2\nkey F3; wait 0.2\ndigest buy-again\n"
-             "key F10; wait 0.2\ndigest inventory");
+    rig.Play("key F10; wait 0.2\ndigest inventory");
     SetBoth(rig, &Commander::legalStatus, 5);
     SetBoth(rig, &Commander::witchspaceCountdown, 3);
     SetBoth(rig, &Commander::militaryLaserCount, 1);

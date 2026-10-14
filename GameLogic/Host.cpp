@@ -260,6 +260,38 @@ FileStamp Host::FileStampNow() const
 
 // ── The picture ──
 
+void Host::ShowMarket(MarketView _view)
+{
+  _view.sequence = m_marketView.sequence + 1;
+  m_marketView = std::move(_view);
+  m_marketShown = true;
+}
+
+void Host::HideMarket() noexcept
+{
+  m_marketShown = false;
+  m_clicks.clear();
+}
+
+void Host::Click(const MarketClick& _click)
+{
+  if (m_marketShown)
+  {
+    m_clicks.push_back(_click);
+  }
+}
+
+std::optional<MarketClick> Host::TakeClick() noexcept
+{
+  if (m_clicks.empty())
+  {
+    return std::nullopt;
+  }
+  const MarketClick click = m_clicks.front();
+  m_clicks.pop_front();
+  return click;
+}
+
 void Host::PublishFlightSnapshot(const FlightSnapshot& _snapshot, bool _continues) noexcept
 {
   m_flightSnapshots[0] = m_flightSnapshots[1];

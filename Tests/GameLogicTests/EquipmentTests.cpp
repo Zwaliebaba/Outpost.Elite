@@ -257,9 +257,17 @@ public:
     TwinRig rig("TwinScoop");
     rig.Play("key space; wait 4");
     SetByte(rig, &Commander::fuelScoopsFitted, 1);
-    // All 11 tonnes of food Lave sells, and 7 of textiles, the next row.
-    rig.Play("key F3; wait 0.5\nkey b; wait 0.2; key 1; key 1; key Return; wait 0.3\nkey Down; wait 0.15\n"
-             "key b; wait 0.2; key 7; key Return; wait 0.3\ndigest cargo");
+    // All 11 tonnes of food Lave sells, and 7 of textiles, the next row, on the market (D01): + to each quantity, then B.
+    const auto more = [](int _times)
+    {
+      std::string steps;
+      for (int time = 0; time < _times; ++time)
+      {
+        steps += "key equal; wait 0.05\n";
+      }
+      return steps;
+    };
+    rig.Play("key F3; wait 0.5\n" + more(10) + "key b; wait 0.05\nkey Down; wait 0.05\n" + more(6) + "key b; wait 0.3\ndigest cargo");
     Assert::AreEqual(std::uint8_t{18}, TwinByte(rig, &Commander::CargoHold::cargoUsedTonnes), L"18 tonnes aboard");
     rig.Play("key F1; wait 1.5\ndigest launched");
     MakeBelowTheNose(rig, Scoopable::MaskingDeviceBarrel);

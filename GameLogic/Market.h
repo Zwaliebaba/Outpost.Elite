@@ -21,21 +21,6 @@ namespace Elite
 // parameters, its results come back, and every byte it writes is written as the original writes it, in
 // the same order and at the same width.
 
-/// What ParseQuantity reads.
-struct Quantity
-{
-  std::uint16_t value;   ///< each digit added to ten times the low byte of what came before it
-  bool valid;            ///< a number, with nothing but spaces around it, and at most 250
-  std::size_t end;       ///< the index of the character after the last it read
-  std::uint8_t lastRead; ///< that character, less '0' where it was read as a digit
-};
-
-/// RunCargoTradeMenu: the cargo menu, with OpenCargoMessage, ShowCargoMessage, SellCargo, BuyCargo, RefuseBuy and
-/// ReadQuantity as one unit (ADR-012 item 14): the cursor moved by the steering and the arrow keys, and B or S with a quantity
-/// typed on the buy or sell screen (tradeScreenIsBuy), each with its message. Returns Esc or the F-key that ends it, other than
-/// the screen's own. Waits for keys as a rule (ADR-015).
-[[nodiscard]] Task<ScreenKey> RunCargoTradeMenu(GameState& _state, Host& _host);
-
 /// ShowMarketPricesScreen: the F8 screen, the system's name cut at its first space and every commodity's buy and
 /// sell price, then the wait for the key that closes it (WaitForScreenExitKey). Waits for keys as a rule (ADR-015).
 [[nodiscard]] Task<ScreenKey> ShowMarketPricesScreen(GameState& _state, Host& _host);
@@ -70,18 +55,6 @@ void StartMarketRandom(GameState& _state);
 /// ((r & 1Fh) - 7) xor (r >> 8 & 3), or nothing, which the screen shows as none, when r & 1Fh is below 7. The economy plays
 /// no part in it.
 [[nodiscard]] std::optional<std::uint8_t> RollQuantityOnSale(GameState& _state);
-
-/// ParseQuantity: the decimal number in _text, a buffer typed into, spaces around it allowed. The buffer holds a NUL
-/// after what was typed, where the reading stops.
-[[nodiscard]] Quantity ParseQuantity(std::span<const std::uint8_t> _text);
-
-/// PrintCargoQuantity: _quantity, or "-" for 0, in the quantity column of menuSelectedRow's row, in its
-/// attribute, and textAttribute put back.
-void PrintCargoQuantity(GameState& _state, std::uint16_t _quantity);
-
-/// AddContrabandPenalty: menuSelectedRow's legal penalty onto legalStatus, unless the sum, in 8 bits,
-/// is 0.
-void AddContrabandPenalty(GameState& _state);
 
 // ── The market's rules (D53, D74): values in, values out, no state and no screen ──
 //

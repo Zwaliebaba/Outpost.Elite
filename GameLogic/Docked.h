@@ -35,15 +35,6 @@ void AwardArchangelTitle(GameState& _state);
 /// Waits for keys as a rule (ADR-015).
 [[nodiscard]] Task<ScreenKey> WaitForScreenExitKey(GameState& _state, Host& _host, std::uint8_t _ownKey);
 
-/// ShowSellCargoScreen, F2, with PrintNameAndPrice, PrintUnit and EndTradeRow as one unit (ADR-012 item 14): the
-/// products with their sell prices and the units held, then RunCargoTradeMenu, which returns the key that closes it. Waits for
-/// keys as a rule (ADR-015).
-[[nodiscard]] Task<ScreenKey> ShowSellCargoScreen(GameState& _state, Host& _host);
-
-/// ShowBuyCargoScreen, F3, as ShowSellCargoScreen: the products with their buy prices and the quantities on sale,
-/// drawn from the market's random state the first time after an arrival, then RunCargoTradeMenu.
-[[nodiscard]] Task<ScreenKey> ShowBuyCargoScreen(GameState& _state, Host& _host);
-
 /// ShowCommanderStatusScreen, F9, docked or in flight: docked, a mission's briefing or debriefing first; then the
 /// commander, systems, fuel, cash, legal status, rating and equipment, and the wait for the key that closes it
 /// (WaitForScreenExitKey).
