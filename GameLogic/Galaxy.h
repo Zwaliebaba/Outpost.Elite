@@ -19,7 +19,7 @@ namespace Elite
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
-// Each is what the 1987 routine of its name computes, with no register in sight: its inputs are
+// Each is what the original's routine of its name computes, with nothing held in a register: its inputs are
 // parameters, its results come back, and every byte it writes is written as the original writes it, in
 // the same order and at the same width.
 
@@ -200,7 +200,7 @@ void TerminateSelectedSystemName(GameState& _state);
 /// its last byte. Returns the text, from its first digit.
 std::string_view FormatSelectedSystemDistance(GameState& _state);
 
-/// ShowSystemDescription: descriptionBuffer zeroed a word at a time as REP STOSW does, forwards, the selected
+/// ShowSystemDescription: descriptionBuffer zeroed a word at a time, forwards, the selected
 /// system's description expanded into it from descriptionTemplate, and printed on the text
 /// page from row 19, word-wrapped at the last space within 36 characters.
 void ShowSystemDescription(GameState& _state);

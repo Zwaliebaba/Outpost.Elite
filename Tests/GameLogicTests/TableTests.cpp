@@ -136,7 +136,7 @@ constexpr std::uint8_t PHRASE_CODE = 0x80;
 
 } // namespace
 
-// The game's tables are source (Phase 7, step 5): what the tool that wrote them from the 1987 image checked of them, these check,
+// The game's tables are source (Phase 7, step 5): what the tool that wrote them from the original's image checked of them, these check,
 // so that an edit cannot take the code that reads them past their ends.
 TEST_CLASS(TableTests)
 {

@@ -30,7 +30,7 @@ constexpr std::string_view COMMANDER_FILE_EXTENSION = ".CDR"; // as the store ke
 // ---- The disc menu ----
 
 // ".CDR" and its NUL, which PromptCommanderFileName appends to a name: a text no symbol starts and nothing
-// writes, whose bytes the 1987 image held there.
+// writes, whose bytes the original's image held there.
 constexpr std::array<std::uint8_t, 5> COMMANDER_EXTENSION = {'.', 'C', 'D', 'R', 0};
 
 // Where it prints on the 40-column text page, 80 bytes a row.
@@ -64,7 +64,7 @@ constexpr std::uint8_t SAVE_COMMANDER = 2;
 constexpr std::uint8_t DELETE_COMMANDER = 3;
 constexpr std::uint8_t CATALOGUE_COMMANDERS = 4;
 
-// inputDevice: the keyboard or the mouse, as 1987 numbered them; its 1, the joystick, went with D81.
+// inputDevice: the keyboard or the mouse, as the original numbered them; its 1, the joystick, went with D81.
 constexpr std::uint8_t KEYBOARD_DEVICE = 0;
 constexpr std::uint8_t MOUSE_DEVICE = 2;
 
@@ -75,7 +75,7 @@ constexpr std::uint16_t CATALOGUE_ROWS = 10;
 constexpr std::uint16_t CATALOGUE_COLUMN_BYTES = 0x12; // nine cells
 constexpr std::uint8_t TEXT_LAYOUT_BIT = 2;            // screenLayout: the text page shows
 
-// commanderFileName up to its NUL: the name the original hands DOS in DS:DX. Every writer leaves a NUL inside it: the image's
+// commanderFileName up to its NUL: the name the original hands DOS. Every writer leaves a NUL inside it: the image's
 // '12345678.CDR', ReadTextLine's eight characters at most and their NUL, the NUL after the ".CDR" appended to a name
 // (PromptCommanderFileName), and the NUL over its '.' (ShowDiskResult).
 [[nodiscard]] std::string_view CommanderFileName(const GameState& _state)
@@ -246,13 +246,13 @@ void DeleteCommanderFile(GameState& _state, FileStore& _files)
 
 // ---- The disc menu ----
 
-// MOV SI,_text / MOV DI,_position / CALL PrintTextModeString: _text at B800:_position. Returns the cell after its last.
+// PrintTextModeString: _text at B800:_position. Returns the cell after its last.
 std::uint16_t PrintAt(GameState& _state, std::string_view _text, std::uint16_t _position)
 {
   return PrintTextModeString(_state, _text, _position);
 }
 
-// CALL GetKey / JZ back: GetKey until a key comes (ADR-039). Returns the key.
+// GetKey until a key comes (ADR-039). Returns the key.
 [[nodiscard]] Task<KeyPress> WaitForKey(GameState& _state, Host& _host)
 {
   for (;;)
@@ -287,9 +287,9 @@ void BlankHelpRows(GameState& _state)
 }
 
 // LeaveGameLoopForDisk: diskOperation=_operation, and resumeAtDiskMenu=1, so that the menu shows what Start's disk
-// work came to when it runs again. The two POP AX between its writes, which drop the return address of the call it is in and the
-// one under it, so that its RET takes GameLoop's back to Start, are its callers' return (DiscMenuExit::leaves): they read the stack
-// and write no memory, so the writes keep the original's order.
+// work came to when it runs again. The two words the original drops from the stack between its writes, the return address of the
+// call it is in and the one under it, so that it returns through GameLoop's to Start, are its callers' return
+// (DiscMenuExit::leaves): they read the stack and write no memory, so the writes keep the original's order.
 DiscMenuExit LeaveGameLoopForDisk(GameState& _state, std::uint8_t _operation)
 {
   _state.Data().saveLoad.diskOperation = _operation;
@@ -330,7 +330,7 @@ void RejectFileName(GameState& _state)
       showDevice = false;
     }
     const KeyPress key = co_await WaitForKey(_state, _host);
-    // PUSH AX and POP AX round it.
+    // The key kept across it.
     BlankHelpRows(_state);
     const std::uint8_t scan = key.scanCode;
     if (scan == SCAN_E)
@@ -373,7 +373,7 @@ void RejectFileName(GameState& _state)
       }
       PrintAt(_state, NO_MOUSE_TEXT, STATUS_POSITION);
       PrintAt(_state, MOUSE_HELP_LINES[0], HELP_POSITION);
-      PrintAt(_state, MOUSE_HELP_LINES[1], SECOND_HELP_POSITION); // INC SI: the second line
+      PrintAt(_state, MOUSE_HELP_LINES[1], SECOND_HELP_POSITION); // the second line
       continue;
     }
     if (scan == SCAN_V)
@@ -395,7 +395,7 @@ void RejectFileName(GameState& _state)
 void ShowDiskResult(GameState& _state)
 {
   PrintAt(_state, BLANK_STATUS_TEXT, STATUS_POSITION);
-  // BL = diskOperation - 1, BH = 0, doubled: the operation's name in diskOperationNames. Only operations 1-4 come back to the
+  // diskOperation - 1, in 8 bits: the operation's name in diskOperationNames. Only operations 1-4 come back to the
   // disc menu: 0 leaves the game.
   const std::uint16_t result =
     PrintTextModeString(_state, DISK_OPERATION_NAMES[static_cast<std::uint8_t>(_state.Data().saveLoad.diskOperation - 1)], STATUS_POSITION);
@@ -405,7 +405,7 @@ void ShowDiskResult(GameState& _state)
     PrintCommanderCatalogue(_state);
     return;
   }
-  // The name without its extension: a NUL over its '.', which the search, SI going up, looks for.
+  // The name without its extension: a NUL over its '.', which the search, going up from the second letter, looks for.
   const std::span<std::uint8_t> name(_state.Data().saveLoad.commanderFileName);
   std::size_t letter = 1;
   for (; name[letter] != '.'; ++letter)
@@ -417,7 +417,7 @@ void ShowDiskResult(GameState& _state)
   {
     return;
   }
-  // Its eight bytes copied to defaultCommanderName by a LOOP.
+  // Its eight bytes copied to defaultCommanderName.
   const std::span<std::uint8_t> commander(_state.Data().commander.defaultCommanderName);
   for (std::size_t from = 0; from < MOST_NAME_CHARACTERS; ++from)
   {
@@ -425,7 +425,7 @@ void ShowDiskResult(GameState& _state)
   }
 }
 
-// Whether AL may stand in a commander's name after its first letter: a digit or an upper-case letter.
+// Whether _character may stand in a commander's name after its first letter: a digit or an upper-case letter.
 [[nodiscard]] constexpr bool IsNameCharacter(std::uint8_t _character) noexcept
 {
   return (_character >= '0' && _character <= '9') || (_character >= 'A' && _character <= 'Z');
@@ -435,7 +435,7 @@ void ShowDiskResult(GameState& _state)
 
 void PerformDiskRequest(GameState& _state, Host& _host, std::uint8_t _request)
 {
-  // DEC AL until it reaches 0: 1 load, 2 save, 3 delete.
+  // The request, counted down to 0: 1 load, 2 save, 3 delete.
   switch (_request)
   {
   case LOAD_COMMANDER:
@@ -454,8 +454,9 @@ void PerformDiskRequest(GameState& _state, Host& _host, std::uint8_t _request)
 }
 void SaveStartupCommander(GameState& _state)
 {
-  // REP MOVSB within the data segment, a byte at a time: commanderBlock into startupCommander, the whole record, as the direction flag
-  // is clear wherever the game calls it: the only STD, MaskOutsideTunnel's, has its CLD before the routine returns (change 3c).
+  // commanderBlock into startupCommander, the whole record, a byte at a time going up: the original's copy never runs downward
+  // where the game calls it, as the only routine that reverses the direction, MaskOutsideTunnel, restores it before it returns
+  // (change 3c).
   _state.Data().saveLoad.startupCommander = _state.Data().commander;
 }
 
@@ -513,7 +514,7 @@ void SaveStartupCommander(GameState& _state)
     }
     name[letter] = character;
   }
-  // ".CDR" and its NUL after the name by a LOOP, SI through the constant and DI through the name.
+  // ".CDR" and its NUL after the name, a byte at a time.
   for (std::size_t from = 0, left = EXTENSION_BYTES;;)
   {
     name[letter] = COMMANDER_EXTENSION[from];
@@ -532,7 +533,7 @@ void PrintCommanderCatalogue(GameState& _state)
   {
     PrintAt(_state, BLANK_LINE_TEXT, static_cast<std::uint16_t>(CATALOGUE_POSITION + row * TEXT_ROW_BYTES));
   }
-  // Name n at row n mod 10, column n / 10, 9 cells apart: CBW and DIV DL by 10, which cannot overflow, as ListCommanderFiles
+  // Name n at row n mod 10, column n / 10, 9 cells apart: an 8-bit divide by 10, which cannot overflow, as ListCommanderFiles
   // lists at most 40. Each name follows the one before's NUL in commanderFileList, which holds the 40 names of eight characters
   // at most and their NULs.
   const std::span<const std::uint8_t> list(_state.Data().saveLoad.commanderFileList);

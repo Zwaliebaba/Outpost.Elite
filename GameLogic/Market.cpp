@@ -44,7 +44,7 @@ constexpr std::uint8_t QUANTITY_RANDOM_HIGH_MASK = 3;
 constexpr std::uint8_t FIRST_PRECIOUS_COMMODITY = 0x0D;
 constexpr std::uint8_t ALIEN_ITEMS = 0x10;
 
-// MUL by _factor, then MOV AL,AH / MOV AH,DL: the product over 256, in 16 bits.
+// _value times _factor over 256, in 16 bits: the middle two bytes of the 32-bit product.
 [[nodiscard]] constexpr std::uint16_t ScaledProduct(std::uint16_t _value, std::uint16_t _factor) noexcept
 {
   return static_cast<std::uint16_t>((std::uint32_t{_value} * _factor) >> 8);
@@ -100,7 +100,7 @@ void StoreCredits(GameState& _state, std::uint32_t _tenths)
   PrintTextModeString(_state, PRICES_HEADER_TEXT, PRICES_HEADER_OFFSET);
   ComputeMarketPrices(_state);
 
-  // Each commodity's name, buy price and sell price, the original holding the name, the row and the prices in SI, DI and BX.
+  // Each commodity's name, buy price and sell price.
   const std::span<const MenusState::ScreenPrice> prices = ScreenPrices(_state);
   std::uint16_t row = FIRST_PRODUCT_OFFSET;
   for (std::uint16_t product = 0, left = COMMODITY_KINDS;;)
@@ -176,7 +176,7 @@ std::uint16_t NextMarketRandom(GameState& _state)
   const std::uint16_t b = random[1];
   const std::uint16_t c = random[2];
   const auto sum = static_cast<std::uint16_t>(a + b);
-  // In the order the original's two XCHGs and its ADD write them.
+  // In the order the original's two swaps and its sum write them.
   random[1] = c;
   random[0] = b;
   random[2] = static_cast<std::uint16_t>(c + sum);
@@ -225,7 +225,7 @@ std::uint8_t MarketTechLevel(std::uint8_t _techLevel) noexcept
 
 CommodityPrices PricesOf(std::uint8_t _commodity, const MarketPlace& _place) noexcept
 {
-  // The economy's factor, the government's, 1.0 and the base price, each MUL then over 256.
+  // The economy's factor, the government's, 1.0 and the base price, each a product over 256.
   const std::size_t row = std::size_t{_commodity} * PRICE_FACTOR_ROW_WORDS;
   std::uint16_t price = ScaledProduct(UNIT_FACTOR, ECONOMY_PRICE_FACTORS[row + _place.economy]);
   price = ScaledProduct(price, GOVERNMENT_PRICE_FACTORS[row + _place.government]);
@@ -244,7 +244,7 @@ CommodityPrices PricesOf(std::uint8_t _commodity, const MarketPlace& _place) noe
 
 std::optional<std::uint32_t> CreditsAfterPaying(std::uint32_t _creditsTenths, std::uint32_t _priceTenths) noexcept
 {
-  // SUB, then SBB: put back by ADD and ADC when that borrows.
+  // The price taken off in 32 bits, and put back when that borrows.
   if (_creditsTenths < _priceTenths)
   {
     return std::nullopt;
@@ -254,7 +254,7 @@ std::optional<std::uint32_t> CreditsAfterPaying(std::uint32_t _creditsTenths, st
 
 std::uint32_t CreditsAfterEarning(std::uint32_t _creditsTenths, std::uint32_t _earnedTenths) noexcept
 {
-  // ADD the low word, then ADC the high word with the carry it makes.
+  // The low words added, then the high words with the carry that makes: a 32-bit sum that wraps.
   return _creditsTenths + _earnedTenths;
 }
 
@@ -314,7 +314,7 @@ CargoTrade CargoBought(const CargoLot& _lot, bool _largeBay, std::uint8_t _amoun
       return CargoTrade{.refusal = CargoRefusal::CannotCarry, .lot = _lot};
     }
   }
-  else if (_lot.held + _amount > PRECIOUS_HELD_MOST) // ADD CL,AL: a carry, or more than 250
+  else if (_lot.held + _amount > PRECIOUS_HELD_MOST) // an 8-bit sum: a carry, or more than 250
   {
     return CargoTrade{.refusal = CargoRefusal::CannotCarry, .lot = _lot};
   }

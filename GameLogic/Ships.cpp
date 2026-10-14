@@ -78,14 +78,13 @@ constexpr std::uint16_t FIRST_EVICTED_SLOT = 4; // ReclaimShipSlot evicts one of
 constexpr std::uint16_t SPAWN_DISTANCE = 10000;
 constexpr std::uint16_t SPAWN_SCATTER_MASK = 0x7FF; // halved and signed by its low bit: +-1023
 
-// MOV AL,[DI] / SHR AL,1 / AND AL,1Fh.
+// The type, bits 1-5 of byte 0.
 [[nodiscard]] std::uint8_t TypeOf(const SpaceObject& _slot) noexcept
 {
   return static_cast<std::uint8_t>((_slot.type >> 1) & TYPE_MASK);
 }
 
-// CWD / MOV [slot+4+2*axis],AX / MOV [slot+1+axis],DL: _value as the 24-bit coordinate _axis (0 x, 1 y, 2 z) of _slot, the low
-// word, then its sign as the high byte.
+// _value as the 24-bit coordinate _axis (0 x, 1 y, 2 z) of _slot, the low word, then its sign as the high byte.
 void SetCoordinate(SpaceObject& _slot, std::size_t _axis, std::int16_t _value)
 {
   const auto value = static_cast<std::uint16_t>(_value);
@@ -97,7 +96,7 @@ void SetCoordinate(SpaceObject& _slot, std::size_t _axis, std::int16_t _value)
 struct PositionFit
 {
   bool fits;
-  std::uint8_t lastHigh; // the last high byte looked at, INC'd and DEC'd back, which leaves 0 for FFh: what the original leaves in AL
+  std::uint8_t lastHigh; // the last high byte looked at, stepped up and back down by the test, which leaves 0 for FFh
 };
 
 // The test IsObjectNear and IsObjectNearKeepBlip share: each high byte of _slot's 24-bit position is the sign extension of
@@ -119,7 +118,7 @@ struct PositionFit
   return PositionFit{true, lastHigh};
 }
 
-// AND AX,7FFh / SHR AX,1 / NEG AX when the bit shifted out was set: a scatter of +-1023.
+// The random word's low 11 bits halved, and negated when the bit halved away was set: a scatter of +-1023.
 [[nodiscard]] std::uint16_t Scatter(std::uint16_t _random) noexcept
 {
   const auto masked = static_cast<std::uint16_t>(_random & SPAWN_SCATTER_MASK);
@@ -127,15 +126,14 @@ struct PositionFit
   return (masked & 1) != 0 ? Negate(halved) : halved;
 }
 
-// AND AH,0Fh / XOR AL,AL / SHR AX,1 twice: ReclaimShipSlot's random word made the offset of one of 16 slots from slot 4, which
-// is its number from there, 0-15, 40h times.
+// ReclaimShipSlot's random word, its high byte's low nibble times 40h: the offset of one of 16 slots from slot 4, which is its
+// number from there, 0-15, 40h times.
 [[nodiscard]] std::uint16_t EvictedSlots(std::uint16_t _random) noexcept
 {
   return static_cast<std::uint16_t>(High(_random) & 0x0F);
 }
 
-// MOV BX,record / XOR AL,AL / CALL InitObjectFromTemplate / MOV [DI+33h],_class: _slot from one fixed record of spawnTemplates,
-// of behaviour class _class.
+// _slot from one fixed record of spawnTemplates, by InitObjectFromTemplate, then of behaviour class _class.
 void InitFromRecord(SpaceObject& _slot, std::size_t _record, std::uint8_t _class)
 {
   InitObjectFromTemplate(_slot, _record, 0);
@@ -164,7 +162,7 @@ void AddToCoordinate(SpaceObject& _slot, int _axis, std::int16_t _value)
 
 void ClearObjectSlot(SpaceObject& _slot)
 {
-  // MOV [SI],CH while CX counts down from 40h: CH is 0 throughout, so every member is 0.
+  // Each of the 40h bytes is written with the high byte of the count, which is 0 throughout, so every member is 0.
   _slot = {};
 }
 
@@ -192,7 +190,7 @@ void InitThargon(SpaceObject& _slot)
 
 void SpawnRandomDrifter(GameState& _state, SpaceObject& _slot)
 {
-  // ROR AX,1 / XOR AL,AH / AND AL,7.
+  // The random word rotated right by one, its two bytes exclusive-ored, the low three bits kept.
   const std::uint16_t random = NextRandom(_state);
   const auto rotated = static_cast<std::uint16_t>((random >> 1) | (random << 15));
   const auto record = static_cast<std::uint8_t>((Low(rotated) ^ High(rotated)) & DRIFTER_CHOICE_MASK);
@@ -204,7 +202,7 @@ void SpawnRandomDrifter(GameState& _state, SpaceObject& _slot)
 
 void SpawnRandomTrader(GameState& _state, SpaceObject& _slot)
 {
-  // XOR AH,AH / MOV BL,2Bh / DIV BL: the quotient of a random byte picks the record.
+  // A random byte over 2Bh: the quotient picks the record.
   const auto record = static_cast<std::uint8_t>(Low(NextRandom(_state)) / TRADER_CHOICE_DIVISOR);
   SpawnFromRecord(_state, _slot, COBRA_TEMPLATE, record);
   _slot.behaviorClass = TRADER_CLASS;
@@ -213,8 +211,8 @@ void SpawnRandomTrader(GameState& _state, SpaceObject& _slot)
   {
     return;
   }
-  // A Viper is police one time in two: AND AX,1 written as a word. Then MOV AL,legalStatus over the 0 of AH, written as a word,
-  // which zeroes the bounty above the aggression.
+  // A Viper is police one time in two, by bit 0 of a random word, written whole as the owner. Then the legal status, with a high
+  // byte of 0, written as a word over the aggression, which zeroes the bounty above it.
   const bool police = (NextRandom(_state) & 1) != 0;
   _slot.owner = police ? SlotIndex::Police : SlotIndex::None;
   if (police)
@@ -227,14 +225,14 @@ void SpawnRandomTrader(GameState& _state, SpaceObject& _slot)
 
 void SpawnMaskMissionShip(GameState& _state, SpaceObject& _slot, bool _maskShip)
 {
-  // MOV AL,18h, or, by the sign of a random word, 12h or 13h; PUSH AX and POP AX keep it round the record's set-up.
+  // 18h, or, by the sign of a random word, 12h or 13h, kept round the record's set-up.
   std::uint8_t type = TYPE_ASP;
   if (!_maskShip)
   {
     type = (NextRandom(_state) & 0x8000) != 0 ? MISSION_TYPE_IF_NEGATIVE : MISSION_TYPE_IF_POSITIVE;
   }
   SpawnFromRecord(_state, _slot, ASP_TEMPLATE, 0);
-  // SHL AL,1 / INC AL: the type, active.
+  // The type, doubled, with the active bit set below it.
   _slot.type = static_cast<std::uint8_t>((type << 1) | SpaceObject::ACTIVE);
   _slot.behaviorClass = WOLF_CLASS;
   _slot.aggression = static_cast<std::uint8_t>(Low(NextRandom(_state)) & MISSION_AGGRESSION_MASK);
@@ -257,7 +255,7 @@ void SpawnInvasionThargoid(GameState& _state, SpaceObject& _slot)
 
 ReclaimedSlot ReclaimShipSlot(GameState& _state)
 {
-  // SUB CL,3 / XOR CH,CH, then LOOP: a count of 0 runs 65,536 times.
+  // objectSlotCount less 3, a byte: a count of 0 runs 65,536 times.
   SlotIndex slot = SlotIndex::FirstShip;
   const auto slots = static_cast<std::uint8_t>(_state.Data().flight.objectSlotCount - FIRST_SHIP_SLOT);
   for (std::uint32_t count = LoopCount(slots); count != 0; --count)
@@ -268,7 +266,7 @@ ReclaimedSlot ReclaimShipSlot(GameState& _state)
     }
     slot = SlotAfter(slot);
   }
-  // Every one has a blip: one of slots 4-19 at random (AND AH,0Fh / XOR AL,AL / SHR AX,1 twice), removed first.
+  // Every one has a blip: one of slots 4-19 at random (EvictedSlots), removed first.
   const SlotIndex evicted = SlotAfter(static_cast<SlotIndex>(FIRST_EVICTED_SLOT), EvictedSlots(NextRandom(_state)));
   (void)RemoveObject(_state, _state.Slot(evicted));
   return ReclaimedSlot{evicted, true};
@@ -313,7 +311,7 @@ void InitCargoBarrel(SpaceObject& _slot)
 
 void SpawnRandomHunter(GameState& _state, SpaceObject& _slot)
 {
-  // XOR AH,AH / MOV BL,25h / DIV BL: the quotient of a random byte picks the record.
+  // A random byte over 25h: the quotient picks the record.
   const auto record = static_cast<std::uint8_t>(Low(NextRandom(_state)) / HUNTER_CHOICE_DIVISOR);
   SpawnFromRecord(_state, _slot, HUNTER_TEMPLATES, record);
   _slot.behaviorClass = HUNTER_CLASS;
@@ -323,7 +321,7 @@ void SpawnRandomHunter(GameState& _state, SpaceObject& _slot)
 
 void SpawnRandomWolf(GameState& _state, SpaceObject& _slot)
 {
-  // MOV AL,5, or out of witch space XOR AH,AH / MOV BL,34h / DIV BL: the quotient of a random byte picks the record.
+  // Record 5, or out of witch space a random byte over 34h, whose quotient picks the record.
   std::uint8_t record = WITCH_SPACE_WOLF;
   if (_state.Data().commander.witchspaceCountdown == 0)
   {
@@ -342,7 +340,7 @@ void SpawnRandomWolf(GameState& _state, SpaceObject& _slot)
   {
     return;
   }
-  // XOR AL,AH / SHR AL,1 three times / AND AL,3 / ADD AL,2: 2 to 5 Thargons.
+  // A random word's two bytes exclusive-ored, shifted right three, two bits of it kept, plus 2: 2 to 5 Thargons.
   const std::uint16_t random = NextRandom(_state);
   _slot.thargons = static_cast<std::uint8_t>((((Low(random) ^ High(random)) >> 3) & THARGON_COUNT_MASK) + FEWEST_THARGONS);
 }
@@ -353,9 +351,9 @@ void InitObjectFromTemplate(SpaceObject& _slot, std::size_t _first, std::uint8_t
   _slot.flags = 0;
   _slot.aggression = 0;
   _slot.scanned = 1;
-  // BX += AL*2, then BX += AL*8: the record _index of ten bytes on.
+  // _index twice, then eight times more, on from the group's start: the record _index of ten bytes on.
   const std::array<std::uint8_t, TEMPLATE_BYTES>& record = SPAWN_TEMPLATES[_first + _index];
-  // STC / RCL AL,1: the type, active.
+  // The type, doubled, with the active bit set below it.
   _slot.type = static_cast<std::uint8_t>((record[0] << 1) | SpaceObject::ACTIVE);
   for (std::size_t field = 0; field < TEMPLATE_FIELDS.size(); ++field)
   {
@@ -398,7 +396,7 @@ Velocity ComputeVelocity(GameState& _state, SpaceObject& _slot)
   (void)SetSinCos(_state, 7, _slot.pitch);
   (void)SetSinCos(_state, 6, _slot.yaw);
   // (0, speed) by pair 6, then (0, what that left) by pair 7: x, then y and z.
-  const auto speed = static_cast<std::int16_t>(SignExtend(_slot.speed)); // CBW
+  const auto speed = static_cast<std::int16_t>(SignExtend(_slot.speed)); // the speed byte, sign-extended
   const Pair first = RotateByStoredSinCos(_state, 6, Pair{0, speed});
   _slot.velocityX = Low(static_cast<std::uint16_t>(first.first));
   const Pair second = RotateByStoredSinCos(_state, 7, Pair{0, first.second});
@@ -409,7 +407,8 @@ Velocity ComputeVelocity(GameState& _state, SpaceObject& _slot)
 
 MovedObject MoveObject(GameState& _state, SpaceObject& _slot)
 {
-  // MOV AL,[DI+19h+axis] / CBW / CWD, then ADD on the low word and ADC on the high byte: x, then y and z.
+  // Each axis's velocity byte, sign-extended to 24 bits and added to its coordinate, the low word's carry into the high byte:
+  // x, then y and z.
   for (std::size_t axis = 0; axis < VELOCITY.size(); ++axis)
   {
     AddToCoordinate(_slot, static_cast<int>(axis), static_cast<std::int16_t>(SignExtend(_slot.*VELOCITY[axis])));
@@ -452,10 +451,10 @@ SlotSearch FindFreeShipSlot(GameState& _state)
 
 void ClearAllObjects(GameState& _state)
 {
-  // MOV CH,shipSlotCount / XOR CL,CL / SHR CX,1 three times: 32 words a slot, cleared by REP STOSW into ES = DS, upwards, as the direction
-  // flag is clear wherever the game calls it: the only STD, MaskOutsideTunnel's, has its CLD before the routine returns (change 3c): the
-  // first shipSlotCount slots, a word at a time, low byte first. shipSlotCount is only ever 3, 20h or 24h, so every store is in shipSlots'
-  // 36, and a count past them throws (GameState::Slot).
+  // 32 words a slot, cleared upwards, as a string instruction runs forwards wherever the game calls this: the only backward one,
+  // MaskOutsideTunnel's, is set forwards again before that routine returns (change 3c). So the first shipSlotCount slots, a word
+  // at a time, low byte first. shipSlotCount is only ever 3, 20h or 24h, so every store is in shipSlots' 36, and a count past
+  // them throws (GameState::Slot).
   SlotIndex slot = SlotIndex::Sun;
   for (std::uint8_t slots = _state.Data().world.shipSlotCount; slots != 0; --slots)
   {
@@ -477,7 +476,7 @@ SlotIndex FindDebrisSlot(GameState& _state)
     slot = SlotAfter(slot);
   }
   // None is free: the oldest, the last of equals. The first slot always passes the test (an age of at least 0), so the
-  // original's BX, its first candidate, never comes back.
+  // original's first candidate, set before the search, never comes back.
   SlotIndex oldest = SlotIndex::FirstDebris;
   std::uint8_t age = 0;
   slot = SlotIndex::FirstDebris;
@@ -496,8 +495,8 @@ SlotIndex FindDebrisSlot(GameState& _state)
 
 void CopyObject(const SpaceObject& _source, SpaceObject& _destination)
 {
-  // REP MOVSW from DS:SI to ES:DI, ES = DS: the whole record, every member, as the direction flag is clear wherever the game calls
-  // it: the only STD, MaskOutsideTunnel's, has its CLD before the routine returns (change 3c).
+  // The whole record, every member, copied a word at a time upwards, as a string instruction runs forwards wherever the game
+  // calls this: the only backward one, MaskOutsideTunnel's, is set forwards again before that routine returns (change 3c).
   _destination = _source;
 }
 
@@ -511,7 +510,7 @@ std::optional<MovedObject> UpdateDebrisAi(GameState& _state, SpaceObject& _slot)
     return std::nullopt;
   }
   _slot.age = static_cast<std::uint8_t>(_slot.age + 1);
-  // MOV AL,[DI+26h] / CBW / ADD [DI+0Eh],AX, then the same from +27h into the pitch.
+  // The roll spin, sign-extended, added to the roll, then the pitch spin to the pitch.
   _slot.roll = Offset(_slot.roll, SignExtend(_slot.SpinRoll()));
   _slot.pitch = Offset(_slot.pitch, SignExtend(_slot.SpinPitch()));
   return MoveObject(_state, _slot);

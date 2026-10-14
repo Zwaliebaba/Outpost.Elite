@@ -22,7 +22,7 @@ constexpr std::uint8_t LOW_BEEP_TICKS = 70;
 constexpr std::uint8_t NOISE_BURST_TICKS = 100;
 
 // BeginSweep, the tail every sweep starter shares. Returns the step length it starts the step
-// counter at, which the original leaves in AL.
+// counter at.
 [[nodiscard]] std::uint8_t BeginSweep(GameState& _state)
 {
   _state.Data().audio.sweepTickCounter = 1;
@@ -32,7 +32,7 @@ constexpr std::uint8_t NOISE_BURST_TICKS = 100;
 }
 
 // StartImpactSound and StartExplosionSound: the step length and its shrink, then BeginNoiseSweep. Entered
-// under CLI, which native code does not need: nothing interrupts it. Returns the step length, as BeginSweep does.
+// with interrupts off, which native code does not need: nothing interrupts it. Returns the step length, as BeginSweep does.
 std::uint8_t StartNoiseSweep(GameState& _state, std::uint8_t _stepLength, std::uint8_t _stepShrink)
 {
   _state.Data().audio.sweepStepLength = _stepLength;

@@ -190,7 +190,7 @@ void SpawnByGovernment(GameState& _state)
   _state.Data().ai.spawnLimitOffset = std::uint16_t{_state.Data().flight.spawnGovernment};
   if (_state.Data().commander.witchspaceCountdown == 0)
   {
-    // MOV AL,[BX+spawnLimitsByGovernment], INC AL with a mining laser fitted.
+    // The drifters' limit from spawnLimitsByGovernment, one more with a mining laser fitted.
     const std::size_t row = SpawnLimitRow(_state);
     auto drifters = std::uint8_t{SPAWN_LIMITS_BY_GOVERNMENT[row + DRIFTER_COLUMN]};
     if (_state.Data().commander.miningLaserCount == 1)
@@ -334,8 +334,7 @@ struct OffenderLaunch
 };
 
 // The station at _station, near, launches a police Viper, a shuttle or a trader at an offender out of the box it guards: a copy
-// of itself (CopyObject) in a free slot, out along z, turned round, its roll reversed, and its velocity set. PUSH DI and POP DI keep the
-// station.
+// of itself (CopyObject) in a free slot, out along z, turned round, its roll reversed, and its velocity set.
 OffenderLaunch LaunchAtOffender(GameState& _state, SpaceObject& _station)
 {
   OffenderLaunch launch{IsObjectNear(_state, _station), std::nullopt};
@@ -368,7 +367,7 @@ OffenderLaunch LaunchAtOffender(GameState& _state, SpaceObject& _station)
   {
     SpawnRandomTrader(_state, ship);
   }
-  // ADD [DI+8],0F0h / ADC [DI+3],0: out along z, turned round, its roll reversed.
+  // F0h added to z, the carry into its high byte: out along z, turned round, its roll reversed.
   const std::uint32_t z = std::uint32_t{ship.z} + LAUNCH_DISTANCE;
   ship.z = static_cast<std::uint16_t>(z);
   ship.zHigh = static_cast<std::uint8_t>(ship.zHigh + (z >> 16));
@@ -386,7 +385,7 @@ std::optional<DashboardPixel> CheckMissilesAtStation(GameState& _state, const Sp
 {
   if (_state.Data().ai.npcEcmFrames == 0)
   {
-    // MOV CL,objectSlotCount / XOR CH,CH, then LOOP: a count of 0 runs 65,536 times.
+    // objectSlotCount slots from the sun, a count of 0 running 65,536 times.
     std::optional<std::uint8_t> crime;
     SlotIndex slot = SlotIndex::Sun;
     for (std::uint32_t count = LoopCount(_state.Data().flight.objectSlotCount); count != 0 && !crime; --count)
@@ -471,7 +470,8 @@ MovedObject WolfTurnAway(GameState& _state, SpaceObject& _slot)
   return MoveObject(_state, _slot);
 }
 
-// MOV AH,1 / ROR AL,1 / NEG AX when the bit rotated out was set: a jink of +-(256 + AL/2, with AL's low bit on top).
+// 256 plus the random low byte rotated right a bit, negated when the bit rotated out was set: a jink of +-(256 + low/2, with
+// the low bit on top).
 [[nodiscard]] std::uint16_t Jink(std::uint16_t _random) noexcept
 {
   const std::uint8_t low = Low(_random);
@@ -499,7 +499,7 @@ MovedObject WolfTurnAway(GameState& _state, SpaceObject& _slot)
     _slot.jinkPitch = Negate(_slot.jinkPitch);
     _slot.jinkYaw = Negate(_slot.jinkYaw);
   }
-  // ConvertVectorToAngles of GetVectorToPlayer, then ADD AX,400h / ADD AX,[DI+36h] / ADD BX,[DI+38h].
+  // ConvertVectorToAngles of GetVectorToPlayer, then a half turn and the jink added to the pitch, and the jink to the yaw.
   const Angles toPlayer = ConvertVectorToAngles(_state, GetVectorToPlayer(_slot));
   return Angles{Offset(Offset(toPlayer.first, HALF_TURN), _slot.jinkPitch), Offset(toPlayer.second, _slot.jinkYaw)};
 }
@@ -547,7 +547,7 @@ MovedObject HunterIdle(GameState& _state, SpaceObject& _slot)
     }
     else if (hunters.count == 1 && hunters.last)
     {
-      // MOV [DI+29h],BP: the mate CountOtherHuntersOnScanner found last, which a count of 1 always has.
+      // The mate CountOtherHuntersOnScanner found last, which a count of 1 always has, as the target.
       _slot.target = *hunters.last;
       _slot.aiState = STATE_FORMATION;
     }
@@ -631,8 +631,8 @@ MovedObject TraderBreakOff(GameState& _state, SpaceObject& _slot)
   return MoveObject(_state, _slot);
 }
 
-// CALL [BX+behaviorHandlers]: the handler of class _behavior for _slot. The table's eight words, which nothing writes, name
-// these eight handlers; a class of 8 or more, which no template gives, would run data as code, and runs nothing.
+// The handler of class _behavior for _slot, which the original calls through behaviorHandlers. The table's eight words, which
+// nothing writes, name these eight handlers; a class of 8 or more, which no template gives, would run data as code, and runs nothing.
 void RunBehaviorHandler(GameState& _state, SpaceObject& _slot, std::uint8_t _behavior)
 {
   switch (_behavior)
@@ -673,16 +673,16 @@ void RunBehaviorHandler(GameState& _state, SpaceObject& _slot, std::uint8_t _beh
 
 void UpdateObjectsAndSpawn(GameState& _state)
 {
-  // PUSH DS / POP ES / MOV DI,activeObjectCount / XOR AL,AL / MOV CX,9 / REP STOSB: activeObjectCount and the eight behaviorClassCounts
-  // cleared, a byte at a time, upwards, as the direction flag is clear wherever the game calls it: the only STD, MaskOutsideTunnel's, has
-  // its CLD before the routine returns (change 3c).
+  // activeObjectCount and the eight behaviorClassCounts cleared, nine bytes, a byte at a time, upwards, as the original's string
+  // writes run upwards wherever the game calls it: the one routine that turns them downwards, MaskOutsideTunnel, turns them back
+  // before it returns (change 3c).
   _state.Data().ai.activeObjectCount = 0;
   for (std::uint8_t& classCount : ClassCounts(_state))
   {
     classCount = 0;
   }
-  // Every slot of shipSlotCount, by LOOP: an active one counted, but for debris, and in its class's count, and its class's handler
-  // run, CX and DI pushed round it.
+  // Every slot of shipSlotCount, a count of 0 running 65,536 times: an active one counted, but for debris, and in its class's
+  // count, and its class's handler run.
   SlotIndex slot = SlotIndex::Sun;
   for (std::uint32_t slots = LoopCount(_state.Data().world.shipSlotCount); slots != 0; --slots)
   {
@@ -694,7 +694,7 @@ void UpdateObjectsAndSpawn(GameState& _state)
       {
         _state.Data().ai.activeObjectCount = static_cast<std::uint8_t>(_state.Data().ai.activeObjectCount + 1);
       }
-      // The class's count in behaviorClassCounts, by the class: INC BYTE PTR [BX+behaviorClassCounts]. A class is 0-7: every
+      // The class's count in behaviorClassCounts, by the class, one more in 8 bits. A class is 0-7: every
       // slot's is a template's, one of the eight, or copied from another slot's.
       std::uint8_t& classCount = ClassCounts(_state)[behavior];
       classCount = static_cast<std::uint8_t>(classCount + 1);
@@ -737,7 +737,7 @@ std::uint16_t ScaleSpawnOdds(const GameState& _state, std::uint16_t _odds)
 
 SlotSearch IsMaskShipPresent(GameState& _state)
 {
-  // Every object slot, active or not, for the device's bit: LOOP from CX = objectSlotCount.
+  // Every object slot, active or not, for the device's bit: objectSlotCount slots from the sun.
   SlotIndex slot = SlotIndex::Sun;
   for (std::uint32_t count = LoopCount(_state.Data().flight.objectSlotCount); count != 0; --count)
   {
@@ -835,7 +835,7 @@ MovedObject UpdateDriftingObjectAi(GameState& _state, SpaceObject& _slot)
   {
     return moved;
   }
-  // MOV AX,37h / MOV BX,0FFDFh, exchanged unless bit 1 of the type byte is set: AX to the pitch, then BX to the roll.
+  // 37h and FFDFh, exchanged unless bit 1 of the type byte is set: the first to the pitch, then the second to the roll.
   Pair tumble{static_cast<std::int16_t>(ROCK_TUMBLE_A), static_cast<std::int16_t>(ROCK_TUMBLE_B)};
   if ((_slot.type & ROCK_TUMBLE_SWAP) == 0)
   {
@@ -850,8 +850,8 @@ MovedObject UpdateTraderOrPoliceAi(GameState& _state, SpaceObject& _slot)
 {
   if (IsDebrisType(_slot))
   {
-    // A rock only spins. The split (LaunchShipFromObject with DL=5) never runs: one jump passes it when bit 0 of +1Eh is
-    // clear, and another when it is set.
+    // A rock only spins. The split (LaunchShipFromObject with a _kind of 5) never runs: one jump passes it when bit 0 of the
+    // flags byte (+1Eh) is clear, and another when it is set.
     _slot.roll = Offset(_slot.roll, ROCK_SPIN);
     return MoveObject(_state, _slot);
   }
@@ -896,7 +896,7 @@ MovedObject UpdateWolfAi(GameState& _state, SpaceObject& _slot)
     _slot.aiState = STATE_ATTACK;
     return MoveObject(_state, _slot);
   case STATE_ATTACK:
-    // Resting: a new set of 2-5 passes once it is not hostile, or calm no more: AND AH,3 / ADD AH,2.
+    // Resting: a new set of 2-5 passes, from two bits of the random word's high byte, once it is not hostile, or calm no more.
     if ((_slot.flags & FLAG_HOSTILE) == 0 || _slot.aggression >= CALM)
     {
       _slot.passes = static_cast<std::uint8_t>((High(NextRandom(_state)) & PASS_COUNT_MASK) + FEWEST_PASSES);

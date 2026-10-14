@@ -7,7 +7,7 @@
 namespace Elite
 {
 
-// The tables and constants this subsystem reads, which nothing writes (D33, D38): source since the 1987 image went (Phase 7,
+// The tables and constants this subsystem reads, which nothing writes (D33, D38): source since the original's image went (Phase 7,
 // step 5).
 // Video.cpp alone includes this, so they are in an unnamed namespace (D38).
 namespace
@@ -104,9 +104,9 @@ constexpr std::array<std::uint8_t, 8> CIRCLE_OCTANT = {
 };
 
 /// triangleEdgeMasks: word; a copy of spanLeftMasks and spanRightMasks at the bottom of the stack segment (the MZ
-/// header's SS is 13CAh): (fill, keep) byte pairs FF/00, 3F/C0, 0F/F0, 03/FC for a left end at x&3 = 0-3, then C0/3F,
-/// F0/0F, FC/03, FF/00 for a right end; read only by FillTriangleSpan through BP. The stack (SP 0x3F8) would have to grow 0x3E8 bytes to
-/// reach it; a FillTriangle call adds at most 0x104
+/// header's stack segment is 13CAh): (fill, keep) byte pairs FF/00, 3F/C0, 0F/F0, 03/FC for a left end at x&3 = 0-3, then C0/3F,
+/// F0/0F, FC/03, FF/00 for a right end; read only by FillTriangleSpan, in the stack segment. The stack (its pointer starting at
+/// 0x3F8) would have to grow 0x3E8 bytes to reach it; a FillTriangle call adds at most 0x104
 constexpr std::array<std::uint16_t, 8> TRIANGLE_EDGE_MASKS = {
   0x00FF, 0xC03F, 0xF00F, 0xFC03, 0x3FC0, 0x0FF0, 0x03FC, 0x00FF, // [0]
 };

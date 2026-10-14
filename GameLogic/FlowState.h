@@ -7,8 +7,8 @@
 namespace Elite
 {
 
-/// Where the game is, at the title, docked or in flight, and the frame's clock, which several subsystems write. Its members are the 1987
-/// data segment's, by their names, in their order there; the GameState holds it in GameData.
+/// Where the game is, at the title, docked or in flight, and the frame's clock, which several subsystems write. Its members are the
+/// original data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct FlowState
 {
   /// incremented every tick; compared with minimumFrameMs and cleared by PresentSpaceView

@@ -87,7 +87,7 @@ template <typename T, std::size_t Extent> [[nodiscard]] T& ElementWithin(std::sp
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
-// Each is what the 1987 routine of its name computes, with no register in sight: its inputs are
+// Each is what the original's routine of its name computes, with nothing held in a register: its inputs are
 // parameters, its results come back, and every byte it writes is written as the original writes it, in
 // the same order and at the same width.
 
@@ -120,7 +120,7 @@ std::uint16_t DrawScreenString(GameState& _state, std::string_view _text, std::u
 void FormatDecimal5(std::uint16_t _value, std::span<std::uint8_t> _digits);
 
 /// BlankLeadingZeros: up to _most of _text's leading characters below '1' become spaces. Every caller's _most is
-/// less than the digits it blanks, which always end in one kept; LOOP would let 65,536 go for 0.
+/// less than the digits it blanks, which always end in one kept; the original's loop would let 65,536 go for 0.
 void BlankLeadingZeros(std::span<std::uint8_t> _text, std::uint8_t _most);
 
 /// DrawSmallViewChar: the 5-row letter _letter ('A'-'Z') in _ink over the drawing buffer at _place, the
@@ -145,8 +145,8 @@ void FormatCredits(GameState& _state);
 /// time, unless it is shown already.
 void UpdateMessageLine(GameState& _state);
 
-/// ClearMessageLine: zeroes the message line's eight rows of 32 words from B800:0058, each row forwards
-/// (REP STOSW).
+/// ClearMessageLine: zeroes the message line's eight rows of 32 words from B800:0058, each row forwards, a word
+/// at a time.
 void ClearMessageLine(GameState& _state);
 
 /// ShowBountyMessage: _tenths of a credit into bountyText as "nnnn.n", shown for 20 frames.
@@ -183,7 +183,8 @@ void PrintTextLines(GameState& _state, std::span<const std::string_view> _lines,
 
 /// PrintTextLines for _lines texts that follow one another in _texts, each after the NUL of the one before, as the original
 /// steps past a NUL to the next: texts the game writes into, or composes from constants and what it writes (JoinTexts). Every text's
-/// NUL but the last's must be within _texts; the last may end at _texts' end. _lines is not 0, which LOOP would count as 65,536.
+/// NUL but the last's must be within _texts; the last may end at _texts' end. _lines is not 0, which the original's loop would
+/// count as 65,536.
 void PrintTextLines(GameState& _state, std::string_view _texts, std::uint16_t _cell, std::uint16_t _lines);
 
 /// _bytes, a member of texts the game writes into, as PrintTextLines reads them.

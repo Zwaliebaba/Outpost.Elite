@@ -7,8 +7,8 @@
 namespace Elite
 {
 
-/// The docked menus' rows, prices and typed numbers, which the equipment, market and docked screens share. Its members are the 1987 data
-/// segment's, by their names, in their order there; the GameState holds it in GameData.
+/// The docked menus' rows, prices and typed numbers, which the equipment, market and docked screens share. Its members are the original
+/// data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct MenusState
 {
   /// FormatTenths output, "nnnn.n", and its NUL

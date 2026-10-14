@@ -85,7 +85,7 @@ constexpr std::uint8_t FRAGMENT_LIFETIME_MASK = 0x0F;
 constexpr std::uint8_t MINED_FRAGMENT_LIFETIME = 0x3C + 0x14;
 constexpr int MOST_DRAWS = 1000;
 
-// SAR AL,1.
+// _value, signed, halved: an arithmetic shift, rounding towards minus infinity.
 [[nodiscard]] std::uint8_t HalveSigned(std::uint8_t _value) noexcept
 {
   return static_cast<std::uint8_t>(static_cast<std::int8_t>(_value) >> 1);

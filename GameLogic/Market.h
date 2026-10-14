@@ -17,7 +17,7 @@ namespace Elite
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
-// Each is what the 1987 routine of its name computes, with no register in sight: its inputs are
+// Each is what the original routine of its name computes, with no register in sight: its inputs are
 // parameters, its results come back, and every byte it writes is written as the original writes it, in
 // the same order and at the same width.
 
@@ -32,7 +32,7 @@ bool SubtractCredits(GameState& _state, std::uint32_t _tenths);
 /// SpendCredits: a jump to SubtractCredits, for _tenths of credits. Returns false when they are not enough.
 bool SpendCredits(GameState& _state, std::uint32_t _tenths);
 
-/// AddCredits: _tenths of credits onto creditsTenths, ADD and then ADC, and the balance reformatted by
+/// AddCredits: _tenths of credits onto creditsTenths, in 32 bits, and the balance reformatted by
 /// FormatCredits.
 void AddCredits(GameState& _state, std::uint32_t _tenths);
 
@@ -59,7 +59,7 @@ void StartMarketRandom(GameState& _state);
 // ── The market's rules (D53, D74): values in, values out, no state and no screen ──
 //
 // What the routines above decide, apart from what they draw and where the game keeps it (ADR-043). The routines call these, so
-// the corpus checks them while the 1987 screens stand; the screens of piece 5 call them in their place. Every sum is at the
+// the corpus checks them while the original screens stand; the screens of piece 5 call them in their place. Every sum is at the
 // width the original computes it at.
 
 /// The hold's tonnes without the extension, and with it.
@@ -131,7 +131,7 @@ struct CargoTrade
 /// SubtractCredits' rule: _creditsTenths less _priceTenths, or nothing when they are not enough.
 [[nodiscard]] std::optional<std::uint32_t> CreditsAfterPaying(std::uint32_t _creditsTenths, std::uint32_t _priceTenths) noexcept;
 
-/// AddCredits' rule: _creditsTenths and _earnedTenths, in 32 bits, as the original's ADD and ADC wrap them.
+/// AddCredits' rule: _creditsTenths and _earnedTenths, in 32 bits, as the original's two-word sum wraps them.
 [[nodiscard]] std::uint32_t CreditsAfterEarning(std::uint32_t _creditsTenths, std::uint32_t _earnedTenths) noexcept;
 
 /// The hold's tonnes, with the extension fitted (_largeBay) or without it.

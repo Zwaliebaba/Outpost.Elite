@@ -8,7 +8,7 @@ namespace Elite
 {
 
 /// What drawing draws into and with, which several subsystems write: the space view buffer, the colour, the paper, the sun's fringe, the
-/// text attribute, the screen's layout and the masking device's background. Its members are the 1987 data segment's, by their names, in
+/// text attribute, the screen's layout and the masking device's background. Its members are the original data segment's, by their names, in
 /// their order there; the GameState holds it in GameData.
 struct DrawingState
 {
@@ -18,7 +18,7 @@ struct DrawingState
   std::uint8_t drawColor;
   /// read by DrawDisc as an AND mask on the disc fill: DrawSunOrPlanet sets 1/3/7 for the sun as its radius passes 0x28/0xB4, 0 for the...
   std::uint8_t sunFringeMask;
-  /// pixel pattern behind each glyph in the graphics printer (DrawViewChar: ink from BX where the glyph is set, this word where it is clear); 0...
+  /// pixel pattern behind each glyph in the graphics printer (DrawViewChar: ink from _ink where the glyph is set, this word where it is clear); 0...
   std::uint16_t textPaperPattern;
   /// FFh in the file; 0 cockpit (ShowCockpitScreen), 1 chart frame (DrawChartFrame), 2 text mode (DrawDockedFrame); also selects the tex...
   std::uint8_t screenLayout;

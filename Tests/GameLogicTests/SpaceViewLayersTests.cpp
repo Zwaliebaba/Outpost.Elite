@@ -366,7 +366,7 @@ void CheckFrame(GameRig& _rig, Elite::FrameImage& _image, Seen& _seen)
     Assert::AreEqual(std::size_t{0}, snapshot.dashboard.blipCount, L"no blips on the title's scanner");
     ++_seen.titleFrames;
   }
-  // 1987's rule for the view's sides (D69): of every object in the view's cone, DrawingOf says a model exactly where the game
+  // the original's rule for the view's sides (D69): of every object in the view's cone, DrawingOf says a model exactly where the game
   // drew one. A flashing object's count has moved on a frame by the time the snapshot reads it, and is not held to it.
   for (std::size_t index = 0; index < snapshot.objectCount; ++index)
   {
@@ -675,7 +675,7 @@ public:
                            .c_str());
   }
 
-  // Ships come into the view from beside it, where the renderer draws them by 1987's rule (D69): each as a model exactly where
+  // Ships come into the view from beside it, where the renderer draws them by the original's rule (D69): each as a model exactly where
   // the rule had it as one, every frame checked as the fight's are a millisecond after it was published, while it is shown.
   TEST_METHOD(ShipsComeIntoTheViewAsTheRuleForesaw)
   {

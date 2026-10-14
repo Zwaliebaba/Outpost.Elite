@@ -7,8 +7,8 @@
 namespace Elite
 {
 
-/// What Docked.cpp, alone, writes of the game's state (D38), and its own: read elsewhere at most, never written. Its members are the 1987
-/// data segment's, by their names, in their order there; the GameState holds it in GameData.
+/// What Docked.cpp, alone, writes of the game's state (D38), and its own: read elsewhere at most, never written. Its members are the
+/// original data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct DockedState
 {
   /// the fuel's light years as the status screen prints them, either side of the point (FormatFuelLightYears)

@@ -140,7 +140,7 @@ template <std::size_t Glyphs, std::size_t GlyphBytes>
   return BytesWithin(DrawingBuffer(_state), _at, 2);
 }
 
-// REP STOSW: _count words of _value at _at, the CGA's memory. Returns where DI ends.
+// REP STOSW: _count words of _value at _at, the CGA's memory. Returns the place past the last word.
 std::uint16_t StoreWords(GameState& _state, std::uint16_t _at, std::uint16_t _count, std::uint16_t _value)
 {
   std::uint16_t at = _at;
@@ -152,9 +152,8 @@ std::uint16_t StoreWords(GameState& _state, std::uint16_t _at, std::uint16_t _co
   return at;
 }
 
-// A loop of byte moves ShowShipIdentity makes (MOV AH,[BX] or MOV AL,[BX], INC BX, the byte to [DI], INC DI, LOOP): the
-// first _to.size() bytes of a name of shipTypeNames, as many as the loop's count, into _to. The name holds one more byte
-// than the field it is copied into, which the loop never moves.
+// A loop of byte moves ShowShipIdentity makes, a byte at a time: the first _to.size() bytes of a name of shipTypeNames, as many
+// as the loop's count, into _to. The name holds one more byte than the field it is copied into, which the loop never moves.
 template <std::size_t Bytes> void CopyNameInto(const std::array<std::uint8_t, Bytes>& _name, std::span<std::uint8_t> _to)
 {
   static_assert(Bytes > 0);
@@ -164,15 +163,15 @@ template <std::size_t Bytes> void CopyNameInto(const std::array<std::uint8_t, By
   }
 }
 
-// The line ReadTextLine reads: the buffer it types into, which the original holds in SI, and where RedrawInputLine echoes it,
-// in DI. Neither changes from one turn of its loop to the next.
+// The line ReadTextLine reads: the buffer it types into, and where RedrawInputLine echoes it. Neither changes from one turn of
+// its loop to the next.
 struct TypedLine
 {
   std::span<std::uint8_t> buffer;
   std::uint16_t cell;
 };
 
-// ReadTextLine's redraw: the line typed and the cursor printed, then the JMP back to counting the blink.
+// ReadTextLine's redraw: the line typed and the cursor printed, then the jump back to counting the blink.
 void RedrawTypedLine(GameState& _state, const TypedLine& _line, std::uint16_t _length)
 {
   RedrawInputLine(_state, _line.buffer, _length, _line.cell);
@@ -187,7 +186,7 @@ void RestartInputBlink(GameState& _state, const TypedLine& _line, std::uint16_t 
 }
 
 // MessageLine's second half: the message in messagePointer, unless it is already shown, on the message line,
-// cleared first a row at a time. The original keeps SI round ClearMessageLine on the stack.
+// cleared first a row at a time.
 void ShowMessage(GameState& _state)
 {
   _state.Data().messages.messageFrames = WithHigh(_state.Data().messages.messageFrames, MESSAGE_DRAWN);
@@ -327,8 +326,7 @@ SmallViewPlace DrawSmallViewChar(GameState& _state, std::uint8_t _letter, std::u
   std::uint16_t address = _place.at;
   for (std::uint16_t line = 0; line < SMALL_GLYPH_ROWS; ++line)
   {
-    // The letter's pixels cleared from the buffer, then set in the ink: AND [DI],BP and OR [DI],AX, two word
-    // writes.
+    // The letter's pixels cleared from the buffer, then set in the ink: two word writes.
     const std::uint16_t pixels = SmallGlyphRow(letter, line, _place.shift);
     const std::span<std::uint8_t> word = DrawingBufferWord(_state, address);
     SetWordIn(word, 0, static_cast<std::uint16_t>(WordIn(word, 0) & ~pixels));
@@ -341,7 +339,7 @@ SmallViewPlace DrawSmallViewChar(GameState& _state, std::uint8_t _letter, std::u
 
 void DrawSmallViewString(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _position)
 {
-  // SHR DI,1 twice for the byte; SHL CL,1 / NOT CL / AND CL,4 for the shift, 4 where bit 1 of x is clear.
+  // The position shifted right twice for the byte; the shift is 4 where bit 1 of x is clear, else 0.
   const auto shift = static_cast<std::uint8_t>(~(Low(_position) << 1) & SMALL_GLYPH_SHIFT);
   SmallViewPlace next{static_cast<std::uint16_t>(_position >> 2), shift};
   for (const char letter : _text)
@@ -431,7 +429,7 @@ void UpdateMessageLine(GameState& _state)
 
 void ClearMessageLine(GameState& _state)
 {
-  // REP STOSW a row at a time, DI going on from where each leaves it to the other bank.
+  // Zero words a row at a time, each row going on from where the last left off, to the other bank.
   std::uint16_t row = MESSAGE_LINE_OFFSET;
   std::uint16_t down = MESSAGE_TO_ODD_BANK;
   std::uint16_t up = MESSAGE_TO_EVEN_BANK;
@@ -457,7 +455,7 @@ void ShowBountyMessage(GameState& _state, std::uint16_t _tenths)
 
 void ShowShipIdentity(GameState& _state, std::uint8_t _type, std::uint8_t _class, const SpaceObject& _slot)
 {
-  // PUSH AX / POP AX round IsDebrisType keep the type and the class.
+  // The type and the class, kept across IsDebrisType.
   std::uint8_t shipClass = _class;
   if (shipClass == CLASS_SIMPLE_OR_DEBRIS && !IsDebrisType(_slot))
   {
@@ -526,7 +524,7 @@ std::uint8_t SwapTextAttributeNibbles(GameState& _state)
 
 void PrintCountedTextLines(GameState& _state, std::span<const std::string_view> _lines, std::uint16_t _cell)
 {
-  // MOV CL,[SI] / XOR CH,CH, then the same loop as PrintTextLines's.
+  // The original reads the count from the text's first byte; then the same loop as PrintTextLines's.
   PrintTextLines(_state, _lines, _cell);
 }
 
@@ -623,7 +621,7 @@ void PrintTextLines(GameState& _state, std::string_view _texts, std::uint16_t _c
     }
     if (character >= 'A' && character <= 'Z')
     {
-      // OR DL,20h, and AND DL,DFh after it when GetKey says Shift was held: lower case unless Shift is held.
+      // Bit 20h set, and cleared after it when GetKey says Shift was held: lower case unless Shift is held.
       character = static_cast<std::uint8_t>(character | LOWER_CASE_BIT);
       if (key.shift)
       {

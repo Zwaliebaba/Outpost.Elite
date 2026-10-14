@@ -8,7 +8,7 @@
 namespace Elite
 {
 
-/// A slot of shipSlots by its number, where the original holds its offset, + 64 times the number, in SI or DI or in a
+/// A slot of shipSlots by its number, where the original holds its offset, + 64 times the number, in a register or in a
 /// word of its state (D33, piece 3): 0 the sun, 1 the planet, 2 the station, 3-19 the ships and 20-35 the debris. A search that
 /// finds none leaves the number past the last slot it looked at.
 ///
@@ -36,16 +36,16 @@ enum class SlotIndex : std::uint16_t
   return static_cast<std::uint16_t>(_slot);
 }
 
-/// The slot _count numbers on from _slot, as the original's SI or DI steps on by 40h a slot.
+/// The slot _count numbers on from _slot, as the original's offset steps on by 40h a slot.
 [[nodiscard]] constexpr SlotIndex SlotAfter(SlotIndex _slot, std::uint16_t _count = 1) noexcept
 {
   return static_cast<SlotIndex>(Number(_slot) + _count);
 }
 
 /// One of the 36 records of 64 bytes in shipSlots that hold the objects in space (ADR-012): slot 0 the sun, 1 the planet, 2 the
-/// station, 3-19 the ships and 20-35 the debris. Its fields are in their 1987 order, the offsets below the original's, each a byte or a
-/// word as the original reads it. The GameState gives the record of a slot's number (GameState::Slot), and a record's number
-/// (GameState::IndexOf), where the original holds the record's offset in SI or DI.
+/// station, 3-19 the ships and 20-35 the debris. Its fields are in the original's order, the offsets below the original's, each a
+/// byte or a word as the original reads it. The GameState gives the record of a slot's number (GameState::Slot), and a record's
+/// number (GameState::IndexOf), where the original holds the record's offset.
 ///
 /// Where the original reads one place by two names of one width, the record has one member and an accessor for the other name
 /// (SpinRoll, SpinPitch, FlashFrames, FramesAway): no union (change 3c). Where it reads

@@ -37,16 +37,16 @@ void StartBeep(GameState& _state);
 /// StartLowBeep: lowBeepTicks = 70.
 void StartLowBeep(GameState& _state);
 
-/// StopSoundEffects: every effect's trigger cleared. The original clears them under CLI.
+/// StopSoundEffects: every effect's trigger cleared. The original clears them with interrupts off.
 void StopSoundEffects(GameState& _state);
 
-/// StartImpactSound: a noise sweep, step 30 shrinking by 4. The original starts it under CLI.
+/// StartImpactSound: a noise sweep, step 30 shrinking by 4. The original starts it with interrupts off.
 void StartImpactSound(GameState& _state);
 
-/// StartExplosionSound: a noise sweep, step 50 shrinking by 8. The original starts it under CLI.
+/// StartExplosionSound: a noise sweep, step 50 shrinking by 8. The original starts it with interrupts off.
 void StartExplosionSound(GameState& _state);
 
-/// StartPlayerDeathSound: a noise sweep, step 60 shrinking by 7. The original starts it under CLI. Returns the
+/// StartPlayerDeathSound: a noise sweep, step 60 shrinking by 7. The original starts it with interrupts off. Returns the
 /// step length the step counter starts at.
 std::uint8_t StartPlayerDeathSound(GameState& _state);
 
@@ -54,7 +54,7 @@ std::uint8_t StartPlayerDeathSound(GameState& _state);
 void StartLaserSound(GameState& _state);
 
 /// StartPlayerHitSound: 100 ticks of noise, the tone sweep and the two-tone stopped. The original does it
-/// under CLI.
+/// with interrupts off.
 void StartPlayerHitSound(GameState& _state);
 
 } // namespace Elite

@@ -23,7 +23,7 @@ constexpr std::uint8_t NOTE_TICKS_PER_BEAT = 0x24;
 constexpr std::uint8_t NOTE_BASE = 0x0C;    // notePeriods starts an octave up
 constexpr std::uint16_t REST_PERIOD = 0x32; // inaudible
 
-// The byte at _field less one, stored back: DEC BYTE PTR. Returns what it leaves.
+// The byte at _field less one, wrapping, stored back. Returns what it leaves.
 std::uint8_t Decrement(std::uint8_t& _field)
 {
   const auto value = static_cast<std::uint8_t>(_field - 1);
@@ -210,8 +210,8 @@ void TimerTick(GameState& _state, Host& _host)
 
 [[nodiscard]] Task<void> WaitForTimerTick(GameState& _state, Host& _host)
 {
-  // PUSH AX, MOV AX,[timerTicks], then the compare and JE back to it, and POP AX: AX holds the tick it started at. The
-  // stack the PUSH used is not state the game reads, nor the digest (ADR-008 item 5).
+  // timerTicks, compared with the tick it started at, until it changes. The stack the original saves its working value on is
+  // not state the game reads, nor the digest (ADR-008 item 5).
   const std::uint16_t ticks = _state.Data().timer.timerTicks;
   while (ticks == _state.Data().timer.timerTicks)
   {

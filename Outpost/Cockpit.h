@@ -17,7 +17,7 @@ namespace Outpost
 class Cockpit
 {
 public:
-  /// The space view's place in the frame's window: the 1987 field of view, 256 x 126 pixels at the CGA's 4:3, about 1.69:1,
+  /// The space view's place in the frame's window: the original's field of view, 256 x 126 pixels at the CGA's 4:3, about 1.69:1,
   /// filling the window's height and centred across (D63).
   static constexpr Engine::Rect VIEW{.left = 308.0f, .top = 40.0f, .width = 1304.0f, .height = 770.0f};
 

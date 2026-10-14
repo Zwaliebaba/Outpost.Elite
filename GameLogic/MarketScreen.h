@@ -28,7 +28,7 @@ struct MarketGoods
   bool largeBay = false; ///< the cargo bay extension is fitted
 };
 
-/// D01's own state, which the 1987 screens have no counterpart for: the row, the quantity, and the strip the last action left.
+/// D01's own state, which the original screens have no counterpart for: the row, the quantity, and the strip the last action left.
 struct MarketScreen
 {
   std::uint8_t selected = 0;
@@ -93,7 +93,7 @@ struct MarketStep
 /// The market and the hold in _state, at the prices ComputeMarketPrices left in screenPrices.
 [[nodiscard]] MarketGoods MarketGoodsOf(const GameState& _state);
 
-/// D01, the market (D82, D92), which F2, F3 and F8 open while docked in place of 1987's Sell Cargo, Buy Cargo and Market Prices.
+/// D01, the market (D82, D92), which F2, F3 and F8 open while docked in place of the original's Sell Cargo, Buy Cargo and Market Prices.
 /// The prices are computed and, the first time after an arrival, the stock rolled, as Buy Cargo did; then each tick a key, and
 /// the clicks the shell sent, act on the screen (StepMarket), a trade is stored, and the view is published (Host::ShowMarket).
 /// Returns the screen key that closes it: Esc, or an F-key other than F2, F3 and F8.

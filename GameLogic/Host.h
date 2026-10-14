@@ -74,7 +74,7 @@ public:
   {
     DosDateTime startMoment;   ///< The date and time at power-on, which the commander files' stamps count from.
     bool mousePresent = false; ///< Whether a mouse is attached (Mouse::Present).
-    bool cheat = false;        ///< Whether the game starts with the cheat on: the shell's --cheat, where 1987 read ' cheat' (D80).
+    bool cheat = false;        ///< Whether the game starts with the cheat on: the shell's --cheat, where the original read ' cheat' (D80).
   };
 
   /// A native routine at an address, and how often it ran.

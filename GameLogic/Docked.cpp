@@ -134,7 +134,7 @@ constexpr std::uint16_t TITLE_YAW_STEP = 0x14;
 constexpr std::uint16_t TITLE_ROLL_STEP = 0x1E;
 constexpr std::uint8_t TITLE_SHIP_FLAGS = 2;
 
-// CALL GetKey; JE back to it, de-assembled: GetKey until a key comes (ADR-039). Returns the key.
+// GetKey until a key comes (ADR-039). Returns the key.
 [[nodiscard]] Task<KeyPress> WaitForKey(GameState& _state, Host& _host)
 {
   for (;;)
@@ -160,7 +160,7 @@ constexpr std::uint8_t TITLE_SHIP_FLAGS = 2;
   return _state.Data().commander.selectedSystem.name;
 }
 
-// The cash without its leading spaces: INC SI from the byte before creditBalanceText while it is on a space. Returns the cash
+// The cash without its leading spaces: a step at a time along creditBalanceText while it is on a space. Returns the cash
 // from the first character that is not a space.
 std::string_view SkipCashSpaces(const GameState& _state)
 {
@@ -226,7 +226,7 @@ void FormatQuantity(std::uint16_t _quantity, std::span<std::uint8_t> _text)
 // player's angles, the view and the lasers zeroed, the cockpit shown (screenLayout 2, which ShowCockpitScreen copies over with the
 // direction flag clear), the message line cleared and ---- E L I T E ---- on it; then the planet and the turning ship of type
 // titleShipType, in stationSlot at its titleShipDistances, until a key: F9 and F10 step the type through 2-29, any other ends it
-// with the music off, the credits and a new game. ES is B800h throughout, from its MOV ES,AX. TitleFrameLoop is one
+// with the music off, the credits and a new game. It writes video memory at B800h throughout. TitleFrameLoop is one
 // frame.
 [[nodiscard]] Task<void> RunTitle(GameState& _state, Host& _host)
 {
@@ -244,7 +244,7 @@ void FormatQuantity(std::uint16_t _quantity, std::span<std::uint8_t> _text)
   (void)DrawScreenString(_state, ELITE_TITLE_TEXT, WHITE_MASK, TITLE_TEXT_CELL);
   SpaceObject& ship = _state.Slot(SlotIndex::Station);
   _state.Data().world.shipSlotCount = TITLE_SHIP_SLOTS;
-  // XOR AX,AX, then the yaw, the roll, the low words of x and y, the high bytes of x and y as a word, and z's high byte.
+  // Zero into the yaw, the roll, the low words of x and y, the high bytes of x and y as a word, and z's high byte.
   ship.yaw = 0;
   ship.roll = 0;
   ship.x = 0;
@@ -262,8 +262,8 @@ void FormatQuantity(std::uint16_t _quantity, std::span<std::uint8_t> _text)
     DrawTitlePlanet(_state, TITLE_PLANET_RADIUS, TITLE_PLANET_X, TITLE_PLANET_Y);
     _host.EndSpaceViewRendered();
     ship.flags = TITLE_SHIP_FLAGS;
-    // MOV BL,titleShipType / SHL BL,1 / XOR BH,BH: the type doubled indexes titleShipDistances, and INC BL makes it the type byte,
-    // active. The ship stands at the type's own distance, turned a step on each axis: the roll, the yaw, then the pitch.
+    // titleShipType doubled, in 8 bits, indexes titleShipDistances, and one more makes it the type byte, active.
+    // The ship stands at the type's own distance, turned a step on each axis: the roll, the yaw, then the pitch.
     const auto doubled = static_cast<std::uint8_t>(_state.Data().docked.titleShipType << 1);
     const std::uint16_t distance = TITLE_SHIP_DISTANCES[doubled / 2];
     ship.type = static_cast<std::uint8_t>(doubled + 1);
@@ -373,7 +373,7 @@ constexpr std::array<DockedScreen, 9> DOCKED_SCREENS = {{
         screenKey = key.scanCode;
         break;
       }
-      // DEC AH: Esc reaches 0, and shows the disc menu.
+      // Esc, whose scan code less one is 0, shows the disc menu.
       if (key.scanCode == SCAN_ESCAPE)
       {
         screenKey = SCAN_ESCAPE;
@@ -397,7 +397,7 @@ void PrintCreditsOnMessageLine(GameState& _state)
 
 void FormatFuelLightYears(GameState& _state)
 {
-  // MUL AH by 10, then DIV BL by 36, which cannot overflow: at most 2550/36.
+  // The fuel times 10, then divided by 36 to a byte, which cannot overflow: at most 2550/36.
   const auto tenths = static_cast<std::uint16_t>(_state.Data().commander.fuel * FUEL_TENTHS_PER_UNIT);
   DockedState& docked = _state.Data().docked;
   FormatDecimal5(static_cast<std::uint8_t>(tenths / FUEL_UNITS_PER_TENTH), docked.fuelDigits);
@@ -549,7 +549,7 @@ void AwardArchangelTitle(GameState& _state)
       if (SelectLaserType(_state))
       {
         std::uint16_t cell = PrintTextModeString(_state, MOUNTS_OPEN_TEXT, named);
-        // Each mount with this type of laser, from laserMountsFitted in DL and laserMountTypes in DH.
+        // Each mount with this type of laser, from laserMountsFitted and laserMountTypes, a bit of each at a time.
         std::uint8_t mounts = _state.Data().commander.laserMountsFitted;
         std::uint8_t types = _state.Data().commander.laserMountTypes;
         std::size_t mountName = 0;
@@ -646,7 +646,7 @@ void AwardArchangelTitle(GameState& _state)
     std::span<const std::string_view> reply = SUPERNOVA_REFUSED_LINES;
     if (answer == SCAN_Y)
     {
-      // The hold emptied for the refugees: MOV [DI],CH, which is 0, at each of the 17 amounts.
+      // The hold emptied for the refugees: 0 at each of the 17 amounts.
       for (std::uint16_t product = 0, left = TRADE_ROWS;;)
       {
         LotOf(_state, product).held = 0;
@@ -752,7 +752,7 @@ void AwardArchangelTitle(GameState& _state)
   {
     co_await RunTitle(_state, _host);
   }
-  // JMP into DockedKeyDispatch: back from a disk request, at the disc menu; otherwise at the status screen.
+  // On into DockedKeyDispatch: back from a disk request, at the disc menu; otherwise at the status screen.
   if (_state.Data().saveLoad.resumeAtDiskMenu == 1)
   {
     co_return co_await DispatchDockedKeys(_state, _host, SCAN_ESCAPE);

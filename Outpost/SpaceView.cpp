@@ -49,10 +49,10 @@ constexpr float BEAM_GUN_ROWS = 1.8f;
 constexpr float BEAM_END_ROWS = 0.5f;
 constexpr float BEAM_INTENSITY = 2.5f;
 // The stardust (D67), the renderer's own, fixed in the scene's axes in a cube round the camera that each mote wraps round, 2,048
-// units from its middle to a face. 1987's dust moves out from the view's middle by 1/32 of its offset a frame at speed 40, as a
-// mote 32 frames off would, which at 40 units a frame is 1,280 units; the motes in the 1987 field lie 1,470 deep on average. Of
-// 1,650, about 30 are in the 1987 field at once, as 1987 keeps 30. Each is drawn from where it is to where it was an update before,
-// a dot at most speeds and a streak on the jump drive, and fades over the furthest 30% of the cube; one nearer than 64 units is
+// units from its middle to a face. The original's dust moves out from the view's middle by 1/32 of its offset a frame at speed 40, as a
+// mote 32 frames off would, which at 40 units a frame is 1,280 units; the motes in the original's field lie 1,470 deep on average. Of
+// 1,650, about 30 are in the original's field at once, as the original keeps 30. Each is drawn from where it is to where it was an update
+// before, a dot at most speeds and a streak on the jump drive, and fades over the furthest 30% of the cube; one nearer than 64 units is
 // not drawn, to keep a mote passing the camera from sweeping across the view.
 constexpr float STARDUST_REACH = 2048.0f;
 constexpr std::size_t STARDUST_MOTES = 1650;
@@ -314,7 +314,7 @@ void SpaceView::MoveStardust(const Elite::Host& _platform, const std::array<std:
     }
   }
   // The world moves back by the velocity's length once an update, which the latest two snapshots time, and the dust with it, along
-  // the player's heading, as 1987's dust streams from the view's middle whatever the velocity's way: arriving from a jump leaves
+  // the player's heading, as the original's dust streams from the view's middle whatever the velocity's way: arriving from a jump leaves
   // the velocity stale until the player steers, and the docking computer flies its approach. At most a few updates at once, so a
   // stall does not sweep the dust away.
   const float speed = std::sqrt(static_cast<float>(latest.velocityX) * static_cast<float>(latest.velocityX) +

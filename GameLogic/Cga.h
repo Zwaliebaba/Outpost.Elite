@@ -108,7 +108,7 @@ enum class CrtcRegister : std::uint8_t
 /// Timing. Time is the platform's millisecond clock (Timing.h, D87), which the CGA reads on every status read and render; it
 /// never reads the host's clock. Frames are 60 a second, frame n starting at FrameStart(n), and the vertical retrace is the
 /// first RETRACE_MILLISECONDS of each. The status register reports bit 3, vertical sync, and bit 0, display inactive, during
-/// the retrace, and nothing else; the game masks the status with `and al, 8` at once, so only bit 3 reaches it.
+/// the retrace, and nothing else; the game masks all but bit 3 off the status at once, so only bit 3 reaches it.
 ///
 /// Paced time's rule (ADR-008 item 2): ReadStatus reports each vertical retrace to the first read that sees it, and to no
 /// later one. The game waits for a retrace by reading the status until bit 3 is set, a level rather than an edge. On the real
@@ -174,13 +174,13 @@ public:
   /// _clock is the platform's millisecond clock, which must outlive the CGA.
   explicit Cga(const Milliseconds& _clock) noexcept;
 
-  /// OUT 3D4h,_register then OUT 3D5h,_value: CRTC register _register, its index taken modulo 32.
+  /// _register written to port 3D4h, then _value to 3D5h: CRTC register _register, its index taken modulo 32.
   void WriteCrtc(std::uint8_t _register, std::uint8_t _value) noexcept;
 
-  /// OUT 3D8h,_value: the mode control register.
+  /// _value written to port 3D8h: the mode control register.
   void SetModeControl(std::uint8_t _value) noexcept;
 
-  /// OUT 3D9h,_value: the colour select register.
+  /// _value written to port 3D9h: the colour select register.
   void SetColorSelect(std::uint8_t _value) noexcept;
 
   /// The card set to _mode, as the BIOS's set-mode left it: the video off, CRTC registers 0-15 from the mode's table (the
@@ -188,7 +188,7 @@ public:
   /// to clear.
   void SetMode(CgaMode _mode) noexcept;
 
-  /// IN AL,3DAh: the status, under paced time's rule for the vertical retrace (above).
+  /// The byte read from port 3DAh: the status, under paced time's rule for the vertical retrace (above).
   [[nodiscard]] std::uint8_t ReadStatus() noexcept;
 
   /// Draws the visible area of _memory and the border as they are at this moment.

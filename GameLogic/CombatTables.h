@@ -7,7 +7,7 @@
 namespace Elite
 {
 
-// The tables and constants this subsystem reads, which nothing writes (D33, D38): source since the 1987 image went (Phase 7,
+// The tables and constants this subsystem reads, which nothing writes (D33, D38): source since the original's image went (Phase 7,
 // step 5).
 // Combat.cpp alone includes this, so they are in an unnamed namespace (D38).
 namespace
@@ -18,7 +18,8 @@ constexpr std::array<std::uint8_t, 4> VIEW_LASER_MOUNT = {
   0x01, 0x04, 0x02, 0x03, // [0]
 };
 
-/// laserSights: sprite: 16 rows of an AND word pair then an OR word pair; one 128-byte 16x16 sight per laser type, drawn
+/// laserSights: sprite: 16 rows of a mask word pair (kept pixels) then an ink word pair (set pixels); one 128-byte 16x16 sight
+/// per laser type, drawn
 /// by DrawLaserSights
 constexpr std::array<std::uint8_t, 512> LASER_SIGHTS = {
   0xFF, 0xF3, 0xCF, 0xFF, 0x00, 0x00, 0x00, 0x00, // [0]

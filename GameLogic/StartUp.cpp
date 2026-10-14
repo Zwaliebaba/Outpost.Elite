@@ -73,8 +73,9 @@ void CheckCheatArgument(GameState& _state, const Host& _host)
 
 void StartNewGame(GameState& _state)
 {
-  // REP MOVSB from DS to ES = DS, a byte at a time: startupCommander into commanderBlock, the whole record, as the direction flag is
-  // clear wherever the game calls it: the only STD, MaskOutsideTunnel's, has its CLD before the routine returns (change 3c).
+  // startupCommander into commanderBlock, the whole record, a byte at a time going up: the original's copy never runs downward
+  // where the game calls it, as the only routine that reverses the direction, MaskOutsideTunnel, restores it before it returns
+  // (change 3c).
   _state.Data().commander = _state.Data().saveLoad.startupCommander;
   _state.Data().commander.witchspaceCountdown = 0;
   _state.Data().playerShip.playerEnergy = NEW_GAME_ENERGY;
@@ -131,7 +132,7 @@ void StartNewGame(GameState& _state)
     // handler on int 24h.
     _state.Data().disk.diskError = 0;
     PerformDiskRequest(_state, _host, request);
-    // JMP RestartPlay.
+    // On to RestartPlay.
   }
 }
 
@@ -142,7 +143,7 @@ void StartNewGame(GameState& _state)
     _state.Data().flow.inFlight = 0;
     if (co_await RunTitleAndDocked(_state, _host))
     {
-      // LeaveGameLoopForDisk: the original drops the disc menu's return address and RunTitleAndDocked's, so that its RET returns
+      // LeaveGameLoopForDisk: the original drops the disc menu's return address and RunTitleAndDocked's, so that it returns
       // into Start.
       co_return;
     }
@@ -153,7 +154,7 @@ void StartNewGame(GameState& _state)
     {
       _state.Data().flow.titleShown = 0;
     }
-    // JMP GameLoop.
+    // On to GameLoop.
   }
 }
 
@@ -162,8 +163,7 @@ void StartNewGame(GameState& _state)
   // The space view's layers watch the frame (ADR-033), which holds only the credits' words (D66).
   _host.BeginSpaceViewFrame();
   ClearDrawBuffer(_state);
-  // Each line from SI, one past the last line's NUL, at DI, a row of characters below the last line's start. The original pushes
-  // and pops the count and the place round the print.
+  // Each line from one past the last line's NUL, at a row of characters below the last line's start.
   std::size_t line = 0;
   std::string_view text = CreditsLine(line);
   std::uint16_t place = CREDITS_FIRST_LINE;
@@ -176,14 +176,14 @@ void StartNewGame(GameState& _state)
     {
       break;
     }
-    // SI past the line's NUL; past the last line, the table's end, nothing reads it.
+    // On past the line's NUL; past the last line, the table's end, nothing reads it.
     line += text.size() + 1;
     text = CreditsLine(line);
   }
   co_await FinishSpaceViewFrame(_state, _host);
   // The frame as it was drawn, for a renderer that draws it in the title's cockpit (D64, D66): the words and nothing of the scene.
   _host.PublishFlightSnapshot(WithoutScene(TakeTitleSnapshot(_state, ELITE_TITLE_TEXT, SnapshotDisc{})), false);
-  // WaitForTimerTick keeps every register; the LOOP counts the ticks left.
+  // The ticks left, counted down.
   for (std::uint16_t ticksLeft = CREDITS_TIMER_TICKS;;)
   {
     co_await WaitForTimerTick(_state, _host);

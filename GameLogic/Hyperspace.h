@@ -19,8 +19,8 @@ namespace Elite
 /// Where IsMassLocked's look at the ship slots stopped.
 struct ShipScan
 {
-  SlotIndex slot;          ///< the ship that locks the jump drive, or past the last slot looked at: what the original leaves in DI
-  std::uint16_t slotsLeft; ///< the count LOOP had there, CX
+  SlotIndex slot;          ///< the ship that locks the jump drive, or past the last slot looked at
+  std::uint16_t slotsLeft; ///< the slots the loop had still to look at there
 };
 
 /// What IsMassLocked found, and what it looked at on the way, which the original leaves in the registers.
@@ -42,11 +42,11 @@ struct JumpDriveRequest
 /// IsMassLocked: whether the jump drive is mass-locked: in the station's safe zone, near the sun or the planet
 /// (IsObjectNear, which erases the blip of one that is far), or with an active ship from firstShipSlot that is not an
 /// asteroid, boulder, barrel or splinter and has its blip drawn. With objectSlotCount 3 or less, or above 127, it looks at no
-/// ship, and is locked when the count is below 3, the borrow of its SUB.
+/// ship, and is locked when the count is below 3, which borrows when 3 is taken from it.
 MassLock IsMassLocked(GameState& _state);
 
-/// ResetHyperspaceRings: hyperspaceRings from hyperspaceRingStart, fifteen words copied up as REP MOVSW does: the direction flag
-/// is clear wherever the game calls it (change 3c).
+/// ResetHyperspaceRings: hyperspaceRings from hyperspaceRingStart, fifteen words copied upwards, as the direction
+/// flag is clear wherever the game calls it (change 3c).
 void ResetHyperspaceRings(GameState& _state);
 
 /// EnterWitchSpace: the witch-space countdown, and the player halfway to the destination on the charts.

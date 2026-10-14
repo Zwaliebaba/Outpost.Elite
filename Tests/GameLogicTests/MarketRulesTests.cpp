@@ -37,7 +37,7 @@ constexpr std::uint8_t ALIEN_ITEMS = 16;
 
 } // namespace
 
-// The market's rules (D53, D74), by known answers: what the 1987 routines decide, with no state and no screen (ADR-043).
+// The market's rules (D53, D74), by known answers: what the original routines decide, with no state and no screen (ADR-043).
 // MarketAnswerTests checks their prices over every market.
 TEST_CLASS(MarketRulesTests)
 {
@@ -66,7 +66,7 @@ public:
     Assert::AreEqual(Wide(low.buyTenths), Wide(high.buyTenths), L"every tech-level factor is 0");
   }
 
-  // Credits are paid only when there are enough, and earnings wrap at 32 bits, as ADD and ADC wrap them.
+  // Credits are paid only when there are enough, and earnings wrap at 32 bits, as the original's two-word sum wraps them.
   TEST_METHOD(CreditsArePaidWhenEnoughAndWrapWhenEarned)
   {
     Assert::IsTrue(Elite::CreditsAfterPaying(100, 100) == std::optional<std::uint32_t>{0}, L"the last tenth");

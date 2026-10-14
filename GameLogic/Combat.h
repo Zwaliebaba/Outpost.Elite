@@ -44,8 +44,8 @@ struct KillCredit
 void DrawLaserSights(GameState& _state);
 
 /// GetViewLaser: the laser type 0-3 of the current view's mount, or none when that mount has no laser. The mount is
-/// viewLaserMount's entry for the view; whether it is fitted, bit mount-1 of laserMountsFitted, which RCR reaches a bit at a
-/// time; its type, the 2-bit field mount-1 of laserMountTypes.
+/// viewLaserMount's entry for the view; whether it is fitted, bit mount-1 of laserMountsFitted, which a rotate through the carry
+/// reaches a bit at a time; its type, the 2-bit field mount-1 of laserMountTypes.
 [[nodiscard]] std::optional<std::uint8_t> GetViewLaser(const GameState& _state);
 
 /// DrawLaserBeams: the player's beams, DrawLine from the bottom row of the view to a random point within 3 pixels of
@@ -99,7 +99,7 @@ void TryFireLaserAtPlayer(GameState& _state, SpaceObject& _slot, std::uint16_t _
 
 /// LaunchPlayerMissile: a ship slot, free or reclaimed, cleared and made a missile (InitMissile) 100 along the player's nose,
 /// locked on missileTarget, aimed at where that is, its velocity set and moved twice. The original copied into it the 64 bytes wherever
-/// DI was left, a slot or the bytes past a buffer; the slot starts cleared instead (ADR-046).
+/// its copy pointer was left, a slot or the bytes past a buffer; the slot starts cleared instead (ADR-046).
 void LaunchPlayerMissile(GameState& _state);
 
 /// LaunchShipFromObject: a copy of _launcher (CopyObject) in a free ship slot, made what _kind names and moved clear of it: 14h a
@@ -139,7 +139,7 @@ void ResolveLaserFire(GameState& _state, Host& _host);
 void CheckMissileTargetDestroyed(GameState& _state, const SpaceObject& _slot);
 
 /// CreditKill: the kill of _slot paid for, or held against the player's legal status. A bounty of 0 pays nothing;
-/// any other counts a kill in killCount, the INC written and then FEh over FFh; FFh pays 500 for a Thargoid and otherwise is a
+/// any other counts a kill in killCount, one more written and then FEh over FFh; FFh pays 500 for a Thargoid and otherwise is a
 /// crime, 4 for a police Viper and 2 for anything else inside the safe zone, added to legalStatus up to FFh, the sum written and
 /// then FFh over it on a carry. A bounty paid goes through ShowBountyMessage and AddCredits, and while a mis-jump's countdown
 /// runs, the kill of a Thargon or a Thargoid counts it down by 5 or 35, to 1 at the least, where the Nav-Comp's repair is

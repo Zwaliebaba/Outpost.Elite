@@ -126,25 +126,25 @@ constexpr std::uint8_t MINERALS_FROM = 0x28;
   return table.substr(_at, table.find('\0', _at) - _at);
 }
 
-// IMUL r/m8: AL times _factor, both signed, into AX.
+// IMUL r/m8: _al times _factor, both signed, into a word.
 [[nodiscard]] std::uint16_t SignedProduct(std::uint8_t _al, std::uint8_t _factor) noexcept
 {
   return static_cast<std::uint16_t>(static_cast<std::int8_t>(_al) * static_cast<std::int8_t>(_factor));
 }
 
-// AND r16,r16 / JNS / NEG r16.
+// The word negated when it is negative.
 [[nodiscard]] std::uint16_t Magnitude(std::uint16_t _value) noexcept
 {
   return (_value & 0x8000) != 0 ? Negate(_value) : _value;
 }
 
-// INC BYTE PTR [_byte].
+// One more, in 8 bits: FFh wraps to 0.
 void IncrementByte(std::uint8_t& _byte)
 {
   _byte = static_cast<std::uint8_t>(_byte + 1);
 }
 
-// ADD [_field],_amount, held at 250 (FAh) from 251 up: gems, gold and platinum.
+// _amount added to _field in 8 bits, then held at 250 (FAh) from 251 up: gems, gold and platinum.
 void AddPrecious(std::uint8_t& _field, std::uint8_t _amount)
 {
   _field = static_cast<std::uint8_t>(_field + _amount);
@@ -240,8 +240,8 @@ void PrintEquipmentSellColumn(GameState& _state, std::string_view _text)
   return static_cast<std::uint16_t>(Join(_rows, 0) >> 2);
 }
 
-// B and S push CX, SI and textAttribute for ShowEquipMessage to pop after the message, and set the message's attribute.
-// Returns the attribute, which the original pushes in AL.
+// B and S save textAttribute for ShowEquipMessage to put back after the message, and set the message's attribute.
+// Returns the saved attribute.
 [[nodiscard]] std::uint8_t OpenEquipMessage(GameState& _state)
 {
   const std::uint8_t saved = _state.Data().drawing.textAttribute;
@@ -249,8 +249,8 @@ void PrintEquipmentSellColumn(GameState& _state, std::string_view _text)
   return saved;
 }
 
-// The message _text on the message line, and textAttribute put back to _saved, which the original pops into AL before its
-// jump back to the steering.
+// The message _text on the message line, and textAttribute put back to _saved, before the original jumps back to the
+// steering.
 void ShowEquipMessage(GameState& _state, std::string_view _text, std::uint8_t _saved)
 {
   PrintTextModeString(_state, _text, MESSAGE_OFFSET);
@@ -359,7 +359,7 @@ std::uint16_t MoveMountBoxRight(GameState& _state, std::uint16_t _box)
 }
 
 // The mount message _text on the message line, in the menu's attribute; the second reached by the
-// jump back into the tail the two messages share. The PUSH SI / POP SI round it keep the box, which the routine never
+// jump back into the tail the two messages share. The original saves the box round it, which the routine never
 // touches.
 void PrintMountMessage(GameState& _state, std::string_view _text)
 {
@@ -427,7 +427,7 @@ using MountSpace = bool (*)(GameState&);
       {
         break;
       }
-      // PUSH AX and POP AX round it.
+      // The key, kept across it.
       ClearDockedMessageLine(_state);
       if (code == SCAN_SPACE)
       {
@@ -469,7 +469,7 @@ void LaunchEscapePod(GameState& _state)
   {
     MoveObjectsByVelocity(_state);
   }
-  // MOV [DI],CH, which is 0 throughout: the 17 amounts held emptied.
+  // The 17 amounts held emptied.
   for (CommanderState::CargoHold::Lot& lot : _state.Data().commander.cargoHold.lots)
   {
     lot.held = 0;
@@ -527,7 +527,7 @@ void TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
   }
   else if (type == TYPE_SPLINTER && (flags & FLAG_PRECIOUS) != 0)
   {
-    // Gems, gold and platinum always; minerals or alloys too if there is room. Gold gets the gems' AL, as the original adds it.
+    // Gems, gold and platinum always; minerals or alloys too if there is room. Gold gets the gems' amount, as the original adds it.
     (void)RemoveObject(_state, _slot);
     const std::uint8_t gems = Low(NextRandom(_state)) & 7;
     AddPrecious(_state.Data().commander.cargoHold.lots[COMMODITY_GEM_STONES].held, gems);
@@ -633,7 +633,7 @@ bool SelectLaserType(GameState& _state)
       {
         break;
       }
-      // PUSH AX and POP AX round it.
+      // The key, kept across it.
       PrintCreditsOnMessageLine(_state);
       if (code == SCAN_B || code == SCAN_S)
       {
@@ -686,7 +686,7 @@ void DrawLaserMountMenu(GameState& _state)
 [[nodiscard]] Task<void> ChooseMountToFitLaser(GameState& _state, Host& _host)
 {
   DrawLaserMountMenu(_state);
-  // DrawLaserMountMenu leaves SI on FORE's box.
+  // The choice starts on FORE's box, where DrawLaserMountMenu leaves it.
   co_await RunMountChooser(_state, _host, &FitLaserOnMount, FIRST_MOUNT_BOX);
 }
 
@@ -695,7 +695,7 @@ void DrawLaserMountMenu(GameState& _state)
   DrawLaserMountMenu(_state);
   _state.Data().drawing.textAttribute = HELP_ATTRIBUTE;
   PrintTextModeString(_state, SELL_LASER_TEXT, SELL_LASER_OFFSET);
-  // SI, pushed and popped round the print, on FORE's box.
+  // The choice starts on FORE's box, kept across the print.
   co_await RunMountChooser(_state, _host, &RemoveLaserFromMount, FIRST_MOUNT_BOX);
 }
 
@@ -735,7 +735,7 @@ void ClearEquipmentSellPrice(GameState& _state)
 
 void ShowEquipmentSellPrice(GameState& _state)
 {
-  // The row's prices in screenPrices, its price and the resale price after it. The original keeps the slot in BX on the stack
+  // The row's prices in screenPrices, its price and the resale price after it. The original keeps the slot on the stack
   // round ComputeResalePrice.
   MenusState::ScreenPrice& prices = RowPrices(_state, _state.Data().menus.menuSelectedRow);
   _state.Data().menus.resalePriceInput = std::uint16_t{prices.price};
@@ -806,7 +806,7 @@ bool IsScreenKey(std::uint8_t _key) noexcept
 
 std::uint16_t SteerMenuCursor(GameState& _state, Host& _host, std::uint16_t _row)
 {
-  // NEG AH: the pitch negated, and up when that is negative.
+  // The pitch negated, and up when that is negative.
   const std::uint8_t pitch = Negate(ReadSteering(_state, _host).pitch);
   if (pitch == 0)
   {
@@ -866,7 +866,7 @@ std::uint8_t EquipmentRowsOnSale(std::uint8_t _techLevel) noexcept
 
 std::uint16_t EquipmentPriceTenths(const EquipmentItem& _item, const MarketPlace& _place) noexcept
 {
-  // The government's and the economy's factors, each by IMUL, and the base price.
+  // The government's and the economy's factors, each a signed byte product, and the base price.
   const std::uint16_t government = SignedProduct(static_cast<std::uint8_t>(_item.governmentFactor), _place.government);
   const std::uint16_t economy = SignedProduct(static_cast<std::uint8_t>(_item.economyFactor), _place.economy);
   return static_cast<std::uint16_t>(economy + government + _item.basePriceTenths);
@@ -957,7 +957,7 @@ std::uint8_t CountAfterFitting(std::uint8_t _row, std::uint8_t _count) noexcept
 
 bool MountHoldsLaser(const LaserMounts& _mounts, std::uint8_t _mount) noexcept
 {
-  // SHR CH,CL with CL the mount + 1: the mount's bit, shifted out into the carry.
+  // The mount's bit of fitted, which the original shifts out into the carry.
   return ((_mounts.fitted >> _mount) & 1) != 0;
 }
 
@@ -982,7 +982,8 @@ MountRefusal RefuseToClearMount(const LaserMounts& _mounts, std::uint8_t _mount,
 
 LaserMounts WithLaserFitted(const LaserMounts& _mounts, std::uint8_t _mount, std::uint8_t _type) noexcept
 {
-  // 3 and the type, shifted up together as AX to the mount's two bits: AL the bits to clear, AH the type to set.
+  // 3 and the type, shifted up together as a word to the mount's two bits: its low byte the bits to clear, its high byte the type
+  // to set.
   const auto bits = static_cast<std::uint16_t>(Join(_type, MOUNT_TYPE_BITS) << (_mount * 2u));
   return LaserMounts{.fitted = static_cast<std::uint8_t>(_mounts.fitted | (1u << _mount)),
                      .types = static_cast<std::uint8_t>((_mounts.types & ~Low(bits)) | High(bits))};

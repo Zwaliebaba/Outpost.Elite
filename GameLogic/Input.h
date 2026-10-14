@@ -76,7 +76,7 @@ void ResetMouseIfSelected(const GameState& _state, Host& _host);
 [[nodiscard]] KeyPress GetKey(GameState& _state);
 
 /// ApplyReverseControls: the reversing options on _steering: reverseYControl negates the pitch, and
-/// reverseXAndY then both. ApplyReverseControlsToDx is the same routine on DL and DH, and its callers call this.
+/// reverseXAndY then both. ApplyReverseControlsToDx is the same routine on the two held as one word, and its callers call this.
 [[nodiscard]] Steering ApplyReverseControls(const GameState& _state, Steering _steering);
 
 } // namespace Elite

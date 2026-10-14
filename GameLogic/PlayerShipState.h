@@ -8,8 +8,8 @@ namespace Elite
 {
 
 /// The player's ship, which several subsystems write: its energy, shields, temperature, altitude, angles and rates, velocity, missiles,
-/// laser, ECM, escape pod, view and docking computer, and whether it is dead. Its members are the 1987 data segment's, by their names, in
-/// their order there; the GameState holds it in GameData.
+/// laser, ECM, escape pod, view and docking computer, and whether it is dead. Its members are the original data segment's, by their names,
+/// in their order there; the GameState holds it in GameData.
 struct PlayerShipState
 {
   /// set to 1 when an ECM goes off: NPC or the player's E key with ecmFitted; read and cleared, which picks...

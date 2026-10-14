@@ -22,7 +22,7 @@ class GameState;
 /// Left out on purpose: the registers, because a native routine has no instruction pointer to agree on;
 /// the code segment, where the triangle filler patches its step instructions as the original rewrites
 /// its own (PatchStep), because nothing reads a patched site back: the native filler steps each edge by
-/// its sign; the stack, which holds whatever the last calls and interrupts left below SP, and the
+/// its sign; the stack, which holds whatever the last calls and interrupts left below its top, and the
 /// constants and gaps nothing uses, none of which GameData holds (D38); and DOS's and the BIOS's own
 /// memory, which the game does not read.
 [[nodiscard]] std::string GameStateDigest(const GameState& _state, const Cga& _video);

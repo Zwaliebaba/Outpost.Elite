@@ -10,7 +10,7 @@ namespace Elite
 {
 
 /// The message line, which several subsystems post to: what it shows and for how many frames, and the warning's frames. Its members are the
-/// 1987 data segment's, by their names, in their order there; the GameState holds it in GameData.
+/// original data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct MessagesState
 {
   /// pointer of the text on the message line now; UpdateMessageLine redraws only when messagePointer differs

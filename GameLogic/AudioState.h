@@ -7,8 +7,8 @@
 namespace Elite
 {
 
-/// The speaker's effects and the music, which Sound starts and the timer's handler steps. Its members are the 1987 data segment's, by their
-/// names, in their order there; the GameState holds it in GameData.
+/// The speaker's effects and the music, which Sound starts and the timer's handler steps. Its members are the original data segment's, by
+/// their names, in their order there; the GameState holds it in GameData.
 struct AudioState
 {
   /// the value last written to port 0x61; the timer handler toggles bit 1 for sound effects

@@ -127,8 +127,7 @@ constexpr std::array<ObjectWord, 3> POSITION_LOW = {&SpaceObject::x, &SpaceObjec
 constexpr std::array<ObjectByte, 3> POSITION_HIGH = {&SpaceObject::xHigh, &SpaceObject::yHigh, &SpaceObject::zHigh};
 constexpr std::array<ObjectByte, 3> VELOCITY = {&SpaceObject::velocityX, &SpaceObject::velocityY, &SpaceObject::velocityZ};
 
-// MOV [DI+4+2*axis],AX / CWD / MOV [DI+1+axis],DL: _value as the 24-bit coordinate _axis (0 x, 1 y, 2 z) of _slot, the low word,
-// then its sign as the high byte.
+// _value as the 24-bit coordinate _axis (0 x, 1 y, 2 z) of _slot: the low word, then its sign extended into the high byte.
 void SetCoordinate(SpaceObject& _slot, std::size_t _axis, std::uint16_t _value)
 {
   _slot.*POSITION_LOW[_axis] = _value;
@@ -141,7 +140,7 @@ void SetCoordinate(SpaceObject& _slot, std::size_t _axis, std::uint16_t _value)
   return static_cast<std::uint8_t>(static_cast<std::int8_t>(_value) >> 1);
 }
 
-// gameOverFrames | escapePodFrames | maskingBackgroundColor, which the original ORs into AL: none of them may run when a ship
+// gameOverFrames | escapePodFrames | maskingBackgroundColor, ORed together as the original does: none of them may run when a ship
 // fires, so it may not unless this is 0.
 [[nodiscard]] std::uint8_t FiringBlocked(const GameState& _state) noexcept
 {
@@ -149,7 +148,7 @@ void SetCoordinate(SpaceObject& _slot, std::size_t _axis, std::uint16_t _value)
                                    _state.Data().drawing.maskingBackgroundColor);
 }
 
-// MOV AL,[DI] / SHR AL,1 / AND AL,1Fh.
+// The slot's type: bits 1-5 of its type byte.
 [[nodiscard]] std::uint8_t TypeOf(const SpaceObject& _slot) noexcept
 {
   return static_cast<std::uint8_t>((_slot.type >> 1) & TYPE_MASK);
@@ -166,7 +165,7 @@ void SetCoordinate(SpaceObject& _slot, std::size_t _axis, std::uint16_t _value)
   return color;
 }
 
-// One beam: DrawLine from (_x, the bottom row) to _target, its x in the low byte and its row in the high, as DL and DH hold it.
+// One beam: DrawLine from (_x, the bottom row) to _target, its x in the low byte and its row in the high.
 void DrawBeam(GameState& _state, std::uint8_t _x, std::uint16_t _target)
 {
   DrawLine(_state, Low(_target), High(_target), _x, BEAM_ROW);
@@ -180,7 +179,7 @@ void DrawBeam(GameState& _state, std::uint8_t _x, std::uint16_t _target)
   {
     magnitude = Negate(magnitude);
   }
-  // CWD / MOV DL,AH / MOV AH,AL / XOR AL,AL: DX:AX = the magnitude * 256, with DH its sign.
+  // The 32-bit dividend: the magnitude * 256, with its sign in the top byte.
   const std::uint32_t dividend = (std::uint32_t{Join(High(SignWord(magnitude)), High(magnitude))} << 16) | Join(Low(magnitude), 0);
   return DivideWord(dividend, _slot.viewZ).quotient < _radius;
 }
@@ -219,7 +218,7 @@ void PayBounty(GameState& _state, const SpaceObject& _slot, std::uint16_t _tenth
 
 // The fragments of an exploding object: _count of them, at least one, each a Splinter in a debris slot copied from _object
 // (CopyObject), its velocity halved and scattered by a random -15..16 on each axis (halved again for an asteroid the mining laser hit), and
-// run for a frame, or for eleven when the station explodes. PUSH CX and POP CX keep the count round each.
+// run for a frame, or for eleven when the station explodes.
 void SpawnFragments(GameState& _state, const SpaceObject& _object, std::uint16_t _count)
 {
   for (std::uint16_t fragments = _count; fragments != 0; --fragments)
@@ -230,7 +229,7 @@ void SpawnFragments(GameState& _state, const SpaceObject& _object, std::uint16_t
     const std::uint16_t spin = NextRandom(_state);
     debris.SpinRoll() = Low(spin);
     debris.SpinPitch() = High(spin);
-    // AND AX,1F1Fh / SUB AH,0Fh / SUB AL,0Fh: x and y; then BX shifted right three times / AND BL,1Fh / SUB BL,0Fh: z.
+    // Each scatter is five bits of the random word less 0Fh: x from bits 0-4, y from bits 8-12, z from bits 3-7.
     const auto scatter = static_cast<std::uint16_t>(spin & FRAGMENT_SCATTER_MASK);
     auto scatterX = static_cast<std::uint8_t>(Low(scatter) - FRAGMENT_SCATTER_CENTER);
     auto scatterY = static_cast<std::uint8_t>(High(scatter) - FRAGMENT_SCATTER_CENTER);
@@ -270,7 +269,7 @@ void SpawnFragments(GameState& _state, const SpaceObject& _object, std::uint16_t
     (void)UpdateDebrisAi(_state, debris);
     if (_state.Data().combat.explodingStation == 1)
     {
-      // A station's fragments are flung ten frames further at once: LOOP from CX = 10, PUSH CX and POP CX round each.
+      // A station's fragments are flung ten frames further at once.
       for (std::uint16_t steps = STATION_FRAGMENT_STEPS; steps != 0; --steps)
       {
         (void)UpdateDebrisAi(_state, debris);
@@ -287,7 +286,7 @@ void DropCargo(GameState& _state, const SpaceObject& _object)
   std::uint16_t barrels = 1;
   if ((_object.flags & FLAG_DEVICE) == 0)
   {
-    // MOV BL,[DI+2Ch] / AND BL,BL / JE, then MOV AX,0FFh / INC BL / DIV BL and MOV BL,AL / INC BL / XOR AH,AH / DIV BL.
+    // No cargo, no barrels; else FFh over (cargo + 1), and the random byte over that + 1, each an 8-bit divide.
     const std::uint8_t cargo = _object.cargo;
     if (cargo == 0)
     {
@@ -300,7 +299,7 @@ void DropCargo(GameState& _state, const SpaceObject& _object)
       return;
     }
   }
-  // LOOP from CX = the count, PUSH CX and POP CX round each barrel.
+  // A barrel at a time, until the count runs out.
   for (; barrels != 0; --barrels)
   {
     const SlotSearch free = FindFreeShipSlot(_state);
@@ -309,7 +308,7 @@ void DropCargo(GameState& _state, const SpaceObject& _object)
       return;
     }
     SpaceObject& barrel = _state.Slot(free.slot);
-    // MOV AL,[SI+1Eh] / PUSH AX round the copy and the barrel's template: the device's bit (5) becomes the barrel's bit 6.
+    // _object's flags, kept from before the copy and the barrel's template: the device's bit (5) becomes the barrel's bit 6.
     const std::uint8_t flags = _object.flags;
     CopyObject(_object, barrel);
     InitCargoBarrel(barrel);
@@ -337,7 +336,7 @@ void DestroyTarget(GameState& _state, Host& _host, SpaceObject& _target)
 
 // The player's laser hits _target, which is marked hostile, with the impact's sound; the damage is the
 // laser's type + 1, and a mining laser marks an asteroid mined. A station's hit cancels the docking computer and is a crime of
-// 28h, added to legalStatus up to FFh, or in an invasion does half the damage, rounded up (NEG AL / SAR AL,1 / NEG AL). The
+// 28h, added to legalStatus up to FFh, or in an invasion does half the damage, rounded up (negated, halved, negated back). The
 // damage goes on the aggression, up to FFh, and off the energy, each written and then FFh or nothing over it. Returns whether
 // the target is to be destroyed (DestroyTarget): it ran out of energy and is not indestructible, or is an invaded station; an
 // indestructible one is left at 0, and a station's is a crime of 28h, which cancels the docking computer only when it carries.
@@ -386,7 +385,7 @@ void DestroyTarget(GameState& _state, Host& _host, SpaceObject& _target)
     _state.Data().commander.thargoidInvasionActive = 0;
     return true;
   }
-  // ADD / JAE / MOV 0FFh, and only an add that carries cancels the docking computer.
+  // The sum written, then FFh over it when it carries, and only an add that carries cancels the docking computer.
   const unsigned status = _state.Data().commander.legalStatus + unsigned{LEGAL_STATUS_PER_STATION_HIT};
   _state.Data().commander.legalStatus = static_cast<std::uint8_t>(status);
   if (status > 0xFF)
@@ -397,7 +396,7 @@ void DestroyTarget(GameState& _state, Host& _host, SpaceObject& _target)
   return false;
 }
 
-// AND AL,_mask / SUB AL,_center / CBW / ADD AX,_drift: a random velocity about the wreck's drift on one axis.
+// The random byte masked by _mask, less _center, sign-extended and added to _drift: a random velocity about the wreck's drift on one axis.
 [[nodiscard]] std::uint16_t WreckScatter(std::uint8_t _random, std::uint8_t _mask, std::uint8_t _center, std::uint16_t _drift) noexcept
 {
   return static_cast<std::uint16_t>(SignExtend(static_cast<std::uint8_t>((_random & _mask) - _center)) + _drift);
@@ -412,14 +411,14 @@ void DrawLaserSights(GameState& _state)
   {
     return;
   }
-  // MOV AH,AL / XOR AL,AL / SHR AX,1: 128 bytes a laser type.
+  // The laser type times 128: 128 bytes a laser type.
   const std::span<std::uint8_t> view = BytesOf(_state.Data().drawing.drawingBuffer).subspan(VIEW_ROW_BYTES);
   std::size_t row = SIGHTS_OFFSET;
   const std::span<const std::uint8_t> sprites(LASER_SIGHTS);
   std::size_t sprite = std::size_t{*laser} << 7;
   for (std::uint16_t rows = SIGHTS_ROWS; rows != 0; --rows)
   {
-    // The buffer's words are big-endian pixels: XCHG AH,AL round the AND and the OR.
+    // The buffer's words are big-endian pixels: byte-swapped before the mask and the ink, and back after.
     for (int half = 0; half < 2; ++half)
     {
       const std::size_t pixels = row + 2 * static_cast<std::size_t>(half);
@@ -434,10 +433,11 @@ void DrawLaserSights(GameState& _state)
 
 std::optional<std::uint8_t> GetViewLaser(const GameState& _state)
 {
-  // MOV BL,AH / SHR BX,1 / AND BX,3: the view, which clears CF.
+  // The view, 0-3, from viewAngle's high byte; the carry starts clear.
   const auto view = static_cast<std::uint16_t>((High(_state.Data().playerShip.viewAngle) >> 1) & 3);
   const std::uint8_t mount = VIEW_LASER_MOUNT[view];
-  // RCR AL,CL through that clear CF, a bit at a time as the 8088 does: CF is bit CL-1 of laserMountsFitted.
+  // laserMountsFitted rotated right through that clear carry, by the mount, a bit at a time as the 8088 does: the carry ends as
+  // bit mount-1 of laserMountsFitted.
   std::uint8_t fitted = _state.Data().commander.laserMountsFitted;
   bool carry = false;
   for (unsigned count = mount; count != 0; --count)
@@ -450,7 +450,7 @@ std::optional<std::uint8_t> GetViewLaser(const GameState& _state)
   {
     return std::nullopt;
   }
-  // DEC CL / SHL CL,1 / SHR AL,CL / AND AL,3: the mount's 2-bit field of laserMountTypes.
+  // laserMountTypes shifted right by (mount - 1) * 2, two bits kept: the mount's 2-bit field.
   const auto shift = static_cast<std::uint8_t>((mount - 1) * 2);
   const std::uint8_t types = _state.Data().commander.laserMountTypes;
   return static_cast<std::uint8_t>((shift >= 8 ? 0 : types >> shift) & 3);
@@ -458,8 +458,7 @@ std::optional<std::uint8_t> GetViewLaser(const GameState& _state)
 
 void DrawLaserBeams(GameState& _state, Host& _host)
 {
-  // AND AX,303h / ADD AL,7Eh / ADD AH,3Eh: the point the beams end at, its x in the low byte and its row in the high, as DX
-  // holds it.
+  // The point the beams end at, a random 0-3 on 7Eh for x and on 3Eh for the row: its x in the low byte and its row in the high.
   const auto scatter = static_cast<std::uint16_t>(NextRandom(_state) & BEAM_SCATTER_MASK);
   const std::uint16_t target =
     Join(static_cast<std::uint8_t>(High(scatter) + BEAM_TARGET_ROW), static_cast<std::uint8_t>(Low(scatter) + BEAM_TARGET_X));
@@ -530,7 +529,7 @@ void ExplodeObject(GameState& _state, SpaceObject& _object)
   {
     _state.Data().combat.explodingStation = 0;
   }
-  // MOV CL,[DI+2Dh] / AND CX,0FFh / JNE: the fragments, then MOV DI,SI, back on the object.
+  // Its fragments, when it has any; then the cargo it drops.
   if (const std::uint8_t fragments = _object.fragments; fragments != 0)
   {
     SpawnFragments(_state, _object, fragments);
@@ -586,8 +585,8 @@ void TryFireLaserAtPlayer(GameState& _state, SpaceObject& _slot, std::uint16_t _
   _state.Data().combat.playerHitPending = HIT_GRAZED;
   const std::uint8_t depth = _slot.cameraZHigh;
   _state.Data().combat.playerHitByDepth = depth;
-  // Again within 70, on the registers the first test leaves: x is AX, the depth MOV AL,[DI+3Ch] put over its 0, and the
-  // errors are their magnitudes, which the test takes again.
+  // Again within 70, on what the first test leaves: x is now the depth, cameraZHigh, where it was 0, and the errors are their
+  // magnitudes, which the test takes again.
   if (VectorWithinBox(Vector{depth, yaw, pitch}, LASER_HIT_BOX))
   {
     _state.Data().combat.playerHitPending = HIT_SQUARE;
@@ -632,7 +631,7 @@ void TryLaunchThargon(GameState& _state, SpaceObject& _slot)
 
 CrosshairTarget FindShipInCrosshairs(GameState& _state)
 {
-  // MOV CL,objectSlotCount / SUB CL,2 / XOR CH,CH, then LOOP: a count of 0 runs 65,536 times. BP is the nearest z so far.
+  // objectSlotCount less 2 slots from the station, a count of 0 running 65,536 times. nearestZ is the nearest z so far.
   CrosshairTarget target{std::nullopt};
   std::uint16_t nearestZ = 0xFFFF;
   SlotIndex slot = SlotIndex::Station;
@@ -643,8 +642,8 @@ CrosshairTarget FindShipInCrosshairs(GameState& _state)
     const std::uint8_t type = object.type;
     if ((type & (SLOT_DRAWN | SLOT_ACTIVE)) == (SLOT_DRAWN | SLOT_ACTIVE) && (object.flags & CROSSHAIR_IGNORED) != CROSSHAIR_IGNORED)
     {
-      // AND BX,3Eh / MOV AX,[BX+shipTargetRadius] / XCHG AH,AL / XOR DX,DX / DIV [DI+14h] / MOV BX,AX / ADD BX,2: the radius *
-      // 256 / z, plus 2, against |x| * 256 / z and |y| * 256 / z.
+      // The type's shipTargetRadius word, its bytes swapped (the radius * 256), over z, plus 2: against |x| * 256 / z and
+      // |y| * 256 / z.
       const std::uint16_t radius = Swap(SHIP_TARGET_RADIUS[(type & (TYPE_MASK << 1)) / 2]);
       const std::uint16_t within = Offset(DivideWord(radius, object.viewZ).quotient, 2);
       if (ScaledWithinRadius(object, &SpaceObject::viewX, within) && ScaledWithinRadius(object, &SpaceObject::viewY, within) &&
@@ -699,7 +698,7 @@ KillCredit CreditKill(GameState& _state, SpaceObject& _slot)
   {
     return credit;
   }
-  // INC, then CMP 0FFh / JB / MOV 0FEh: a count that reaches FFh is written and then FEh over it; one that wraps to 0 stays there.
+  // One more, in 8 bits: a count that reaches FFh is written and then FEh over it; one that wraps to 0 stays there.
   const auto kills = static_cast<std::uint8_t>(_state.Data().commander.killCount + 1);
   _state.Data().commander.killCount = kills;
   if (kills == 0xFF)
@@ -740,8 +739,8 @@ void ApplyEnemyLaserHit(GameState& _state, Host& _host)
   const SpaceObject& attacker = _state.Slot(_state.Data().combat.playerHitBy);
   if ((attacker.type & SLOT_DRAWN) != 0)
   {
-    // A beam from the attacker on screen, ProjectToScreen's x moved to DX and its row left in BX, to a random point on an edge of
-    // the view, x in CX and the row in AX: the top edge, the bottom, the left or the right, by four ranges of the random word.
+    // A beam from the attacker on screen, where ProjectToScreen puts it, to a random point on an edge of the view: the top edge,
+    // the bottom, the left or the right, by four ranges of the random word.
     const Vector view{static_cast<std::int16_t>(attacker.viewX), static_cast<std::int16_t>(attacker.viewY),
                       static_cast<std::int16_t>(attacker.viewZ)};
     const ScreenPoint from = ProjectToScreen(view);
@@ -778,8 +777,9 @@ void ApplyEnemyLaserHit(GameState& _state, Host& _host)
                                          .color = ENEMY_BEAM_COLOR});
   }
   _state.Data().combat.playerHitPending = 0;
-  // Bit 7 of the attacker's depth byte: behind, so the aft shield takes it. SUB [shield],0Fh; on a borrow, MOV AL,[shield] and 0
-  // written over it: what the shield could not take, NEG AL / CBW, comes off the energy, SUB and then 0 over it on a borrow.
+  // Bit 7 of the attacker's depth byte: behind, so the aft shield takes it. 0Fh comes off the shield, written; on a borrow 0 is
+  // written over it, and what the shield could not take, the wrapped byte negated and sign-extended, comes off the energy,
+  // written and then 0 over it on a borrow.
   std::uint8_t& shield =
     (_state.Data().combat.playerHitByDepth & 0x80) != 0 ? _state.Data().playerShip.aftShield : _state.Data().playerShip.foreShield;
   const std::uint8_t strength = shield;
@@ -810,13 +810,14 @@ void TakeDamage(GameState& _state, std::uint16_t _damage)
   std::uint16_t excess = 0;
   if (_damage >= OVERWHELMING_DAMAGE)
   {
-    // MOV BL,foreShield / XOR BH,BH / SUB AX,BX: the shield takes all it holds, and the energy the rest.
+    // The shield takes all it holds, and the energy the rest.
     excess = static_cast<std::uint16_t>(_damage - _state.Data().playerShip.foreShield);
     _state.Data().playerShip.foreShield = 0;
   }
   else
   {
-    // MOV AH,AL / MOV AL,foreShield / SUB AL,AH, written back; on a borrow 0 over it, and NEG AL / CBW: the excess, sign-extended.
+    // foreShield less the damage's low byte, in 8 bits, written back; on a borrow 0 over it, and the excess is the wrapped byte
+    // negated and sign-extended.
     const std::uint8_t damage = Low(_damage);
     const std::uint8_t shield = _state.Data().playerShip.foreShield;
     const auto left = static_cast<std::uint8_t>(shield - damage);
@@ -844,8 +845,8 @@ void DetonateEnergyBomb(GameState& _state)
   {
     AddSaturating(_state.Data().commander.legalStatus, LEGAL_STATUS_PER_BOMB);
   }
-  // Every active ship with a blip explodes, its cargo emptied first: MOV CL,objectSlotCount / SUB CL,3 / XOR CH,CH, then LOOP, a
-  // count of 0 running 65,536 times; PUSH DI and PUSH CX round each explosion.
+  // Every active ship with a blip explodes, its cargo emptied first: objectSlotCount less 3 slots from the first ship, a count
+  // of 0 running 65,536 times.
   SlotIndex slot = SlotIndex::FirstShip;
   const auto slots = static_cast<std::uint8_t>(_state.Data().flight.objectSlotCount - FIRST_SHIP_SLOT);
   for (std::uint32_t count = LoopCount(slots); count != 0; --count)
@@ -872,7 +873,7 @@ void SpawnPlayerWreckage(GameState& _state)
   _state.Data().playerShip.playerSpeed = WRECK_SPEED;
   _state.Data().playerShip.velocityDirty = 1;
   _state.Data().playerShip.viewLocked = 1;
-  // Six splinters: LOOP from CX = 6, PUSH CX and POP CX round each.
+  // Six splinters.
   for (std::uint16_t splinters = WRECK_SPLINTERS; splinters != 0; --splinters)
   {
     SpaceObject& splinter = _state.Slot(FindDebrisSlot(_state));
@@ -881,7 +882,8 @@ void SpawnPlayerWreckage(GameState& _state)
     const std::uint16_t random = NextRandom(_state);
     splinter.SpinRoll() = Low(random);
     splinter.SpinPitch() = High(random);
-    // Each velocity byte from its own bits of the random word: x from BL, y from BH, z from BL shifted right twice.
+    // Each velocity byte from its own bits of the random word: x from the low byte, y from the high, z from the low byte shifted
+    // right twice.
     splinter.velocityX = Low(WreckScatter(Low(random), SPLINTER_SCATTER_MASK, SPLINTER_SCATTER_CENTER, _state.Data().combat.wreckDriftX));
     splinter.velocityY = Low(WreckScatter(High(random), SPLINTER_SCATTER_MASK, SPLINTER_SCATTER_CENTER, _state.Data().combat.wreckDriftY));
     splinter.velocityZ = Low(WreckScatter(static_cast<std::uint8_t>(Low(random) >> 2), SPLINTER_SCATTER_MASK, SPLINTER_SCATTER_CENTER,
@@ -912,7 +914,7 @@ void SpawnPlayerWreckage(GameState& _state)
   const Angles heading = ConvertVectorToAngles(_state, GetObjectPosition(barrel));
   barrel.pitch = heading.first;
   barrel.yaw = heading.second;
-  // The same random -31..32 added to x and to y: AND AX,3Fh / SUB AX,1Fh / CWD, then ADD and ADC; then BX likewise.
+  // The same random -31..32, sign-extended to 24 bits, added to x and to y, the carry into the high byte.
   const std::uint16_t random = NextRandom(_state);
   const auto offset = static_cast<std::int16_t>((random & BARREL_OFFSET_MASK) - BARREL_OFFSET_CENTER);
   AddToCoordinate(barrel, 0, offset);
@@ -937,7 +939,7 @@ void InitMissile(SpaceObject& _slot)
 
 std::optional<DashboardPixel> RemoveAllMissiles(GameState& _state)
 {
-  // MOV CL,objectSlotCount / XOR CH,CH, then LOOP: a count of 0 runs 65,536 times.
+  // objectSlotCount slots from the sun, a count of 0 running 65,536 times.
   std::optional<DashboardPixel> lastErased;
   SlotIndex slot = SlotIndex::Sun;
   for (std::uint32_t count = LoopCount(_state.Data().flight.objectSlotCount); count != 0; --count)
@@ -988,7 +990,7 @@ std::optional<SlotIndex> LaunchShipFromObject(GameState& _state, const SpaceObje
   {
     return std::nullopt;
   }
-  // Any other DL launches nothing. The original also takes 15h, an escape pod, and 5, a Krait, which
+  // Any other _kind launches nothing. The original also takes 15h, an escape pod, and 5, a Krait, which
   // no caller passes: those branches were deleted with InitEscapePod and InitKraitHunter (D22).
   if (_kind != MISSILE_LAUNCH && _kind != THARGON_LAUNCH)
   {
@@ -1033,14 +1035,14 @@ void UpdateMissileAi(GameState& _state, SpaceObject& _missile)
     const SpaceObject& aimed = _state.Slot(target);
     if ((aimed.type & SLOT_ACTIVE) == 0)
     {
-      // JMP ExplodeObject: its target is gone.
+      // It explodes: its target is gone.
       ExplodeObject(_state, _missile);
       return;
     }
     const auto difference = [&aimed, &_missile](ObjectWord _axis) { return static_cast<std::int16_t>(aimed.*_axis - _missile.*_axis); };
     toTarget = Vector{difference(&SpaceObject::x), difference(&SpaceObject::y), difference(&SpaceObject::z)};
   }
-  // MOV DX,0C8h / VectorWithinBox, with AX, BX and CX, the vector, pushed and popped round it.
+  // Outside the hit box (C8h) round its target, it turns toward the target and flies on.
   if (!VectorWithinBox(toTarget, MISSILE_HIT_BOX))
   {
     (void)TurnTowardAngles(_missile, ConvertVectorToAngles(_state, toTarget));
@@ -1060,7 +1062,7 @@ void UpdateMissileAi(GameState& _state, SpaceObject& _missile)
   SpaceObject& struck = _state.Slot(struckSlot);
   if (!IsStation(struck).station)
   {
-    // MOV DI,SI: a ship, credited, and exploded unless indestructible.
+    // A ship, credited, and exploded unless indestructible.
     (void)CreditKill(_state, struck);
     if ((struck.flags & FLAG_INDESTRUCTIBLE) != 0)
     {
@@ -1074,7 +1076,7 @@ void UpdateMissileAi(GameState& _state, SpaceObject& _missile)
     AddSaturating(_state.Data().commander.legalStatus, MISSILE_AT_STATION_CRIME);
     return;
   }
-  // MOV DI,SI: an invaded station loses energy to each missile, the SUB written, and goes when it runs out.
+  // An invaded station loses energy to each missile, the difference written, and goes when it runs out.
   const std::uint8_t energy = struck.energy;
   struck.energy = static_cast<std::uint8_t>(energy - INVADED_STATION_HIT);
   if (energy >= INVADED_STATION_HIT)
@@ -1094,7 +1096,7 @@ ThargoidTest Routine8C51(const SpaceObject& _slot)
 
 void UseMaskingDevice(GameState& _state)
 {
-  // SUB, then 0 written over it on a borrow: two writes.
+  // The difference written, then 0 over it on a borrow: two writes.
   const std::uint16_t energy = _state.Data().playerShip.playerEnergy;
   _state.Data().playerShip.playerEnergy = static_cast<std::uint16_t>(energy - MASKING_ENERGY);
   if (energy < MASKING_ENERGY)
@@ -1102,7 +1104,7 @@ void UseMaskingDevice(GameState& _state)
     _state.Data().playerShip.playerEnergy = 0;
   }
   _state.Data().drawing.maskingBackgroundColor = MASKING_COLOR;
-  // Every ship forgets its state and that the player hit it, and calms a little: LOOP from CX = objectSlotCount.
+  // Every ship forgets its state and that the player hit it, and calms a little: objectSlotCount slots from the sun.
   SlotIndex slot = SlotIndex::Sun;
   for (std::uint32_t count = LoopCount(_state.Data().flight.objectSlotCount); count != 0; --count)
   {

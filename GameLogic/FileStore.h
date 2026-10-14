@@ -11,7 +11,7 @@
 namespace Elite
 {
 
-/// The DOS error codes the file functions return in AX with CF set. Exactly the ones the services produce.
+/// The DOS error codes the file functions return when they fail. Exactly the ones the services produce.
 enum class DosError : std::uint16_t
 {
   None = 0x00,
@@ -101,7 +101,7 @@ public:
   static constexpr std::uint8_t ATTRIBUTE_VOLUME = 0x08;
   static constexpr std::uint8_t ATTRIBUTE_DIRECTORY = 0x10;
   static constexpr std::uint8_t ATTRIBUTE_ARCHIVE = 0x20;
-  /// The bits a file can have set: 43h AX=4301h refuses any other.
+  /// The bits a file can have set: DOS's set-attributes call, 4301h, refuses any other.
   static constexpr std::uint8_t ATTRIBUTES_SETTABLE = 0x27;
 
   FileStore() = default;

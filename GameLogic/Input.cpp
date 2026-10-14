@@ -38,14 +38,13 @@ constexpr std::uint8_t RATE_DECAY_STEPS = 3;
 // The mouse's buttons, either of which fires: the left and the right.
 constexpr std::uint8_t MOUSE_LEFT_AND_RIGHT = 0x03;
 
-// A key's keyDown byte, or two ORed, as SHR AL,1 tests it: bit 0, which the shift leaves in CF.
+// A key's keyDown byte, or two ORed, as the original tests it: bit 0 alone.
 [[nodiscard]] bool Pressed(std::uint8_t _keys) noexcept
 {
   return (_keys & 1) != 0;
 }
 
-// Whether IntegrateRate tests _input against the rate at _rate for a reversal: XOR BL,[rate], which leaves BL the key
-// XOR the rate.
+// Whether IntegrateRate tests _input against the rate at _rate for a reversal: the key's direction against the rate's.
 [[nodiscard]] bool TestsReversal(const GameState& _state, std::uint8_t _input, const std::uint8_t& _rate)
 {
   return _input != 0 && _state.Data().flight.keyboardRecenter == 1 && _rate != 0;
@@ -126,8 +125,8 @@ void RampAxis(std::uint8_t _key, std::uint8_t& _lastKey, std::uint8_t& _ramp)
   return negative ? Negate(step) : step;
 }
 
-// One axis of ReadMouseSteering's rate: the step, halved, added to the rate the last frame left, within -23..23; then INC / SUB 2
-// / INC, which snaps -1 and 1 to 0.
+// One axis of ReadMouseSteering's rate: the step, halved, added to the rate the last frame left, within -23..23; then -1 and
+// 1 snapped to 0.
 [[nodiscard]] std::uint8_t MouseRate(std::uint8_t _step, std::uint8_t _rate) noexcept
 {
   auto value = static_cast<std::uint8_t>(Sar(_step, 1) + _rate);
@@ -160,7 +159,7 @@ bool IsMouseDriverInstalled(Host& _host)
 
 [[nodiscard]] Task<void> WaitForKeyPress(GameState& _state, Host& _host)
 {
-  // GetKey until a key comes, the JE back to the entry.
+  // GetKey until a key comes.
   for (;;)
   {
     const KeyPress key = GetKey(_state);
@@ -209,7 +208,7 @@ KeyPress GetKey(GameState& _state)
 
 void ResetKeyboard(GameState& _state)
 {
-  // REP STOSW: every key released, two at a time.
+  // Every key released.
   for (std::uint8_t& key : KeyDown(_state))
   {
     key = 0;
@@ -296,7 +295,7 @@ Steering ReadMouseSteering(GameState& _state, Host& _host)
   const MouseMotion motion = _host.MouseDevice().Motion();
   const std::uint8_t rollStep = MouseAxis(motion.acrossMickeys);
   const std::uint8_t pitchStep = MouseAxis(motion.downMickeys);
-  // NEG AH / SAR AL,1 / SAR AH,1: half of each step, the pitch negated, added to the rates the last frame left.
+  // Half of each step, the pitch negated, added to the rates the last frame left.
   return Steering{MouseRate(rollStep, Low(_state.Data().playerShip.rollRate)),
                   MouseRate(Negate(pitchStep), High(_state.Data().playerShip.rollRate))};
 }
