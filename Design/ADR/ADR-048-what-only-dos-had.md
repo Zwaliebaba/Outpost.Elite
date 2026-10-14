@@ -19,7 +19,7 @@ The state was dumped by member at every digest point of the corpus and the twins
 | What | Result |
 |---|---|
 | Members that moved | none, at any point of the 26 replays or of the twins kept |
-| Twins | `TwinScreenshots` and `TwinFlightScreenshot` retired with their 15 answers each; `TwinQuit` added in their place for what of them stays: a commander saved from the chart's Escape, then E and Y, which end the program; the commander file it writes is the one `TwinScreenshots` wrote, `X.CDR`, by its SHA-256 |
+| Twins | `TwinScreenshots` and `TwinFlightScreenshot` retired with their 15 answers between them; `TwinQuit` added in their place for what of them stays: a commander saved from the chart's Escape, then E and Y, which end the program; the commander file it writes is the one `TwinScreenshots` wrote, `X.CDR`, by its SHA-256 |
 | Pictures | two, both of the screen the program ends on: `leave-for-dos`'s `at-dos` and `TwinStartAndExit`'s fourth, now the disc menu's page where they were the farewell's |
 
 Every digest moved, as the state is 24 bytes shorter. They were re-based from the dump after the change, once the comparison above held; the pictures and outcomes were recorded by `OUTPOST_ELITE_RECORD_GUARD`, and a second recording reproduced every file byte for byte. The suite passes in check mode under g++: 176 tests.
