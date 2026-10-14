@@ -7,6 +7,7 @@
 #include "Input.h"
 #include "SaveLoadTables.h"
 #include "SharedTables.h"
+#include "StateWriter.h"
 #include "Text.h"
 
 #include <array>
@@ -96,17 +97,30 @@ constexpr std::uint16_t ERROR_INK = 0xFFFF; // colour 3
   return TextIn(_state.Data().saveLoad.commanderFileName);
 }
 
-// commanderBlock's commanderFileBytes, the .cdr file's: the buffer DS:DX names to the read that loads a commander.
-[[nodiscard]] std::span<Field<std::uint8_t>> CommanderFile(GameState& _state)
+// The commander as the .cdr file holds it (D78): its members written in their order (StateWriter).
+[[nodiscard]] std::vector<std::uint8_t> CommanderFileBytes(const GameState& _state)
 {
-  return BytesOf(_state.Data().commander);
+  return StateBytes(_state.Data().commander);
 }
 
-// The same bytes as DOS writes them out: each Field byte is its stored byte (Field.h).
-[[nodiscard]] std::span<const std::uint8_t> CommanderFileBytes(const GameState& _state)
+// A commander file read over the commander (D78): the file's bytes in place of the commander's, as many as the read gave, and
+// the commander read back from them; what the read does not reach stays as it was.
+[[nodiscard]] DosAnswer ReadCommanderFile(GameState& _state, Hardware& _hardware)
 {
-  const std::span<const Field<std::uint8_t>> bytes = BytesOf(_state.Data().commander);
-  return std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size());
+  const std::vector<std::uint8_t> commander = CommanderFileBytes(_state);
+  std::array<Field<std::uint8_t>, COMMANDER_FILE_BYTES> file{};
+  for (std::size_t index = 0; index < file.size(); ++index)
+  {
+    file[index] = commander[index];
+  }
+  const DosAnswer read = _hardware.ReadFile(_state.Data().disk.fileHandle, file);
+  std::array<std::uint8_t, COMMANDER_FILE_BYTES> bytes{};
+  for (std::size_t index = 0; index < bytes.size(); ++index)
+  {
+    bytes[index] = file[index];
+  }
+  ReadStateBytes(_state.Data().commander, bytes);
+  return read;
 }
 
 // The common failure (0x039D): DOS's _error, which is no failure when it only ran out of files.
@@ -195,7 +209,7 @@ void LoadCommanderFile(GameState& _state, Hardware& _hardware)
     return;
   }
   _state.Data().disk.fileHandle = opened.value;
-  const DosAnswer read = _hardware.ReadFile(_state.Data().disk.fileHandle, CommanderFile(_state));
+  const DosAnswer read = ReadCommanderFile(_state, _hardware);
   if (read.failed)
   {
     CloseAndFail(_state, _hardware, read.value);

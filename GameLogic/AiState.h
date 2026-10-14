@@ -37,6 +37,27 @@ struct AiState
     /// behaviorClassCounts[6]: class 6 ('Hunter')
     Field<std::uint8_t> hunterCount;
     Field<std::uint8_t> gap79A8[1];
+
+    /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+    template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+    {
+      _visitor("gap79A1", _self.gap79A1);
+      _visitor("drifterCount", _self.drifterCount);
+      _visitor("traderCount", _self.traderCount);
+      _visitor("wolfCount", _self.wolfCount);
+      _visitor("hunterCount", _self.hunterCount);
+      _visitor("gap79A8", _self.gap79A8);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor)
+    {
+      VisitMembers(*this, _visitor);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor) const
+    {
+      VisitMembers(*this, _visitor);
+    }
   };
   /// byte; active objects per class 0-7, recounted each frame by UpdateObjectsAndSpawn
   BehaviorClassCounts behaviorClassCounts;
@@ -48,6 +69,27 @@ struct AiState
   Field<SlotIndex> maskShipSlot;
   /// currentGovernment x 8, set by UpdateObjectsAndSpawn
   Field<std::uint16_t> spawnOddsOffset;
+
+  /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+  template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+  {
+    _visitor("activeObjectCount", _self.activeObjectCount);
+    _visitor("behaviorClassCounts", _self.behaviorClassCounts);
+    _visitor("spawnLimitOffset", _self.spawnLimitOffset);
+    _visitor("npcEcmFrames", _self.npcEcmFrames);
+    _visitor("maskShipSlot", _self.maskShipSlot);
+    _visitor("spawnOddsOffset", _self.spawnOddsOffset);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor)
+  {
+    VisitMembers(*this, _visitor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor) const
+  {
+    VisitMembers(*this, _visitor);
+  }
 };
 
 static_assert(std::is_trivially_copyable_v<AiState> && std::is_standard_layout_v<AiState>);

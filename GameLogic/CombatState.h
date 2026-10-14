@@ -41,6 +41,32 @@ struct CombatState
   Field<std::uint8_t> explodingStation;
   /// set when laser kind 2 (Mining, names at DS:81C2) hits type 5 (0x8AEC); fragments get slower, live 60 frames longer, and may carry m...
   Field<std::uint8_t> miningLaserOnAsteroid;
+
+  /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+  template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+  {
+    _visitor("laserBeamSide", _self.laserBeamSide);
+    _visitor("laserBeamColorToggle", _self.laserBeamColorToggle);
+    _visitor("laserBeamColor", _self.laserBeamColor);
+    _visitor("playerHitBy", _self.playerHitBy);
+    _visitor("playerHitPending", _self.playerHitPending);
+    _visitor("playerHitByDepth", _self.playerHitByDepth);
+    _visitor("wreckDriftX", _self.wreckDriftX);
+    _visitor("wreckDriftY", _self.wreckDriftY);
+    _visitor("wreckDriftZ", _self.wreckDriftZ);
+    _visitor("explodingStation", _self.explodingStation);
+    _visitor("miningLaserOnAsteroid", _self.miningLaserOnAsteroid);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor)
+  {
+    VisitMembers(*this, _visitor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor) const
+  {
+    VisitMembers(*this, _visitor);
+  }
 };
 
 static_assert(std::is_trivially_copyable_v<CombatState> && std::is_standard_layout_v<CombatState>);

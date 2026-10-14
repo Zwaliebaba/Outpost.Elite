@@ -46,6 +46,35 @@ struct InputState
   Field<std::uint8_t> keyboardRollRate;
   /// integrated pitch, as keyboardRollRate
   Field<std::uint8_t> keyboardPitchRate;
+
+  /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+  template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+  {
+    _visitor("keyBuffer", _self.keyBuffer);
+    _visitor("keyBufferWrite", _self.keyBufferWrite);
+    _visitor("keyBufferRead", _self.keyBufferRead);
+    _visitor("keyBufferCount", _self.keyBufferCount);
+    _visitor("keyboardLastRollKey", _self.keyboardLastRollKey);
+    _visitor("keyboardLastPitchKey", _self.keyboardLastPitchKey);
+    _visitor("keyboardRollRamp", _self.keyboardRollRamp);
+    _visitor("keyboardPitchRamp", _self.keyboardPitchRamp);
+    _visitor("amstradStickLastRoll", _self.amstradStickLastRoll);
+    _visitor("amstradStickLastPitch", _self.amstradStickLastPitch);
+    _visitor("amstradStickRollRamp", _self.amstradStickRollRamp);
+    _visitor("amstradStickPitchRamp", _self.amstradStickPitchRamp);
+    _visitor("keyboardRollRate", _self.keyboardRollRate);
+    _visitor("keyboardPitchRate", _self.keyboardPitchRate);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor)
+  {
+    VisitMembers(*this, _visitor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor) const
+  {
+    VisitMembers(*this, _visitor);
+  }
 };
 
 static_assert(std::is_trivially_copyable_v<InputState> && std::is_standard_layout_v<InputState>);

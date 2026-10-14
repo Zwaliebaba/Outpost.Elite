@@ -28,6 +28,26 @@ struct JumpState
   Field<std::uint8_t> hyperspaceCountdown;
   /// frames left in the current countdown step (10)
   Field<std::uint8_t> hyperspaceCountdownFrames;
+
+  /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+  template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+  {
+    _visitor("forceMisjump", _self.forceMisjump);
+    _visitor("galacticJumpPending", _self.galacticJumpPending);
+    _visitor("galacticDriveReadyFrames", _self.galacticDriveReadyFrames);
+    _visitor("hyperspaceCountdown", _self.hyperspaceCountdown);
+    _visitor("hyperspaceCountdownFrames", _self.hyperspaceCountdownFrames);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor)
+  {
+    VisitMembers(*this, _visitor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor) const
+  {
+    VisitMembers(*this, _visitor);
+  }
 };
 
 static_assert(std::is_trivially_copyable_v<JumpState> && std::is_standard_layout_v<JumpState>);

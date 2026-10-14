@@ -130,6 +130,69 @@ struct SpaceObject
   Field<std::uint8_t> size;
   Field<std::uint8_t> detail; ///< +3F: the level-of-detail threshold, from the template
 
+  /// Each field, by its name, in its order (D76): what the state's digest and the commander file are written from.
+  template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+  {
+    _visitor("type", _self.type);
+    _visitor("xHigh", _self.xHigh);
+    _visitor("yHigh", _self.yHigh);
+    _visitor("zHigh", _self.zHigh);
+    _visitor("x", _self.x);
+    _visitor("y", _self.y);
+    _visitor("z", _self.z);
+    _visitor("pitch", _self.pitch);
+    _visitor("yaw", _self.yaw);
+    _visitor("roll", _self.roll);
+    _visitor("viewX", _self.viewX);
+    _visitor("viewY", _self.viewY);
+    _visitor("viewZ", _self.viewZ);
+    _visitor("passes", _self.passes);
+    _visitor("aiState", _self.aiState);
+    _visitor("speed", _self.speed);
+    _visitor("velocityX", _self.velocityX);
+    _visitor("velocityY", _self.velocityY);
+    _visitor("velocityZ", _self.velocityZ);
+    _visitor("range", _self.range);
+    _visitor("turnRate", _self.turnRate);
+    _visitor("flags", _self.flags);
+    _visitor("thargons", _self.thargons);
+    _visitor("compassX", _self.compassX);
+    _visitor("compassY", _self.compassY);
+    _visitor("compassZ", _self.compassZ);
+    _visitor("blipX", _self.blipX);
+    _visitor("blipY", _self.blipY);
+    _visitor("blipZ", _self.blipZ);
+    _visitor("target", _self.target);
+    _visitor("energy", _self.energy);
+    _visitor("cargo", _self.cargo);
+    _visitor("fragments", _self.fragments);
+    _visitor("lifetime", _self.lifetime);
+    _visitor("age", _self.age);
+    _visitor("aggression", _self.aggression);
+    _visitor("bounty", _self.bounty);
+    _visitor("missiles", _self.missiles);
+    _visitor("behaviorClass", _self.behaviorClass);
+    _visitor("scanned", _self.scanned);
+    _visitor("jinkFrames", _self.jinkFrames);
+    _visitor("jinkPitch", _self.jinkPitch);
+    _visitor("jinkYaw", _self.jinkYaw);
+    _visitor("owner", _self.owner);
+    _visitor("cameraZHigh", _self.cameraZHigh);
+    _visitor("depth", _self.depth);
+    _visitor("size", _self.size);
+    _visitor("detail", _self.detail);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor)
+  {
+    VisitMembers(*this, _visitor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor) const
+  {
+    VisitMembers(*this, _visitor);
+  }
+
   /// x, y and z of the position relative to the player, 24 bits each: the high byte and the low word. The value is the 24-bit
   /// two's complement number, held in the low 24 bits.
   [[nodiscard]] std::uint32_t PositionX() const noexcept

@@ -278,6 +278,29 @@ def emit_copy_rule(_type: str, _indent: str, _out: list[str]) -> None:
   _out.append("")
 
 
+def emit_visit(_names: list[str], _indent: str, _out: list[str]) -> None:
+  """A struct's members by name, in their order (D76): what the state's digest and the commander file are written from, and
+  read back into, through a visitor called with each member's name and the member (StateWriter.h)."""
+  inner = _indent + "  "
+  _out.append("")
+  _out.append(f"{_indent}/// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.")
+  _out.append(f"{_indent}template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)")
+  _out.append(f"{_indent}{{")
+  for name in _names:
+    _out.append(f'{inner}_visitor("{name}", _self.{name});')
+  _out.append(f"{_indent}}}")
+  _out.append("")
+  _out.append(f"{_indent}template <typename Visitor> void Visit(Visitor& _visitor)")
+  _out.append(f"{_indent}{{")
+  _out.append(f"{inner}VisitMembers(*this, _visitor);")
+  _out.append(f"{_indent}}}")
+  _out.append("")
+  _out.append(f"{_indent}template <typename Visitor> void Visit(Visitor& _visitor) const")
+  _out.append(f"{_indent}{{")
+  _out.append(f"{inner}VisitMembers(*this, _visitor);")
+  _out.append(f"{_indent}}}")
+
+
 def record_declaration(_member: Member) -> str:
   """The declaration of a container of RECORDS: one array of its records."""
   record, _, record_bytes = RECORDS[_member.name]
@@ -322,6 +345,7 @@ def emit_members(_members: list[Member], _indent: str, _out: list[str]) -> None:
     _out.append(f"{_indent}{{")
     emit_copy_rule(type_name(member), inner, _out)
     emit_members(member.children, inner, _out)
+    emit_visit([child.name for child in member.children], inner, _out)
     _out.append(f"{_indent}}};")
     if note:
       _out.append(f"{_indent}/// {note}")
@@ -501,6 +525,7 @@ def generate_group(_group: Group) -> str:
   out += [f"struct {_group.type}", "{"]
   emit_copy_rule(_group.type, "  ", out)
   emit_members(_group.members, "  ", out)
+  emit_visit([member.name for member in _group.members], "  ", out)
   out += [
     "};",
     "",
@@ -538,6 +563,7 @@ def generate_commander(_block: Member) -> str:
   out += ["struct CommanderState", "{"]
   emit_copy_rule("CommanderState", "  ", out)
   emit_members(_block.children, "  ", out)
+  emit_visit([child.name for child in _block.children], "  ", out)
   out += ["};", "", "#pragma pack(pop)", "", "// Every member at its 1987 offset in the record, every struct at its size, and the record's."]
   for path, offset in offset_paths(_block.children, f"{_block.path}.", _block.offset):
     out.append(f"static_assert(COMMANDER_STATE_OFFSET({path}) == 0x{offset:02X});")
@@ -582,6 +608,7 @@ def generate_game_data(_groups: list[Group]) -> str:
   emit_copy_rule("GameData", "  ", out)
   for group in _groups:
     out.append(f"  {group.type} {group.member};")
+  emit_visit([group.member for group in _groups], "  ", out)
   out += [
     "};",
     "",

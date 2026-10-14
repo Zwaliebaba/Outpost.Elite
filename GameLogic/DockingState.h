@@ -26,6 +26,25 @@ struct DockingState
   Field<std::uint16_t> dockingTargetAngle;
   /// each alignment phase of RunDockingComputer runs twice
   Field<std::uint8_t> dockingAlignPasses;
+
+  /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+  template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+  {
+    _visitor("dockingComputerSteering", _self.dockingComputerSteering);
+    _visitor("dockingComputerState", _self.dockingComputerState);
+    _visitor("dockingTargetAngle", _self.dockingTargetAngle);
+    _visitor("dockingAlignPasses", _self.dockingAlignPasses);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor)
+  {
+    VisitMembers(*this, _visitor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor) const
+  {
+    VisitMembers(*this, _visitor);
+  }
 };
 
 static_assert(std::is_trivially_copyable_v<DockingState> && std::is_standard_layout_v<DockingState>);

@@ -37,6 +37,26 @@ struct GalaxyState
     Field<std::uint8_t> distanceTensDigit;
     Field<std::uint8_t> distanceUnitsDigit;
     Field<std::uint8_t> distanceTenthsDigit;
+
+    /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+    template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+    {
+      _visitor("gap29E4", _self.gap29E4);
+      _visitor("distanceHundredsDigit", _self.distanceHundredsDigit);
+      _visitor("distanceTensDigit", _self.distanceTensDigit);
+      _visitor("distanceUnitsDigit", _self.distanceUnitsDigit);
+      _visitor("distanceTenthsDigit", _self.distanceTenthsDigit);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor)
+    {
+      VisitMembers(*this, _visitor);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor) const
+    {
+      VisitMembers(*this, _visitor);
+    }
   };
   /// FormatDecimal5's five ASCII digits of selectedDistanceTenthsLy
   DistanceDigits distanceDigits;
@@ -78,6 +98,46 @@ struct GalaxyState
   Field<std::uint8_t> descriptionBuffer[256];
   /// system or random name for codes 1-3
   Field<std::uint8_t> descriptionNameBuffer[13];
+
+  /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+  template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+  {
+    _visitor("systemSeed0", _self.systemSeed0);
+    _visitor("systemSeed1", _self.systemSeed1);
+    _visitor("systemSeed2", _self.systemSeed2);
+    _visitor("distanceText", _self.distanceText);
+    _visitor("distanceDigits", _self.distanceDigits);
+    _visitor("findInput", _self.findInput);
+    _visitor("findInputEcho", _self.findInputEcho);
+    _visitor("galacticChartNumber", _self.galacticChartNumber);
+    _visitor("chartItemCount", _self.chartItemCount);
+    _visitor("chartItemEnd", _self.chartItemEnd);
+    _visitor("chartItems", _self.chartItems);
+    _visitor("chartLabelCursor", _self.chartLabelCursor);
+    _visitor("pendingChartLabels", _self.pendingChartLabels);
+    _visitor("labelNudgeCount", _self.labelNudgeCount);
+    _visitor("labelsLeftToPlace", _self.labelsLeftToPlace);
+    _visitor("data7D48", _self.data7D48);
+    _visitor("data7D49", _self.data7D49);
+    _visitor("selectedDistanceText", _self.selectedDistanceText);
+    _visitor("populationDigits", _self.populationDigits);
+    _visitor("productivityDigits", _self.productivityDigits);
+    _visitor("radiusDigits", _self.radiusDigits);
+    _visitor("invasionDebriefText", _self.invasionDebriefText);
+    _visitor("descriptionCapitalize", _self.descriptionCapitalize);
+    _visitor("descriptionBuffer", _self.descriptionBuffer);
+    _visitor("descriptionNameBuffer", _self.descriptionNameBuffer);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor)
+  {
+    VisitMembers(*this, _visitor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor) const
+  {
+    VisitMembers(*this, _visitor);
+  }
 };
 
 static_assert(std::is_trivially_copyable_v<GalaxyState> && std::is_standard_layout_v<GalaxyState>);

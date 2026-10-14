@@ -84,7 +84,7 @@ Platform::Platform(GameState& _state, FileStore& _files, const Desc& _desc)
     m_day(TimerTicksAt(_desc.startMoment)),
     m_modes(_state, m_cga),
     m_mouse(_desc.mousePresent),
-    m_files(_state, _files, _desc.startMoment),
+    m_files(_files, _desc.startMoment),
     m_mouseDriverLoaded(_desc.mousePresent),
     m_flags(ENTRY_FLAGS),
     m_commandTail(_desc.commandTail)

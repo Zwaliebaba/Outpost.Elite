@@ -27,6 +27,25 @@ struct MessagesState
   Field<std::uint16_t> messageFrames;
   /// 20 when a warning is raised; counts down
   Field<std::uint8_t> warningFrames;
+
+  /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+  template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+  {
+    _visitor("messageShown", _self.messageShown);
+    _visitor("messagePointer", _self.messagePointer);
+    _visitor("messageFrames", _self.messageFrames);
+    _visitor("warningFrames", _self.warningFrames);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor)
+  {
+    VisitMembers(*this, _visitor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor) const
+  {
+    VisitMembers(*this, _visitor);
+  }
 };
 
 static_assert(std::is_trivially_copyable_v<MessagesState> && std::is_standard_layout_v<MessagesState>);

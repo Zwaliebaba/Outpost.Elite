@@ -88,6 +88,24 @@ struct CommanderState
     Field<std::uint16_t> data75C8;
     /// characters 7-8 of selectedSystemName; GenerateSystemName blanks them
     Field<std::uint16_t> data75CA;
+
+    /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+    template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+    {
+      _visitor("gap75C4", _self.gap75C4);
+      _visitor("data75C8", _self.data75C8);
+      _visitor("data75CA", _self.data75CA);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor)
+    {
+      VisitMembers(*this, _visitor);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor) const
+    {
+      VisitMembers(*this, _visitor);
+    }
   };
   /// start of the selected (hyperspace target) system's record, filled by SelectSystemAtCursor and rebuilt at every WaitForScreenExitKey...
   SelectedSystemName selectedSystemName;
@@ -165,6 +183,23 @@ struct CommanderState
 
     Field<std::uint8_t> gap75F3[2];
     Field<std::uint16_t> data75F5;
+
+    /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+    template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+    {
+      _visitor("gap75F3", _self.gap75F3);
+      _visitor("data75F5", _self.data75F5);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor)
+    {
+      VisitMembers(*this, _visitor);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor) const
+    {
+      VisitMembers(*this, _visitor);
+    }
   };
   /// 32-bit cash in tenths of a credit, low word first
   CreditsTenths creditsTenths;
@@ -206,6 +241,38 @@ struct CommanderState
     Field<std::uint8_t> refugeesTonnes;
     /// tonnes in the hold (gold, platinum and gems excluded); capacity 20, 35 with the extension
     Field<std::uint8_t> cargoUsedTonnes;
+
+    /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+    template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+    {
+      _visitor("gap7602", _self.gap7602);
+      _visitor("cargoSlavesTonnes", _self.cargoSlavesTonnes);
+      _visitor("gap7609", _self.gap7609);
+      _visitor("cargoAlloysTonnes", _self.cargoAlloysTonnes);
+      _visitor("gap7615", _self.gap7615);
+      _visitor("cargoMineralsTonnes", _self.cargoMineralsTonnes);
+      _visitor("gap761B", _self.gap761B);
+      _visitor("cargoGoldKg", _self.cargoGoldKg);
+      _visitor("gap761D", _self.gap761D);
+      _visitor("cargoPlatinumKg", _self.cargoPlatinumKg);
+      _visitor("gap761F", _self.gap761F);
+      _visitor("cargoGemStonesGrams", _self.cargoGemStonesGrams);
+      _visitor("gap7621", _self.gap7621);
+      _visitor("cargoAlienItemsTonnes", _self.cargoAlienItemsTonnes);
+      _visitor("gap7623", _self.gap7623);
+      _visitor("refugeesTonnes", _self.refugeesTonnes);
+      _visitor("cargoUsedTonnes", _self.cargoUsedTonnes);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor)
+    {
+      VisitMembers(*this, _visitor);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor) const
+    {
+      VisitMembers(*this, _visitor);
+    }
   };
   /// byte pair; per commodity: units held, units on sale here; entry 17 is refugeesTonnes/cargoUsedTonnes
   CargoHold cargoHold;
@@ -248,6 +315,112 @@ struct CommanderState
   Field<std::uint8_t> maskSystemJumps;
   /// selectedSystemIndex latched when the countdown starts
   Field<std::uint8_t> hyperspaceTargetIndex;
+
+  /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+  template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+  {
+    _visitor("gap756B", _self.gap756B);
+    _visitor("commanderTitle", _self.commanderTitle);
+    _visitor("commanderRankText", _self.commanderRankText);
+    _visitor("gap7585", _self.gap7585);
+    _visitor("creditBalanceText", _self.creditBalanceText);
+    _visitor("gap759A", _self.gap759A);
+    _visitor("randomState0", _self.randomState0);
+    _visitor("randomState1", _self.randomState1);
+    _visitor("randomState2", _self.randomState2);
+    _visitor("galaxyNumber", _self.galaxyNumber);
+    _visitor("currentSystemX", _self.currentSystemX);
+    _visitor("currentSystemChartY", _self.currentSystemChartY);
+    _visitor("chartCursorX", _self.chartCursorX);
+    _visitor("chartCursorY", _self.chartCursorY);
+    _visitor("shortRangeCursorX", _self.shortRangeCursorX);
+    _visitor("shortRangeCursorY", _self.shortRangeCursorY);
+    _visitor("galacticCursorX", _self.galacticCursorX);
+    _visitor("galacticCursorY", _self.galacticCursorY);
+    _visitor("chartIsShortRange", _self.chartIsShortRange);
+    _visitor("currentSystemName", _self.currentSystemName);
+    _visitor("gap75B4", _self.gap75B4);
+    _visitor("currentSystemIndex", _self.currentSystemIndex);
+    _visitor("gap75B6", _self.gap75B6);
+    _visitor("currentGovernment", _self.currentGovernment);
+    _visitor("currentEconomy", _self.currentEconomy);
+    _visitor("currentTechLevel", _self.currentTechLevel);
+    _visitor("gap75BB", _self.gap75BB);
+    _visitor("data75BC", _self.data75BC);
+    _visitor("gap75BD", _self.gap75BD);
+    _visitor("data75BF", _self.data75BF);
+    _visitor("gap75C0", _self.gap75C0);
+    _visitor("selectedSystemName", _self.selectedSystemName);
+    _visitor("gap75CC", _self.gap75CC);
+    _visitor("selectedSystemNameLength", _self.selectedSystemNameLength);
+    _visitor("selectedSystemIndex", _self.selectedSystemIndex);
+    _visitor("selectedDistanceTenthsLy", _self.selectedDistanceTenthsLy);
+    _visitor("selectedGovernment", _self.selectedGovernment);
+    _visitor("selectedEconomy", _self.selectedEconomy);
+    _visitor("selectedTechLevel", _self.selectedTechLevel);
+    _visitor("selectedPopulationTenthsBillion", _self.selectedPopulationTenthsBillion);
+    _visitor("selectedSpeciesAdjective1", _self.selectedSpeciesAdjective1);
+    _visitor("selectedSpeciesAdjective2", _self.selectedSpeciesAdjective2);
+    _visitor("selectedSpeciesAdjective3", _self.selectedSpeciesAdjective3);
+    _visitor("selectedSpeciesType", _self.selectedSpeciesType);
+    _visitor("selectedProductivityMillionCredits", _self.selectedProductivityMillionCredits);
+    _visitor("selectedRadiusKm", _self.selectedRadiusKm);
+    _visitor("descriptionSeed0", _self.descriptionSeed0);
+    _visitor("descriptionSeed1", _self.descriptionSeed1);
+    _visitor("gap75E1", _self.gap75E1);
+    _visitor("fuel", _self.fuel);
+    _visitor("missileCount", _self.missileCount);
+    _visitor("largeCargoBayFitted", _self.largeCargoBayFitted);
+    _visitor("ecmFitted", _self.ecmFitted);
+    _visitor("pulseLaserCount", _self.pulseLaserCount);
+    _visitor("beamLaserCount", _self.beamLaserCount);
+    _visitor("fuelScoopsFitted", _self.fuelScoopsFitted);
+    _visitor("escapePodFitted", _self.escapePodFitted);
+    _visitor("energyBombFitted", _self.energyBombFitted);
+    _visitor("energyUnitFitted", _self.energyUnitFitted);
+    _visitor("dockingComputerFitted", _self.dockingComputerFitted);
+    _visitor("galacticHyperdriveFitted", _self.galacticHyperdriveFitted);
+    _visitor("miningLaserCount", _self.miningLaserCount);
+    _visitor("militaryLaserCount", _self.militaryLaserCount);
+    _visitor("maskingDeviceFitted", _self.maskingDeviceFitted);
+    _visitor("laserMountsFitted", _self.laserMountsFitted);
+    _visitor("laserMountTypes", _self.laserMountTypes);
+    _visitor("creditsTenths", _self.creditsTenths);
+    _visitor("legalStatus", _self.legalStatus);
+    _visitor("killCount", _self.killCount);
+    _visitor("defaultCommanderName", _self.defaultCommanderName);
+    _visitor("cargoHold", _self.cargoHold);
+    _visitor("marketQuantitiesSet", _self.marketQuantitiesSet);
+    _visitor("missionJumpCount", _self.missionJumpCount);
+    _visitor("missionNumber", _self.missionNumber);
+    _visitor("data7629", _self.data7629);
+    _visitor("witchspaceCountdown", _self.witchspaceCountdown);
+    _visitor("fuelLeakDelayFrames", _self.fuelLeakDelayFrames);
+    _visitor("fuelLeakFrames", _self.fuelLeakFrames);
+    _visitor("maskShipDestroyed", _self.maskShipDestroyed);
+    _visitor("maskingDeviceRecovered", _self.maskingDeviceRecovered);
+    _visitor("maskMissionShipsLeft", _self.maskMissionShipsLeft);
+    _visitor("thargoidInvasionActive", _self.thargoidInvasionActive);
+    _visitor("invadedStationDestroyed", _self.invadedStationDestroyed);
+    _visitor("antiEcmEmulatorFitted", _self.antiEcmEmulatorFitted);
+    _visitor("supernovaHeat", _self.supernovaHeat);
+    _visitor("supernovaFrames", _self.supernovaFrames);
+    _visitor("missionStage", _self.missionStage);
+    _visitor("jumpedSinceBriefing", _self.jumpedSinceBriefing);
+    _visitor("fledMaskShip", _self.fledMaskShip);
+    _visitor("maskSystemJumps", _self.maskSystemJumps);
+    _visitor("hyperspaceTargetIndex", _self.hyperspaceTargetIndex);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor)
+  {
+    VisitMembers(*this, _visitor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor) const
+  {
+    VisitMembers(*this, _visitor);
+  }
 };
 
 #pragma pack(pop)

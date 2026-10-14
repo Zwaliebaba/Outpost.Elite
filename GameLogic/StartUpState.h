@@ -22,6 +22,23 @@ struct StartUpState
   Field<std::uint8_t> amstradPresent;
   /// 1 when the command tail is exactly ' cheat' (CheckCheatArgument compares PSP:80h with DS:2063 XOR AAh); RunFlight then ignores the...
   Field<std::uint8_t> cheatEnabled;
+
+  /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+  template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+  {
+    _visitor("amstradPresent", _self.amstradPresent);
+    _visitor("cheatEnabled", _self.cheatEnabled);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor)
+  {
+    VisitMembers(*this, _visitor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor) const
+  {
+    VisitMembers(*this, _visitor);
+  }
 };
 
 static_assert(std::is_trivially_copyable_v<StartUpState> && std::is_standard_layout_v<StartUpState>);

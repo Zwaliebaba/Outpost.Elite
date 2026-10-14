@@ -67,6 +67,45 @@ struct PlayerShipState
   Field<std::uint8_t> viewLocked;
   /// 1 for the frame the laser fires; ResolveLaserFire clears it
   Field<std::uint8_t> laserFiring;
+
+  /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+  template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+  {
+    _visitor("ecmFired", _self.ecmFired);
+    _visitor("cabinTemperature", _self.cabinTemperature);
+    _visitor("altitude", _self.altitude);
+    _visitor("foreShield", _self.foreShield);
+    _visitor("aftShield", _self.aftShield);
+    _visitor("playerEnergy", _self.playerEnergy);
+    _visitor("missileState", _self.missileState);
+    _visitor("playerDead", _self.playerDead);
+    _visitor("playerPitchAngle", _self.playerPitchAngle);
+    _visitor("playerYawAngle", _self.playerYawAngle);
+    _visitor("playerRollAngle", _self.playerRollAngle);
+    _visitor("incomingMissileAlert", _self.incomingMissileAlert);
+    _visitor("rollRate", _self.rollRate);
+    _visitor("dockingKeyReleased", _self.dockingKeyReleased);
+    _visitor("escapePodFrames", _self.escapePodFrames);
+    _visitor("dockingComputerOn", _self.dockingComputerOn);
+    _visitor("playerVelocityX", _self.playerVelocityX);
+    _visitor("playerVelocityY", _self.playerVelocityY);
+    _visitor("playerVelocityZ", _self.playerVelocityZ);
+    _visitor("playerSpeed", _self.playerSpeed);
+    _visitor("velocityDirty", _self.velocityDirty);
+    _visitor("viewAngle", _self.viewAngle);
+    _visitor("viewLocked", _self.viewLocked);
+    _visitor("laserFiring", _self.laserFiring);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor)
+  {
+    VisitMembers(*this, _visitor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor) const
+  {
+    VisitMembers(*this, _visitor);
+  }
 };
 
 static_assert(std::is_trivially_copyable_v<PlayerShipState> && std::is_standard_layout_v<PlayerShipState>);

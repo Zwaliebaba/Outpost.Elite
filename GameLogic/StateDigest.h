@@ -12,11 +12,12 @@ class GameState;
 /// The SHA-256, as lowercase hex, of the game's state (ADR-008): what replays check and what Phase 3
 /// must leave unchanged. In this order:
 ///
-///  1. the game's state, GameData's bytes, the data segment distributed (D38), every member it holds;
+///  1. the game's state, every member GameData holds, written by its members in their order (StateWriter, D76), not by
+///     how the struct lays them out;
 ///  2. the CGA's 16 KiB of video memory at B800:0000;
 ///  3. the CGA's mode control and colour select registers and its 18 CRTC registers.
 ///
-/// The first two are _state's own bytes (D19), the third _video's.
+/// The first two are _state's own (D19), the third _video's.
 ///
 /// Left out on purpose: the registers, because a native routine has no instruction pointer to agree on;
 /// the code segment, where the triangle filler patches its step instructions as the original rewrites

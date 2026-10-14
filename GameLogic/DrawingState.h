@@ -33,6 +33,28 @@ struct DrawingState
   Field<std::uint8_t> textAttribute;
   /// colour-select value UpdateDamageFlash writes each frame: 9 (bright blue) while the masking device runs, else 0 (cleared at 4A4C); e...
   Field<std::uint8_t> maskingBackgroundColor;
+
+  /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+  template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+  {
+    _visitor("drawingBuffer", _self.drawingBuffer);
+    _visitor("drawColor", _self.drawColor);
+    _visitor("sunFringeMask", _self.sunFringeMask);
+    _visitor("textPaperPattern", _self.textPaperPattern);
+    _visitor("screenLayout", _self.screenLayout);
+    _visitor("textAttribute", _self.textAttribute);
+    _visitor("maskingBackgroundColor", _self.maskingBackgroundColor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor)
+  {
+    VisitMembers(*this, _visitor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor) const
+  {
+    VisitMembers(*this, _visitor);
+  }
 };
 
 static_assert(std::is_trivially_copyable_v<DrawingState> && std::is_standard_layout_v<DrawingState>);

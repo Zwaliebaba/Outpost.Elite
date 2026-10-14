@@ -26,6 +26,25 @@ struct EquipmentState
   Field<std::uint8_t> selectedLaserMount;
   /// 0 pulse, 1 beam, 2 mining, 3 military
   Field<std::uint8_t> selectedLaserType;
+
+  /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+  template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+  {
+    _visitor("scoopedCargoText", _self.scoopedCargoText);
+    _visitor("freeCargoTonnes", _self.freeCargoTonnes);
+    _visitor("selectedLaserMount", _self.selectedLaserMount);
+    _visitor("selectedLaserType", _self.selectedLaserType);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor)
+  {
+    VisitMembers(*this, _visitor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor) const
+  {
+    VisitMembers(*this, _visitor);
+  }
 };
 
 static_assert(std::is_trivially_copyable_v<EquipmentState> && std::is_standard_layout_v<EquipmentState>);

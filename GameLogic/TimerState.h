@@ -24,6 +24,24 @@ struct TimerState
   Field<std::uint16_t> timerTicks;
   /// incremented every tick; bit 9 drives a blink at 0x2914
   Field<std::uint16_t> millisecondCounter;
+
+  /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+  template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+  {
+    _visitor("savedSpeakerPort", _self.savedSpeakerPort);
+    _visitor("timerTicks", _self.timerTicks);
+    _visitor("millisecondCounter", _self.millisecondCounter);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor)
+  {
+    VisitMembers(*this, _visitor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor) const
+  {
+    VisitMembers(*this, _visitor);
+  }
 };
 
 static_assert(std::is_trivially_copyable_v<TimerState> && std::is_standard_layout_v<TimerState>);

@@ -86,6 +86,50 @@ struct GameData
   JumpState jump;
   KeyboardState keyboard;
   CommanderState commander;
+
+  /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+  template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+  {
+    _visitor("ai", _self.ai);
+    _visitor("combat", _self.combat);
+    _visitor("docked", _self.docked);
+    _visitor("docking", _self.docking);
+    _visitor("equipment", _self.equipment);
+    _visitor("flight", _self.flight);
+    _visitor("galaxy", _self.galaxy);
+    _visitor("hyperspace", _self.hyperspace);
+    _visitor("input", _self.input);
+    _visitor("market", _self.market);
+    _visitor("maths", _self.maths);
+    _visitor("saveLoad", _self.saveLoad);
+    _visitor("scene", _self.scene);
+    _visitor("sound", _self.sound);
+    _visitor("startUp", _self.startUp);
+    _visitor("text", _self.text);
+    _visitor("timer", _self.timer);
+    _visitor("video", _self.video);
+    _visitor("playerShip", _self.playerShip);
+    _visitor("messages", _self.messages);
+    _visitor("audio", _self.audio);
+    _visitor("menus", _self.menus);
+    _visitor("disk", _self.disk);
+    _visitor("drawing", _self.drawing);
+    _visitor("world", _self.world);
+    _visitor("flow", _self.flow);
+    _visitor("jump", _self.jump);
+    _visitor("keyboard", _self.keyboard);
+    _visitor("commander", _self.commander);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor)
+  {
+    VisitMembers(*this, _visitor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor) const
+  {
+    VisitMembers(*this, _visitor);
+  }
 };
 
 static_assert(std::is_trivially_copyable_v<GameData> && std::is_standard_layout_v<GameData>);

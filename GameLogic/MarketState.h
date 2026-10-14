@@ -30,11 +30,49 @@ struct MarketState
     Field<std::uint8_t> gap8C1E[2];
     Field<std::uint16_t> data8C20;
     Field<std::uint16_t> data8C22;
+
+    /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+    template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+    {
+      _visitor("gap8C1E", _self.gap8C1E);
+      _visitor("data8C20", _self.data8C20);
+      _visitor("data8C22", _self.data8C22);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor)
+    {
+      VisitMembers(*this, _visitor);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor) const
+    {
+      VisitMembers(*this, _visitor);
+    }
   };
   /// copy of randomState0 stepped by NextMarketRandom
   MarketRandomState marketRandomState;
   /// currentTechLevel clamped to 9
   Field<std::uint8_t> marketTechLevel;
+
+  /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+  template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+  {
+    _visitor("data8C10", _self.data8C10);
+    _visitor("data8C12", _self.data8C12);
+    _visitor("data8C14", _self.data8C14);
+    _visitor("marketRandomState", _self.marketRandomState);
+    _visitor("marketTechLevel", _self.marketTechLevel);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor)
+  {
+    VisitMembers(*this, _visitor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor) const
+  {
+    VisitMembers(*this, _visitor);
+  }
 };
 
 static_assert(std::is_trivially_copyable_v<MarketState> && std::is_standard_layout_v<MarketState>);

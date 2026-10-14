@@ -116,9 +116,95 @@ struct KeyboardState
     /// keyDown entry for scan code 7Eh: Amstrad mouse button, key code 7Eh (bit 0 of mouseButtons, the fire latch)
     Field<std::uint8_t> keyDownAmstradMouseLeft;
     Field<std::uint8_t> gapA0AF[1];
+
+    /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+    template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+    {
+      _visitor("gapA030", _self.gapA030);
+      _visitor("keyDownEsc", _self.keyDownEsc);
+      _visitor("gapA032", _self.gapA032);
+      _visitor("keyDownQ", _self.keyDownQ);
+      _visitor("gapA041", _self.gapA041);
+      _visitor("keyDownE", _self.keyDownE);
+      _visitor("gapA043", _self.gapA043);
+      _visitor("keyDownT", _self.keyDownT);
+      _visitor("gapA045", _self.gapA045);
+      _visitor("keyDownU", _self.keyDownU);
+      _visitor("keyDownI", _self.keyDownI);
+      _visitor("keyDownO", _self.keyDownO);
+      _visitor("keyDownP", _self.keyDownP);
+      _visitor("gapA04A", _self.gapA04A);
+      _visitor("keyDownCtrl", _self.keyDownCtrl);
+      _visitor("keyDownA", _self.keyDownA);
+      _visitor("gapA04F", _self.gapA04F);
+      _visitor("keyDownG", _self.keyDownG);
+      _visitor("keyDownH", _self.keyDownH);
+      _visitor("keyDownJ", _self.keyDownJ);
+      _visitor("gapA055", _self.gapA055);
+      _visitor("keyDownL", _self.keyDownL);
+      _visitor("gapA057", _self.gapA057);
+      _visitor("keyDownLeftShift", _self.keyDownLeftShift);
+      _visitor("gapA05B", _self.gapA05B);
+      _visitor("keyDownC", _self.keyDownC);
+      _visitor("gapA05F", _self.gapA05F);
+      _visitor("keyDownB", _self.keyDownB);
+      _visitor("keyDownN", _self.keyDownN);
+      _visitor("keyDownM", _self.keyDownM);
+      _visitor("keyDownComma", _self.keyDownComma);
+      _visitor("keyDownPeriod", _self.keyDownPeriod);
+      _visitor("gapA065", _self.gapA065);
+      _visitor("keyDownRightShift", _self.keyDownRightShift);
+      _visitor("keyDownPrintScreen", _self.keyDownPrintScreen);
+      _visitor("keyDownAlt", _self.keyDownAlt);
+      _visitor("keyDownSpace", _self.keyDownSpace);
+      _visitor("gapA06A", _self.gapA06A);
+      _visitor("keyDownUp", _self.keyDownUp);
+      _visitor("gapA079", _self.gapA079);
+      _visitor("keyDownLeft", _self.keyDownLeft);
+      _visitor("gapA07C", _self.gapA07C);
+      _visitor("keyDownRight", _self.keyDownRight);
+      _visitor("gapA07E", _self.gapA07E);
+      _visitor("keyDownDown", _self.keyDownDown);
+      _visitor("gapA081", _self.gapA081);
+      _visitor("keyDownAmstradFire1", _self.keyDownAmstradFire1);
+      _visitor("keyDownAmstradFire2", _self.keyDownAmstradFire2);
+      _visitor("keyDownAmstradRight", _self.keyDownAmstradRight);
+      _visitor("keyDownAmstradLeft", _self.keyDownAmstradLeft);
+      _visitor("keyDownAmstradDown", _self.keyDownAmstradDown);
+      _visitor("keyDownAmstradUp", _self.keyDownAmstradUp);
+      _visitor("keyDownAmstradMouseRight", _self.keyDownAmstradMouseRight);
+      _visitor("keyDownAmstradMouseLeft", _self.keyDownAmstradMouseLeft);
+      _visitor("gapA0AF", _self.gapA0AF);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor)
+    {
+      VisitMembers(*this, _visitor);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor) const
+    {
+      VisitMembers(*this, _visitor);
+    }
   };
   /// 1 while the key is held, indexed by the scan code itself (entry 0 unused; the map's 'scan code - 1' misses the inc ah at 7452); wri...
   KeyDown keyDown;
+
+  /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+  template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+  {
+    _visitor("keyDown", _self.keyDown);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor)
+  {
+    VisitMembers(*this, _visitor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor) const
+  {
+    VisitMembers(*this, _visitor);
+  }
 };
 
 static_assert(std::is_trivially_copyable_v<KeyboardState> && std::is_standard_layout_v<KeyboardState>);

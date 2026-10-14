@@ -43,6 +43,34 @@ struct AudioState
   Field<std::uint16_t> noteTicksLeft;
   /// next note; 0x47 restarts at DS:A1B4
   Field<std::uint16_t> musicPointer;
+
+  /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+  template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+  {
+    _visitor("speakerPortImage", _self.speakerPortImage);
+    _visitor("beepTicks", _self.beepTicks);
+    _visitor("lowBeepTicks", _self.lowBeepTicks);
+    _visitor("toneSweepActive", _self.toneSweepActive);
+    _visitor("noiseSweepActive", _self.noiseSweepActive);
+    _visitor("sweepStepLength", _self.sweepStepLength);
+    _visitor("sweepTickCounter", _self.sweepTickCounter);
+    _visitor("sweepStepCounter", _self.sweepStepCounter);
+    _visitor("sweepPeriodTicks", _self.sweepPeriodTicks);
+    _visitor("noiseBurstTicks", _self.noiseBurstTicks);
+    _visitor("noteGapTicks", _self.noteGapTicks);
+    _visitor("noteTicksLeft", _self.noteTicksLeft);
+    _visitor("musicPointer", _self.musicPointer);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor)
+  {
+    VisitMembers(*this, _visitor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor) const
+  {
+    VisitMembers(*this, _visitor);
+  }
 };
 
 static_assert(std::is_trivially_copyable_v<AudioState> && std::is_standard_layout_v<AudioState>);

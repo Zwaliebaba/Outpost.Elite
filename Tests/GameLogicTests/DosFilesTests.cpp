@@ -635,10 +635,9 @@ public:
     Assert::IsFalse(twin.Close(answer.value).failed);
   }
 
-  // A read lands in the buffer it is given, of the game's state, and no further: a buffer shorter than the file takes its own
-  // bytes, and one that is not the game's state, where its writes would not count, is refused whole, as is a transfer area
-  // there or one too short for a search. The game reads and searches into its own members only.
-  TEST_METHOD(BuffersAreTheGameStates)
+  // A read lands in the buffer it is given and no further: a buffer shorter than the file takes its own bytes, and the next read
+  // goes on from there. A transfer area too short for a search is refused.
+  TEST_METHOD(AReadLandsInItsBufferAndNoFurther)
   {
     DosRig twin("DosFilesBuffers", START);
     std::string bytes;
@@ -654,19 +653,14 @@ public:
 
     DosRig::Put(twin.Block(), std::string(0x10, '\0'), false);
     Assert::IsFalse(twin.Open(twin.Name(), 0).failed);
-    std::array<Elite::Field<std::uint8_t>, Elite::DosFiles::TRANSFER_AREA_BYTES> outside{};
-    const Snapshot before = twin.Memory();
-    Assert::ExpectException<std::out_of_range>([&] { (void)twin.Files().Read(5, outside); }, L"a buffer outside the state is refused");
-    Assert::IsTrue(twin.Memory() == before, L"and nothing changed");
     const Elite::DosAnswer first = twin.Read(5, twin.Block().first(4));
     Assert::IsTrue(!first.failed && first.value == 4, L"a buffer of four takes four");
     Assert::IsTrue(DosRig::Text(twin.Block(), 0, 0x10) == std::string("ABCD") + std::string(0x0C, '\0'), L"and no more");
     const Elite::DosAnswer rest = twin.Read(5, twin.Block().subspan(4));
-    Assert::IsTrue(!rest.failed && rest.value == 0x0C, L"the other twelve: the refused read moved nothing");
+    Assert::IsTrue(!rest.failed && rest.value == 0x0C, L"the other twelve");
     Assert::IsTrue(DosRig::Text(twin.Block(), 0, 0x10) == bytes, L"every byte, once");
     Assert::IsFalse(twin.Close(5).failed);
 
-    Assert::ExpectException<std::out_of_range>([&] { twin.Files().SetTransferArea(outside); }, L"a transfer area outside the state");
     Assert::ExpectException<std::logic_error>([&] { twin.Files().SetTransferArea(twin.Area().first(0x2A)); },
                                               L"a transfer area too short for a search");
   }
@@ -676,7 +670,6 @@ public:
   {
     ScratchDirectory directory("DosFilesClock");
     Elite::DirectoryFileStore store(directory.Path());
-    Elite::GameState state;
     Elite::DosDateTime start;
     start.year = 1987;
     start.month = 12;
@@ -685,7 +678,7 @@ public:
     start.minute = 59;
     start.second = 59;
     start.hundredths = 99;
-    const Elite::DosFiles files(state, store, start);
+    const Elite::DosFiles files(store, start);
     const Elite::DosDateTime now = files.Now(95'456); // two hundredths
     Assert::AreEqual(1988u, std::uint32_t{now.year});
     Assert::AreEqual(1u, std::uint32_t{now.month});

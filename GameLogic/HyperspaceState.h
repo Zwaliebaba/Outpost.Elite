@@ -28,6 +28,24 @@ struct HyperspaceState
     /// galaxyNumber + '1', written by GalacticJump into arrivalGalaxyText
     Field<std::uint8_t> arrivalGalaxyDigit[1];
     Field<std::uint8_t> gap752C[1];
+
+    /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+    template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+    {
+      _visitor("gap7513", _self.gap7513);
+      _visitor("arrivalGalaxyDigit", _self.arrivalGalaxyDigit);
+      _visitor("gap752C", _self.gap752C);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor)
+    {
+      VisitMembers(*this, _visitor);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor) const
+    {
+      VisitMembers(*this, _visitor);
+    }
   };
   /// 'Hyperspaced into galaxy ' and a digit at DS:752B
   ArrivalGalaxyText arrivalGalaxyText;
@@ -37,6 +55,25 @@ struct HyperspaceState
   Field<std::uint8_t> hyperspaceTargetRecord[25];
   /// two ASCII digits at the end of hyperspaceCountdownMessage, written by ShowHyperspaceCountdown
   Field<std::uint16_t> hyperspaceCountdownDigits;
+
+  /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+  template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+  {
+    _visitor("arrivalGalaxyText", _self.arrivalGalaxyText);
+    _visitor("hyperspaceRings", _self.hyperspaceRings);
+    _visitor("hyperspaceTargetRecord", _self.hyperspaceTargetRecord);
+    _visitor("hyperspaceCountdownDigits", _self.hyperspaceCountdownDigits);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor)
+  {
+    VisitMembers(*this, _visitor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor) const
+  {
+    VisitMembers(*this, _visitor);
+  }
 };
 
 static_assert(std::is_trivially_copyable_v<HyperspaceState> && std::is_standard_layout_v<HyperspaceState>);

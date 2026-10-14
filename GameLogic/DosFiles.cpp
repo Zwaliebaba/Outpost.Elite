@@ -159,9 +159,8 @@ void RefuseStandardHandle(std::uint16_t _handle, const char* _service)
 
 } // namespace
 
-DosFiles::DosFiles(GameState& _state, FileStore& _files, const DosDateTime& _startMoment) noexcept
-  : m_state(_state),
-    m_files(_files),
+DosFiles::DosFiles(FileStore& _files, const DosDateTime& _startMoment) noexcept
+  : m_files(_files),
     m_startMoment(_startMoment)
 {
 }
@@ -181,9 +180,7 @@ void DosFiles::SetTransferArea(std::span<Field<std::uint8_t>> _area)
   {
     throw std::logic_error("DosFiles: a transfer area shorter than the 43 bytes a search fills");
   }
-  const std::span<Field<std::uint8_t>> area = _area.first(TRANSFER_AREA_BYTES);
-  RefuseOutsideState(area);
-  m_transferArea = area;
+  m_transferArea = _area.first(TRANSFER_AREA_BYTES);
 }
 
 DosFileAttributes DosFiles::ReadAttributes(std::string_view _name)
@@ -271,12 +268,10 @@ DosAnswer DosFiles::Read(std::uint16_t _handle, std::span<Field<std::uint8_t>> _
   {
     return Fail(DosError::InvalidHandle);
   }
-  // The buffer is the game's state, all of it, before the file moves: a read that could not land whole is refused whole.
   if (_buffer.size() > MOST_BUFFER_BYTES)
   {
     throw std::out_of_range("DosFiles: a read into more bytes than CX counts");
   }
-  RefuseOutsideState(_buffer);
   std::vector<std::uint8_t> buffer(_buffer.size());
   std::uint32_t count = 0;
   const DosError error = file->Read(buffer, count);
@@ -483,16 +478,6 @@ void DosFiles::RefuseNoTransferArea() const
   {
     throw std::logic_error(
       "DosFiles: a search before the program set a transfer area, whose default was PSP:0080, outside the game's memory");
-  }
-}
-
-void DosFiles::RefuseOutsideState(std::span<const Field<std::uint8_t>> _bytes) const
-{
-  const std::span<const std::uint8_t> state = m_state.DataBytes();
-  const auto into = reinterpret_cast<std::uintptr_t>(_bytes.data()) - reinterpret_cast<std::uintptr_t>(state.data());
-  if (into > state.size() || _bytes.size() > state.size() - into)
-  {
-    throw std::out_of_range("DosFiles: a buffer that is not all in the game's state, where its writes would not count");
   }
 }
 

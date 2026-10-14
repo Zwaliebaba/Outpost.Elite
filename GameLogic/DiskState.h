@@ -22,6 +22,23 @@ struct DiskState
   Field<std::uint8_t> diskError;
   /// DOS handle of the open commander or screenshot file
   Field<std::uint16_t> fileHandle;
+
+  /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+  template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+  {
+    _visitor("diskError", _self.diskError);
+    _visitor("fileHandle", _self.fileHandle);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor)
+  {
+    VisitMembers(*this, _visitor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor) const
+  {
+    VisitMembers(*this, _visitor);
+  }
 };
 
 static_assert(std::is_trivially_copyable_v<DiskState> && std::is_standard_layout_v<DiskState>);

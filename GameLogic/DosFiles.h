@@ -17,8 +17,6 @@
 namespace Elite
 {
 
-class GameState;
-
 /// A moment on DOS's calendar, to the hundredth of a second. A plain record (R8). The year must be 1980 to 2099.
 struct DosDateTime
 {
@@ -57,9 +55,8 @@ struct DosFileAttributes
 /// its reserved bytes 00h-14h, as DOS keeps it: find-next reads it from there, as DOS did.
 ///
 /// Where the original hands DOS an address in DS:DX, a call takes what is there (D38): the name, up to its NUL, or the buffer, a
-/// span of the member that holds it; and the transfer area is a span of its member too. A byte a call writes is a Field of
-/// the game's state, and a buffer or a transfer area that is not all in the game's state throws std::out_of_range, and nothing is
-/// written, as it did while the state counted its changes (ADR-024). A call takes no time and counts no instruction cycles, as the emulated DOS's calls did not.
+/// span of the member that holds it, or of the commander file's bytes (D78); and the transfer area is a span of its member. A
+/// call takes no time and counts no instruction cycles, as the emulated DOS's calls did not.
 ///
 /// What the emulated DOS refused as a fault, stopping the run, this refuses by throwing std::logic_error: a close, read or
 /// write on a standard handle (0 to 4), and a write of no bytes. So it refuses a search before the program has set a transfer
@@ -73,9 +70,8 @@ public:
   static constexpr std::size_t TRANSFER_AREA_BYTES = 0x2B; // what find-first and find-next fill
   static constexpr std::size_t MOST_BUFFER_BYTES = 0xFFFF; // CX's count
 
-  /// _state is the game's memory and _files where the files are; both must outlive this. DOS's clock starts at
-  /// _startMoment.
-  DosFiles(GameState& _state, FileStore& _files, const DosDateTime& _startMoment) noexcept;
+  /// _files is where the files are, and must outlive this. DOS's clock starts at _startMoment.
+  DosFiles(FileStore& _files, const DosDateTime& _startMoment) noexcept;
   DosFiles(const DosFiles&) = delete;
   DosFiles& operator=(const DosFiles&) = delete;
 
@@ -102,8 +98,7 @@ public:
   [[nodiscard]] DosAnswer Open(std::string_view _name, std::uint8_t _access);
 
   /// Int 21h AH=3Fh: up to all of _buffer's bytes from the file _handle into it, from its first; the value the count read, 0
-  /// at the end of the file. A buffer that is not all in the game's state, or longer than CX counts, throws std::out_of_range,
-  /// and nothing is read.
+  /// at the end of the file. A buffer longer than CX counts throws std::out_of_range, and nothing is read.
   [[nodiscard]] DosAnswer Read(std::uint16_t _handle, std::span<Field<std::uint8_t>> _buffer);
 
   /// Int 21h AH=40h: _buffer's bytes written to the file _handle, which is stamped with DOS's time at _clock; the value the
@@ -142,10 +137,7 @@ private:
   [[nodiscard]] int FreeHandle() const noexcept;
   // Throws std::logic_error when the program has set no transfer area.
   void RefuseNoTransferArea() const;
-  // Throws std::out_of_range when _bytes are not all in the game's state, where their writes count.
-  void RefuseOutsideState(std::span<const Field<std::uint8_t>> _bytes) const;
 
-  GameState& m_state;
   FileStore& m_files;
   DosDateTime m_startMoment;
   std::array<std::unique_ptr<OpenFile>, HANDLE_COUNT> m_handles;

@@ -20,6 +20,22 @@ struct MathsState
 
   /// word sin, word cos; filled by the entries 2421/2426/242B/2430/2435/243B/2441/244D/2447 (one each), used by the rotations 2453..249D...
   Field<std::uint8_t> rotationSinCos[9][4];
+
+  /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+  template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+  {
+    _visitor("rotationSinCos", _self.rotationSinCos);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor)
+  {
+    VisitMembers(*this, _visitor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor) const
+  {
+    VisitMembers(*this, _visitor);
+  }
 };
 
 static_assert(std::is_trivially_copyable_v<MathsState> && std::is_standard_layout_v<MathsState>);

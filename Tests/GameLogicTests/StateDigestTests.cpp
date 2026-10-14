@@ -1,9 +1,13 @@
 #include "pch.h"
 
 #include "ReferenceRig.h"
+#include "SharedTables.h"
 #include "StateDigest.h"
+#include "StateWriter.h"
 
 #include <algorithm>
+#include <cstring>
+#include <memory>
 #include <stdexcept>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -11,9 +15,48 @@ using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 namespace GameLogicTests
 {
 
+namespace
+{
+
+// A byte unlike its neighbours for every place in a struct of _bytes bytes: what fills one before it is written by its members.
+[[nodiscard]] std::vector<std::uint8_t> Pattern(std::size_t _bytes)
+{
+  std::vector<std::uint8_t> pattern(_bytes);
+  for (std::size_t index = 0; index < _bytes; ++index)
+  {
+    pattern[index] = static_cast<std::uint8_t>(index * 31 + (index >> 8) * 7 + 1);
+  }
+  return pattern;
+}
+
+} // namespace
+
 TEST_CLASS(StateDigestTests)
 {
 public:
+  // The state written by its members (StateWriter, D76) is GameData's bytes, every one in its order, while the structs lay their
+  // members out as the 1987 data segment did: each member listed once, in place, at its width. So the digest is unchanged by
+  // writing the state this way. Read back from the bytes, the state is them again.
+  TEST_METHOD(TheStateWrittenByItsMembersIsItsBytes)
+  {
+    const std::vector<std::uint8_t> pattern = Pattern(sizeof(Elite::GameData));
+    const auto data = std::make_unique<Elite::GameData>();
+    std::memcpy(static_cast<void*>(data.get()), pattern.data(), pattern.size());
+    Assert::IsTrue(std::ranges::equal(Elite::StateBytes(*data), pattern), L"GameData written by its members is its bytes");
+
+    const auto read = std::make_unique<Elite::GameData>();
+    std::memset(static_cast<void*>(read.get()), 0, sizeof(Elite::GameData));
+    Assert::AreEqual(pattern.size(), Elite::ReadStateBytes(*read, pattern), L"every byte read");
+    Assert::AreEqual(0, std::memcmp(read.get(), pattern.data(), pattern.size()), L"and read back over it, the same bytes");
+
+    // The commander file (D78) is the commander's 208 bytes.
+    Assert::AreEqual(std::size_t{Elite::COMMANDER_FILE_BYTES}, Elite::StateBytes(data->commander).size(), L"the .cdr file's size");
+
+    // A shorter list of bytes than the state is an error.
+    const std::span<const std::uint8_t> shorter(pattern.data(), pattern.size() - 1);
+    Assert::ExpectException<std::out_of_range>([&read, shorter]() { (void)Elite::ReadStateBytes(*read, shorter); }, L"too few bytes");
+  }
+
   // What the digest covers (StateDigest.h): every byte of the game's state, from GameData's first group to its last, video memory and the
   // CGA's registers. The original's stack is not in the state at all.
   TEST_METHOD(CoversTheGameAndNotItsScratch)

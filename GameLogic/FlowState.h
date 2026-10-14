@@ -24,6 +24,24 @@ struct FlowState
   Field<std::uint8_t> inFlight;
   /// 1 once the title has run; cleared on death (GameLoop) and by Abort on the pause screen, so the title runs again
   Field<std::uint8_t> titleShown;
+
+  /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+  template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+  {
+    _visitor("msSinceFrame", _self.msSinceFrame);
+    _visitor("inFlight", _self.inFlight);
+    _visitor("titleShown", _self.titleShown);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor)
+  {
+    VisitMembers(*this, _visitor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor) const
+  {
+    VisitMembers(*this, _visitor);
+  }
 };
 
 static_assert(std::is_trivially_copyable_v<FlowState> && std::is_standard_layout_v<FlowState>);

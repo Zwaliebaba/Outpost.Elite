@@ -33,6 +33,30 @@ struct DockedState
   Field<std::uint8_t> refugeeRewardDigit;
   /// ship type shown on the title (1Ah in the file), F9/F10 step it through 2-29
   Field<std::uint8_t> titleShipType;
+
+  /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+  template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+  {
+    _visitor("data83F7", _self.data83F7);
+    _visitor("data83F9", _self.data83F9);
+    _visitor("fuelDigits", _self.fuelDigits);
+    _visitor("data84F5", _self.data84F5);
+    _visitor("productNames", _self.productNames);
+    _visitor("cargoRowPointer", _self.cargoRowPointer);
+    _visitor("tradeScreenIsBuy", _self.tradeScreenIsBuy);
+    _visitor("refugeeRewardDigit", _self.refugeeRewardDigit);
+    _visitor("titleShipType", _self.titleShipType);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor)
+  {
+    VisitMembers(*this, _visitor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor) const
+  {
+    VisitMembers(*this, _visitor);
+  }
 };
 
 static_assert(std::is_trivially_copyable_v<DockedState> && std::is_standard_layout_v<DockedState>);

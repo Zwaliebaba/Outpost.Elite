@@ -28,6 +28,25 @@ struct MenusState
     Field<std::uint8_t> data8040;
     Field<std::uint8_t> data8041;
     Field<std::uint8_t> gap8042[1];
+
+    /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+    template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+    {
+      _visitor("gap803C", _self.gap803C);
+      _visitor("data8040", _self.data8040);
+      _visitor("data8041", _self.data8041);
+      _visitor("gap8042", _self.gap8042);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor)
+    {
+      VisitMembers(*this, _visitor);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor) const
+    {
+      VisitMembers(*this, _visitor);
+    }
   };
   /// FormatTenths output, "nnnn.n"
   PriceText priceText;
@@ -50,11 +69,53 @@ struct MenusState
     Field<std::uint8_t> gap8241[4];
     Field<std::uint16_t> data8245;
     Field<std::uint8_t> gap8247[56];
+
+    /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+    template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+    {
+      _visitor("gap823B", _self.gap823B);
+      _visitor("data823F", _self.data823F);
+      _visitor("gap8241", _self.gap8241);
+      _visitor("data8245", _self.data8245);
+      _visitor("gap8247", _self.gap8247);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor)
+    {
+      VisitMembers(*this, _visitor);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor) const
+    {
+      VisitMembers(*this, _visitor);
+    }
   };
   /// word pair; cargo rows from 0: buy price, sell price; equipment rows from index 1: price, resale price; tenths of credits
   ScreenPrices screenPrices;
   /// number text for the trade screens and the typed quantity
   Field<std::uint8_t> quantityText[6];
+
+  /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+  template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+  {
+    _visitor("priceText", _self.priceText);
+    _visitor("resalePriceInput", _self.resalePriceInput);
+    _visitor("menuRowCount", _self.menuRowCount);
+    _visitor("menuFirstRowAttr", _self.menuFirstRowAttr);
+    _visitor("menuSelectedRow", _self.menuSelectedRow);
+    _visitor("screenPrices", _self.screenPrices);
+    _visitor("quantityText", _self.quantityText);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor)
+  {
+    VisitMembers(*this, _visitor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor) const
+  {
+    VisitMembers(*this, _visitor);
+  }
 };
 
 static_assert(std::is_trivially_copyable_v<MenusState> && std::is_standard_layout_v<MenusState>);

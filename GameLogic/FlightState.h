@@ -107,6 +107,24 @@ struct FlightState
     Field<std::uint8_t> gapABFF[1];
     Field<std::uint8_t> dataAC00;
     Field<std::uint8_t> dataAC01;
+
+    /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+    template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+    {
+      _visitor("gapABFF", _self.gapABFF);
+      _visitor("dataAC00", _self.dataAC00);
+      _visitor("dataAC01", _self.dataAC01);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor)
+    {
+      VisitMembers(*this, _visitor);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor) const
+    {
+      VisitMembers(*this, _visitor);
+    }
   };
   /// the '8) ' of '(F8) ' at the end of the pause menu's frame-rate line; rewritten by F1-F10
   FrameRateKeyLabel frameRateKeyLabel;
@@ -128,6 +146,70 @@ struct FlightState
   Field<std::uint8_t> minimumFrameMs;
   /// set on a 500/65536 chance at launch (Missile Jammed... Can't Launch!); M then fails until reset at 2A33
   Field<std::uint8_t> missileJammed;
+
+  /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+  template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+  {
+    _visitor("stardust", _self.stardust);
+    _visitor("stardustPrevious", _self.stardustPrevious);
+    _visitor("stardustShift", _self.stardustShift);
+    _visitor("flightScreenShown", _self.flightScreenShown);
+    _visitor("laserTemperature", _self.laserTemperature);
+    _visitor("conditionColor", _self.conditionColor);
+    _visitor("missileCountShown", _self.missileCountShown);
+    _visitor("missileLockShown", _self.missileLockShown);
+    _visitor("energyBanksShown", _self.energyBanksShown);
+    _visitor("energyBankFill", _self.energyBankFill);
+    _visitor("rollRateShown", _self.rollRateShown);
+    _visitor("pitchRateShown", _self.pitchRateShown);
+    _visitor("altitudeShown", _self.altitudeShown);
+    _visitor("cabinTemperatureShown", _self.cabinTemperatureShown);
+    _visitor("fuelShown", _self.fuelShown);
+    _visitor("ecmGlyphShown", _self.ecmGlyphShown);
+    _visitor("safeZoneGlyphShown", _self.safeZoneGlyphShown);
+    _visitor("laserTemperatureShown", _self.laserTemperatureShown);
+    _visitor("foreShieldShown", _self.foreShieldShown);
+    _visitor("aftShieldShown", _self.aftShieldShown);
+    _visitor("conditionColorShown", _self.conditionColorShown);
+    _visitor("speedShown", _self.speedShown);
+    _visitor("playerDocked", _self.playerDocked);
+    _visitor("safeZoneFlags", _self.safeZoneFlags);
+    _visitor("spawnGovernment", _self.spawnGovernment);
+    _visitor("warningMessage", _self.warningMessage);
+    _visitor("warningIndex", _self.warningIndex);
+    _visitor("objectSlotCount", _self.objectSlotCount);
+    _visitor("debrisSlotCount", _self.debrisSlotCount);
+    _visitor("compassTargetIsStation", _self.compassTargetIsStation);
+    _visitor("hyperspaceFuelCost", _self.hyperspaceFuelCost);
+    _visitor("pitchAngleScratch", _self.pitchAngleScratch);
+    _visitor("yawAngleScratch", _self.yawAngleScratch);
+    _visitor("jumpDriveEngaged", _self.jumpDriveEngaged);
+    _visitor("missileTarget", _self.missileTarget);
+    _visitor("firingLaserType", _self.firingLaserType);
+    _visitor("laserAlternateFrame", _self.laserAlternateFrame);
+    _visitor("shipIdRequested", _self.shipIdRequested);
+    _visitor("gameOverFrames", _self.gameOverFrames);
+    _visitor("frameRateKeyLabel", _self.frameRateKeyLabel);
+    _visitor("keyboardRecenter", _self.keyboardRecenter);
+    _visitor("keyboardDamping", _self.keyboardDamping);
+    _visitor("reverseYControl", _self.reverseYControl);
+    _visitor("reverseXAndY", _self.reverseXAndY);
+    _visitor("soundEnabled", _self.soundEnabled);
+    _visitor("antiEcmActive", _self.antiEcmActive);
+    _visitor("gamePaused", _self.gamePaused);
+    _visitor("minimumFrameMs", _self.minimumFrameMs);
+    _visitor("missileJammed", _self.missileJammed);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor)
+  {
+    VisitMembers(*this, _visitor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor) const
+  {
+    VisitMembers(*this, _visitor);
+  }
 };
 
 static_assert(std::is_trivially_copyable_v<FlightState> && std::is_standard_layout_v<FlightState>);

@@ -28,6 +28,24 @@ struct VideoState
     /// the two digits in screenshotTextFileName
     Field<std::uint16_t> screenshotTextFileDigits;
     Field<std::uint8_t> gap227A[4];
+
+    /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+    template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+    {
+      _visitor("gap2273", _self.gap2273);
+      _visitor("screenshotTextFileDigits", _self.screenshotTextFileDigits);
+      _visitor("gap227A", _self.gap227A);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor)
+    {
+      VisitMembers(*this, _visitor);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor) const
+    {
+      VisitMembers(*this, _visitor);
+    }
   };
   /// 'elite' + two digits + '.lo', for the text layout
   ScreenshotTextFileName screenshotTextFileName;
@@ -41,6 +59,24 @@ struct VideoState
     /// the two digits in screenshotGraphicsFileName
     Field<std::uint16_t> screenshotGraphicsFileDigits;
     Field<std::uint8_t> gap2285[4];
+
+    /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+    template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+    {
+      _visitor("gap227E", _self.gap227E);
+      _visitor("screenshotGraphicsFileDigits", _self.screenshotGraphicsFileDigits);
+      _visitor("gap2285", _self.gap2285);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor)
+    {
+      VisitMembers(*this, _visitor);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor) const
+    {
+      VisitMembers(*this, _visitor);
+    }
   };
   /// 'elite' + two digits + '.hi', for the graphics layouts
   ScreenshotGraphicsFileName screenshotGraphicsFileName;
@@ -71,6 +107,24 @@ struct VideoState
     Field<std::uint8_t> gap2EFC[2];
     Field<std::uint16_t> data2EFE;
     Field<std::uint8_t> gap2F00[124];
+
+    /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+    template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+    {
+      _visitor("gap2EFC", _self.gap2EFC);
+      _visitor("data2EFE", _self.data2EFE);
+      _visitor("gap2F00", _self.gap2F00);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor)
+    {
+      VisitMembers(*this, _visitor);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor) const
+    {
+      VisitMembers(*this, _visitor);
+    }
   };
   /// 2 words: x, y; DrawCircle's polygon
   CirclePoints circlePoints;
@@ -112,6 +166,52 @@ struct VideoState
   Field<std::uint16_t> clippedBottomX;
   /// general: rows drawn, the span count for DrawStackedSpansFromRow
   Field<std::uint8_t> clippedRowCount;
+
+  /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+  template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+  {
+    _visitor("screenshotTextFileName", _self.screenshotTextFileName);
+    _visitor("screenshotGraphicsFileName", _self.screenshotGraphicsFileName);
+    _visitor("screenshotNumber", _self.screenshotNumber);
+    _visitor("discFillByte", _self.discFillByte);
+    _visitor("discCenterX", _self.discCenterX);
+    _visitor("discRadiusRows", _self.discRadiusRows);
+    _visitor("discRowsLeft", _self.discRowsLeft);
+    _visitor("discProfileStepFraction", _self.discProfileStepFraction);
+    _visitor("discProfileStepWhole", _self.discProfileStepWhole);
+    _visitor("fringeRandomA", _self.fringeRandomA);
+    _visitor("fringeRandomB", _self.fringeRandomB);
+    _visitor("circlePoints", _self.circlePoints);
+    _visitor("triangleEdgeStartX", _self.triangleEdgeStartX);
+    _visitor("triangleEdgeStartX2", _self.triangleEdgeStartX2);
+    _visitor("triangleBottomRow", _self.triangleBottomRow);
+    _visitor("triangleUpperRows", _self.triangleUpperRows);
+    _visitor("triangleTotalRows", _self.triangleTotalRows);
+    _visitor("triangleMiddleX", _self.triangleMiddleX);
+    _visitor("triangleBottomX", _self.triangleBottomX);
+    _visitor("clippedEdgeStartX", _self.clippedEdgeStartX);
+    _visitor("clippedEdgeStartX2", _self.clippedEdgeStartX2);
+    _visitor("clippedUpperRows", _self.clippedUpperRows);
+    _visitor("clippedTotalRows", _self.clippedTotalRows);
+    _visitor("clippedFirstRow", _self.clippedFirstRow);
+    _visitor("clippedSlopeAFraction", _self.clippedSlopeAFraction);
+    _visitor("clippedSlopeAWhole", _self.clippedSlopeAWhole);
+    _visitor("clippedSlopeBFraction", _self.clippedSlopeBFraction);
+    _visitor("clippedSlopeBWhole", _self.clippedSlopeBWhole);
+    _visitor("clippedMiddleX", _self.clippedMiddleX);
+    _visitor("clippedBottomX", _self.clippedBottomX);
+    _visitor("clippedRowCount", _self.clippedRowCount);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor)
+  {
+    VisitMembers(*this, _visitor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor) const
+  {
+    VisitMembers(*this, _visitor);
+  }
 };
 
 static_assert(std::is_trivially_copyable_v<VideoState> && std::is_standard_layout_v<VideoState>);

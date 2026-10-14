@@ -357,6 +357,9 @@
     <ClInclude Include="StateDigest.h">
       <Filter>Replay</Filter>
     </ClInclude>
+    <ClInclude Include="StateWriter.h">
+      <Filter>State</Filter>
+    </ClInclude>
     <ClInclude Include="Text.h">
       <Filter>Text</Filter>
     </ClInclude>

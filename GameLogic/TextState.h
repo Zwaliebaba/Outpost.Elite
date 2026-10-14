@@ -28,6 +28,26 @@ struct TextState
   Field<std::uint16_t> cursorBlinkTicks;
   /// characters ReadTextLine may still accept
   Field<std::uint8_t> inputCharsLeft;
+
+  /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+  template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+  {
+    _visitor("bountyText", _self.bountyText);
+    _visitor("shipIdentityText", _self.shipIdentityText);
+    _visitor("inputCursorText", _self.inputCursorText);
+    _visitor("cursorBlinkTicks", _self.cursorBlinkTicks);
+    _visitor("inputCharsLeft", _self.inputCharsLeft);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor)
+  {
+    VisitMembers(*this, _visitor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor) const
+  {
+    VisitMembers(*this, _visitor);
+  }
 };
 
 static_assert(std::is_trivially_copyable_v<TextState> && std::is_standard_layout_v<TextState>);
