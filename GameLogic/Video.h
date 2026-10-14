@@ -2,7 +2,7 @@
 #pragma once
 
 #include "GameState.h"
-#include "Hardware.h"
+#include "Host.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -45,20 +45,20 @@ struct Triangle
 };
 
 /// FinishSpaceViewFrame (CS:0570): DrawLaserSights, then PresentSpaceView and ClearDrawBuffer, both forwards. It waits.
-[[nodiscard]] Task<void> FinishSpaceViewFrame(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<void> FinishSpaceViewFrame(GameState& _state, Host& _host);
 
 /// PresentChartFrame (CS:0587): CopyChartBufferToScreen of the whole chart, with no bands skipped whatever the caller passed, then
 /// ClearDrawBuffer, both forwards. It waits.
-[[nodiscard]] Task<void> PresentChartFrame(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<void> PresentChartFrame(GameState& _state, Host& _host);
 
 /// PresentSpaceView (CS:0599): waits until msSinceFrame reaches minimumFrameMs and clears it, WaitRetraceThenDelay, then copies
-/// spaceViewBuffer's 63 line pairs to the screen at B800:01E8. Its loops turn through _hardware.
-[[nodiscard]] Task<void> PresentSpaceView(GameState& _state, Hardware& _hardware);
+/// spaceViewBuffer's 63 line pairs to the screen at B800:01E8. Its loops turn through _host.
+[[nodiscard]] Task<void> PresentSpaceView(GameState& _state, Host& _host);
 
 /// CopyChartBufferToScreen (CS:05CC): waits for a vertical retrace and a delay, then copies 64 - 4 * _bandsSkipped line pairs, as
 /// a byte, of the drawing buffer from its byte _bandsSkipped * 512 to the chart's place on the screen, at B800:0648. Its loops turn
-/// through _hardware.
-[[nodiscard]] Task<void> CopyChartBufferToScreen(GameState& _state, Hardware& _hardware, std::uint8_t _bandsSkipped);
+/// through _host.
+[[nodiscard]] Task<void> CopyChartBufferToScreen(GameState& _state, Host& _host, std::uint8_t _bandsSkipped);
 
 /// ClearDrawBuffer (CS:060D): the drawing buffer (DrawingBuffer) zeroed a word at a time as REP STOSW does.
 void ClearDrawBuffer(GameState& _state);
@@ -132,8 +132,8 @@ void FillTriangle(GameState& _state, Triangle _triangle);
 void FillClippedTriangle(GameState& _state, Triangle _doubled);
 
 /// WaitRetraceThenDelay (CS:45FF): waits for a vertical retrace on the CGA's status port, then spins 2000 turns, a delay the
-/// 8088's speed made. Its loops turn through _hardware.
-[[nodiscard]] Task<void> WaitRetraceThenDelay(Hardware& _hardware);
+/// 8088's speed made. Its loops turn through _host.
+[[nodiscard]] Task<void> WaitRetraceThenDelay(Host& _host);
 
 /// How ShowCockpitScreen and DrawChartFrame made the screen ready for what they draw.
 enum class ScreenChange : std::uint8_t
@@ -145,7 +145,7 @@ enum class ScreenChange : std::uint8_t
 
 /// ShowCockpitScreen (CS:7BC0): unless the cockpit shows already (screenLayout 0), graphics mode from text or a clear screen from
 /// graphics, screenLayout 0, and cockpitImage copied into both banks of the screen with the direction flag clear.
-ScreenChange ShowCockpitScreen(GameState& _state, Hardware& _hardware);
+ScreenChange ShowCockpitScreen(GameState& _state, Host& _host);
 
 /// ClearCgaScreen (CS:7BFB): both banks of CGA memory, B800:0000-1F3F and B800:2000-3F3F, zeroed a word at a time.
 void ClearCgaScreen(GameState& _state);
@@ -156,15 +156,15 @@ void ClearTextScreen(GameState& _state);
 /// DrawChartFrame (CS:7C25): unless the chart frame shows already (screenLayout 1), graphics mode from text or a clear screen from
 /// graphics, screenLayout 1, and the frame's box in colour 3: four horizontal lines by REP STOSW, forwards, then
 /// the two verticals a byte at a time.
-ScreenChange DrawChartFrame(GameState& _state, Hardware& _hardware);
+ScreenChange DrawChartFrame(GameState& _state, Host& _host);
 
 /// SetGraphicsMode (CS:7CFE): the CGA in 320x200 graphics, video memory cleared, and the colour select register bright on
 /// black.
-void SetGraphicsMode(GameState& _state, Hardware& _hardware);
+void SetGraphicsMode(GameState& _state, Host& _host);
 
 /// SetTextMode (CS:7D11): the CGA in 40x25 text, video memory blank, the cursor's address off the page, and the mode control
 /// register with blinking off, so that attribute bit 7 is a bright background.
-void SetTextMode(GameState& _state, Hardware& _hardware);
+void SetTextMode(GameState& _state, Host& _host);
 
 /// DrawTitlePlanet (CS:7D4E): DrawDisc with sunFringeMask 1, then sunFringeMask 0.
 void DrawTitlePlanet(GameState& _state, std::uint16_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow);

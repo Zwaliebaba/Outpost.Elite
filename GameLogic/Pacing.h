@@ -10,7 +10,7 @@ namespace Elite
 /// much (ADR-013, D18): measured on the interpreter clocked as a 4.77 MHz 8088 from the end of one of the loop's
 /// waits to the start of the next, and held as whole milliseconds since D87. Paced time otherwise lets work take
 /// no time, so a loop whose only wait is the retrace runs at 60 turns a second. The native code that stands in for
-/// the instruction pays the time there (Hardware::Spend).
+/// the instruction pays the time there (Host::Spend).
 struct PacingPoint
 {
   Milliseconds milliseconds;

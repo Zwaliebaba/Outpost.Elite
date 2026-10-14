@@ -253,25 +253,25 @@ std::uint16_t PrintAt(GameState& _state, std::string_view _text, std::uint16_t _
 }
 
 // CALL GetKey / JZ back: GetKey until a key comes (ADR-039). Returns the key.
-[[nodiscard]] Task<KeyPress> WaitForKey(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<KeyPress> WaitForKey(GameState& _state, Host& _host)
 {
   for (;;)
   {
-    const KeyPress key = GetKey(_state, _hardware);
+    const KeyPress key = GetKey(_state, _host);
     if (key.scanCode != 0)
     {
       co_return key;
     }
-    co_await AwaitNextKey(_hardware, key);
+    co_await AwaitNextKey(_host, key);
   }
 }
 
 // WaitForKey until one of _first and _second comes, every other key going back to it too. Returns it.
-[[nodiscard]] Task<std::uint8_t> WaitForEitherKey(GameState& _state, Hardware& _hardware, std::uint8_t _first, std::uint8_t _second)
+[[nodiscard]] Task<std::uint8_t> WaitForEitherKey(GameState& _state, Host& _host, std::uint8_t _first, std::uint8_t _second)
 {
   for (;;)
   {
-    const std::uint8_t scan = (co_await WaitForKey(_state, _hardware)).scanCode;
+    const std::uint8_t scan = (co_await WaitForKey(_state, _host)).scanCode;
     if (scan == _first || scan == _second)
     {
       co_return scan;
@@ -319,7 +319,7 @@ void RejectFileName(GameState& _state)
 
 // The disc menu's keys: DiscControlKeyLoop (CS:665E), or ShowControlDevice before it when _showDevice; and everything they run
 // until the menu is left.
-[[nodiscard]] Task<DiscMenuExit> RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _showDevice)
+[[nodiscard]] Task<DiscMenuExit> RunDiscControlKeys(GameState& _state, Host& _host, bool _showDevice)
 {
   bool showDevice = _showDevice;
   for (;;)
@@ -329,14 +329,14 @@ void RejectFileName(GameState& _state)
       ShowControlDevice(_state);
       showDevice = false;
     }
-    const KeyPress key = co_await WaitForKey(_state, _hardware);
+    const KeyPress key = co_await WaitForKey(_state, _host);
     // PUSH AX and POP AX round it.
     BlankHelpRows(_state);
     const std::uint8_t scan = key.scanCode;
     if (scan == SCAN_E)
     {
       PrintAt(_state, EXIT_QUESTION_TEXT, STATUS_POSITION);
-      if (co_await WaitForEitherKey(_state, _hardware, SCAN_N, SCAN_Y) == SCAN_N)
+      if (co_await WaitForEitherKey(_state, _host, SCAN_N, SCAN_Y) == SCAN_N)
       {
         showDevice = true;
         continue;
@@ -345,7 +345,7 @@ void RejectFileName(GameState& _state)
     }
     if (scan == SCAN_L || scan == SCAN_S || scan == SCAN_D)
     {
-      if (!co_await PromptCommanderFileName(_state, _hardware))
+      if (!co_await PromptCommanderFileName(_state, _host))
       {
         // The prompt's return address dropped, and the menu's keys read on in its place.
         RejectFileName(_state);
@@ -365,7 +365,7 @@ void RejectFileName(GameState& _state)
     }
     if (scan == SCAN_M)
     {
-      if (IsMouseDriverInstalled(_hardware))
+      if (IsMouseDriverInstalled(_host))
       {
         _state.Data().saveLoad.inputDevice = MOUSE_DEVICE;
         showDevice = true;
@@ -433,22 +433,22 @@ void ShowDiskResult(GameState& _state)
 
 } // namespace
 
-void PerformDiskRequest(GameState& _state, Hardware& _hardware, std::uint8_t _request)
+void PerformDiskRequest(GameState& _state, Host& _host, std::uint8_t _request)
 {
   // DEC AL until it reaches 0: 1 load, 2 save, 3 delete.
   switch (_request)
   {
   case LOAD_COMMANDER:
-    LoadCommanderFile(_state, _hardware.Files());
+    LoadCommanderFile(_state, _host.Files());
     return;
   case SAVE_COMMANDER:
-    SaveCommanderFile(_state, _hardware.Files(), _hardware.FileStampNow());
+    SaveCommanderFile(_state, _host.Files(), _host.FileStampNow());
     return;
   case DELETE_COMMANDER:
-    DeleteCommanderFile(_state, _hardware.Files());
+    DeleteCommanderFile(_state, _host.Files());
     return;
   default:
-    ListCommanderFiles(_state, _hardware.Files());
+    ListCommanderFiles(_state, _host.Files());
     return;
   }
 }
@@ -459,34 +459,34 @@ void SaveStartupCommander(GameState& _state)
   _state.Data().saveLoad.startupCommander = _state.Data().commander;
 }
 
-[[nodiscard]] Task<DiscMenuExit> ShowDiscControlScreen(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<DiscMenuExit> ShowDiscControlScreen(GameState& _state, Host& _host)
 {
   if (_state.Data().saveLoad.resumeAtDiskMenu == 0)
   {
-    PrintAt(_state, DrawDockedFrame(_state, _hardware, DISC_CONTROL_FRAME), TITLE_POSITION);
+    PrintAt(_state, DrawDockedFrame(_state, _host, DISC_CONTROL_FRAME), TITLE_POSITION);
     PrintCountedTextLines(_state, DISC_MENU_TEXT, MENU_POSITION);
-    co_return co_await RunDiscControlKeys(_state, _hardware, true);
+    co_return co_await RunDiscControlKeys(_state, _host, true);
   }
   // Back from Start's disk work.
   if (_state.Data().disk.diskError == 0)
   {
     ShowDiskResult(_state);
-    co_return co_await RunDiscControlKeys(_state, _hardware, false);
+    co_return co_await RunDiscControlKeys(_state, _host, false);
   }
   PrintAt(_state, RETRY_TEXT, STATUS_POSITION);
-  if (co_await WaitForEitherKey(_state, _hardware, SCAN_N, SCAN_Y) == SCAN_N)
+  if (co_await WaitForEitherKey(_state, _host, SCAN_N, SCAN_Y) == SCAN_N)
   {
-    co_return co_await RunDiscControlKeys(_state, _hardware, true);
+    co_return co_await RunDiscControlKeys(_state, _host, true);
   }
   PrintAt(_state, BLANK_STATUS_TEXT, STATUS_POSITION);
   co_return LeaveGameLoopForDisk(_state, _state.Data().saveLoad.diskOperation);
 }
 
-[[nodiscard]] Task<bool> PromptCommanderFileName(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<bool> PromptCommanderFileName(GameState& _state, Host& _host)
 {
   PrintAt(_state, FILE_NAME_PROMPT_TEXT, STATUS_POSITION);
   const std::span<std::uint8_t> name(_state.Data().saveLoad.commanderFileName);
-  co_await ReadTextLine(_state, _hardware, name, MOST_NAME_CHARACTERS, NAME_POSITION);
+  co_await ReadTextLine(_state, _host, name, MOST_NAME_CHARACTERS, NAME_POSITION);
   // A letter, then letters and digits, folded to upper case.
   std::size_t letter = 0;
   auto character = static_cast<std::uint8_t>(name[letter] & LOWER_CASE_BIT_CLEAR);

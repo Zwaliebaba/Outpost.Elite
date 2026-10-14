@@ -1223,16 +1223,16 @@ void FillClippedGeneral(GameState& _state, ScreenPoint _a, ScreenPoint _b, Scree
 
 // IN AL,DX / AND AL,8 / JZ: the CGA's status until it reports a vertical retrace. A read that sees a retrace uses it up
 // (Cga::SetRetraceSeenOnce), so these are the original's reads, one a poll, and a poll that sees none waits (ADR-039).
-[[nodiscard]] Task<void> WaitForRetrace(Hardware& _hardware)
+[[nodiscard]] Task<void> WaitForRetrace(Host& _host)
 {
   for (;;)
   {
-    const auto retrace = static_cast<std::uint8_t>(_hardware.CgaStatus() & STATUS_VERTICAL_RETRACE);
+    const auto retrace = static_cast<std::uint8_t>(_host.Video().ReadStatus() & STATUS_VERTICAL_RETRACE);
     if (retrace != 0)
     {
       co_return;
     }
-    co_await _hardware.Wait();
+    co_await _host.Wait();
   }
 }
 
@@ -1260,11 +1260,11 @@ void CopyLinePairs(GameState& _state, std::uint16_t _source, std::uint16_t _dest
 
 // TEST [screenLayout],2 (CS:7BC7, CS:7C2C), for a screen that is not the one wanted: from text, mode 4 through the BIOS
 // (SetGraphicsMode); from graphics, both banks cleared, forwards (ClearCgaScreen).
-ScreenChange MakeGraphicsScreen(GameState& _state, Hardware& _hardware, std::uint8_t _layout)
+ScreenChange MakeGraphicsScreen(GameState& _state, Host& _host, std::uint8_t _layout)
 {
   if ((_layout & TEXT_LAYOUT_BIT) != 0)
   {
-    SetGraphicsMode(_state, _hardware);
+    SetGraphicsMode(_state, _host);
     return ScreenChange::ModeSet;
   }
   ClearCgaScreen(_state);
@@ -1287,43 +1287,43 @@ std::span<std::uint8_t, DRAWING_BUFFER_BYTES> DrawingBuffer(GameState& _state) n
   return BytesOf(_state.Data().drawing.drawingBuffer);
 }
 
-[[nodiscard]] Task<void> FinishSpaceViewFrame(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<void> FinishSpaceViewFrame(GameState& _state, Host& _host)
 {
   // MOV AX,B800h / MOV ES,AX, the sights, then XOR AL,AL / CLD: the copy and the clear run forwards. The sights are watched for
   // the space view, which the renderer draws in their place (ADR-035).
-  _hardware.BeginSpaceViewObject();
+  _host.BeginSpaceViewObject();
   DrawLaserSights(_state);
-  _hardware.EndSpaceViewRendered();
-  co_await PresentSpaceView(_state, _hardware);
+  _host.EndSpaceViewRendered();
+  co_await PresentSpaceView(_state, _host);
   ClearDrawBuffer(_state);
 }
 
-[[nodiscard]] Task<void> PresentChartFrame(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<void> PresentChartFrame(GameState& _state, Host& _host)
 {
   // MOV AX,B800h / MOV ES,AX / CLD: AL, the bands CopyChartBufferToScreen skips, is 0 whatever the caller passed, and both
   // copy forwards.
-  co_await CopyChartBufferToScreen(_state, _hardware, 0);
+  co_await CopyChartBufferToScreen(_state, _host, 0);
   ClearDrawBuffer(_state);
 }
 
-[[nodiscard]] Task<void> PresentSpaceView(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<void> PresentSpaceView(GameState& _state, Host& _host)
 {
   // MOV AL,[msSinceFrame] / CMP AL,[minimumFrameMs] / JB back to the start at 0599h, while the timer interrupt counts
   // msSinceFrame up.
   while (_state.Data().flow.msSinceFrame < _state.Data().flight.minimumFrameMs)
   {
-    co_await _hardware.Wait();
+    co_await _host.Wait();
   }
   _state.Data().flow.msSinceFrame = 0;
-  co_await WaitRetraceThenDelay(_hardware);
+  co_await WaitRetraceThenDelay(_host);
   CopyLinePairs(_state, SPACE_VIEW_BUFFER_START, SPACE_VIEW_SCREEN_OFFSET, SPACE_VIEW_LINE_PAIRS);
 }
 
-[[nodiscard]] Task<void> CopyChartBufferToScreen(GameState& _state, Hardware& _hardware, std::uint8_t _bandsSkipped)
+[[nodiscard]] Task<void> CopyChartBufferToScreen(GameState& _state, Host& _host, std::uint8_t _bandsSkipped)
 {
   // MOV DX,3DAh / PUSH AX, the retrace's loop at 05D0 and the delay's at 05D8, then POP AX: the bands are a value, not a word on
   // the stack. The delay, MOV AX,2BCh / DEC AX / JNZ, is the 8088's speed and takes no paced time.
-  co_await WaitForRetrace(_hardware);
+  co_await WaitForRetrace(_host);
   // _bandsSkipped bands of 8 lines: SHL BL,1 twice / SUB BL,40h / NEG BL, so 64 - 4 * the bands line pairs as a byte, from
   // DS:the bands * 512, as SHL AH,1 leaves the bands doubled in AH.
   const auto linePairs = static_cast<std::uint8_t>(CHART_LINE_PAIRS - static_cast<std::uint8_t>(_bandsSkipped << 2));
@@ -1764,21 +1764,21 @@ void FillClippedTriangle(GameState& _state, Triangle _doubled)
   }
 }
 
-[[nodiscard]] Task<void> WaitRetraceThenDelay(Hardware& _hardware)
+[[nodiscard]] Task<void> WaitRetraceThenDelay(Host& _host)
 {
   // MOV DX,3DAh and the retrace's loop at 4602, then MOV AX,7D0h and the delay's at 460A, which counts AX down to 0: the
   // 8088's speed, which takes no paced time.
-  co_await WaitForRetrace(_hardware);
+  co_await WaitForRetrace(_host);
 }
 
-ScreenChange ShowCockpitScreen(GameState& _state, Hardware& _hardware)
+ScreenChange ShowCockpitScreen(GameState& _state, Host& _host)
 {
   const std::uint8_t layout = _state.Data().drawing.screenLayout;
   if (layout == 0)
   {
     return ScreenChange::None;
   }
-  const ScreenChange change = MakeGraphicsScreen(_state, _hardware, layout);
+  const ScreenChange change = MakeGraphicsScreen(_state, _host, layout);
   _state.Data().drawing.screenLayout = 0;
   // PUSH DS / MOV DS,<cockpitImage's segment>, then from its start both banks, after CLD (REP MOVSW): the even lines' 8000 bytes
   // and the odd lines' after them.
@@ -1805,14 +1805,14 @@ void ClearTextScreen(GameState& _state)
   RepeatStoreVideoWords(_state, 0, TEXT_CELLS, Join(_state.Data().drawing.textAttribute, SPACE), 2);
 }
 
-ScreenChange DrawChartFrame(GameState& _state, Hardware& _hardware)
+ScreenChange DrawChartFrame(GameState& _state, Host& _host)
 {
   const std::uint8_t layout = _state.Data().drawing.screenLayout;
   if (layout == CHART_LAYOUT)
   {
     return ScreenChange::None;
   }
-  const ScreenChange change = MakeGraphicsScreen(_state, _hardware, layout);
+  const ScreenChange change = MakeGraphicsScreen(_state, _host, layout);
   _state.Data().drawing.screenLayout = CHART_LAYOUT;
   // The horizontals at y=9, 39, 168 and 199, x 32-287: 32 words of colour 3 each into ES = B800h, by REP STOSW, forwards
   // (MOV CX,20h, then MOV CL,20h over the 0 the last left).
@@ -1835,19 +1835,19 @@ ScreenChange DrawChartFrame(GameState& _state, Hardware& _hardware)
   return change;
 }
 
-void SetGraphicsMode(GameState& _state, Hardware& _hardware)
+void SetGraphicsMode(GameState& _state, Host& _host)
 {
-  _hardware.SetVideoMode(CgaMode::Graphics320);
+  _host.Video().SetMode(CgaMode::Graphics320);
   FillVideoMemory(_state, 0);
-  _hardware.SetColorSelect(BRIGHT_ON_BLACK);
+  _host.Video().SetColorSelect(BRIGHT_ON_BLACK);
 }
 
-void SetTextMode(GameState& _state, Hardware& _hardware)
+void SetTextMode(GameState& _state, Host& _host)
 {
-  _hardware.SetVideoMode(CgaMode::Text40Columns);
+  _host.Video().SetMode(CgaMode::Text40Columns);
   FillVideoMemory(_state, BLANK_TEXT_CELL);
-  _hardware.SetCursorAddressHigh(CURSOR_OFF_PAGE);
-  _hardware.SetModeControl(VIDEO_ON_BLINK_OFF);
+  _host.Video().WriteCrtc(static_cast<std::uint8_t>(CrtcRegister::CursorAddressHigh), CURSOR_OFF_PAGE);
+  _host.Video().SetModeControl(VIDEO_ON_BLINK_OFF);
 }
 
 void DrawTitlePlanet(GameState& _state, std::uint16_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow)

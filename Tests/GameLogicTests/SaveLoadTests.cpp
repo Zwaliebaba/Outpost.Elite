@@ -1,6 +1,6 @@
 #include "pch.h"
 
-#include "PlatformRig.h"
+#include "HostRig.h"
 #include "SaveLoad.h"
 #include "Sha256.h"
 #include "Text.h"
@@ -91,16 +91,16 @@ void PlayEveryDiscMenuPath(TwinRig& _rig)
   _rig.Play("key v; wait 0.05\nkey q; wait 0.05\nkey Next; wait 0.05\nkey m; wait 0.05\ndigest no-mouse");
   // A mouse attached, which the menu then offers.
   const bool mouse = _rig.Host().MouseDevice().Present();
-  _rig.Both([](Elite::Platform& _platform, Elite::GameState&) { _platform.MouseDevice().SetPresent(true); });
+  _rig.Both([](Elite::Host& _platform, Elite::GameState&) { _platform.MouseDevice().SetPresent(true); });
   _rig.Play("key m; wait 0.05\ndigest mouse\nkey k; wait 0.05");
-  _rig.Both([mouse](Elite::Platform& _platform, Elite::GameState&) { _platform.MouseDevice().SetPresent(mouse); });
+  _rig.Both([mouse](Elite::Host& _platform, Elite::GameState&) { _platform.MouseDevice().SetPresent(mouse); });
   // J and the keys that answered the joystick's questions until D81, the IBM stick's and the Amstrad's, and the codes the
   // Amstrad's stick sent: each a key the menu ignores, as it ignores every other.
   _rig.Play("key j; wait 0.05; key q; wait 0.05; key i; wait 0.05; key space; wait 0.1\ndigest no-stick");
   _rig.Play("key j; wait 0.05; key i; wait 0.05; key space; wait 0.1\ndigest stick\nkey k; wait 0.05");
   _rig.Play("key j; wait 0.05; key a; wait 0.05; key q; wait 0.05\ndigest amstrad-still\nkey j; wait 0.05; key a; wait 0.05");
   _rig.Both(
-    [](Elite::Platform&, Elite::GameState& _state)
+    [](Elite::Host&, Elite::GameState& _state)
     {
       constexpr std::array<std::uint8_t, 3> CODES = {0x60, 0x7D, 0x77};
       for (const std::uint8_t code : CODES)
@@ -159,7 +159,7 @@ public:
   // loaded through PerformDiskRequest and held to what the game's writers keep.
   TEST_METHOD(LoadedCommanderIsHeldToWhatTheGameWrites)
   {
-    PlatformRig rig("SaveLoadClamp");
+    HostRig rig("SaveLoadClamp");
     rig.Start(
       [&rig]() -> Elite::Task<void>
       {
@@ -184,8 +184,8 @@ public:
         commander.creditsTenths = 1234;
         for (std::uint8_t& character : commander.creditBalanceText)
           character = 'X';
-        Elite::PerformDiskRequest(state, rig.Native(), SAVE_COMMANDER);
-        Elite::PerformDiskRequest(state, rig.Native(), LOAD_COMMANDER);
+        Elite::PerformDiskRequest(state, rig.Host(), SAVE_COMMANDER);
+        Elite::PerformDiskRequest(state, rig.Host(), LOAD_COMMANDER);
         co_return;
       });
     Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Elite::StopReason::Terminated);

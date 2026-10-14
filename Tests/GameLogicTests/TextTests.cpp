@@ -124,7 +124,7 @@ Elite::SlotIndex LaunchMissileAtPlayer(TwinRig& _rig, Elite::SlotIndex _launcher
 {
   std::string name;
   _rig.Both(
-    [&name](Elite::Platform&, Elite::GameState& _state)
+    [&name](Elite::Host&, Elite::GameState& _state)
     {
       name.clear();
       for (std::size_t index = 0; index < IDENTITY_CLASS_BYTES; ++index)

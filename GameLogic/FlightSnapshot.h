@@ -174,7 +174,7 @@ struct FlightSnapshot
   std::size_t dustCount = 0;
   std::uint8_t dustColor = 0; ///< the pixel value the stardust is drawn in
   std::array<SnapshotBeam, MOST_BEAMS> beams{};
-  std::size_t beamCount = 0;      ///< the beams the frame drew, which the platform hands it (Platform::PublishFlightSnapshot)
+  std::size_t beamCount = 0;      ///< the beams the frame drew, which the platform hands it (Host::PublishFlightSnapshot)
   std::uint8_t sight = NO_SIGHT;  ///< the view's laser type, 0-3, whose sights FinishSpaceViewFrame draws, or NO_SIGHT for none
   std::uint8_t supernovaHeat = 0; ///< while a supernova burns (SupernovaHeat), the sun's radius in rows; else 0
   std::uint8_t galaxy = 0;        ///< the system the planet is: galaxyNumber
@@ -244,7 +244,7 @@ inline constexpr float VIEW_FOCAL = 256.0f;
 [[nodiscard]] float AngleBetween(const Orientation& _a, const Orientation& _b) noexcept;
 
 /// The snapshot of _state as the frame just drawn left it: the player's angles and view, and each active slot. Its sequence,
-/// paced time and continuity are the publisher's (Platform::PublishFlightSnapshot).
+/// paced time and continuity are the publisher's (Host::PublishFlightSnapshot).
 [[nodiscard]] FlightSnapshot TakeFlightSnapshot(const GameState& _state);
 
 /// The snapshot of the title's frame (RunTitle, D64, D65): TakeFlightSnapshot's, marked the title's, with _message on its

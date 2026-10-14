@@ -325,12 +325,12 @@ void DropCargo(GameState& _state, const SpaceObject& _object)
 
 // 8B63: _target destroyed by the player's laser: credited (CreditKill), a missile locked on it unlocked
 // (CheckMissileTargetDestroyed), and exploded (ExplodeObject); then the beams, and the laser's flags cleared.
-void DestroyTarget(GameState& _state, Hardware& _hardware, SpaceObject& _target)
+void DestroyTarget(GameState& _state, Host& _host, SpaceObject& _target)
 {
   (void)CreditKill(_state, _target);
   CheckMissileTargetDestroyed(_state, _target);
-  ExplodeObject(_state, _hardware, _target);
-  DrawLaserBeams(_state, _hardware);
+  ExplodeObject(_state, _host, _target);
+  DrawLaserBeams(_state, _host);
   _state.Data().combat.miningLaserOnAsteroid = 0;
   _state.Data().playerShip.laserFiring = 0;
 }
@@ -341,11 +341,11 @@ void DestroyTarget(GameState& _state, Hardware& _hardware, SpaceObject& _target)
 // damage goes on the aggression, up to FFh, and off the energy, each written and then FFh or nothing over it. Returns whether
 // the target is to be destroyed (DestroyTarget): it ran out of energy and is not indestructible, or is an invaded station; an
 // indestructible one is left at 0, and a station's is a crime of 28h, which cancels the docking computer only when it carries.
-[[nodiscard]] bool HitTarget(GameState& _state, Hardware& _hardware, SpaceObject& _target)
+[[nodiscard]] bool HitTarget(GameState& _state, Host& _host, SpaceObject& _target)
 {
   _target.flags = static_cast<std::uint8_t>(_target.flags | FLAG_HOSTILE);
   StartImpactSound(_state);
-  _hardware.EnableInterrupts();
+  _host.EnableInterrupts();
   const std::uint8_t laser = _state.Data().flight.firingLaserType;
   if (laser == MINING_LASER && TypeOf(_target) == TYPE_ASTEROID)
   {
@@ -355,7 +355,7 @@ void DestroyTarget(GameState& _state, Hardware& _hardware, SpaceObject& _target)
   const bool invasion = _state.Data().commander.thargoidInvasionActive == 1;
   if (IsStation(_target).station)
   {
-    CancelDockingComputer(_state, _hardware);
+    CancelDockingComputer(_state, _host);
     if (invasion)
     {
       damage = static_cast<std::uint8_t>(0u - HalveSigned(static_cast<std::uint8_t>(0u - damage)));
@@ -393,7 +393,7 @@ void DestroyTarget(GameState& _state, Hardware& _hardware, SpaceObject& _target)
   if (status > 0xFF)
   {
     _state.Data().commander.legalStatus = 0xFF;
-    CancelDockingComputer(_state, _hardware);
+    CancelDockingComputer(_state, _host);
   }
   return false;
 }
@@ -457,7 +457,7 @@ std::optional<std::uint8_t> GetViewLaser(const GameState& _state)
   return static_cast<std::uint8_t>((shift >= 8 ? 0 : types >> shift) & 3);
 }
 
-void DrawLaserBeams(GameState& _state, Hardware& _hardware)
+void DrawLaserBeams(GameState& _state, Host& _host)
 {
   // AND AX,303h / ADD AL,7Eh / ADD AH,3Eh: the point the beams end at, its x in the low byte and its row in the high, as DX
   // holds it.
@@ -465,13 +465,16 @@ void DrawLaserBeams(GameState& _state, Hardware& _hardware)
   const std::uint16_t target =
     Join(static_cast<std::uint8_t>(High(scatter) + BEAM_TARGET_ROW), static_cast<std::uint8_t>(Low(scatter) + BEAM_TARGET_X));
   // Each beam watched for the space view, which the renderer draws in its place (ADR-035); no byte of the state is written.
-  const auto beam = [&_state, &_hardware, target](std::uint8_t _x)
+  const auto beam = [&_state, &_host, target](std::uint8_t _x)
   {
-    _hardware.BeginSpaceViewObject();
+    _host.BeginSpaceViewObject();
     DrawBeam(_state, _x, target);
-    _hardware.EndSpaceViewRendered();
-    _hardware.NoteSpaceViewBeam(std::int16_t{_x}, std::int16_t{BEAM_ROW}, std::int16_t{Low(target)}, std::int16_t{High(target)},
-                                std::uint8_t{_state.Data().drawing.drawColor});
+    _host.EndSpaceViewRendered();
+    _host.NoteSpaceViewBeam(SnapshotBeam{.fromX = std::int16_t{_x},
+                                         .fromRow = std::int16_t{BEAM_ROW},
+                                         .toX = std::int16_t{Low(target)},
+                                         .toRow = std::int16_t{High(target)},
+                                         .color = std::uint8_t{_state.Data().drawing.drawColor}});
   };
   const std::uint8_t type = _state.Data().flight.firingLaserType;
   if ((type & 1) != 0)
@@ -512,7 +515,7 @@ void DrawLaserBeams(GameState& _state, Hardware& _hardware)
   beam(BEAM_INNER_RIGHT);
 }
 
-void ExplodeObject(GameState& _state, Hardware& _hardware, SpaceObject& _object)
+void ExplodeObject(GameState& _state, Host& _host, SpaceObject& _object)
 {
   TallyMaskMissionKill(_state, _object);
   const bool drawn = (_object.type & SLOT_DRAWN) != 0;
@@ -523,7 +526,7 @@ void ExplodeObject(GameState& _state, Hardware& _hardware, SpaceObject& _object)
     return;
   }
   StartExplosionSound(_state);
-  _hardware.EnableInterrupts();
+  _host.EnableInterrupts();
   _state.Data().combat.explodingStation = 1;
   if (!IsStation(_object).station)
   {
@@ -658,7 +661,7 @@ CrosshairTarget FindShipInCrosshairs(GameState& _state)
   return target;
 }
 
-void ResolveLaserFire(GameState& _state, Hardware& _hardware)
+void ResolveLaserFire(GameState& _state, Host& _host)
 {
   if (_state.Data().playerShip.laserFiring != 1)
   {
@@ -667,16 +670,16 @@ void ResolveLaserFire(GameState& _state, Hardware& _hardware)
   if (const CrosshairTarget target = FindShipInCrosshairs(_state); target.slot)
   {
     SpaceObject& hit = _state.Slot(*target.slot);
-    if (HitTarget(_state, _hardware, hit))
+    if (HitTarget(_state, _host, hit))
     {
-      DestroyTarget(_state, _hardware, hit);
+      DestroyTarget(_state, _host, hit);
       return;
     }
   }
-  DrawLaserBeams(_state, _hardware);
+  DrawLaserBeams(_state, _host);
   if (StartLaserSound(_state))
   {
-    _hardware.EnableInterrupts();
+    _host.EnableInterrupts();
   }
   _state.Data().combat.miningLaserOnAsteroid = 0;
   _state.Data().playerShip.laserFiring = 0;
@@ -731,7 +734,7 @@ KillCredit CreditKill(GameState& _state, SpaceObject& _slot)
   return credit;
 }
 
-void ApplyEnemyLaserHit(GameState& _state, Hardware& _hardware)
+void ApplyEnemyLaserHit(GameState& _state, Host& _host)
 {
   if (_state.Data().combat.playerHitPending == 0)
   {
@@ -739,7 +742,7 @@ void ApplyEnemyLaserHit(GameState& _state, Hardware& _hardware)
   }
   // StartPlayerHitSound's CLI round its writes, which nothing interrupts in native code, then its STI.
   StartPlayerHitSound(_state);
-  _hardware.EnableInterrupts();
+  _host.EnableInterrupts();
   const SpaceObject& attacker = _state.Slot(_state.Data().combat.playerHitBy);
   if ((attacker.type & SLOT_DRAWN) != 0)
   {
@@ -771,11 +774,14 @@ void ApplyEnemyLaserHit(GameState& _state, Hardware& _hardware)
     }
     _state.Data().drawing.drawColor = ENEMY_BEAM_COLOR;
     // Watched for the space view, which the renderer draws in its place (ADR-035); no byte of the state is written.
-    _hardware.BeginSpaceViewObject();
+    _host.BeginSpaceViewObject();
     DrawClippedLine(_state, static_cast<std::uint16_t>(from.x), static_cast<std::uint16_t>(from.y), edgeX, edgeRow);
-    _hardware.EndSpaceViewRendered();
-    _hardware.NoteSpaceViewBeam(static_cast<std::int16_t>(from.x), static_cast<std::int16_t>(from.y), static_cast<std::int16_t>(edgeX),
-                                static_cast<std::int16_t>(edgeRow), ENEMY_BEAM_COLOR);
+    _host.EndSpaceViewRendered();
+    _host.NoteSpaceViewBeam(SnapshotBeam{.fromX = static_cast<std::int16_t>(from.x),
+                                         .fromRow = static_cast<std::int16_t>(from.y),
+                                         .toX = static_cast<std::int16_t>(edgeX),
+                                         .toRow = static_cast<std::int16_t>(edgeRow),
+                                         .color = ENEMY_BEAM_COLOR});
   }
   _state.Data().combat.playerHitPending = 0;
   // Bit 7 of the attacker's depth byte: behind, so the aft shield takes it. SUB [shield],0Fh; on a borrow, MOV AL,[shield] and 0
@@ -839,7 +845,7 @@ std::optional<std::uint8_t> TakeDamage(GameState& _state, std::uint16_t _damage)
   return stepLength;
 }
 
-void DetonateEnergyBomb(GameState& _state, Hardware& _hardware)
+void DetonateEnergyBomb(GameState& _state, Host& _host)
 {
   if (InSafeZone(_state).inside)
   {
@@ -855,7 +861,7 @@ void DetonateEnergyBomb(GameState& _state, Hardware& _hardware)
     if ((ship.type & SLOT_ACTIVE) != 0 && (ship.flags & FLAG_BLIP_DRAWN) != 0)
     {
       ship.cargo = 0;
-      ExplodeObject(_state, _hardware, ship);
+      ExplodeObject(_state, _host, ship);
     }
     slot = SlotAfter(slot);
   }
@@ -1017,7 +1023,7 @@ std::optional<SlotIndex> LaunchShipFromObject(GameState& _state, const SpaceObje
   return free.slot;
 }
 
-void UpdateMissileAi(GameState& _state, Hardware& _hardware, SpaceObject& _missile)
+void UpdateMissileAi(GameState& _state, Host& _host, SpaceObject& _missile)
 {
   _state.Data().playerShip.incomingMissileAlert = 0;
   _missile.roll = Offset(_missile.roll, MISSILE_SPIN);
@@ -1035,7 +1041,7 @@ void UpdateMissileAi(GameState& _state, Hardware& _hardware, SpaceObject& _missi
     if ((aimed.type & SLOT_ACTIVE) == 0)
     {
       // JMP ExplodeObject: its target is gone.
-      ExplodeObject(_state, _hardware, _missile);
+      ExplodeObject(_state, _host, _missile);
       return;
     }
     const auto difference = [&aimed, &_missile](ObjectWord _axis) { return static_cast<std::int16_t>(aimed.*_axis - _missile.*_axis); };
@@ -1050,14 +1056,14 @@ void UpdateMissileAi(GameState& _state, Hardware& _hardware, SpaceObject& _missi
     return;
   }
   // It explodes, and strikes its target.
-  ExplodeObject(_state, _hardware, _missile);
+  ExplodeObject(_state, _host, _missile);
   const SlotIndex struckSlot = target;
   if (struckSlot == SlotIndex::Player)
   {
     // The player, with TakeDamage's STI when it kills.
     if (TakeDamage(_state, MISSILE_DAMAGE))
     {
-      _hardware.EnableInterrupts();
+      _host.EnableInterrupts();
     }
     return;
   }
@@ -1070,7 +1076,7 @@ void UpdateMissileAi(GameState& _state, Hardware& _hardware, SpaceObject& _missi
     {
       return;
     }
-    ExplodeObject(_state, _hardware, struck);
+    ExplodeObject(_state, _host, struck);
     return;
   }
   if (_state.Data().commander.thargoidInvasionActive != 1)
@@ -1085,7 +1091,7 @@ void UpdateMissileAi(GameState& _state, Hardware& _hardware, SpaceObject& _missi
   {
     return;
   }
-  ExplodeObject(_state, _hardware, struck);
+  ExplodeObject(_state, _host, struck);
   _state.Data().commander.invadedStationDestroyed = 1;
   _state.Data().commander.thargoidInvasionActive = 0;
 }

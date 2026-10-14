@@ -238,7 +238,7 @@ public:
     Answer(Elite::TakeCheckpoint(m_rig.State(), m_rig.Host().Video()), Widen(m_name) + L", the state Play ends in");
   }
 
-  [[nodiscard]] Elite::Platform& Host() noexcept
+  [[nodiscard]] Elite::Host& Host() noexcept
   {
     return m_rig.Host();
   }

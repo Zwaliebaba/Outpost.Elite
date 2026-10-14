@@ -45,31 +45,31 @@ std::uint8_t StartNoiseSweep(GameState& _state, std::uint8_t _stepLength, std::u
 
 } // namespace
 
-void StartMusic(GameState& _state, Hardware& _hardware)
+void StartMusic(GameState& _state, Host& _host)
 {
-  SilenceSpeakerTimer(_hardware);
+  SilenceSpeakerTimer(_host);
   // The gate and data on in the port, but not in speakerPortImage.
-  _hardware.SetSystemControl(static_cast<std::uint8_t>(_state.Data().audio.speakerPortImage | SPEAKER_GATE_AND_DATA));
+  _host.SetSystemControl(static_cast<std::uint8_t>(_state.Data().audio.speakerPortImage | SPEAKER_GATE_AND_DATA));
   _state.Data().audio.noteTicksLeft = 0;
   _state.Data().audio.noteGapTicks = 0;
   _state.Data().audio.musicPointer = 0;
   _state.Data().sound.musicPlaying = 1;
 }
 
-void StopAllSound(GameState& _state, Hardware& _hardware)
+void StopAllSound(GameState& _state, Host& _host)
 {
   // StopSoundEffects clears the effects under CLI and ends with STI.
   StopSoundEffects(_state);
-  _hardware.EnableInterrupts();
+  _host.EnableInterrupts();
   _state.Data().sound.musicPlaying = 0;
   const auto port = static_cast<std::uint8_t>(_state.Data().audio.speakerPortImage & ~SPEAKER_GATE_AND_DATA);
   _state.Data().audio.speakerPortImage = port;
-  _hardware.SetSystemControl(port);
+  _host.SetSystemControl(port);
 }
 
-void SilenceSpeakerTimer(Hardware& _hardware)
+void SilenceSpeakerTimer(Host& _host)
 {
-  _hardware.SetToneDivisor(INAUDIBLE_DIVISOR);
+  _host.Sound().SetTone(INAUDIBLE_DIVISOR);
 }
 
 void StartBeep(GameState& _state)
@@ -90,7 +90,7 @@ void StopSoundEffects(GameState& _state)
   _state.Data().audio.lowBeepTicks = 0;
 }
 
-std::uint8_t EmitNoiseSample(GameState& _state, Hardware& _hardware)
+std::uint8_t EmitNoiseSample(GameState& _state, Host& _host)
 {
   const auto index = static_cast<std::uint16_t>((_state.Data().sound.noiseSourceIndex + 1) & NOISE_SOURCE_MASK);
   const std::uint8_t sample = NOISE_SOURCE[index];
@@ -98,16 +98,16 @@ std::uint8_t EmitNoiseSample(GameState& _state, Hardware& _hardware)
   const auto image = static_cast<std::uint8_t>(_state.Data().audio.speakerPortImage & ~SPEAKER_DATA);
   _state.Data().audio.speakerPortImage = image;
   const auto port = static_cast<std::uint8_t>((sample & SPEAKER_DATA) | image);
-  _hardware.SetSystemControl(port);
+  _host.SetSystemControl(port);
   _state.Data().audio.speakerPortImage = port;
   return port;
 }
 
-std::uint8_t ToggleSpeaker(GameState& _state, Hardware& _hardware)
+std::uint8_t ToggleSpeaker(GameState& _state, Host& _host)
 {
   const auto port = static_cast<std::uint8_t>(_state.Data().audio.speakerPortImage ^ SPEAKER_DATA);
   _state.Data().audio.speakerPortImage = port;
-  _hardware.SetSystemControl(port);
+  _host.SetSystemControl(port);
   return port;
 }
 

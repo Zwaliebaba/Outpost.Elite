@@ -4,7 +4,7 @@
 
 #include "FlightSnapshot.h"
 #include "PlanetLook.h"
-#include "Platform.h"
+#include "Host.h"
 #include "SpaceViewLayers.h"
 
 #include <algorithm>
@@ -140,7 +140,7 @@ static_assert(Engine::SCENE_LAYER_CLEAR == Elite::LAYER_CLEAR, "the game's layer
 }
 
 // The screen's four colours in its graphics mode, 0x00RRGGBB.
-[[nodiscard]] std::array<std::uint32_t, PALETTE_COLORS> PaletteOf(const Elite::Platform& _platform) noexcept
+[[nodiscard]] std::array<std::uint32_t, PALETTE_COLORS> PaletteOf(const Elite::Host& _platform) noexcept
 {
   const std::array<std::uint8_t, 4> colors = _platform.GraphicsColors();
   const auto palette = Elite::CgaPalette();
@@ -285,7 +285,7 @@ void SpaceView::TakeSideDots(const Elite::FlightSnapshot& _snapshot, const std::
   }
 }
 
-void SpaceView::MoveStardust(const Elite::Platform& _platform, const std::array<std::uint32_t, 4>& _palette)
+void SpaceView::MoveStardust(const Elite::Host& _platform, const std::array<std::uint32_t, 4>& _palette)
 {
   m_dust.clear();
   const Elite::FlightSnapshot& latest = _platform.LatestFlightSnapshot();
@@ -390,7 +390,7 @@ void SpaceView::TakeBeams(const Elite::FlightSnapshot& _before, const std::array
   }
 }
 
-const Engine::SceneFrame* SpaceView::Frame(const Elite::Platform& _platform, const Engine::Rect& _view, const Engine::Rect& _window)
+const Engine::SceneFrame* SpaceView::Frame(const Elite::Host& _platform, const Engine::Rect& _view, const Engine::Rect& _window)
 {
   const Elite::FlightSnapshot& latest = _platform.LatestFlightSnapshot();
   if (latest.sequence == 0 || !_platform.SpaceViewShown())
@@ -466,7 +466,7 @@ const Engine::SceneFrame* SpaceView::Frame(const Elite::Platform& _platform, con
   return &m_frame;
 }
 
-void SpaceView::DrawWords(const Elite::Platform& _platform, const Engine::Rect& _place, Engine::Canvas& _canvas)
+void SpaceView::DrawWords(const Elite::Host& _platform, const Engine::Rect& _place, Engine::Canvas& _canvas)
 {
   if (_platform.LatestFlightSnapshot().sequence == 0 || !_platform.SpaceViewShown())
   {

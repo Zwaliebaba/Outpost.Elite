@@ -3,7 +3,7 @@
 
 #include "DirectoryFileStore.h"
 #include "Game.h"
-#include "Platform.h"
+#include "Host.h"
 #include "Reference.h"
 
 #include <memory>
@@ -68,7 +68,7 @@ public:
   }
 
   /// The platform the game runs on.
-  [[nodiscard]] Elite::Platform& Host() noexcept
+  [[nodiscard]] Elite::Host& Host() noexcept
   {
     return m_game->Host();
   }
@@ -97,9 +97,9 @@ public:
   }
 
 private:
-  [[nodiscard]] static Elite::Platform::Desc Desc(const Elite::DosDateTime& _startMoment, bool _mousePresent)
+  [[nodiscard]] static Elite::Host::Desc Desc(const Elite::DosDateTime& _startMoment, bool _mousePresent)
   {
-    Elite::Platform::Desc desc;
+    Elite::Host::Desc desc;
     desc.startMoment = _startMoment;
     desc.mousePresent = _mousePresent;
     return desc;

@@ -4,7 +4,7 @@
 #include "Arithmetic.h"
 #include "Docked.h"
 #include "GameState.h"
-#include "Hardware.h"
+#include "Host.h"
 #include "Text.h"
 
 #include <cstdint>
@@ -155,21 +155,21 @@ std::uint8_t GenerateSystemName(GameState& _state);
 /// FindSystemByName (CS:140D): a name read under the chart (ReadTextLine) and, if a system of the galaxy has it and
 /// it is on the chart, the cursor moved there and ShowNearestSystemDistance; otherwise 'not on map'. Nothing typed is
 /// ShowNearestSystemDistance alone. Waits for keys as a rule (ADR-015).
-[[nodiscard]] Task<void> FindSystemByName(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<void> FindSystemByName(GameState& _state, Host& _host);
 
 /// ShowSystemDataScreen (CS:5CDE): F7's data on the selected system and its description, then the keys until Esc or another F
 /// key (WaitForScreenExitKey), which selects the system at the chart cursor again. Waits for keys as a rule (ADR-015).
-[[nodiscard]] Task<ScreenKey> ShowSystemDataScreen(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<ScreenKey> ShowSystemDataScreen(GameState& _state, Host& _host);
 
 /// ShowGalacticChart (CS:0CAE): F5's chart of the galaxy's 256 systems: the current system and the cursor kept for the galactic
 /// chart, a frame at a time until Esc or another F key closes it, the cursor moved by the steering. D shows the distance to the
 /// system nearest the cursor, F finds one by name, keypad 5 or fire recentres the cursor; a key that closes it selects the system
 /// at the cursor unless the hyperspace countdown runs. Waits for keys as a rule (ADR-015).
-[[nodiscard]] Task<ScreenKey> ShowGalacticChart(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<ScreenKey> ShowGalacticChart(GameState& _state, Host& _host);
 
 /// ShowShortRangeChart (CS:0E52): F6's chart of the systems around the current one, each a disc and a label placed clear of the
 /// others (PlaceChartLabels), run as ShowGalacticChart runs its own.
-[[nodiscard]] Task<ScreenKey> ShowShortRangeChart(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<ScreenKey> ShowShortRangeChart(GameState& _state, Host& _host);
 
 /// DrawChartItems (CS:14C5): the short-range chart's chartItemCount items in colour 3: a label by DrawSmallViewString in ink
 /// FFFFh at its top-left corner, a disc (DrawDisc) at its centre.

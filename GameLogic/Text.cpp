@@ -569,11 +569,11 @@ void PrintTextLines(GameState& _state, std::string_view _texts, std::uint16_t _c
   }
 }
 
-[[nodiscard]] Task<void> ReadTextLine(GameState& _state, Hardware& _hardware, std::span<std::uint8_t> _buffer, std::uint8_t _most,
+[[nodiscard]] Task<void> ReadTextLine(GameState& _state, Host& _host, std::span<std::uint8_t> _buffer, std::uint8_t _most,
                                       std::uint16_t _cell)
 {
   const TypedLine line{_buffer, _cell};
-  ResetKeyboard(_state, _hardware);
+  ResetKeyboard(_state, _host);
   _state.Data().drawing.textPaperPattern = 0;
   _state.Data().text.inputCharsLeft = _most;
   std::uint16_t length = 0;
@@ -587,8 +587,8 @@ void PrintTextLines(GameState& _state, std::string_view _texts, std::uint16_t _c
       RestartInputBlink(_state, line, length);
       continue;
     }
-    co_await WaitForTimerTick(_state, _hardware);
-    const KeyPress key = GetKey(_state, _hardware);
+    co_await WaitForTimerTick(_state, _host);
+    const KeyPress key = GetKey(_state, _host);
     if (key.scanCode == 0)
     {
       continue;

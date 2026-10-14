@@ -2,7 +2,7 @@
 #pragma once
 
 #include "GameState.h"
-#include "Hardware.h"
+#include "Host.h"
 #include "Maths.h"
 #include "SpaceObject.h"
 #include "Ships.h"
@@ -154,7 +154,7 @@ Vector TransformToView(GameState& _state, Vector _position);
 /// TransformAndDrawObjects (CS:3D25): the player's pitch, yaw and roll into rotation pairs 0-2; every one of shipSlotCount slots
 /// classified and transformed (ClassifyObject), from the slot each leaves DI on; then, from the farthest in, the visible objects
 /// drawn (DrawFarthestObject): the sun or the planet, the station as a disc, a dot, or a blueprint.
-void TransformAndDrawObjects(GameState& _state, Hardware& _hardware);
+void TransformAndDrawObjects(GameState& _state, Host& _host);
 
 /// What SizePlanet and SizeSun scale to an object's distance, its disc's radius in rows at 256 of its view units off (MOV DX,32h
 /// and MOV DX,64h), which makes the planet a sphere of 50 x 256 units and the sun one of 100 x 256 (ADR-035).
@@ -163,7 +163,7 @@ inline constexpr std::uint16_t SUN_DISC_SCALE = 0x64;
 
 /// DrawSunOrPlanet (CS:3F4F): the planet in _slot sized (SizePlanet), with its altitude, or the sun, with the cabin temperature, its
 /// fringe, fuel scooping, death by heat and a supernova's heat; then, in front of the view, its disc.
-void DrawSunOrPlanet(GameState& _state, Hardware& _hardware, SpaceObject& _slot);
+void DrawSunOrPlanet(GameState& _state, Host& _host, SpaceObject& _slot);
 
 /// DrawDistantStation (CS:45C6): the station in _slot as a disc in colour 3 at its compass position, +20h/+22h/+24h, projected
 /// (ProjectToScreen): radius 7 rows when its depth byte +25h is below 14h, smaller further off, and none from 21h to A5h.

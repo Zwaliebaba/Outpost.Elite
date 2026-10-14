@@ -17,7 +17,7 @@ namespace Elite
 
 class Cga;
 class FileStore;
-class Platform;
+class Host;
 enum class StopReason : std::uint8_t;
 
 class GameState;
@@ -132,13 +132,13 @@ class ReplayPlayer
 {
 public:
   /// A player for steps that copy no file.
-  ReplayPlayer(Platform& _platform, const GameState& _state) noexcept;
+  ReplayPlayer(Host& _platform, const GameState& _state) noexcept;
 
   /// A player whose file steps copy from _sources, the directory the replay is in, into _files, the store the
   /// machine's DOS was given.
-  ReplayPlayer(Platform& _platform, const GameState& _state, FileStore& _files, std::filesystem::path _sources);
+  ReplayPlayer(Host& _platform, const GameState& _state, FileStore& _files, std::filesystem::path _sources);
 
-  /// Plays one step: a wait or an end runs the machine on to the next moment (Platform::RunUntil, ReplayTime),
+  /// Plays one step: a wait or an end runs the machine on to the next moment (Host::RunUntil, ReplayTime),
   /// a key queues its codes on the keyboard, a digest sets _checkpoint to TakeCheckpoint, a file step copies its
   /// file into the store. A shot does nothing here; writing pictures is the caller's. Returns why the run
   /// stopped, StopReason::Reached if it did not; ExpectedStop says which the step must return. A digest after
@@ -156,7 +156,7 @@ public:
 private:
   void CopyFile(const Step& _step);
 
-  Platform& m_platform;
+  Host& m_platform;
   const GameState& m_state;
   FileStore* m_files = nullptr;
   std::filesystem::path m_sources;

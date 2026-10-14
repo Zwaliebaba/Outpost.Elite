@@ -4,7 +4,7 @@
 
 #include "FileStore.h"
 #include "Outcome.h"
-#include "Platform.h"
+#include "Host.h"
 #include "StateDigest.h"
 
 #include <algorithm>
@@ -399,14 +399,14 @@ StopReason ExpectedStop(const Step& _step) noexcept
   return _step.kind == StepKind::End ? StopReason::Terminated : StopReason::Reached;
 }
 
-ReplayPlayer::ReplayPlayer(Platform& _platform, const GameState& _state) noexcept
+ReplayPlayer::ReplayPlayer(Host& _platform, const GameState& _state) noexcept
   : m_platform(_platform),
     m_state(_state),
     m_start(_platform.Clock())
 {
 }
 
-ReplayPlayer::ReplayPlayer(Platform& _platform, const GameState& _state, FileStore& _files, std::filesystem::path _sources)
+ReplayPlayer::ReplayPlayer(Host& _platform, const GameState& _state, FileStore& _files, std::filesystem::path _sources)
   : m_platform(_platform),
     m_state(_state),
     m_files(&_files),

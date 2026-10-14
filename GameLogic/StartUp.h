@@ -2,8 +2,7 @@
 #pragma once
 
 #include "GameState.h"
-#include "Hardware.h"
-#include "NativeEntry.h"
+#include "Host.h"
 #include "SpaceObject.h"
 
 #include <array>
@@ -15,10 +14,7 @@ namespace Elite
 
 // The reference's start-up routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): start-up and the way out to DOS. The copy
 // protection, which D5 closes (ADR-001), is not ported. Each takes values and gives values back, on the GameState and, where it drives a device, the
-// devices (ADR-014). Start also has its entry, at the end, where DOS starts the program (ADR-010).
-
-/// The program's entry (CS:0000), where DOS starts it: Start, for InstallNativeRoutines to make the platform's program.
-[[nodiscard]] Task<void> StartEntry(Guest& _guest);
+// devices (ADR-014). Start is the program: the host runs it (Game).
 
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState and the devices (ADR-014) ──
 
@@ -27,30 +23,30 @@ namespace Elite
 /// (HandleDiskRequest): the interrupts put back, and the request made with the game's own critical-error handler on int 24h, after which it
 /// starts again. Returns when the program ends, once a request to leave has wiped the program: a quit (D80). Waits
 /// in GameLoop.
-[[nodiscard]] Task<void> Start(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<void> Start(GameState& _state, Host& _host);
 
 /// GameLoop (CS:7D30): RunTitleAndDocked, then RunFlight, and the title again after a death; for ever, but that the disc menu
 /// leaves it for the disk (LeaveGameLoopForDisk), whose return addresses the original drops so that a RET returns into Start.
 /// Waits as a rule (ADR-015).
-[[nodiscard]] Task<void> GameLoop(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<void> GameLoop(GameState& _state, Host& _host);
 
 /// InstallDivideAndKeyboardInterrupts (CS:0105): with interrupts off, the game's int 0 and int 9 handlers installed in the
 /// BIOS's place, int 8's segment rewritten; then interrupts on, and ResetKeyboard. The original first keeps the BIOS's two
 /// in the data segment, which native code does not need (RestoreDivideAndKeyboardInterrupts).
-void InstallDivideAndKeyboardInterrupts(GameState& _state, Hardware& _hardware);
+void InstallDivideAndKeyboardInterrupts(GameState& _state, Host& _host);
 
 /// RestoreDivideAndKeyboardInterrupts (CS:0148): with interrupts off, the BIOS's int 9 and int 0 handlers put back
-/// (Hardware::BiosInterruptVector), where the original puts back what InstallDivideAndKeyboardInterrupts kept; then interrupts
+/// (Host::BiosInterruptVector), where the original puts back what InstallDivideAndKeyboardInterrupts kept; then interrupts
 /// on.
-void RestoreDivideAndKeyboardInterrupts(Hardware& _hardware);
+void RestoreDivideAndKeyboardInterrupts(Host& _host);
 
-/// CheckCheatArgument (CS:02A5): cheatEnabled=1 when the game was started with the cheat on (Hardware::CheatRequested, D80), 0
+/// CheckCheatArgument (CS:02A5): cheatEnabled=1 when the game was started with the cheat on (Host::CheatRequested, D80), 0
 /// otherwise.
-void CheckCheatArgument(GameState& _state, const Hardware& _hardware);
+void CheckCheatArgument(GameState& _state, const Host& _host);
 
 /// WipeProgram (CS:0554): interrupts off. The original then fills CS:0564-8F30 with the code segment's low byte, which nothing
 /// reads: the code segment is not the game's memory.
-void WipeProgram(Hardware& _hardware);
+void WipeProgram(Host& _host);
 
 /// StartNewGame (CS:4671): the start-up commander copied back over the commander, a byte at a time, going up as REP MOVSB does (the
 /// direction flag is clear wherever the game calls it, change 3c), and the per-game state reset.
@@ -58,11 +54,6 @@ void StartNewGame(GameState& _state);
 
 /// ShowCredits (CS:8F02): the space view's buffer cleared (ClearDrawBuffer), the
 /// nine lines of creditsScreenText drawn in it, presented (FinishSpaceViewFrame), then 3000 timer ticks, about 3 s. Waits.
-[[nodiscard]] Task<void> ShowCredits(GameState& _state, Hardware& _hardware);
-
-// ── The entry of the program ──
-
-/// Start. The program ends when it returns. Waits.
-[[nodiscard]] Task<void> StartEntry(Guest& _guest);
+[[nodiscard]] Task<void> ShowCredits(GameState& _state, Host& _host);
 
 } // namespace Elite

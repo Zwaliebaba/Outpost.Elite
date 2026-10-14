@@ -2,7 +2,7 @@
 #pragma once
 
 #include "GameState.h"
-#include "Hardware.h"
+#include "Host.h"
 #include "Maths.h"
 #include "SpaceObject.h"
 #include "Ships.h"
@@ -22,7 +22,7 @@ namespace Elite
 /// clear wherever the game calls it, change 3c), then every active slot of shipSlotCount counted, debris apart, and run by its class's
 /// handler; maskingBackgroundColor cleared; then, with fewer than 10 active objects and no more than objectSlotCount, the mask mission's
 /// ships, an invasion's Thargoids, or the government's spawns.
-void UpdateObjectsAndSpawn(GameState& _state, Hardware& _hardware);
+void UpdateObjectsAndSpawn(GameState& _state, Host& _host);
 
 /// UpdateStationAi (CS:5595): class 1: the station at _station spins; while it is hostile and the government is no anarchy, it looks for an
 /// offender out of the box it guards and launches police, shuttles or traders at one (copies of itself); then it answers missiles aimed at

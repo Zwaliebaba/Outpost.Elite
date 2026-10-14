@@ -25,20 +25,20 @@ constexpr std::uint8_t FLAG_MASKING_DEVICE = 0x40;
 // The byte _member names, set to _value on the twin.
 template <typename Struct> void SetByte(TwinRig& _rig, DataByte<Struct> _member, std::uint8_t _value)
 {
-  _rig.Both([_member, _value](Elite::Platform&, Elite::GameState& _state) { DataByteIn(_state, _member) = _value; });
+  _rig.Both([_member, _value](Elite::Host&, Elite::GameState& _state) { DataByteIn(_state, _member) = _value; });
 }
 
 // The cash, in tenths of credits, on the twin.
 void SetCredits(TwinRig& _rig, std::uint32_t _tenths)
 {
-  _rig.Both([_tenths](Elite::Platform&, Elite::GameState& _state) { _state.Data().commander.creditsTenths = _tenths; });
+  _rig.Both([_tenths](Elite::Host&, Elite::GameState& _state) { _state.Data().commander.creditsTenths = _tenths; });
 }
 
 // The byte _member names, as the twin holds it.
 template <typename Struct> [[nodiscard]] std::uint8_t TwinByte(TwinRig& _rig, DataByte<Struct> _member)
 {
   std::uint8_t value = 0;
-  _rig.Both([&value, _member](Elite::Platform&, Elite::GameState& _state) { value = DataByteIn(_state, _member); });
+  _rig.Both([&value, _member](Elite::Host&, Elite::GameState& _state) { value = DataByteIn(_state, _member); });
   return value;
 }
 
@@ -46,7 +46,7 @@ template <typename Struct> [[nodiscard]] std::uint8_t TwinByte(TwinRig& _rig, Da
 [[nodiscard]] std::uint8_t TwinHeld(TwinRig& _rig, std::uint8_t _commodity)
 {
   std::uint8_t value = 0;
-  _rig.Both([&value, _commodity](Elite::Platform&, Elite::GameState& _state)
+  _rig.Both([&value, _commodity](Elite::Host&, Elite::GameState& _state)
             { value = _state.Data().commander.cargoHold.lots[_commodity].held; });
   return value;
 }
@@ -55,7 +55,7 @@ template <typename Struct> [[nodiscard]] std::uint8_t TwinByte(TwinRig& _rig, Da
 [[nodiscard]] Elite::Message TwinMessage(TwinRig& _rig)
 {
   Elite::Message message = Elite::Message::None;
-  _rig.Both([&message](Elite::Platform&, Elite::GameState& _state) { message = _state.Data().messages.messagePointer; });
+  _rig.Both([&message](Elite::Host&, Elite::GameState& _state) { message = _state.Data().messages.messagePointer; });
   return message;
 }
 
@@ -190,7 +190,7 @@ public:
     TwinRig rig("TwinEquipmentMenu");
     rig.Play("key space; wait 4");
     SetCredits(rig, 1000000);
-    rig.Both([](Elite::Platform&, Elite::GameState& _state) { _state.Data().commander.currentSystem.techLevel = 9; }); // all 14 items
+    rig.Both([](Elite::Host&, Elite::GameState& _state) { _state.Data().commander.currentSystem.techLevel = 9; }); // all 14 items
     SetByte(rig, &Commander::fuel, 100);
     SetByte(rig, &Commander::missionNumber, 1);
     rig.Play("key F4; wait 1\nkey b; wait 0.2"); // no fuel in the first mission

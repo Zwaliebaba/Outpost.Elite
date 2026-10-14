@@ -148,53 +148,53 @@ void RampAxis(std::uint8_t _key, std::uint8_t& _lastKey, std::uint8_t& _ramp)
 
 } // namespace
 
-void KeyboardInterrupt(GameState& _state, Hardware& _hardware)
+void KeyboardInterrupt(GameState& _state, Host& _host)
 {
-  ReadScanCode(_state, _hardware);
+  ReadScanCode(_state, _host);
 }
 
-bool IsMouseDriverInstalled(Hardware& _hardware)
+bool IsMouseDriverInstalled(Host& _host)
 {
-  return _hardware.MouseDevice().Present();
+  return _host.MouseDevice().Present();
 }
 
-[[nodiscard]] Task<void> WaitForKeyPress(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<void> WaitForKeyPress(GameState& _state, Host& _host)
 {
   // GetKey until a key comes, the JE back to the entry at 6DECh.
   for (;;)
   {
-    const KeyPress key = GetKey(_state, _hardware);
+    const KeyPress key = GetKey(_state, _host);
     if (key.scanCode != 0)
     {
       co_return;
     }
-    co_await AwaitNextKey(_hardware, key);
+    co_await AwaitNextKey(_host, key);
   }
 }
 
-[[nodiscard]] Task<void> AwaitNextKey(Hardware& _hardware, const KeyPress& _key)
+[[nodiscard]] Task<void> AwaitNextKey(Host& _host, const KeyPress& _key)
 {
   if (_key.taken)
   {
-    _hardware.Spin();
+    _host.Spin();
     co_return;
   }
-  co_await _hardware.Wait();
+  co_await _host.Wait();
 }
 
-Steering ReadSteering(GameState& _state, Hardware& _hardware)
+Steering ReadSteering(GameState& _state, Host& _host)
 {
   const std::uint8_t device = _state.Data().saveLoad.inputDevice;
   if (device == KEYBOARD_DEVICE)
   {
     return ApplyKeyboardRates(_state, ReadKeyboardSteering(_state));
   }
-  return ReadMouseSteering(_state, _hardware);
+  return ReadMouseSteering(_state, _host);
 }
 
-KeyPress GetKey(GameState& _state, Hardware& _hardware)
+KeyPress GetKey(GameState& _state, Host& _host)
 {
-  _hardware.DisableInterrupts();
+  _host.DisableInterrupts();
   KeyPress key{false, 0, false};
   const std::uint8_t count = _state.Data().input.keyBufferCount;
   if (count != 0)
@@ -205,13 +205,13 @@ KeyPress GetKey(GameState& _state, Hardware& _hardware)
     _state.Data().input.keyBufferCount = static_cast<std::uint8_t>(count - 1);
     key = KeyPress{true, static_cast<std::uint8_t>(code & ~SHIFT_BIT), (code & SHIFT_BIT) != 0};
   }
-  _hardware.EnableInterrupts();
+  _host.EnableInterrupts();
   return key;
 }
 
-void ResetKeyboard(GameState& _state, Hardware& _hardware)
+void ResetKeyboard(GameState& _state, Host& _host)
 {
-  _hardware.DisableInterrupts();
+  _host.DisableInterrupts();
   // REP STOSW: every key released, two at a time.
   for (std::uint8_t& key : KeyDown(_state))
   {
@@ -221,12 +221,12 @@ void ResetKeyboard(GameState& _state, Hardware& _hardware)
   _state.Data().input.keyBufferWrite = 0;
   _state.Data().input.keyBufferRead = 0;
   _state.Data().playerShip.rollRate = 0;
-  _hardware.EnableInterrupts();
+  _host.EnableInterrupts();
 }
 
-void ReadScanCode(GameState& _state, Hardware& _hardware)
+void ReadScanCode(GameState& _state, Host& _host)
 {
-  const KeyEvent event = _hardware.TakeKey();
+  const KeyEvent event = _host.TakeKey();
   const auto key = static_cast<std::uint8_t>(event.key & ~SHIFT_BIT);
   if (!event.down)
   {
@@ -257,17 +257,17 @@ void ReadScanCode(GameState& _state, Hardware& _hardware)
       _state.Data().input.keyBufferCount = static_cast<std::uint8_t>(count + 1);
     }
   }
-  _hardware.EndOfInterrupt();
+  _host.EndOfInterrupt();
 }
 
-bool ReadFireButton(const GameState& _state, Hardware& _hardware)
+bool ReadFireButton(const GameState& _state, Host& _host)
 {
   const std::uint8_t device = _state.Data().saveLoad.inputDevice;
   if (device == KEYBOARD_DEVICE)
   {
     return Pressed(_state.Data().keyboard.keyDown[Keys::SPACE]);
   }
-  return (_hardware.MouseDevice().Buttons() & MOUSE_LEFT_AND_RIGHT) != 0;
+  return (_host.MouseDevice().Buttons() & MOUSE_LEFT_AND_RIGHT) != 0;
 }
 
 Steering ReadKeyboardSteering(GameState& _state)
@@ -296,9 +296,9 @@ Steering ReadKeyboardSteering(GameState& _state)
   return Steering{_state.Data().input.keyboardRollRamp, Negate(_state.Data().input.keyboardPitchRamp)};
 }
 
-Steering ReadMouseSteering(GameState& _state, Hardware& _hardware)
+Steering ReadMouseSteering(GameState& _state, Host& _host)
 {
-  const MouseMotion motion = _hardware.MouseDevice().Motion();
+  const MouseMotion motion = _host.MouseDevice().Motion();
   const std::uint8_t rollStep = MouseAxis(motion.acrossMickeys);
   const std::uint8_t pitchStep = MouseAxis(motion.downMickeys);
   // NEG AH / SAR AL,1 / SAR AH,1: half of each step, the pitch negated, added to the rates the last frame left.
@@ -306,13 +306,13 @@ Steering ReadMouseSteering(GameState& _state, Hardware& _hardware)
                   MouseRate(Negate(pitchStep), High(_state.Data().playerShip.rollRate))};
 }
 
-void ResetMouseIfSelected(const GameState& _state, Hardware& _hardware)
+void ResetMouseIfSelected(const GameState& _state, Host& _host)
 {
   if (_state.Data().saveLoad.inputDevice != MOUSE_DEVICE)
   {
     return;
   }
-  _hardware.MouseDevice().Reset();
+  _host.MouseDevice().Reset();
 }
 
 Steering ApplyReverseControls(const GameState& _state, Steering _steering)
@@ -328,28 +328,6 @@ Steering ApplyReverseControls(const GameState& _state, Steering _steering)
     steering.pitch = Negate(steering.pitch);
   }
   return steering;
-}
-
-// ── The entry of the keyboard's interrupt handler ──
-
-void KeyboardInterruptEntry(Guest& _guest)
-{
-  // AX, DS and ES pushed round MOV ES,B800h / MOV DS,data and the call, and popped: every register is kept.
-  KeyboardInterrupt(_guest.State(), _guest.Devices());
-}
-
-namespace
-{
-
-constexpr std::array ENTRIES = {
-  NativeEntry{EntryKind::KeyboardHandler, &KeyboardInterruptEntry}, // CS:0201
-};
-
-} // namespace
-
-std::span<const NativeEntry> InputEntries() noexcept
-{
-  return ENTRIES;
 }
 
 } // namespace Elite

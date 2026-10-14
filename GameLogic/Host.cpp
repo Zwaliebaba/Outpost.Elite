@@ -1,6 +1,6 @@
 #include "pch.h"
 
-#include "Platform.h"
+#include "Host.h"
 
 #include "GameState.h"
 
@@ -35,7 +35,7 @@ struct ProgramStopped
 
 } // namespace
 
-Platform::Platform(GameState& _state, FileStore& _files, const Desc& _desc)
+Host::Host(GameState& _state, FileStore& _files, const Desc& _desc)
   : m_state(_state),
     m_speaker(m_clock),
     m_events(m_clock),
@@ -48,32 +48,32 @@ Platform::Platform(GameState& _state, FileStore& _files, const Desc& _desc)
 {
 }
 
-Platform::~Platform() = default;
+Host::~Host() = default;
 
 // ── The program ──
 
-void Platform::SetEntry(ProgramRoutine _routine)
+void Host::SetEntry(ProgramRoutine _routine)
 {
   if (m_entry.routine)
   {
-    throw std::logic_error("Platform: the program has a start routine already");
+    throw std::logic_error("Host: the program has a start routine already");
   }
   m_entry.routine = std::move(_routine);
 }
 
-void Platform::SetGameHandler(Irq _irq, NativeRoutine _routine)
+void Host::SetGameHandler(Irq _irq, NativeRoutine _routine)
 {
   HookedRoutine& handler = m_gameHandlers[static_cast<std::size_t>(_irq)];
   if (handler.routine)
   {
-    throw std::logic_error("Platform: two native routines at one entry");
+    throw std::logic_error("Host: two native routines at one entry");
   }
   handler.routine = std::move(_routine);
 }
 
 // ── Running ──
 
-StopReason Platform::RunUntil(Milliseconds _time)
+StopReason Host::RunUntil(Milliseconds _time)
 {
   m_runLimit = _time;
   while (m_clock < _time)
@@ -89,14 +89,14 @@ StopReason Platform::RunUntil(Milliseconds _time)
     }
     if (!m_suspended)
     {
-      throw std::logic_error("Platform: the program's routine ended with no reason to stop");
+      throw std::logic_error("Host: the program's routine ended with no reason to stop");
     }
   }
   m_runLimit = NO_EVENT;
   return StopReason::Reached;
 }
 
-StopReason Platform::Stopped() const noexcept
+StopReason Host::Stopped() const noexcept
 {
   if (m_terminated)
     return StopReason::Terminated;
@@ -108,13 +108,13 @@ StopReason Platform::Stopped() const noexcept
 // The program's coroutine started, or resumed in the wait it is suspended in, until it suspends again or ends. Its end is
 // the program's: its far return to PSP:0000 is DOS's int 20h; a stop on the way ends it by ProgramStopped; any other exception
 // is thrown on to the host.
-void Platform::Resume()
+void Host::Resume()
 {
   if (!m_program)
   {
     if (!m_entry.routine)
     {
-      throw std::logic_error("Platform: no program to run");
+      throw std::logic_error("Host: no program to run");
     }
     ++m_entry.calls;
     m_program.emplace(m_entry.routine());
@@ -138,30 +138,30 @@ void Platform::Resume()
     // The program stopped inside a service or an interrupt, its reason recorded on the way; RunUntil reports it.
     if (Stopped() == StopReason::Reached)
     {
-      throw std::logic_error("Platform: the program stopped with no reason recorded");
+      throw std::logic_error("Host: the program stopped with no reason recorded");
     }
   }
 }
 
 // ── Interrupts ──
 
-void Platform::EnableInterrupts()
+void Host::EnableInterrupts()
 {
   m_flags = static_cast<std::uint16_t>(m_flags | FLAG_INTERRUPT);
   TakeDueInterrupts();
 }
 
-void Platform::DisableInterrupts() noexcept
+void Host::DisableInterrupts() noexcept
 {
   m_flags = static_cast<std::uint16_t>(m_flags & ~FLAG_INTERRUPT);
 }
 
-bool Platform::InterruptsEnabled() const noexcept
+bool Host::InterruptsEnabled() const noexcept
 {
   return (m_flags & FLAG_INTERRUPT) != 0;
 }
 
-void Platform::TakeDueInterrupts()
+void Host::TakeDueInterrupts()
 {
   while (InterruptsEnabled() && m_events.InterruptPending())
   {
@@ -176,7 +176,19 @@ void Platform::TakeDueInterrupts()
   }
 }
 
-void Platform::SetSystemControl(std::uint8_t _value)
+void Host::SetTickRunning(bool _running)
+{
+  m_events.SetTickRunning(_running);
+  TakeDueInterrupts();
+}
+
+void Host::EndOfInterrupt()
+{
+  m_events.EndOfInterrupt();
+  TakeDueInterrupts();
+}
+
+void Host::SetSystemControl(std::uint8_t _value)
 {
   const auto changed = static_cast<std::uint8_t>(m_systemControl ^ _value);
   m_systemControl = _value;
@@ -187,7 +199,7 @@ void Platform::SetSystemControl(std::uint8_t _value)
 }
 
 // As the 8088 enters a handler: IF cleared, the handler its vector names run, and its IRET putting the flags back as they were.
-void Platform::Interrupt(Irq _irq)
+void Host::Interrupt(Irq _irq)
 {
   const Irq irq = _irq;
   const std::uint16_t flags = m_flags;
@@ -209,14 +221,14 @@ void Platform::Interrupt(Irq _irq)
     HookedRoutine& handler = m_gameHandlers[static_cast<std::size_t>(irq)];
     if (!handler.routine)
     {
-      throw std::logic_error("Platform: an interrupt to code no native routine stands in for");
+      throw std::logic_error("Host: an interrupt to code no native routine stands in for");
     }
     ++handler.calls;
     handler.routine();
     break;
   }
   case IrqHandler::Stray:
-    throw std::logic_error("Platform: an interrupt to code no native routine stands in for");
+    throw std::logic_error("Host: an interrupt to code no native routine stands in for");
   }
   m_flags = flags;
 }
@@ -224,13 +236,13 @@ void Platform::Interrupt(Irq _irq)
 // ── The host's defaults, where the game has no handler of its own ──
 
 // A tick that came before the game stopped it: the interrupt ended.
-void Platform::RunBiosTimerHandler()
+void Host::RunBiosTimerHandler()
 {
   m_events.EndOfInterrupt();
 }
 
 // A key before the game's handler is in place, or after it is taken out: dropped, and the interrupt ended.
-void Platform::RunBiosKeyboardHandler()
+void Host::RunBiosKeyboardHandler()
 {
   (void)m_events.TakeKey();
   m_events.EndOfInterrupt();
@@ -238,7 +250,7 @@ void Platform::RunBiosKeyboardHandler()
 
 // ── Paced time ──
 
-void Platform::Idle(Milliseconds _limit)
+void Host::Idle(Milliseconds _limit)
 {
   Milliseconds next = std::min({m_events.NextEventAt(), m_cga.NextStatusChangeAt(), _limit});
   if (next <= m_clock)
@@ -250,13 +262,13 @@ void Platform::Idle(Milliseconds _limit)
   m_events.Advance();
 }
 
-Platform::RunAwaiter Platform::Wait()
+Host::RunAwaiter Host::Wait()
 {
   Idle(m_runLimit);
   return RunAwaiter(*this);
 }
 
-void Platform::Spin()
+void Host::Spin()
 {
   // The clock stands still, below the run's end, where the last wait left it.
   ++m_stepsSinceIdle;
@@ -264,7 +276,7 @@ void Platform::Spin()
 }
 
 // After a wait or a spin, and the game resumed if the wait reached the run's end: the interrupts now due.
-void Platform::EndTurn()
+void Host::EndTurn()
 {
   TakeDueInterrupts();
   if (Stopped() != StopReason::Reached)
@@ -273,7 +285,7 @@ void Platform::EndTurn()
   }
 }
 
-Task<void> Platform::Spend(Milliseconds _duration)
+Task<void> Host::Spend(Milliseconds _duration)
 {
   const Milliseconds until = m_clock + _duration;
   while (m_clock < until)
@@ -288,14 +300,14 @@ Task<void> Platform::Spend(Milliseconds _duration)
   }
 }
 
-FileStamp Platform::FileStampNow() const
+FileStamp Host::FileStampNow() const
 {
   return StampOf(MomentAfter(m_startMoment, m_clock / MILLISECONDS_PER_CENTISECOND));
 }
 
 // ── The picture ──
 
-void Platform::PublishFlightSnapshot(const FlightSnapshot& _snapshot, bool _continues) noexcept
+void Host::PublishFlightSnapshot(const FlightSnapshot& _snapshot, bool _continues) noexcept
 {
   m_flightSnapshots[0] = m_flightSnapshots[1];
   FlightSnapshot& latest = m_flightSnapshots[1];
@@ -315,7 +327,7 @@ void Platform::PublishFlightSnapshot(const FlightSnapshot& _snapshot, bool _cont
   }
 }
 
-void Platform::PublishSpaceViewPicture(const FlightSnapshot& _snapshot) noexcept
+void Host::PublishSpaceViewPicture(const FlightSnapshot& _snapshot) noexcept
 {
   m_flightSnapshots[0] = m_flightSnapshots[1];
   FlightSnapshot& latest = m_flightSnapshots[1];
@@ -328,7 +340,7 @@ void Platform::PublishSpaceViewPicture(const FlightSnapshot& _snapshot) noexcept
   m_spaceView.FinishPicture(m_state);
 }
 
-void Platform::Render(FrameImage& _image) const noexcept
+void Host::Render(FrameImage& _image) const noexcept
 {
   m_cga.Render(m_state.VideoBytes(), _image);
 }

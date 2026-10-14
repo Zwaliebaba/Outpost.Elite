@@ -162,9 +162,9 @@ void AddCarried(std::uint16_t& _low, std::uint8_t& _high, std::uint16_t _value)
 
 } // namespace
 
-void ArriveInSystem(GameState& _state, Hardware& _hardware)
+void ArriveInSystem(GameState& _state, Host& _host)
 {
-  (void)SetUpLocalSpace(_state, _hardware);
+  (void)SetUpLocalSpace(_state, _host);
   if (_state.Data().commander.witchspaceCountdown != 0)
   {
     return;
@@ -236,7 +236,7 @@ MassLock IsMassLocked(GameState& _state)
   return lock;
 }
 
-[[nodiscard]] Task<void> CompleteHyperspaceJump(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<void> CompleteHyperspaceJump(GameState& _state, Host& _host)
 {
   (void)EraseCompassAndBlips(_state);
   _state.Data().messages.messagePointer = Message::HyperspaceEngaged;
@@ -303,8 +303,8 @@ MassLock IsMassLocked(GameState& _state)
   }
 
   // The tunnel's frames end with FinishSpaceViewFrame's CLD, so the arrival copies forwards.
-  co_await PlayHyperspaceTunnel(_state, _hardware);
-  ArriveInSystem(_state, _hardware);
+  co_await PlayHyperspaceTunnel(_state, _host);
+  ArriveInSystem(_state, _host);
   UpdateMissionSchedule(_state);
   _state.Data().commander.supernovaHeat = 0;
   _state.Data().commander.supernovaFrames = 0;
@@ -353,16 +353,16 @@ void DrawHyperspaceRings(GameState& _state)
   }
 }
 
-[[nodiscard]] Task<void> PlayHyperspaceTunnel(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<void> PlayHyperspaceTunnel(GameState& _state, Host& _host)
 {
   // PUSH CX / POP CX keep the frames left round the frame's work.
   for (std::uint16_t frames = HYPERSPACE_TUNNEL_FRAMES;;)
   {
     UpdateMessageLine(_state);
     DrawHyperspaceRings(_state);
-    co_await FinishSpaceViewFrame(_state, _hardware);
+    co_await FinishSpaceViewFrame(_state, _host);
     // The frame as the game drew it, for a renderer that shows it in the cockpit (D68).
-    _hardware.PublishSpaceViewPicture(WithoutScene(TakeFlightSnapshot(_state)));
+    _host.PublishSpaceViewPicture(WithoutScene(TakeFlightSnapshot(_state)));
     if (--frames == 0)
     {
       co_return;
@@ -422,7 +422,7 @@ void LatchHyperspaceTarget(GameState& _state)
   _state.Data().hyperspace.hyperspaceTarget = _state.Data().commander.selectedSystem;
 }
 
-[[nodiscard]] Task<bool> TickHyperspaceCountdown(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<bool> TickHyperspaceCountdown(GameState& _state, Host& _host)
 {
   if (_state.Data().jump.galacticDriveReadyFrames != 0)
   {
@@ -444,7 +444,7 @@ void LatchHyperspaceTarget(GameState& _state)
   {
     co_return false;
   }
-  co_await CompleteHyperspaceJump(_state, _hardware);
+  co_await CompleteHyperspaceJump(_state, _host);
   co_return true;
 }
 

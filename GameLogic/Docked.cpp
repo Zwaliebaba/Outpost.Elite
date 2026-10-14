@@ -140,16 +140,16 @@ constexpr std::uint16_t TITLE_ROLL_STEP = 0x1E;
 constexpr std::uint8_t TITLE_SHIP_FLAGS = 2;
 
 // CALL GetKey; JE back to it, de-assembled: GetKey until a key comes (ADR-039). Returns the key.
-[[nodiscard]] Task<KeyPress> WaitForKey(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<KeyPress> WaitForKey(GameState& _state, Host& _host)
 {
   for (;;)
   {
-    const KeyPress key = GetKey(_state, _hardware);
+    const KeyPress key = GetKey(_state, _host);
     if (key.scanCode != 0)
     {
       co_return key;
     }
-    co_await AwaitNextKey(_hardware, key);
+    co_await AwaitNextKey(_host, key);
   }
 }
 
@@ -236,9 +236,9 @@ void FormatQuantity(std::uint16_t _quantity, std::span<std::uint8_t> _text)
 // What both trade screens start with: the frame from the descriptor _frame and its title, the two lines of help _help, the
 // header in its attribute, the rows' attribute, and the prices; cargoRowPointer on the first product, 0.
 template <typename Frame>
-void DrawTradeScreenHeader(GameState& _state, Hardware& _hardware, const Frame& _frame, std::span<const std::string_view> _help)
+void DrawTradeScreenHeader(GameState& _state, Host& _host, const Frame& _frame, std::span<const std::string_view> _help)
 {
-  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, _frame), TITLE_CELL);
+  PrintTextModeString(_state, DrawDockedFrame(_state, _host, _frame), TITLE_CELL);
   PrintTextModeString(_state, _help[0], LINE_3);
   PrintTextModeString(_state, _help[1], LINE_4); // INC SI: the second line, after the first's NUL
   _state.Data().drawing.textAttribute = HEADER_ATTRIBUTE;
@@ -290,17 +290,17 @@ void PrintUnit(GameState& _state, const TradeRow& _row, std::uint16_t _cell)
 // titleShipType, in stationSlot at its titleShipDistances, until a key: F9 and F10 step the type through 2-29, any other ends it
 // with the music off, the credits and a new game. ES is B800h throughout, from its MOV ES,AX. TitleFrameLoop (CS:7DF1) is one
 // frame.
-[[nodiscard]] Task<void> RunTitle(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<void> RunTitle(GameState& _state, Host& _host)
 {
   ClearAllObjects(_state);
-  StartMusic(_state, _hardware);
+  StartMusic(_state, _host);
   _state.Data().commander.laserMountsFitted = 0;
   _state.Data().playerShip.playerPitchAngle = 0;
   _state.Data().playerShip.playerYawAngle = 0;
   _state.Data().playerShip.playerRollAngle = 0;
   _state.Data().playerShip.viewAngle = 0;
   _state.Data().drawing.screenLayout = TITLE_LAYOUT;
-  (void)ShowCockpitScreen(_state, _hardware);
+  (void)ShowCockpitScreen(_state, _host);
   ClearMessageLine(_state);
   _state.Data().drawing.textPaperPattern = 0;
   (void)DrawScreenString(_state, ELITE_TITLE_TEXT, WHITE_MASK, TITLE_TEXT_CELL);
@@ -318,11 +318,11 @@ void PrintUnit(GameState& _state, const TradeRow& _row, std::uint16_t _cell)
   for (;;)
   {
     // The space view's layers watch the frame (ADR-033), the planet the renderer's to draw as the system's (ADR-035).
-    _hardware.BeginSpaceViewFrame();
-    _hardware.BeginSpaceViewObject();
+    _host.BeginSpaceViewFrame();
+    _host.BeginSpaceViewObject();
     _state.Data().drawing.drawColor = TITLE_PLANET_COLOR;
     DrawTitlePlanet(_state, TITLE_PLANET_RADIUS, TITLE_PLANET_X, TITLE_PLANET_Y);
-    _hardware.EndSpaceViewRendered();
+    _host.EndSpaceViewRendered();
     ship.flags = TITLE_SHIP_FLAGS;
     // MOV BL,titleShipType / SHL BL,1 / XOR BH,BH: the type doubled indexes titleShipDistances, and INC BL makes it the type byte,
     // active. The ship stands at the type's own distance, turned a step on each axis: the roll, the yaw, then the pitch.
@@ -335,17 +335,17 @@ void PrintUnit(GameState& _state, const TradeRow& _row, std::uint16_t _cell)
     ship.pitch = Offset(ship.pitch, TITLE_PITCH_STEP);
     _state.Data().drawing.textPaperPattern = 0;
     DrawViewString(_state, PRESS_ANY_KEY_TEXT, PRESS_ANY_KEY_MASK, PRESS_ANY_KEY_PLACE);
-    (void)TransformAndDrawObjects(_state, _hardware);
-    co_await FinishSpaceViewFrame(_state, _hardware);
+    (void)TransformAndDrawObjects(_state, _host);
+    co_await FinishSpaceViewFrame(_state, _host);
     // The frame as it was drawn, the title's, for a renderer that draws its ship and its planet (ADR-033, ADR-035), with the
     // dashboard the title shows: the cockpit's picture, nothing on it live (D64). DrawDisc's radius is twice the disc's rows.
     const SnapshotDisc planet{.shown = true,
                               .x = static_cast<std::int16_t>(TITLE_PLANET_X),
                               .row = static_cast<std::int16_t>(TITLE_PLANET_Y),
                               .rows = static_cast<std::uint16_t>(TITLE_PLANET_RADIUS >> 1)};
-    _hardware.PublishFlightSnapshot(TakeTitleSnapshot(_state, ELITE_TITLE_TEXT, planet), !firstFrame);
+    _host.PublishFlightSnapshot(TakeTitleSnapshot(_state, ELITE_TITLE_TEXT, planet), !firstFrame);
     firstFrame = false;
-    if (const KeyPress key = GetKey(_state, _hardware); key.scanCode != 0)
+    if (const KeyPress key = GetKey(_state, _host); key.scanCode != 0)
     {
       if (key.scanCode == SCAN_F9)
       {
@@ -369,8 +369,8 @@ void PrintUnit(GameState& _state, const TradeRow& _row, std::uint16_t _cell)
       }
     }
   }
-  StopAllSound(_state, _hardware);
-  co_await ShowCredits(_state, _hardware);
+  StopAllSound(_state, _host);
+  co_await ShowCredits(_state, _host);
   StartNewGame(_state);
   _state.Data().flow.titleShown = 1;
 }
@@ -380,7 +380,7 @@ void PrintUnit(GameState& _state, const TradeRow& _row, std::uint16_t _cell)
 struct DockedScreen
 {
   std::uint8_t key;
-  Task<ScreenKey> (*show)(GameState&, Hardware&);
+  Task<ScreenKey> (*show)(GameState&, Host&);
 };
 
 constexpr std::array<DockedScreen, 9> DOCKED_SCREENS = {{
@@ -392,10 +392,10 @@ constexpr std::array<DockedScreen, 9> DOCKED_SCREENS = {{
   {SCAN_F7, &ShowSystemDataScreen},
   {SCAN_F8, &ShowMarketPricesScreen},
   {SCAN_F9,
-   [](GameState& _state, Hardware& _hardware)
+   [](GameState& _state, Host& _host)
    {
-     ResetKeyboard(_state, _hardware);
-     return ShowCommanderStatusScreen(_state, _hardware);
+     ResetKeyboard(_state, _host);
+     return ShowCommanderStatusScreen(_state, _host);
    }},
   {SCAN_F10, &ShowInventoryScreen},
 }};
@@ -404,7 +404,7 @@ constexpr std::array<DockedScreen, 9> DOCKED_SCREENS = {{
 // (CS:0BAC). Each screen returns the key that closed it, which picks the next screen, until F1 leaves; Esc is the disc menu, and
 // any other key waits for one (CS:0B40). Returns whether the disc menu left for the disk, through LeaveGameLoopForDisk, which returns
 // past RunTitleAndDocked (DiscMenuExit); otherwise F1 ended them.
-[[nodiscard]] Task<bool> DispatchDockedKeys(GameState& _state, Hardware& _hardware, std::uint8_t _screenKey)
+[[nodiscard]] Task<bool> DispatchDockedKeys(GameState& _state, Host& _host, std::uint8_t _screenKey)
 {
   std::uint8_t screenKey = _screenKey;
   for (;;)
@@ -412,7 +412,7 @@ constexpr std::array<DockedScreen, 9> DOCKED_SCREENS = {{
     ScreenKey key{};
     if (screenKey == SCAN_ESCAPE)
     {
-      const DiscMenuExit exit = co_await ShowDiscControlScreen(_state, _hardware);
+      const DiscMenuExit exit = co_await ShowDiscControlScreen(_state, _host);
       if (exit.leaves)
       {
         co_return true;
@@ -422,7 +422,7 @@ constexpr std::array<DockedScreen, 9> DOCKED_SCREENS = {{
     else
     {
       const auto screen = std::ranges::find(DOCKED_SCREENS, screenKey, &DockedScreen::key);
-      key = co_await screen->show(_state, _hardware);
+      key = co_await screen->show(_state, _host);
     }
     for (;;)
     {
@@ -442,7 +442,7 @@ constexpr std::array<DockedScreen, 9> DOCKED_SCREENS = {{
         break;
       }
       // Back to the GetKey at 0B40h.
-      const KeyPress next = co_await WaitForKey(_state, _hardware);
+      const KeyPress next = co_await WaitForKey(_state, _host);
       key = ScreenKey{next.scanCode};
     }
   }
@@ -468,17 +468,17 @@ void FormatFuelLightYears(GameState& _state)
   docked.fuelTenthsDigit = std::uint8_t{docked.fuelDigits[FUEL_TENTHS_DIGIT]};
 }
 
-void DrawDockedFrameAt(GameState& _state, Hardware& _hardware, std::uint8_t _screen, std::uint8_t _frame)
+void DrawDockedFrameAt(GameState& _state, Host& _host, std::uint8_t _screen, std::uint8_t _frame)
 {
   if ((_state.Data().drawing.screenLayout & TEXT_LAYOUT) == 0)
   {
     _state.Data().drawing.screenLayout = TEXT_LAYOUT;
-    SetTextMode(_state, _hardware);
+    SetTextMode(_state, _host);
   }
   // The screen's attribute, and its background as the border.
   const auto attribute = static_cast<std::uint8_t>(_screen & ATTRIBUTE_MASK);
   _state.Data().drawing.textAttribute = attribute;
-  _hardware.SetColorSelect(static_cast<std::uint8_t>(attribute >> 4));
+  _host.Video().SetColorSelect(static_cast<std::uint8_t>(attribute >> 4));
   ClearTextScreen(_state);
 
   const std::uint8_t frame = _frame;
@@ -494,9 +494,9 @@ void DrawDockedFrameAt(GameState& _state, Hardware& _hardware, std::uint8_t _scr
   }
 }
 
-std::string_view DrawDockedFrame(GameState& _state, Hardware& _hardware, std::string_view _descriptor)
+std::string_view DrawDockedFrame(GameState& _state, Host& _host, std::string_view _descriptor)
 {
-  DrawDockedFrameAt(_state, _hardware, static_cast<std::uint8_t>(_descriptor[0]), static_cast<std::uint8_t>(_descriptor[1]));
+  DrawDockedFrameAt(_state, _host, static_cast<std::uint8_t>(_descriptor[0]), static_cast<std::uint8_t>(_descriptor[1]));
   return _descriptor.substr(2);
 }
 
@@ -522,19 +522,19 @@ void DrawFrameRow(GameState& _state, std::uint16_t _cell, std::uint16_t _value)
   }
 }
 
-[[nodiscard]] Task<ScreenKey> WaitForScreenExitKey(GameState& _state, Hardware& _hardware, std::uint8_t _ownKey)
+[[nodiscard]] Task<ScreenKey> WaitForScreenExitKey(GameState& _state, Host& _host, std::uint8_t _ownKey)
 {
   // GetKey until Esc or another screen's F-key, every other key and an empty poll going back to 60B4h.
   for (;;)
   {
-    const KeyPress key = GetKey(_state, _hardware);
+    const KeyPress key = GetKey(_state, _host);
     const std::uint8_t scanCode = key.scanCode;
     if (scanCode != 0 && scanCode != _ownKey && (scanCode == SCAN_ESCAPE || (scanCode >= SCAN_F1 && scanCode <= SCAN_F10)))
     {
       SelectSystemAtCursor(_state);
       co_return ScreenKey{scanCode};
     }
-    co_await AwaitNextKey(_hardware, key);
+    co_await AwaitNextKey(_host, key);
   }
 }
 
@@ -546,9 +546,9 @@ void AwardArchangelTitle(GameState& _state)
   }
 }
 
-[[nodiscard]] Task<ScreenKey> ShowSellCargoScreen(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<ScreenKey> ShowSellCargoScreen(GameState& _state, Host& _host)
 {
-  DrawTradeScreenHeader(_state, _hardware, SELL_CARGO_FRAME, SELL_CARGO_HELP_LINES);
+  DrawTradeScreenHeader(_state, _host, SELL_CARGO_FRAME, SELL_CARGO_HELP_LINES);
   TradeRow row = FIRST_TRADE_ROW;
   for (;;)
   {
@@ -575,13 +575,13 @@ void AwardArchangelTitle(GameState& _state)
     }
   }
   _state.Data().docked.tradeScreenIsBuy = 0;
-  co_return co_await RunCargoTradeMenu(_state, _hardware);
+  co_return co_await RunCargoTradeMenu(_state, _host);
 }
 
-[[nodiscard]] Task<ScreenKey> ShowBuyCargoScreen(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<ScreenKey> ShowBuyCargoScreen(GameState& _state, Host& _host)
 {
   StartMarketRandom(_state);
-  DrawTradeScreenHeader(_state, _hardware, BUY_CARGO_FRAME, BUY_CARGO_HELP_LINES);
+  DrawTradeScreenHeader(_state, _host, BUY_CARGO_FRAME, BUY_CARGO_HELP_LINES);
   TradeRow row = FIRST_TRADE_ROW;
   for (;;)
   {
@@ -627,24 +627,24 @@ void AwardArchangelTitle(GameState& _state)
   }
   _state.Data().docked.tradeScreenIsBuy = 1;
   _state.Data().commander.marketQuantitiesSet = 1;
-  co_return co_await RunCargoTradeMenu(_state, _hardware);
+  co_return co_await RunCargoTradeMenu(_state, _host);
 }
 
-[[nodiscard]] Task<ScreenKey> ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<ScreenKey> ShowCommanderStatusScreen(GameState& _state, Host& _host)
 {
   if (_state.Data().flow.inFlight != 1 && _state.Data().commander.missionNumber != 0)
   {
     if (_state.Data().commander.missionStage == 0)
     {
-      co_await ShowMissionBriefing(_state, _hardware);
+      co_await ShowMissionBriefing(_state, _host);
     }
     else if (_state.Data().commander.missionStage == STAGE_BRIEFED && _state.Data().flight.playerDocked == 1)
     {
-      co_await ShowMissionDebriefing(_state, _hardware);
+      co_await ShowMissionDebriefing(_state, _host);
     }
   }
   const CommanderState& commander = _state.Data().commander;
-  DrawDockedFrameAt(_state, _hardware, commander.commanderTitle[0], commander.commanderTitle[1]);
+  DrawDockedFrameAt(_state, _host, commander.commanderTitle[0], commander.commanderTitle[1]);
   const std::uint16_t title = PrintTextModeString(_state, CommanderTitleText(_state), TITLE_CELL);
   PrintTextModeString(_state, TextWithin(BytesOf(_state.Data().commander.defaultCommanderName), 0), title);
   _state.Data().drawing.textAttribute = STATUS_ATTRIBUTE;
@@ -725,12 +725,12 @@ void AwardArchangelTitle(GameState& _state)
       break;
     }
   }
-  co_return co_await WaitForScreenExitKey(_state, _hardware, SCAN_F9);
+  co_return co_await WaitForScreenExitKey(_state, _host, SCAN_F9);
 }
 
-[[nodiscard]] Task<ScreenKey> ShowInventoryScreen(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<ScreenKey> ShowInventoryScreen(GameState& _state, Host& _host)
 {
-  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, INVENTORY_FRAME), TITLE_CELL);
+  PrintTextModeString(_state, DrawDockedFrame(_state, _host, INVENTORY_FRAME), TITLE_CELL);
   // The fuel text without the padding the status screen has: 'Fuel: ', which the original cuts from the text by a NUL that
   // becomes a space again, then 'n.n Light Years'.
   FormatFuelLightYears(_state);
@@ -768,13 +768,13 @@ void AwardArchangelTitle(GameState& _state)
       break;
     }
   }
-  co_return co_await WaitForScreenExitKey(_state, _hardware, SCAN_F10);
+  co_return co_await WaitForScreenExitKey(_state, _host, SCAN_F10);
 }
 
-[[nodiscard]] Task<void> ShowMissionBriefing(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<void> ShowMissionBriefing(GameState& _state, Host& _host)
 {
   _state.Data().commander.missionStage = STAGE_BRIEFED;
-  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, EMERGENCY_FRAME), TITLE_CELL);
+  PrintTextModeString(_state, DrawDockedFrame(_state, _host, EMERGENCY_FRAME), TITLE_CELL);
   const std::uint8_t mission = _state.Data().commander.missionNumber;
   if (mission == MISSION_SUPERNOVA)
   {
@@ -783,7 +783,7 @@ void AwardArchangelTitle(GameState& _state)
     std::uint8_t answer = 0;
     for (;;)
     {
-      answer = (co_await WaitForKey(_state, _hardware)).scanCode;
+      answer = (co_await WaitForKey(_state, _host)).scanCode;
       if (answer == SCAN_Y || answer == SCAN_N)
       {
         break;
@@ -811,7 +811,7 @@ void AwardArchangelTitle(GameState& _state)
       reply = SUPERNOVA_ACCEPTED_LINES;
     }
     PrintTextLines(_state, reply, LINE_10);
-    co_await WaitForKeyPress(_state, _hardware);
+    co_await WaitForKeyPress(_state, _host);
     _state.Data().commander.supernovaFrames = SUPERNOVA_DELAY_FRAMES;
     _state.Data().commander.jumpedSinceBriefing = 0;
     co_return;
@@ -819,18 +819,18 @@ void AwardArchangelTitle(GameState& _state)
   if (mission == MISSION_MASK_SHIP)
   {
     PrintTextLines(_state, MASK_BRIEFING_TEXT, LINE_4);
-    co_await WaitForKeyPress(_state, _hardware);
+    co_await WaitForKeyPress(_state, _host);
     _state.Data().commander.maskMissionShipsLeft = MASK_SHIPS;
     _state.Data().commander.maskSystemJumps = MASK_SYSTEM_JUMPS;
     co_return;
   }
   PrintTextLines(_state, INVASION_BRIEFING_TEXT, LINE_4);
-  co_await WaitForKeyPress(_state, _hardware);
+  co_await WaitForKeyPress(_state, _host);
   _state.Data().commander.thargoidInvasionActive = 1;
   _state.Data().commander.jumpedSinceBriefing = 0;
 }
 
-[[nodiscard]] Task<void> ShowMissionDebriefing(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<void> ShowMissionDebriefing(GameState& _state, Host& _host)
 {
   // Not yet: the mask ship is still about, or the supernova's refugees have not been taken away.
   if (_state.Data().commander.missionNumber == MISSION_MASK_SHIP
@@ -839,7 +839,7 @@ void AwardArchangelTitle(GameState& _state)
   {
     co_return;
   }
-  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, TASK_COMPLETE_FRAME), TITLE_CELL);
+  PrintTextModeString(_state, DrawDockedFrame(_state, _host, TASK_COMPLETE_FRAME), TITLE_CELL);
   _state.Data().commander.missionStage = STAGE_DEBRIEFED;
   const std::uint8_t mission = _state.Data().commander.missionNumber;
   if (mission == MISSION_SUPERNOVA)
@@ -853,7 +853,7 @@ void AwardArchangelTitle(GameState& _state)
     const std::string debriefing =
       JoinTexts({SUPERNOVA_DEBRIEF_OPEN, CharText(_state.Data().docked.refugeeRewardDigit), SUPERNOVA_DEBRIEF_CLOSE});
     PrintTextLines(_state, debriefing, LINE_4, SUPERNOVA_DEBRIEFING_LINES);
-    co_await WaitForKeyPress(_state, _hardware);
+    co_await WaitForKeyPress(_state, _host);
     _state.Data().commander.missionNumber = 0;
     _state.Data().commander.missionStage = 0;
     co_return;
@@ -871,7 +871,7 @@ void AwardArchangelTitle(GameState& _state)
       text = MASK_FLED_LINES;
     }
     PrintTextLines(_state, text, LINE_4);
-    co_await WaitForKeyPress(_state, _hardware);
+    co_await WaitForKeyPress(_state, _host);
     _state.Data().commander.maskMissionShipsLeft = 0;
     _state.Data().commander.maskShipDestroyed = 0;
     _state.Data().commander.missionNumber = 0;
@@ -882,7 +882,7 @@ void AwardArchangelTitle(GameState& _state)
     co_return;
   }
   PrintTextLines(_state, TextsOf(BytesOf(_state.Data().galaxy.invasionDebriefText)), LINE_4, INVASION_DEBRIEFING_LINES);
-  co_await WaitForKeyPress(_state, _hardware);
+  co_await WaitForKeyPress(_state, _host);
   AwardArchangelTitle(_state);
   _state.Data().commander.antiEcmEmulatorFitted = 1;
   _state.Data().commander.missionNumber = 0;
@@ -892,18 +892,18 @@ void AwardArchangelTitle(GameState& _state)
   _state.Data().commander.missionStage = 0;
 }
 
-[[nodiscard]] Task<bool> RunTitleAndDocked(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<bool> RunTitleAndDocked(GameState& _state, Host& _host)
 {
   if (_state.Data().flow.titleShown != 1)
   {
-    co_await RunTitle(_state, _hardware);
+    co_await RunTitle(_state, _host);
   }
   // JMP into DockedKeyDispatch: back from a disk request, at the disc menu (CS:0BAC); otherwise at the status screen (CS:0B96).
   if (_state.Data().saveLoad.resumeAtDiskMenu == 1)
   {
-    co_return co_await DispatchDockedKeys(_state, _hardware, SCAN_ESCAPE);
+    co_return co_await DispatchDockedKeys(_state, _host, SCAN_ESCAPE);
   }
-  co_return co_await DispatchDockedKeys(_state, _hardware, SCAN_F9);
+  co_return co_await DispatchDockedKeys(_state, _host, SCAN_F9);
 }
 
 } // namespace Elite

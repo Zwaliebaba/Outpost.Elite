@@ -516,7 +516,7 @@ void SubtractFloored(std::uint8_t& _field, std::uint8_t _value)
 // costs 1500 and is removed. Each hit is credited (CreditKill), unlocks a missile on it (CheckMissileTargetDestroyed), takes
 // the damage (TakeDamage) and starts the impact sound, whose STI the hit's every path ends with, as KillPlayer's does when it
 // kills.
-void CheckCollision(GameState& _state, Hardware& _hardware, SpaceObject& _slot)
+void CheckCollision(GameState& _state, Host& _host, SpaceObject& _slot)
 {
   // MOV BL,[DI] / AND BX,3Eh: the type, doubled, indexes the box's half sizes.
   const std::uint16_t range = COLLISION_RANGES[(_slot.type & 0x3E) >> 1];
@@ -573,10 +573,10 @@ void CheckCollision(GameState& _state, Hardware& _hardware, SpaceObject& _slot)
   }
   if (TakeDamage(_state, damage))
   {
-    _hardware.EnableInterrupts();
+    _host.EnableInterrupts();
   }
   StartImpactSound(_state);
-  _hardware.EnableInterrupts();
+  _host.EnableInterrupts();
 }
 
 // ---- The warnings ---------------------------------------------------------------------------------
@@ -662,16 +662,16 @@ constexpr std::array<DotStep, 8> COMPASS_RING = {
 
 // CALL GetKey / JE back to it, de-assembled: GetKey until a key comes (ADR-039), the waits at 0x0BF3 (FlightScreenDispatch),
 // 0x8153 (ProcessFlightKeys' Ctrl+Esc) and 0x8DC7 (RunPauseScreen). Returns the key.
-[[nodiscard]] Task<KeyPress> WaitForKey(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<KeyPress> WaitForKey(GameState& _state, Host& _host)
 {
   for (;;)
   {
-    const KeyPress key = GetKey(_state, _hardware);
+    const KeyPress key = GetKey(_state, _host);
     if (key.scanCode != 0)
     {
       co_return key;
     }
-    co_await AwaitNextKey(_hardware, key);
+    co_await AwaitNextKey(_host, key);
   }
 }
 
@@ -789,24 +789,24 @@ void SetFrameTime(GameState& _state, std::uint8_t _key)
 // The pause screen from PauseShowOptions (0x8D8F): the options, presented (PresentSpaceView, after MOV AX,0B800h / MOV ES,AX),
 // then its keys, waited for at 0x8DC7, until one ends it. The jumps
 // back to PauseShowOptions and to the wait load or write every register they read, and carry nothing.
-[[nodiscard]] Task<PauseExit> RunPauseOptions(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<PauseExit> RunPauseOptions(GameState& _state, Host& _host)
 {
   for (;;)
   {
     // The space view's layers watch the frame (ADR-033), on the menu DrawPauseMenu drew: only the game's words (D66).
-    _hardware.BeginSpaceViewFrame();
+    _host.BeginSpaceViewFrame();
     ShowPauseOptions(_state);
-    co_await PresentSpaceView(_state, _hardware);
+    co_await PresentSpaceView(_state, _host);
     // The frame as it was drawn, for a renderer that draws it in the cockpit, the dashboard live as it was left.
-    _hardware.PublishFlightSnapshot(WithoutScene(TakeFlightSnapshot(_state)), false);
+    _host.PublishFlightSnapshot(WithoutScene(TakeFlightSnapshot(_state)), false);
     for (;;)
     {
-      const std::uint8_t key = (co_await WaitForKey(_state, _hardware)).scanCode;
+      const std::uint8_t key = (co_await WaitForKey(_state, _host)).scanCode;
       if (key == SCAN_SPACE)
       {
         // Resume, with the space that did it not fired.
         StartBeep(_state);
-        ResetKeyboard(_state, _hardware);
+        ResetKeyboard(_state, _host);
         ClearDrawBuffer(_state);
         _state.Data().flight.gamePaused = 0;
         _state.Data().drawing.textPaperPattern = 0;
@@ -820,11 +820,11 @@ void SetFrameTime(GameState& _state, std::uint8_t _key)
       if (key == SCAN_A)
       {
         // Abort to the title: StopSoundEffects' CLI round its writes, which nothing interrupts in native code, then its STI.
-        ResetKeyboard(_state, _hardware);
+        ResetKeyboard(_state, _host);
         ClearMessageLine(_state);
         ClearDrawBuffer(_state);
         StopSoundEffects(_state);
-        _hardware.EnableInterrupts();
+        _host.EnableInterrupts();
         _state.Data().flight.gamePaused = 0;
         _state.Data().drawing.textPaperPattern = 0;
         _state.Data().flow.titleShown = 0;
@@ -842,13 +842,13 @@ void SetFrameTime(GameState& _state, std::uint8_t _key)
 
 // FlightScreenDispatch (0x0BDE): leaving the function keys: the cockpit back (RestoreFlightScreen, then ResetKeyboard) if a
 // screen was shown, then inFlight set. Returns what RestoreFlightScreen did, when it ran.
-std::optional<ScreenChange> LeaveFlightScreens(GameState& _state, Hardware& _hardware)
+std::optional<ScreenChange> LeaveFlightScreens(GameState& _state, Host& _host)
 {
   std::optional<ScreenChange> change;
   if (_state.Data().flight.flightScreenShown != 0)
   {
-    change = RestoreFlightScreen(_state, _hardware);
-    ResetKeyboard(_state, _hardware);
+    change = RestoreFlightScreen(_state, _host);
+    ResetKeyboard(_state, _host);
   }
   _state.Data().flow.inFlight = 1;
   return change;
@@ -864,7 +864,7 @@ bool EraseForFlightScreen(GameState& _state)
 
 // FlightScreenDispatch (0x0BF8): the screen for _key, then the screen for the key that screen returns, until F1-F4 or the
 // navigation computer's error leaves (0x0BDE): the jumps back to the tests at 0x0BF8 carry the key.
-[[nodiscard]] Task<FlightScreens> DispatchFlightScreens(GameState& _state, Hardware& _hardware, std::uint8_t _key)
+[[nodiscard]] Task<FlightScreens> DispatchFlightScreens(GameState& _state, Host& _host, std::uint8_t _key)
 {
   FlightScreens screens{0, std::nullopt};
   std::uint8_t key = _key;
@@ -873,9 +873,9 @@ bool EraseForFlightScreen(GameState& _state)
   // A screen shown, and the key that closed it. Then JMP FlightScreenDispatch.
   const auto shown = [&key](const ScreenKey& _closed) { key = _closed.scanCode; };
   // 0x0BDE, jumped back to: the cockpit back if a screen was shown (LeaveFlightScreens).
-  const auto leave = [&_state, &_hardware, &screens]
+  const auto leave = [&_state, &_host, &screens]
   {
-    screens.restored = LeaveFlightScreens(_state, _hardware);
+    screens.restored = LeaveFlightScreens(_state, _host);
     return screens;
   };
   for (;;)
@@ -890,22 +890,22 @@ bool EraseForFlightScreen(GameState& _state)
       erase();
       if (key == SCAN_F5)
       {
-        shown(co_await ShowGalacticChart(_state, _hardware));
+        shown(co_await ShowGalacticChart(_state, _host));
         continue;
       }
       if (key == SCAN_F6)
       {
-        shown(co_await ShowShortRangeChart(_state, _hardware));
+        shown(co_await ShowShortRangeChart(_state, _host));
         continue;
       }
       if (key == SCAN_F7)
       {
-        shown(co_await ShowSystemDataScreen(_state, _hardware));
+        shown(co_await ShowSystemDataScreen(_state, _host));
         continue;
       }
       if (key == SCAN_F8)
       {
-        shown(co_await ShowMarketPricesScreen(_state, _hardware));
+        shown(co_await ShowMarketPricesScreen(_state, _host));
         continue;
       }
     }
@@ -918,7 +918,7 @@ bool EraseForFlightScreen(GameState& _state)
         if (_state.Data().commander.witchspaceCountdown == 1)
         {
           erase();
-          shown(co_await ShowShortRangeChart(_state, _hardware));
+          shown(co_await ShowShortRangeChart(_state, _host));
           continue;
         }
       }
@@ -937,20 +937,20 @@ bool EraseForFlightScreen(GameState& _state)
     // 0x0C45: F9 and F10; any other key the screens return is waited past.
     if (key == SCAN_F9)
     {
-      ResetKeyboard(_state, _hardware);
+      ResetKeyboard(_state, _host);
       _state.Data().flow.inFlight = 1;
-      const ScreenKey closed = co_await ShowCommanderStatusScreen(_state, _hardware);
+      const ScreenKey closed = co_await ShowCommanderStatusScreen(_state, _host);
       _state.Data().flow.inFlight = 0;
       shown(closed);
       continue;
     }
     if (key == SCAN_F10)
     {
-      shown(co_await ShowInventoryScreen(_state, _hardware));
+      shown(co_await ShowInventoryScreen(_state, _host));
       continue;
     }
     // JMP 0BF3h, and GetKey until a key comes.
-    key = (co_await WaitForKey(_state, _hardware)).scanCode;
+    key = (co_await WaitForKey(_state, _host)).scanCode;
   }
 }
 
@@ -1090,9 +1090,9 @@ void HandleMissileKeys(GameState& _state)
 }
 
 // 0x826F-0x829E: fire heats the laser by 5; a pulse laser (type 0) fires every other frame.
-void HandleFireButton(GameState& _state, Hardware& _hardware)
+void HandleFireButton(GameState& _state, Host& _host)
 {
-  if (!ReadFireButton(_state, _hardware))
+  if (!ReadFireButton(_state, _host))
   {
     return;
   }
@@ -1561,7 +1561,7 @@ void SaveStardustPositions(GameState& _state)
   }
 }
 
-[[nodiscard]] Task<FlightScreens> HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<FlightScreens> HandleFlightFunctionKeys(GameState& _state, Host& _host)
 {
   _state.Data().flow.inFlight = 0;
   // F1-F10 in keyDown, BX the scan code and LOOP counting CX down from 10.
@@ -1571,9 +1571,9 @@ void SaveStardustPositions(GameState& _state)
     if (ByteWithin(BytesOf(_state.Data().keyboard.keyDown), scan) == 1)
     {
       // MOV AH,BL, and PUSH AX / CALL ResetKeyboard / POP AX keep it.
-      ResetKeyboard(_state, _hardware);
+      ResetKeyboard(_state, _host);
       _state.Data().flight.flightScreenShown = 0;
-      co_return co_await DispatchFlightScreens(_state, _hardware, Low(scan));
+      co_return co_await DispatchFlightScreens(_state, _host, Low(scan));
     }
     ++scan;
     if (--keys == 0)
@@ -1585,9 +1585,9 @@ void SaveStardustPositions(GameState& _state)
   co_return FlightScreens{0, std::nullopt};
 }
 
-ScreenChange RestoreFlightScreen(GameState& _state, Hardware& _hardware)
+ScreenChange RestoreFlightScreen(GameState& _state, Host& _host)
 {
-  const ScreenChange change = ShowCockpitScreen(_state, _hardware);
+  const ScreenChange change = ShowCockpitScreen(_state, _host);
   InvalidateDashboard(_state);
   StartBeep(_state);
   _state.Data().messages.messageShown = Message::None;
@@ -1894,7 +1894,7 @@ void UpdateConditionColor(GameState& _state)
   _state.Data().flight.conditionColor = color;
 }
 
-ScreenChange SetUpLocalSpace(GameState& _state, Hardware& _hardware)
+ScreenChange SetUpLocalSpace(GameState& _state, Host& _host)
 {
   LoadSystemSeeds(_state, _state.Data().commander.currentSystem.index);
   InvalidateDashboard(_state);
@@ -1902,7 +1902,7 @@ ScreenChange SetUpLocalSpace(GameState& _state, Hardware& _hardware)
   _state.Data().flight.debrisSlotCount = 0x10;
   _state.Data().world.shipSlotCount = 0x24;
   ClearAllObjects(_state);
-  const ScreenChange change = ShowCockpitScreen(_state, _hardware);
+  const ScreenChange change = ShowCockpitScreen(_state, _host);
   (void)ResetStardust(_state);
   _state.Data().jump.hyperspaceCountdown = 0;
   _state.Data().playerShip.dockingComputerOn = 0;
@@ -1928,7 +1928,7 @@ ScreenChange SetUpLocalSpace(GameState& _state, Hardware& _hardware)
   return change;
 }
 
-void CheckCollisions(GameState& _state, Hardware& _hardware)
+void CheckCollisions(GameState& _state, Host& _host)
 {
   // MOV CL,objectSlotCount / XOR CH,CH, PUSH CX and POP CX round each slot, then DEC CX / JE: a count of 0 runs 65,536 times.
   SlotIndex slot = SlotIndex::Sun;
@@ -1937,7 +1937,7 @@ void CheckCollisions(GameState& _state, Hardware& _hardware)
     SpaceObject& object = _state.Slot(slot);
     if ((object.type & SpaceObject::ACTIVE) != 0)
     {
-      CheckCollision(_state, _hardware, object);
+      CheckCollision(_state, _host, object);
     }
     slot = SlotAfter(slot);
   }
@@ -2214,7 +2214,7 @@ bool EraseCompassAndBlips(GameState& _state)
   return erased;
 }
 
-void UpdateFuelLeak(GameState& _state, Hardware& _hardware)
+void UpdateFuelLeak(GameState& _state, Host& _host)
 {
   std::uint8_t border = 0;
   if (_state.Data().commander.fuelLeakDelayFrames != 0)
@@ -2245,51 +2245,51 @@ void UpdateFuelLeak(GameState& _state, Hardware& _hardware)
   {
     border = _state.Data().drawing.maskingBackgroundColor;
   }
-  _hardware.SetColorSelect(static_cast<std::uint8_t>(border | BRIGHT_PALETTE));
+  _host.Video().SetColorSelect(static_cast<std::uint8_t>(border | BRIGHT_PALETTE));
 }
 
-[[nodiscard]] Task<void> RunFlight(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<void> RunFlight(GameState& _state, Host& _host)
 {
-  ResetMouseIfSelected(_state, _hardware);
-  (void)SetUpLocalSpace(_state, _hardware);
-  co_await PlayStationTunnel(_state, _hardware);
+  ResetMouseIfSelected(_state, _host);
+  (void)SetUpLocalSpace(_state, _host);
+  co_await PlayStationTunnel(_state, _host);
   bool firstFrame = true;
   for (;;)
   {
     // FlightFrameLoop: one frame.
     UpdateDashboard(_state);
-    _hardware.BeginSpaceViewFrame(); // the space view's layers watch the frame's drawing from here (ADR-033)
-    TransformAndDrawObjects(_state, _hardware);
-    ApplyEnemyLaserHit(_state, _hardware);
-    ResolveLaserFire(_state, _hardware);
+    _host.BeginSpaceViewFrame(); // the space view's layers watch the frame's drawing from here (ADR-033)
+    TransformAndDrawObjects(_state, _host);
+    ApplyEnemyLaserHit(_state, _host);
+    ResolveLaserFire(_state, _host);
     // The stardust, watched for the space view, which the renderer draws in its place (ADR-035).
-    _hardware.BeginSpaceViewObject();
+    _host.BeginSpaceViewObject();
     UpdateStardust(_state);
-    _hardware.EndSpaceViewRendered();
-    UpdateFuelLeak(_state, _hardware);
+    _host.EndSpaceViewRendered();
+    UpdateFuelLeak(_state, _host);
     UpdateMessageLine(_state);
-    co_await FinishSpaceViewFrame(_state, _hardware);
+    co_await FinishSpaceViewFrame(_state, _host);
     // The frame as it was drawn, for a renderer that draws between frames (ADR-032); the first continues nothing before it.
-    _hardware.PublishFlightSnapshot(TakeFlightSnapshot(_state), !firstFrame);
+    _host.PublishFlightSnapshot(TakeFlightSnapshot(_state), !firstFrame);
     firstFrame = false;
-    UpdateObjectsAndSpawn(_state, _hardware);
-    UpdatePlayerMotion(_state, _hardware);
+    UpdateObjectsAndSpawn(_state, _host);
+    UpdatePlayerMotion(_state, _host);
     // DI past the slots, from which M's launch copies the missile unless a routine before it moves DI (ProcessFlightKeys).
-    CheckCollisions(_state, _hardware);
+    CheckCollisions(_state, _host);
     if (_state.Data().flight.playerDocked == 1)
     {
-      co_await PlayStationTunnel(_state, _hardware);
-      ResetKeyboard(_state, _hardware);
+      co_await PlayStationTunnel(_state, _host);
+      ResetKeyboard(_state, _host);
       StopSoundEffects(_state);
-      StopAllSound(_state, _hardware);
+      StopAllSound(_state, _host);
       co_return;
     }
-    const FlightKeysExit keys = co_await ProcessFlightKeys(_state, _hardware);
+    const FlightKeysExit keys = co_await ProcessFlightKeys(_state, _host);
     if (keys.aborted)
     {
       co_return;
     }
-    co_await TickHyperspaceCountdown(_state, _hardware);
+    co_await TickHyperspaceCountdown(_state, _host);
     if (TickEscapePod(_state))
     {
       co_return;
@@ -2312,7 +2312,7 @@ void UpdateFuelLeak(GameState& _state, Hardware& _hardware)
     {
       continue;
     }
-    ResetKeyboard(_state, _hardware);
+    ResetKeyboard(_state, _host);
     // MOV AX,0B800h / MOV ES,AX for the message line and the title.
     ClearMessageLine(_state);
     _state.Data().drawing.textPaperPattern = 0;
@@ -2331,7 +2331,7 @@ bool TickEscapePod(GameState& _state)
   return _state.Data().playerShip.escapePodFrames == 0;
 }
 
-[[nodiscard]] Task<FlightKeysExit> ProcessFlightKeys(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<FlightKeysExit> ProcessFlightKeys(GameState& _state, Host& _host)
 {
   if (_state.Data().flight.gameOverFrames != 0)
   {
@@ -2342,7 +2342,7 @@ bool TickEscapePod(GameState& _state)
     // JNE back to the RET above.
     co_return FlightKeysExit{false};
   }
-  const FlightScreens screens = co_await HandleFlightFunctionKeys(_state, _hardware);
+  const FlightScreens screens = co_await HandleFlightFunctionKeys(_state, _host);
   if (screens.view != 0 && _state.Data().playerShip.viewLocked != 1)
   {
     (void)ChangeView(_state, screens.view);
@@ -2369,7 +2369,7 @@ bool TickEscapePod(GameState& _state)
     else
     {
       _state.Data().flight.jumpDriveEngaged = 0;
-      ToggleDockingComputer(_state, _hardware);
+      ToggleDockingComputer(_state, _host);
     }
   }
   if (_state.Data().keyboard.keyDown[Keys::J] == 1)
@@ -2382,14 +2382,14 @@ bool TickEscapePod(GameState& _state)
     if (_state.Data().keyboard.keyDown[Keys::CTRL] == 1)
     {
       // Ctrl+Esc freezes the game until a key, without the menu.
-      ResetKeyboard(_state, _hardware);
-      (void)co_await WaitForKey(_state, _hardware);
+      ResetKeyboard(_state, _host);
+      (void)co_await WaitForKey(_state, _host);
     }
     else
     {
       SetMessage(_state, Message::GamePaused, 1);
       UpdateMessageLine(_state);
-      if (co_await RunPauseScreen(_state, _hardware))
+      if (co_await RunPauseScreen(_state, _host))
       {
         co_return FlightKeysExit{true};
       }
@@ -2397,7 +2397,7 @@ bool TickEscapePod(GameState& _state)
     _state.Data().flight.gamePaused = 0;
   }
   HandleMissileKeys(_state);
-  HandleFireButton(_state, _hardware);
+  HandleFireButton(_state, _host);
   if (_state.Data().keyboard.keyDown[Keys::E] == 1 && _state.Data().commander.ecmFitted == 1)
   {
     _state.Data().playerShip.ecmFired = 1;
@@ -2408,7 +2408,7 @@ bool TickEscapePod(GameState& _state)
   if (_state.Data().keyboard.keyDown[Keys::B] == 1 && _state.Data().commander.energyBombFitted == 1)
   {
     _state.Data().commander.energyBombFitted = 0;
-    DetonateEnergyBomb(_state, _hardware);
+    DetonateEnergyBomb(_state, _host);
   }
   if (_state.Data().keyboard.keyDown[Keys::C] == 1 && _state.Data().commander.escapePodFitted == 1 &&
       _state.Data().playerShip.escapePodFrames == 0)
@@ -2465,7 +2465,7 @@ JumpDriveRequest EngageJumpDrive(GameState& _state)
   return JumpDriveRequest{lock};
 }
 
-void UpdatePlayerMotion(GameState& _state, Hardware& _hardware)
+void UpdatePlayerMotion(GameState& _state, Host& _host)
 {
   const std::uint8_t gameOver = _state.Data().flight.gameOverFrames;
   if (gameOver != 0 && gameOver != GAME_OVER_FRAMES)
@@ -2507,7 +2507,7 @@ void UpdatePlayerMotion(GameState& _state, Hardware& _hardware)
       }
     }
     _state.Data().playerShip.playerSpeed = speed;
-    const Steering read = ReadSteering(_state, _hardware);
+    const Steering read = ReadSteering(_state, _host);
     _state.Data().playerShip.rollRate = Join(read.pitch, read.roll);
     steering = ApplyReverseControls(_state, read);
   }
@@ -2574,14 +2574,14 @@ void MoveObjectsByVelocity(GameState& _state)
   }
 }
 
-[[nodiscard]] Task<bool> RunPauseScreen(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<bool> RunPauseScreen(GameState& _state, Host& _host)
 {
-  SilenceSpeakerTimer(_hardware);
+  SilenceSpeakerTimer(_host);
   for (;;)
   {
     DrawPauseMenu(_state);
-    ResetKeyboard(_state, _hardware);
-    const PauseExit exit = co_await RunPauseOptions(_state, _hardware);
+    ResetKeyboard(_state, _host);
+    const PauseExit exit = co_await RunPauseOptions(_state, _host);
     if (exit != PauseExit::NewFrameRate)
     {
       co_return exit == PauseExit::Abort;

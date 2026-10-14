@@ -1,4 +1,4 @@
-// GameLogic/Platform.h
+// GameLogic/Host.h
 #pragma once
 
 #include "Cga.h"
@@ -38,9 +38,8 @@ using NativeRoutine = std::function<void()>;
 /// The program's start (ADR-010), a coroutine that waits (D77): the platform resumes it each run until it ends.
 using ProgramRoutine = std::function<Task<void>()>;
 
-/// The native platform the game runs on (D23, D27, D33): the IBM PC's devices and the services of its ROM and DOS, as the
-/// game uses them, with no processor and no memory map. A de-assembled routine reaches it only through Hardware, which takes
-/// the platform (ADR-014); the game's memory is the GameState's.
+/// The host the game runs on (D90): its clock and its waits, the keys and the mouse, the sound, the CGA and the files. Every
+/// routine that waits or drives a device is given it beside the GameState, which holds the game's memory.
 ///
 /// It holds, each what the game uses of the PC, without its port bus, its registers or its vector table (ADR-041): the clock and
 /// the events it waits for, with the two interrupts they request (Scheduler: the tick, the keys and their requests); the system
@@ -57,15 +56,15 @@ using ProgramRoutine = std::function<Task<void>()>;
 /// ends, say that instead (Spin), and the clock stands still.
 ///
 /// Interrupts are taken where they fall due, as the 8088 takes them: at the end of a wait's poll and of a spin, and when
-/// native code lets them in (EnableInterrupts), ends one (Hardware::EndOfInterrupt) or reprograms the timer
-/// (Hardware::SetTickRunning). The interrupt controller's rules hold: in service and end of interrupt (Scheduler). The handler
+/// native code lets them in (EnableInterrupts), ends one (Host::EndOfInterrupt) or reprograms the timer
+/// (Host::SetTickRunning). The interrupt controller's rules hold: in service and end of interrupt (Scheduler). The handler
 /// is the one installed by name: the game's own, the BIOS's, or a stray one, which throws.
 ///
 /// The game runs as a coroutine on the host's thread (D77): the program's start routine, and every routine it calls that waits,
 /// each a Task that co_awaits the next. When the clock reaches the end of a run inside a wait, the wait suspends the game and
 /// RunUntil returns; the next RunUntil resumes it where it stopped. There is one thread, and a run is a function of the program,
 /// its start moment and its inputs: there is no wall clock anywhere.
-class Platform
+class Host
 {
 public:
   /// How the platform powers on.
@@ -90,7 +89,7 @@ public:
   class [[nodiscard]] RunAwaiter
   {
   public:
-    explicit RunAwaiter(Platform& _platform) noexcept
+    explicit RunAwaiter(Host& _platform) noexcept
       : m_platform(_platform)
     {
     }
@@ -111,7 +110,7 @@ public:
     }
 
   private:
-    Platform& m_platform;
+    Host& m_platform;
   };
 
   /// The system control port at power-on (SystemControl).
@@ -124,10 +123,10 @@ public:
   /// Powers on: every device in its power-on state, the CGA with every register clear until the game sets its mode, the tick
   /// stopped, and none of the game's handlers in place. _state is the game's memory and _files where the commander files are;
   /// both must outlive the platform. Not noexcept: the devices allocate.
-  Platform(GameState& _state, FileStore& _files, const Desc& _desc);
-  Platform(const Platform&) = delete;
-  Platform& operator=(const Platform&) = delete;
-  ~Platform();
+  Host(GameState& _state, FileStore& _files, const Desc& _desc);
+  Host(const Host&) = delete;
+  Host& operator=(const Host&) = delete;
+  ~Host();
 
   // ── The program ──
 
@@ -195,7 +194,7 @@ public:
     return m_events;
   }
 
-  /// IN AL,61h: the system control port, as last written: bit 0 is the tone's gate and bit 1 the speaker's data. At power-on
+  /// The system control port, as last written: bit 0 is the tone's gate and bit 1 the speaker's data. At power-on
   /// it holds 4Ch, what the XT BIOS's keyboard reset writes last (speaker and gate off).
   [[nodiscard]] std::uint8_t SystemControl() const noexcept
   {
@@ -204,6 +203,20 @@ public:
 
   /// OUT 61h,_value: the speaker takes bits 0 and 1, the tone's gate and its data. Not noexcept: the speaker logs a change.
   void SetSystemControl(std::uint8_t _value);
+
+  /// The game's tick started, a millisecond from now and every millisecond after (D87), or stopped. With interrupts on, one
+  /// now due is taken here.
+  void SetTickRunning(bool _running);
+
+  /// The end of an interrupt. With interrupts on, one held back is taken here.
+  void EndOfInterrupt();
+
+  /// The key event the keyboard's interrupt delivered (D88), taken: the next one can then arrive. Only inside the keyboard's
+  /// handler.
+  [[nodiscard]] KeyEvent TakeKey() noexcept
+  {
+    return m_events.TakeKey();
+  }
 
   /// The mouse, which the host moves and the game reads (ADR-051).
   [[nodiscard]] Mouse& MouseDevice() noexcept
@@ -259,7 +272,7 @@ public:
     return m_cga.ShowsGraphicsFromStart() && m_spaceView.Shown(m_state);
   }
 
-  /// The space view's watch of a frame's drawing (Hardware::BeginSpaceViewFrame and the rest), over the game's state.
+  /// The space view's watch of a frame's drawing (Host::BeginSpaceViewFrame and the rest), over the game's state.
   void BeginSpaceViewFrame() noexcept
   {
     m_spaceView.BeginFrame();
@@ -279,6 +292,14 @@ public:
   void NoteSpaceViewRendered() noexcept
   {
     m_spaceView.NoteRendered();
+  }
+
+  /// What was drawn since BeginSpaceViewObject, no slot's, is the renderer's to draw: the stardust, the beams, the sights, the
+  /// title's planet (ADR-035).
+  void EndSpaceViewRendered() noexcept
+  {
+    m_spaceView.NoteRendered();
+    m_spaceView.EndObject(m_state, SpaceViewLayers::NO_SLOT);
   }
 
   /// A beam of the frame being drawn, which PublishFlightSnapshot hands to its snapshot; past MOST_BEAMS, none.
@@ -311,7 +332,7 @@ public:
   /// The stamp a file written now takes: the date and time at the clock, from the start moment (Desc::startMoment).
   [[nodiscard]] FileStamp FileStampNow() const;
 
-  // ── For native code, through Hardware ──
+  // ── For the game's routines ──
 
   /// STI: interrupts are taken again when they fall due, and those due now are taken here.
   void EnableInterrupts();

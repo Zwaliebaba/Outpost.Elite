@@ -21,7 +21,7 @@ constexpr std::int32_t FULL = Elite::Speaker::FULL_LEVEL;
 constexpr std::int32_t SAMPLE_44_LEVEL = 14856; // 90.7% of full
 
 // The speaker as the game drives it: the tone, and the system control port's two bits as the platform passes them on, which
-// PlatformTests checks.
+// HostTests checks.
 class SpeakerRig
 {
 public:

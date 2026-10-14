@@ -112,10 +112,10 @@ void ShowCargoMessage(GameState& _state, std::string_view _text, std::uint8_t _s
 }
 
 // 6C25 and 6D10: "Quantity?", up to three characters typed into quantityText, and ParseQuantity on them.
-[[nodiscard]] Task<Quantity> ReadQuantity(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<Quantity> ReadQuantity(GameState& _state, Host& _host)
 {
   PrintTextModeString(_state, QUANTITY_PROMPT_TEXT, MESSAGE_OFFSET);
-  co_await ReadTextLine(_state, _hardware, _state.Data().menus.quantityText, QUANTITY_DIGITS, QUANTITY_INPUT_OFFSET);
+  co_await ReadTextLine(_state, _host, _state.Data().menus.quantityText, QUANTITY_DIGITS, QUANTITY_INPUT_OFFSET);
   co_return ParseQuantity(_state.Data().menus.quantityText);
 }
 
@@ -186,14 +186,14 @@ void StoreLot(GameState& _state, const CargoLot& _lot)
 
 // 6C0F: S on the sell screen, once OpenCargoMessage has saved the attribute: a typed quantity from the hold to the market, for
 // the sell price (CargoSold). Returns the message for ShowCargoMessage, after the jumps back the original takes to it.
-[[nodiscard]] Task<std::string_view> SellCargo(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<std::string_view> SellCargo(GameState& _state, Host& _host)
 {
   const CargoRefusal refusal = RefuseToSell(SelectedLot(_state));
   if (refusal != CargoRefusal::None)
   {
     co_return RefusalText(refusal);
   }
-  const Quantity quantity = co_await ReadQuantity(_state, _hardware);
+  const Quantity quantity = co_await ReadQuantity(_state, _host);
   if (!quantity.valid)
   {
     co_return QUANTITY_ERROR_TEXT;
@@ -216,7 +216,7 @@ void StoreLot(GameState& _state, const CargoLot& _lot)
 // 6CBD: B on the buy screen, once OpenCargoMessage has saved the attribute: a typed quantity from the market into the hold, if
 // there is room and the cash, for the buy price (CargoBought). Returns the message for ShowCargoMessage, after the jumps back
 // the original takes to it.
-[[nodiscard]] Task<std::string_view> BuyCargo(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<std::string_view> BuyCargo(GameState& _state, Host& _host)
 {
   const bool largeBay = _state.Data().commander.largeCargoBayFitted == 1;
   const CargoRefusal refusal = RefuseToBuy(SelectedLot(_state), largeBay);
@@ -224,7 +224,7 @@ void StoreLot(GameState& _state, const CargoLot& _lot)
   {
     co_return RefusalText(refusal);
   }
-  const Quantity quantity = co_await ReadQuantity(_state, _hardware);
+  const Quantity quantity = co_await ReadQuantity(_state, _host);
   if (!quantity.valid)
   {
     co_return QUANTITY_ERROR_TEXT;
@@ -245,9 +245,9 @@ void StoreLot(GameState& _state, const CargoLot& _lot)
 
 } // namespace
 
-[[nodiscard]] Task<ScreenKey> ShowMarketPricesScreen(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<ScreenKey> ShowMarketPricesScreen(GameState& _state, Host& _host)
 {
-  const std::string_view title = DrawDockedFrame(_state, _hardware, MARKET_PRICES_FRAME);
+  const std::string_view title = DrawDockedFrame(_state, _host, MARKET_PRICES_FRAME);
   // The system's name, cut for good at its first space after the first letter.
   const std::span<std::uint8_t> name(_state.Data().commander.currentSystem.name);
   for (std::size_t letter = 1;; ++letter)
@@ -285,7 +285,7 @@ void StoreLot(GameState& _state, const CargoLot& _lot)
       break;
     }
   }
-  co_return co_await WaitForScreenExitKey(_state, _hardware, SCAN_F8);
+  co_return co_await WaitForScreenExitKey(_state, _host, SCAN_F8);
 }
 
 bool SubtractCredits(GameState& _state, std::uint32_t _tenths)
@@ -429,7 +429,7 @@ void PrintCargoQuantity(GameState& _state, std::uint16_t _quantity)
   _state.Data().drawing.textAttribute = attribute;
 }
 
-[[nodiscard]] Task<ScreenKey> RunCargoTradeMenu(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<ScreenKey> RunCargoTradeMenu(GameState& _state, Host& _host)
 {
   _state.Data().menus.menuFirstRowAttr = CARGO_MENU_FIRST_ROW;
   _state.Data().menus.menuRowCount = static_cast<std::uint8_t>(COMMODITY_KINDS);
@@ -437,10 +437,10 @@ void PrintCargoQuantity(GameState& _state, std::uint16_t _quantity)
   for (;;)
   {
     // 6B43: the steering; then the keys.
-    row = SteerMenuCursor(_state, _hardware, row);
+    row = SteerMenuCursor(_state, _host, row);
     for (;;)
     {
-      const KeyPress key = co_await PollMenuKey(_state, _hardware);
+      const KeyPress key = co_await PollMenuKey(_state, _host);
       const std::uint8_t code = key.scanCode;
       if (code == 0)
       {
@@ -459,11 +459,11 @@ void PrintCargoQuantity(GameState& _state, std::uint16_t _quantity)
           std::string_view message;
           if (buy)
           {
-            message = co_await BuyCargo(_state, _hardware);
+            message = co_await BuyCargo(_state, _host);
           }
           else
           {
-            message = co_await SellCargo(_state, _hardware);
+            message = co_await SellCargo(_state, _host);
           }
           ShowCargoMessage(_state, message, saved);
         }

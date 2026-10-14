@@ -166,7 +166,7 @@ public:
     GuardReport report(L"corpus");
     Checkpoints checkpoints;
     PlayEveryReplay(recording, report, checkpoints,
-                    [](const std::wstring& _name, Elite::Platform& _platform)
+                    [](const std::wstring& _name, Elite::Host& _platform)
                     {
                       const std::uint64_t calls = _platform.Entry().calls + _platform.GameHandler(Elite::Irq::Timer).calls +
                                                   _platform.GameHandler(Elite::Irq::Keyboard).calls;

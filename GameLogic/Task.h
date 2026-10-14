@@ -11,7 +11,7 @@ namespace Elite
 {
 
 /// A routine of the game that can wait (D77): a C++20 coroutine that runs when it is awaited and returns a T. Awaiting a Task runs
-/// it until it finishes or a wait suspends it; a suspended task is resumed by the host (Platform::RunUntil), and when it
+/// it until it finishes or a wait suspends it; a suspended task is resumed by the host (Host::RunUntil), and when it
 /// finishes, the routine that awaited it carries on, by symmetric transfer, with no stack growth. An exception leaves the task
 /// and is thrown again where it was awaited. A Task is awaited once.
 template <typename T> class [[nodiscard]] Task;
@@ -176,7 +176,7 @@ public:
     }
   }
 
-  /// The task as a host starts it: resumed from its start, its frame kept until the Task is destroyed (Platform).
+  /// The task as a host starts it: resumed from its start, its frame kept until the Task is destroyed (Host).
   [[nodiscard]] std::coroutine_handle<> Handle() const noexcept
   {
     return m_handle;

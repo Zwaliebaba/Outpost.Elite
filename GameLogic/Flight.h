@@ -2,7 +2,7 @@
 #pragma once
 
 #include "GameState.h"
-#include "Hardware.h"
+#include "Host.h"
 #include "Maths.h"
 #include "SpaceObject.h"
 #include "Video.h"
@@ -151,7 +151,7 @@ void ComputeStardustShift(GameState& _state);
 
 /// RestoreFlightScreen (CS:15CF): the cockpit back after a function key's screen (ShowCockpitScreen), every gauge marked stale
 /// (InvalidateDashboard), a beep, and messageShown cleared. Returns what ShowCockpitScreen did.
-ScreenChange RestoreFlightScreen(GameState& _state, Hardware& _hardware);
+ScreenChange RestoreFlightScreen(GameState& _state, Host& _host);
 
 /// UpdateDashboard (CS:254F): once a frame, in the CGA's video memory: the condition light, the energy and the laser's heat
 /// (UpdateEnergyAndLaserHeat), the safe zone's S and the ECM's E, the energy banks, the missiles, the pitch and roll
@@ -181,14 +181,14 @@ void UpdateEnergyAndLaserHeat(GameState& _state);
 /// (ClearAllObjects), the cockpit shown (ShowCockpitScreen), the stardust scattered, the flight's
 /// variables reset; then out of witch space the sun, the planet and the station, and spawnGovernment, else spawnGovernment 0.
 /// Returns what ShowCockpitScreen did.
-ScreenChange SetUpLocalSpace(GameState& _state, Hardware& _hardware);
+ScreenChange SetUpLocalSpace(GameState& _state, Host& _host);
 
 /// UpdatePlayerMotion (CS:8472): skipped during GAME OVER after its first frame; with the escape pod flying, only the world moves
 /// (MoveObjectsByVelocity). Otherwise the steering for the frame, the docking computer's (RunDockingComputer) or the selected
 /// device's (ReadSteering, then ApplyReverseControls) after . and , change the speed; the roll, -23 to 23, turns the roll angle
 /// by twice as much, and the pitch the camera's frame (ApplyPitch); then, unless the docking computer flies, the velocity
 /// (UpdatePlayerVelocity) and the world moved (MoveObjectsByVelocity). Waits sometimes, in the stick's read.
-void UpdatePlayerMotion(GameState& _state, Hardware& _hardware);
+void UpdatePlayerMotion(GameState& _state, Host& _host);
 
 /// InvalidateDashboard (CS:2540): the 22 dashboard cache bytes from missileCountShown filled with 0x80, so that
 /// UpdateDashboard redraws every gauge.
@@ -226,7 +226,7 @@ void UpdateSafeZone(GameState& _state);
 
 /// CheckCollisions (CS:2BC5): the player against each active one of objectSlotCount slots from shipSlots: inside its type's collisionRanges
 /// box, a ship's damage, or the station's docking, scrape or crash, the impact sound's STI on each.
-void CheckCollisions(GameState& _state, Hardware& _hardware);
+void CheckCollisions(GameState& _state, Host& _host);
 
 /// UpdateWarnings (CS:36B6): unless the game is over, the current warning posted again while warningFrames lasts, else the
 /// four warning checks from the one after the last warning.
@@ -267,7 +267,7 @@ std::uint8_t XorDashboardPixel(GameState& _state, std::uint8_t _x, std::uint8_t 
 
 /// UpdateFuelLeak (CS:499F): a fuel leak's delay counted down, then its frames, each taking 5 fuel and posting fuelLeakText;
 /// the border red while it leaks and maskingBackgroundColor otherwise, with the bright palette, unless the delay has just run out.
-void UpdateFuelLeak(GameState& _state, Hardware& _hardware);
+void UpdateFuelLeak(GameState& _state, Host& _host);
 
 /// TickEscapePod (CS:7F69): escapePodFrames counted down while it runs. Returns whether the pod has arrived, when the original
 /// drops its own return address so that its RET leaves RunFlight.
@@ -305,7 +305,7 @@ struct FlightScreens
 /// F1-F4; in witch space F5, F7, F8, and F6 until its countdown is down to 1, post the navigation computer's error instead. A screen
 /// shown first sets flightScreenShown and erases the compass and the blips, and the cockpit comes back as it leaves
 /// (RestoreFlightScreen). inFlight is 0 throughout, but for the status screen. Waits for keys on the screens' paths (ADR-015).
-[[nodiscard]] Task<FlightScreens> HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<FlightScreens> HandleFlightFunctionKeys(GameState& _state, Host& _host);
 
 /// How ProcessFlightKeys ends.
 struct FlightKeysExit
@@ -321,13 +321,13 @@ struct FlightKeysExit
 /// missile; fire; E the ECM; B the energy bomb; C the escape pod; I identifies; N the masking device; L the anti-ECM emulator.
 /// Waits
 /// for keys on the screens', the pause's and the freeze's paths (ADR-015).
-[[nodiscard]] Task<FlightKeysExit> ProcessFlightKeys(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<FlightKeysExit> ProcessFlightKeys(GameState& _state, Host& _host);
 
 /// RunPauseScreen (CS:8D6A): the speaker silenced (SilenceSpeakerTimer), then the pause menu drawn and its options presented until
 /// a key ends it: space resumes; R, D, Y, B and S toggle the options; F1-F10 set the frame time and draw the menu again; A leaves
 /// for the title, titleShown cleared. Returns whether A left, when the
 /// original drops its own return address and its caller's. Waits for keys as a rule (ADR-015).
-[[nodiscard]] Task<bool> RunPauseScreen(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<bool> RunPauseScreen(GameState& _state, Host& _host);
 
 /// RunFlight (CS:7E9B): the mouse reset if it steers, local space set up (SetUpLocalSpace) and the
 /// station's tunnel played; then a frame at a time: the dashboard, the objects drawn, the lasers, the stardust, the fuel leak, the
@@ -335,6 +335,6 @@ struct FlightKeysExit
 /// docked, the tunnel again and the keyboard and the sound reset; otherwise the flight keys, the hyperspace countdown and the escape
 /// pod. While the player is dead, unless cheatEnabled, GAME OVER for 40 frames, then ELITE on the message line. Waits as a rule
 /// (ADR-015).
-[[nodiscard]] Task<void> RunFlight(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<void> RunFlight(GameState& _state, Host& _host);
 
 } // namespace Elite

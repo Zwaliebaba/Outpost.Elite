@@ -63,7 +63,7 @@
     <ClInclude Include="pch.h">
       <Filter>Build</Filter>
     </ClInclude>
-    <ClInclude Include="PlatformRig.h">
+    <ClInclude Include="HostRig.h">
       <Filter>Rigs</Filter>
     </ClInclude>
     <ClInclude Include="ReferenceRig.h">
@@ -149,7 +149,7 @@
     <ClCompile Include="PlanetLookTests.cpp">
       <Filter>Flight</Filter>
     </ClCompile>
-    <ClCompile Include="PlatformTests.cpp">
+    <ClCompile Include="HostTests.cpp">
       <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="ReplayTests.cpp">

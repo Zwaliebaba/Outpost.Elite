@@ -141,12 +141,12 @@ void DrawTunnelRectangles(GameState& _state, std::size_t _first, std::uint16_t _
 }
 
 // MOV CX,_ticks, then WaitForTimerTick and the LOOP back to it: about _ticks milliseconds. The original leaves CX = 0.
-[[nodiscard]] Task<void> WaitTimerTicks(GameState& _state, Hardware& _hardware, std::uint16_t _ticks)
+[[nodiscard]] Task<void> WaitTimerTicks(GameState& _state, Host& _host, std::uint16_t _ticks)
 {
   std::uint16_t count = _ticks;
   for (;;)
   {
-    co_await WaitForTimerTick(_state, _hardware);
+    co_await WaitForTimerTick(_state, _host);
     if (--count == 0)
     {
       co_return;
@@ -469,7 +469,7 @@ void MaskOutsideTunnel(GameState& _state, std::size_t _rectangle)
   } while (--left != 0);
 }
 
-[[nodiscard]] Task<void> PlayStationTunnel(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<void> PlayStationTunnel(GameState& _state, Host& _host)
 {
   // MOV AX,leavingStationMessage, or autoDockMessage when docked, for one frame.
   _state.Data().messages.messagePointer = _state.Data().flight.playerDocked != 0 ? Message::AutoDock : Message::LeavingStation;
@@ -483,20 +483,20 @@ void MaskOutsideTunnel(GameState& _state, std::size_t _rectangle)
   {
     if (_state.Data().flight.playerDocked == 0)
     {
-      TransformAndDrawObjects(_state, _hardware);
+      TransformAndDrawObjects(_state, _host);
       MoveObjectsByVelocity(_state);
       UpdateStardust(_state);
       MaskOutsideTunnel(_state, 0);
     }
     else
     {
-      co_await WaitTimerTicks(_state, _hardware, DOCKED_FIRST_TICKS);
+      co_await WaitTimerTicks(_state, _host, DOCKED_FIRST_TICKS);
     }
     DrawTunnelRectangles(_state, 0, frame);
-    co_await FinishSpaceViewFrame(_state, _hardware);
+    co_await FinishSpaceViewFrame(_state, _host);
     // The frame as the game drew it, for a renderer that shows it in the cockpit (D68).
-    _hardware.PublishSpaceViewPicture(WithoutScene(TakeFlightSnapshot(_state)));
-    co_await WaitTimerTicks(_state, _hardware, TUNNEL_FRAME_TICKS);
+    _host.PublishSpaceViewPicture(WithoutScene(TakeFlightSnapshot(_state)));
+    co_await WaitTimerTicks(_state, _host, TUNNEL_FRAME_TICKS);
     // INC AX / CMP AL,0Bh.
     frame = Offset(frame, 1);
     if (Low(frame) == TUNNEL_FRAMES + 1)
@@ -512,18 +512,18 @@ void MaskOutsideTunnel(GameState& _state, std::size_t _rectangle)
   {
     if (_state.Data().flight.playerDocked == 0)
     {
-      TransformAndDrawObjects(_state, _hardware);
+      TransformAndDrawObjects(_state, _host);
       UpdateStardust(_state);
       MoveObjectsByVelocity(_state);
       MaskOutsideTunnel(_state, first);
     }
     else
     {
-      co_await WaitTimerTicks(_state, _hardware, TUNNEL_FRAME_TICKS);
+      co_await WaitTimerTicks(_state, _host, TUNNEL_FRAME_TICKS);
     }
     DrawTunnelRectangles(_state, first, frames);
-    co_await FinishSpaceViewFrame(_state, _hardware);
-    _hardware.PublishSpaceViewPicture(WithoutScene(TakeFlightSnapshot(_state)));
+    co_await FinishSpaceViewFrame(_state, _host);
+    _host.PublishSpaceViewPicture(WithoutScene(TakeFlightSnapshot(_state)));
     ++first;
     if (--frames == 0)
     {
@@ -532,12 +532,12 @@ void MaskOutsideTunnel(GameState& _state, std::size_t _rectangle)
   }
 }
 
-void ToggleDockingComputer(GameState& _state, Hardware& _hardware)
+void ToggleDockingComputer(GameState& _state, Host& _host)
 {
   _state.Data().playerShip.dockingKeyReleased = 0;
   if (_state.Data().playerShip.dockingComputerOn == 1)
   {
-    StopAllSound(_state, _hardware);
+    StopAllSound(_state, _host);
     _state.Data().playerShip.dockingComputerOn = 0;
     _state.Data().playerShip.viewLocked = 0;
     if (_state.Data().playerShip.playerSpeed == 0)
@@ -564,7 +564,7 @@ void ToggleDockingComputer(GameState& _state, Hardware& _hardware)
   _state.Data().docking.dockingComputerSteering = 0;
   _state.Data().docking.dockingComputerState = SLOW_TO_STOP;
   _state.Data().playerShip.dockingComputerOn = 1;
-  StartMusic(_state, _hardware);
+  StartMusic(_state, _host);
   StartBeep(_state);
   PostDockingMessage(_state, Message::DockingComputerOn);
 }
@@ -622,7 +622,7 @@ void RunDockingComputer(GameState& _state)
   }
 }
 
-void CancelDockingComputer(GameState& _state, Hardware& _hardware)
+void CancelDockingComputer(GameState& _state, Host& _host)
 {
   if (_state.Data().playerShip.dockingComputerOn != 1)
   {
@@ -631,7 +631,7 @@ void CancelDockingComputer(GameState& _state, Hardware& _hardware)
   _state.Data().playerShip.dockingComputerOn = 0;
   _state.Data().playerShip.viewLocked = 0;
   // PUSH AX / POP AX round it: StopAllSound's AX does not come out.
-  StopAllSound(_state, _hardware);
+  StopAllSound(_state, _host);
 }
 
 } // namespace Elite

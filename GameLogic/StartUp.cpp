@@ -51,35 +51,35 @@ constexpr std::uint16_t CREDITS_TIMER_TICKS = 3000; // 3 s
 
 } // namespace
 
-void InstallDivideAndKeyboardInterrupts(GameState& _state, Hardware& _hardware)
+void InstallDivideAndKeyboardInterrupts(GameState& _state, Host& _host)
 {
   // The original keeps the BIOS's int 0 and int 9 in savedDivideVector and savedKeyboardVector to put back; native code puts
   // back the BIOS's own (RestoreDivideAndKeyboardInterrupts).
   // With interrupts off, the game's own handlers installed, and int 8's segment written again. Nothing raises int 0 (the
   // divide trap at CS:025E), so its vector goes nowhere; the keyboard's handler is CS:0201. Int 8's segment written as the code
   // segment keeps the game's handler there; the BIOS's, moved into the code segment, would name code no routine stands in for.
-  _hardware.DisableInterrupts();
-  _hardware.SetHandler(Irq::Keyboard, IrqHandler::Game);
-  if (_hardware.Handler(Irq::Timer) != IrqHandler::Game)
+  _host.DisableInterrupts();
+  _host.SetHandler(Irq::Keyboard, IrqHandler::Game);
+  if (_host.Handler(Irq::Timer) != IrqHandler::Game)
   {
-    _hardware.SetHandler(Irq::Timer, IrqHandler::Stray);
+    _host.SetHandler(Irq::Timer, IrqHandler::Stray);
   }
-  _hardware.EnableInterrupts();
-  ResetKeyboard(_state, _hardware);
+  _host.EnableInterrupts();
+  ResetKeyboard(_state, _host);
 }
 
-void RestoreDivideAndKeyboardInterrupts(Hardware& _hardware)
+void RestoreDivideAndKeyboardInterrupts(Host& _host)
 {
   // With interrupts off, the BIOS's int 9 and int 0 put back; int 0's goes nowhere, as nothing raises it.
-  _hardware.DisableInterrupts();
-  _hardware.SetHandler(Irq::Keyboard, IrqHandler::Bios);
-  _hardware.EnableInterrupts();
+  _host.DisableInterrupts();
+  _host.SetHandler(Irq::Keyboard, IrqHandler::Bios);
+  _host.EnableInterrupts();
 }
 
-void CheckCheatArgument(GameState& _state, const Hardware& _hardware)
+void CheckCheatArgument(GameState& _state, const Host& _host)
 {
   // The shell's --cheat (D80), where the original read ' cheat' from the command tail DOS gave it.
-  _state.Data().startUp.cheatEnabled = _hardware.CheatRequested() ? 1 : 0;
+  _state.Data().startUp.cheatEnabled = _host.CheatRequested() ? 1 : 0;
 }
 
 void StartNewGame(GameState& _state)
@@ -115,7 +115,7 @@ void StartNewGame(GameState& _state)
   _state.Data().commander.maskSystemJumps = 0;
 }
 
-[[nodiscard]] Task<void> Start(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<void> Start(GameState& _state, Host& _host)
 {
   // The original keeps the PSP's segment in pspSegment to read its command tail from, and asks DOS's version, which is 3.30
   // (ADR-006 item 3): the platform gives the tail (CheckCheatArgument), and DOS 1's refusal never comes.
@@ -123,48 +123,48 @@ void StartNewGame(GameState& _state)
 
   for (;;)
   {
-    InstallTimerInterrupt(_state, _hardware);
+    InstallTimerInterrupt(_state, _host);
     // CopyProtection (CS:04A3) came here: it does nothing once protectionShown is set, as the D5 byte sets it (ADR-001).
-    InstallDivideAndKeyboardInterrupts(_state, _hardware);
-    CheckCheatArgument(_state, _hardware);
-    co_await GameLoop(_state, _hardware);
+    InstallDivideAndKeyboardInterrupts(_state, _host);
+    CheckCheatArgument(_state, _host);
+    co_await GameLoop(_state, _host);
 
     // HandleDiskRequest (CS:0065): GameLoop comes back only for diskOperation, 0 to leave.
-    RestoreDivideAndKeyboardInterrupts(_hardware);
-    RestoreTimerInterrupt(_state, _hardware);
+    RestoreDivideAndKeyboardInterrupts(_host);
+    RestoreTimerInterrupt(_state, _host);
     const std::uint8_t request = _state.Data().saveLoad.diskOperation;
     if (request == 0)
     {
       // Exit to DOS is a quit (D80): the program ends, with no farewell.
-      WipeProgram(_hardware);
+      WipeProgram(_host);
       co_return;
     }
     // The request, through the platform's file store (D78), where the original went through DOS with its own critical-error
     // handler on int 24h.
     _state.Data().disk.diskError = 0;
-    PerformDiskRequest(_state, _hardware, request);
+    PerformDiskRequest(_state, _host, request);
     // JMP RestartPlay.
   }
 }
 
-void WipeProgram(Hardware& _hardware)
+void WipeProgram(Host& _host)
 {
-  _hardware.DisableInterrupts();
+  _host.DisableInterrupts();
 }
 
-[[nodiscard]] Task<void> GameLoop(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<void> GameLoop(GameState& _state, Host& _host)
 {
   for (;;)
   {
     _state.Data().flow.inFlight = 0;
-    if (co_await RunTitleAndDocked(_state, _hardware))
+    if (co_await RunTitleAndDocked(_state, _host))
     {
       // LeaveGameLoopForDisk: the original drops the disc menu's return address and RunTitleAndDocked's, so that its RET returns
       // into Start.
       co_return;
     }
     _state.Data().flow.inFlight = 1;
-    co_await RunFlight(_state, _hardware);
+    co_await RunFlight(_state, _host);
     // After a death the title runs again.
     if (_state.Data().playerShip.playerDead == 1)
     {
@@ -174,10 +174,10 @@ void WipeProgram(Hardware& _hardware)
   }
 }
 
-[[nodiscard]] Task<void> ShowCredits(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<void> ShowCredits(GameState& _state, Host& _host)
 {
   // The space view's layers watch the frame (ADR-033), which holds only the credits' words (D66).
-  _hardware.BeginSpaceViewFrame();
+  _host.BeginSpaceViewFrame();
   ClearDrawBuffer(_state);
   // Each line from SI, one past the last line's NUL, at DI, a row of characters below the last line's start. The original pushes
   // and pops the count and the place round the print.
@@ -197,27 +197,18 @@ void WipeProgram(Hardware& _hardware)
     line += text.size() + 1;
     text = CreditsLine(line);
   }
-  co_await FinishSpaceViewFrame(_state, _hardware);
+  co_await FinishSpaceViewFrame(_state, _host);
   // The frame as it was drawn, for a renderer that draws it in the title's cockpit (D64, D66): the words and nothing of the scene.
-  _hardware.PublishFlightSnapshot(WithoutScene(TakeTitleSnapshot(_state, ELITE_TITLE_TEXT, SnapshotDisc{})), false);
+  _host.PublishFlightSnapshot(WithoutScene(TakeTitleSnapshot(_state, ELITE_TITLE_TEXT, SnapshotDisc{})), false);
   // WaitForTimerTick keeps every register; the LOOP counts the ticks left.
   for (std::uint16_t ticksLeft = CREDITS_TIMER_TICKS;;)
   {
-    co_await WaitForTimerTick(_state, _hardware);
+    co_await WaitForTimerTick(_state, _host);
     if (--ticksLeft == 0)
     {
       break;
     }
   }
-}
-
-// ── The entry of the program ──
-
-Task<void> StartEntry(Guest& _guest)
-{
-  // Start's first instructions push the far return to PSP:0000, where DOS's INT 20h ends the program, for its RETF to take once
-  // Start returns; on the platform the program ends when Start returns.
-  co_await Start(_guest.State(), _guest.Devices());
 }
 
 } // namespace Elite

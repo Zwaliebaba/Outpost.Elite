@@ -25,7 +25,7 @@ constexpr std::uint8_t MOUSE_DEVICE = 2;
 void MoveTwinMouse(TwinRig& _rig, std::int32_t _acrossMickeys, std::int32_t _downMickeys, std::uint8_t _buttons = 0)
 {
   _rig.Both(
-    [=](Elite::Platform& _platform, Elite::GameState&)
+    [=](Elite::Host& _platform, Elite::GameState&)
     {
       Elite::Mouse& mouse = _platform.MouseDevice();
       mouse.Move(_acrossMickeys, _downMickeys);
@@ -37,7 +37,7 @@ void MoveTwinMouse(TwinRig& _rig, std::int32_t _acrossMickeys, std::int32_t _dow
 [[nodiscard]] std::pair<std::int8_t, std::int8_t> FlightRates(TwinRig& _rig)
 {
   std::uint16_t rates = 0;
-  _rig.Both([&rates](Elite::Platform&, Elite::GameState& _state) { rates = _state.Data().playerShip.rollRate; });
+  _rig.Both([&rates](Elite::Host&, Elite::GameState& _state) { rates = _state.Data().playerShip.rollRate; });
   return {static_cast<std::int8_t>(rates & 0xFF), static_cast<std::int8_t>(rates >> 8)};
 }
 
@@ -45,7 +45,7 @@ void MoveTwinMouse(TwinRig& _rig, std::int32_t _acrossMickeys, std::int32_t _dow
 template <typename Struct> [[nodiscard]] std::uint8_t TwinByte(TwinRig& _rig, DataByte<Struct> _member)
 {
   std::uint8_t value = 0;
-  _rig.Both([&value, _member](Elite::Platform&, Elite::GameState& _state) { value = DataByteIn(_state, _member); });
+  _rig.Both([&value, _member](Elite::Host&, Elite::GameState& _state) { value = DataByteIn(_state, _member); });
   return value;
 }
 
@@ -62,7 +62,7 @@ public:
     TwinRig rig("TwinBriefing");
     rig.Play("key space; wait 4");
     rig.Both(
-      [](Elite::Platform&, Elite::GameState& _state)
+      [](Elite::Host&, Elite::GameState& _state)
       {
         _state.Data().commander.missionNumber = 2;
         _state.Data().commander.missionStage = 0;

@@ -32,21 +32,21 @@ std::uint8_t Decrement(std::uint8_t& _field)
 }
 
 // _image to speakerPortImage and to port 61h.
-void OutSpeaker(GameState& _state, Hardware& _hardware, std::uint8_t _image)
+void OutSpeaker(GameState& _state, Host& _host, std::uint8_t _image)
 {
   _state.Data().audio.speakerPortImage = _image;
-  _hardware.SetSystemControl(_image);
+  _host.SetSystemControl(_image);
 }
 
 // A beep's square wave: bit 1 of _bit replaces the speaker's data bit.
-void SetSpeakerData(GameState& _state, Hardware& _hardware, std::uint8_t _bit)
+void SetSpeakerData(GameState& _state, Host& _host, std::uint8_t _bit)
 {
-  OutSpeaker(_state, _hardware, static_cast<std::uint8_t>((_state.Data().audio.speakerPortImage & ~SPEAKER_DATA) | _bit));
+  OutSpeaker(_state, _host, static_cast<std::uint8_t>((_state.Data().audio.speakerPortImage & ~SPEAKER_DATA) | _bit));
 }
 
 // TimerTickMusic (0x72FF): titleTune's notes, each a byte (negative: no gap after it, 'F' a rest, 'G' the end) and a
 // length in beats. A note change (0x7372) sets the PIT's channel 2 to its period.
-void TickMusic(GameState& _state, Hardware& _hardware)
+void TickMusic(GameState& _state, Host& _host)
 {
   const std::uint16_t ticksLeft = _state.Data().audio.noteTicksLeft;
   if (ticksLeft != 0)
@@ -64,7 +64,7 @@ void TickMusic(GameState& _state, Hardware& _hardware)
     }
     _state.Data().audio.noteGapTicks = 0;
     _state.Data().audio.noteTicksLeft = gapTicks;
-    _hardware.SetToneDivisor(REST_PERIOD);
+    _host.Sound().SetTone(REST_PERIOD);
     return;
   }
 
@@ -100,29 +100,29 @@ void TickMusic(GameState& _state, Hardware& _hardware)
       }
       _state.Data().audio.noteTicksLeft = sounding;
       const auto index = static_cast<std::uint8_t>(pitch - NOTE_BASE);
-      _hardware.SetToneDivisor(NOTE_PERIODS[index]);
+      _host.Sound().SetTone(NOTE_PERIODS[index]);
       return;
     }
   }
   _state.Data().audio.noteGapTicks = 0;
   _state.Data().audio.noteTicksLeft = ticks;
-  _hardware.SetToneDivisor(REST_PERIOD);
+  _host.Sound().SetTone(REST_PERIOD);
 }
 
 // A sweep's sample: EmitNoiseSample for the noise sweep, ToggleSpeaker for the tone sweep. Each returns the port 61h
 // value, which the sweep does not use.
-using SweepSample = std::uint8_t (*)(GameState&, Hardware&);
+using SweepSample = std::uint8_t (*)(GameState&, Host&);
 
 // The noise and tone sweeps (0x7215, 0x7289): every sweepPeriodTicks ticks one sample, by _sample; every
 // sweepStepLength samples a longer period and a shorter step, until the period reaches 7.
-void TickSweep(GameState& _state, Hardware& _hardware, SweepSample _sample, std::uint8_t& _active)
+void TickSweep(GameState& _state, Host& _host, SweepSample _sample, std::uint8_t& _active)
 {
   if (Decrement(_state.Data().audio.sweepTickCounter) != 0)
   {
     return;
   }
   _state.Data().audio.sweepTickCounter = std::uint8_t{_state.Data().audio.sweepPeriodTicks};
-  _sample(_state, _hardware);
+  _sample(_state, _host);
   if (Decrement(_state.Data().audio.sweepStepCounter) != 0)
   {
     return;
@@ -139,68 +139,68 @@ void TickSweep(GameState& _state, Hardware& _hardware, SweepSample _sample, std:
 }
 
 // TimerTickSoundEffects (0x717F): the beeps, then the one effect of highest priority.
-void TickSoundEffects(GameState& _state, Hardware& _hardware)
+void TickSoundEffects(GameState& _state, Host& _host)
 {
   if (_state.Data().audio.beepTicks != 0)
   {
-    SetSpeakerData(_state, _hardware, static_cast<std::uint8_t>((Decrement(_state.Data().audio.beepTicks) << 1) & SPEAKER_DATA));
+    SetSpeakerData(_state, _host, static_cast<std::uint8_t>((Decrement(_state.Data().audio.beepTicks) << 1) & SPEAKER_DATA));
   }
   if (_state.Data().audio.lowBeepTicks != 0)
   {
-    SetSpeakerData(_state, _hardware, static_cast<std::uint8_t>(Decrement(_state.Data().audio.lowBeepTicks) & SPEAKER_DATA));
+    SetSpeakerData(_state, _host, static_cast<std::uint8_t>(Decrement(_state.Data().audio.lowBeepTicks) & SPEAKER_DATA));
   }
   if (_state.Data().audio.noiseSweepActive == 1)
   {
-    TickSweep(_state, _hardware, &EmitNoiseSample, _state.Data().audio.noiseSweepActive);
+    TickSweep(_state, _host, &EmitNoiseSample, _state.Data().audio.noiseSweepActive);
     return;
   }
   if (_state.Data().audio.noiseBurstTicks != 0)
   {
     Decrement(_state.Data().audio.noiseBurstTicks);
-    EmitNoiseSample(_state, _hardware);
+    EmitNoiseSample(_state, _host);
     return;
   }
   if (_state.Data().audio.toneSweepActive == 1)
   {
-    TickSweep(_state, _hardware, &ToggleSpeaker, _state.Data().audio.toneSweepActive);
+    TickSweep(_state, _host, &ToggleSpeaker, _state.Data().audio.toneSweepActive);
   }
 }
 
 } // namespace
 
-void InstallTimerInterrupt(GameState& _state, Hardware& _hardware)
+void InstallTimerInterrupt(GameState& _state, Host& _host)
 {
-  _hardware.SetTickRunning(true);
-  const std::uint8_t speaker = _hardware.SystemControl();
+  _host.SetTickRunning(true);
+  const std::uint8_t speaker = _host.SystemControl();
   _state.Data().timer.savedSpeakerPort = speaker;
   const auto image = static_cast<std::uint8_t>(speaker & ~SPEAKER_BITS);
   _state.Data().audio.speakerPortImage = image;
-  _hardware.SetSystemControl(image);
+  _host.SetSystemControl(image);
   // The game's own handler, at CS:0215, installed in place of the BIOS's, which the original keeps in savedTimerVector and
   // native code puts back by name (RestoreTimerInterrupt).
-  _hardware.SetHandler(Irq::Timer, IrqHandler::Game);
-  _hardware.EnableInterrupts();
+  _host.SetHandler(Irq::Timer, IrqHandler::Game);
+  _host.EnableInterrupts();
 }
 
-void RestoreTimerInterrupt(GameState& _state, Hardware& _hardware)
+void RestoreTimerInterrupt(GameState& _state, Host& _host)
 {
-  _hardware.DisableInterrupts();
+  _host.DisableInterrupts();
   // The BIOS's handler put back, as InstallTimerInterrupt found it.
-  _hardware.SetHandler(Irq::Timer, IrqHandler::Bios);
-  _hardware.SetSystemControl(_state.Data().timer.savedSpeakerPort);
-  _hardware.SetTickRunning(false);
-  _hardware.EnableInterrupts();
+  _host.SetHandler(Irq::Timer, IrqHandler::Bios);
+  _host.SetSystemControl(_state.Data().timer.savedSpeakerPort);
+  _host.SetTickRunning(false);
+  _host.EnableInterrupts();
 }
 
-void TimerInterrupt(GameState& _state, Hardware& _hardware)
+void TimerInterrupt(GameState& _state, Host& _host)
 {
   // PUSH AX / PUSH DS / PUSH ES, and their POPs before the IRET or the chain: what it loads into them, the data segment, B800h
   // and the end of the interrupt's 20h, goes no further.
-  TimerTick(_state, _hardware);
-  _hardware.EndOfInterrupt();
+  TimerTick(_state, _host);
+  _host.EndOfInterrupt();
 }
 
-void TimerTick(GameState& _state, Hardware& _hardware)
+void TimerTick(GameState& _state, Host& _host)
 {
   _state.Data().timer.millisecondCounter = static_cast<std::uint16_t>(_state.Data().timer.millisecondCounter + 1);
   _state.Data().timer.timerTicks = static_cast<std::uint16_t>(_state.Data().timer.timerTicks + 1);
@@ -213,43 +213,21 @@ void TimerTick(GameState& _state, Hardware& _hardware)
   }
   if (_state.Data().sound.musicPlaying == 1)
   {
-    TickMusic(_state, _hardware);
+    TickMusic(_state, _host);
     return;
   }
-  TickSoundEffects(_state, _hardware);
+  TickSoundEffects(_state, _host);
 }
 
-[[nodiscard]] Task<void> WaitForTimerTick(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<void> WaitForTimerTick(GameState& _state, Host& _host)
 {
   // PUSH AX, MOV AX,[timerTicks], then the compare at 7776 and JE back to it, and POP AX: AX holds the tick it started at. The
   // stack the PUSH used is not state the game reads, nor the digest (ADR-008 item 5).
   const std::uint16_t ticks = _state.Data().timer.timerTicks;
   while (ticks == _state.Data().timer.timerTicks)
   {
-    co_await _hardware.Wait();
+    co_await _host.Wait();
   }
-}
-
-// ── The entry of the timer's interrupt handler ──
-
-void TimerInterruptEntry(Guest& _guest)
-{
-  // AX, DS and ES pushed round what it loads into them, and popped: every register is kept, and the IRET takes the flags.
-  TimerInterrupt(_guest.State(), _guest.Devices());
-}
-
-namespace
-{
-
-constexpr std::array ENTRIES = {
-  NativeEntry{EntryKind::TimerHandler, &TimerInterruptEntry}, // CS:0215
-};
-
-} // namespace
-
-std::span<const NativeEntry> TimerEntries() noexcept
-{
-  return ENTRIES;
 }
 
 } // namespace Elite

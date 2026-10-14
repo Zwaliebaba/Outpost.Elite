@@ -186,12 +186,6 @@
     <ClInclude Include="Gauges.h">
       <Filter>Flight</Filter>
     </ClInclude>
-    <ClInclude Include="Guest.h">
-      <Filter>Native</Filter>
-    </ClInclude>
-    <ClInclude Include="Hardware.h">
-      <Filter>State</Filter>
-    </ClInclude>
     <ClInclude Include="Hyperspace.h">
       <Filter>Hyperspace</Filter>
     </ClInclude>
@@ -243,12 +237,6 @@
     <ClInclude Include="Mouse.h">
       <Filter>Platform</Filter>
     </ClInclude>
-    <ClInclude Include="NativeEntry.h">
-      <Filter>Native</Filter>
-    </ClInclude>
-    <ClInclude Include="NativeRoutines.h">
-      <Filter>Native</Filter>
-    </ClInclude>
     <ClInclude Include="Outcome.h">
       <Filter>Replay</Filter>
     </ClInclude>
@@ -261,7 +249,7 @@
     <ClInclude Include="PlanetLook.h">
       <Filter>Scene</Filter>
     </ClInclude>
-    <ClInclude Include="Platform.h">
+    <ClInclude Include="Host.h">
       <Filter>Platform</Filter>
     </ClInclude>
     <ClInclude Include="PlayerShipState.h">
@@ -431,9 +419,6 @@
     <ClCompile Include="Gauges.cpp">
       <Filter>Flight</Filter>
     </ClCompile>
-    <ClCompile Include="Hardware.cpp">
-      <Filter>State</Filter>
-    </ClCompile>
     <ClCompile Include="Hyperspace.cpp">
       <Filter>Hyperspace</Filter>
     </ClCompile>
@@ -449,9 +434,6 @@
     <ClCompile Include="Mouse.cpp">
       <Filter>Platform</Filter>
     </ClCompile>
-    <ClCompile Include="NativeRoutines.cpp">
-      <Filter>Native</Filter>
-    </ClCompile>
     <ClCompile Include="Outcome.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
@@ -461,7 +443,7 @@
     <ClCompile Include="PlanetLook.cpp">
       <Filter>Scene</Filter>
     </ClCompile>
-    <ClCompile Include="Platform.cpp">
+    <ClCompile Include="Host.cpp">
       <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="Reference.cpp">

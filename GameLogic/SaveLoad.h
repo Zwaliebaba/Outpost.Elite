@@ -2,7 +2,7 @@
 #pragma once
 
 #include "GameState.h"
-#include "Hardware.h"
+#include "Host.h"
 
 #include <cstdint>
 
@@ -26,17 +26,17 @@ struct DiscMenuExit
 /// ShowDiscControlScreen (CS:660B), with RunDiscControlKeys, ShowDiskResult and PromptCommanderFileName, which
 /// jumps into its key loop after a bad name, as one unit (ADR-012 item 14): the Disc/Control menu, or, back from Start's disk
 /// work, what it came to or the question whether to retry it; then its keys. Waits for keys as a rule (ADR-015).
-[[nodiscard]] Task<DiscMenuExit> ShowDiscControlScreen(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<DiscMenuExit> ShowDiscControlScreen(GameState& _state, Host& _host);
 
 /// PromptCommanderFileName (CS:6862): FILENAME? and up to 8 characters through ReadTextLine into commanderFileName, folded to
 /// upper case, and ".CDR" after them. Returns false for a bad name, which the original answers by dropping its return address
 /// and reading the menu's keys on in its place (RejectFileName). Waits for keys as a rule (ADR-015).
-[[nodiscard]] Task<bool> PromptCommanderFileName(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<bool> PromptCommanderFileName(GameState& _state, Host& _host);
 
 /// PerformDiskRequest (CS:02FF): _request 1 loads commanderFileName into commanderBlock, 2 saves it, 3 deletes it, and anything
 /// else lists the .CDR files with no attribute into commanderFileList, each through the platform's FileStore (D78).
 /// diskError=1 on a failure.
-void PerformDiskRequest(GameState& _state, Hardware& _hardware, std::uint8_t _request);
+void PerformDiskRequest(GameState& _state, Host& _host, std::uint8_t _request);
 
 /// PrintCommanderCatalogue (CS:68CE): ten text rows blanked, and commanderFileList's commanderFileCount names printed in
 /// columns of ten.

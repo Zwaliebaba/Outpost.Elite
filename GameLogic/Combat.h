@@ -3,7 +3,7 @@
 
 #include "Flight.h"
 #include "GameState.h"
-#include "Hardware.h"
+#include "Host.h"
 #include "SpaceObject.h"
 
 #include <array>
@@ -53,7 +53,7 @@ void DrawLaserSights(GameState& _state);
 /// and the colour counting down past 0 for type 0 and up for type 2; type 1 both outer beams, the colour counting up; type 3 all
 /// four, the inner pair in laserBeamColorToggle's colour and the outer in the other. Each beam is watched for the space view and
 /// noted for the frame's snapshot, which the renderer draws in its place (ADR-035).
-void DrawLaserBeams(GameState& _state, Hardware& _hardware);
+void DrawLaserBeams(GameState& _state, Host& _host);
 
 /// TakeDamage (CS:2C9B): _damage taken by the fore shield and what it cannot take by the energy: from 100h on, the shield takes all
 /// it holds; below, the low byte goes against the shield, written back, and 0 over it on a borrow. An energy that goes below 0
@@ -63,7 +63,7 @@ std::optional<std::uint8_t> TakeDamage(GameState& _state, std::uint16_t _damage)
 
 /// DetonateEnergyBomb (CS:2ED6): in the safe zone a crime, 28h added to legalStatus up to FFh (the sum written, then FFh over it on a
 /// carry); then every active ship from firstShipSlot with its blip drawn has its cargo emptied and explodes (ExplodeObject).
-void DetonateEnergyBomb(GameState& _state, Hardware& _hardware);
+void DetonateEnergyBomb(GameState& _state, Host& _host);
 
 /// SpawnPlayerWreckage (CS:2FE3): the player's death: the drift, 40 along the nose (ComputeDeathDebrisVector), kept in
 /// wreckDrift; the player stopped at speed 8 with the view locked; six splinters in debris slots drifting with it and a
@@ -86,7 +86,7 @@ std::optional<DashboardPixel> RemoveAllMissiles(GameState& _state);
 /// ExplodeObject (CS:4FC1): _object removed (TallyMaskMissionKill first, then RemoveObject); when it was drawn this frame, the explosion's
 /// sound, its fragments in debris slots (copied from it), and its cargo's barrels in free ship slots: one for a ship that carries the
 /// device, else a random byte / (255 / (cargo + 1) + 1).
-void ExplodeObject(GameState& _state, Hardware& _hardware, SpaceObject& _object);
+void ExplodeObject(GameState& _state, Host& _host, SpaceObject& _object);
 
 /// TallyMaskMissionKill (CS:50FE): while maskMissionShipsLeft is not 0, an Asp at _slot with the mission's bounty counts it down,
 /// and one that carries the device sets maskShipDestroyed.
@@ -122,7 +122,7 @@ void TryLaunchThargon(GameState& _state, SpaceObject& _slot);
 /// its target is gone it explodes. Within C8h of it on every axis it explodes (ExplodeObject) on it: the player takes 320h damage
 /// (TakeDamage); a station is a crime of 5 on legalStatus, or in an invasion loses 10 of its energy and explodes at the last; a ship is
 /// credited (CreditKill) and explodes unless indestructible.
-void UpdateMissileAi(GameState& _state, Hardware& _hardware, SpaceObject& _missile);
+void UpdateMissileAi(GameState& _state, Host& _host, SpaceObject& _missile);
 
 /// FindShipInCrosshairs (CS:8A46): the nearest of objectSlotCount - 2 slots from stationSlot that is active, drawn this frame,
 /// not passed over (+1Eh bits 5 and 6 both set), and over the view's centre: |x| * 256 / z and |y| * 256 / z both below its
@@ -134,7 +134,7 @@ void UpdateMissileAi(GameState& _state, Hardware& _hardware, SpaceObject& _missi
 /// computer and is a crime of 28h, or in an invasion does half damage; a ship that runs out of energy is destroyed (CreditKill,
 /// CheckMissileTargetDestroyed, ExplodeObject) unless indestructible, where a station stays at 0 and falls only in an invasion. Then the
 /// beams (DrawLaserBeams), the laser's sound unless the target was destroyed, and laserFiring cleared.
-void ResolveLaserFire(GameState& _state, Hardware& _hardware);
+void ResolveLaserFire(GameState& _state, Host& _host);
 
 /// CheckMissileTargetDestroyed (CS:8B8B): when a missile is locked on the slot at _slot, its message and the missile unlocked.
 void CheckMissileTargetDestroyed(GameState& _state, const SpaceObject& _slot);
@@ -155,7 +155,7 @@ KillCredit CreditKill(GameState& _state, SpaceObject& _slot);
 /// edge of the view (DrawClippedLine); then 15 off the fore shield, or the aft while the attacker is behind (playerHitByDepth
 /// bit 7), written back and 0 over it on a borrow, and what it could not take off playerEnergy likewise, where a borrow sets
 /// playerDead.
-void ApplyEnemyLaserHit(GameState& _state, Hardware& _hardware);
+void ApplyEnemyLaserHit(GameState& _state, Host& _host);
 
 /// UseMaskingDevice (CS:8ECF): 12 off the energy, at least 0, the background blue, and for each of objectSlotCount slots from
 /// shipSlots, its state and hostility cleared and 2 off its aggression, at least 0.

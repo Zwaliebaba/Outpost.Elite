@@ -19,7 +19,7 @@ enum class Irq : std::uint8_t
   Keyboard
 };
 
-/// What serves an interrupt: the game's own handler, or none of the game's, when the host's default runs (Platform); a stray
+/// What serves an interrupt: the game's own handler, or none of the game's, when the host's default runs (Host); a stray
 /// one throws std::logic_error.
 enum class IrqHandler : std::uint8_t
 {
