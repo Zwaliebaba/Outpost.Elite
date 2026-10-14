@@ -255,7 +255,7 @@
     <ClInclude Include="PlayerShipState.h">
       <Filter>State</Filter>
     </ClInclude>
-    <ClInclude Include="Reference.h">
+    <ClInclude Include="Repository.h">
       <Filter>Reference</Filter>
     </ClInclude>
     <ClInclude Include="Replay.h">
@@ -310,9 +310,6 @@
       <Filter>Scene</Filter>
     </ClInclude>
     <ClInclude Include="Speaker.h">
-      <Filter>Platform</Filter>
-    </ClInclude>
-    <ClInclude Include="SquareWave.h">
       <Filter>Platform</Filter>
     </ClInclude>
     <ClInclude Include="StartState.h">
@@ -443,7 +440,7 @@
     <ClCompile Include="Host.cpp">
       <Filter>Platform</Filter>
     </ClCompile>
-    <ClCompile Include="Reference.cpp">
+    <ClCompile Include="Repository.cpp">
       <Filter>Reference</Filter>
     </ClCompile>
     <ClCompile Include="Replay.cpp">
@@ -471,9 +468,6 @@
       <Filter>Scene</Filter>
     </ClCompile>
     <ClCompile Include="Speaker.cpp">
-      <Filter>Platform</Filter>
-    </ClCompile>
-    <ClCompile Include="SquareWave.cpp">
       <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="StartState.cpp">

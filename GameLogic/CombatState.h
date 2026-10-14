@@ -19,9 +19,9 @@ struct CombatState
   std::uint8_t laserBeamColorToggle;
   /// cycles through 1-3
   std::uint8_t laserBeamColor;
-  /// slot of the ship whose laser hit the player (51C3)
+  /// slot of the ship whose laser hit the player
   SlotIndex playerHitBy;
-  /// set to 2 or 1 by the enemy fire code (51C7, 51DA); ApplyEnemyLaserHit applies it and clears it
+  /// set to 2 or 1 by the enemy fire code; ApplyEnemyLaserHit applies it and clears it
   std::uint8_t playerHitPending;
   /// shooter's +3C; bit 7 picks the aft shield
   std::uint8_t playerHitByDepth;
@@ -33,7 +33,7 @@ struct CombatState
   std::uint16_t wreckDriftZ;
   /// 1 while ExplodeObject explodes a station: 10 extra debris steps
   std::uint8_t explodingStation;
-  /// set when laser kind 2 (Mining, names at DS:81C2) hits type 5 (0x8AEC); fragments get slower, live 60 frames longer, and may carry m...
+  /// set when laser kind 2 (Mining) hits type 5; fragments get slower, live 60 frames longer, and may carry m...
   std::uint8_t miningLaserOnAsteroid;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.

@@ -18,47 +18,47 @@ struct KeyEvent
 namespace Keys
 {
 
-/// pauses the game in flight (ProcessFlightKeys 813D)
+/// pauses the game in flight (ProcessFlightKeys)
 inline constexpr std::uint8_t ESC = 0x01;
 /// pitch -1 (ReadKeyboardSteering)
 inline constexpr std::uint8_t Q = 0x10;
-/// ECM (ProcessFlightKeys 829F)
+/// ECM (ProcessFlightKeys)
 inline constexpr std::uint8_t E = 0x12;
-/// primes a missile (8171)
+/// primes a missile
 inline constexpr std::uint8_t T = 0x14;
-/// unarms the missile (81FB)
+/// unarms the missile
 inline constexpr std::uint8_t U = 0x16;
-/// ID indicator: identifies the ship in the sights (82FE)
+/// ID indicator: identifies the ship in the sights
 inline constexpr std::uint8_t I = 0x17;
 /// roll -1 (ReadKeyboardSteering)
 inline constexpr std::uint8_t O = 0x18;
 /// roll +1 (ReadKeyboardSteering)
 inline constexpr std::uint8_t P = 0x19;
-/// with Esc, a freeze without the pause menu (8149)
+/// with Esc, a freeze without the pause menu
 inline constexpr std::uint8_t CTRL = 0x1D;
 /// pitch +1 (ReadKeyboardSteering)
 inline constexpr std::uint8_t A = 0x1E;
-/// arms the galactic hyperdrive (802E)
+/// arms the galactic hyperdrive
 inline constexpr std::uint8_t G = 0x22;
-/// hyperspace (805E)
+/// hyperspace
 inline constexpr std::uint8_t H = 0x23;
-/// jump drive (8133)
+/// jump drive
 inline constexpr std::uint8_t J = 0x24;
-/// anti-ECM emulator while held (837E)
+/// anti-ECM emulator while held
 inline constexpr std::uint8_t L = 0x26;
 /// makes ReadScanCode OR 80h into the buffered code
 inline constexpr std::uint8_t LEFT_SHIFT = 0x2A;
-/// launches the escape capsule (82DC)
+/// launches the escape capsule
 inline constexpr std::uint8_t C = 0x2E;
-/// energy bomb (82C6)
+/// energy bomb
 inline constexpr std::uint8_t B = 0x30;
-/// masking device while held (8368)
+/// masking device while held
 inline constexpr std::uint8_t N = 0x31;
-/// launches a locked missile (8222)
+/// launches a locked missile
 inline constexpr std::uint8_t M = 0x32;
-/// playerSpeed -4 (84B2)
+/// playerSpeed -4
 inline constexpr std::uint8_t COMMA = 0x33;
-/// playerSpeed +4 (849E)
+/// playerSpeed +4
 inline constexpr std::uint8_t PERIOD = 0x34;
 /// makes ReadScanCode OR 80h into the buffered code
 inline constexpr std::uint8_t RIGHT_SHIFT = 0x36;
@@ -81,8 +81,8 @@ inline constexpr std::uint8_t DOWN = 0x50;
 /// order there; the GameState holds it in GameData.
 struct KeyboardState
 {
-  /// 1 while the key is held, indexed by the scan code itself (Keys; entry 0 unused; the map's 'scan code - 1' misses the inc ah at
-  /// 7452); written by ReadScanCode
+  /// 1 while the key is held, indexed by the scan code itself (Keys; entry 0 unused; the map's 'scan code - 1' misses ReadScanCode's
+  /// inc ah); written by ReadScanCode
   std::uint8_t keyDown[128];
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.

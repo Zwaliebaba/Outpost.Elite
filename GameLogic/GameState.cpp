@@ -14,10 +14,8 @@ GameState::GameState()
 {
 }
 
-void GameState::Start(std::uint16_t _codeSegment)
+void GameState::Start()
 {
-  m_codeSegment = _codeSegment;
-  m_dataSegment = static_cast<std::uint16_t>(_codeSegment + DATA_SEGMENT_PARAGRAPH);
   *m_data = GameData{};
   SetStartState(*m_data);
 }

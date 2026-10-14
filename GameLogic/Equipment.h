@@ -25,58 +25,58 @@ namespace Elite
 
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState ──
 
-/// TryScoopObject (CS:4401): freeCargoTonnes, and the object in _slot scooped into the hold if its view position _view is in
+/// TryScoopObject: freeCargoTonnes, and the object in _slot scooped into the hold if its view position _view is in
 /// the scoop's box: a barrel's random product or its masking device, a splinter's alloys or precious metals, an escape pod's
 /// slaves, a Thargon's alien items, each removed (RemoveObject) with its message, or the message that the hold is full or the
 /// object cannot be scooped.
 void TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view);
 
-/// PayForEquipmentItem (CS:65A3): menuSelectedRow's price off creditsTenths (SubtractCredits): fuel's by the tank's emptiness.
+/// PayForEquipmentItem: menuSelectedRow's price off creditsTenths (SubtractCredits): fuel's by the tank's emptiness.
 /// Returns whether the credits were enough, and are now less the price.
 [[nodiscard]] bool PayForEquipmentItem(GameState& _state);
 
-/// LaunchEscapePod (CS:2F0F): an abandoned Cobra in a free ship slot, or one ReclaimShipSlot makes, the player turned away
+/// LaunchEscapePod: an abandoned Cobra in a free ship slot, or one ReclaimShipSlot makes, the player turned away
 /// at speed 20 and moved 12 frames, the escape pod and the cargo hold gone.
 void LaunchEscapePod(GameState& _state);
 
-/// SelectLaserType (CS:633B): selectedLaserType 0-3 for the laser at menuSelectedRow (LaserTypeOfRow), or 3, where the
+/// SelectLaserType: selectedLaserType 0-3 for the laser at menuSelectedRow (LaserTypeOfRow), or 3, where the
 /// original's count up a type at a time stops, for a row that is no laser's. Returns whether the row is a laser's.
 [[nodiscard]] bool SelectLaserType(GameState& _state);
 
-/// ShowEquipShipScreen (CS:5BF2): the F4 screen, each item up to the system's tech level with its price into screenPrices and
+/// ShowEquipShipScreen: the F4 screen, each item up to the system's tech level with its price into screenPrices and
 /// its resale price, then RunEquipShipMenu from the first item's row, which returns the key that closes it. Waits for keys as a
 /// rule (ADR-015).
 [[nodiscard]] Task<ScreenKey> ShowEquipShipScreen(GameState& _state, Host& _host);
 
-/// RunEquipShipMenu (CS:6111), with OpenEquipMessage, ShowEquipMessage, ReportNotEnoughCredits and the buying and selling it
+/// RunEquipShipMenu, with OpenEquipMessage, ShowEquipMessage, ReportNotEnoughCredits and the buying and selling it
 /// runs into as one unit (ADR-012 item 14): the equipment menu from row _firstRow of the text page (menuFirstRowAttr), the
 /// cursor moved by the steering and the arrow keys, and B and S to buy and sell, each with its message. Returns Esc or the
 /// F-key, other than F4, that ends it. Waits for keys as a rule (ADR-015).
 [[nodiscard]] Task<ScreenKey> RunEquipShipMenu(GameState& _state, Host& _host, std::uint16_t _firstRow);
 
-/// ChooseMountToFitLaser (CS:63B2): the mount menu, and the mount a bought laser goes on, chosen with the steering or the
+/// ChooseMountToFitLaser: the mount menu, and the mount a bought laser goes on, chosen with the steering or the
 /// arrow keys and Space. Waits for keys as a rule (ADR-015).
 [[nodiscard]] Task<void> ChooseMountToFitLaser(GameState& _state, Host& _host);
 
-/// ChooseMountToRemoveLaser (CS:646F): the mount menu, and the mount a sold laser comes off, as ChooseMountToFitLaser.
+/// ChooseMountToRemoveLaser: the mount menu, and the mount a sold laser comes off, as ChooseMountToFitLaser.
 [[nodiscard]] Task<void> ChooseMountToRemoveLaser(GameState& _state, Host& _host);
 
-/// DrawLaserMountMenu (CS:6367): the mount header, each of the four mounts' laser or "Free" on the line after it, and
+/// DrawLaserMountMenu: the mount header, each of the four mounts' laser or "Free" on the line after it, and
 /// FORE's box highlighted; selectedLaserMount = 0.
 void DrawLaserMountMenu(GameState& _state);
 
-/// RedrawEquipHelpText (CS:653F): the equipment screen's help lines again, over the mount menu, and textAttribute put
+/// RedrawEquipHelpText: the equipment screen's help lines again, over the mount menu, and textAttribute put
 /// back to the menu's.
 void RedrawEquipHelpText(GameState& _state);
 
-/// PaintLaserMountBox (CS:6564): textAttribute over the 8x3 cells of the mount box whose first attribute byte is at
+/// PaintLaserMountBox: textAttribute over the 8x3 cells of the mount box whose first attribute byte is at
 /// B800:_box.
 void PaintLaserMountBox(GameState& _state, std::uint16_t _box);
 
-/// ClearEquipmentSellPrice (CS:6946): "-" in menuSelectedRow's resale column, once the last of an item is sold.
+/// ClearEquipmentSellPrice: "-" in menuSelectedRow's resale column, once the last of an item is sold.
 void ClearEquipmentSellPrice(GameState& _state);
 
-/// ShowEquipmentSellPrice (CS:6972): menuSelectedRow's resale price computed by ComputeResalePrice, stored after its
+/// ShowEquipmentSellPrice: menuSelectedRow's resale price computed by ComputeResalePrice, stored after its
 /// price in screenPrices, and printed in its row's resale column.
 void ShowEquipmentSellPrice(GameState& _state);
 

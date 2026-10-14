@@ -24,66 +24,66 @@ constexpr std::array<Message, 4> WARNING_MESSAGES = {
   Message::EnergyWarning,      // warningTexts[3]
 };
 
-/// stardustColor (DS:27F4 in 1987): drawColor for stardust; 3 in the file
+/// stardustColor: drawColor for stardust; 3 in the file
 constexpr std::uint8_t STARDUST_COLOR = 0x03;
 
-/// barPartialBytes (DS:41FA in 1987): byte; the partial byte of a bar: 1, 2 or 3 pixels of colour 1 then colour 2 (entry 0 unused)
+/// barPartialBytes: byte; the partial byte of a bar: 1, 2 or 3 pixels of colour 1 then colour 2 (entry 0 unused)
 constexpr std::array<std::uint8_t, 4> BAR_PARTIAL_BYTES = {
-  0xAA, 0x6A, 0x5A, 0x56, // DS:41FA
+  0xAA, 0x6A, 0x5A, 0x56, // [0]
 };
 
-/// indicatorMarkers (DS:41FE in 1987): word; DrawSignedIndicator's 2-pixel marker at each pixel offset
+/// indicatorMarkers: word; DrawSignedIndicator's 2-pixel marker at each pixel offset
 constexpr std::array<std::uint16_t, 4> INDICATOR_MARKERS = {
-  0xAA5A, 0xAA96, 0xAAA5, 0x6AA9, // DS:41FE
+  0xAA5A, 0xAA96, 0xAAA5, 0x6AA9, // [0]
 };
 
-/// missileIcon (DS:4206 in 1987): word, one per scanline; drawn by DrawMissileIcons in the order +0, +4, +8, +2, +6 to match the CGA banks
+/// missileIcon: word, one per scanline; drawn by DrawMissileIcons in the order +0, +4, +8, +2, +6 to match the CGA banks
 constexpr std::array<std::uint16_t, 5> MISSILE_ICON = {
-  0x55A5, 0xA9A6, 0xA9A6, 0xA9A6, 0x55A5, // DS:4206
+  0x55A5, 0xA9A6, 0xA9A6, 0xA9A6, 0x55A5, // [0]
 };
 
-/// conditionLightBitmap (DS:4210 in 1987): word, one per scanline; an 8x8 disc, ANDed with the condition colour
+/// conditionLightBitmap: word, one per scanline; an 8x8 disc, ANDed with the condition colour
 constexpr std::array<std::uint16_t, 8> CONDITION_LIGHT_BITMAP = {
-  0x0FF0, 0x3FFC, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0x3FFC, 0x0FF0, // DS:4210
+  0x0FF0, 0x3FFC, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0x3FFC, 0x0FF0, // [0]
 };
 
-/// collisionRanges (DS:4264 in 1987): word; box half-size per object type for CheckCollisions: 275 for types 0-1 (stations), 100 for the
+/// collisionRanges: word; box half-size per object type for CheckCollisions: 275 for types 0-1 (stations), 100 for the
 /// rest
 constexpr std::array<std::uint16_t, 32> COLLISION_RANGES = {
-  0x0113, 0x0113, 0x0064, 0x0064, 0x0064, 0x0064, 0x0064, 0x0064, // DS:4264
-  0x0064, 0x0064, 0x0064, 0x0064, 0x0064, 0x0064, 0x0064, 0x0064, // DS:4274
-  0x0064, 0x0064, 0x0064, 0x0064, 0x0064, 0x0064, 0x0064, 0x0064, // DS:4284
-  0x0064, 0x0064, 0x0064, 0x0064, 0x0064, 0x0064, 0x0064, 0x0064, // DS:4294
+  0x0113, 0x0113, 0x0064, 0x0064, 0x0064, 0x0064, 0x0064, 0x0064, // [0]
+  0x0064, 0x0064, 0x0064, 0x0064, 0x0064, 0x0064, 0x0064, 0x0064, // [8]
+  0x0064, 0x0064, 0x0064, 0x0064, 0x0064, 0x0064, 0x0064, 0x0064, // [16]
+  0x0064, 0x0064, 0x0064, 0x0064, 0x0064, 0x0064, 0x0064, 0x0064, // [24]
 };
 
-/// sqrtTable (DS:7332 in 1987): byte; about sqrt(n) rounded, n=0-128 (n=57 and 73 hold 7 and 8); UpdateCompass reads n=65-98. Sits just
+/// sqrtTable: byte; about sqrt(n) rounded, n=0-128 (n=57 and 73 hold 7 and 8); UpdateCompass reads n=65-98. Sits just
 /// past the 42 vertices, so a 43rd would overwrite it
 constexpr std::array<std::uint8_t, 129> SQRT_TABLE = {
-  0x00, 0x01, 0x01, 0x02, 0x02, 0x02, 0x02, 0x03, // DS:7332
-  0x03, 0x03, 0x03, 0x03, 0x03, 0x04, 0x04, 0x04, // DS:733A
-  0x04, 0x04, 0x04, 0x04, 0x04, 0x05, 0x05, 0x05, // DS:7342
-  0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x06, // DS:734A
-  0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, // DS:7352
-  0x06, 0x06, 0x06, 0x07, 0x07, 0x07, 0x07, 0x07, // DS:735A
-  0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, // DS:7362
-  0x07, 0x07, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, // DS:736A
-  0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, // DS:7372
-  0x08, 0x08, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, // DS:737A
-  0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, // DS:7382
-  0x09, 0x09, 0x09, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, // DS:738A
-  0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, // DS:7392
-  0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0B, // DS:739A
-  0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, // DS:73A2
-  0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, // DS:73AA
-  0x0B,                                           // DS:73B2
+  0x00, 0x01, 0x01, 0x02, 0x02, 0x02, 0x02, 0x03, // [0]
+  0x03, 0x03, 0x03, 0x03, 0x03, 0x04, 0x04, 0x04, // [8]
+  0x04, 0x04, 0x04, 0x04, 0x04, 0x05, 0x05, 0x05, // [16]
+  0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x06, // [24]
+  0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, // [32]
+  0x06, 0x06, 0x06, 0x07, 0x07, 0x07, 0x07, 0x07, // [40]
+  0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, // [48]
+  0x07, 0x07, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, // [56]
+  0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, // [64]
+  0x08, 0x08, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, // [72]
+  0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, // [80]
+  0x09, 0x09, 0x09, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, // [88]
+  0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, // [96]
+  0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0B, // [104]
+  0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, // [112]
+  0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, // [120]
+  0x0B,                                           // [128]
 };
 
-/// dashboardPixelMasks (DS:73B3 in 1987): byte; 0x80, 0x20, 0x08, 0x02: a colour-2 pixel at each position in a CGA byte; XorDashboardPixel
+/// dashboardPixelMasks: byte; 0x80, 0x20, 0x08, 0x02: a colour-2 pixel at each position in a CGA byte; XorDashboardPixel
 constexpr std::array<std::uint8_t, 4> DASHBOARD_PIXEL_MASKS = {
-  0x80, 0x20, 0x08, 0x02, // DS:73B3
+  0x80, 0x20, 0x08, 0x02, // [0]
 };
 
-/// pauseMenuText (DS:AB3C in 1987): word buffer offset, then zero-terminated text; the pause screen's lines: SPACE..Restart Game,
+/// pauseMenuText: word buffer offset, then zero-terminated text; the pause screen's lines: SPACE..Restart Game,
 /// A......Abort Game, R Keyboard Recentre, D Keyboard Damping, Y Reverse Y control, B Reverse X and Y, S Sound Toggle, F1/F10.Set Frame
 /// Rate (F8)
 constexpr std::string_view PAUSE_MENU_TEXT{"\010\006SPACE..Restart Game\000\010\010A......Abort Game\000\010\014R......Keyboard Recentre"
@@ -91,25 +91,25 @@ constexpr std::string_view PAUSE_MENU_TEXT{"\010\006SPACE..Restart Game\000\010\
                                            "rse X and Y\000\010\024S......Sound Toggle\000\010\030F1/F10.Set Frame Rate (F",
                                            195};
 
-/// recenterLetter (DS:AC04 in 1987): 'R', the letter the pause screen shows for keyboardRecenter, after it (change 3c names it)
+/// recenterLetter: 'R', the letter the pause screen shows for keyboardRecenter, after it (change 3c names it)
 constexpr std::string_view RECENTER_LETTER{"R", 1};
 
-/// dampingLetter (DS:AC06 in 1987): 'D', the letter the pause screen shows for keyboardDamping, after it (change 3c names it)
+/// dampingLetter: 'D', the letter the pause screen shows for keyboardDamping, after it (change 3c names it)
 constexpr std::string_view DAMPING_LETTER{"D", 1};
 
-/// yReverseLetter (DS:AC08 in 1987): 'Y', the letter the pause screen shows for reverseYControl, after it (change 3c names it)
+/// yReverseLetter: 'Y', the letter the pause screen shows for reverseYControl, after it (change 3c names it)
 constexpr std::string_view Y_REVERSE_LETTER{"Y", 1};
 
-/// xyReverseLetter (DS:AC0A in 1987): 'B', the letter the pause screen shows for reverseXAndY, after it (change 3c names it)
+/// xyReverseLetter: 'B', the letter the pause screen shows for reverseXAndY, after it (change 3c names it)
 constexpr std::string_view XY_REVERSE_LETTER{"B", 1};
 
-/// soundLetter (DS:AC0C in 1987): 'S', the letter the pause screen shows for soundEnabled, after it (change 3c names it)
+/// soundLetter: 'S', the letter the pause screen shows for soundEnabled, after it (change 3c names it)
 constexpr std::string_view SOUND_LETTER{"S", 1};
 
-/// frameTimeChoices (DS:ACF1 in 1987): byte; 200, 125, 100, 83, 67, 56, 50, 40, 30, 1 ms, chosen with F1-F10 on the pause screen
+/// frameTimeChoices: byte; 200, 125, 100, 83, 67, 56, 50, 40, 30, 1 ms, chosen with F1-F10 on the pause screen
 constexpr std::array<std::uint8_t, 10> FRAME_TIME_CHOICES = {
-  0xC8, 0x7D, 0x64, 0x53, 0x43, 0x38, 0x32, 0x28, // DS:ACF1
-  0x1E, 0x01,                                     // DS:ACF9
+  0xC8, 0x7D, 0x64, 0x53, 0x43, 0x38, 0x32, 0x28, // [0]
+  0x1E, 0x01,                                     // [8]
 };
 
 } // namespace

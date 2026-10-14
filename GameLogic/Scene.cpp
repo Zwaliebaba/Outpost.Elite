@@ -26,9 +26,9 @@ namespace
 constexpr std::uint8_t BOMB_FIRST_SLOT = 3;
 
 // What DivideOverflowInterrupt makes of each divide here, by the byte two before the instruction after it. ProjectVertices'
-// divides, DIV [SI+4] (returning to CS:236C and CS:2395), take a memory operand, so the handler reads their ModRM byte 74h and
-// saturates only AL; ProjectDiscCoordinate's DIV [DI+14h] (CS:4044, CS:4064) has ModRM byte 75h, and ProjectToScreen's DIV CX
-// (CS:8D4B, CS:8D56) a word divide's opcode.
+// divides, DIV [SI+4], take a memory operand, so the handler reads their ModRM byte 74h and
+// saturates only AL; ProjectDiscCoordinate's DIV [DI+14h] has ModRM byte 75h, and ProjectToScreen's DIV CX
+// a word divide's opcode.
 constexpr DivideTrap VERTEX_DIVIDE_TRAP = DivideTrap::LowByte;
 constexpr DivideTrap DISC_DIVIDE_TRAP = DivideTrap::Word;
 constexpr DivideTrap SCREEN_DIVIDE_TRAP = DivideTrap::Word;
@@ -155,7 +155,7 @@ void SetVertexWord(std::span<std::uint16_t> _words, std::size_t _byte, std::uint
 }
 
 // The handlers' rotations by the drawn object's angles: -roll into rotation pair 3, yaw into 4, and pitch with the
-// player's into 5 (CS:3781, CS:38C0).
+// player's into 5.
 void SetDrawAngles(GameState& _state)
 {
   (void)SetSinCos(_state, 3, Negate(_state.Data().scene.drawRollAngle));
@@ -213,9 +213,9 @@ void RotateVertices(GameState& _state, std::size_t _first, std::uint16_t _count,
   }
 }
 
-// The handlers' last rotation, by the view direction when it is not ahead (CS:383A, CS:39CF): -viewAngle into rotation
+// The handlers' last rotation, by the view direction when it is not ahead: -viewAngle into rotation
 // pair 8, and the x and z of _count vertices from _first turned by it. Nothing reads what the original leaves in AX and BX:
-// the box's handler loads AX next (CS:3864), and both load them in ReflectVertexAboutCenter (CS:3740) before reading them.
+// the box's handler loads AX next, and both load them in ReflectVertexAboutCenter before reading them.
 void RotateVerticesToView(GameState& _state, std::size_t _first, std::uint16_t _count)
 {
   const std::uint16_t angle = _state.Data().playerShip.viewAngle;
@@ -227,7 +227,7 @@ void RotateVerticesToView(GameState& _state, std::size_t _first, std::uint16_t _
   RotateVertices(_state, _first, _count, 0, VERTEX_Z, 8);
 }
 
-// RenderBlueprint (CS:3CF2-3D20), what RenderBlueprintBody does with _blueprint's body: the vertex program from _accumulator, the
+// RenderBlueprint, what RenderBlueprintBody does with _blueprint's body: the vertex program from _accumulator, the
 // projection, the edge lists and the faces. Each count is a byte loaded into CL and stored with all of CX, whose CH the LOOPs
 // before it leave 0, or the edge count's doubling.
 void RenderBlueprint(GameState& _state, const Blueprint& _blueprint, Vector _accumulator)
@@ -256,7 +256,7 @@ void RenderBlueprint(GameState& _state, const Blueprint& _blueprint, Vector _acc
   return (std::uint32_t{Negative(_magnitude) ? HIGH_BYTE_ONES : HIGH_BYTE_ZERO} << 24) | (std::uint32_t{_magnitude} << 8);
 }
 
-// One coordinate of a vertex (CS:2356, CS:237E): 256|_value| over _z, the vertex's z, by DIV [SI+4], plus one when the quotient
+// One coordinate of a vertex: 256|_value| over _z, the vertex's z, by DIV [SI+4], plus one when the quotient
 // is below twice the remainder (SHL DX,1 / CMP AX,DX / ADC AX,0), with _value's sign put back.
 [[nodiscard]] std::uint16_t ProjectVertexCoordinate(std::uint16_t _value, std::uint16_t _z)
 {
@@ -310,7 +310,7 @@ struct WindingProducts
                          product(difference(_triangle.first.y, _triangle.second.y), difference(_triangle.third.x, _triangle.second.x))};
 }
 
-// An edge item (CS:3AF3): _item, the edge's offset in _blueprint's face edges, which the original's faceEdgeList points at; the edge's colour from
+// An edge item: _item, the edge's offset in _blueprint's face edges, which the original's faceEdgeList points at; the edge's colour from
 // its high byte's low bits, then DrawClippedLine from its second vertex to its first, unless either's x is 7FFFh, the trap's
 // saturation. PUSH SI / POP SI round the line keep the list.
 void DrawFaceEdge(GameState& _state, const Blueprint& _blueprint, std::uint8_t _item)
@@ -330,7 +330,7 @@ void DrawFaceEdge(GameState& _state, const Blueprint& _blueprint, std::uint8_t _
   DrawClippedLine(_state, fromX, VertexWord(points, from + 2), toX, VertexWord(points, to + 2));
 }
 
-// A triangle item (CS:3B30): _item, the offset of its pattern in faceFillPatterns, into triangleFillPattern, then the three
+// A triangle item: _item, the offset of its pattern in faceFillPatterns, into triangleFillPattern, then the three
 // vertex bytes at _vertices of _list: FillTriangle unless a corner's x is 7FFFh. PUSH SI / POP SI round it keep the list. Returns
 // the offset past the vertex bytes.
 [[nodiscard]] std::uint16_t DrawFaceTriangle(GameState& _state, std::uint8_t _item, std::span<const std::uint8_t> _list,
@@ -347,7 +347,7 @@ void DrawFaceEdge(GameState& _state, const Blueprint& _blueprint, std::uint8_t _
   return Offset(_vertices, TRIANGLE_VERTEX_BYTES);
 }
 
-// A facing face's items (CS:3AE8), at _items in _blueprint's face list: a count byte into CL, CH 0, then the items, an edge's one
+// A facing face's items, at _items in _blueprint's face list: a count byte into CL, CH 0, then the items, an edge's one
 // byte counted off by LOOP and a triangle's four by SUB CX,4 / JE, which ends only on 0. Returns the offset in the list past them.
 [[nodiscard]] std::uint16_t DrawFaceItems(GameState& _state, const Blueprint& _blueprint, std::uint16_t _items)
 {
@@ -386,7 +386,7 @@ void DrawFaceEdge(GameState& _state, const Blueprint& _blueprint, std::uint8_t _
   return static_cast<std::uint16_t>(Magnitude(_value) << 1);
 }
 
-// ClassifyViewPosition (CS:3CA1), the shared tail of TransformShip and ClassifyStationPosition: _view is _slot's view
+// ClassifyViewPosition, the shared tail of TransformShip and ClassifyStationPosition: _view is _slot's view
 // position. Visible, with byte 0 bit 7 set, when z is at least nearClipZ and twice |x| and twice |y| are at most z; the
 // position is stored, in the slot and as drawCenter, when z passes.
 void ClassifyViewPosition(GameState& _state, SpaceObject& _slot, Vector _view)
@@ -424,7 +424,7 @@ void ClassifyViewPosition(GameState& _state, SpaceObject& _slot, Vector _view)
   return Vector{static_cast<std::int16_t>(_slot.viewX), static_cast<std::int16_t>(_slot.viewY), static_cast<std::int16_t>(_slot.viewZ)};
 }
 
-// RotateToViewDirection (CS:3EE6), the shared tail of the two TransformToView entries: _view with (x, z) rotated by -viewAngle
+// RotateToViewDirection, the shared tail of the two TransformToView entries: _view with (x, z) rotated by -viewAngle
 // through rotation pair 8, which it sets, when the view is not the front one. PUSH BX, AX and CX round SetSinCos8 keep the
 // position, which comes back in the registers it went in.
 [[nodiscard]] Vector RotateToViewDirection(GameState& _state, Vector _view)
@@ -445,7 +445,7 @@ void ClassifyViewPosition(GameState& _state, SpaceObject& _slot, Vector _view)
   return std::uint32_t{_value} * _value;
 }
 
-// CheckShipInRange's test once IsObjectNear has passed (CS:3BEF): |x|, |y| and |z| below maxAxisDistance, then the high words
+// CheckShipInRange's test once IsObjectNear has passed: |x|, |y| and |z| below maxAxisDistance, then the high words
 // of their unsigned squares, summed, below maxDistanceSquaredHigh after the second and the third. Within, the sum shifted
 // right 6 is the ship's size, and byte 0 bit 6 is set.
 [[nodiscard]] ShipRange ShipWithinRange(SpaceObject& _slot)
@@ -474,7 +474,7 @@ void ClassifyViewPosition(GameState& _state, SpaceObject& _slot, Vector _view)
   return range;
 }
 
-// ClassifyObject (CS:3D41), one slot of TransformAndDrawObjects' first pass: _slot's drawn bit (+1Eh bit 7) cleared; an active
+// ClassifyObject, one slot of TransformAndDrawObjects' first pass: _slot's drawn bit (+1Eh bit 7) cleared; an active
 // object's visible and in-range bits cleared, and one off the scanner counted a frame further, removed (RemoveObject) on the
 // 255th; then the sun or the planet transformed (TransformSunOrPlanet), a ship in range transformed (CheckShipInRange,
 // TransformShip), and the station classified at its compass position (ClassifyStationPosition) when UpdateCompass has made it the
@@ -520,7 +520,7 @@ void ClassifyViewPosition(GameState& _state, SpaceObject& _slot, Vector _view)
   return station;
 }
 
-// The station in _slot (CS:3DEE), when it is far enough away to draw as a disc: true if it is, and DrawDistantStation drew it.
+// The station in _slot, when it is far enough away to draw as a disc: true if it is, and DrawDistantStation drew it.
 // One at depth 1 nearer than 1B58h has its compass position doubled into its view position instead.
 [[nodiscard]] bool DrawStationIfDistant(GameState& _state, SpaceObject& _slot)
 {
@@ -564,7 +564,7 @@ void ClassifyViewPosition(GameState& _state, SpaceObject& _slot, Vector _view)
   return false;
 }
 
-// DrawObjectAsDot (CS:3E8C): _slot's view position projected (ProjectToScreen), as a disc of radius 2 in colour 3. PUSH DI /
+// DrawObjectAsDot: _slot's view position projected (ProjectToScreen), as a disc of radius 2 in colour 3. PUSH DI /
 // POP DI round it keep the slot.
 void DrawObjectAsDot(GameState& _state, SpaceObject& _slot)
 {
@@ -573,7 +573,7 @@ void DrawObjectAsDot(GameState& _state, SpaceObject& _slot)
   DrawDisc(_state, DOT_RADIUS, static_cast<std::uint16_t>(at.x), static_cast<std::uint16_t>(at.y));
 }
 
-// DrawObject (CS:3DE1), the visible object in _slot, not yet drawn: the sun or the planet (DrawSunOrPlanet); a station far enough
+// DrawObject, the visible object in _slot, not yet drawn: the sun or the planet (DrawSunOrPlanet); a station far enough
 // off as a disc (DrawStationIfDistant); nothing in a flashing object's off frames; a dot (DrawObjectAsDot) when its size (+3Eh)
 // passes its level of detail (+3Fh); else its blueprint, from blueprintTable by its type (RunBlueprintHandler), at its angles and
 // view position. PUSH DI / POP DI round the sun's, the station's and the dot's keep the slot, and the search the draws jump back
@@ -612,7 +612,7 @@ void DrawObject(GameState& _state, Host& _host, SpaceObject& _slot)
   RunBlueprintHandler(_state, blueprint);
 }
 
-// DrawFarthestObject (CS:3D95), TransformAndDrawObjects' second pass, to which every draw jumps back: of shipSlotCount slots
+// DrawFarthestObject, TransformAndDrawObjects' second pass, to which every draw jumps back: of shipSlotCount slots
 // (MOV CL / XOR CH,CH, then LOOP: 65,536 for 0), the visible object not yet drawn with the largest depth class (+3Dh), then
 // the largest view z, marked drawn (+1Eh bit 7) and drawn (DrawObject). Returns false once no object is left.
 bool DrawFarthestObject(GameState& _state, Host& _host)
@@ -650,7 +650,7 @@ bool DrawFarthestObject(GameState& _state, Host& _host)
   return true;
 }
 
-// One coordinate of the sun's or planet's centre (CS:4030, CS:404E): 256|_value| over _slot's view z, by DIV [DI+14h], rounded
+// One coordinate of the sun's or planet's centre: 256|_value| over _slot's view z, by DIV [DI+14h], rounded
 // down, with _value's sign put back.
 [[nodiscard]] std::uint16_t ProjectDiscCoordinate(const SpaceObject& _slot, std::uint16_t _value)
 {
@@ -674,7 +674,7 @@ bool DrawFarthestObject(GameState& _state, Host& _host)
   return !SubtractOverflows(once, _radius) && static_cast<std::int16_t>(lowerEdge) <= static_cast<std::int16_t>(_limit);
 }
 
-// DrawSunOrPlanetDisc (CS:402C): a disc of radius _radius at _slot's view position projected, in its colour (+0Bh), drawn only
+// DrawSunOrPlanetDisc: a disc of radius _radius at _slot's view position projected, in its colour (+0Bh), drawn only
 // when the disc's whole box is on the 256x128 view: DrawDisc with twice the radius.
 void DrawSunOrPlanetDisc(GameState& _state, SpaceObject& _slot, std::uint16_t _radius)
 {
@@ -695,7 +695,7 @@ struct SupernovaGlow
   SlotIndex slot;     // DI after it: the sun's, or past the ship slots once an energy bomb went off and its LOOP looked at them
 };
 
-// SupernovaHeat (CS:3F57): once supernovaFrames has counted down to 1, where an INC keeps it, the sun's heat is supernovaHeat, first the
+// SupernovaHeat: once supernovaFrames has counted down to 1, where an INC keeps it, the sun's heat is supernovaHeat, first the
 // cabin temperature, growing by a quarter of itself (at least 1) a frame; when it overflows a byte, the player is killed (KillPlayer, with
 // StartPlayerDeathSound) and an energy bomb goes off (DetonateEnergyBomb), and the heat is FFh. None while the countdown runs, or
 // when it is 0. _slot is the sun's slot, DI.
@@ -744,7 +744,7 @@ struct SunDisc
   SlotIndex slot;       // DI: the sun's, or where a supernova's energy bomb left it
 };
 
-// SizeSun (CS:3F57-3FF4): the sun's radius, SupernovaHeat's heat or else 100 scaled to _slot's distance (ScaleByInverseDistance),
+// SizeSun: the sun's radius, SupernovaHeat's heat or else 100 scaled to _slot's distance (ScaleByInverseDistance),
 // into the cabin temperature. Behind the view, by bit 7 of the view z's high byte in the slot DI then holds, nothing more; in
 // front, sunFringeMask 1, 3 or 7 below radii 28h, B4h and C3h; from C3h, with fuel scoops fitted, 6 more fuel, written, then FFh
 // over it on a carry, with FUEL SCOOPS ACTIVE for 5 frames; from FDh, KillPlayer, whose StartPlayerDeathSound leaves its step length
@@ -807,7 +807,7 @@ struct SunDisc
   return disc;
 }
 
-// SizePlanet (CS:3FF6): sunFringeMask cleared, the radius ScaleByInverseDistance makes of 50 at _slot's distance, and the
+// SizePlanet: sunFringeMask cleared, the radius ScaleByInverseDistance makes of 50 at _slot's distance, and the
 // altitude, twice 255 less that radius held to 127. In front of the view, a radius of FDh or more kills the player, with
 // StartPlayerDeathSound, and one past a byte draws as FFh. Returns the disc's radius in front of the view.
 std::optional<std::uint16_t> SizePlanet(GameState& _state, SpaceObject& _slot)
@@ -1123,7 +1123,7 @@ void DrawVisibleFaces(GameState& _state, const Blueprint& _blueprint, std::uint1
     }
     else
     {
-      // SkipHiddenFace (CS:3B8D): MOV CL,[SI] / STC / ADC SI,CX, CH 0: past the count byte and the items.
+      // SkipHiddenFace: MOV CL,[SI] / STC / ADC SI,CX, CH 0: past the count byte and the items.
       next = Offset(next, Offset(_blueprint.faceList[next], 1));
     }
   } while (Loop(faces));
@@ -1213,7 +1213,7 @@ SnapshotDrawing DrawingOf(const SpaceObject& _slot) noexcept
 
 void RunBlueprintHandler(GameState& _state, const Blueprint& _blueprint)
 {
-  // PUSH DI and the way back to RenderBlueprintBody (CS:3CF2), then the handler's word, BL into boxHalfWidth with BH 0, and JMP AX
+  // PUSH DI and the way back to RenderBlueprintBody, then the handler's word, BL into boxHalfWidth with BH 0, and JMP AX
   // to the handler with SI past them. The slot and the way back are the stack the handler returns through, which this unit
   // keeps itself.
   _state.Data().scene.boxHalfWidth = _blueprint.halfWidth;

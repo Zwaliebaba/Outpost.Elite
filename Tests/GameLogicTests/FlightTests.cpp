@@ -85,7 +85,7 @@ public:
     rig.Play("key a; wait 2\ndigest title");
   }
 
-  // A screen left by Escape, which waits for a key at 0BF3; in witch space the short-range chart at the
+  // A screen left by Escape, which waits for a key; in witch space the short-range chart at the
   // last of the countdown, F9 past the navigation computer, Escape back to it, and the charts refused.
   TEST_METHOD(FlightScreensAgreeInWitchSpace)
   {

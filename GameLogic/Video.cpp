@@ -55,9 +55,9 @@ constexpr std::uint8_t VIDEO_ON_BLINK_OFF = 0x08; // the mode control register: 
 constexpr std::uint16_t BLANK_TEXT_CELL = 0x0720; // a space, light gray on black
 
 // The triangle fillers choose each edge's step, ADD or SUB, by rewriting the step instructions in their own code from tables of
-// opcodes after them (triangleStepOpcodes, CS:1CF3, and clippedTriangleStepOpcodes, CS:1FF8). Native code holds the choice with the
+// opcodes after them (triangleStepOpcodes, and clippedTriangleStepOpcodes). Native code holds the choice with the
 // edge instead, and the code segment is not the game's memory. One rewrite reaches a picture: FillClippedGeneral's last moves
-// clippedTriangleStepOpcodes' SBB BX,[m] (CS:2014), its opcode and ModRM byte, through SI, the long edge's fraction, and leaves
+// clippedTriangleStepOpcodes' SBB BX,[m], its opcode and ModRM byte, through SI, the long edge's fraction, and leaves
 // it there.
 constexpr std::uint16_t SBB_BX_OPCODES = 0x1E1B;
 // clippedFirstRow and clippedLastRow before a row is drawn.
@@ -83,7 +83,7 @@ constexpr std::uint8_t CLIP_SPRITE_RIGHT = 0xAA; // only its left byte is drawn
 constexpr std::uint16_t CIRCLE_CHORDS = 32;
 static_assert(std::size(VideoState{}.circlePoints) == CIRCLE_CHORDS, "circlePoints holds the 32 points");
 
-// The drawing buffer, DS:0000-1FFF as in 1987: a row, the space view's 126, and a row.
+// The drawing buffer, as in 1987: a row, the space view's 126, and a row.
 static_assert(sizeof(DrawingState::drawingBuffer) == DRAWING_BUFFER_BYTES);
 // The space view's first byte in the drawing buffer, a row in: where PresentSpaceView's copy starts (MOV SI,spaceViewBuffer).
 constexpr std::uint16_t SPACE_VIEW_BUFFER_START = 64;
@@ -136,7 +136,7 @@ constexpr std::uint16_t SPACE_VIEW_BUFFER_START = 64;
 
 // The byte of the drawing buffer at _offset, where a drawing routine's DI points. Every place they draw at is on it: lines,
 // spans, discs and triangles are clipped to its 256x128 pixels, and the direction flag is clear wherever the original runs them
-// (its one STD, at CS:2E4A, is cleared at CS:2E5C with no call between), so no string instruction runs down past its start. A
+// (its one STD is cleared with no call between), so no string instruction runs down past its start. A
 // byte off it, which the original would reach in the data segment around the buffer, throws std::out_of_range.
 [[nodiscard]] std::uint8_t& BufferByte(GameState& _state, std::uint16_t _offset)
 {
@@ -242,7 +242,7 @@ void PaintHeld(LinePen& _pen) noexcept
   _pen.held = static_cast<std::uint8_t>((_pen.held & _pen.keep) | _pen.pixel);
 }
 
-// DrawLineHorizontal (CS:17BE): the pixels across right of the first, pixel by pixel to a byte boundary, then whole bytes, then the
+// DrawLineHorizontal: the pixels across right of the first, pixel by pixel to a byte boundary, then whole bytes, then the
 // pixels left.
 void DrawHorizontalLine(GameState& _state, LinePen& _pen)
 {
@@ -293,7 +293,7 @@ void DrawHorizontalLine(GameState& _state, LinePen& _pen)
   BufferByte(_state, _pen.at) = _pen.held;
 }
 
-// DrawLineVertical (CS:17AF).
+// DrawLineVertical.
 void DrawVerticalLine(GameState& _state, LinePen& _pen)
 {
   for (std::uint8_t rows = _pen.down; rows != 0; --rows)
@@ -304,7 +304,7 @@ void DrawVerticalLine(GameState& _state, LinePen& _pen)
   Plot(_state, _pen.at, _pen.keep, _pen.pixel);
 }
 
-// DrawLineSteep (CS:177E): a row a pixel, stepping across when the error term borrows.
+// DrawLineSteep: a row a pixel, stepping across when the error term borrows.
 void DrawSteepLine(GameState& _state, LinePen& _pen)
 {
   const auto down = static_cast<std::uint8_t>(_pen.down + 1);
@@ -329,7 +329,7 @@ void DrawSteepLine(GameState& _state, LinePen& _pen)
   Plot(_state, _pen.at, _pen.keep, _pen.pixel);
 }
 
-// DrawLineShallow (CS:172F): a pixel a step, stepping a row when the error term borrows, the byte held until the line leaves it.
+// DrawLineShallow: a pixel a step, stepping a row when the error term borrows, the byte held until the line leaves it.
 void DrawShallowLine(GameState& _state, LinePen& _pen)
 {
   // An increment of the pixels across that stops at FFh.
@@ -373,7 +373,7 @@ void DrawShallowLine(GameState& _state, LinePen& _pen)
   }
 }
 
-// DrawLineDiagonal (CS:180E).
+// DrawLineDiagonal.
 void DrawDiagonalLine(GameState& _state, LinePen& _pen)
 {
   for (std::uint8_t pixels = _pen.across; pixels != 0; --pixels)
@@ -385,20 +385,20 @@ void DrawDiagonalLine(GameState& _state, LinePen& _pen)
   Plot(_state, _pen.at, _pen.keep, _pen.pixel);
 }
 
-// CS:1623: the rows were doubled to clip; DrawLine takes them halved (MOV DH,BL / MOV CH,AL / SHR DH,1 / SHR CH,1).
+// the rows were doubled to clip; DrawLine takes them halved (MOV DH,BL / MOV CH,AL / SHR DH,1 / SHR CH,1).
 void DrawHalvedRows(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromDoubledRow, std::uint8_t _toX, std::uint8_t _toDoubledRow)
 {
   DrawLine(_state, _fromX, static_cast<std::uint8_t>(_fromDoubledRow >> 1), _toX, static_cast<std::uint8_t>(_toDoubledRow >> 1));
 }
 
-// LeaveEndpoints (CS:16B5): the ends stay where they are, and the line is still to draw: MOV SI,0 / INC SI / STC, which leave
+// LeaveEndpoints: the ends stay where they are, and the line is still to draw: MOV SI,0 / INC SI / STC, which leave
 // ZF clear from the INC and CF set.
 [[nodiscard]] constexpr ClipStep LeaveEndpoints(ClipLine _line) noexcept
 {
   return ClipStep{_line, true, false};
 }
 
-// MoveEndpointToEdge (CS:1691): the first end (CX, AX) onto the edge at 0 along the line to the second (DX, BX): MOV SI,DX, then
+// MoveEndpointToEdge: the first end (CX, AX) onto the edge at 0 along the line to the second (DX, BX): MOV SI,DX, then
 // unless an end is on the edge already, SUB AX,BX / SUB CX,DX / NEG DX / IMUL DX / IDIV CX / ADD AX,BX / MOV CX,0 / MOV DX,SI. The
 // moved end inside 0-255 counts off BP, DEC BP setting ZF once none is outside; outside it, the ends stay as they now are
 // (LeaveEndpoints).
@@ -422,7 +422,7 @@ void DrawHalvedRows(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromDo
   return ClipStep{_line, true, _line.outside == 0};
 }
 
-// SwapThenCutLine (CS:168E): XCHG CX,DX / XCHG BX,AX, then MoveEndpointToEdge: the second end moved, the ends left swapped.
+// SwapThenCutLine: XCHG CX,DX / XCHG BX,AX, then MoveEndpointToEdge: the second end moved, the ends left swapped.
 [[nodiscard]] ClipStep SwapThenCutLine(ClipLine _line)
 {
   std::swap(_line.firstCut, _line.secondCut);
@@ -448,7 +448,7 @@ void DrawHalvedRows(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromDo
 
 // ---- Discs ----
 
-// CS:18F2-1924: the half-width of a disc's row, byte _profile of circleProfile scaled by discRadiusRows and rounded, plus the
+// the half-width of a disc's row, byte _profile of circleProfile scaled by discRadiusRows and rounded, plus the
 // fringe while sunFringeMask is set. The DX the fringe leaves is dead: DiscRowSpan's first instruction loads DX.
 [[nodiscard]] std::uint16_t DiscHalfWidth(GameState& _state, std::size_t _profile)
 {
@@ -482,7 +482,7 @@ struct DiscRowEdges
   bool visible;        // false when the row lies wholly off the buffer
 };
 
-// CS:1926-1940: the edges of a row _halfWidth either side of discCenterX. DX holds left and AX right, and on screen
+// the edges of a row _halfWidth either side of discCenterX. DX holds left and AX right, and on screen
 // DH is right's low byte.
 [[nodiscard]] DiscRowEdges DiscRowSpan(const GameState& _state, std::uint16_t _halfWidth)
 {
@@ -509,7 +509,7 @@ struct DiscRowEdges
   return edges;
 }
 
-// CS:18EE: the row _upperRow (2*row, moving up) alone, from byte _profile of circleProfile, while it is on the buffer.
+// the row _upperRow (2*row, moving up) alone, from byte _profile of circleProfile, while it is on the buffer.
 void DrawDiscUpperRow(GameState& _state, std::size_t _profile, std::uint16_t _upperRow)
 {
   if (High(_upperRow) != 0)
@@ -523,7 +523,7 @@ void DrawDiscUpperRow(GameState& _state, std::size_t _profile, std::uint16_t _up
   }
 }
 
-// CS:187B: the rows _lowerRow (moving down) and _upperRow (moving up), as 2*row, one half-width for both; the upper while it
+// the rows _lowerRow (moving down) and _upperRow (moving up), as 2*row, one half-width for both; the upper while it
 // is on the buffer.
 void DrawDiscRowPair(GameState& _state, std::size_t _profile, std::uint16_t _lowerRow, std::uint16_t _upperRow)
 {
@@ -539,7 +539,7 @@ void DrawDiscRowPair(GameState& _state, std::size_t _profile, std::uint16_t _low
   }
 }
 
-// Where DrawSmallDisc (CS:194B) puts a disc of radius 0-4: a 4-row sprite from smallDiscSprites, clipped a byte at a
+// Where DrawSmallDisc puts a disc of radius 0-4: a 4-row sprite from smallDiscSprites, clipped a byte at a
 // time at the left and right edges and a row at a time at the top and bottom.
 struct SmallDiscPlace
 {
@@ -551,7 +551,7 @@ struct SmallDiscPlace
   bool onBuffer;      // false when the sprite is wholly off the buffer, and nothing is drawn
 };
 
-// CS:194B-19AA: where the sprite of a disc of radius _radius goes for the centre (_centerX, _centerRow).
+// where the sprite of a disc of radius _radius goes for the centre (_centerX, _centerRow).
 [[nodiscard]] SmallDiscPlace PlaceSmallDisc(std::uint8_t _radius, std::int16_t _centerX, std::int16_t _centerRow) noexcept
 {
   // CMP BL,BH / JNE / INC BL: radius 0, with BH 0, draws radius 1's sprite. Its corner is half the radius up and left of
@@ -612,7 +612,7 @@ struct SmallDiscPlace
   return place;
 }
 
-// DrawSmallDisc (CS:19AB-1A06): the sprite _place gives, in discFillByte, a row at a time from its top: each byte ANDed
+// DrawSmallDisc: the sprite _place gives, in discFillByte, a row at a time from its top: each byte ANDed
 // out and then ORed in, the both bytes of a row as words, as the original writes them.
 void DrawSmallDisc(GameState& _state, const SmallDiscPlace& _place)
 {
@@ -661,7 +661,7 @@ void DrawSmallDisc(GameState& _state, const SmallDiscPlace& _place)
 
 // MOV BP,DX / AND BP,3 / SHL BP,1, then MOV AX,[BP] for a span's left end or [BP+8] for its right: triangleEdgeMasks' word for
 // an end at x = _x, its fill bits in the low byte and the bits it keeps in the high. BP addresses the stack segment, and
-// SS:0000 is DS:AD60, where the table is.
+// is, where the table is.
 [[nodiscard]] std::uint16_t TriangleEdgeMask(std::uint8_t _x, bool _right) noexcept
 {
   return TRIANGLE_EDGE_MASKS[(_right ? 4u : 0u) + (_x & 3u)];
@@ -671,7 +671,7 @@ void DrawSmallDisc(GameState& _state, const SmallDiscPlace& _place)
 // pushes them: from the top row down. DrawStackedSpansFromRow pops them, so the last pushed is drawn first, on the bottom row.
 using TriangleSpans = std::vector<std::uint16_t>;
 
-// DrawStackedSpansFromRow (CS:1CD5): the spans of _spans popped and each filled (FillTriangleSpan), the first on the row
+// DrawStackedSpansFromRow: the spans of _spans popped and each filled (FillTriangleSpan), the first on the row
 // _bottomRow and each next a row up, with triangleFillPattern's low byte on even rows and its high on odd ones. It pops CX
 // spans, and every walk sets CX to the count it pushed.
 void DrawStackedSpansFromRow(GameState& _state, TriangleSpans& _spans, std::uint8_t _bottomRow)
@@ -693,7 +693,7 @@ void DrawStackedSpansFromRow(GameState& _state, TriangleSpans& _spans, std::uint
   }
 }
 
-// DrawStackedSpans (CS:1CD1): DrawStackedSpansFromRow from triangleBottomRow.
+// DrawStackedSpans: DrawStackedSpansFromRow from triangleBottomRow.
 void DrawStackedSpans(GameState& _state, TriangleSpans& _spans)
 {
   DrawStackedSpansFromRow(_state, _spans, _state.Data().video.triangleBottomRow);
@@ -753,8 +753,8 @@ struct ByteRun
   return _to < _from ? ByteRun{Negate8(difference), true} : ByteRun{difference, false};
 }
 
-// TraceTwoEdges (CS:1CBE): the spans of _rows rows pushed, edges A and B stepped after each by the steps the original patches
-// in at CS:1CC9 and CS:1CCB, then DrawStackedSpans. LOOP counts the rows from CX, the rows + 1.
+// TraceTwoEdges: the spans of _rows rows pushed, edges A and B stepped after each by the steps the original patches
+// in, then DrawStackedSpans. LOOP counts the rows from CX, the rows + 1.
 void TraceTwoEdges(GameState& _state, WalkEdge _a, WalkEdge _b, std::uint8_t _rows)
 {
   TriangleSpans spans;
@@ -768,7 +768,7 @@ void TraceTwoEdges(GameState& _state, WalkEdge _a, WalkEdge _b, std::uint8_t _ro
   DrawStackedSpans(_state, spans);
 }
 
-// FillFlatBottomTriangle (CS:1C62): A on top, B and C on the bottom row; edge A from A to C, edge B from A to B.
+// FillFlatBottomTriangle: A on top, B and C on the bottom row; edge A from A to C, edge B from A to B.
 void FillFlatBottomTriangle(GameState& _state, OnScreenCorner _a, OnScreenCorner _b, OnScreenCorner _c)
 {
   _state.Data().video.triangleEdgeStartX = _a.x;
@@ -786,7 +786,7 @@ void FillFlatBottomTriangle(GameState& _state, OnScreenCorner _a, OnScreenCorner
   TraceTwoEdges(_state, a, b, static_cast<std::uint8_t>(rows + 1));
 }
 
-// FillFlatTopTriangle (CS:1CFB): B and C on the top row, A at the bottom; edge A from C to A, edge B from B to A.
+// FillFlatTopTriangle: B and C on the top row, A at the bottom; edge A from C to A, edge B from B to A.
 void FillFlatTopTriangle(GameState& _state, OnScreenCorner _a, OnScreenCorner _b, OnScreenCorner _c)
 {
   _state.Data().video.triangleEdgeStartX = _b.x;
@@ -805,7 +805,7 @@ void FillFlatTopTriangle(GameState& _state, OnScreenCorner _a, OnScreenCorner _b
   TraceTwoEdges(_state, a, b, static_cast<std::uint8_t>(rows + 1));
 }
 
-// FillOneRowTriangle (CS:1D5B): all three on one row, one span from the least x to the greatest, the x sorted by exchanges.
+// FillOneRowTriangle: all three on one row, one span from the least x to the greatest, the x sorted by exchanges.
 void FillOneRowTriangle(GameState& _state, OnScreenCorner _a, OnScreenCorner _b, OnScreenCorner _c)
 {
   _state.Data().video.triangleBottomRow = _a.row;
@@ -835,7 +835,7 @@ void FillOneRowTriangle(GameState& _state, OnScreenCorner _a, OnScreenCorner _b,
   DrawStackedSpans(_state, spans);
 }
 
-// FillGeneralTriangle (CS:1D82): A on top, B the middle row, C the bottom; the long edge A-C in AX by SI, the short edges A-B and
+// FillGeneralTriangle: A on top, B the middle row, C the bottom; the long edge A-C in AX by SI, the short edges A-B and
 // then B-C in BX by DI, each step one the original patches in at the upper and the lower walk's sites.
 void FillGeneralTriangle(GameState& _state, OnScreenCorner _a, OnScreenCorner _b, OnScreenCorner _c)
 {
@@ -858,7 +858,7 @@ void FillGeneralTriangle(GameState& _state, OnScreenCorner _a, OnScreenCorner _b
   WalkEdge shortEdge{0, EdgeSlope(runUpper.magnitude, upperRows), runUpper.backward};
   longEdge.x = Join(_state.Data().video.triangleEdgeStartX, 0);
   shortEdge.x = longEdge.x;
-  // TraceUpperEdges (CS:1E15): rows A to B inclusive, each span pushed before the edges step.
+  // TraceUpperEdges: rows A to B inclusive, each span pushed before the edges step.
   TriangleSpans spans;
   std::uint16_t rows = static_cast<std::uint8_t>(upperRows + 1);
   do
@@ -867,12 +867,12 @@ void FillGeneralTriangle(GameState& _state, OnScreenCorner _a, OnScreenCorner _b
     longEdge.Step();
     shortEdge.Step();
   } while (--rows != 0);
-  // StartLowerShortEdge (CS:1E26): the rows below B, the short edge restarting from B's x. PUSH AX / POP AX round its slope keep
+  // StartLowerShortEdge: the rows below B, the short edge restarting from B's x. PUSH AX / POP AX round its slope keep
   // the long edge.
   rows = static_cast<std::uint8_t>(_state.Data().video.triangleTotalRows - _state.Data().video.triangleUpperRows);
   const ByteRun runLower = RunBetween(_state.Data().video.triangleMiddleX, _state.Data().video.triangleBottomX);
   shortEdge = WalkEdge{Join(_state.Data().video.triangleMiddleX, 0), EdgeSlope(runLower.magnitude, Low(rows)), runLower.backward};
-  // TraceLowerEdges (CS:1E54): the short edge steps before each span is pushed, the long edge after.
+  // TraceLowerEdges: the short edge steps before each span is pushed, the long edge after.
   do
   {
     shortEdge.Step();
@@ -882,7 +882,7 @@ void FillGeneralTriangle(GameState& _state, OnScreenCorner _a, OnScreenCorner _b
   DrawStackedSpans(_state, spans);
 }
 
-// FillOnScreenTriangle (CS:1C12): A, B and C wholly on the buffer, sorted by row into the four cases by exchanges, which the
+// FillOnScreenTriangle: A, B and C wholly on the buffer, sorted by row into the four cases by exchanges, which the
 // original starts with edge A's and edge B's steps patched to their ADD forms. MOV DX,DS / MOV ES,DX before them.
 void FillOnScreenTriangle(GameState& _state, OnScreenCorner _a, OnScreenCorner _b, OnScreenCorner _c)
 {
@@ -996,7 +996,7 @@ struct WordRun
   return WordRun{backward ? Negate(difference) : difference, backward};
 }
 
-// Whether row _row, between edges _a and _b, shows (CS:1F78): CMP BP,80h / JAE, TEST BH,AH / JS, AND AH,AH / JLE, AND BH,BH / JG:
+// Whether row _row, between edges _a and _b, shows: CMP BP,80h / JAE, TEST BH,AH / JS, AND AH,AH / JLE, AND BH,BH / JG:
 // 0-127, and not both edges left of 0 or both right of 255.
 [[nodiscard]] bool ClippedRowVisible(std::uint16_t _row, ClippedEdge _a, ClippedEdge _b) noexcept
 {
@@ -1013,7 +1013,7 @@ struct WordRun
   return !(Signed8(highA) > 0 && Signed8(highB) > 0);
 }
 
-// PushClippedSpan (CS:1F96): a shown row's span, held to 0-255, DL the left x and DH the right.
+// PushClippedSpan: a shown row's span, held to 0-255, DL the left x and DH the right.
 [[nodiscard]] std::uint16_t ClippedSpan(ClippedEdge _a, ClippedEdge _b) noexcept
 {
   const auto a = static_cast<std::uint16_t>(_a.whole);
@@ -1045,8 +1045,8 @@ struct WordRun
   return true;
 }
 
-// TraceClippedFlatEdges (CS:1F6C) and FinishClippedFlat (CS:1FDB): _rows rows from _row (LOOP from CX), edge A from _a and B
-// from _b, stepped by the steps patched in at CS:1FC8 and CS:1FD0; then, if any row showed, clippedLastRow and
+// TraceClippedFlatEdges and FinishClippedFlat: _rows rows from _row (LOOP from CX), edge A from _a and B
+// from _b, stepped by the steps patched in; then, if any row showed, clippedLastRow and
 // DrawStackedSpansFromRow from it.
 void TraceClippedFlatEdges(GameState& _state, ClippedEdge _a, bool _subtractA, ClippedEdge _b, bool _subtractB, std::uint16_t _row,
                            std::uint16_t _rows)
@@ -1073,7 +1073,7 @@ void TraceClippedFlatEdges(GameState& _state, ClippedEdge _a, bool _subtractA, C
   DrawStackedSpansFromRow(_state, spans, Low(row));
 }
 
-// FillClippedFlatBottom (CS:1EFD): A on top, B and C on the bottom row, signed words; edge A from A to C, edge B from A to B.
+// FillClippedFlatBottom: A on top, B and C on the bottom row, signed words; edge A from A to C, edge B from A to B.
 void FillClippedFlatBottom(GameState& _state, ScreenPoint _a, ScreenPoint _b, ScreenPoint _c)
 {
   _state.Data().video.clippedEdgeStartX = static_cast<std::uint16_t>(_a.x);
@@ -1089,7 +1089,7 @@ void FillClippedFlatBottom(GameState& _state, ScreenPoint _a, ScreenPoint _b, Sc
   TraceClippedFlatEdges(_state, a, runA.backward, b, runB.backward, static_cast<std::uint16_t>(_a.y), static_cast<std::uint16_t>(rows + 1));
 }
 
-// FillClippedFlatTop (CS:2018): B and C on the top row, A at the bottom; edge A from C to A, edge B from B to A. PUSH AX / POP AX
+// FillClippedFlatTop: B and C on the top row, A at the bottom; edge A from C to A, edge B from B to A. PUSH AX / POP AX
 // round edge A's slope keep A's x.
 void FillClippedFlatTop(GameState& _state, ScreenPoint _a, ScreenPoint _b, ScreenPoint _c)
 {
@@ -1107,7 +1107,7 @@ void FillClippedFlatTop(GameState& _state, ScreenPoint _a, ScreenPoint _b, Scree
   TraceClippedFlatEdges(_state, a, runA.backward, b, runB.backward, static_cast<std::uint16_t>(_b.y), static_cast<std::uint16_t>(rows + 1));
 }
 
-// FillClippedOneRow (CS:208B): all three on row _a's, its low byte triangleBottomRow; the x sorted by signed exchanges, and one
+// FillClippedOneRow: all three on row _a's, its low byte triangleBottomRow; the x sorted by signed exchanges, and one
 // span from the least to the greatest, held to 0-255, unless all lie left of 0 or right of 255.
 void FillClippedOneRow(GameState& _state, ScreenPoint _a, ScreenPoint _b, ScreenPoint _c)
 {
@@ -1137,7 +1137,7 @@ void FillClippedOneRow(GameState& _state, ScreenPoint _a, ScreenPoint _b, Screen
   DrawStackedSpans(_state, spans);
 }
 
-// FillClippedGeneral (CS:20C2): A on top, B the middle row, C the bottom; the long edge A-C in AX:SI, the short edges in BX:DI,
+// FillClippedGeneral: A on top, B the middle row, C the bottom; the long edge A-C in AX:SI, the short edges in BX:DI,
 // every row from A's walked and counted in clippedRowCount, each step one the original patches in at the upper and the lower
 // walk's sites.
 void FillClippedGeneral(GameState& _state, ScreenPoint _a, ScreenPoint _b, ScreenPoint _c)
@@ -1167,7 +1167,7 @@ void FillClippedGeneral(GameState& _state, ScreenPoint _a, ScreenPoint _b, Scree
   _state.Data().video.clippedFirstRow = NO_ROW;
   _state.Data().video.clippedRowCount = 0;
   TriangleSpans spans;
-  // ClippedUpperRowLoop (CS:21A5): rows A to B inclusive.
+  // ClippedUpperRowLoop: rows A to B inclusive.
   bool walking = true;
   std::uint16_t rows = static_cast<std::uint16_t>(upperRows + 1);
   do
@@ -1183,7 +1183,7 @@ void FillClippedGeneral(GameState& _state, ScreenPoint _a, ScreenPoint _b, Scree
   } while (--rows != 0);
   if (walking)
   {
-    // StartClippedLowerEdge (CS:2213): the short edge restarts from B's x, its fraction carrying on. The original patches the
+    // StartClippedLowerEdge: the short edge restarts from B's x, its fraction carrying on. The original patches the
     // SUB/SBB form in through SI, which leaves the long edge's fraction the second word moved. PUSH AX / POP AX keep the long
     // edge's x.
     rows = static_cast<std::uint16_t>(_state.Data().video.clippedTotalRows - _state.Data().video.clippedUpperRows);
@@ -1194,7 +1194,7 @@ void FillClippedGeneral(GameState& _state, ScreenPoint _a, ScreenPoint _b, Scree
     }
     ClippedSlope(runLower.magnitude, rows, _state.Data().video.clippedSlopeBWhole, _state.Data().video.clippedSlopeBFraction);
     shortEdge.whole = Signed(_state.Data().video.clippedMiddleX);
-    // ClippedLowerRowLoop (CS:224E): the short edge steps before the row is taken, the long edge after.
+    // ClippedLowerRowLoop: the short edge steps before the row is taken, the long edge after.
     do
     {
       shortEdge = StepClippedEdgeB(_state, shortEdge, runLower.backward);
@@ -1206,7 +1206,7 @@ void FillClippedGeneral(GameState& _state, ScreenPoint _a, ScreenPoint _b, Scree
       ++row;
     } while (--rows != 0);
   }
-  // FinishClippedGeneral (CS:22B9). The guard on the last row never holds: a row is pushed only below 128.
+  // FinishClippedGeneral. The guard on the last row never holds: a row is pushed only below 128.
   if (_state.Data().video.clippedRowCount == 0)
   {
     return;
@@ -1236,7 +1236,7 @@ void FillClippedGeneral(GameState& _state, ScreenPoint _a, ScreenPoint _b, Scree
   }
 }
 
-// The copy loop at 05BC or 05FD: _linePairs line pairs of a 64-byte buffer line from DS:_source to B800:_destination, the even
+// The copy loop: _linePairs line pairs of a 64-byte buffer line from DS:_source to B800:_destination, the even
 // line, then the odd one below it, then back to the next even line: MOV CX,BP / REP MOVSW / ADD DI,AX / MOV CX,BP /
 // REP MOVSW / SUB DI,DX / DEC BX / JNZ, with BP, AX and DX the steps SetLinePairSteps gives.
 void CopyLinePairs(GameState& _state, std::uint16_t _source, std::uint16_t _destination, std::uint16_t _linePairs)
@@ -1258,7 +1258,7 @@ void CopyLinePairs(GameState& _state, std::uint16_t _source, std::uint16_t _dest
 
 // ---- Screens ----
 
-// TEST [screenLayout],2 (CS:7BC7, CS:7C2C), for a screen that is not the one wanted: from text, mode 4 through the BIOS
+// TEST [screenLayout],2, for a screen that is not the one wanted: from text, mode 4 through the BIOS
 // (SetGraphicsMode); from graphics, both banks cleared, forwards (ClearCgaScreen).
 ScreenChange MakeGraphicsScreen(GameState& _state, Host& _host, std::uint8_t _layout)
 {
@@ -1308,7 +1308,7 @@ std::span<std::uint8_t, DRAWING_BUFFER_BYTES> DrawingBuffer(GameState& _state) n
 
 [[nodiscard]] Task<void> PresentSpaceView(GameState& _state, Host& _host)
 {
-  // MOV AL,[msSinceFrame] / CMP AL,[minimumFrameMs] / JB back to the start at 0599h, while the timer interrupt counts
+  // MOV AL,[msSinceFrame] / CMP AL,[minimumFrameMs] / JB back to the start, while the timer interrupt counts
   // msSinceFrame up.
   while (_state.Data().flow.msSinceFrame < _state.Data().flight.minimumFrameMs)
   {
@@ -1321,7 +1321,7 @@ std::span<std::uint8_t, DRAWING_BUFFER_BYTES> DrawingBuffer(GameState& _state) n
 
 [[nodiscard]] Task<void> CopyChartBufferToScreen(GameState& _state, Host& _host, std::uint8_t _bandsSkipped)
 {
-  // MOV DX,3DAh / PUSH AX, the retrace's loop at 05D0 and the delay's at 05D8, then POP AX: the bands are a value, not a word on
+  // MOV DX,3DAh / PUSH AX, the retrace's loop and the delay's, then POP AX: the bands are a value, not a word on
   // the stack. The delay, MOV AX,2BCh / DEC AX / JNZ, is the 8088's speed and takes no paced time.
   co_await WaitForRetrace(_host);
   // _bandsSkipped bands of 8 lines: SHL BL,1 twice / SUB BL,40h / NEG BL, so 64 - 4 * the bands line pairs as a byte, from
@@ -1354,7 +1354,7 @@ void DrawClippedLine(GameState& _state, std::uint16_t _fromX, std::uint16_t _fro
   const bool firstOutside = (High(line.firstAlong) | High(line.firstCut)) != 0;
   const bool secondOutside = (High(line.secondAlong) | High(line.secondCut)) != 0;
   line.outside = static_cast<std::uint16_t>((firstOutside ? 1 : 0) + (secondOutside ? 1 : 0));
-  // CS:1623: DrawLine on the ends as they stand.
+  // DrawLine on the ends as they stand.
   const auto draw = [&_state](const ClipLine& _ends)
   { DrawHalvedRows(_state, Low(_ends.secondCut), Low(_ends.secondAlong), Low(_ends.firstCut), Low(_ends.firstAlong)); };
   if (line.outside == 0)
@@ -1637,7 +1637,7 @@ void FillTriangleSpan(GameState& _state, std::uint16_t _row, std::uint8_t _left,
   const std::uint16_t leftMask = TriangleEdgeMask(_left, false);
   if (bytes == 0)
   {
-    // FillTriangleSpanOneByte (CS:1BD5): both edges in one byte.
+    // FillTriangleSpanOneByte: both edges in one byte.
     const std::uint16_t rightMask = TriangleEdgeMask(_right, true);
     Plot(_state, at, static_cast<std::uint8_t>(High(leftMask) | High(rightMask)),
          static_cast<std::uint8_t>(Low(leftMask) & Low(rightMask) & _fill));
@@ -1684,7 +1684,7 @@ void FillTriangle(GameState& _state, Triangle _triangle)
     FillClippedTriangle(_state, rowsDoubled);
     return;
   }
-  // CS:1C12: A in AL and AH, B in BL and BH, C in CL and CH, the rows halved back (SHR).
+  // A in AL and AH, B in BL and BH, C in CL and CH, the rows halved back (SHR).
   const auto corner = [&word](ScreenPoint _point)
   { return OnScreenCorner{Low(word(_point.x)), static_cast<std::uint8_t>(Low(word(_point.y)) >> 1)}; };
   FillOnScreenTriangle(_state, corner(rowsDoubled.first), corner(rowsDoubled.second), corner(rowsDoubled.third));
@@ -1714,7 +1714,7 @@ void FillClippedTriangle(GameState& _state, Triangle _doubled)
   {
     return;
   }
-  // PrepareClippedTriangle (CS:1E9D): SAR DX, BP and DI: the rows halved, keeping their signs. MOV SI,DS / MOV ES,SI, then the
+  // PrepareClippedTriangle: SAR DX, BP and DI: the rows halved, keeping their signs. MOV SI,DS / MOV ES,SI, then the
   // ADD/ADC forms of both edges' steps, which the original patches in through SI.
   const auto halved = [](ScreenPoint _point) { return ScreenPoint{_point.x, static_cast<std::int16_t>(_point.y >> 1)}; };
   ScreenPoint a = halved(_doubled.first);
@@ -1766,7 +1766,7 @@ void FillClippedTriangle(GameState& _state, Triangle _doubled)
 
 [[nodiscard]] Task<void> WaitRetraceThenDelay(Host& _host)
 {
-  // MOV DX,3DAh and the retrace's loop at 4602, then MOV AX,7D0h and the delay's at 460A, which counts AX down to 0: the
+  // MOV DX,3DAh and the retrace's loop, then MOV AX,7D0h and the delay's, which counts AX down to 0: the
   // 8088's speed, which takes no paced time.
   co_await WaitForRetrace(_host);
 }

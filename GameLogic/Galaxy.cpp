@@ -30,7 +30,7 @@ constexpr std::uint8_t SCAN_F7 = 0x41;
 constexpr std::uint8_t SCAN_F10 = 0x44;
 constexpr std::uint8_t SCAN_KEYPAD_5 = 0x4C;
 
-// A description's control codes, in the order textControlCodes (DS:9763) lists their handlers.
+// A description's control codes, in the order textControlCodes lists their handlers.
 constexpr std::uint8_t INSERT_SYSTEM_NAME = 1;
 constexpr std::uint8_t INSERT_SYSTEM_ADJECTIVE = 2;
 constexpr std::uint8_t INSERT_RANDOM_NAME = 3;
@@ -51,7 +51,7 @@ constexpr std::uint8_t SHORT_RANGE_DIVISOR = 7;
 
 constexpr std::uint16_t GALAXY_SYSTEMS = 0x100;
 constexpr std::uint8_t GALAXY_SEED_BYTES = 6;
-// The ninth galaxy, galaxyNumber 8, and its seeds: the six bytes after galaxySeeds' eight entries, gap29A6, DS:29A6-29AB of the 1987
+// The ninth galaxy, galaxyNumber 8, and its seeds: the six bytes after galaxySeeds' eight entries, gap29A6, of the original's
 // image (GalaxyTests holds them to it), which the original reads as a ninth entry.
 constexpr std::uint8_t NINTH_GALAXY = 8;
 constexpr std::array<std::uint8_t, GALAXY_SEED_BYTES> NINTH_GALAXY_SEEDS = {0x34, 0x12, 0x78, 0x56, 0xBC, 0x9A};
@@ -108,7 +108,7 @@ constexpr std::uint16_t PRODUCTIVITY_ROW = 0x04B4;
 constexpr std::uint16_t RADIUS_ROW = 0x0554;
 constexpr std::uint8_t TECH_LEVEL_TENS = 10;
 
-// Where InsertRandomName keeps selectedSystem.name while it borrows it: DS:9650, in invasionDebriefText's row.
+// Where InsertRandomName keeps selectedSystem.name while it borrows it: in invasionDebriefText's row.
 constexpr std::size_t SAVED_SYSTEM_NAME = 0x9650 - 0x94B9;
 constexpr std::uint16_t SYSTEM_NAME_BYTES = 8;
 constexpr std::uint16_t ADJECTIVE_SUFFIX_BYTES = 5;
@@ -255,7 +255,7 @@ template <typename State> [[nodiscard]] auto LabelBytes(State& _state, std::size
   return TextWithin(_state.Data().galaxy.pendingChartLabels, _index);
 }
 
-// One pass of PlaceChartLabels over chartItems (CS:152B): whether an item overlaps the label with x range _x and
+// One pass of PlaceChartLabels over chartItems: whether an item overlaps the label with x range _x and
 // rows _rows. It stops at the first that does, and LOOP counts chartItemCount items, 65,536 for 0.
 [[nodiscard]] bool AnyChartItemOverlaps(const GameState& _state, ChartSpan _x, ChartSpan _rows)
 {
@@ -301,7 +301,7 @@ std::uint16_t RunTextControlCode(GameState& _state, std::uint8_t _code, std::uin
   }
 }
 
-// A chart's cross (CS:0D33, CS:0D61, CS:0FAD): _arm either way of (_x, _row), across and then down, each a clipped line. The
+// A chart's cross: _arm either way of (_x, _row), across and then down, each a clipped line. The
 // original keeps the centre on the stack between them (PUSH BX / PUSH DX).
 void DrawCross(GameState& _state, std::uint16_t _x, std::uint16_t _row, std::uint16_t _arm)
 {
@@ -309,7 +309,7 @@ void DrawCross(GameState& _state, std::uint16_t _x, std::uint16_t _row, std::uin
   DrawClippedLine(_state, _x, Offset(_row, _arm), _x, static_cast<std::uint16_t>(_row - _arm));
 }
 
-// The chart cursor's cross in colour 1 and the dot at its centre in colour 0 (CS:0D4D, CS:0F99).
+// The chart cursor's cross in colour 1 and the dot at its centre in colour 0.
 void DrawChartCursor(GameState& _state)
 {
   _state.Data().drawing.drawColor = 1;
@@ -318,7 +318,7 @@ void DrawChartCursor(GameState& _state)
   PlotPixel(_state, _state.Data().commander.chartCursorX, _state.Data().commander.chartCursorY);
 }
 
-// The steering moves a chart's cursor (CS:0DB4, CS:0FDA): the roll across, clamped to the chart, and the pitch negated down,
+// The steering moves a chart's cursor: the roll across, clamped to the chart, and the pitch negated down,
 // clamped to its 128 rows. Returns the cursor, which the original leaves in AX.
 ChartPoint MoveChartCursor(GameState& _state, Host& _host)
 {
@@ -351,7 +351,7 @@ ChartPoint MoveChartCursor(GameState& _state, Host& _host)
   return cursor;
 }
 
-// One frame of the galactic chart up to its presentation (CS:0CF9): the fuel range about the current system, its cross, the
+// One frame of the galactic chart up to its presentation: the fuel range about the current system, its cross, the
 // cursor, and a dot for each of the galaxy's 256 systems, the seeds twisted four times from one to the next.
 void DrawGalacticChart(GameState& _state, Host& /*_host*/)
 {
@@ -379,7 +379,7 @@ void DrawGalacticChart(GameState& _state, Host& /*_host*/)
   }
 }
 
-// One frame of the short-range chart up to its presentation (CS:0F60): the fuel range about the centre, the current system's
+// One frame of the short-range chart up to its presentation: the fuel range about the centre, the current system's
 // cross, the chart's discs and labels, and the cursor.
 void DrawShortRangeChart(GameState& _state, Host& /*_host*/)
 {
@@ -406,14 +406,14 @@ struct ChartKeys
   std::uint8_t CommanderState::*keptCursorY;
 };
 
-// The galactic chart's cursor back on the current system (CS:0E19).
+// The galactic chart's cursor back on the current system.
 void RecenterGalacticCursor(GameState& _state)
 {
   _state.Data().commander.chartCursorX = std::uint8_t{_state.Data().commander.currentSystemX};
   _state.Data().commander.chartCursorY = std::uint8_t{_state.Data().commander.currentSystemChartY};
 }
 
-// The short-range chart's cursor back on its centre (CS:103F).
+// The short-range chart's cursor back on its centre.
 void RecenterShortRangeCursor(GameState& _state)
 {
   _state.Data().commander.chartCursorX = static_cast<std::uint8_t>(SHORT_RANGE_CENTER_X);
@@ -433,10 +433,9 @@ constexpr ChartKeys SHORT_RANGE_CHART_KEYS{.drawFrame = &DrawShortRangeChart,
                                            .keptCursorX = &CommanderState::shortRangeCursorX,
                                            .keptCursorY = &CommanderState::shortRangeCursorY};
 
-// A chart's key (CS:0DEF, CS:1015): D shows the distance to the system nearest the cursor, F finds one by name, keypad 5 or fire
+// A chart's key: D shows the distance to the system nearest the cursor, F finds one by name, keypad 5 or fire
 // recentres the cursor, and Esc or an F key other than the chart's own closes it, selecting the system at the cursor unless the
-// hyperspace countdown runs. Returns the key that closes it; otherwise the original jumps back to the chart's frame (CS:0CF9,
-// CS:0F60).
+// hyperspace countdown runs. Returns the key that closes it; otherwise the original jumps back to the chart's frame.
 [[nodiscard]] Task<std::optional<ScreenKey>> ReadChartKey(GameState& _state, Host& _host, const ChartKeys& _chart)
 {
   const KeyPress key = GetKey(_state);
@@ -476,7 +475,7 @@ constexpr ChartKeys SHORT_RANGE_CHART_KEYS{.drawFrame = &DrawShortRangeChart,
   co_return ScreenKey{scanCode};
 }
 
-// A chart's frames until a key closes it (CS:0CF9, CS:0F60): the frame drawn, the IBM PC's redraw paid (D18), presented, the
+// A chart's frames until a key closes it: the frame drawn, the IBM PC's redraw paid (D18), presented, the
 // cursor steered, and the key read.
 [[nodiscard]] Task<ScreenKey> RunChartFrames(GameState& _state, Host& _host, const ChartKeys& _chart)
 {
@@ -502,7 +501,7 @@ void DrawChartTitle(GameState& _state, std::string_view _title)
   ClearChartTextLines(_state, INK_1);
 }
 
-// ShowShortRangeChart's item for the system in systemSeeds (CS:0E9F), _x and _row its offsets from the current system: a
+// ShowShortRangeChart's item for the system in systemSeeds, _x and _row its offsets from the current system: a
 // disc of radius 4 or 6 at 3.5 times them about the centre, and a label to place to its right, the name GenerateSystemName
 // makes. The seeds are left on the next system. The disc's centre, which the original keeps on the stack for the label
 // (PUSH CX / PUSH DX, then POP DX / POP BX), is a local; the label's endless loop down from the top spins on _host.
@@ -543,7 +542,7 @@ void AddShortRangeSystem(GameState& _state, Host& _host, std::int16_t _x, std::i
   ChartSpan rows{static_cast<std::uint8_t>(centerRow - LABEL_ABOVE), centerRow};
   if ((rows.first & 0x80) != 0)
   {
-    // A label above the chart's top would loop here for ever, at 0F23h: the jump goes back past the test. No system on the
+    // A label above the chart's top would loop here for ever: the jump goes back past the test. No system on the
     // chart is near enough the top (its rows are 4-7Bh). Its turns spin, so the run stops (Host::Spin).
     for (;;)
     {
@@ -601,7 +600,7 @@ struct ByteComparison
   return comparison;
 }
 
-// FindSystemByName's 'ERROR: <name> not on map!' on the second line under the chart (CS:148B): the name as typed
+// FindSystemByName's 'ERROR: <name> not on map!' on the second line under the chart: the name as typed
 // between the other two parts.
 void ShowNotOnMap(GameState& _state)
 {
@@ -610,7 +609,7 @@ void ShowNotOnMap(GameState& _state)
   (void)DrawScreenString(_state, FIND_ERROR_SUFFIX, INK_3, nameEnd);
 }
 
-// FindNearestSystem's search (CS:1292): what it leaves in BP, the count its loop had left at the nearest system on the current
+// FindNearestSystem's search: what it leaves in BP, the count its loop had left at the nearest system on the current
 // chart, CL with CH cleared (XOR CH,CH / MOV BP,CX); or, when no system is on the chart, which never happens, 100h less the
 // current system's index, where the original keeps BP as it came (ADR-046). The index it selects is 100h less that count.
 std::uint16_t SearchNearestSystem(GameState& _state)
@@ -683,7 +682,7 @@ void SelectNearestSystem(GameState& _state)
   _state.Data().galaxy.chartLabelCursor = 0;
   LoadGalaxySeeds(_state);
   // Each of the 256 systems that is on the chart becomes an item. XOR AL,AL, then PUSH AX round the system and POP AX at its end,
-  // where a system off the chart jumps back to (CS:0F50) with the count on the stack; the jump back to the next system carries it
+  // where a system off the chart jumps back to with the count on the stack; the jump back to the next system carries it
   // in AL.
   for (std::uint8_t systems = 0;;)
   {
@@ -1295,7 +1294,7 @@ std::uint16_t ExpandDescriptionText(GameState& _state, std::string_view _text, s
     }
     const std::uint16_t output = next;
     // The byte before the output, which the original reads at DI-1: before the buffer's first byte, the byte before it in 1987,
-    // descriptionTemplate's NUL (DESCRIPTION_TEMPLATE's nine bytes end with it at DS:9662).
+    // descriptionTemplate's NUL (DESCRIPTION_TEMPLATE's nine bytes end with it).
     const std::uint8_t previous = output == 0 ? std::uint8_t{BEFORE_DESCRIPTION_BUFFER} : std::uint8_t{ByteWithin(buffer, output - 1)};
     if (code == SPACE && previous == SPACE)
     {

@@ -2,7 +2,7 @@
 
 #include "SpaceObject.h"
 #include "Outcome.h"
-#include "ReferenceRig.h"
+#include "GameRig.h"
 #include "Text.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -33,7 +33,7 @@ public:
   // not an outcome has no value.
   TEST_METHOD(EveryOutcomeIsReadByItsName)
   {
-    ReferenceRig rig("Outcomes");
+    GameRig rig("Outcomes");
     const Elite::GameState& state = rig.State();
     const std::string text = Elite::OutcomeText(state);
     std::string expected;
@@ -53,7 +53,7 @@ public:
   // one that would not survive in a line escaped, and the active ship slots of the first shipSlotCount.
   TEST_METHOD(EachOutcomeReadsWhatItNames)
   {
-    ReferenceRig rig("OutcomeFields");
+    GameRig rig("OutcomeFields");
     Elite::GameState& state = rig.State();
     state.Data().commander.creditsTenths = 0x00012345;
     Assert::AreEqual("74565", Value(state, "creditsTenths").c_str(), false, L"10000h + 2345h tenths");
@@ -83,7 +83,7 @@ public:
   // which fails whatever its kind. A text that is not outcomes is refused, saying why.
   TEST_METHOD(DifferencesAreToldByKind)
   {
-    ReferenceRig rig("OutcomeDifferences");
+    GameRig rig("OutcomeDifferences");
     Elite::GameState& state = rig.State();
     const std::string recorded = Elite::OutcomeText(state);
     state.Data().commander.killCount = static_cast<std::uint8_t>(state.Data().commander.killCount + 1);

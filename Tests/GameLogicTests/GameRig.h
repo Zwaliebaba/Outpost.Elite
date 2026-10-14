@@ -1,10 +1,9 @@
-// Tests/GameLogicTests/ReferenceRig.h
+// Tests/GameLogicTests/GameRig.h
 #pragma once
 
 #include "DirectoryFileStore.h"
 #include "Game.h"
 #include "Host.h"
-#include "Reference.h"
 
 #include <memory>
 #include <string_view>
@@ -51,20 +50,18 @@ private:
   std::filesystem::path m_path;
 };
 
-/// The reference loaded on the native platform in paced time (ADR-008), as replays run it and the game does: from its
-/// generated image (D3), the PSP where DOSBox-X puts it, the clock starting at midnight on 1 January 1980 unless
-/// _startMoment says otherwise, DOS's files in a scratch directory, and the native routines where the program's entries are
-/// (D33). A Game holds the platform and the GameState that owns the game's memory (D19). A load that fails fails the test
-/// that made the rig.
-class ReferenceRig
+/// The game on its Host in paced time (ADR-008), as replays run it and the shell does: started (Game::Start), DOS's clock
+/// from midnight on 1 January 1980 unless _startMoment says otherwise, and the commander files in a scratch directory. A
+/// Game holds the Host and the GameState that owns the game's memory (D19).
+class GameRig
 {
 public:
-  explicit ReferenceRig(std::string_view _name, const Elite::DosDateTime& _startMoment = Elite::START_MOMENT, bool _mousePresent = false)
+  explicit GameRig(std::string_view _name, const Elite::DosDateTime& _startMoment = Elite::START_MOMENT, bool _mousePresent = false)
     : m_directory(_name),
       m_files(m_directory.Path()),
       m_game(std::make_unique<Elite::Game>(m_files, Desc(_startMoment, _mousePresent)))
   {
-    m_game->Start(Elite::PSP_SEGMENT);
+    m_game->Start();
   }
 
   /// The platform the game runs on.

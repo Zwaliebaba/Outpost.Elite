@@ -34,7 +34,7 @@ struct MathsState
       VisitMembers(*this, _visitor);
     }
   };
-  /// filled by the entries 2421/2426/242B/2430/2435/243B/2441/244D/2447 (one each), used by the rotations 2453..249D...
+  /// filled by nine entries of the sine and cosine setter, one each, used by the rotations...
   StoredSinCos rotationSinCos[9];
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.

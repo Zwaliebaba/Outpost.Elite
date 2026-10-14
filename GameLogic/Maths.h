@@ -79,7 +79,7 @@ enum class DivideTrap : std::uint8_t
   LowByte ///< bit 0 clear, as DIV [SI+4]'s ModRM byte 74h, which the handler takes for a byte divide's opcode: AL = 7Fh alone
 };
 
-/// DivideOverflowInterrupt (CS:025E), the int 0 handler, for a divide that traps as _trap says, with AX = _ax: AL = 7Fh or
+/// DivideOverflowInterrupt, the int 0 handler, for a divide that traps as _trap says, with AX = _ax: AL = 7Fh or
 /// AX = 7FFFh, the remainder untouched. An 80286 pushes the divide's own address, so the handler steps the return address over
 /// a DIV or IDIV it finds there, assuming a register operand; _trap is what that reading gives. The original first saves BX and
 /// DS in its code segment, which nothing reads. Returns AX as it leaves it.
@@ -94,80 +94,80 @@ enum class DivideTrap : std::uint8_t
 [[nodiscard]] ByteQuotient DivideByte(std::uint16_t _dividend, std::uint8_t _divisor);
 
 /// DIV r/m16: _dividend / _divisor, or AX = 7FFFh and DX as it was. The handler reads every word divide in the program as one
-/// but ProjectVertices' two, at CS:2369 and CS:2392, which DivideUnsigned serves.
+/// but ProjectVertices' two, which DivideUnsigned serves.
 [[nodiscard]] WordQuotient DivideWord(std::uint32_t _dividend, std::uint16_t _divisor);
 
 /// IDIV r/m16, as the 8088 does it: the magnitudes divided, and the trap as DivideWord's when the quotient's magnitude
 /// reaches the sign bit, so that -32768 traps too.
 [[nodiscard]] WordQuotient DivideSignedWord(std::uint32_t _dividend, std::uint16_t _divisor);
 
-/// NextRandom (CS:061C): the lagged-Fibonacci step on randomState0-2, and the number it makes.
+/// NextRandom: the lagged-Fibonacci step on randomState0-2, and the number it makes.
 [[nodiscard]] std::uint16_t NextRandom(GameState& _state);
 
 /// sin and cos of _angle, from sineTable.
 [[nodiscard]] SinCos SinCosOf(std::uint16_t _angle);
 
-/// SetSinCos (CS:23B8): sin and cos of _angle, stored as rotationSinCos[_pair].
+/// SetSinCos: sin and cos of _angle, stored as rotationSinCos[_pair].
 SinCos SetSinCos(GameState& _state, std::size_t _pair, std::uint16_t _angle);
 
-/// RotateBySinCos (CS:23DB): _point turned by _by, each product doubled and rounded on the bit below.
+/// RotateBySinCos: _point turned by _by, each product doubled and rounded on the bit below.
 [[nodiscard]] Pair RotateBySinCos(Pair _point, SinCos _by);
 
-/// RotateByStoredSinCos (CS:2459): RotateBySinCos by rotationSinCos[_pair].
+/// RotateByStoredSinCos: RotateBySinCos by rotationSinCos[_pair].
 [[nodiscard]] Pair RotateByStoredSinCos(const GameState& _state, std::size_t _pair, Pair _point);
 
-/// ArcTangent2 (CS:24A5): the angle of (_a, _b), 0 along +_b and 200h along +_a.
+/// ArcTangent2: the angle of (_a, _b), 0 along +_b and 200h along +_a.
 [[nodiscard]] std::uint16_t ArcTangent2(std::int16_t _a, std::int16_t _b);
 
-/// QuadrantArcTangent (CS:24E5): atan(_b/_a) for magnitudes, 0-200h.
+/// QuadrantArcTangent: atan(_b/_a) for magnitudes, 0-200h.
 [[nodiscard]] std::uint16_t QuadrantArcTangent(std::uint16_t _a, std::uint16_t _b);
 
-/// RatioArcTangent (CS:24F7): atan(_numerator/_denominator) for _numerator <= _denominator, 0-100h, by
+/// RatioArcTangent: atan(_numerator/_denominator) for _numerator <= _denominator, 0-100h, by
 /// a search of tangentTable. A divide that overflows goes through the trap, and gives 100h.
 [[nodiscard]] std::uint16_t RatioArcTangent(std::uint16_t _numerator, std::uint16_t _denominator);
 
-/// AngleWithinTolerance (CS:2CDB): whether 11-bit angles _a and _b differ by less than _tolerance.
+/// AngleWithinTolerance: whether 11-bit angles _a and _b differ by less than _tolerance.
 [[nodiscard]] bool AngleWithinTolerance(std::uint16_t _a, std::uint16_t _b, std::uint16_t _tolerance);
 
-/// VectorLength (CS:2E96): the length of _vector from the top 16 significant bits of its squared length,
+/// VectorLength: the length of _vector from the top 16 significant bits of its squared length,
 /// by subtracting odd numbers.
 [[nodiscard]] std::uint16_t VectorLength(Vector _vector);
 
-/// VectorWithinBox (CS:2F6E): whether |x|, |y| and |z| are all below _halfSize.
+/// VectorWithinBox: whether |x|, |y| and |z| are all below _halfSize.
 [[nodiscard]] bool VectorWithinBox(Vector _vector, std::uint16_t _halfSize);
 
-/// ObjectWithinBox (CS:2F65): VectorWithinBox on the low words of _slot's position.
+/// ObjectWithinBox: VectorWithinBox on the low words of _slot's position.
 [[nodiscard]] bool ObjectWithinBox(const SpaceObject& _slot, std::uint16_t _halfSize);
 
-/// RotatePitchYawRoll (CS:3EAC): (y, z) by rotationSinCos[0], (x, z) by [1], (x, y) by [2]. It keeps the
+/// RotatePitchYawRoll: (y, z) by rotationSinCos[0], (x, z) by [1], (x, y) by [2]. It keeps the
 /// rotated y, then z, in rotateScratch on the way, as the original does.
 [[nodiscard]] Vector RotatePitchYawRoll(GameState& _state, Vector _vector);
 
-/// RotateRollYawPitch (CS:3EC7): (x, y) by rotationSinCos[2], (x, z) by [1], (y, z) by [0].
+/// RotateRollYawPitch: (x, y) by rotationSinCos[2], (x, z) by [1], (y, z) by [0].
 [[nodiscard]] Vector RotateRollYawPitch(const GameState& _state, Vector _vector);
 
-/// RotateBySinCos7210 (CS:3F02): (y, z) by rotationSinCos[7], then (x, y) by [2], (x, z) by [1] and
+/// RotateBySinCos7210: (y, z) by rotationSinCos[7], then (x, y) by [2], (x, z) by [1] and
 /// (y, z) by [0], keeping z, y and then x in rotateScratch on the way.
 [[nodiscard]] Vector RotateBySinCos7210(GameState& _state, Vector _vector);
 
-/// ScaleByInverseDistance (CS:40A4): _value shifted right by _slot's disc scale, over 256 times one more
+/// ScaleByInverseDistance: _value shifted right by _slot's disc scale, over 256 times one more
 /// than the square root of the high word of the view position's squared length, at most 255.
 [[nodiscard]] std::uint16_t ScaleByInverseDistance(const SpaceObject& _slot, std::uint32_t _value);
 
-/// ShiftRight24 (CS:4326): the 24-bit _value shifted arithmetically right _count times, in 24 bits.
+/// ShiftRight24: the 24-bit _value shifted arithmetically right _count times, in 24 bits.
 [[nodiscard]] std::uint32_t ShiftRight24(std::uint32_t _value, std::uint8_t _count);
 
-/// GetPositionScaleShift (CS:4333): the shift for _slot's position.
+/// GetPositionScaleShift: the shift for _slot's position.
 [[nodiscard]] PositionScale GetPositionScaleShift(const SpaceObject& _slot);
 
-/// ScalePositionDown (CS:439E): _slot's 24-bit coordinates shifted right by _shift, their low words.
+/// ScalePositionDown: _slot's 24-bit coordinates shifted right by _shift, their low words.
 [[nodiscard]] Vector ScalePositionDown(const SpaceObject& _slot, std::uint8_t _shift);
 
-/// ComputeAnglesToObject (CS:4ECF): the two angles of the direction of _slot's position, by ArcTangent2 and
+/// ComputeAnglesToObject: the two angles of the direction of _slot's position, by ArcTangent2 and
 /// rotationSinCos[6], which it sets.
 [[nodiscard]] Angles ComputeAnglesToObject(GameState& _state, const SpaceObject& _slot);
 
-/// ConvertVectorToAngles (CS:4F08): the two angles, negated, of the direction _vector / 4, by ArcTangent2
+/// ConvertVectorToAngles: the two angles, negated, of the direction _vector / 4, by ArcTangent2
 /// and rotationSinCos[8], which it sets.
 [[nodiscard]] Angles ConvertVectorToAngles(GameState& _state, Vector _vector);
 

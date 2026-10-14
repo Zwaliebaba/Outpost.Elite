@@ -1,9 +1,10 @@
 #include "pch.h"
 
 #include "AnswerFile.h"
+#include "GameRig.h"
 #include "GuardReport.h"
-#include "ReferenceRig.h"
 #include "Replay.h"
+#include "Repository.h"
 #include "StateDumps.h"
 
 #include <algorithm>
@@ -35,11 +36,11 @@ std::string ReadText(const std::filesystem::path& _path)
 // The checkpoint of every digest step of the corpus, by replay and by the line the step is on.
 using Checkpoints = std::map<std::filesystem::path, std::map<std::size_t, Elite::Checkpoint>>;
 
-// Every Replays/*.replay, played on the native routines (ReferenceRig). Every digest it names must come out as
+// Every Replays/*.replay, played on the native routines (GameRig). Every digest it names must come out as
 // recorded, and each is kept in _checkpoints. Unless _recording, each digest's picture and outcomes are checked against
 // the ones recorded on the lines after it (_report): a picture or a timing outcome that differs fails nothing, and an
-// outcome of the player's progress that differs, or a picture or outcomes not recorded, fails. While the data segment is
-// dumped or the digests re-based (StateDumps), each digest point's data segment is dumped or held to the dump before the
+// outcome of the player's progress that differs, or a picture or outcomes not recorded, fails. While the state is
+// dumped or the digests re-based (StateDumps), each digest point's state is dumped or held to the dump before the
 // change instead of its digest to the one recorded, and a re-base fails on any picture or outcome that differs.
 // _check then looks at the machine after each replay.
 template <typename Check> void PlayEveryReplay(bool _recording, GuardReport& _report, Checkpoints& _checkpoints, Check _check)
@@ -64,7 +65,7 @@ template <typename Check> void PlayEveryReplay(bool _recording, GuardReport& _re
     if (!Elite::ParseSteps(ReadText(path), steps, error))
       Assert::Fail((name + L": " + Widen(error)).c_str());
 
-    ReferenceRig rig("Corpus");
+    GameRig rig("Corpus");
     Elite::ReplayPlayer player(rig.Host(), rig.State(), rig.Store(), directory); // file steps copy from Replays/
     std::size_t checked = 0;
     for (const Elite::Step& step : steps)

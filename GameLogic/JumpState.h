@@ -11,7 +11,7 @@ namespace Elite
 /// their names, in their order there; the GameState holds it in GameData.
 struct JumpState
 {
-  /// set by ReadScanCode when W (11h) is pressed while Alt is held; on hyperspace arrival (478C) it forces EnterWitchSpace, which puts t...
+  /// set by ReadScanCode when W (11h) is pressed while Alt is held; on hyperspace arrival it forces EnterWitchSpace, which puts t...
   std::uint8_t forceMisjump;
   /// set when H is pressed inside the galactic drive window; CompleteHyperspaceJump then makes a galactic jump
   std::uint8_t galacticJumpPending;

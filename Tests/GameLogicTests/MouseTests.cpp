@@ -11,7 +11,7 @@ namespace GameLogicTests
 TEST_CLASS(MouseTests)
 {
 public:
-  // ReadFireButton (CS:7543) looks at the buttons held.
+  // ReadFireButton looks at the buttons held.
   TEST_METHOD(ButtonsHeldAreReported)
   {
     Elite::Mouse mouse(true);
@@ -20,7 +20,7 @@ public:
     Assert::AreEqual(3u, std::uint32_t{mouse.Buttons()}, L"both held");
   }
 
-  // ReadMouseSteering (CS:79A1) reads the motion every frame; ResetMouseIfSelected forgets it.
+  // ReadMouseSteering reads the motion every frame; ResetMouseIfSelected forgets it.
   TEST_METHOD(MotionCountersAreSinceTheLastCall)
   {
     Elite::Mouse mouse(true);

@@ -1,6 +1,6 @@
 #include "pch.h"
 
-#include "ReferenceRig.h"
+#include "GameRig.h"
 #include "Sha256.h"
 #include "StateDigest.h"
 #include "StateWriter.h"
@@ -62,7 +62,7 @@ public:
   // CGA's registers. The original's stack is not in the state at all.
   TEST_METHOD(CoversTheGameAndNotItsScratch)
   {
-    ReferenceRig rig("Digest");
+    GameRig rig("Digest");
     Elite::GameState& state = rig.State();
     Elite::Cga& video = rig.Host().Video();
     const std::string before = Elite::GameStateDigest(state, video);
@@ -83,17 +83,13 @@ public:
     Assert::AreNotEqual(videoMemory.c_str(), Elite::GameStateDigest(state, video).c_str(), false, L"and the CGA's registers");
   }
 
-  // The GameState owns the game's memory (D19), started at the segments DOS would have used (D33) as SetStartState sets it: the
+  // The GameState owns the game's memory (D19), started as SetStartState sets it: the
   // state the 1987 image loaded, whose hash this was measured as when the image still loaded it (Phase 7, step 4); a write to a member
   // or to video memory lands there, and an offset past video memory is refused.
   TEST_METHOD(TheGameStateHoldsTheGamesMemory)
   {
-    ReferenceRig rig("GameState");
+    GameRig rig("GameState");
     Elite::GameState& state = rig.State();
-    Assert::AreEqual(std::uint32_t{Elite::PSP_SEGMENT + Elite::PSP_PARAGRAPHS}, std::uint32_t{state.CodeSegment()}, L"the code segment");
-    Assert::AreEqual(std::uint32_t{state.CodeSegment()} + Elite::DATA_SEGMENT_PARAGRAPH, std::uint32_t{state.DataSegment()},
-                     L"the data segment");
-
     // The state as the 1987 image loaded it, less the joystick's members (D81), the Amstrad's flag (D12) and the screenshots' (D86), and video memory clear until the game sets its first mode.
     Elite::Sha256 start;
     start.Update(Elite::StateBytes(std::as_const(state).Data()));

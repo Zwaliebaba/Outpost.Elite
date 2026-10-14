@@ -5,7 +5,7 @@
 #include "GameState.h"
 #include "StateDumps.h"
 #include "GuardReport.h"
-#include "ReferenceRig.h"
+#include "GameRig.h"
 #include "Replay.h"
 #include "StateDigest.h"
 
@@ -130,19 +130,17 @@ template <typename Struct> [[nodiscard]] std::uint8_t& DataByteIn(Elite::GameSta
   return StructIn<Struct>(_state.Data()).*_member;
 }
 
-/// A twin (ADR-016): the reference booted to its title screen, or started at power-on, on the native platform
-/// (ReferenceRig), and then a scenario no replay reaches, played step by step. A test sets up its state through Both, from
+/// A twin (ADR-016): the game run to its title screen, or started at power-on, on its Host (GameRig), and then a scenario no replay reaches, played step by step. A test sets up its state through Both, from
 /// the values the game's own code writes, and plays it with Play. Each digest it gives, at every digest step and at the end
 /// of every Play, must be the twin's next known answer (KnownAnswers), which the interpreted original gave for the same
-/// scenario before D7 deleted it. A twin also shows that its scenario sends no interrupt to code no native routine stands in
-/// for.
+/// scenario before D7 deleted it.
 ///
 /// Beside each answer, the picture and the outcomes of the same state (D33) are checked against the ones recorded in
 /// KNOWN_PICTURES_FILE and KNOWN_OUTCOMES_FILE (GuardReport). A picture, or a timing outcome, that differs is reported: it
 /// is written to the test's log with both values. An outcome of the player's progress that differs fails, and so does a
 /// picture or outcomes not recorded. While the guard is recorded (RecordingGuard), a twin keeps its pictures and outcomes
-/// instead and writes them when it is done, only if every state digest it gave met its known answer. While the data segment
-/// is dumped or the digests re-based (StateDumps), each answer's data segment is dumped or held to the dump before the
+/// instead and writes them when it is done, only if every state digest it gave met its known answer. While the state
+/// is dumped or the digests re-based (StateDumps), each answer's state is dumped or held to the dump before the
 /// change instead of its digest to the known answer; a re-base fails on any picture or outcome that differs, and the twin
 /// writes its digests as its known answers when it is done.
 class TwinRig
@@ -350,7 +348,7 @@ private:
   std::vector<std::string> m_recordedOutcomes; // while recording, the outcomes by ordinal from 1
   std::vector<std::string> m_digestsGiven;     // the state digests, by ordinal from 1, which a re-base records
   std::size_t m_digests = 0;                   // the twin's digests so far, the last one's ordinal
-  ReferenceRig m_rig;
+  GameRig m_rig;
   Elite::ReplayPlayer m_player;
 };
 

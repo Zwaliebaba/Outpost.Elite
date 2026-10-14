@@ -44,8 +44,8 @@ void SetSpeakerData(GameState& _state, Host& _host, std::uint8_t _bit)
   OutSpeaker(_state, _host, static_cast<std::uint8_t>((_state.Data().audio.speakerPortImage & ~SPEAKER_DATA) | _bit));
 }
 
-// TimerTickMusic (0x72FF): titleTune's notes, each a byte (negative: no gap after it, 'F' a rest, 'G' the end) and a
-// length in beats. A note change (0x7372) sets the PIT's channel 2 to its period.
+// TimerTickMusic: titleTune's notes, each a byte (negative: no gap after it, 'F' a rest, 'G' the end) and a
+// length in beats. A note change sets the PIT's channel 2 to its period.
 void TickMusic(GameState& _state, Host& _host)
 {
   const std::uint16_t ticksLeft = _state.Data().audio.noteTicksLeft;
@@ -113,7 +113,7 @@ void TickMusic(GameState& _state, Host& _host)
 // value, which the sweep does not use.
 using SweepSample = std::uint8_t (*)(GameState&, Host&);
 
-// The noise and tone sweeps (0x7215, 0x7289): every sweepPeriodTicks ticks one sample, by _sample; every
+// The noise and tone sweeps: every sweepPeriodTicks ticks one sample, by _sample; every
 // sweepStepLength samples a longer period and a shorter step, until the period reaches 7.
 void TickSweep(GameState& _state, Host& _host, SweepSample _sample, std::uint8_t& _active)
 {
@@ -138,7 +138,7 @@ void TickSweep(GameState& _state, Host& _host, SweepSample _sample, std::uint8_t
   }
 }
 
-// TimerTickSoundEffects (0x717F): the beeps, then the one effect of highest priority.
+// TimerTickSoundEffects: the beeps, then the one effect of highest priority.
 void TickSoundEffects(GameState& _state, Host& _host)
 {
   if (_state.Data().audio.beepTicks != 0)
@@ -194,7 +194,7 @@ void TimerTick(GameState& _state, Host& _host)
   _state.Data().timer.millisecondCounter = static_cast<std::uint16_t>(_state.Data().timer.millisecondCounter + 1);
   _state.Data().timer.timerTicks = static_cast<std::uint16_t>(_state.Data().timer.timerTicks + 1);
   _state.Data().flow.msSinceFrame = static_cast<std::uint8_t>(_state.Data().flow.msSinceFrame + 1);
-  // The original checks the copy protection's answer here while a question is pending (CheckProtectionAnswer, CS:739A), and
+  // The original checks the copy protection's answer here while a question is pending (CheckProtectionAnswer), and
   // none is: protectionQuestion stays FFh, since the D5 byte keeps the protection from asking one (ADR-001).
   if (_state.Data().flight.soundEnabled == 0 || _state.Data().flight.gamePaused == 1)
   {
@@ -210,7 +210,7 @@ void TimerTick(GameState& _state, Host& _host)
 
 [[nodiscard]] Task<void> WaitForTimerTick(GameState& _state, Host& _host)
 {
-  // PUSH AX, MOV AX,[timerTicks], then the compare at 7776 and JE back to it, and POP AX: AX holds the tick it started at. The
+  // PUSH AX, MOV AX,[timerTicks], then the compare and JE back to it, and POP AX: AX holds the tick it started at. The
   // stack the PUSH used is not state the game reads, nor the digest (ADR-008 item 5).
   const std::uint16_t ticks = _state.Data().timer.timerTicks;
   while (ticks == _state.Data().timer.timerTicks)

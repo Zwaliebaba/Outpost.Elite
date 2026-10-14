@@ -27,8 +27,8 @@ namespace Elite
 /// The vertices a blueprint's program starts from, by the handler its first word names.
 enum class BlueprintShape : std::uint8_t
 {
-  Box, ///< BuildBoxCornerVertices (CS:377A): a box from its extents and half-width
-  Dodo ///< BuildDodoVertices (CS:38BF): the Dodo's two rings and its slot
+  Box, ///< BuildBoxCornerVertices: a box from its extents and half-width
+  Dodo ///< BuildDodoVertices: the Dodo's two rings and its slot
 };
 
 /// A ship type's blueprint (RunBlueprintHandler, RenderBlueprint): what its handler builds, and the parts of its body, each
@@ -80,78 +80,78 @@ struct ShipRangeCheck
   }
 };
 
-/// ProjectVertices (CS:2340): the first projectedVertexCount 6-byte vertices of vertexBuffer projected in place to 4-byte points,
+/// ProjectVertices: the first projectedVertexCount 6-byte vertices of vertexBuffer projected in place to 4-byte points,
 /// 80h + 256x/z and 40h + 256y/z rounded; a vertex nearer than nearPlaneZ gets x = 8000h and keeps a stale y. Each divide takes a
 /// memory operand, so the trap saturates only AL when it overflows.
 void ProjectVertices(GameState& _state);
 
-/// ReflectVertexAboutCenter (CS:3740): for x, y and z in turn, the vertex at _reflection = drawCenter - the vertex at _vertex,
+/// ReflectVertexAboutCenter: for x, y and z in turn, the vertex at _reflection = drawCenter - the vertex at _vertex,
 /// then the vertex at _vertex += drawCenter, each the byte of vertexBuffer it starts at.
 void ReflectVertexAboutCenter(GameState& _state, std::size_t _vertex, std::size_t _reflection);
 
-/// OffsetVertexByCenter (CS:3768): the vertex at byte _vertex of vertexBuffer plus drawCenter, x, y and z in turn.
+/// OffsetVertexByCenter: the vertex at byte _vertex of vertexBuffer plus drawCenter, x, y and z in turn.
 void OffsetVertexByCenter(GameState& _state, std::size_t _vertex);
 
-/// BuildBoxCornerVertices (CS:377A): the blueprint handler of types 1-29, from the blueprint's two extent bytes _extents, the
+/// BuildBoxCornerVertices: the blueprint handler of types 1-29, from the blueprint's two extent bytes _extents, the
 /// first low. The eight corners (+-boxHalfWidth, +-the first, +-the second) about drawCenter, rotated by the drawn angles, the
 /// player's pitch and the view direction, as vertices 34-41.
 void BuildBoxCornerVertices(GameState& _state, std::uint16_t _extents);
 
-/// BuildDodoVertices (CS:38BF): the blueprint handler of type 0, the Dodo station: two rings of five from the sine table in
+/// BuildDodoVertices: the blueprint handler of type 0, the Dodo station: two rings of five from the sine table in
 /// 72-degree steps from the roll angle, a slot of four, rotated as BuildBoxCornerVertices rotates, and the rings reflected
 /// through drawCenter, as vertices 0-23.
 void BuildDodoVertices(GameState& _state);
 
-/// ScaleDodoRadii (CS:3A13): the signed byte _value scaled to the Dodo's two ring radii by arithmetic shifts and adds.
+/// ScaleDodoRadii: the signed byte _value scaled to the Dodo's two ring radii by arithmetic shifts and adds.
 [[nodiscard]] DodoRadii ScaleDodoRadii(std::int8_t _value);
 
-/// RunVertexProgram (CS:3A40): runs a blueprint's ops, _program, on vertexBuffer, from _accumulator. An op's bits 0-5 are a
+/// RunVertexProgram: runs a blueprint's ops, _program, on vertexBuffer, from _accumulator. An op's bits 0-5 are a
 /// vertex; bits 6-7 load it into the accumulator, store the accumulator there, average the two (the 16-bit sum halved
 /// arithmetically), or add it.
 void RunVertexProgram(GameState& _state, std::span<const std::uint8_t> _program, Vector _accumulator);
 
-/// TriangleWindingSign (CS:3A9B): whether (x0-x1)(y2-y1) - (y0-y1)(x2-x1) is negative, by the sign of the high words'
+/// TriangleWindingSign: whether (x0-x1)(y2-y1) - (y0-y1)(x2-x1) is negative, by the sign of the high words'
 /// difference, or of the low words' when the high words agree: true when _triangle faces the viewer.
 [[nodiscard]] bool TriangleWindingSign(Triangle _triangle);
 
-/// DrawVisibleFaces (CS:3AB3): for each of _faces faces of _blueprint's face list that faces the viewer (TriangleWindingSign on
+/// DrawVisibleFaces: for each of _faces faces of _blueprint's face list that faces the viewer (TriangleWindingSign on
 /// its first three vertices), its items in order: an edge (DrawClippedLine) of its face edges in its colour unless an end is off
 /// screen, or a triangle (FillTriangle) in its pattern unless a corner is. A face turned away is skipped.
 void DrawVisibleFaces(GameState& _state, const Blueprint& _blueprint, std::uint16_t _faces);
 
-/// CheckShipInRange (CS:3BEA): IsObjectNear, then |x|, |y| and |z| of _slot's position below maxAxisDistance and the high words
+/// CheckShipInRange: IsObjectNear, then |x|, |y| and |z| of _slot's position below maxAxisDistance and the high words
 /// of their squares, summed, below maxDistanceSquaredHigh after the second and the third. In range, _slot's size (+3Eh) is that
 /// sum shifted right 6 and its in-range bit (byte 0 bit 6) is set; out of range, EraseScannerBlip.
 ShipRangeCheck CheckShipInRange(GameState& _state, SpaceObject& _slot);
 
-/// TransformSunOrPlanet (CS:3C52): _slot's position scaled down by its GetPositionScaleShift, which becomes its disc scale
+/// TransformSunOrPlanet: _slot's position scaled down by its GetPositionScaleShift, which becomes its disc scale
 /// (+0Ah) and depth (+3Dh), turned to the view (TransformToViewWithBlip) and stored at +10h/+12h/+14h, and byte 0 bit 7 set.
 void TransformSunOrPlanet(GameState& _state, SpaceObject& _slot);
 
-/// TransformShip (CS:3C7E): _slot's position, the low words, turned to the view (TransformToViewWithBlip); offered to the hold
+/// TransformShip: _slot's position, the low words, turned to the view (TransformToViewWithBlip); offered to the hold
 /// (TryScoopObject) while fuel scoops are fitted and the game is not over; _slot's depth (+3Dh) cleared; then ClassifyViewPosition.
 void TransformShip(GameState& _state, SpaceObject& _slot);
 
-/// RunBlueprintHandler (CS:3CDD): boxHalfWidth from _blueprint, the handler it names run (BuildBoxCornerVertices or
-/// BuildDodoVertices), then what the handler returns into at RenderBlueprintBody (CS:3CF2): the vertex program, the projection
+/// RunBlueprintHandler: boxHalfWidth from _blueprint, the handler it names run (BuildBoxCornerVertices or
+/// BuildDodoVertices), then what the handler returns into at RenderBlueprintBody: the vertex program, the projection
 /// and the faces.
 void RunBlueprintHandler(GameState& _state, const Blueprint& _blueprint);
 
-/// ClassifyStationPosition (CS:3C72): ClassifyViewPosition on _slot's compass position, +20h/+22h/+24h: visible, with byte 0 bit 7
+/// ClassifyStationPosition: ClassifyViewPosition on _slot's compass position, +20h/+22h/+24h: visible, with byte 0 bit 7
 /// set, when z is at least nearClipZ and twice |x| and twice |y| are at most z; the position stored at +10h/+12h/+14h and as
 /// drawCenter once z passes.
 void ClassifyStationPosition(GameState& _state, SpaceObject& _slot);
 
-/// TransformToViewWithBlip (CS:3ED7): _position turned to the camera's frame (RotatePitchYawRoll), the high byte of its z into
+/// TransformToViewWithBlip: _position turned to the camera's frame (RotatePitchYawRoll), the high byte of its z into
 /// _slot's +3Ch, _slot's scanner blip moved there (UpdateScannerBlip), then the frame turned to the view (TransformToView's tail).
 /// Returns the position in the view.
 Vector TransformToViewWithBlip(GameState& _state, SpaceObject& _slot, Vector _position);
 
-/// TransformToView (CS:3EE3): _position turned to the camera's frame (RotatePitchYawRoll), then, off the front view, (x, z) turned
+/// TransformToView: _position turned to the camera's frame (RotatePitchYawRoll), then, off the front view, (x, z) turned
 /// by -viewAngle through rotationSinCos[8], which it sets.
 Vector TransformToView(GameState& _state, Vector _position);
 
-/// TransformAndDrawObjects (CS:3D25): the player's pitch, yaw and roll into rotation pairs 0-2; every one of shipSlotCount slots
+/// TransformAndDrawObjects: the player's pitch, yaw and roll into rotation pairs 0-2; every one of shipSlotCount slots
 /// classified and transformed (ClassifyObject), from the slot each leaves DI on; then, from the farthest in, the visible objects
 /// drawn (DrawFarthestObject): the sun or the planet, the station as a disc, a dot, or a blueprint.
 void TransformAndDrawObjects(GameState& _state, Host& _host);
@@ -161,11 +161,11 @@ void TransformAndDrawObjects(GameState& _state, Host& _host);
 inline constexpr std::uint16_t PLANET_DISC_SCALE = 0x32;
 inline constexpr std::uint16_t SUN_DISC_SCALE = 0x64;
 
-/// DrawSunOrPlanet (CS:3F4F): the planet in _slot sized (SizePlanet), with its altitude, or the sun, with the cabin temperature, its
+/// DrawSunOrPlanet: the planet in _slot sized (SizePlanet), with its altitude, or the sun, with the cabin temperature, its
 /// fringe, fuel scooping, death by heat and a supernova's heat; then, in front of the view, its disc.
 void DrawSunOrPlanet(GameState& _state, SpaceObject& _slot);
 
-/// DrawDistantStation (CS:45C6): the station in _slot as a disc in colour 3 at its compass position, +20h/+22h/+24h, projected
+/// DrawDistantStation: the station in _slot as a disc in colour 3 at its compass position, +20h/+22h/+24h, projected
 /// (ProjectToScreen): radius 7 rows when its depth byte +25h is below 14h, smaller further off, and none from 21h to A5h.
 void DrawDistantStation(GameState& _state, SpaceObject& _slot);
 
@@ -182,10 +182,10 @@ void DrawDistantStation(GameState& _state, SpaceObject& _slot);
 /// so one out of the view keeps its state; for one TransformAndDrawObjects drew, read after it, the count has moved on a frame.
 [[nodiscard]] SnapshotDrawing DrawingOf(const SpaceObject& _slot) noexcept;
 
-/// LoadPlayerAngles (CS:8A16): the player's pitch, yaw and roll into rotation pairs 0-2.
+/// LoadPlayerAngles: the player's pitch, yaw and roll into rotation pairs 0-2.
 void LoadPlayerAngles(GameState& _state);
 
-/// ProjectToScreen (CS:8D2E): _view on the screen, 80h + 256x/z and 40h + 256y/z, each divide saturated by the trap when it
+/// ProjectToScreen: _view on the screen, 80h + 256x/z and 40h + 256y/z, each divide saturated by the trap when it
 /// overflows.
 [[nodiscard]] ScreenPoint ProjectToScreen(Vector _view);
 

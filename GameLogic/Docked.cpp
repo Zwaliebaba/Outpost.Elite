@@ -284,11 +284,11 @@ void PrintUnit(GameState& _state, const TradeRow& _row, std::uint16_t _cell)
                   Offset(_row.cell, TEXT_ROW_BYTES)};
 }
 
-// RunTitle (CS:7D8B), the title: the ship slots cleared (ClearAllObjects), the music on, the
+// RunTitle, the title: the ship slots cleared (ClearAllObjects), the music on, the
 // player's angles, the view and the lasers zeroed, the cockpit shown (screenLayout 2, which ShowCockpitScreen copies over with the
 // direction flag clear), the message line cleared and ---- E L I T E ---- on it; then the planet and the turning ship of type
 // titleShipType, in stationSlot at its titleShipDistances, until a key: F9 and F10 step the type through 2-29, any other ends it
-// with the music off, the credits and a new game. ES is B800h throughout, from its MOV ES,AX. TitleFrameLoop (CS:7DF1) is one
+// with the music off, the credits and a new game. ES is B800h throughout, from its MOV ES,AX. TitleFrameLoop is one
 // frame.
 [[nodiscard]] Task<void> RunTitle(GameState& _state, Host& _host)
 {
@@ -375,7 +375,7 @@ void PrintUnit(GameState& _state, const TradeRow& _row, std::uint16_t _cell)
   _state.Data().flow.titleShown = 1;
 }
 
-// The screen each F-key shows in DockedKeyDispatch (CS:0B45), in the order it tests them. The status screen's arm (CS:0B96) resets
+// The screen each F-key shows in DockedKeyDispatch, in the order it tests them. The status screen's arm resets
 // the keyboard first.
 struct DockedScreen
 {
@@ -400,9 +400,9 @@ constexpr std::array<DockedScreen, 9> DOCKED_SCREENS = {{
   {SCAN_F10, &ShowInventoryScreen},
 }};
 
-// DockedKeyDispatch (CS:0B40), from the arm that shows the screen for _screenKey: F9's status screen (CS:0B96), or Esc's disc menu
-// (CS:0BAC). Each screen returns the key that closed it, which picks the next screen, until F1 leaves; Esc is the disc menu, and
-// any other key waits for one (CS:0B40). Returns whether the disc menu left for the disk, through LeaveGameLoopForDisk, which returns
+// DockedKeyDispatch, from the arm that shows the screen for _screenKey: F9's status screen, or Esc's disc menu
+// . Each screen returns the key that closed it, which picks the next screen, until F1 leaves; Esc is the disc menu, and
+// any other key waits for one. Returns whether the disc menu left for the disk, through LeaveGameLoopForDisk, which returns
 // past RunTitleAndDocked (DiscMenuExit); otherwise F1 ended them.
 [[nodiscard]] Task<bool> DispatchDockedKeys(GameState& _state, Host& _host, std::uint8_t _screenKey)
 {
@@ -441,7 +441,7 @@ constexpr std::array<DockedScreen, 9> DOCKED_SCREENS = {{
         screenKey = SCAN_ESCAPE;
         break;
       }
-      // Back to the GetKey at 0B40h.
+      // Back to the GetKey.
       const KeyPress next = co_await WaitForKey(_state, _host);
       key = ScreenKey{next.scanCode};
     }
@@ -524,7 +524,7 @@ void DrawFrameRow(GameState& _state, std::uint16_t _cell, std::uint16_t _value)
 
 [[nodiscard]] Task<ScreenKey> WaitForScreenExitKey(GameState& _state, Host& _host, std::uint8_t _ownKey)
 {
-  // GetKey until Esc or another screen's F-key, every other key and an empty poll going back to 60B4h.
+  // GetKey until Esc or another screen's F-key, every other key and an empty poll going back to the GetKey.
   for (;;)
   {
     const KeyPress key = GetKey(_state);
@@ -779,7 +779,7 @@ void AwardArchangelTitle(GameState& _state)
   if (mission == MISSION_SUPERNOVA)
   {
     PrintTextLines(_state, SUPERNOVA_BRIEFING_TEXT, LINE_4);
-    // Y takes the refugees, N refuses; every other key goes back to the GetKey at 6E23, as an empty one does.
+    // Y takes the refugees, N refuses; every other key goes back to the GetKey, as an empty one does.
     std::uint8_t answer = 0;
     for (;;)
     {
@@ -898,7 +898,7 @@ void AwardArchangelTitle(GameState& _state)
   {
     co_await RunTitle(_state, _host);
   }
-  // JMP into DockedKeyDispatch: back from a disk request, at the disc menu (CS:0BAC); otherwise at the status screen (CS:0B96).
+  // JMP into DockedKeyDispatch: back from a disk request, at the disc menu; otherwise at the status screen.
   if (_state.Data().saveLoad.resumeAtDiskMenu == 1)
   {
     co_return co_await DispatchDockedKeys(_state, _host, SCAN_ESCAPE);

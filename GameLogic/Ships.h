@@ -86,139 +86,139 @@ struct ReclaimedSlot
 /// 2 z) of _slot, the low word, then the high byte. Not an entry: the idiom several routines share.
 void AddToCoordinate(SpaceObject& _slot, int _axis, std::int16_t _value);
 
-/// ClearObjectSlot (CS:2FD8): the 64 bytes of _slot zeroed, byte by byte.
+/// ClearObjectSlot: the 64 bytes of _slot zeroed, byte by byte.
 void ClearObjectSlot(SpaceObject& _slot);
 
-/// IsObjectNear (CS:3B9A): whether each 24-bit coordinate of _slot fits a signed word; when one does not, EraseScannerBlip.
+/// IsObjectNear: whether each 24-bit coordinate of _slot fits a signed word; when one does not, EraseScannerBlip.
 NearTest IsObjectNear(GameState& _state, SpaceObject& _slot);
 
-/// IsSunOrPlanet (CS:3F2A): whether _slot is the sun (type 1Eh) or the planet (1Fh).
+/// IsSunOrPlanet: whether _slot is the sun (type 1Eh) or the planet (1Fh).
 [[nodiscard]] bool IsSunOrPlanet(const SpaceObject& _slot);
 
-/// IsPlanet (CS:3F37): whether _slot is the planet (type 1Fh).
+/// IsPlanet: whether _slot is the planet (type 1Fh).
 [[nodiscard]] bool IsPlanet(const SpaceObject& _slot);
 
-/// IsStation (CS:3F40): whether _slot is a station, and whether a Dodo.
+/// IsStation: whether _slot is a station, and whether a Dodo.
 [[nodiscard]] StationTest IsStation(const SpaceObject& _slot);
 
-/// IsObjectNearKeepBlip (CS:460E): IsObjectNear's test alone: whether each 24-bit coordinate of _slot fits a signed word.
+/// IsObjectNearKeepBlip: IsObjectNear's test alone: whether each 24-bit coordinate of _slot fits a signed word.
 [[nodiscard]] bool IsObjectNearKeepBlip(const SpaceObject& _slot);
 
-/// InitPoliceViper (CS:4C76): _slot made a Viper (spawnTemplates entry 14), class 4, police (+3Ah = 1), aggression 64h.
+/// InitPoliceViper: _slot made a Viper (spawnTemplates entry 14), class 4, police (+3Ah = 1), aggression 64h.
 void InitPoliceViper(SpaceObject& _slot);
 
-/// InitCargoBarrel (CS:4C99): _slot made a barrel (spawnTemplates entry 3), class 3.
+/// InitCargoBarrel: _slot made a barrel (spawnTemplates entry 3), class 3.
 void InitCargoBarrel(SpaceObject& _slot);
 
-/// InitAbandonedCobra (CS:4CA6): _slot made a Cobra (entry 9) of class 0: the ship an escape pod leaves.
+/// InitAbandonedCobra: _slot made a Cobra (entry 9) of class 0: the ship an escape pod leaves.
 void InitAbandonedCobra(SpaceObject& _slot);
 
-/// InitShuttle (CS:4CC0): _slot made a shuttle (entry 7), class 3.
+/// InitShuttle: _slot made a shuttle (entry 7), class 3.
 void InitShuttle(SpaceObject& _slot);
 
-/// InitThargon (CS:4CDA): _slot made a Thargon (entry 28), class 5.
+/// InitThargon: _slot made a Thargon (entry 28), class 5.
 void InitThargon(SpaceObject& _slot);
 
-/// SpawnRandomDrifter (CS:4CE7): _slot, a free one, made one of the eight drifters from spawnTemplates' entry 1 by a random
+/// SpawnRandomDrifter: _slot, a free one, made one of the eight drifters from spawnTemplates' entry 1 by a random
 /// word rotated right and its two bytes XORed, placed at the spawn point and turned to the player, of class 3 with turn rate
 /// 1Eh, and its velocity set.
 void SpawnRandomDrifter(GameState& _state, SpaceObject& _slot);
 
-/// SpawnRandomTrader (CS:4D08): _slot, a free one, made one of the six traders from spawnTemplates' entry 9 by a random byte /
+/// SpawnRandomTrader: _slot, a free one, made one of the six traders from spawnTemplates' entry 9 by a random byte /
 /// 43, placed and turned as SpawnRandomDrifter does, of class 4, and its velocity set. A Viper gets a random bit for +3Ah,
 /// police when 1, and then a word write of legalStatus at +30h, which zeroes the bounty above it.
 void SpawnRandomTrader(GameState& _state, SpaceObject& _slot);
 
-/// SpawnMaskMissionShip (CS:4DAE): _slot, a free one, from the Asp's record, placed and turned as SpawnRandomDrifter does: the
+/// SpawnMaskMissionShip: _slot, a free one, from the Asp's record, placed and turned as SpawnRandomDrifter does: the
 /// Asp when _maskShip, otherwise type 12h or 13h by the sign of a random word; class 5, a random aggression below 80h, energy
 /// 96h, no cargo, 6 missiles and a bounty of C8h.
 void SpawnMaskMissionShip(GameState& _state, SpaceObject& _slot, bool _maskShip);
 
-/// SpawnInvasionThargoid (CS:4DF0): _slot, a free one, made the Thargoid of an invasion (spawnTemplates entry 27), placed and
+/// SpawnInvasionThargoid: _slot, a free one, made the Thargoid of an invasion (spawnTemplates entry 27), placed and
 /// turned as SpawnRandomDrifter does; class 5, a random aggression below 80h, energy 32h, no cargo, 6 missiles and 8
 /// Thargons.
 void SpawnInvasionThargoid(GameState& _state, SpaceObject& _slot);
 
-/// SpawnRandomHunter (CS:4D3B): _slot, a free one, made one of the seven hunters from spawnTemplates' entry 15 by a random
+/// SpawnRandomHunter: _slot, a free one, made one of the seven hunters from spawnTemplates' entry 15 by a random
 /// byte / 37, placed at the spawn point and turned to the player, of class 6 with a random aggression below 20h, and its velocity
 /// set.
 void SpawnRandomHunter(GameState& _state, SpaceObject& _slot);
 
-/// SpawnRandomWolf (CS:4D60): _slot, a free one, made one of the five wolves from spawnTemplates' entry 22 by a random byte / 52,
+/// SpawnRandomWolf: _slot, a free one, made one of the five wolves from spawnTemplates' entry 22 by a random byte / 52,
 /// or in witch space the sixth, the Thargoid; placed and turned as SpawnRandomHunter does, of class 5 with a random aggression
 /// below 40h, 20h more in an anarchy, its velocity set, and a Thargoid given 2 to 5 Thargons.
 void SpawnRandomWolf(GameState& _state, SpaceObject& _slot);
 
-/// InitObjectFromTemplate (CS:4E1B): _slot from the 10-byte record _index of spawnTemplates from _first, the first of a group of
+/// InitObjectFromTemplate: _slot from the 10-byte record _index of spawnTemplates from _first, the first of a group of
 /// them, which the original holds the address of in BX: its state, flags and
 /// aggression cleared, its scanned byte 1, its type active, then the record's nine fields.
 void InitObjectFromTemplate(SpaceObject& _slot, std::size_t _first, std::uint8_t _index);
 
-/// PlaceAtSpawnPoint (CS:4E75): _slot placed at a random point 10000 out, by rotation pairs 7 and 6: (a scatter of +-1023,
+/// PlaceAtSpawnPoint: _slot placed at a random point 10000 out, by rotation pairs 7 and 6: (a scatter of +-1023,
 /// 10000) turned by pair 7, then (another scatter, what that left of the 10000) by pair 6. Its y, x and z, in that order.
 void PlaceAtSpawnPoint(GameState& _state, SpaceObject& _slot);
 
-/// FacePlayerWithRandomRoll (CS:4EC5): FacePlayer, then a random word for _slot's roll.
+/// FacePlayerWithRandomRoll: FacePlayer, then a random word for _slot's roll.
 void FacePlayerWithRandomRoll(GameState& _state, SpaceObject& _slot);
 
-/// GetObjectPosition (CS:4EF4): the low words of _slot's position.
+/// GetObjectPosition: the low words of _slot's position.
 [[nodiscard]] Vector GetObjectPosition(const SpaceObject& _slot);
 
-/// GetVectorToPlayer (CS:4EFE): the low words of _slot's position, negated.
+/// GetVectorToPlayer: the low words of _slot's position, negated.
 [[nodiscard]] Vector GetVectorToPlayer(const SpaceObject& _slot);
 
-/// ComputeVelocity (CS:4F48): _slot's velocity bytes from its speed and heading: the pitch into rotation pair 7 and the yaw
+/// ComputeVelocity: _slot's velocity bytes from its speed and heading: the pitch into rotation pair 7 and the yaw
 /// into pair 6, then (0, speed) turned by pair 6 and (0, what that left) by pair 7. Returns the velocity as those rotations
 /// give it, in words, of which the slot keeps the low bytes.
 Velocity ComputeVelocity(GameState& _state, SpaceObject& _slot);
 
-/// MoveObject (CS:4F6E): _slot's velocity bytes, sign-extended, added to its 24-bit position, x, y then z, each as ADD on the
+/// MoveObject: _slot's velocity bytes, sign-extended, added to its 24-bit position, x, y then z, each as ADD on the
 /// low word and ADC on the high byte; then IsObjectNear, and RemoveObject when it is not near.
 MovedObject MoveObject(GameState& _state, SpaceObject& _slot);
 
-/// RemoveObject (CS:4F98): _slot's active bit cleared, then EraseScannerBlip. Returns the blip's last pixel, when it erased one.
+/// RemoveObject: _slot's active bit cleared, then EraseScannerBlip. Returns the blip's last pixel, when it erased one.
 std::optional<DashboardPixel> RemoveObject(GameState& _state, SpaceObject& _slot);
 
-/// FacePlayer (CS:513E): _slot's heading turned to the player: ConvertVectorToAngles of GetVectorToPlayer, as its pitch, then
+/// FacePlayer: _slot's heading turned to the player: ConvertVectorToAngles of GetVectorToPlayer, as its pitch, then
 /// its yaw.
 void FacePlayer(GameState& _state, SpaceObject& _slot);
 
-/// FindFreeShipSlot (CS:51E0): the first inactive ship slot, from firstShipSlot.
+/// FindFreeShipSlot: the first inactive ship slot, from firstShipSlot.
 [[nodiscard]] SlotSearch FindFreeShipSlot(GameState& _state);
 
-/// ReclaimShipSlot (CS:51FD): the first ship slot from firstShipSlot whose blip is not drawn; when every one has a blip, one of
+/// ReclaimShipSlot: the first ship slot from firstShipSlot whose blip is not drawn; when every one has a blip, one of
 /// slots 4-19 at random, removed (RemoveObject) to make room.
 ReclaimedSlot ReclaimShipSlot(GameState& _state);
 
-/// ClearAllObjects (CS:52B2): shipSlotCount slots from shipSlots zeroed, a word at a time as REP STOSW does, upwards: the direction flag is
+/// ClearAllObjects: shipSlotCount slots from shipSlots zeroed, a word at a time as REP STOSW does, upwards: the direction flag is
 /// clear wherever the game calls it (change 3c).
 void ClearAllObjects(GameState& _state);
 
-/// FindDebrisSlot (CS:52EC): the first inactive debris slot, or, when every one is active, the oldest, the last of equals.
+/// FindDebrisSlot: the first inactive debris slot, or, when every one is active, the oldest, the last of equals.
 [[nodiscard]] SlotIndex FindDebrisSlot(GameState& _state);
 
-/// CopyObject (CS:5320): _source's 64 bytes copied over _destination's a word at a time as REP MOVSW does, upwards: the direction flag is
+/// CopyObject: _source's 64 bytes copied over _destination's a word at a time as REP MOVSW does, upwards: the direction flag is
 /// clear wherever the game calls it (change 3c).
 void CopyObject(const SpaceObject& _source, SpaceObject& _destination);
 
-/// UpdateDebrisAi (CS:5330): a fragment's frame: its lifetime counted down, and at 0 its active bit cleared; otherwise its age
+/// UpdateDebrisAi: a fragment's frame: its lifetime counted down, and at 0 its active bit cleared; otherwise its age
 /// counted up, its spin bytes, sign-extended, added to its roll and then its pitch, and MoveObject. Returns what MoveObject
 /// did, when it ran.
 std::optional<MovedObject> UpdateDebrisAi(GameState& _state, SpaceObject& _slot);
 
-/// IsDebrisType (CS:53FE): whether _slot is a rock: a plate (0Ch), a boulder (6), an asteroid (5) or a splinter (0Bh).
+/// IsDebrisType: whether _slot is a rock: a plate (0Ch), a boulder (6), an asteroid (5) or a splinter (0Bh).
 [[nodiscard]] bool IsDebrisType(const SpaceObject& _slot);
 
-/// IsViperType (CS:5413): whether _slot is a Viper (type 1Ch).
+/// IsViperType: whether _slot is a Viper (type 1Ch).
 [[nodiscard]] bool IsViperType(const SpaceObject& _slot);
 
-/// IsPoliceViper (CS:541E): whether _slot is a Viper with word +3Ah = 1.
+/// IsPoliceViper: whether _slot is a Viper with word +3Ah = 1.
 [[nodiscard]] bool IsPoliceViper(const SpaceObject& _slot);
 
-/// IsThargoidType (CS:5428): whether _slot is a Thargoid (type 16h).
+/// IsThargoidType: whether _slot is a Thargoid (type 16h).
 [[nodiscard]] bool IsThargoidType(const SpaceObject& _slot);
 
-/// IsThargonType (CS:5431): whether _slot is a Thargon (type 7).
+/// IsThargonType: whether _slot is a Thargon (type 7).
 [[nodiscard]] bool IsThargonType(const SpaceObject& _slot);
 
 } // namespace Elite

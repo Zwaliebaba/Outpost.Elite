@@ -17,9 +17,9 @@ struct AudioState
   std::uint8_t beepTicks;
   /// counts down from 70 (StartLowBeep); speaker bit 1 = bit 1 of the count, 250 Hz
   std::uint8_t lowBeepTicks;
-  /// sweep that toggles the speaker (ToggleSpeaker); started by 0x7B71
+  /// sweep that toggles the speaker (ToggleSpeaker); started by StartLaserSound
   std::uint8_t toneSweepActive;
-  /// sweep that plays noiseSource samples (EmitNoiseSample); started by 0x7AC3, 0x7AFC, 0x7B09
+  /// sweep that plays noiseSource samples (EmitNoiseSample); started by StartNoiseSweep, for impacts, explosions and the player's death
   std::uint8_t noiseSweepActive;
   /// samples per step; falls by sweepStepShrink each step
   std::uint8_t sweepStepLength;
@@ -29,12 +29,12 @@ struct AudioState
   std::uint8_t sweepStepCounter;
   /// ticks between samples; +1 a step, the sweep ends at 7
   std::uint8_t sweepPeriodTicks;
-  /// one noise sample a tick while nonzero; 100 from 0x7B96
+  /// one noise sample a tick while nonzero; 100
   std::uint8_t noiseBurstTicks;
   /// silent tail of the current note
   std::uint16_t noteGapTicks;
   std::uint16_t noteTicksLeft;
-  /// next note; 0x47 restarts at DS:A1B4
+  /// next note; 0x47 restarts the tune
   std::uint16_t musicPointer;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.

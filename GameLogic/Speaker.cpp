@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <limits>
 
 namespace Elite
 {
@@ -12,48 +11,22 @@ namespace Elite
 namespace
 {
 
-// The tone is the interval timer's channel 2, clocked as on the IBM PC: its own time base, private to the speaker until the synth
-// replaces it. A millisecond of the platform's clock starts at cycle CyclesAt of an 8088 clocked at a third of the crystal, and a
-// timer tick is four such cycles.
-constexpr std::uint64_t CRYSTAL_HZ = 14'318'180;
-constexpr std::uint64_t CPU_CLOCK_DIVISOR = 3;
-constexpr std::uint64_t CYCLES_PER_PIT_TICK = 4;
-
-[[nodiscard]] constexpr std::uint64_t CyclesAt(Milliseconds _time) noexcept
-{
-  return _time * CRYSTAL_HZ / (CPU_CLOCK_DIVISOR * 1'000);
-}
-
-[[nodiscard]] constexpr std::int64_t PitTickAt(Milliseconds _time) noexcept
-{
-  return static_cast<std::int64_t>(CyclesAt(_time) / CYCLES_PER_PIT_TICK);
-}
-
-// Rendering counts time in units of 1 / (CPU_CLOCK_DIVISOR * rate) of a cycle. In those units a
-// cycle is CPU_CLOCK_DIVISOR * rate long and a sample exactly CRYSTAL_HZ, so every boundary, a
-// cycle's, a timer tick's or a sample's, falls on a whole unit and nothing is rounded.
-constexpr std::uint64_t UNITS_PER_SAMPLE = CRYSTAL_HZ;
-
 // The BIOS's programming of the tone, which is its power-on state (Speaker.h).
 constexpr std::uint16_t BEEP_DIVISOR = 0x0533;
+constexpr std::uint32_t FULL_DIVISOR = 0x10000;
+constexpr std::uint64_t MILLISECONDS_PER_SECOND = 1'000;
 
-[[nodiscard]] constexpr std::uint64_t UnitsPerCycle(std::uint32_t _sampleRate) noexcept
+// The first sample whose interval ends after _time: the one _time falls in.
+[[nodiscard]] constexpr std::uint64_t SampleAt(Milliseconds _time, std::uint32_t _sampleRate) noexcept
 {
-  return CPU_CLOCK_DIVISOR * _sampleRate;
+  return _time * _sampleRate / MILLISECONDS_PER_SECOND;
 }
 
-// The shortest period, in timer ticks, that is rendered as a wave rather than as its mean. A wave
-// is averaged when its fundamental, CRYSTAL_HZ / (12 * period), is above the limit of hearing or
-// the output's Nyquist frequency, whichever is lower.
-[[nodiscard]] std::uint32_t AverageBelowTicks(std::uint32_t _sampleRate) noexcept
+// The time-integral, in periods, of a square wave high for the first half of each period, from phase 0 to phase _phase.
+[[nodiscard]] double HighPhase(double _phase) noexcept
 {
-  const std::uint64_t limitHz = std::min<std::uint64_t>(Speaker::AUDIBLE_LIMIT_HZ, _sampleRate / 2);
-  if (limitHz == 0)
-  {
-    return std::numeric_limits<std::uint32_t>::max();
-  }
-  const std::uint64_t ticksHz = limitHz * CPU_CLOCK_DIVISOR * CYCLES_PER_PIT_TICK;
-  return static_cast<std::uint32_t>((CRYSTAL_HZ + ticksHz - 1) / ticksHz); // period < CRYSTAL_HZ / ticksHz
+  const double periods = std::floor(_phase);
+  return periods * 0.5 + std::min(_phase - periods, 0.5);
 }
 
 } // namespace
@@ -63,10 +36,14 @@ Speaker::Speaker(const Milliseconds& _clock)
 {
   Event initial;
   initial.at = m_clock;
-  initial.tone.loaded = true;
-  initial.tone.reload = BEEP_DIVISOR;
-  initial.tone.gate = false;
+  initial.toneHz = ToneHz(BEEP_DIVISOR);
+  initial.toneStart = m_clock;
   m_events.push_back(initial);
+}
+
+double Speaker::ToneHz(std::uint16_t _divisor) noexcept
+{
+  return TIMER_HZ / static_cast<double>(_divisor == 0 ? FULL_DIVISOR : _divisor);
 }
 
 void Speaker::SetBits(bool _gate, bool _data)
@@ -78,14 +55,9 @@ void Speaker::SetBits(bool _gate, bool _data)
   }
   Event event = last;
   event.at = m_clock;
-  if (event.tone.gate != _gate)
+  if (_gate && !last.gate)
   {
-    event.tone.gate = _gate;
-    if (_gate && event.tone.loaded)
-    {
-      event.tone.reload = event.tone.CountRegister();
-      event.tone.originTick = PitTickAt(m_clock) + 1;
-    }
+    event.toneStart = m_clock;
   }
   event.gate = _gate;
   event.data = _data;
@@ -94,12 +66,10 @@ void Speaker::SetBits(bool _gate, bool _data)
 
 void Speaker::SetTone(std::uint16_t _divisor)
 {
-  // The control word, which leaves the tone unloaded until its count, then the count: both at one cycle, so one event.
   Event event = m_events.back();
   event.at = m_clock;
-  event.tone.reload = SquareWave::Reload(_divisor);
-  event.tone.originTick = PitTickAt(m_clock) + 1;
-  event.tone.loaded = true;
+  event.toneHz = ToneHz(_divisor);
+  event.toneStart = m_clock;
   Append(event);
 }
 
@@ -107,15 +77,10 @@ void Speaker::Append(const Event& _event)
 {
   if (m_events.back().at >= _event.at)
   {
-    m_events.back() = _event; // the same cycle: the later change is the one in force
+    m_events.back() = _event; // the same millisecond: the later change is the one in force
     return;
   }
   m_events.push_back(_event);
-}
-
-bool Speaker::ToneOutputAt(Milliseconds _time) const noexcept
-{
-  return m_events.back().tone.OutputHigh(PitTickAt(_time));
 }
 
 std::size_t Speaker::SampleCount(Milliseconds _from, Milliseconds _to, std::uint32_t _sampleRate) noexcept
@@ -124,8 +89,7 @@ std::size_t Speaker::SampleCount(Milliseconds _from, Milliseconds _to, std::uint
   {
     return 0;
   }
-  const std::uint64_t unitsPerCycle = UnitsPerCycle(_sampleRate);
-  return static_cast<std::size_t>(CyclesAt(_to) * unitsPerCycle / UNITS_PER_SAMPLE - CyclesAt(_from) * unitsPerCycle / UNITS_PER_SAMPLE);
+  return static_cast<std::size_t>(SampleAt(_to, _sampleRate) - SampleAt(_from, _sampleRate));
 }
 
 Milliseconds Speaker::FirstSampleStart(Milliseconds _from, std::uint32_t _sampleRate) noexcept
@@ -134,10 +98,7 @@ Milliseconds Speaker::FirstSampleStart(Milliseconds _from, std::uint32_t _sample
   {
     return _from;
   }
-  const std::uint64_t unitsPerCycle = UnitsPerCycle(_sampleRate);
-  const std::uint64_t sample = CyclesAt(_from) * unitsPerCycle / UNITS_PER_SAMPLE;
-  const std::uint64_t cycle = sample * UNITS_PER_SAMPLE / unitsPerCycle;
-  return cycle * CPU_CLOCK_DIVISOR * 1'000 / CRYSTAL_HZ;
+  return SampleAt(_from, _sampleRate) * MILLISECONDS_PER_SECOND / _sampleRate;
 }
 
 std::size_t Speaker::RenderSamples(Milliseconds _from, Milliseconds _to, std::uint32_t _sampleRate, std::span<std::int16_t> _out) const
@@ -147,41 +108,45 @@ std::size_t Speaker::RenderSamples(Milliseconds _from, Milliseconds _to, std::ui
   {
     return 0;
   }
-  const std::uint64_t unitsPerCycle = UnitsPerCycle(_sampleRate);
-  const std::uint64_t unitsPerTick = unitsPerCycle * CYCLES_PER_PIT_TICK;
-  const std::uint32_t averageBelowTicks = AverageBelowTicks(_sampleRate);
-  const std::uint64_t firstSample = CyclesAt(_from) * unitsPerCycle / UNITS_PER_SAMPLE;
-  const auto startOf = [&](std::size_t _event) { return CyclesAt(m_events[_event].at) * unitsPerCycle; };
+  const double rate = _sampleRate;
+  const double audibleHz = std::min<double>(AUDIBLE_LIMIT_HZ, rate / 2.0);
+  const std::uint64_t firstSample = SampleAt(_from, _sampleRate);
+  const auto seconds = [](Milliseconds _time) { return static_cast<double>(_time) / MILLISECONDS_PER_SECOND; };
 
   // The event in force at the first sample's start (the first event, if the log begins later).
   std::size_t current = 0;
   for (std::size_t index = 0; index < count; ++index)
   {
-    const std::uint64_t sampleStart = (firstSample + index) * UNITS_PER_SAMPLE;
-    const std::uint64_t sampleEnd = sampleStart + UNITS_PER_SAMPLE;
-    while (current + 1 < m_events.size() && startOf(current + 1) <= sampleStart)
+    const std::uint64_t sample = firstSample + index;
+    const double sampleStart = static_cast<double>(sample) / rate;
+    const double sampleEnd = static_cast<double>(sample + 1) / rate;
+    while (current + 1 < m_events.size() && seconds(m_events[current + 1].at) <= sampleStart)
     {
       ++current;
     }
 
-    double area = 0.0;
-    std::uint64_t position = sampleStart;
+    double high = 0.0; // seconds of the sample at level 1
+    double position = sampleStart;
     for (std::size_t event = current; position < sampleEnd; ++event)
     {
-      const std::uint64_t end = event + 1 < m_events.size() ? std::min(sampleEnd, startOf(event + 1)) : sampleEnd;
+      const double end = event + 1 < m_events.size() ? std::min(sampleEnd, seconds(m_events[event + 1].at)) : sampleEnd;
       const Event& state = m_events[event];
       if (state.data && !state.gate)
       {
-        area += static_cast<double>(end - position);
+        high += end - position;
+      }
+      else if (state.data && state.toneHz > audibleHz)
+      {
+        high += (end - position) * 0.5;
       }
       else if (state.data)
       {
-        area += state.tone.Integral(position, end, unitsPerTick, averageBelowTicks);
+        const double start = seconds(state.toneStart);
+        high += (HighPhase((end - start) * state.toneHz) - HighPhase((position - start) * state.toneHz)) / state.toneHz;
       }
-      position = end;
+      position = std::max(position, end);
     }
-    const double level = area / static_cast<double>(UNITS_PER_SAMPLE);
-    _out[index] = static_cast<std::int16_t>(std::lround(level * FULL_LEVEL));
+    _out[index] = static_cast<std::int16_t>(std::lround(high * rate * FULL_LEVEL));
   }
   return count;
 }

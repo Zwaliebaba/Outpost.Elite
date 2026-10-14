@@ -93,7 +93,7 @@ constexpr std::uint8_t QUANTITY_BASE = 10; // ParseQuantity's decimal, which the
   return TextWithin(BytesOf(_state.Data().docked.productNames), std::size_t{_product} * PRODUCT_NAME_BYTES);
 }
 
-// 6C05 and 6CB3: SI and textAttribute pushed for ShowCargoMessage, and the message's attribute set. Returns the attribute, which
+// SI and textAttribute pushed for ShowCargoMessage, and the message's attribute set. Returns the attribute, which
 // the original pushes in AL.
 [[nodiscard]] std::uint8_t OpenCargoMessage(GameState& _state)
 {
@@ -102,7 +102,7 @@ constexpr std::uint8_t QUANTITY_BASE = 10; // ParseQuantity's decimal, which the
   return saved;
 }
 
-// 6BE8: the message _text on the message line in 4Eh, and textAttribute put back to _saved, which the original pops into AL
+// The message _text on the message line in 4Eh, and textAttribute put back to _saved, which the original pops into AL
 // before its jump back to the steering.
 void ShowCargoMessage(GameState& _state, std::string_view _text, std::uint8_t _saved)
 {
@@ -111,7 +111,7 @@ void ShowCargoMessage(GameState& _state, std::string_view _text, std::uint8_t _s
   _state.Data().drawing.textAttribute = _saved;
 }
 
-// 6C25 and 6D10: "Quantity?", up to three characters typed into quantityText, and ParseQuantity on them.
+// "Quantity?", up to three characters typed into quantityText, and ParseQuantity on them.
 [[nodiscard]] Task<Quantity> ReadQuantity(GameState& _state, Host& _host)
 {
   PrintTextModeString(_state, QUANTITY_PROMPT_TEXT, MESSAGE_OFFSET);
@@ -184,7 +184,7 @@ void StoreLot(GameState& _state, const CargoLot& _lot)
   return {};
 }
 
-// 6C0F: S on the sell screen, once OpenCargoMessage has saved the attribute: a typed quantity from the hold to the market, for
+// S on the sell screen, once OpenCargoMessage has saved the attribute: a typed quantity from the hold to the market, for
 // the sell price (CargoSold). Returns the message for ShowCargoMessage, after the jumps back the original takes to it.
 [[nodiscard]] Task<std::string_view> SellCargo(GameState& _state, Host& _host)
 {
@@ -213,7 +213,7 @@ void StoreLot(GameState& _state, const CargoLot& _lot)
   co_return SOLD_TEXT;
 }
 
-// 6CBD: B on the buy screen, once OpenCargoMessage has saved the attribute: a typed quantity from the market into the hold, if
+// B on the buy screen, once OpenCargoMessage has saved the attribute: a typed quantity from the market into the hold, if
 // there is room and the cash, for the buy price (CargoBought). Returns the message for ShowCargoMessage, after the jumps back
 // the original takes to it.
 [[nodiscard]] Task<std::string_view> BuyCargo(GameState& _state, Host& _host)
@@ -436,7 +436,7 @@ void PrintCargoQuantity(GameState& _state, std::uint16_t _quantity)
   std::uint16_t row = StartMenu(_state).row;
   for (;;)
   {
-    // 6B43: the steering; then the keys.
+    // The steering; then the keys.
     row = SteerMenuCursor(_state, _host, row);
     for (;;)
     {

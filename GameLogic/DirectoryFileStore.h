@@ -18,8 +18,8 @@ namespace Elite
 /// Attributes and stamps are kept per file, in memory, for the store's lifetime, because the host has nowhere to keep
 /// DOS's attribute bits. A file the store has not created or changed reads as attribute 0 (a plain file with the
 /// archive bit clear) stamped 1980-01-01 00:00:00. That default is load-bearing: the game refuses to load a commander
-/// file with any attribute set (LoadCommanderFile, CS:031A) and lists only files whose attribute byte is 0
-/// (ListCommanderFiles, CS:03BC). It clears the archive bit itself after saving (SaveCommanderFile, CS:0382), so a
+/// file with any attribute set (LoadCommanderFile) and lists only files whose attribute byte is 0
+/// (ListCommanderFiles). It clears the archive bit itself after saving (SaveCommanderFile), so a
 /// commander saved in this session loads, and one saved in an earlier session, or copied in, does too. Stamps come
 /// from DOS's clock, never from the host's file times, so a run does not depend on when its files were made.
 ///

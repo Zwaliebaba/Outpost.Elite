@@ -1,8 +1,8 @@
 #include "pch.h"
 
 #include "AnswerFile.h"
+#include "GameRig.h"
 #include "Maths.h"
-#include "ReferenceRig.h"
 
 #include <array>
 #include <format>
@@ -272,7 +272,7 @@ public:
   // of inputs that takes in the edges: the answers recorded in MATHS_ANSWERS_FILE, MATHS_ANSWERS of them.
   TEST_METHOD(EveryRoutineGivesTheOriginalsAnswers)
   {
-    ReferenceRig rig("MathsAnswers");
+    GameRig rig("MathsAnswers");
     Elite::GameState& state = rig.State();
     std::vector<std::string> answers;
     Divides(answers);

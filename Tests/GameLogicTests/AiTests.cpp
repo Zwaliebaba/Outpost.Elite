@@ -2,6 +2,7 @@
 
 #include "GameState.h"
 #include "Maths.h"
+#include "Repository.h"
 #include "SpaceObject.h"
 #include "Ships.h"
 #include "TwinRig.h"

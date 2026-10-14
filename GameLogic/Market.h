@@ -30,35 +30,35 @@ struct Quantity
   std::uint8_t lastRead; ///< that character, less '0' where it was read as a digit
 };
 
-/// RunCargoTradeMenu (CS:6B1E): the cargo menu, with OpenCargoMessage, ShowCargoMessage, SellCargo, BuyCargo, RefuseBuy and
+/// RunCargoTradeMenu: the cargo menu, with OpenCargoMessage, ShowCargoMessage, SellCargo, BuyCargo, RefuseBuy and
 /// ReadQuantity as one unit (ADR-012 item 14): the cursor moved by the steering and the arrow keys, and B or S with a quantity
 /// typed on the buy or sell screen (tradeScreenIsBuy), each with its message. Returns Esc or the F-key that ends it, other than
 /// the screen's own. Waits for keys as a rule (ADR-015).
 [[nodiscard]] Task<ScreenKey> RunCargoTradeMenu(GameState& _state, Host& _host);
 
-/// ShowMarketPricesScreen (CS:5E2C): the F8 screen, the system's name cut at its first space and every commodity's buy and
+/// ShowMarketPricesScreen: the F8 screen, the system's name cut at its first space and every commodity's buy and
 /// sell price, then the wait for the key that closes it (WaitForScreenExitKey). Waits for keys as a rule (ADR-015).
 [[nodiscard]] Task<ScreenKey> ShowMarketPricesScreen(GameState& _state, Host& _host);
 
-/// SubtractCredits (CS:65BA), the body PayForEquipmentItem runs into and SpendCredits jumps to: _tenths of credits off
+/// SubtractCredits, the body PayForEquipmentItem runs into and SpendCredits jumps to: _tenths of credits off
 /// creditsTenths, and the balance reformatted. Returns false, and the credits as they were, when they are not enough.
 bool SubtractCredits(GameState& _state, std::uint32_t _tenths);
 
-/// SpendCredits (CS:65EC): a jump to SubtractCredits, for _tenths of credits. Returns false when they are not enough.
+/// SpendCredits: a jump to SubtractCredits, for _tenths of credits. Returns false when they are not enough.
 bool SpendCredits(GameState& _state, std::uint32_t _tenths);
 
-/// AddCredits (CS:65EE): _tenths of credits onto creditsTenths, ADD and then ADC, and the balance reformatted by
+/// AddCredits: _tenths of credits onto creditsTenths, ADD and then ADC, and the balance reformatted by
 /// FormatCredits.
 void AddCredits(GameState& _state, std::uint32_t _tenths);
 
-/// ComputeResalePrice (CS:6995): resalePriceInput less one, less a 32nd of it halved until it is below 100;
+/// ComputeResalePrice: resalePriceInput less one, less a 32nd of it halved until it is below 100;
 /// 0 for 0.
 [[nodiscard]] std::uint16_t ComputeResalePrice(const GameState& _state);
 
-/// ComputeMarketPrices (CS:69CE): each commodity's buy and sell price into screenPrices, for the current system.
+/// ComputeMarketPrices: each commodity's buy and sell price into screenPrices, for the current system.
 void ComputeMarketPrices(GameState& _state);
 
-/// NextMarketRandom (CS:6A85): NextRandom's step on marketRandomState, and the number it makes.
+/// NextMarketRandom: NextRandom's step on marketRandomState, and the number it makes.
 std::uint16_t NextMarketRandom(GameState& _state);
 
 /// The start of ShowBuyCargoScreen, named so that the market's known answers can call it (D33): the market's random state,
@@ -71,15 +71,15 @@ void StartMarketRandom(GameState& _state);
 /// no part in it.
 [[nodiscard]] std::optional<std::uint8_t> RollQuantityOnSale(GameState& _state);
 
-/// ParseQuantity (CS:6A99): the decimal number in _text, a buffer typed into, spaces around it allowed. The buffer holds a NUL
+/// ParseQuantity: the decimal number in _text, a buffer typed into, spaces around it allowed. The buffer holds a NUL
 /// after what was typed, where the reading stops.
 [[nodiscard]] Quantity ParseQuantity(std::span<const std::uint8_t> _text);
 
-/// PrintCargoQuantity (CS:6AD9): _quantity, or "-" for 0, in the quantity column of menuSelectedRow's row, in its
+/// PrintCargoQuantity: _quantity, or "-" for 0, in the quantity column of menuSelectedRow's row, in its
 /// attribute, and textAttribute put back.
 void PrintCargoQuantity(GameState& _state, std::uint16_t _quantity);
 
-/// AddContrabandPenalty (CS:6DC1): menuSelectedRow's legal penalty onto legalStatus, unless the sum, in 8 bits,
+/// AddContrabandPenalty: menuSelectedRow's legal penalty onto legalStatus, unless the sum, in 8 bits,
 /// is 0.
 void AddContrabandPenalty(GameState& _state);
 

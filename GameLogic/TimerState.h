@@ -15,7 +15,7 @@ struct TimerState
   std::uint8_t savedSpeakerPort;
   /// incremented by TimerTick; reset by RateLimit
   std::uint16_t timerTicks;
-  /// incremented every tick; bit 9 drives a blink at 0x2914
+  /// incremented every tick; bit 9 drives a blink
   std::uint16_t millisecondCounter;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.

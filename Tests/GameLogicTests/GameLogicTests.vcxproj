@@ -87,7 +87,7 @@
     <ClInclude Include="GuardReport.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="HostRig.h" />
-    <ClInclude Include="ReferenceRig.h" />
+    <ClInclude Include="GameRig.h" />
     <ClInclude Include="StateDumps.h" />
     <ClInclude Include="TwinRig.h" />
   </ItemGroup>
