@@ -21,7 +21,6 @@ struct DiscMenuExit
                          ///< return addresses of the menu's call and RunTitleAndDocked's, so that the RET returns from GameLoop
                          ///< to Start
   std::uint8_t scanCode; ///< otherwise the F-key that ends it
-  std::uint8_t al;       ///< and AL as its GetKey leaves it with the key in AH
 };
 
 /// ShowDiscControlScreen (CS:660B), with RunDiscControlKeys, ShowDiskResult and PromptCommanderFileName, which

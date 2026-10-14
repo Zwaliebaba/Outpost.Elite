@@ -44,8 +44,8 @@ void LaunchEscapePod(GameState& _state);
 [[nodiscard]] bool SelectLaserType(GameState& _state);
 
 /// ShowEquipShipScreen (CS:5BF2): the F4 screen, each item up to the system's tech level with its price into screenPrices and
-/// its resale price, then RunEquipShipMenu from the first item's row, which returns the key that closes it. _backward is the
-/// direction flag, which DrawDockedFrame goes by. Waits for keys as a rule (ADR-015).
+/// its resale price, then RunEquipShipMenu from the first item's row, which returns the key that closes it. Waits for keys as a
+/// rule (ADR-015).
 ScreenKey ShowEquipShipScreen(GameState& _state, Hardware& _hardware);
 
 /// RunEquipShipMenu (CS:6111), with OpenEquipMessage, ShowEquipMessage, ReportNotEnoughCredits and the buying and selling it
@@ -101,17 +101,9 @@ MenuCursor MoveMenuCursorUp(GameState& _state, std::uint16_t _row);
 /// The cursor down a row from the row at _row, from the last round to the first.
 MenuCursor MoveMenuCursorDown(GameState& _state, std::uint16_t _row);
 
-/// What a menu that waits holds in registers from one turn of its loop to the next: where its cursor is, in SI, and AL, which
-/// ReadSteering fires the stick with and GetKey shifts each key's Shift into (AlAfterKey).
-struct MenuLoop
-{
-  std::uint16_t row; ///< the selected row's first attribute byte on the text page
-  std::uint8_t al;
-};
-
-/// ReadSteering, fired with _loop's AL, and the cursor moved up or down a row if its pitch says so. Returns the cursor, and AL as
-/// the original leaves it: the roll, or once the cursor moved, the attribute ToggleMenuRowHighlight left.
-MenuLoop SteerMenuCursor(GameState& _state, Hardware& _hardware, MenuLoop _loop);
+/// ReadSteering, and the cursor at _row, the selected row's first attribute byte on the text page, moved up or down a row if its
+/// pitch says so. Returns the cursor's row.
+std::uint16_t SteerMenuCursor(GameState& _state, Hardware& _hardware, std::uint16_t _row);
 
 /// 100 timer ticks, then GetKey. Returns the key.
 KeyPress PollMenuKey(GameState& _state, Hardware& _hardware);

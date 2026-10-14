@@ -37,24 +37,6 @@ namespace Elite
 namespace
 {
 
-// What RunFlight hands its callees for the registers the original passes them by accident and no value routine computes (ADR-012).
-// Each reaches nothing the game can show:
-// - ProcessFlightKeys' ES is DS, as UpdateObjectsAndSpawn's PUSH DS / POP ES leaves it, or B800h, once a blip was XORed after it
-//   (XorDashboardPixel). Only a chart drawn while its frame shows already reads it (ChartSegment), and in flight the cockpit always
-//   shows when ProcessFlightKeys runs: SetUpLocalSpace shows it, and so does every leaving of the function keys' screens
-//   (RestoreFlightScreen).
-// - BP is PresentSpaceView's 20h, as FinishSpaceViewFrame leaves it each frame, unless one of UpdateObjectsAndSpawn's handlers
-//   leaves its own: ComputeAnglesToObject's first angle, TurnTowardAngles' pitch error, the last hunter CountOtherHuntersOnScanner
-//   found, or a quarter of the hunter's z from GetVectorToObject; and after ProcessFlightKeys, what its screens and its crosshair
-//   search leave, which TickHyperspaceCountdown is called with. It reaches only the count SelectSystemAtCursor makes an index from
-//   when no system is on the chart, through the function keys' screens, GalacticJump and, after the escape pod, the docked status
-//   screen; and a system always is. On the galactic chart every system is, and from any cursor one of each galaxy, 0 to 8, is near
-//   enough for its distance not to carry (at worst 19962, in galaxy 8, measured over every cursor with a scratch model of the search
-//   outside the repository); on the short-range chart, the current system at its centre is.
-// ClearMessageLine counts its eight rows down in BP (MOV BP,8 / DEC BP), and leaves it 0: after GAME OVER, and after the pause
-// screen's A, which clears the message line.
-constexpr std::uint16_t CLEARED_MESSAGE_LINE_BP = 0;
-
 // The stardust: 30 particles, x and y, a lifetime and a spare; stardustPrevious holds their copies, its spare the respawned flag.
 constexpr std::uint16_t STARDUST_COUNT = 30;
 static_assert(STARDUST_COUNT == STARDUST_PARTICLES);
@@ -946,8 +928,7 @@ PauseExit RunPauseOptions(GameState& _state, Hardware& _hardware)
 }
 
 // FlightScreenDispatch (0x0BDE): leaving the function keys: the cockpit back (RestoreFlightScreen, then ResetKeyboard) if a
-// screen was shown, then inFlight set. Returns what RestoreFlightScreen did, when it ran; _backward is the direction flag it
-// runs by.
+// screen was shown, then inFlight set. Returns what RestoreFlightScreen did, when it ran.
 std::optional<ScreenChange> LeaveFlightScreens(GameState& _state, Hardware& _hardware)
 {
   std::optional<ScreenChange> change;
@@ -969,32 +950,15 @@ bool EraseForFlightScreen(GameState& _state)
 }
 
 // FlightScreenDispatch (0x0BF8): the screen for _key, then the screen for the key that screen returns, until F1-F4 or the
-// navigation computer's error leaves (0x0BDE). _countIfNone, _segment and _backward are BP, ES and the direction flag as the
-// dispatch finds them, which the screens and their waits read and leave: the jumps back to the tests at 0x0BF8 carry the key, the
-// AL the last screen left, and BP, which the next screen reads.
-FlightScreens DispatchFlightScreens(GameState& _state, Hardware& _hardware, std::uint8_t _key, std::uint16_t _countIfNone)
+// navigation computer's error leaves (0x0BDE): the jumps back to the tests at 0x0BF8 carry the key.
+FlightScreens DispatchFlightScreens(GameState& _state, Hardware& _hardware, std::uint8_t _key)
 {
   FlightScreens screens{0, std::nullopt};
   std::uint8_t key = _key;
-  std::uint16_t countLeft = _countIfNone;
-  // 0x0C13, 0x0C72 and 0x0CA0: flightScreenShown set and the compass and the blips erased (EraseForFlightScreen). Of what
-  // EraseCompassAndBlips leaves, the screens read BP, the compass dot's in-front byte CBW'd once it erases the dot.
-  const auto erase = [&_state, &countLeft]
-  {
-    const SpaceObject& station = _state.Slot(SlotIndex::Station);
-    if ((station.flags & FLAG_BLIP_DRAWN) != 0)
-    {
-      countLeft = SignExtend(station.blipZ);
-    }
-    (void)EraseForFlightScreen(_state);
-  };
-  // A screen shown, and the key that closed it, with AL as it leaves it: the screens that select the system at the cursor as they
-  // close leave BP its count. Then JMP FlightScreenDispatch.
-  const auto shown = [&key, &countLeft](const ScreenKey& _closed)
-  {
-    key = _closed.scanCode;
-    countLeft = _closed.countLeft.value_or(countLeft);
-  };
+  // 0x0C13, 0x0C72 and 0x0CA0: flightScreenShown set and the compass and the blips erased (EraseForFlightScreen).
+  const auto erase = [&_state] { (void)EraseForFlightScreen(_state); };
+  // A screen shown, and the key that closed it. Then JMP FlightScreenDispatch.
+  const auto shown = [&key](const ScreenKey& _closed) { key = _closed.scanCode; };
   // 0x0BDE, jumped back to: the cockpit back if a screen was shown (LeaveFlightScreens).
   const auto leave = [&_state, &_hardware, &screens]
   {
@@ -1023,12 +987,12 @@ FlightScreens DispatchFlightScreens(GameState& _state, Hardware& _hardware, std:
       }
       if (key == SCAN_F7)
       {
-        shown(ShowSystemDataScreen(_state, _hardware, countLeft));
+        shown(ShowSystemDataScreen(_state, _hardware));
         continue;
       }
       if (key == SCAN_F8)
       {
-        shown(ShowMarketPricesScreen(_state, _hardware, countLeft));
+        shown(ShowMarketPricesScreen(_state, _hardware));
         continue;
       }
     }
@@ -1062,14 +1026,14 @@ FlightScreens DispatchFlightScreens(GameState& _state, Hardware& _hardware, std:
     {
       ResetKeyboard(_state, _hardware);
       _state.Data().flow.inFlight = 1;
-      const ScreenKey closed = ShowCommanderStatusScreen(_state, _hardware, countLeft);
+      const ScreenKey closed = ShowCommanderStatusScreen(_state, _hardware);
       _state.Data().flow.inFlight = 0;
       shown(closed);
       continue;
     }
     if (key == SCAN_F10)
     {
-      shown(ShowInventoryScreen(_state, _hardware, countLeft));
+      shown(ShowInventoryScreen(_state, _hardware));
       continue;
     }
     // JMP 0BF3h, and GetKey until a key comes.
@@ -1159,7 +1123,7 @@ void PostHyperspaceRefusal(GameState& _state, Message _message)
 
 // 0x8171-0x826C: T primes a missile, which locks on what is in the sights; U unarms it; M launches it. _di is the DI
 // ProcessFlightKeys holds here, which M's launch copies the missile from (LaunchPlayerMissile), unless the primed missile looked
-// in the sights this frame and FindShipInCrosshairs left DI; _backward is the direction flag the copy runs by.
+// in the sights this frame and FindShipInCrosshairs left DI.
 void HandleMissileKeys(GameState& _state, LaunchDi _di)
 {
   LaunchDi source = _di;
@@ -1688,7 +1652,7 @@ void SaveStardustPositions(GameState& _state)
   }
 }
 
-FlightScreens HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
+FlightScreens HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware)
 {
   _state.Data().flow.inFlight = 0;
   // F1-F10 in keyDown, BX the scan code and LOOP counting CX down from 10.
@@ -1700,7 +1664,7 @@ FlightScreens HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware, s
       // MOV AH,BL, and PUSH AX / CALL ResetKeyboard / POP AX keep it.
       ResetKeyboard(_state, _hardware);
       _state.Data().flight.flightScreenShown = 0;
-      return DispatchFlightScreens(_state, _hardware, Low(scan), _countIfNone);
+      return DispatchFlightScreens(_state, _hardware, Low(scan));
     }
     ++scan;
     if (--keys == 0)
@@ -2381,13 +2345,11 @@ void UpdateFuelLeak(GameState& _state, Hardware& _hardware)
   _hardware.SetColorSelect(static_cast<std::uint8_t>(border | BRIGHT_PALETTE));
 }
 
-FlightExit RunFlight(GameState& _state, Hardware& _hardware)
+void RunFlight(GameState& _state, Hardware& _hardware)
 {
   ResetMouseIfSelected(_state, _hardware);
   (void)SetUpLocalSpace(_state, _hardware);
   PlayStationTunnel(_state, _hardware);
-  // The tunnel's last FinishSpaceViewFrame: PresentSpaceView's MOV BP,20h.
-  std::uint16_t countLeft = PRESENT_SPACE_VIEW_BP;
   bool firstFrame = true;
   for (;;)
   {
@@ -2408,8 +2370,7 @@ FlightExit RunFlight(GameState& _state, Hardware& _hardware)
     // The frame as it was drawn, for a renderer that draws between frames (ADR-032); the first continues nothing before it.
     _hardware.PublishFlightSnapshot(TakeFlightSnapshot(_state), !firstFrame);
     firstFrame = false;
-    // PresentSpaceView's MOV BP,20h and MOV DX,1FF0h, which UpdateObjectsAndSpawn hands to its first handler.
-    countLeft = PRESENT_SPACE_VIEW_BP;
+    // PresentSpaceView's MOV DX,1FF0h, which UpdateObjectsAndSpawn hands to its first handler.
     UpdateObjectsAndSpawn(_state, _hardware, PRESENT_SPACE_VIEW_DX);
     UpdatePlayerMotion(_state, _hardware);
     // DI past the slots, from which M's launch copies the missile unless a routine before it moves DI (ProcessFlightKeys).
@@ -2420,18 +2381,17 @@ FlightExit RunFlight(GameState& _state, Hardware& _hardware)
       ResetKeyboard(_state, _hardware);
       StopSoundEffects(_state);
       StopAllSound(_state, _hardware);
-      // The tunnel's last frame's BP of 20h, which the docked status screen goes on with.
-      return FlightExit{PRESENT_SPACE_VIEW_BP};
+      return;
     }
-    const FlightKeysExit keys = ProcessFlightKeys(_state, _hardware, slotsEnd, countLeft);
+    const FlightKeysExit keys = ProcessFlightKeys(_state, _hardware, slotsEnd);
     if (keys.aborted)
     {
-      return FlightExit{CLEARED_MESSAGE_LINE_BP};
+      return;
     }
-    TickHyperspaceCountdown(_state, _hardware, countLeft);
+    TickHyperspaceCountdown(_state, _hardware);
     if (TickEscapePod(_state))
     {
-      return FlightExit{countLeft};
+      return;
     }
     if (_state.Data().playerShip.playerDead != 1 || _state.Data().startUp.cheatEnabled == 1)
     {
@@ -2456,7 +2416,7 @@ FlightExit RunFlight(GameState& _state, Hardware& _hardware)
     ClearMessageLine(_state);
     _state.Data().drawing.textPaperPattern = 0;
     (void)DrawScreenString(_state, ELITE_TITLE_TEXT, ALL_COLORS, TITLE_TEXT_POSITION);
-    return FlightExit{CLEARED_MESSAGE_LINE_BP};
+    return;
   }
 }
 
@@ -2470,7 +2430,7 @@ bool TickEscapePod(GameState& _state)
   return _state.Data().playerShip.escapePodFrames == 0;
 }
 
-FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, SlotIndex _diSlot, std::uint16_t _countIfNone)
+FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, SlotIndex _diSlot)
 {
   if (_state.Data().flight.gameOverFrames != 0)
   {
@@ -2481,7 +2441,7 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, SlotInd
     // JNE back to the RET above.
     return FlightKeysExit{false};
   }
-  const FlightScreens screens = HandleFlightFunctionKeys(_state, _hardware, _countIfNone);
+  const FlightScreens screens = HandleFlightFunctionKeys(_state, _hardware);
   // DI, from which M's launch copies the missile, as the routines before it leave it: InvalidateDashboard once the cockpit came
   // back, ResetStardust once the view changed, IsMassLocked once J asked it, and ClearDrawBuffer once the pause screen resumed.
   LaunchDi di = screens.restored ? LaunchDi{_diSlot, PastBuffer::DashboardCache} : LaunchDi{_diSlot, PastBuffer::None};

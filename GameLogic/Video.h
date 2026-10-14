@@ -25,8 +25,7 @@ inline constexpr std::size_t DRAWING_BUFFER_BYTES = 0x2000;
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
 // Each is what the 1987 routine of its name computes, with no register in sight, and every byte it writes is written as the
-// original writes it, in the same order and at the same width. A string instruction's direction is the direction flag its
-// entry finds: _backward.
+// original writes it, in the same order and at the same width. A string instruction runs forwards (ADR-046).
 
 /// A point of the screen, x and row, signed: a vertex of vertexBuffer once ProjectVertices has projected it, what ProjectToScreen
 /// gives, or a corner FillTriangle takes, which may lie off the drawing buffer.
@@ -56,8 +55,8 @@ void WriteScreenshotFile(GameState& _state, Hardware& _hardware);
 /// FinishSpaceViewFrame (CS:0570): DrawLaserSights, then PresentSpaceView and ClearDrawBuffer, both forwards. It waits.
 void FinishSpaceViewFrame(GameState& _state, Hardware& _hardware);
 
-/// What PresentSpaceView, and FinishSpaceViewFrame with it, leaves in BP: its MOV BP,20h, the words of a line it copies. The status
-/// screen shown after the credits, or after docking, hands it to SelectSystemAtCursor as the count when no system is on the chart.
+/// What PresentSpaceView, and FinishSpaceViewFrame with it, leaves in BP: its MOV BP,20h, the words of a line it copies. Nothing
+/// reads it since BP went (ADR-046).
 inline constexpr std::uint16_t PRESENT_SPACE_VIEW_BP = 0x20;
 
 /// What PresentSpaceView, and FinishSpaceViewFrame with it, leaves in DX: its MOV DX,1FF0h, the copy's step from an odd line back
@@ -84,8 +83,7 @@ void ClearDrawBuffer(GameState& _state);
 void PlotPixel(GameState& _state, std::uint8_t _x, std::uint8_t _row);
 
 /// DrawClippedLine (CS:1603): the line from (_fromX, _fromRow) to (_toX, _toRow), signed words, clipped to the 256x128 buffer and
-/// drawn (DrawLine). Returns what DrawLine returns: whether it filled a horizontal line's bytes, for which the original sets ES to
-/// DS and clears the direction flag.
+/// drawn (DrawLine).
 void DrawClippedLine(GameState& _state, std::uint16_t _fromX, std::uint16_t _fromRow, std::uint16_t _toX, std::uint16_t _toRow);
 
 /// A line as DrawClippedLine's clip routines hold it: its ends (CX, AX) and (DX, BX), the first coordinate of each the one an edge
@@ -120,9 +118,8 @@ struct ClipStep
 /// circleOctant scaled by _radius/128 and turned through the eight octants into circlePoints.
 void DrawCircle(GameState& _state, std::uint8_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow);
 
-/// DrawLine (CS:16D1): Bresenham from (_fromX, _fromRow) to (_toX, _toRow) into the drawing buffer in colorFillBytes[drawColor].
-/// Returns whether it filled whole bytes of a horizontal line with REP STOSB, for which the original sets ES to DS and clears
-/// the direction flag first.
+/// DrawLine (CS:16D1): Bresenham from (_fromX, _fromRow) to (_toX, _toRow) into the drawing buffer in colorFillBytes[drawColor];
+/// a horizontal line's whole bytes are filled as REP STOSB fills them, forwards.
 void DrawLine(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromRow, std::uint8_t _toX, std::uint8_t _toRow);
 
 /// DrawDisc (CS:1826): a disc of radius _radius filled at (_centerX, _centerRow), signed words, in colorFillBytes[drawColor & 3],
@@ -173,7 +170,7 @@ void ClearCgaScreen(GameState& _state);
 void ClearTextScreen(GameState& _state);
 
 /// DrawChartFrame (CS:7C25): unless the chart frame shows already (screenLayout 1), graphics mode from text or a clear screen from
-/// graphics, screenLayout 1, and the frame's box in colour 3: four horizontal lines by REP STOSW in the direction it finds, then
+/// graphics, screenLayout 1, and the frame's box in colour 3: four horizontal lines by REP STOSW, forwards, then
 /// the two verticals a byte at a time.
 ScreenChange DrawChartFrame(GameState& _state, Hardware& _hardware);
 

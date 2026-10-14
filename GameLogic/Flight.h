@@ -142,16 +142,15 @@ void SaveStardustPositions(GameState& _state);
 /// UpdateStardust (CS:068F): the 30 stardust particles moved and drawn for viewAngle, once a frame, in stardustColor; streaks
 /// from where they were while the jump drive is engaged (SaveStardustPositions first). The front and rear views shift them by
 /// the pitch, roll them by the roll and move them by the speed (ComputeStardustShift), the rear inwards with lifetimes; the side
-/// views shift them sideways by the speed (UpdateSideStardust). Returns whether a DrawLine filled bytes with REP STOSB.
+/// views shift them sideways by the speed (UpdateSideStardust).
 void UpdateStardust(GameState& _state);
 
 /// ComputeStardustShift (CS:0887): stardustShift = (34h - playerSpeed) / 12 + 4, one less while jumpDriveEngaged. A speed
 /// above 34h, which the game never sets, divides into the game's trap.
 void ComputeStardustShift(GameState& _state);
 
-/// RestoreFlightScreen (CS:15CF): the cockpit back after a function key's screen (ShowCockpitScreen, its copies backwards when
-/// _backward), every gauge marked stale (InvalidateDashboard), a beep, and messageShown cleared. Returns what ShowCockpitScreen
-/// did.
+/// RestoreFlightScreen (CS:15CF): the cockpit back after a function key's screen (ShowCockpitScreen), every gauge marked stale
+/// (InvalidateDashboard), a beep, and messageShown cleared. Returns what ShowCockpitScreen did.
 ScreenChange RestoreFlightScreen(GameState& _state, Hardware& _hardware);
 
 /// UpdateDashboard (CS:254F): once a frame, in the CGA's video memory: the condition light, the energy and the laser's heat
@@ -310,11 +309,8 @@ struct FlightScreens
 /// prices, F9 the commander's status and F10 the inventory, each from the key the last returned, any other key waited past, until
 /// F1-F4; in witch space F5, F7, F8, and F6 until its countdown is down to 1, post the navigation computer's error instead. A screen
 /// shown first sets flightScreenShown and erases the compass and the blips, and the cockpit comes back as it leaves
-/// (RestoreFlightScreen). inFlight is 0 throughout, but for the status screen. _countIfNone, _segment and _backward are BP, ES and
-/// the direction flag it is called with, which the screens and their waits read: BP is the count SelectSystemAtCursor makes
-/// the index from when no system is on the chart, ES what a chart draws its title through when its frame shows already. Waits
-/// for keys on the screens' paths (ADR-015).
-FlightScreens HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone);
+/// (RestoreFlightScreen). inFlight is 0 throughout, but for the status screen. Waits for keys on the screens' paths (ADR-015).
+FlightScreens HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware);
 
 /// How ProcessFlightKeys ends.
 struct FlightKeysExit
@@ -328,10 +324,9 @@ struct FlightKeysExit
 /// keys' screens and views (HandleFlightFunctionKeys, then ChangeView); G arms the galactic drive; H starts the hyperspace countdown, which
 /// ends it; D toggles the docking computer; J the jump drive; Esc pauses (RunPauseScreen), or with Ctrl freezes until a key; T, U and M the
 /// missile; fire; E the ECM; B the energy bomb; C the escape pod; I identifies; N the masking device; L the anti-ECM emulator.
-/// _countIfNone, _segment and _backward are BP, ES and the direction flag it is called with, which HandleFlightFunctionKeys takes; _diSlot
-/// is the slot DI is on, from which M's launch copies the missile (LaunchPlayerMissile) unless a routine before it moves DI. Waits for keys
-/// on the screens', the pause's and the freeze's paths (ADR-015).
-FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, SlotIndex _diSlot, std::uint16_t _countIfNone);
+/// _diSlot is the slot DI is on, from which M's launch copies the missile (LaunchPlayerMissile) unless a routine before it moves DI. Waits
+/// for keys on the screens', the pause's and the freeze's paths (ADR-015).
+FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, SlotIndex _diSlot);
 
 /// RunPauseScreen (CS:8D6A): the speaker silenced (SilenceSpeakerTimer), then the pause menu drawn and its options presented until
 /// a key ends it: space resumes; R, D, Y, B and S toggle the options; F1-F10 set the frame time and draw the menu again; A leaves
@@ -339,20 +334,12 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, SlotInd
 /// original drops its own return address and its caller's. Waits for keys as a rule (ADR-015).
 bool RunPauseScreen(GameState& _state, Hardware& _hardware);
 
-/// What RunFlight leaves for GameLoop: BP and the direction flag, which GameLoop hands on to RunTitleAndDocked.
-struct FlightExit
-{
-  /// BP: PresentSpaceView's 20h after docking, ClearMessageLine's 0 after GAME OVER and the pause screen's A, and after the escape
-  /// pod the last frame's 20h, which stands in for what the AI's handlers may leave there (Flight.cpp says why that cannot show).
-  std::uint16_t countLeft;
-};
-
 /// RunFlight (CS:7E9B): the mouse reset if it steers, local space set up (SetUpLocalSpace) and the
 /// station's tunnel played; then a frame at a time: the dashboard, the objects drawn, the lasers, the stardust, the fuel leak, the
 /// message line, the screen dump key, the frame presented, the objects moved and spawned, the player's motion and the collisions;
 /// docked, the tunnel again and the keyboard and the sound reset; otherwise the flight keys, the hyperspace countdown and the escape
 /// pod. While the player is dead, unless cheatEnabled, GAME OVER for 40 frames, then ELITE on the message line. Waits as a rule
 /// (ADR-015).
-FlightExit RunFlight(GameState& _state, Hardware& _hardware);
+void RunFlight(GameState& _state, Hardware& _hardware);
 
 } // namespace Elite

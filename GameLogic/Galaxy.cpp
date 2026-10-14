@@ -18,10 +18,6 @@ namespace Elite
 namespace
 {
 
-// What PresentChartFrame leaves in BP, CopyChartBufferToScreen's MOV BP,20h, the words of a line it copies: the count a chart
-// hands ShowNearestSystemDistance, FindSystemByName and SelectSystemAtCursor for when no system is on the chart.
-constexpr std::uint16_t PRESENT_CHART_FRAME_BP = 0x20;
-
 // Scan codes the charts and the data screen read.
 constexpr std::uint8_t SCAN_ESCAPE = 0x01;
 constexpr std::uint8_t SCAN_D = 0x20;
@@ -355,8 +351,7 @@ ChartPoint MoveChartCursor(GameState& _state, Hardware& _hardware)
 }
 
 // One frame of the galactic chart up to its presentation (CS:0CF9): the fuel range about the current system, its cross, the
-// cursor, and a dot for each of the galaxy's 256 systems, the seeds twisted four times from one to the next. _backward is the
-// direction flag, which DrawDisc goes by.
+// cursor, and a dot for each of the galaxy's 256 systems, the seeds twisted four times from one to the next.
 void DrawGalacticChart(GameState& _state, Hardware& /*_hardware*/)
 {
   LoadGalaxySeeds(_state);
@@ -406,7 +401,6 @@ struct ChartKeys
   PacingPoint pacing;  // the IBM PC's redraw (D18), paid before PresentChartFrame
   std::uint8_t ownKey; // the chart's own F key, which leaves it open
   void (*recenter)(GameState&);
-  bool recenterThroughAl;                    // the recentring goes through AL, and leaves the cursor's row there
   std::uint8_t CommanderState::*keptCursorX; // where the cursor is kept while the chart is closed
   std::uint8_t CommanderState::*keptCursorY;
 };
@@ -429,52 +423,41 @@ constexpr ChartKeys GALACTIC_CHART_KEYS{.drawFrame = &DrawGalacticChart,
                                         .pacing = GALACTIC_CHART_PACING,
                                         .ownKey = SCAN_F5,
                                         .recenter = &RecenterGalacticCursor,
-                                        .recenterThroughAl = true,
                                         .keptCursorX = &CommanderState::galacticCursorX,
                                         .keptCursorY = &CommanderState::galacticCursorY};
 constexpr ChartKeys SHORT_RANGE_CHART_KEYS{.drawFrame = &DrawShortRangeChart,
                                            .pacing = SHORT_RANGE_CHART_PACING,
                                            .ownKey = SCAN_F6,
                                            .recenter = &RecenterShortRangeCursor,
-                                           .recenterThroughAl = false,
                                            .keptCursorX = &CommanderState::shortRangeCursorX,
                                            .keptCursorY = &CommanderState::shortRangeCursorY};
 
-// A chart's key (CS:0DEF, CS:1015), with AL _al, the cursor's x as the frame leaves it: D shows the distance to the system
-// nearest the cursor, F finds one by name, keypad 5 or fire recentres the cursor, and Esc or an F key other than the chart's
-// own closes it, selecting the system at the cursor unless the hyperspace countdown runs. Returns the key that closes it, with
-// AL as GetKey and the recentring leave it and BP as the original leaves it. Otherwise the original jumps back to the chart's
-// frame (CS:0CF9, CS:0F60), which loads every register it reads, and the direction flag is clear from the first
-// PresentChartFrame on.
-std::optional<ScreenKey> ReadChartKey(GameState& _state, Hardware& _hardware, const ChartKeys& _chart, std::uint8_t _al)
+// A chart's key (CS:0DEF, CS:1015): D shows the distance to the system nearest the cursor, F finds one by name, keypad 5 or fire
+// recentres the cursor, and Esc or an F key other than the chart's own closes it, selecting the system at the cursor unless the
+// hyperspace countdown runs. Returns the key that closes it; otherwise the original jumps back to the chart's frame (CS:0CF9,
+// CS:0F60).
+std::optional<ScreenKey> ReadChartKey(GameState& _state, Hardware& _hardware, const ChartKeys& _chart)
 {
   const KeyPress key = GetKey(_state, _hardware);
-  std::uint8_t al = AlAfterKey(_al, key);
   const std::uint8_t scanCode = key.scanCode;
   if (scanCode == 0)
   {
     return std::nullopt;
   }
-  // PresentChartFrame leaves ES on the screen, BP the words of a line it copied and the direction flag clear; the steering and
-  // GetKey keep them.
   if (scanCode == SCAN_D)
   {
-    ShowNearestSystemDistance(_state, PRESENT_CHART_FRAME_BP);
+    ShowNearestSystemDistance(_state);
     return std::nullopt;
   }
   if (scanCode == SCAN_F)
   {
-    FindSystemByName(_state, _hardware, PRESENT_CHART_FRAME_BP);
+    FindSystemByName(_state, _hardware);
     return std::nullopt;
   }
   // PUSH AX / POP AX round ReadFireButton keep the key.
   if (scanCode == SCAN_KEYPAD_5 || ReadFireButton(_state, _hardware))
   {
     _chart.recenter(_state);
-    if (_chart.recenterThroughAl)
-    {
-      al = _state.Data().commander.chartCursorY;
-    }
   }
   const bool closes = scanCode == SCAN_ESCAPE || (scanCode >= SCAN_F1 && scanCode <= SCAN_F10 && scanCode != _chart.ownKey);
   if (!closes)
@@ -482,19 +465,18 @@ std::optional<ScreenKey> ReadChartKey(GameState& _state, Hardware& _hardware, co
     return std::nullopt;
   }
   // PUSH AX / POP AX round the selection keep the key.
-  std::uint16_t countLeft = PRESENT_CHART_FRAME_BP;
   if (_state.Data().jump.hyperspaceCountdown == 0)
   {
-    countLeft = SelectSystemAtCursor(_state, PRESENT_CHART_FRAME_BP);
+    SelectSystemAtCursor(_state);
     CommanderState& commander = _state.Data().commander;
     commander.*_chart.keptCursorX = std::uint8_t{commander.chartCursorX};
     commander.*_chart.keptCursorY = std::uint8_t{commander.chartCursorY};
   }
-  return ScreenKey{scanCode, al, countLeft};
+  return ScreenKey{scanCode};
 }
 
 // A chart's frames until a key closes it (CS:0CF9, CS:0F60): the frame drawn, the IBM PC's redraw paid (D18), presented, the
-// cursor steered with AL 0, as PresentChartFrame's MOV AX,B800h leaves it, and the key read.
+// cursor steered, and the key read.
 ScreenKey RunChartFrames(GameState& _state, Hardware& _hardware, const ChartKeys& _chart)
 {
   for (;;)
@@ -502,8 +484,8 @@ ScreenKey RunChartFrames(GameState& _state, Hardware& _hardware, const ChartKeys
     _chart.drawFrame(_state, _hardware);
     _hardware.Spend(_chart.pacing);
     PresentChartFrame(_state, _hardware);
-    const ChartPoint cursor = MoveChartCursor(_state, _hardware);
-    if (const std::optional<ScreenKey> key = ReadChartKey(_state, _hardware, _chart, cursor.x))
+    (void)MoveChartCursor(_state, _hardware);
+    if (const std::optional<ScreenKey> key = ReadChartKey(_state, _hardware, _chart))
     {
       return *key;
     }
@@ -618,7 +600,7 @@ struct ByteComparison
   return comparison;
 }
 
-// FindSystemByName's 'ERROR: <name> not on map!' on the second line under the chart (CS:148B), at _segment: the name as typed
+// FindSystemByName's 'ERROR: <name> not on map!' on the second line under the chart (CS:148B): the name as typed
 // between the other two parts.
 void ShowNotOnMap(GameState& _state)
 {
@@ -628,15 +610,15 @@ void ShowNotOnMap(GameState& _state)
 }
 
 // FindNearestSystem's search (CS:1292): what it leaves in BP, the count its loop had left at the nearest system on the current
-// chart, CL with CH cleared (XOR CH,CH / MOV BP,CX); or _countIfNone, BP as it came, when no system is on the chart. The index it
-// selects is 100h less that count.
-std::uint16_t SearchNearestSystem(GameState& _state, std::uint16_t _countIfNone)
+// chart, CL with CH cleared (XOR CH,CH / MOV BP,CX); or, when no system is on the chart, which never happens, 100h less the
+// current system's index, where the original keeps BP as it came (ADR-046). The index it selects is 100h less that count.
+std::uint16_t SearchNearestSystem(GameState& _state)
 {
   LoadGalaxySeeds(_state);
   const ChartPoint cursor = GetCursorGalaxyPosition(_state);
   // SI the nearest distance so far, and BP the loop's count, CL, at the nearest.
   std::uint16_t nearest = 0xFFFF;
-  std::uint16_t nearestCount = _countIfNone;
+  std::uint16_t nearestCount = static_cast<std::uint16_t>(GALAXY_SYSTEMS - _state.Data().commander.currentSystem.index);
   for (std::uint16_t count = GALAXY_SYSTEMS; count != 0; --count)
   {
     // dx^2 + (dy/2)^2 to the cursor, each square a byte multiply; a sum that carries is passed over.
@@ -658,16 +640,14 @@ std::uint16_t SearchNearestSystem(GameState& _state, std::uint16_t _countIfNone)
 }
 
 // What SelectSystemAtCursor and ShowNearestSystemDistance begin with: FindNearestSystem, ComputeDistanceToSystem, and the
-// distance, read back from selectedSystem.distanceTenthsLy, into distanceDigits with up to three leading zeros blanked. Returns the BP
-// FindNearestSystem leaves.
-std::uint16_t SelectNearestSystem(GameState& _state, std::uint16_t _countIfNone)
+// distance, read back from selectedSystem.distanceTenthsLy, into distanceDigits with up to three leading zeros blanked.
+void SelectNearestSystem(GameState& _state)
 {
-  const std::uint16_t countLeft = SearchNearestSystem(_state, _countIfNone);
+  (void)SearchNearestSystem(_state);
   ComputeDistanceToSystem(_state);
   const std::span<std::uint8_t> digits(_state.Data().galaxy.distanceDigits);
   FormatDecimal5(_state.Data().commander.selectedSystem.distanceTenthsLy, digits);
   BlankLeadingZeros(digits, DISTANCE_ZEROS_BLANKED);
-  return countLeft;
 }
 
 } // namespace
@@ -805,11 +785,10 @@ void MoveCursorToSystem(GameState& _state)
   _state.Data().commander.chartCursorY = Low(GalaxyToChart(down, SHORT_RANGE_CENTER_ROW));
 }
 
-std::uint16_t SelectSystemAtCursor(GameState& _state, std::uint16_t _countIfNone)
+void SelectSystemAtCursor(GameState& _state)
 {
-  const std::uint16_t countLeft = SelectNearestSystem(_state, _countIfNone);
+  SelectNearestSystem(_state);
   DescribeSystem(_state);
-  return countLeft;
 }
 
 void DescribeSystem(GameState& _state)
@@ -860,9 +839,9 @@ void DescribeSystem(GameState& _state)
   GenerateSystemName(_state);
 }
 
-std::uint8_t FindNearestSystem(GameState& _state, std::uint16_t _countIfNone)
+std::uint8_t FindNearestSystem(GameState& _state)
 {
-  return static_cast<std::uint8_t>(GALAXY_SYSTEMS - SearchNearestSystem(_state, _countIfNone));
+  return static_cast<std::uint8_t>(GALAXY_SYSTEMS - SearchNearestSystem(_state));
 }
 
 void ComputeDistanceToSystem(GameState& _state)
@@ -885,9 +864,9 @@ void ComputeDistanceToSystem(GameState& _state)
   _state.Data().commander.selectedSystem.distanceTenthsLy = distanceTenthsLy;
 }
 
-void ShowNearestSystemDistance(GameState& _state, std::uint16_t _countIfNone)
+void ShowNearestSystemDistance(GameState& _state)
 {
-  (void)SelectNearestSystem(_state, _countIfNone);
+  SelectNearestSystem(_state);
   // The distance's four digits into distanceText, either side of its point.
   constexpr std::array<std::size_t, 4> PLACES = {DISTANCE_TEXT_HUNDREDS, DISTANCE_TEXT_TENS, DISTANCE_TEXT_UNITS, DISTANCE_TEXT_TENTHS};
   for (std::size_t digit = 0; digit < PLACES.size(); ++digit)
@@ -959,7 +938,7 @@ std::uint8_t GenerateSystemName(GameState& _state)
   return length;
 }
 
-void FindSystemByName(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
+void FindSystemByName(GameState& _state, Hardware& _hardware)
 {
   LoadGalaxySeeds(_state);
   DrawScreenString(_state, FIND_PROMPT, INK_1, CHART_TEXT_LINE_1);
@@ -973,7 +952,7 @@ void FindSystemByName(GameState& _state, Hardware& _hardware, std::uint16_t _cou
   if (typed[0] == 0)
   {
     // Nothing typed: on into ShowNearestSystemDistance, by a jump back to its entry.
-    ShowNearestSystemDistance(_state, _countIfNone);
+    ShowNearestSystemDistance(_state);
     return;
   }
 
@@ -1009,7 +988,7 @@ void FindSystemByName(GameState& _state, Hardware& _hardware, std::uint16_t _cou
         return;
       }
       MoveCursorToSystem(_state);
-      ShowNearestSystemDistance(_state, _countIfNone);
+      ShowNearestSystemDistance(_state);
       return;
     }
     ++system;
@@ -1154,7 +1133,7 @@ void ClearChartTextLines(GameState& _state, std::uint16_t _ink)
   DrawScreenString(_state, BLANK_CHART_LINE, _ink, CHART_TEXT_LINE_2);
 }
 
-ScreenKey ShowSystemDataScreen(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
+ScreenKey ShowSystemDataScreen(GameState& _state, Hardware& _hardware)
 {
   const std::uint16_t titleEnd = PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, SYSTEM_DATA_FRAME), DATA_TITLE);
   TerminateSelectedSystemName(_state);
@@ -1220,8 +1199,7 @@ ScreenKey ShowSystemDataScreen(GameState& _state, Hardware& _hardware, std::uint
   galaxy.radiusDigits[0] = SPACE;
   PrintTextModeString(_state, JoinTexts({RADIUS_LABEL, DigitsText(galaxy.radiusDigits), RADIUS_UNIT_TEXT}), RADIUS_ROW);
   ShowSystemDescription(_state);
-  // ShowSystemDescription's last print leaves AL 0.
-  return WaitForScreenExitKey(_state, _hardware, SCAN_F7, 0, _countIfNone);
+  return WaitForScreenExitKey(_state, _hardware, SCAN_F7);
 }
 
 void TerminateSelectedSystemName(GameState& _state)
@@ -1257,8 +1235,7 @@ std::string_view FormatSelectedSystemDistance(GameState& _state)
 
 void ShowSystemDescription(GameState& _state)
 {
-  // REP STOSW of zeros over descriptionBuffer, ES = DS, from its start: DI, a byte of it. The
-  // direction flag is clear wherever the original runs it, and a word down past its start throws std::out_of_range.
+  // REP STOSW of zeros over descriptionBuffer, ES = DS, from its start, forwards: DI, a byte of it.
   const std::span<std::uint8_t> buffer(_state.Data().galaxy.descriptionBuffer);
   std::uint16_t word = 0;
   for (std::uint16_t words = DESCRIPTION_BUFFER_WORDS; words != 0; --words)

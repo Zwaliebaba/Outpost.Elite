@@ -19,8 +19,7 @@ namespace Elite
 /// for a frame (UpdateMessageLine) and the dashboard, then twenty frames of tunnelRectangles, the first ten one to ten of them and
 /// the last ten ten to one, from one further along each time, each presented (FinishSpaceViewFrame) and the first ten followed by
 /// 20 timer ticks. Leaving, the world moves on behind the tunnel (TransformAndDrawObjects, MoveObjectsByVelocity,
-/// UpdateStardust), masked outside it (MaskOutsideTunnel); docking, each frame waits for the timer first. _backward is the
-/// direction flag; it leaves it clear. Waits as a rule (ADR-015).
+/// UpdateStardust), masked outside it (MaskOutsideTunnel); docking, each frame waits for the timer first. Waits as a rule (ADR-015).
 void PlayStationTunnel(GameState& _state, Hardware& _hardware);
 
 /// RunDockingComputer (CS:8622): one frame of the docking computer's flight, by dockingComputerState: 0 slow to a stop; 1 to 3
@@ -30,7 +29,7 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware);
 void RunDockingComputer(GameState& _state);
 
 /// DrawTunnelRectangle (CS:1AA0): the four edges between the five points of rectangle _rectangle of tunnelRectangles, x and y
-/// signed bytes about the view's centre, by DrawLine in drawColor. Returns whether any DrawLine filled bytes with REP STOSB.
+/// signed bytes about the view's centre, by DrawLine in drawColor.
 void DrawTunnelRectangle(GameState& _state, std::size_t _rectangle);
 
 /// CheckDockingAlignment (CS:2D0F): whether the player's angles are within _tolerance of those that dock with the

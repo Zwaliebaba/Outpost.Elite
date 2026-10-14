@@ -94,8 +94,8 @@ constexpr std::uint16_t COUNTDOWN_MESSAGE_FRAMES = 10;
 
 // GalacticJump (0x485B), which CompleteHyperspaceJump jumps to and which jumps back to 0x4733: the next galaxy, the ninth now
 // and then after the eighth, and the system nearest a random point of its galactic chart selected (FindNearestSystem, then
-// SelectSystemAtCursor). _countIfNone is BP, what FindNearestSystem makes the index from when no system is on the chart.
-void GalacticJump(GameState& _state, std::uint16_t _countIfNone)
+// SelectSystemAtCursor).
+void GalacticJump(GameState& _state)
 {
   if (_state.Data().commander.galaxyNumber == NINTH_GALAXY)
   {
@@ -118,8 +118,8 @@ void GalacticJump(GameState& _state, std::uint16_t _countIfNone)
   _state.Data().commander.chartIsShortRange = 0;
   // The galactic chart holds every system, and none is far enough from that point for its distance to carry, so the search
   // always finds one, and leaves BP its loop's count there, 100h less its index, for SelectSystemAtCursor's own search.
-  const std::uint8_t index = FindNearestSystem(_state, _countIfNone);
-  SelectSystemAtCursor(_state, Negate(index));
+  (void)FindNearestSystem(_state);
+  SelectSystemAtCursor(_state);
 }
 
 // The arrival's message, and a fuel leak armed for missions 1 and 3 at their stages.
@@ -236,14 +236,14 @@ MassLock IsMassLocked(GameState& _state)
   return lock;
 }
 
-void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
+void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware)
 {
   (void)EraseCompassAndBlips(_state);
   _state.Data().messages.messagePointer = Message::HyperspaceEngaged;
   _state.Data().messages.messageFrames = ENGAGED_MESSAGE_FRAMES;
   if (_state.Data().jump.galacticJumpPending == 1)
   {
-    GalacticJump(_state, _countIfNone);
+    GalacticJump(_state);
     // JMP 4733h, back into the shared tail below.
   }
   else
@@ -422,7 +422,7 @@ void LatchHyperspaceTarget(GameState& _state)
   _state.Data().hyperspace.hyperspaceTarget = _state.Data().commander.selectedSystem;
 }
 
-bool TickHyperspaceCountdown(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
+bool TickHyperspaceCountdown(GameState& _state, Hardware& _hardware)
 {
   if (_state.Data().jump.galacticDriveReadyFrames != 0)
   {
@@ -444,7 +444,7 @@ bool TickHyperspaceCountdown(GameState& _state, Hardware& _hardware, std::uint16
   {
     return false;
   }
-  CompleteHyperspaceJump(_state, _hardware, _countIfNone);
+  CompleteHyperspaceJump(_state, _hardware);
   return true;
 }
 

@@ -343,7 +343,7 @@ DiscMenuExit LeaveGameLoopForDisk(GameState& _state, std::uint8_t _operation)
 {
   _state.Data().saveLoad.diskOperation = _operation;
   _state.Data().saveLoad.resumeAtDiskMenu = 1;
-  return DiscMenuExit{true, 0, 0};
+  return DiscMenuExit{true, 0};
 }
 
 // The input device's name, which ShowControlDevice reads from inputDeviceNames: the disc menu sets inputDevice to 0 or 2.
@@ -366,22 +366,19 @@ void RejectFileName(GameState& _state)
   PrintAt(_state, FILE_NAME_ERROR_TEXT, STATUS_POSITION);
 }
 
-// The disc menu's keys: DiscControlKeyLoop (CS:665E), with AL _al there, or ShowControlDevice before it when _showDevice; and
-// everything they run until the menu is left.
-DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _showDevice, std::uint8_t _al)
+// The disc menu's keys: DiscControlKeyLoop (CS:665E), or ShowControlDevice before it when _showDevice; and everything they run
+// until the menu is left.
+DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _showDevice)
 {
-  std::uint8_t al = _al;
   bool showDevice = _showDevice;
   for (;;)
   {
     if (showDevice)
     {
       ShowControlDevice(_state);
-      al = 0; // the print's NUL
       showDevice = false;
     }
     const KeyPress key = WaitForKey(_state, _hardware);
-    al = AlAfterKey(al, key);
     // PUSH AX and POP AX round it.
     BlankHelpRows(_state);
     const std::uint8_t scan = key.scanCode;
@@ -401,7 +398,6 @@ DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _sh
       {
         // The prompt's return address dropped, and the menu's keys read on in its place.
         RejectFileName(_state);
-        al = 0;
         continue;
       }
       return LeaveGameLoopForDisk(_state, scan == SCAN_L ? LOAD_COMMANDER : scan == SCAN_S ? SAVE_COMMANDER : DELETE_COMMANDER);
@@ -427,13 +423,11 @@ DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _sh
       PrintAt(_state, NO_MOUSE_TEXT, STATUS_POSITION);
       PrintAt(_state, MOUSE_HELP_LINES[0], HELP_POSITION);
       PrintAt(_state, MOUSE_HELP_LINES[1], SECOND_HELP_POSITION); // INC SI: the second line
-      al = 0;
       continue;
     }
     if (scan == SCAN_V)
     {
       PrintAt(_state, VERSION_STRING, HELP_POSITION);
-      al = 0;
       continue;
     }
     if (scan < SCAN_F1 || scan >= SCAN_PAST_F10)
@@ -441,13 +435,13 @@ DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _sh
       continue;
     }
     _state.Data().saveLoad.resumeAtDiskMenu = 0;
-    return DiscMenuExit{false, scan, al};
+    return DiscMenuExit{false, scan};
   }
 }
 
 // What the disk operation Start did came to (CS:67E7): LOADED:, SAVED:, DELETED: and the name, or CATALOGUED and the catalogue;
-// a loaded name becomes the default. Returns AL as it leaves it: its last print's NUL, or once a name is copied, its last byte.
-std::uint8_t ShowDiskResult(GameState& _state)
+// a loaded name becomes the default.
+void ShowDiskResult(GameState& _state)
 {
   PrintAt(_state, BLANK_STATUS_TEXT, STATUS_POSITION);
   // BL = diskOperation - 1, BH = 0, doubled: the operation's name in diskOperationNames. Only operations 1-4 come back to the
@@ -458,7 +452,7 @@ std::uint8_t ShowDiskResult(GameState& _state)
   {
     PrintAt(_state, CATALOGUE_OK_TEXT, result);
     PrintCommanderCatalogue(_state);
-    return 0;
+    return;
   }
   // The name without its extension: a NUL over its '.', which the search, SI going up, looks for.
   const std::span<std::uint8_t> name(_state.Data().saveLoad.commanderFileName);
@@ -470,21 +464,13 @@ std::uint8_t ShowDiskResult(GameState& _state)
   PrintAt(_state, TextIn(name), result);
   if (_state.Data().saveLoad.diskOperation != LOAD_COMMANDER)
   {
-    return 0;
+    return;
   }
   // Its eight bytes copied to defaultCommanderName by a LOOP.
   const std::span<std::uint8_t> commander(_state.Data().commander.defaultCommanderName);
-  std::size_t from = 0;
-  std::uint8_t copied = 0;
-  for (std::uint16_t left = MOST_NAME_CHARACTERS;;)
+  for (std::size_t from = 0; from < MOST_NAME_CHARACTERS; ++from)
   {
-    copied = name[from];
-    commander[from] = copied;
-    ++from;
-    if (--left == 0)
-    {
-      return copied;
-    }
+    commander[from] = name[from];
   }
 }
 
@@ -548,18 +534,18 @@ DiscMenuExit ShowDiscControlScreen(GameState& _state, Hardware& _hardware)
   {
     PrintAt(_state, DrawDockedFrame(_state, _hardware, DISC_CONTROL_FRAME), TITLE_POSITION);
     PrintCountedTextLines(_state, DISC_MENU_TEXT, MENU_POSITION);
-    return RunDiscControlKeys(_state, _hardware, true, 0);
+    return RunDiscControlKeys(_state, _hardware, true);
   }
   // Back from Start's disk work.
   if (_state.Data().disk.diskError == 0)
   {
-    const std::uint8_t al = ShowDiskResult(_state);
-    return RunDiscControlKeys(_state, _hardware, false, al);
+    ShowDiskResult(_state);
+    return RunDiscControlKeys(_state, _hardware, false);
   }
   PrintAt(_state, RETRY_TEXT, STATUS_POSITION);
   if (WaitForEitherKey(_state, _hardware, SCAN_N, SCAN_Y) == SCAN_N)
   {
-    return RunDiscControlKeys(_state, _hardware, true, 0);
+    return RunDiscControlKeys(_state, _hardware, true);
   }
   PrintAt(_state, BLANK_STATUS_TEXT, STATUS_POSITION);
   return LeaveGameLoopForDisk(_state, _state.Data().saveLoad.diskOperation);

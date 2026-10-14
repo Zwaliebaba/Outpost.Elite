@@ -234,8 +234,7 @@ void FormatQuantity(std::uint16_t _quantity, std::span<std::uint8_t> _text)
 }
 
 // What both trade screens start with: the frame from the descriptor _frame and its title, the two lines of help _help, the
-// header in its attribute, the rows' attribute, and the prices; cargoRowPointer on the first product, 0. _backward is the
-// direction flag, which DrawDockedFrame goes by.
+// header in its attribute, the rows' attribute, and the prices; cargoRowPointer on the first product, 0.
 template <typename Frame>
 void DrawTradeScreenHeader(GameState& _state, Hardware& _hardware, const Frame& _frame, std::span<const std::string_view> _help)
 {
@@ -290,9 +289,8 @@ void PrintUnit(GameState& _state, const TradeRow& _row, std::uint16_t _cell)
 // direction flag clear), the message line cleared and ---- E L I T E ---- on it; then the planet and the turning ship of type
 // titleShipType, in stationSlot at its titleShipDistances, until a key: F9 and F10 step the type through 2-29, any other ends it
 // with the music off, the credits and a new game. ES is B800h throughout, from its MOV ES,AX. TitleFrameLoop (CS:7DF1) is one
-// frame. Returns what it leaves in BP, PresentSpaceView's 20h from the credits; the direction flag is clear, from their
-// FinishSpaceViewFrame.
-std::uint16_t RunTitle(GameState& _state, Hardware& _hardware)
+// frame.
+void RunTitle(GameState& _state, Hardware& _hardware)
 {
   ClearAllObjects(_state);
   StartMusic(_state, _hardware);
@@ -375,46 +373,40 @@ std::uint16_t RunTitle(GameState& _state, Hardware& _hardware)
   ShowCredits(_state, _hardware);
   StartNewGame(_state);
   _state.Data().flow.titleShown = 1;
-  // The credits' FinishSpaceViewFrame leaves BP, which StartNewGame keeps.
-  return PRESENT_SPACE_VIEW_BP;
 }
 
-// The screen each F-key shows in DockedKeyDispatch (CS:0B45), in the order it tests them, called as the dispatch calls it: with
-// BP, which the screens that select the system at the cursor take as the count when no system is on the
-// chart. The status screen's arm (CS:0B96) resets the keyboard first. Every screen leaves ES on B800h, the text page or the
-// graphics screen, so a chart shown after another finds it there.
+// The screen each F-key shows in DockedKeyDispatch (CS:0B45), in the order it tests them. The status screen's arm (CS:0B96) resets
+// the keyboard first.
 struct DockedScreen
 {
   std::uint8_t key;
-  ScreenKey (*show)(GameState&, Hardware&, std::uint16_t);
+  ScreenKey (*show)(GameState&, Hardware&);
 };
 
 constexpr std::array<DockedScreen, 9> DOCKED_SCREENS = {{
-  {SCAN_F2, [](GameState& _state, Hardware& _hardware, std::uint16_t /*_countIfNone*/) { return ShowSellCargoScreen(_state, _hardware); }},
-  {SCAN_F3, [](GameState& _state, Hardware& _hardware, std::uint16_t /*_countIfNone*/) { return ShowBuyCargoScreen(_state, _hardware); }},
-  {SCAN_F4, [](GameState& _state, Hardware& _hardware, std::uint16_t /*_countIfNone*/) { return ShowEquipShipScreen(_state, _hardware); }},
-  {SCAN_F5, [](GameState& _state, Hardware& _hardware, std::uint16_t /*_countIfNone*/) { return ShowGalacticChart(_state, _hardware); }},
-  {SCAN_F6, [](GameState& _state, Hardware& _hardware, std::uint16_t /*_countIfNone*/) { return ShowShortRangeChart(_state, _hardware); }},
+  {SCAN_F2, &ShowSellCargoScreen},
+  {SCAN_F3, &ShowBuyCargoScreen},
+  {SCAN_F4, &ShowEquipShipScreen},
+  {SCAN_F5, &ShowGalacticChart},
+  {SCAN_F6, &ShowShortRangeChart},
   {SCAN_F7, &ShowSystemDataScreen},
   {SCAN_F8, &ShowMarketPricesScreen},
   {SCAN_F9,
-   [](GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
+   [](GameState& _state, Hardware& _hardware)
    {
      ResetKeyboard(_state, _hardware);
-     return ShowCommanderStatusScreen(_state, _hardware, _countIfNone);
+     return ShowCommanderStatusScreen(_state, _hardware);
    }},
   {SCAN_F10, &ShowInventoryScreen},
 }};
 
 // DockedKeyDispatch (CS:0B40), from the arm that shows the screen for _screenKey: F9's status screen (CS:0B96), or Esc's disc menu
 // (CS:0BAC). Each screen returns the key that closed it, which picks the next screen, until F1 leaves; Esc is the disc menu, and
-// any other key waits for one (CS:0B40). _countIfNone is BP as RunTitleAndDocked leaves it,
-// carried from screen to screen as the original's registers carry them, with the key and BP, which the next screen reads; the
-// wait's turns carry nothing, as WaitForKey's do.
-DockedExit DispatchDockedKeys(GameState& _state, Hardware& _hardware, std::uint8_t _screenKey, std::uint16_t _countIfNone)
+// any other key waits for one (CS:0B40). Returns whether the disc menu left for the disk, through LeaveGameLoopForDisk, which returns
+// past RunTitleAndDocked (DiscMenuExit); otherwise F1 ended them.
+bool DispatchDockedKeys(GameState& _state, Hardware& _hardware, std::uint8_t _screenKey)
 {
   std::uint8_t screenKey = _screenKey;
-  std::uint16_t countLeft = _countIfNone;
   for (;;)
   {
     ScreenKey key{};
@@ -423,21 +415,20 @@ DockedExit DispatchDockedKeys(GameState& _state, Hardware& _hardware, std::uint8
       const DiscMenuExit exit = ShowDiscControlScreen(_state, _hardware);
       if (exit.leaves)
       {
-        return DockedExit{true, countLeft};
+        return true;
       }
-      key = ScreenKey{exit.scanCode, exit.al, std::nullopt};
+      key = ScreenKey{exit.scanCode};
     }
     else
     {
       const auto screen = std::ranges::find(DOCKED_SCREENS, screenKey, &DockedScreen::key);
-      key = screen->show(_state, _hardware, countLeft);
+      key = screen->show(_state, _hardware);
     }
-    countLeft = key.countLeft.value_or(countLeft);
     for (;;)
     {
       if (key.scanCode == SCAN_F1)
       {
-        return DockedExit{false, countLeft};
+        return false;
       }
       if (std::ranges::find(DOCKED_SCREENS, key.scanCode, &DockedScreen::key) != DOCKED_SCREENS.end())
       {
@@ -452,7 +443,7 @@ DockedExit DispatchDockedKeys(GameState& _state, Hardware& _hardware, std::uint8
       }
       // Back to the GetKey at 0B40h.
       const KeyPress next = WaitForKey(_state, _hardware);
-      key = ScreenKey{next.scanCode, AlAfterKey(key.al, next), std::nullopt};
+      key = ScreenKey{next.scanCode};
     }
   }
 }
@@ -531,25 +522,17 @@ void DrawFrameRow(GameState& _state, std::uint16_t _cell, std::uint16_t _value)
   }
 }
 
-std::uint8_t AlAfterKey(std::uint8_t _al, const KeyPress& _key) noexcept
-{
-  // ROL AX,1 / SHR AH,1 when it takes a code: AL shifted left, Shift in bit 0.
-  return _key.taken ? static_cast<std::uint8_t>((_al << 1) | (_key.shift ? 1 : 0)) : _al;
-}
-
-ScreenKey WaitForScreenExitKey(GameState& _state, Hardware& _hardware, std::uint8_t _ownKey, std::uint8_t _al, std::uint16_t _countIfNone)
+ScreenKey WaitForScreenExitKey(GameState& _state, Hardware& _hardware, std::uint8_t _ownKey)
 {
   // GetKey until Esc or another screen's F-key, every other key and an empty poll going back to 60B4h.
-  std::uint8_t al = _al;
   for (;;)
   {
     const KeyPress key = GetKey(_state, _hardware);
-    al = AlAfterKey(al, key);
     const std::uint8_t scanCode = key.scanCode;
     if (scanCode != 0 && scanCode != _ownKey && (scanCode == SCAN_ESCAPE || (scanCode >= SCAN_F1 && scanCode <= SCAN_F10)))
     {
-      const std::uint16_t countLeft = SelectSystemAtCursor(_state, _countIfNone);
-      return ScreenKey{scanCode, al, countLeft};
+      SelectSystemAtCursor(_state);
+      return ScreenKey{scanCode};
     }
     AwaitNextKey(_hardware, key);
   }
@@ -647,7 +630,7 @@ ScreenKey ShowBuyCargoScreen(GameState& _state, Hardware& _hardware)
   return RunCargoTradeMenu(_state, _hardware);
 }
 
-ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
+ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware)
 {
   if (_state.Data().flow.inFlight != 1 && _state.Data().commander.missionNumber != 0)
   {
@@ -692,9 +675,7 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, std:
   _state.Data().drawing.textAttribute = EQUIPMENT_HEADING_ATTRIBUTE;
   PrintTextModeString(_state, EQUIPMENT_HEADING_TEXT, LINE_9);
   _state.Data().drawing.textAttribute = STATUS_ATTRIBUTE;
-  // AL keeps the missiles' digit until a row prints, whose NUL then leaves 0 there.
-  auto al = static_cast<std::uint8_t>(_state.Data().commander.missileCount + DIGIT_ZERO);
-  _state.Data().docked.missileCountDigit = al;
+  _state.Data().docked.missileCountDigit = static_cast<std::uint8_t>(_state.Data().commander.missileCount + DIGIT_ZERO);
 
   // One row for each item fitted, and after a laser the mounts it is fitted to.
   std::uint16_t row = LINE_10;
@@ -711,7 +692,6 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, std:
       const std::string missiles = JoinTexts({MISSILE_NAME_OPEN, CharText(_state.Data().docked.missileCountDigit), MISSILE_NAME_CLOSE});
       const std::string_view name = item == 0 ? std::string_view(missiles) : EQUIPMENT_NAMES[item];
       const std::uint16_t named = PrintTextModeString(_state, name, row);
-      al = 0;
       if (SelectLaserType(_state))
       {
         std::uint16_t cell = PrintTextModeString(_state, MOUNTS_OPEN_TEXT, named);
@@ -745,10 +725,10 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, std:
       break;
     }
   }
-  return WaitForScreenExitKey(_state, _hardware, SCAN_F9, al, _countIfNone);
+  return WaitForScreenExitKey(_state, _hardware, SCAN_F9);
 }
 
-ScreenKey ShowInventoryScreen(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
+ScreenKey ShowInventoryScreen(GameState& _state, Hardware& _hardware)
 {
   PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, INVENTORY_FRAME), TITLE_CELL);
   // The fuel text without the padding the status screen has: 'Fuel: ', which the original cuts from the text by a NUL that
@@ -788,8 +768,7 @@ ScreenKey ShowInventoryScreen(GameState& _state, Hardware& _hardware, std::uint1
       break;
     }
   }
-  // The last row leaves AL 0: an empty one its amount, a printed one the NUL its last print stops at.
-  return WaitForScreenExitKey(_state, _hardware, SCAN_F10, 0, _countIfNone);
+  return WaitForScreenExitKey(_state, _hardware, SCAN_F10);
 }
 
 void ShowMissionBriefing(GameState& _state, Hardware& _hardware)
@@ -913,20 +892,18 @@ void ShowMissionDebriefing(GameState& _state, Hardware& _hardware)
   _state.Data().commander.missionStage = 0;
 }
 
-DockedExit RunTitleAndDocked(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
+bool RunTitleAndDocked(GameState& _state, Hardware& _hardware)
 {
-  std::uint16_t countIfNone = _countIfNone;
   if (_state.Data().flow.titleShown != 1)
   {
-    countIfNone = RunTitle(_state, _hardware);
+    RunTitle(_state, _hardware);
   }
-  // JMP into DockedKeyDispatch: back from a disk request, at the disc menu (CS:0BAC); otherwise at the status screen (CS:0B96),
-  // with BP, which the status screen reads.
+  // JMP into DockedKeyDispatch: back from a disk request, at the disc menu (CS:0BAC); otherwise at the status screen (CS:0B96).
   if (_state.Data().saveLoad.resumeAtDiskMenu == 1)
   {
-    return DispatchDockedKeys(_state, _hardware, SCAN_ESCAPE, countIfNone);
+    return DispatchDockedKeys(_state, _hardware, SCAN_ESCAPE);
   }
-  return DispatchDockedKeys(_state, _hardware, SCAN_F9, countIfNone);
+  return DispatchDockedKeys(_state, _hardware, SCAN_F9);
 }
 
 } // namespace Elite

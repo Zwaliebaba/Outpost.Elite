@@ -614,8 +614,7 @@ void DrawObject(GameState& _state, Hardware& _hardware, SpaceObject& _slot)
 
 // DrawFarthestObject (CS:3D95), TransformAndDrawObjects' second pass, to which every draw jumps back: of shipSlotCount slots
 // (MOV CL / XOR CH,CH, then LOOP: 65,536 for 0), the visible object not yet drawn with the largest depth class (+3Dh), then
-// the largest view z, marked drawn (+1Eh bit 7) and drawn (DrawObject). Returns false once no
-// object is left.
+// the largest view z, marked drawn (+1Eh bit 7) and drawn (DrawObject). Returns false once no object is left.
 bool DrawFarthestObject(GameState& _state, Hardware& _hardware)
 {
   // DX the slot found, FFFFh none; AH its depth and BP its z, from 0.

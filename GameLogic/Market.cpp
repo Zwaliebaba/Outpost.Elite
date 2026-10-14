@@ -245,7 +245,7 @@ void StoreLot(GameState& _state, const CargoLot& _lot)
 
 } // namespace
 
-ScreenKey ShowMarketPricesScreen(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
+ScreenKey ShowMarketPricesScreen(GameState& _state, Hardware& _hardware)
 {
   const std::string_view title = DrawDockedFrame(_state, _hardware, MARKET_PRICES_FRAME);
   // The system's name, cut for good at its first space after the first letter.
@@ -285,8 +285,7 @@ ScreenKey ShowMarketPricesScreen(GameState& _state, Hardware& _hardware, std::ui
       break;
     }
   }
-  // The last print leaves AL 0.
-  return WaitForScreenExitKey(_state, _hardware, SCAN_F8, 0, _countIfNone);
+  return WaitForScreenExitKey(_state, _hardware, SCAN_F8);
 }
 
 bool SubtractCredits(GameState& _state, std::uint32_t _tenths)
@@ -434,17 +433,14 @@ ScreenKey RunCargoTradeMenu(GameState& _state, Hardware& _hardware)
 {
   _state.Data().menus.menuFirstRowAttr = CARGO_MENU_FIRST_ROW;
   _state.Data().menus.menuRowCount = static_cast<std::uint8_t>(COMMODITY_KINDS);
-  // StartMenu's last ToggleMenuRowHighlight leaves AL the attribute it toggled the row to, which it left in textAttribute.
-  MenuLoop loop{StartMenu(_state).row, 0};
-  loop.al = _state.Data().drawing.textAttribute;
+  std::uint16_t row = StartMenu(_state).row;
   for (;;)
   {
     // 6B43: the steering; then the keys.
-    loop = SteerMenuCursor(_state, _hardware, loop);
+    row = SteerMenuCursor(_state, _hardware, row);
     for (;;)
     {
       const KeyPress key = PollMenuKey(_state, _hardware);
-      loop.al = AlAfterKey(loop.al, key);
       const std::uint8_t code = key.scanCode;
       if (code == 0)
       {
@@ -454,28 +450,26 @@ ScreenKey RunCargoTradeMenu(GameState& _state, Hardware& _hardware)
       PrintCreditsOnMessageLine(_state);
       if (code == SCAN_B || code == SCAN_S)
       {
-        // B on the buy screen and S on the sell screen: a typed quantity bought or sold, and its message, after which AL is
-        // the attribute it pops back. On the other screen the key does nothing.
+        // B on the buy screen and S on the sell screen: a typed quantity bought or sold, and its message. On the other screen
+        // the key does nothing.
         const bool buy = code == SCAN_B;
         if ((_state.Data().docked.tradeScreenIsBuy == 1) == buy)
         {
           const std::uint8_t saved = OpenCargoMessage(_state);
           ShowCargoMessage(_state, buy ? BuyCargo(_state, _hardware) : SellCargo(_state, _hardware), saved);
-          loop.al = saved;
         }
         break;
       }
       if (code == SCAN_UP || code == SCAN_DOWN)
       {
-        loop.row = (code == SCAN_UP ? MoveMenuCursorUp(_state, loop.row) : MoveMenuCursorDown(_state, loop.row)).row;
-        loop.al = _state.Data().drawing.textAttribute;
+        row = (code == SCAN_UP ? MoveMenuCursorUp(_state, row) : MoveMenuCursorDown(_state, row)).row;
         continue;
       }
       // The screen's own key, F2 to sell or F3 to buy, does nothing here.
       const auto own = static_cast<std::uint8_t>(SCAN_F2 + _state.Data().docked.tradeScreenIsBuy);
       if (code != own && IsScreenKey(code))
       {
-        return ScreenKey{code, loop.al, std::nullopt};
+        return ScreenKey{code};
       }
       break;
     }

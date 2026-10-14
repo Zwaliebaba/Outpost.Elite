@@ -37,9 +37,8 @@ struct Quantity
 ScreenKey RunCargoTradeMenu(GameState& _state, Hardware& _hardware);
 
 /// ShowMarketPricesScreen (CS:5E2C): the F8 screen, the system's name cut at its first space and every commodity's buy and
-/// sell price, then the wait for the key that closes it (WaitForScreenExitKey, with _countIfNone). _backward is the direction
-/// flag, which DrawDockedFrame goes by. Waits for keys as a rule (ADR-015).
-ScreenKey ShowMarketPricesScreen(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone);
+/// sell price, then the wait for the key that closes it (WaitForScreenExitKey). Waits for keys as a rule (ADR-015).
+ScreenKey ShowMarketPricesScreen(GameState& _state, Hardware& _hardware);
 
 /// SubtractCredits (CS:65BA), the body PayForEquipmentItem runs into and SpendCredits jumps to: _tenths of credits off
 /// creditsTenths, and the balance reformatted. Returns false, and the credits as they were, when they are not enough.

@@ -15,7 +15,7 @@ namespace
 {
 
 // The bit of the 8088's FLAGS that the platform keeps: the interrupt flag. The rest of FLAGS is the processor's, and there is
-// none: nothing sets the trap flag, and native code passes the direction flag itself (_backward).
+// none: nothing sets the trap flag, and native code runs its string work forwards (ADR-046).
 constexpr std::uint16_t FLAG_INTERRUPT = 0x0200;
 // DOS starts a program with FLAGS F202h: interrupts on and the direction flag clear (ADR-006 item 4).
 constexpr std::uint16_t ENTRY_FLAGS = 0xF202;

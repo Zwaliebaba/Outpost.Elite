@@ -231,175 +231,166 @@ struct StringOffsets
 
 // ---- Lines ----
 
-// DrawLine's working state: the registers it draws with, as bytes where it uses them so, which it loads before its
-// line routines and stores after them.
-struct LineState
+// A line as DrawLine draws it: where it is in the drawing buffer, how far it has to go, and its pixel.
+struct LinePen
 {
-  std::uint8_t al = 0;
-  std::uint8_t ah = 0;
-  std::uint8_t bl = 0;
-  std::uint8_t bh = 0;
-  std::uint8_t dl = 0;
-  std::uint8_t dh = 0;
-  std::uint16_t cx = 0;
-  std::uint16_t di = 0;
-  std::uint16_t bp = 0;
+  std::uint16_t at;      // the buffer's byte the pixel is in
+  std::uint16_t rowStep; // a row down, or up when the line rises
+  std::uint8_t across;   // its pixels across, right of the first
+  std::uint8_t down;     // its rows down or up, past the first
+  std::uint8_t keep;     // the mask that keeps the rest of the pixel's byte
+  std::uint8_t pixel;    // the pixel's colour, in place in its byte
+  std::uint8_t held;     // the byte being drawn, read from the buffer, until it is written back
+  std::uint8_t fill;     // the colour's fill byte, for whole bytes of a horizontal line
 };
 
-// DrawLineHorizontal (CS:17BE): BL pixels right of the first, pixel by pixel to a byte boundary, whole
-// bytes with REP STOSB, then the pixels left.
-void DrawHorizontalLine(GameState& _state, LineState& _line)
+// The pen's pixel into the byte it holds.
+void PaintHeld(LinePen& _pen) noexcept
 {
-  if (_line.bl == 0)
+  _pen.held = static_cast<std::uint8_t>((_pen.held & _pen.keep) | _pen.pixel);
+}
+
+// DrawLineHorizontal (CS:17BE): the pixels across right of the first, pixel by pixel to a byte boundary, then whole bytes, then the
+// pixels left.
+void DrawHorizontalLine(GameState& _state, LinePen& _pen)
+{
+  if (_pen.across == 0)
   {
-    Plot(_state, _line.di, _line.dh, _line.dl);
+    Plot(_state, _pen.at, _pen.keep, _pen.pixel);
     return;
   }
-  _line.cx = static_cast<std::uint16_t>(_line.bl + 1);
-  if ((_line.dh & LEFT_PIXEL_MASK) != 0)
+  std::uint16_t count = static_cast<std::uint16_t>(_pen.across + 1);
+  if ((_pen.keep & LEFT_PIXEL_MASK) != 0)
   {
     for (;;)
     {
-      _line.al = static_cast<std::uint8_t>((_line.al & _line.dh) | _line.dl);
-      if (!NextPixel(_line.dl, _line.dh))
+      PaintHeld(_pen);
+      if (!NextPixel(_pen.pixel, _pen.keep))
       {
-        BufferByte(_state, _line.di) = _line.al;
-        ++_line.di;
-        if (--_line.cx == 0)
+        BufferByte(_state, _pen.at) = _pen.held;
+        ++_pen.at;
+        if (--count == 0)
         {
           return;
         }
         break;
       }
-      if (--_line.cx == 0)
+      if (--count == 0)
       {
-        BufferByte(_state, _line.di) = _line.al;
+        BufferByte(_state, _pen.at) = _pen.held;
         return;
       }
     }
   }
-  _line.al = _line.ah;
-  _line.ah = Low(_line.cx);
-  _line.cx = static_cast<std::uint16_t>(_line.cx >> 2);
-  if (_line.cx != 0)
+  const auto rest = static_cast<std::uint8_t>(count & 3);
+  for (std::uint16_t bytes = static_cast<std::uint16_t>(count >> 2); bytes != 0; --bytes)
   {
-    for (; _line.cx != 0; --_line.cx)
-    {
-      BufferByte(_state, _line.di) = _line.al;
-      ++_line.di;
-    }
+    BufferByte(_state, _pen.at) = _pen.fill;
+    ++_pen.at;
   }
-  _line.ah = static_cast<std::uint8_t>(_line.ah & 3);
-  if (_line.ah == 0)
+  if (rest == 0)
   {
     return;
   }
-  _line.cx = _line.ah;
-  _line.al = BufferByte(_state, _line.di);
-  do
+  _pen.held = BufferByte(_state, _pen.at);
+  for (std::uint8_t left = rest; left != 0; --left)
   {
-    _line.al = static_cast<std::uint8_t>((_line.al & _line.dh) | _line.dl);
-    (void)NextPixel(_line.dl, _line.dh);
-  } while (--_line.cx != 0);
-  BufferByte(_state, _line.di) = _line.al;
+    PaintHeld(_pen);
+    (void)NextPixel(_pen.pixel, _pen.keep);
+  }
+  BufferByte(_state, _pen.at) = _pen.held;
 }
 
 // DrawLineVertical (CS:17AF).
-void DrawVerticalLine(GameState& _state, LineState& _line)
+void DrawVerticalLine(GameState& _state, LinePen& _pen)
 {
-  _line.cx = _line.bh;
-  do
+  for (std::uint8_t rows = _pen.down; rows != 0; --rows)
   {
-    Plot(_state, _line.di, _line.dh, _line.dl);
-    _line.di = static_cast<std::uint16_t>(_line.di + _line.bp);
-  } while (--_line.cx != 0);
-  Plot(_state, _line.di, _line.dh, _line.dl);
-}
-
-// DrawLineSteep (CS:177E): a row a pixel, AH the error term.
-void DrawSteepLine(GameState& _state, LineState& _line)
-{
-  _line.cx = _line.bh;
-  ++_line.bh;
-  ++_line.bl;
-  _line.ah = _line.bh;
-  do
-  {
-    const bool borrow = _line.ah < _line.bl;
-    _line.ah = static_cast<std::uint8_t>(_line.ah - _line.bl);
-    Plot(_state, _line.di, _line.dh, _line.dl);
-    if (borrow)
-    {
-      _line.ah = static_cast<std::uint8_t>(_line.ah + _line.bh);
-      const bool sameByte = NextPixel(_line.dl, _line.dh);
-      _line.di = static_cast<std::uint16_t>(_line.di + _line.bp + (sameByte ? 0 : 1));
-    }
-    else
-    {
-      _line.di = static_cast<std::uint16_t>(_line.di + _line.bp);
-    }
-  } while (--_line.cx != 0);
-  Plot(_state, _line.di, _line.dh, _line.dl);
-}
-
-// DrawLineShallow (CS:172F): a pixel a step, the byte kept in AL until the line leaves it.
-void DrawShallowLine(GameState& _state, LineState& _line)
-{
-  _line.cx = _line.bl;
-  if (_line.bl != 0xFF)
-  {
-    ++_line.bl; // ADD BL,1 / SBB BL,0: an increment that stops at FFh
+    Plot(_state, _pen.at, _pen.keep, _pen.pixel);
+    _pen.at = static_cast<std::uint16_t>(_pen.at + _pen.rowStep);
   }
-  ++_line.bh;
-  _line.ah = _line.bl;
-  for (;;)
+  Plot(_state, _pen.at, _pen.keep, _pen.pixel);
+}
+
+// DrawLineSteep (CS:177E): a row a pixel, stepping across when the error term borrows.
+void DrawSteepLine(GameState& _state, LinePen& _pen)
+{
+  const auto down = static_cast<std::uint8_t>(_pen.down + 1);
+  const auto across = static_cast<std::uint8_t>(_pen.across + 1);
+  std::uint8_t error = down;
+  for (std::uint8_t rows = _pen.down; rows != 0; --rows)
   {
-    const bool borrow = _line.ah < _line.bh;
-    _line.ah = static_cast<std::uint8_t>(_line.ah - _line.bh);
-    _line.al = static_cast<std::uint8_t>((_line.al & _line.dh) | _line.dl);
+    const bool borrow = error < across;
+    error = static_cast<std::uint8_t>(error - across);
+    Plot(_state, _pen.at, _pen.keep, _pen.pixel);
     if (borrow)
     {
-      _line.ah = static_cast<std::uint8_t>(_line.ah + _line.bl);
-      const bool sameByte = NextPixel(_line.dl, _line.dh);
-      BufferByte(_state, _line.di) = _line.al;
-      _line.di = static_cast<std::uint16_t>(_line.di + _line.bp + (sameByte ? 0 : 1));
-      _line.al = BufferByte(_state, _line.di);
-    }
-    else if (!NextPixel(_line.dl, _line.dh))
-    {
-      BufferByte(_state, _line.di) = _line.al;
-      ++_line.di;
-      _line.al = BufferByte(_state, _line.di);
+      error = static_cast<std::uint8_t>(error + down);
+      const bool sameByte = NextPixel(_pen.pixel, _pen.keep);
+      _pen.at = static_cast<std::uint16_t>(_pen.at + _pen.rowStep + (sameByte ? 0 : 1));
     }
     else
     {
-      if (--_line.cx == 0)
+      _pen.at = static_cast<std::uint16_t>(_pen.at + _pen.rowStep);
+    }
+  }
+  Plot(_state, _pen.at, _pen.keep, _pen.pixel);
+}
+
+// DrawLineShallow (CS:172F): a pixel a step, stepping a row when the error term borrows, the byte held until the line leaves it.
+void DrawShallowLine(GameState& _state, LinePen& _pen)
+{
+  // An increment of the pixels across that stops at FFh.
+  const auto across = static_cast<std::uint8_t>(_pen.across != 0xFF ? _pen.across + 1 : _pen.across);
+  const auto down = static_cast<std::uint8_t>(_pen.down + 1);
+  std::uint8_t error = across;
+  for (std::uint8_t pixels = _pen.across;;)
+  {
+    const bool borrow = error < down;
+    error = static_cast<std::uint8_t>(error - down);
+    PaintHeld(_pen);
+    if (borrow)
+    {
+      error = static_cast<std::uint8_t>(error + across);
+      const bool sameByte = NextPixel(_pen.pixel, _pen.keep);
+      BufferByte(_state, _pen.at) = _pen.held;
+      _pen.at = static_cast<std::uint16_t>(_pen.at + _pen.rowStep + (sameByte ? 0 : 1));
+      _pen.held = BufferByte(_state, _pen.at);
+    }
+    else if (!NextPixel(_pen.pixel, _pen.keep))
+    {
+      BufferByte(_state, _pen.at) = _pen.held;
+      ++_pen.at;
+      _pen.held = BufferByte(_state, _pen.at);
+    }
+    else
+    {
+      if (--pixels == 0)
       {
-        _line.al = static_cast<std::uint8_t>((_line.al & _line.dh) | _line.dl);
-        BufferByte(_state, _line.di) = _line.al;
+        PaintHeld(_pen);
+        BufferByte(_state, _pen.at) = _pen.held;
         return;
       }
       continue;
     }
-    if (--_line.cx == 0)
+    if (--pixels == 0)
     {
-      Plot(_state, _line.di, _line.dh, _line.dl);
+      Plot(_state, _pen.at, _pen.keep, _pen.pixel);
       return;
     }
   }
 }
 
 // DrawLineDiagonal (CS:180E).
-void DrawDiagonalLine(GameState& _state, LineState& _line)
+void DrawDiagonalLine(GameState& _state, LinePen& _pen)
 {
-  _line.cx = _line.bl;
-  do
+  for (std::uint8_t pixels = _pen.across; pixels != 0; --pixels)
   {
-    Plot(_state, _line.di, _line.dh, _line.dl);
-    const bool sameByte = NextPixel(_line.dl, _line.dh);
-    _line.di = static_cast<std::uint16_t>(_line.di + _line.bp + (sameByte ? 0 : 1));
-  } while (--_line.cx != 0);
-  Plot(_state, _line.di, _line.dh, _line.dl);
+    Plot(_state, _pen.at, _pen.keep, _pen.pixel);
+    const bool sameByte = NextPixel(_pen.pixel, _pen.keep);
+    _pen.at = static_cast<std::uint16_t>(_pen.at + _pen.rowStep + (sameByte ? 0 : 1));
+  }
+  Plot(_state, _pen.at, _pen.keep, _pen.pixel);
 }
 
 // CS:1623: the rows were doubled to clip; DrawLine takes them halved (MOV DH,BL / MOV CH,AL / SHR DH,1 / SHR CH,1).
@@ -1276,7 +1267,7 @@ void CopyLinePairs(GameState& _state, std::uint16_t _source, std::uint16_t _dest
 // ---- Screens ----
 
 // TEST [screenLayout],2 (CS:7BC7, CS:7C2C), for a screen that is not the one wanted: from text, mode 4 through the BIOS
-// (SetGraphicsMode); from graphics, both banks cleared in the direction the routine finds (ClearCgaScreen).
+// (SetGraphicsMode); from graphics, both banks cleared, forwards (ClearCgaScreen).
 ScreenChange MakeGraphicsScreen(GameState& _state, Hardware& _hardware, std::uint8_t _layout)
 {
   if ((_layout & TEXT_LAYOUT_BIT) != 0)
@@ -1523,55 +1514,48 @@ void DrawLine(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromRow, std
   std::uint8_t row = _fromRow;
   std::uint8_t endX = _toX;
   std::uint8_t endRow = _toRow;
-  LineState line;
-  // BL = |dx| and BH = |drow|, with the endpoints swapped so that the line runs right; BP the row step.
-  line.al = static_cast<std::uint8_t>(endX - x);
+  LinePen pen{};
+  // The pixels across and the rows down, with the endpoints swapped so that the line runs right, and the row step.
+  pen.across = static_cast<std::uint8_t>(endX - x);
   if (endX < x)
   {
-    line.al = Negate8(line.al);
+    pen.across = Negate8(pen.across);
     std::swap(x, endX);
     std::swap(row, endRow);
   }
-  line.bl = line.al;
-  line.bp = ROW_BYTES;
-  line.al = static_cast<std::uint8_t>(endRow - row);
+  pen.rowStep = ROW_BYTES;
+  pen.down = static_cast<std::uint8_t>(endRow - row);
   if (endRow < row)
   {
-    line.al = Negate8(line.al);
-    line.bp = Negate(line.bp);
+    pen.down = Negate8(pen.down);
+    pen.rowStep = Negate(pen.rowStep);
   }
-  line.bh = line.al;
-  line.di = static_cast<std::uint16_t>(Join(row, x) >> 2);
-  line.al = ColorFillByte(_state.Data().drawing.drawColor);
-  line.ah = line.al;
-  // DL the pixel's color in place, DH the mask that keeps the rest of its byte.
-  const auto shift = static_cast<std::uint8_t>((x & 3) << 1);
-  const std::uint8_t pixel = RotateRight(LEFT_PIXEL_MASK, shift);
-  line.dh = static_cast<std::uint8_t>(~pixel);
-  line.al = static_cast<std::uint8_t>(line.al & pixel);
-  line.dl = line.al;
-  line.al = BufferByte(_state, line.di);
-  line.cx = shift;
-  if (line.bh == 0)
+  pen.at = static_cast<std::uint16_t>(Join(row, x) >> 2);
+  pen.fill = ColorFillByte(_state.Data().drawing.drawColor);
+  // The pixel's colour in place, and the mask that keeps the rest of its byte.
+  const std::uint8_t pixel = RotateRight(LEFT_PIXEL_MASK, static_cast<unsigned>((x & 3) << 1));
+  pen.keep = static_cast<std::uint8_t>(~pixel);
+  pen.pixel = static_cast<std::uint8_t>(pen.fill & pixel);
+  pen.held = BufferByte(_state, pen.at);
+  if (pen.down == 0)
   {
-    DrawHorizontalLine(_state, line);
-    return;
+    DrawHorizontalLine(_state, pen);
   }
-  if (line.bl == 0)
+  else if (pen.across == 0)
   {
-    DrawVerticalLine(_state, line);
+    DrawVerticalLine(_state, pen);
   }
-  else if (line.bl < line.bh)
+  else if (pen.across < pen.down)
   {
-    DrawSteepLine(_state, line);
+    DrawSteepLine(_state, pen);
   }
-  else if (line.bl != line.bh)
+  else if (pen.across != pen.down)
   {
-    DrawShallowLine(_state, line);
+    DrawShallowLine(_state, pen);
   }
   else
   {
-    DrawDiagonalLine(_state, line);
+    DrawDiagonalLine(_state, pen);
   }
 }
 
@@ -1893,8 +1877,8 @@ ScreenChange DrawChartFrame(GameState& _state, Hardware& _hardware)
   }
   const ScreenChange change = MakeGraphicsScreen(_state, _hardware, layout);
   _state.Data().drawing.screenLayout = CHART_LAYOUT;
-  // The horizontals at y=9, 39, 168 and 199, x 32-287: 32 words of colour 3 each into ES = B800h, by REP STOSW in the direction
-  // the routine finds (MOV CX,20h, then MOV CL,20h over the 0 the last left).
+  // The horizontals at y=9, 39, 168 and 199, x 32-287: 32 words of colour 3 each into ES = B800h, by REP STOSW, forwards
+  // (MOV CX,20h, then MOV CL,20h over the 0 the last left).
   for (const std::uint16_t line : CHART_FRAME_LINES)
   {
     RepeatStoreVideoWords(_state, line, CHART_FRAME_LINE_WORDS, CHART_FRAME_COLOR_WORD, 2);

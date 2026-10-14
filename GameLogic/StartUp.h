@@ -25,22 +25,14 @@ namespace Elite
 /// Start (CS:0000), the program's entry from DOS: the start-up commander kept (SaveStartupCommander); then
 /// from RestartPlay the timer, int 0 and int 9, the cheat argument and GameLoop, which comes back only for a disk request
 /// (HandleDiskRequest): the interrupts put back, and the request made with the game's own critical-error handler on int 24h, after which it
-/// starts again. _countIfNone is BP as DOS left it, which GameLoop takes. Returns when the program ends, once a request to leave has wiped
-/// the program and said farewell (ExitToDos). Waits in GameLoop.
-void Start(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone);
-
-/// What GameLoop leaves for Start when the disc menu leaves it for the disk: BP and the direction flag as the docked screens left
-/// them, which Start hands back to it after the request.
-struct GameLoopExit
-{
-  std::uint16_t countLeft; ///< BP
-};
+/// starts again. Returns when the program ends, once a request to leave has wiped the program and said farewell (ExitToDos). Waits
+/// in GameLoop.
+void Start(GameState& _state, Hardware& _hardware);
 
 /// GameLoop (CS:7D30): RunTitleAndDocked, then RunFlight, and the title again after a death; for ever, but that the disc menu
 /// leaves it for the disk (LeaveGameLoopForDisk), whose return addresses the original drops so that a RET returns into Start.
-/// _countIfNone and _backward are BP and the direction flag it is called with, which RunTitleAndDocked takes, and RunFlight
-/// leaves for it the next time round. Waits as a rule (ADR-015).
-GameLoopExit GameLoop(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone);
+/// Waits as a rule (ADR-015).
+void GameLoop(GameState& _state, Hardware& _hardware);
 
 /// InstallDivideAndKeyboardInterrupts (CS:0105): with interrupts off, the game's int 0 and int 9 handlers installed in the
 /// BIOS's place, int 8's segment rewritten; then interrupts on, and ResetKeyboard. The original first keeps the BIOS's two
@@ -74,7 +66,7 @@ void ShowCredits(GameState& _state, Hardware& _hardware);
 
 // ── The entry of the program ──
 
-/// Start, with the PSP's segment, BP and the direction flag as DOS leaves them. The program ends when it returns. Waits.
+/// Start. The program ends when it returns. Waits.
 void StartEntry(Guest& _guest);
 
 } // namespace Elite

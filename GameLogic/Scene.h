@@ -22,7 +22,7 @@ namespace Elite
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
 // A vertex is the offset in the data segment of its three words, x, y and z, as the original holds it in SI or DI. A string
-// instruction's direction is the direction flag the routine finds: _backward.
+// instruction runs forwards (ADR-046).
 
 /// The vertices a blueprint's program starts from, by the handler its first word names.
 enum class BlueprintShape : std::uint8_t
@@ -134,7 +134,7 @@ void TransformShip(GameState& _state, SpaceObject& _slot);
 
 /// RunBlueprintHandler (CS:3CDD): boxHalfWidth from _blueprint, the handler it names run (BuildBoxCornerVertices or
 /// BuildDodoVertices), then what the handler returns into at RenderBlueprintBody (CS:3CF2): the vertex program, the projection
-/// and the faces. Returns the direction flag as they leave it.
+/// and the faces.
 void RunBlueprintHandler(GameState& _state, const Blueprint& _blueprint);
 
 /// ClassifyStationPosition (CS:3C72): ClassifyViewPosition on _slot's compass position, +20h/+22h/+24h: visible, with byte 0 bit 7
@@ -153,8 +153,7 @@ Vector TransformToView(GameState& _state, Vector _position);
 
 /// TransformAndDrawObjects (CS:3D25): the player's pitch, yaw and roll into rotation pairs 0-2; every one of shipSlotCount slots
 /// classified and transformed (ClassifyObject), from the slot each leaves DI on; then, from the farthest in, the visible objects
-/// drawn (DrawFarthestObject): the sun or the planet, the station as a disc, a dot, or a blueprint. _backward is the direction flag;
-/// returns it as the drawing leaves it.
+/// drawn (DrawFarthestObject): the sun or the planet, the station as a disc, a dot, or a blueprint.
 void TransformAndDrawObjects(GameState& _state, Hardware& _hardware);
 
 /// What SizePlanet and SizeSun scale to an object's distance, its disc's radius in rows at 256 of its view units off (MOV DX,32h
@@ -163,8 +162,7 @@ inline constexpr std::uint16_t PLANET_DISC_SCALE = 0x32;
 inline constexpr std::uint16_t SUN_DISC_SCALE = 0x64;
 
 /// DrawSunOrPlanet (CS:3F4F): the planet in _slot sized (SizePlanet), with its altitude, or the sun, with the cabin temperature, its
-/// fringe, fuel scooping, death by heat and a supernova's heat; then, in front of the view, its disc. _backward is the direction
-/// flag, which the disc and a supernova's energy bomb go by.
+/// fringe, fuel scooping, death by heat and a supernova's heat; then, in front of the view, its disc.
 void DrawSunOrPlanet(GameState& _state, Hardware& _hardware, SpaceObject& _slot);
 
 /// DrawDistantStation (CS:45C6): the station in _slot as a disc in colour 3 at its compass position, +20h/+22h/+24h, projected

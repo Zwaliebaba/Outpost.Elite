@@ -407,25 +407,21 @@ bool RemoveLaserFromMount(GameState& _state)
 using MountSpace = bool (*)(GameState&);
 
 // 63B5-6448 and 6482-6515, one loop at two addresses: the box moved by the steering's roll or the arrow keys until Space does
-// its work (_space), from the box and AL in _start. AL is what the original fires the stick with and GetKey shifts each key's
-// Shift into.
-void RunMountChooser(GameState& _state, Hardware& _hardware, MountSpace _space, MenuLoop _start)
+// its work (_space), from the box at _start.
+void RunMountChooser(GameState& _state, Hardware& _hardware, MountSpace _space, std::uint16_t _start)
 {
-  MenuLoop loop = _start;
+  std::uint16_t box = _start;
   for (;;)
   {
     const std::uint8_t roll = ReadSteering(_state, _hardware).roll;
-    loop.al = roll;
     if (roll != 0)
     {
       _state.Data().drawing.textAttribute = HELP_ATTRIBUTE;
-      loop.row = (roll & 0x80) != 0 ? MoveMountBoxLeft(_state, loop.row) : MoveMountBoxRight(_state, loop.row);
-      loop.al = MOUNT_HIGHLIGHT_ATTRIBUTE; // the second PaintLaserMountBox's AL
+      box = (roll & 0x80) != 0 ? MoveMountBoxLeft(_state, box) : MoveMountBoxRight(_state, box);
     }
     for (;;)
     {
       const KeyPress key = PollMenuKey(_state, _hardware);
-      loop.al = AlAfterKey(loop.al, key);
       const std::uint8_t code = key.scanCode;
       if (code == 0)
       {
@@ -439,14 +435,12 @@ void RunMountChooser(GameState& _state, Hardware& _hardware, MountSpace _space, 
         {
           return;
         }
-        loop.al = 0; // the message's NUL
         break;
       }
       _state.Data().drawing.textAttribute = HELP_ATTRIBUTE;
       if (code == SCAN_LEFT || code == SCAN_RIGHT)
       {
-        loop.row = code == SCAN_LEFT ? MoveMountBoxLeft(_state, loop.row) : MoveMountBoxRight(_state, loop.row);
-        loop.al = MOUNT_HIGHLIGHT_ATTRIBUTE;
+        box = code == SCAN_LEFT ? MoveMountBoxLeft(_state, box) : MoveMountBoxRight(_state, box);
         continue;
       }
       break;
@@ -626,17 +620,14 @@ bool SelectLaserType(GameState& _state)
 ScreenKey RunEquipShipMenu(GameState& _state, Hardware& _hardware, std::uint16_t _firstRow)
 {
   _state.Data().menus.menuFirstRowAttr = _firstRow;
-  // StartMenu's last ToggleMenuRowHighlight leaves AL the attribute it toggled the row to, which it left in textAttribute.
-  MenuLoop loop{StartMenu(_state).row, 0};
-  loop.al = _state.Data().drawing.textAttribute;
+  std::uint16_t row = StartMenu(_state).row;
   for (;;)
   {
     // 612F: the steering; then the keys.
-    loop = SteerMenuCursor(_state, _hardware, loop);
+    row = SteerMenuCursor(_state, _hardware, row);
     for (;;)
     {
       const KeyPress key = PollMenuKey(_state, _hardware);
-      loop.al = AlAfterKey(loop.al, key);
       const std::uint8_t code = key.scanCode;
       if (code == 0)
       {
@@ -646,22 +637,20 @@ ScreenKey RunEquipShipMenu(GameState& _state, Hardware& _hardware, std::uint16_t
       PrintCreditsOnMessageLine(_state);
       if (code == SCAN_B || code == SCAN_S)
       {
-        // B buys and S sells the row's item, and its message; then AL is the attribute OpenEquipMessage saved, popped back.
+        // B buys and S sells the row's item, and its message.
         const std::uint8_t saved = OpenEquipMessage(_state);
         ShowEquipMessage(_state, code == SCAN_B ? BuyEquipment(_state, _hardware) : SellEquipment(_state, _hardware), saved);
-        loop.al = saved;
         break;
       }
       if (code == SCAN_UP || code == SCAN_DOWN)
       {
-        loop.row = (code == SCAN_UP ? MoveMenuCursorUp(_state, loop.row) : MoveMenuCursorDown(_state, loop.row)).row;
-        loop.al = _state.Data().drawing.textAttribute;
+        row = (code == SCAN_UP ? MoveMenuCursorUp(_state, row) : MoveMenuCursorDown(_state, row)).row;
         continue;
       }
       // The screen's own F4 does nothing here.
       if (code != SCAN_F4 && IsScreenKey(code))
       {
-        return ScreenKey{code, loop.al, std::nullopt};
+        return ScreenKey{code};
       }
       break;
     }
@@ -688,8 +677,8 @@ void DrawLaserMountMenu(GameState& _state)
 void ChooseMountToFitLaser(GameState& _state, Hardware& _hardware)
 {
   DrawLaserMountMenu(_state);
-  // DrawLaserMountMenu leaves SI on FORE's box, and AL the highlight its last PaintLaserMountBox painted.
-  RunMountChooser(_state, _hardware, &FitLaserOnMount, MenuLoop{FIRST_MOUNT_BOX, MOUNT_HIGHLIGHT_ATTRIBUTE});
+  // DrawLaserMountMenu leaves SI on FORE's box.
+  RunMountChooser(_state, _hardware, &FitLaserOnMount, FIRST_MOUNT_BOX);
 }
 
 void ChooseMountToRemoveLaser(GameState& _state, Hardware& _hardware)
@@ -697,8 +686,8 @@ void ChooseMountToRemoveLaser(GameState& _state, Hardware& _hardware)
   DrawLaserMountMenu(_state);
   _state.Data().drawing.textAttribute = HELP_ATTRIBUTE;
   PrintTextModeString(_state, SELL_LASER_TEXT, SELL_LASER_OFFSET);
-  // SI, pushed and popped round the print, on FORE's box; AL the print's NUL.
-  RunMountChooser(_state, _hardware, &RemoveLaserFromMount, MenuLoop{FIRST_MOUNT_BOX, 0});
+  // SI, pushed and popped round the print, on FORE's box.
+  RunMountChooser(_state, _hardware, &RemoveLaserFromMount, FIRST_MOUNT_BOX);
 }
 
 void RedrawEquipHelpText(GameState& _state)
@@ -806,17 +795,15 @@ bool IsScreenKey(std::uint8_t _key) noexcept
   return _key == SCAN_ESCAPE || (_key >= SCAN_F1 && _key < SCAN_PAST_F10);
 }
 
-MenuLoop SteerMenuCursor(GameState& _state, Hardware& _hardware, MenuLoop _loop)
+std::uint16_t SteerMenuCursor(GameState& _state, Hardware& _hardware, std::uint16_t _row)
 {
-  const Steering steering = ReadSteering(_state, _hardware);
   // NEG AH: the pitch negated, and up when that is negative.
-  const std::uint8_t pitch = Negate(steering.pitch);
+  const std::uint8_t pitch = Negate(ReadSteering(_state, _hardware).pitch);
   if (pitch == 0)
   {
-    return MenuLoop{_loop.row, steering.roll};
+    return _row;
   }
-  const MenuCursor cursor = (pitch & 0x80) != 0 ? MoveMenuCursorUp(_state, _loop.row) : MoveMenuCursorDown(_state, _loop.row);
-  return MenuLoop{cursor.row, _state.Data().drawing.textAttribute};
+  return ((pitch & 0x80) != 0 ? MoveMenuCursorUp(_state, _row) : MoveMenuCursorDown(_state, _row)).row;
 }
 
 KeyPress PollMenuKey(GameState& _state, Hardware& _hardware)

@@ -73,9 +73,8 @@ void DrawLaserSights(GameState& _state);
 /// DrawLaserBeams (CS:0A9A): the player's beams, DrawLine from the bottom row of the view to a random point within 3 pixels of
 /// (7Eh, 3Eh), in firingLaserType's pattern: with bit 0 clear, one side's pair a shot, the sides alternating by laserBeamSide
 /// and the colour counting down past 0 for type 0 and up for type 2; type 1 both outer beams, the colour counting up; type 3 all
-/// four, the inner pair in laserBeamColorToggle's colour and the outer in the other. Returns whether a beam was a horizontal
-/// line, which DrawLine fills by REP STOSB. Each beam is watched for the space view and noted for the frame's snapshot, which the
-/// renderer draws in its place (ADR-035).
+/// four, the inner pair in laserBeamColorToggle's colour and the outer in the other. Each beam is watched for the space view and
+/// noted for the frame's snapshot, which the renderer draws in its place (ADR-035).
 void DrawLaserBeams(GameState& _state, Hardware& _hardware);
 
 /// TakeDamage (CS:2C9B): _damage taken by the fore shield and what it cannot take by the energy: from 100h on, the shield takes all
@@ -168,8 +167,7 @@ MissileFlight UpdateMissileAi(GameState& _state, Hardware& _hardware, SpaceObjec
 /// marked hostile, and takes the laser's type + 1 in damage, added to its aggression up to FFh; a station's hit cancels the docking
 /// computer and is a crime of 28h, or in an invasion does half damage; a ship that runs out of energy is destroyed (CreditKill,
 /// CheckMissileTargetDestroyed, ExplodeObject) unless indestructible, where a station stays at 0 and falls only in an invasion. Then the
-/// beams (DrawLaserBeams), the laser's sound unless the target was destroyed, and laserFiring cleared. Returns whether a beam was a
-/// horizontal line, which DrawLine fills by REP STOSB.
+/// beams (DrawLaserBeams), the laser's sound unless the target was destroyed, and laserFiring cleared.
 void ResolveLaserFire(GameState& _state, Hardware& _hardware);
 
 /// CheckMissileTargetDestroyed (CS:8B8B): when a missile is locked on the slot at _slot, its message and the missile unlocked.
@@ -190,7 +188,7 @@ KillCredit CreditKill(GameState& _state, SpaceObject& _slot);
 /// at playerHitBy was drawn this frame, its beam in colour 3 from where it is on screen (ProjectToScreen) to a random point on an
 /// edge of the view (DrawClippedLine); then 15 off the fore shield, or the aft while the attacker is behind (playerHitByDepth
 /// bit 7), written back and 0 over it on a borrow, and what it could not take off playerEnergy likewise, where a borrow sets
-/// playerDead. Returns whether the beam was a horizontal line, which DrawLine fills by REP STOSB.
+/// playerDead.
 void ApplyEnemyLaserHit(GameState& _state, Hardware& _hardware);
 
 /// UseMaskingDevice (CS:8ECF): 12 off the energy, at least 0, the background blue, and for each of objectSlotCount slots from

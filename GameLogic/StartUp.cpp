@@ -144,22 +144,19 @@ void StartNewGame(GameState& _state)
   _state.Data().commander.maskSystemJumps = 0;
 }
 
-void Start(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
+void Start(GameState& _state, Hardware& _hardware)
 {
   // The original keeps the PSP's segment in pspSegment to read its command tail from, and asks DOS's version, which is 3.30
   // (ADR-006 item 3): the platform gives the tail (CheckCheatArgument), and DOS 1's refusal never comes.
   SaveStartupCommander(_state);
 
-  // From here on BP is as DOS left it, and as GameLoop leaves it.
-  std::uint16_t countIfNone = _countIfNone;
   for (;;)
   {
     InstallTimerInterrupt(_state, _hardware);
     // CopyProtection (CS:04A3) came here: it does nothing once protectionShown is set, as the D5 byte sets it (ADR-001).
     InstallDivideAndKeyboardInterrupts(_state, _hardware);
     CheckCheatArgument(_state, _hardware);
-    const GameLoopExit loopExit = GameLoop(_state, _hardware, countIfNone);
-    countIfNone = loopExit.countLeft;
+    GameLoop(_state, _hardware);
 
     // HandleDiskRequest (CS:0065): GameLoop comes back only for diskOperation, 0 to leave.
     RestoreDivideAndKeyboardInterrupts(_hardware);
@@ -185,23 +182,19 @@ void WipeProgram(Hardware& _hardware)
   _hardware.DisableInterrupts();
 }
 
-GameLoopExit GameLoop(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
+void GameLoop(GameState& _state, Hardware& _hardware)
 {
-  // BP goes round: RunTitleAndDocked's screens read it, and RunFlight leaves it.
-  std::uint16_t countIfNone = _countIfNone;
   for (;;)
   {
     _state.Data().flow.inFlight = 0;
-    const DockedExit docked = RunTitleAndDocked(_state, _hardware, countIfNone);
-    if (docked.leaves)
+    if (RunTitleAndDocked(_state, _hardware))
     {
       // LeaveGameLoopForDisk: the original drops the disc menu's return address and RunTitleAndDocked's, so that its RET returns
       // into Start.
-      return GameLoopExit{docked.countLeft};
+      return;
     }
     _state.Data().flow.inFlight = 1;
-    const FlightExit flight = RunFlight(_state, _hardware);
-    countIfNone = flight.countLeft;
+    RunFlight(_state, _hardware);
     // After a death the title runs again.
     if (_state.Data().playerShip.playerDead == 1)
     {
@@ -275,10 +268,9 @@ std::array<std::uint8_t, SpaceObject::BYTES> BytesAfterDrawBuffer(const GameStat
 
 void StartEntry(Guest& _guest)
 {
-  // DOS leaves BP as Start takes it, and the direction flag clear. Start's first instructions push the far return to PSP:0000,
-  // where DOS's INT 20h ends the program, for its RETF to take once Start returns; on the platform the program ends when Start
-  // returns.
-  Start(_guest.State(), _guest.Devices(), Guest::EntryBasePointer());
+  // Start's first instructions push the far return to PSP:0000, where DOS's INT 20h ends the program, for its RETF to take once
+  // Start returns; on the platform the program ends when Start returns.
+  Start(_guest.State(), _guest.Devices());
 }
 
 namespace
