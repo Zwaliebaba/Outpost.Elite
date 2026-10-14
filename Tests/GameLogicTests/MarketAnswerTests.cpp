@@ -23,7 +23,7 @@ constexpr std::size_t ECONOMIES = 8;
 constexpr std::size_t GOVERNMENTS = 8;
 // The tech levels the prices are computed at: none, the first, the 9 that ComputeMarketPrices caps it at, and the most a
 // nibble holds. The galaxies give 0 to 11. In this build the tech level changes no price: every commodity's tech-level
-// factor in productTradeRecords is 0 (Symbols.tsv), so these four check that it still reads the level, and nothing more.
+// factor in productTradeRecords is 0 (MarketTables.h), so these four check that it still reads the level, and nothing more.
 constexpr auto TECH_LEVELS = std::to_array<std::uint8_t>({0, 1, 9, 15});
 constexpr std::size_t COMMODITIES = 17;
 // A commodity's entry in screenPrices: its price, then its resale price, a word each.

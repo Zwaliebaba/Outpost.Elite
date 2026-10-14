@@ -140,7 +140,6 @@
     <ClInclude Include="Platform.h" />
     <ClInclude Include="PlayerShipState.h" />
     <ClInclude Include="Reference.h" />
-    <ClInclude Include="ReferenceImage.h" />
     <ClInclude Include="Replay.h" />
     <ClInclude Include="SaveLoad.h" />
     <ClInclude Include="SaveLoadState.h" />
@@ -213,7 +212,6 @@
     <ClCompile Include="PlanetLook.cpp" />
     <ClCompile Include="Platform.cpp" />
     <ClCompile Include="Reference.cpp" />
-    <ClCompile Include="ReferenceImage.cpp" />
     <ClCompile Include="Replay.cpp" />
     <ClCompile Include="SaveLoad.cpp" />
     <ClCompile Include="Scene.cpp" />

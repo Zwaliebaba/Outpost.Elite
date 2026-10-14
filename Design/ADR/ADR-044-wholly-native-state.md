@@ -1,6 +1,6 @@
 # ADR-044 — Wholly native, the state: written by name, then free of the 1987 layout
 
-**Status:** accepted 2026-10-14, with the change that implements it, step 1 of Phase 7 ([Reverse-Engineering-Plan.md §5, Phase 7](../Reverse-Engineering-Plan.md#phase-7--wholly-native)), under the owner's rulings D76 and D78. Each later step of 2 to 5 amends it as it lands. **Amended 2026-10-14, step 4:** the start state is set in C++, and nothing loads the 1987 image. The steps land in the order 1, 4, 5, 2, 3: once the digest no longer depends on the layout, the generators can go before the layout changes, and steps 2 and 3 are then edits of plain source.
+**Status:** accepted 2026-10-14, with the change that implements it, step 1 of Phase 7 ([Reverse-Engineering-Plan.md §5, Phase 7](../Reverse-Engineering-Plan.md#phase-7--wholly-native)), under the owner's rulings D76 and D78. Each later step of 2 to 5 amends it as it lands. **Amended 2026-10-14, step 4:** the start state is set in C++, and nothing loads the 1987 image. **Step 5:** the tables and the state's headers are source, and the image, the symbol table, the partition and the tools that read them go. The steps land in the order 1, 4, 5, 2, 3: once the digest no longer depends on the layout, the generators can go before the layout changes, and steps 2 and 3 are then edits of plain source.
 
 ## Context
 
@@ -38,7 +38,22 @@ While the structs lay their members out as the 1987 data segment did, the state 
 | The suite | `GameLogicTests` passes under g++, 185 tests, the corpus's digests among them, with no re-base |
 | The re-base checks | a dump of the corpus by member (26 replays, 13,747 values a point) and a re-base against it pass, and leave every replay as it was |
 
+## Decision, step 5: the tables and the headers as source
+
+1. **The state's headers and the 18 tables' headers are source** (`GameData.h`, the 29 groups', `Message.h`, each `*Tables.h`): edited as any header is, with no generator behind them. Their opening comments no longer name the tools or the image.
+2. **What only built them goes, with what only it read** (D79): `GameLogic/ReferenceImage.cpp`'s 13,289 lines and its header, `Design/Symbols.tsv`, `Design/DataPartition.tsv`, `Tools/GenerateGameData.py`, `Tools/GenerateTables.py`, `Tools/MapReference.py` and `Tools/PrepareCommanders.py`, and the two CI steps that checked the generated headers. The prepared commanders in `Replays/` stay, as the corpus's data.
+3. **What the table generator checked of the tables, tests check** (`TableTests`): that every blueprint indexes within the vertex buffer, the fill patterns and its own edges, every face ending where its count says; and that every description text holds only the codes its expansion handles. The test of the image's hash, `ReferenceImageTests`, goes with the image, and `GalaxyTests` holds the ninth galaxy's seeds to the values the image held.
+4. **AGENTS.md says the tree holds none of the reference's bytes**: a design question is measured against the owner's `ELITES.EXE` (D79).
+
+### Measured 2026-10-14, step 5
+
+| Check | Result |
+|---|---|
+| The suite | `GameLogicTests` passes under g++, 186 tests, the corpus's digests among them, with no re-base |
+| What is left of the image | no file of `GameLogic`, `Tests`, `Outpost`, `Engine`, `Tools` or `Build` names the image, the symbol table, the partition or a tool that read them; the checkers are clean |
+
 ## What this forecloses
 
 - **The state's layout as a format.** What the digest and the commander file hold is the members in their order; a struct may lay them out as it likes.
 - **Loading the state from the 1987 image.** The start state is source.
+- **Generating the tables or the state from the 1987 program.** Both are source, and a change to either is an edit.

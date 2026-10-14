@@ -16,7 +16,7 @@ namespace
 
 using Commander = Elite::CommanderState;
 
-// The twins' prepared commanders, from Replays/ (Tools/PrepareCommanders.py).
+// The twins' prepared commanders, from Replays/: commanders the 1987 game saved, changed as its own code would change them.
 constexpr std::string_view ARMED = "armed.cdr";
 constexpr std::string_view INVASION_MISSION = "invasion-mission.cdr";
 // From the title: the credits, the status screen, the disc menu, and JAMESON loaded.
@@ -39,8 +39,8 @@ void LoadCommander(TwinRig& _rig, std::string_view _source)
   _rig.Play(LOAD_JAMESON);
 }
 
-// The twin's random state _draws draws on, by NextRandom itself: a state some later moment of play reaches, as
-// Tools/PrepareCommanders.py steps a commander's.
+// The twin's random state _draws draws on, by NextRandom itself: a state some later moment of play reaches, as the prepared
+// commanders' random states were stepped.
 void DrawRandomNumbers(TwinRig& _rig, std::uint32_t _draws)
 {
   Elite::GameState& state = _rig.State();

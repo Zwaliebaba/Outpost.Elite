@@ -34,7 +34,7 @@ template <typename T> [[nodiscard]] consteval bool IsFieldValue() noexcept
 /// - nor do compound assignment and increment; write `a = static_cast<T>(a + 1)`;
 /// - a helper that writes one takes it by reference.
 ///
-/// It can be copied, as GameData must be trivially copyable for the reference's image to load into it as bytes, but only
+/// It can be copied, as GameData is trivially copyable, but only
 /// explicitly, as GameData's structs' and SpaceObject's copy constructors are: `auto x = member`, a capture by copy, a by-value
 /// parameter and a return by value do not compile. Read a value as `T x = member`.
 template <typename T> class Field

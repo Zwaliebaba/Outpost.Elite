@@ -45,7 +45,7 @@ std::string StatusAgain(std::string_view _steps)
 constexpr std::string_view LOAD_JAMESON = "key space; wait 4\nkey Escape; wait 0.3\nkey l; wait 0.3\n"
                                           "key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5";
 
-// Replays/_source, a prepared commander (Tools/PrepareCommanders.py), copied into the twin's DOS directory as JAMESON.CDR, as a
+// Replays/_source, a prepared commander, copied into the twin's DOS directory as JAMESON.CDR, as a
 // replay's file step copies one (DirectoryFileStore gives a file it did not write attribute 0 and DOS's stamp), and loaded at the
 // disc menu as the game loads its own saves.
 void LoadCommander(TwinRig& _rig, std::string_view _source)

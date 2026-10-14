@@ -61,7 +61,7 @@ constexpr std::size_t POINT_BYTES = 4;
 constexpr std::size_t VERTEX_BYTES = 6;
 constexpr std::uint16_t VERTEX_Z = 4;
 // What a vertex program reaches: vertexBuffer's 42 vertices. Its six bits of vertex could name 64, past the buffer into the bytes
-// after it, which the state no longer holds beside it (D38); Tools/GenerateTables.py checks that no blueprint's does.
+// after it, which the state no longer holds beside it (D38); TableTests checks that no blueprint's does.
 constexpr std::size_t VERTEX_REACH = sizeof(SceneState::VertexBuffer);
 constexpr std::uint8_t VERTEX_INDEX_BITS = 0x3F;
 constexpr std::uint8_t VERTEX_OP_BITS = 0xC0;
@@ -323,7 +323,7 @@ struct WindingProducts
 [[nodiscard]] std::uint16_t DrawFaceTriangle(GameState& _state, std::uint8_t _item, std::span<const std::uint8_t> _list,
                                              std::uint16_t _vertices, bool _backward)
 {
-  // _item is even, and inside the table: Tools/GenerateTables.py checks every triangle item's.
+  // _item is even, and inside the table: TableTests checks every triangle item's.
   _state.Data().scene.triangleFillPattern = FACE_FILL_PATTERNS[_item / 2];
   const Triangle triangle = LoadTriangle(_state, _list, _vertices, 1);
   const auto offScreen = [](ScreenPoint _point) { return static_cast<std::uint16_t>(_point.x) == OFF_SCREEN; };

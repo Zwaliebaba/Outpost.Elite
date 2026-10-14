@@ -12,9 +12,8 @@
 namespace Elite
 {
 
-// The image's layout: one code segment at paragraph 0 of the image, 0x8F40 bytes, and the data segment
-// at image paragraph 0x08F4 (Reverse-Engineering-Plan.md §1).
-inline constexpr std::uint16_t CODE_SEGMENT_BYTES = 0x8F40;
+// Where the 1987 program's data segment began, in paragraphs past its code segment's (Reverse-Engineering-Plan.md §1): the
+// segment values the game's state still carries until step 6 of Phase 7.
 inline constexpr std::uint16_t DATA_SEGMENT_PARAGRAPH = 0x08F4;
 
 // Where DOSBox-X puts the PSP (measured from its trace), which the host copied so the two boot traces

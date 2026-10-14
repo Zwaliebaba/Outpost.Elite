@@ -24,7 +24,7 @@ inline constexpr std::size_t DRAWING_BUFFER_BYTES = 0x2000;
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
-// Each is what the routine Symbols.tsv names computes, with no register in sight, and every byte it writes is written as the
+// Each is what the 1987 routine of its name computes, with no register in sight, and every byte it writes is written as the
 // original writes it, in the same order and at the same width. A string instruction's direction is the direction flag its
 // entry finds: _backward.
 

@@ -22,7 +22,7 @@ class Game;
 /// The game's memory (ADR-012, D19, D38): the game's state as its struct (GameData), by member (Data()), and the CGA's video memory. It
 /// owns both, and it has no registers: a routine that takes a GameState takes its inputs as parameters and gives its results back.
 ///
-/// The host makes one for the whole run, inside a Game, which loads the reference's image into it (Game::Load). Since change 3c of D38
+/// The host makes one for the whole run, inside a Game, which starts it (Game::Start). Since change 3c of D38
 /// nothing reaches the state by the original's addresses: native code names a member, a run of members that followed one another in 1987
 /// (BytesThrough, Text.h), or a byte within either. The code segment and the PSP are not here, nor what the game
 /// used of the vector table and the BIOS's data area, which is the platform's (Platform, Hardware, ADR-041); the segments the game was

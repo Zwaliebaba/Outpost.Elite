@@ -54,8 +54,8 @@ constexpr std::uint8_t SHORT_RANGE_DIVISOR = 7;
 
 constexpr std::uint16_t GALAXY_SYSTEMS = 0x100;
 constexpr std::uint8_t GALAXY_SEED_BYTES = 6;
-// The ninth galaxy, galaxyNumber 8, and its seeds: the six bytes after galaxySeeds' eight entries, gap29A6, DS:29A6-29AB of the
-// reference's image (GalaxyTests holds them to it), which the original reads as a ninth entry.
+// The ninth galaxy, galaxyNumber 8, and its seeds: the six bytes after galaxySeeds' eight entries, gap29A6, DS:29A6-29AB of the 1987
+// image (GalaxyTests holds them to it), which the original reads as a ninth entry.
 constexpr std::uint8_t NINTH_GALAXY = 8;
 constexpr std::array<std::uint8_t, GALAXY_SEED_BYTES> NINTH_GALAXY_SEEDS = {0x34, 0x12, 0x78, 0x56, 0xBC, 0x9A};
 // A chart item, a disc or a label: its x range and its rows, each a byte for the first and one for the last,
@@ -277,7 +277,7 @@ template <typename State> [[nodiscard]] auto LabelBytes(State& _state, std::size
 // jmp [bx] through textControlCodes to control code _code's handler, with SI and the return to ResumeTextExpansion pushed; the
 // handler returns there, which pops SI. The stack keeps no more than SI and the way back, so the handler's value routine runs on
 // the output at DS:_output. Codes 7-31 jump into descriptionPhraseLists, whose words the original would run as code; the
-// routine runs nothing for them. No text in the game holds such a code (Tools/GenerateTables.py checks the phrases), and no
+// routine runs nothing for them. No text in the game holds such a code (TableTests checks the phrases), and no
 // description reaches textControlCodes to write over it: the longest is 144 bytes of descriptionBuffer's 256. Returns the place
 // past what the handler wrote.
 std::uint16_t RunTextControlCode(GameState& _state, std::uint8_t _code, std::uint16_t _output)

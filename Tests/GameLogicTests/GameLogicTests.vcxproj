@@ -121,7 +121,6 @@
     </ClCompile>
     <ClCompile Include="PlanetLookTests.cpp" />
     <ClCompile Include="PlatformTests.cpp" />
-    <ClCompile Include="ReferenceImageTests.cpp" />
     <ClCompile Include="ReplayTests.cpp" />
     <ClCompile Include="SaveLoadTests.cpp" />
     <ClCompile Include="SchedulerTests.cpp" />
@@ -131,6 +130,7 @@
     <ClCompile Include="SpeakerTests.cpp" />
     <ClCompile Include="StartUpTests.cpp" />
     <ClCompile Include="StateDigestTests.cpp" />
+    <ClCompile Include="TableTests.cpp" />
     <ClCompile Include="TextTests.cpp" />
     <ClCompile Include="TimeOfDayTests.cpp" />
     <ClCompile Include="TwinRigTests.cpp" />

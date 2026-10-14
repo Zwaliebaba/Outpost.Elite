@@ -32,7 +32,7 @@ constexpr std::uint8_t MOST_COMMANDER_FILES = 0x28;
 // ---- The disc menu ----
 
 // ".CDR" and its NUL, which PromptCommanderFileName appends to a name: DS:8697 in 1987, a text no symbol starts and nothing
-// writes, whose bytes the reference's image holds there.
+// writes, whose bytes the 1987 image held there.
 constexpr std::array<std::uint8_t, 5> COMMANDER_EXTENSION = {'.', 'C', 'D', 'R', 0};
 
 // Where it prints on the 40-column text page, 80 bytes a row.
