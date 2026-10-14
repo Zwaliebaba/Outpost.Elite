@@ -718,8 +718,9 @@ KillCredit CreditKill(GameState& _state, SpaceObject& _slot)
       {
         return credit;
       }
-      credit.crime = police ? CRIME_AGAINST_POLICE : CRIME;
-      AddSaturating(_state.Data().commander.legalStatus, *credit.crime);
+      const std::uint8_t crime = police ? CRIME_AGAINST_POLICE : CRIME;
+      credit.crime = crime;
+      AddSaturating(_state.Data().commander.legalStatus, crime);
       return credit;
     }
     tenths = THARGOID_BOUNTY;
