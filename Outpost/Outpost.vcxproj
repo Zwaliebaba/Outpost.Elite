@@ -85,12 +85,16 @@
   <ItemGroup>
     <ClInclude Include="Application.h" />
     <ClInclude Include="Cockpit.h" />
+    <ClInclude Include="DockedFrame.h" />
+    <ClInclude Include="DockedMarket.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="SpaceView.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Application.cpp" />
     <ClCompile Include="Cockpit.cpp" />
+    <ClCompile Include="DockedFrame.cpp" />
+    <ClCompile Include="DockedMarket.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>

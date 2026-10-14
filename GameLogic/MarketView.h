@@ -10,6 +10,9 @@
 namespace Elite
 {
 
+/// The most a trade asks for at once: the quantity is a byte, as every amount of cargo is.
+inline constexpr std::uint8_t MOST_QUANTITY = 0xFF;
+
 /// What the message strip of D01 says after a trade or a refused one (D11's Market column): the kind, and the figures its words
 /// take. The shell words it.
 enum class MarketNotice : std::uint8_t

@@ -16,9 +16,6 @@ namespace Elite
 class GameState;
 class Host;
 
-/// The most a trade asks for at once: the quantity is a byte, as every amount of cargo is.
-inline constexpr std::uint8_t MOST_QUANTITY = 0xFF;
-
 /// The market and the hold as D01 reads them: values, from the game's state (MarketGoodsOf) or from a test.
 struct MarketGoods
 {

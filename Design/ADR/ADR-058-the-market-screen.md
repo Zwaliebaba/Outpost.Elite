@@ -44,6 +44,21 @@ The mouse is on while docked (D83). Nothing in the game or the shell drew a dock
    - While docked, F2, F3 and F8 all open it until the new key bar is complete (D92). F8 in flight is still 1987's Market Prices.
 5. **The 1987 Sell Cargo and Buy Cargo screens go.** With them go their trade menu, the typed quantity (`ReadQuantity`, `ParseQuantity`), their messages and their tables. Market Prices stays, for flight. `DockedState::tradeScreenIsBuy` and the menus' quantity text stay in the state, which they are part of, and are written no longer.
 
+6. **The shell draws it (T1, T2's mouse, T7).**
+   - `Outpost/DockedFrame` is the common frame and its widgets, read off `docked/`: the background and its 48-unit grid, the top bar with where the ship is and the credits, the title on its tab between rules measured by DirectWrite, the key bar with the open screen's key lit, the 35% amber panel with its 24-unit chamfers, and the message strip.
+   - `Outpost/DockedMarket` draws D01 into it:
+     - the table, a row lit when selected and shaded when under the pointer;
+     - the Selected panel;
+     - the quantity's controls, lit under the pointer;
+     - [B] BUY lit as the first action, as drawn, unless the pointer is on [S] SELL;
+     - a button off when its trade at the quantity would be refused;
+     - the hold's bar of 9-unit segments with its glow;
+     - the footer.
+   - The strip, which `01-market.png` does not place, sits in the space under the hold's panel. D11's one-line words are split at the dash into a headline and the figures under it, as the strip is narrower there. Strips not drawn yet (a sale, nothing in stock or held, a precious commodity's limit) follow D11's form.
+   - `Engine::Window` reports the mouse's moves, left button and leaving. The shell maps them into design units by `PlaceDesign`'s placement, tracks the pointer for hover, and sends a click either to the game (`Host::Click`) or to the key bar.
+   - A key on the bar is pressed as a key. While D02 to D08 are 1987's (D92), EQUIP sends F4, GALAXY F5, LOCAL F6 and STATUS F9, the keys 1987 shows those screens on.
+   - While a market view is shown, the shell draws it in place of the CGA picture. `OutpostTests` draws it on WARP against its golden images (ADR-059).
+
 ## What moved, and how it was measured
 
 Following D92, `trading.replay` and three twins go: `TwinCargoBuy`, `TwinCargoSell` and `TwinMarketPrices`. They take their known answers, pictures and outcomes with them. Four more were re-recorded. Each was dumped member by member before and after the change (`OUTPOST_ELITE_DUMP_STATE`), the dumps were compared, and the re-base was run from the dumps after (`OUTPOST_ELITE_REBASE_DIGESTS`, then `OUTPOST_ELITE_RECORD_GUARD`):
@@ -67,7 +82,7 @@ The suite passes, 152 tests under g++, on two runs in check mode. That counts th
 
 `CheckFormat` and `CheckProjectFiles` are clean.
 
-| Not run here | the MSVC build and clang-tidy 22, which CI runs; the screen drawn, which the shell's part of this change and its golden image (D94) cover |
+| Not run here | the MSVC build and clang-tidy 22, which CI runs; the game played with the screen drawn, which the owner does; the screen on WARP, whose images CI draws and the owner makes golden (ADR-059) |
 |---|---|
 
 ## What this forecloses

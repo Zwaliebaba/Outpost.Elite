@@ -5,6 +5,7 @@
   <Folder Name="/Tests/">
     <Project Path="Tests/EngineTests/EngineTests.vcxproj" Id="327b5b58-4bbf-57ad-bb86-99456d480603" />
     <Project Path="Tests/GameLogicTests/GameLogicTests.vcxproj" Id="eb759a55-4cea-5c44-8ec9-d2700f14f9e3" />
+    <Project Path="Tests/OutpostTests/OutpostTests.vcxproj" Id="e65aeda8-c44a-5ad2-9d7e-632460afe917" />
   </Folder>
   <Project Path="Engine/Engine.vcxproj" Id="508b8537-8f4c-5a84-b7cc-b165f9c8b082" />
   <Project Path="GameLogic/GameLogic.vcxproj" Id="092fb942-d1c6-56a9-bd38-795b1f453d7f" />
