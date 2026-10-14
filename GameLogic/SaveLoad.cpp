@@ -10,7 +10,10 @@
 #include "StateWriter.h"
 #include "Text.h"
 
+#include <algorithm>
 #include <array>
+#include <memory>
+#include <string>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -21,13 +24,8 @@ namespace Elite
 namespace
 {
 
-constexpr std::uint16_t DOS_NO_MORE_FILES = 0x12;
-constexpr std::uint8_t READ_ACCESS = 0;    // a file opened to read
-constexpr std::uint16_t NO_ATTRIBUTES = 0; // a commander's file is neither read-only, hidden nor system
-
-constexpr std::uint16_t FOUND_ATTRIBUTE = 0x15; // in the transfer area, after find-first or find-next
-constexpr std::uint16_t FOUND_NAME = 0x1E;
 constexpr std::uint8_t MOST_COMMANDER_FILES = 0x28;
+constexpr std::string_view COMMANDER_FILE_EXTENSION = ".CDR"; // as the store keys names, upper case
 
 // ---- The disc menu ----
 
@@ -76,10 +74,6 @@ constexpr auto EXTENSION_BYTES = static_cast<std::uint16_t>(COMMANDER_EXTENSION.
 constexpr std::uint16_t CATALOGUE_ROWS = 10;
 constexpr std::uint16_t CATALOGUE_COLUMN_BYTES = 0x12; // nine cells
 constexpr std::uint8_t TEXT_LAYOUT_BIT = 2;            // screenLayout: the text page shows
-constexpr std::uint16_t GRAPHICS_ERROR_POSITION = 0x0C90;
-constexpr std::uint16_t TEXT_ERROR_POSITION = 0x0330;
-constexpr std::uint16_t DISK_ERROR_CHARACTERS = 10;
-constexpr std::uint16_t ERROR_INK = 0xFFFF; // colour 3
 
 // commanderFileName up to its NUL: the name the original hands DOS in DS:DX. Every writer leaves a NUL inside it: the image's
 // '12345678.CDR', ReadTextLine's eight characters at most and their NUL, the NUL after the ".CDR" appended to a name
@@ -97,39 +91,21 @@ constexpr std::uint16_t ERROR_INK = 0xFFFF; // colour 3
 
 // A commander file read over the commander (D78): the file's bytes in place of the commander's, as many as the read gave, and
 // the commander read back from them; what the read does not reach stays as it was.
-[[nodiscard]] DosAnswer ReadCommanderFile(GameState& _state, Hardware& _hardware)
+[[nodiscard]] DosError ReadCommanderFile(GameState& _state, OpenFile& _file)
 {
   const std::vector<std::uint8_t> commander = CommanderFileBytes(_state);
-  std::array<std::uint8_t, COMMANDER_FILE_BYTES> file{};
-  for (std::size_t index = 0; index < file.size(); ++index)
-  {
-    file[index] = commander[index];
-  }
-  const DosAnswer read = _hardware.ReadFile(_state.Data().disk.fileHandle, file);
   std::array<std::uint8_t, COMMANDER_FILE_BYTES> bytes{};
-  for (std::size_t index = 0; index < bytes.size(); ++index)
-  {
-    bytes[index] = file[index];
-  }
+  std::copy_n(commander.begin(), bytes.size(), bytes.begin());
+  std::uint32_t count = 0;
+  const DosError read = _file.Read(bytes, count);
   ReadStateBytes(_state.Data().commander, bytes);
   return read;
 }
 
-// The common failure (0x039D): DOS's _error, which is no failure when it only ran out of files.
-void Fail(GameState& _state, std::uint16_t _error)
+// A failure of a disk request: diskError, which the disc menu shows as DISC ERROR and offers to retry.
+void Fail(GameState& _state)
 {
-  if (_error != DOS_NO_MORE_FILES)
-  {
-    _state.Data().disk.diskError = 1;
-  }
-}
-
-// A failed read or write (0x0393): the file is closed, and the failure is DOS's _error, which the original keeps on the stack
-// round the close.
-void CloseAndFail(GameState& _state, Hardware& _hardware, std::uint16_t _error)
-{
-  static_cast<void>(_hardware.CloseFile(_state.Data().disk.fileHandle));
-  Fail(_state, _error);
+  _state.Data().disk.diskError = 1;
 }
 
 // The most each of a loaded commander's fields holds when the game wrote it (D43): the ninth galaxy, the chart's last row, four
@@ -183,113 +159,88 @@ void ClampLoadedCommander(GameState& _state)
 
 // LoadCommanderFile (0x031A): only a file with no attributes, read whole into commanderBlock, and then held to what the game
 // writes (D43).
-void LoadCommanderFile(GameState& _state, Hardware& _hardware)
+void LoadCommanderFile(GameState& _state, FileStore& _files)
 {
-  const DosFileAttributes attributes = _hardware.ReadFileAttributes(CommanderFileName(_state));
-  if (attributes.answer.failed)
+  std::uint8_t attribute = 0;
+  if (_files.Attribute(CommanderFileName(_state), attribute) != DosError::None || attribute != 0)
   {
-    Fail(_state, attributes.answer.value);
+    Fail(_state);
     return;
   }
-  if (attributes.attributes != 0)
+  std::unique_ptr<OpenFile> file;
+  if (_files.Open(CommanderFileName(_state), FileAccess::Read, file) != DosError::None)
   {
-    _state.Data().disk.diskError = 1;
+    Fail(_state);
     return;
   }
-  const DosAnswer opened = _hardware.OpenFile(CommanderFileName(_state), READ_ACCESS);
-  if (opened.failed)
+  if (ReadCommanderFile(_state, *file) != DosError::None)
   {
-    Fail(_state, opened.value);
-    return;
-  }
-  _state.Data().disk.fileHandle = opened.value;
-  const DosAnswer read = ReadCommanderFile(_state, _hardware);
-  if (read.failed)
-  {
-    CloseAndFail(_state, _hardware, read.value);
+    Fail(_state);
     return;
   }
   ClampLoadedCommander(_state);
-  const DosAnswer closed = _hardware.CloseFile(_state.Data().disk.fileHandle);
-  if (closed.failed)
-  {
-    Fail(_state, closed.value);
-  }
 }
 
-// SaveCommanderFile (0x0358): commanderBlock written to a new file, whose attributes are then cleared.
-void SaveCommanderFile(GameState& _state, Hardware& _hardware)
+// SaveCommanderFile (0x0358): commanderBlock written to a new file, stamped _stamp, whose attributes are then cleared.
+void SaveCommanderFile(GameState& _state, FileStore& _files, const FileStamp& _stamp)
 {
-  const DosAnswer created = _hardware.CreateFile(CommanderFileName(_state), NO_ATTRIBUTES);
-  if (created.failed)
+  std::unique_ptr<OpenFile> file;
+  if (_files.Create(CommanderFileName(_state), 0, _stamp, file) != DosError::None)
   {
-    Fail(_state, created.value);
+    Fail(_state);
     return;
   }
-  _state.Data().disk.fileHandle = created.value;
-  const DosAnswer written = _hardware.WriteFile(_state.Data().disk.fileHandle, CommanderFileBytes(_state));
-  if (written.failed)
+  std::uint32_t count = 0;
+  if (file->Write(CommanderFileBytes(_state), _stamp, count) != DosError::None)
   {
-    CloseAndFail(_state, _hardware, written.value);
+    Fail(_state);
     return;
   }
-  const DosAnswer closed = _hardware.CloseFile(_state.Data().disk.fileHandle);
-  if (closed.failed)
+  file.reset();
+  if (_files.SetAttribute(CommanderFileName(_state), 0) != DosError::None)
   {
-    Fail(_state, closed.value);
-    return;
-  }
-  const DosAnswer cleared = _hardware.SetFileAttributes(CommanderFileName(_state), NO_ATTRIBUTES);
-  if (cleared.failed)
-  {
-    Fail(_state, cleared.value);
+    Fail(_state);
   }
 }
 
-// ListCommanderFiles (0x03A8): the names of up to 40 *.cdr files with no attributes, without their extension, into
-// commanderFileList. _attributes, the attributes searched for, are the caller's CX.
-void ListCommanderFiles(GameState& _state, Hardware& _hardware, std::uint16_t _attributes)
+// ListCommanderFiles (0x03A8): the names of up to 40 .CDR files with no attributes, without their extension, into
+// commanderFileList, in the order of their names.
+void ListCommanderFiles(GameState& _state, FileStore& _files)
 {
   _state.Data().saveLoad.commanderFileCount = 0;
   _state.Data().saveLoad.commanderFileListNext = 0;
-  // commanderFilePattern, "*.cdr" and its NUL.
-  const std::string_view pattern(reinterpret_cast<const char*>(COMMANDER_FILE_PATTERN.data()), COMMANDER_FILE_PATTERN.size());
-  DosAnswer found = _hardware.FindFirstFile(pattern, _attributes);
-  while (!found.failed)
+  const std::span<std::uint8_t> list(_state.Data().saveLoad.commanderFileList);
+  for (const FileEntry& entry : _files.List())
   {
-    if (_state.Data().saveLoad.diskTransferArea[FOUND_ATTRIBUTE] == 0)
+    const std::size_t dot = entry.name.find('.');
+    if (entry.attribute != 0 || dot == std::string::npos || std::string_view(entry.name).substr(dot) != COMMANDER_FILE_EXTENSION)
     {
-      // The name the search found, up to its '.', at the index in commanderFileList that commanderFileListNext holds.
-      const std::span<const std::uint8_t> foundName =
-        std::span<const std::uint8_t>(_state.Data().saveLoad.diskTransferArea).subspan(FOUND_NAME);
-      const std::span<std::uint8_t> list(_state.Data().saveLoad.commanderFileList);
-      std::size_t to = _state.Data().saveLoad.commanderFileListNext;
-      for (std::size_t from = 0; foundName[from] != '.'; ++from)
-      {
-        list[to] = std::uint8_t{foundName[from]};
-        ++to;
-      }
-      list[to] = 0;
-      _state.Data().saveLoad.commanderFileListNext = static_cast<std::uint16_t>(to + 1);
-      const auto count = static_cast<std::uint8_t>(_state.Data().saveLoad.commanderFileCount + 1);
-      _state.Data().saveLoad.commanderFileCount = count;
-      if (count == MOST_COMMANDER_FILES)
-      {
-        return;
-      }
+      continue;
     }
-    found = _hardware.FindNextFile();
+    // The name up to its '.', at the index in commanderFileList that commanderFileListNext holds.
+    std::size_t to = _state.Data().saveLoad.commanderFileListNext;
+    for (std::size_t from = 0; from < dot; ++from)
+    {
+      list[to] = static_cast<std::uint8_t>(entry.name[from]);
+      ++to;
+    }
+    list[to] = 0;
+    _state.Data().saveLoad.commanderFileListNext = static_cast<std::uint16_t>(to + 1);
+    const auto count = static_cast<std::uint8_t>(_state.Data().saveLoad.commanderFileCount + 1);
+    _state.Data().saveLoad.commanderFileCount = count;
+    if (count == MOST_COMMANDER_FILES)
+    {
+      return;
+    }
   }
-  Fail(_state, found.value);
 }
 
 // DeleteCommanderFile (0x03F2).
-void DeleteCommanderFile(GameState& _state, Hardware& _hardware)
+void DeleteCommanderFile(GameState& _state, FileStore& _files)
 {
-  const DosAnswer deleted = _hardware.DeleteFile(CommanderFileName(_state));
-  if (deleted.failed)
+  if (_files.Delete(CommanderFileName(_state)) != DosError::None)
   {
-    Fail(_state, deleted.value);
+    Fail(_state);
   }
 }
 
@@ -302,28 +253,28 @@ std::uint16_t PrintAt(GameState& _state, std::string_view _text, std::uint16_t _
 }
 
 // CALL GetKey / JZ back: GetKey until a key comes (ADR-039). Returns the key.
-KeyPress WaitForKey(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<KeyPress> WaitForKey(GameState& _state, Host& _host)
 {
   for (;;)
   {
-    const KeyPress key = GetKey(_state, _hardware);
+    const KeyPress key = GetKey(_state);
     if (key.scanCode != 0)
     {
-      return key;
+      co_return key;
     }
-    AwaitNextKey(_hardware, key);
+    co_await AwaitNextKey(_host, key);
   }
 }
 
 // WaitForKey until one of _first and _second comes, every other key going back to it too. Returns it.
-std::uint8_t WaitForEitherKey(GameState& _state, Hardware& _hardware, std::uint8_t _first, std::uint8_t _second)
+[[nodiscard]] Task<std::uint8_t> WaitForEitherKey(GameState& _state, Host& _host, std::uint8_t _first, std::uint8_t _second)
 {
   for (;;)
   {
-    const std::uint8_t scan = WaitForKey(_state, _hardware).scanCode;
+    const std::uint8_t scan = (co_await WaitForKey(_state, _host)).scanCode;
     if (scan == _first || scan == _second)
     {
-      return scan;
+      co_return scan;
     }
   }
 }
@@ -343,7 +294,7 @@ DiscMenuExit LeaveGameLoopForDisk(GameState& _state, std::uint8_t _operation)
 {
   _state.Data().saveLoad.diskOperation = _operation;
   _state.Data().saveLoad.resumeAtDiskMenu = 1;
-  return DiscMenuExit{true, 0, 0};
+  return DiscMenuExit{true, 0};
 }
 
 // The input device's name, which ShowControlDevice reads from inputDeviceNames: the disc menu sets inputDevice to 0 or 2.
@@ -366,49 +317,45 @@ void RejectFileName(GameState& _state)
   PrintAt(_state, FILE_NAME_ERROR_TEXT, STATUS_POSITION);
 }
 
-// The disc menu's keys: DiscControlKeyLoop (CS:665E), with AL _al there, or ShowControlDevice before it when _showDevice; and
-// everything they run until the menu is left.
-DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _showDevice, std::uint8_t _al)
+// The disc menu's keys: DiscControlKeyLoop (CS:665E), or ShowControlDevice before it when _showDevice; and everything they run
+// until the menu is left.
+[[nodiscard]] Task<DiscMenuExit> RunDiscControlKeys(GameState& _state, Host& _host, bool _showDevice)
 {
-  std::uint8_t al = _al;
   bool showDevice = _showDevice;
   for (;;)
   {
     if (showDevice)
     {
       ShowControlDevice(_state);
-      al = 0; // the print's NUL
       showDevice = false;
     }
-    const KeyPress key = WaitForKey(_state, _hardware);
-    al = AlAfterKey(al, key);
+    const KeyPress key = co_await WaitForKey(_state, _host);
     // PUSH AX and POP AX round it.
     BlankHelpRows(_state);
     const std::uint8_t scan = key.scanCode;
     if (scan == SCAN_E)
     {
       PrintAt(_state, EXIT_QUESTION_TEXT, STATUS_POSITION);
-      if (WaitForEitherKey(_state, _hardware, SCAN_N, SCAN_Y) == SCAN_N)
+      if (co_await WaitForEitherKey(_state, _host, SCAN_N, SCAN_Y) == SCAN_N)
       {
         showDevice = true;
         continue;
       }
-      return LeaveGameLoopForDisk(_state, EXIT_TO_DOS);
+      co_return LeaveGameLoopForDisk(_state, EXIT_TO_DOS);
     }
     if (scan == SCAN_L || scan == SCAN_S || scan == SCAN_D)
     {
-      if (!PromptCommanderFileName(_state, _hardware))
+      if (!co_await PromptCommanderFileName(_state, _host))
       {
         // The prompt's return address dropped, and the menu's keys read on in its place.
         RejectFileName(_state);
-        al = 0;
         continue;
       }
-      return LeaveGameLoopForDisk(_state, scan == SCAN_L ? LOAD_COMMANDER : scan == SCAN_S ? SAVE_COMMANDER : DELETE_COMMANDER);
+      co_return LeaveGameLoopForDisk(_state, scan == SCAN_L ? LOAD_COMMANDER : scan == SCAN_S ? SAVE_COMMANDER : DELETE_COMMANDER);
     }
     if (scan == SCAN_C)
     {
-      return LeaveGameLoopForDisk(_state, CATALOGUE_COMMANDERS);
+      co_return LeaveGameLoopForDisk(_state, CATALOGUE_COMMANDERS);
     }
     if (scan == SCAN_K)
     {
@@ -418,7 +365,7 @@ DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _sh
     }
     if (scan == SCAN_M)
     {
-      if (IsMouseDriverInstalled(_hardware).installed)
+      if (IsMouseDriverInstalled(_host))
       {
         _state.Data().saveLoad.inputDevice = MOUSE_DEVICE;
         showDevice = true;
@@ -427,13 +374,11 @@ DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _sh
       PrintAt(_state, NO_MOUSE_TEXT, STATUS_POSITION);
       PrintAt(_state, MOUSE_HELP_LINES[0], HELP_POSITION);
       PrintAt(_state, MOUSE_HELP_LINES[1], SECOND_HELP_POSITION); // INC SI: the second line
-      al = 0;
       continue;
     }
     if (scan == SCAN_V)
     {
       PrintAt(_state, VERSION_STRING, HELP_POSITION);
-      al = 0;
       continue;
     }
     if (scan < SCAN_F1 || scan >= SCAN_PAST_F10)
@@ -441,13 +386,13 @@ DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _sh
       continue;
     }
     _state.Data().saveLoad.resumeAtDiskMenu = 0;
-    return DiscMenuExit{false, scan, al};
+    co_return DiscMenuExit{false, scan};
   }
 }
 
 // What the disk operation Start did came to (CS:67E7): LOADED:, SAVED:, DELETED: and the name, or CATALOGUED and the catalogue;
-// a loaded name becomes the default. Returns AL as it leaves it: its last print's NUL, or once a name is copied, its last byte.
-std::uint8_t ShowDiskResult(GameState& _state)
+// a loaded name becomes the default.
+void ShowDiskResult(GameState& _state)
 {
   PrintAt(_state, BLANK_STATUS_TEXT, STATUS_POSITION);
   // BL = diskOperation - 1, BH = 0, doubled: the operation's name in diskOperationNames. Only operations 1-4 come back to the
@@ -458,7 +403,7 @@ std::uint8_t ShowDiskResult(GameState& _state)
   {
     PrintAt(_state, CATALOGUE_OK_TEXT, result);
     PrintCommanderCatalogue(_state);
-    return 0;
+    return;
   }
   // The name without its extension: a NUL over its '.', which the search, SI going up, looks for.
   const std::span<std::uint8_t> name(_state.Data().saveLoad.commanderFileName);
@@ -470,21 +415,13 @@ std::uint8_t ShowDiskResult(GameState& _state)
   PrintAt(_state, TextIn(name), result);
   if (_state.Data().saveLoad.diskOperation != LOAD_COMMANDER)
   {
-    return 0;
+    return;
   }
   // Its eight bytes copied to defaultCommanderName by a LOOP.
   const std::span<std::uint8_t> commander(_state.Data().commander.defaultCommanderName);
-  std::size_t from = 0;
-  std::uint8_t copied = 0;
-  for (std::uint16_t left = MOST_NAME_CHARACTERS;;)
+  for (std::size_t from = 0; from < MOST_NAME_CHARACTERS; ++from)
   {
-    copied = name[from];
-    commander[from] = copied;
-    ++from;
-    if (--left == 0)
-    {
-      return copied;
-    }
+    commander[from] = name[from];
   }
 }
 
@@ -496,27 +433,25 @@ std::uint8_t ShowDiskResult(GameState& _state)
 
 } // namespace
 
-void PerformDiskRequest(GameState& _state, Hardware& _hardware, std::uint8_t _request, std::uint16_t _attributes)
+void PerformDiskRequest(GameState& _state, Host& _host, std::uint8_t _request)
 {
-  _hardware.SetDiskTransferArea(_state.Data().saveLoad.diskTransferArea);
   // DEC AL until it reaches 0: 1 load, 2 save, 3 delete.
   switch (_request)
   {
   case LOAD_COMMANDER:
-    LoadCommanderFile(_state, _hardware);
+    LoadCommanderFile(_state, _host.Files());
     return;
   case SAVE_COMMANDER:
-    SaveCommanderFile(_state, _hardware);
+    SaveCommanderFile(_state, _host.Files(), _host.FileStampNow());
     return;
   case DELETE_COMMANDER:
-    DeleteCommanderFile(_state, _hardware);
+    DeleteCommanderFile(_state, _host.Files());
     return;
   default:
-    ListCommanderFiles(_state, _hardware, _attributes);
+    ListCommanderFiles(_state, _host.Files());
     return;
   }
 }
-
 void SaveStartupCommander(GameState& _state)
 {
   // REP MOVSB within the data segment, a byte at a time: commanderBlock into startupCommander, the whole record, as the direction flag
@@ -524,58 +459,40 @@ void SaveStartupCommander(GameState& _state)
   _state.Data().saveLoad.startupCommander = _state.Data().commander;
 }
 
-void ShowDiskError(GameState& _state)
-{
-  _state.Data().disk.diskError = 0;
-  if ((_state.Data().drawing.screenLayout & TEXT_LAYOUT_BIT) == 0)
-  {
-    DrawScreenString(_state, DISK_ERROR_TEXT, ERROR_INK, GameState::VIDEO_SEGMENT, GRAPHICS_ERROR_POSITION);
-    return;
-  }
-  // The characters alone, over the text page's attributes.
-  static_assert(DISK_ERROR_TEXT.size() == DISK_ERROR_CHARACTERS);
-  std::uint16_t to = TEXT_ERROR_POSITION;
-  for (const char character : DISK_ERROR_TEXT)
-  {
-    _state.SetVideoByte(to, static_cast<std::uint8_t>(character));
-    to = Offset(to, 2);
-  }
-}
-
-DiscMenuExit ShowDiscControlScreen(GameState& _state, Hardware& _hardware, bool _backward)
+[[nodiscard]] Task<DiscMenuExit> ShowDiscControlScreen(GameState& _state, Host& _host)
 {
   if (_state.Data().saveLoad.resumeAtDiskMenu == 0)
   {
-    PrintAt(_state, DrawDockedFrame(_state, _hardware, DISC_CONTROL_FRAME, _backward), TITLE_POSITION);
+    PrintAt(_state, DrawDockedFrame(_state, _host, DISC_CONTROL_FRAME), TITLE_POSITION);
     PrintCountedTextLines(_state, DISC_MENU_TEXT, MENU_POSITION);
-    return RunDiscControlKeys(_state, _hardware, true, 0);
+    co_return co_await RunDiscControlKeys(_state, _host, true);
   }
   // Back from Start's disk work.
   if (_state.Data().disk.diskError == 0)
   {
-    const std::uint8_t al = ShowDiskResult(_state);
-    return RunDiscControlKeys(_state, _hardware, false, al);
+    ShowDiskResult(_state);
+    co_return co_await RunDiscControlKeys(_state, _host, false);
   }
   PrintAt(_state, RETRY_TEXT, STATUS_POSITION);
-  if (WaitForEitherKey(_state, _hardware, SCAN_N, SCAN_Y) == SCAN_N)
+  if (co_await WaitForEitherKey(_state, _host, SCAN_N, SCAN_Y) == SCAN_N)
   {
-    return RunDiscControlKeys(_state, _hardware, true, 0);
+    co_return co_await RunDiscControlKeys(_state, _host, true);
   }
   PrintAt(_state, BLANK_STATUS_TEXT, STATUS_POSITION);
-  return LeaveGameLoopForDisk(_state, _state.Data().saveLoad.diskOperation);
+  co_return LeaveGameLoopForDisk(_state, _state.Data().saveLoad.diskOperation);
 }
 
-bool PromptCommanderFileName(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<bool> PromptCommanderFileName(GameState& _state, Host& _host)
 {
   PrintAt(_state, FILE_NAME_PROMPT_TEXT, STATUS_POSITION);
   const std::span<std::uint8_t> name(_state.Data().saveLoad.commanderFileName);
-  ReadTextLine(_state, _hardware, name, MOST_NAME_CHARACTERS, GameState::VIDEO_SEGMENT, NAME_POSITION);
+  co_await ReadTextLine(_state, _host, name, MOST_NAME_CHARACTERS, NAME_POSITION);
   // A letter, then letters and digits, folded to upper case.
   std::size_t letter = 0;
   auto character = static_cast<std::uint8_t>(name[letter] & LOWER_CASE_BIT_CLEAR);
   if (name[letter] == 0 || character < 'A' || character > 'Z')
   {
-    return false;
+    co_return false;
   }
   name[letter] = character;
   for (;;)
@@ -592,7 +509,7 @@ bool PromptCommanderFileName(GameState& _state, Hardware& _hardware)
     }
     if (!IsNameCharacter(character))
     {
-      return false;
+      co_return false;
     }
     name[letter] = character;
   }
@@ -604,7 +521,7 @@ bool PromptCommanderFileName(GameState& _state, Hardware& _hardware)
     ++letter;
     if (--left == 0)
     {
-      return true;
+      co_return true;
     }
   }
 }

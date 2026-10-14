@@ -23,7 +23,7 @@ public:
   TEST_METHOD(TwinTakesASetUp)
   {
     TwinRig rig("TwinSetUp");
-    rig.Both([](Elite::Platform&, Elite::GameState& _state) { _state.Data().commander.fuel = 0x20; });
+    rig.Both([](Elite::Host&, Elite::GameState& _state) { _state.Data().commander.fuel = 0x20; });
     rig.Play("key space; wait 4\ndigest docked");
   }
 };

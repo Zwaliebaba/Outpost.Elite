@@ -11,12 +11,6 @@ namespace Elite
 /// data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct VideoState
 {
-  /// 'elite' + two digits + '.lo' and its NUL, for the text layout
-  std::uint8_t screenshotTextFileName[11];
-  /// 'elite' + two digits + '.hi' and its NUL, for the graphics layouts
-  std::uint8_t screenshotGraphicsFileName[11];
-  /// two ASCII digits, '00' in the file, incremented before each screenshot
-  std::uint16_t screenshotNumber;
   /// colorFillBytes[drawColor], set by DrawDisc for FillSpan
   std::uint8_t discFillByte;
   /// DrawDisc's centre x
@@ -100,9 +94,6 @@ struct VideoState
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
   {
-    _visitor("screenshotTextFileName", _self.screenshotTextFileName);
-    _visitor("screenshotGraphicsFileName", _self.screenshotGraphicsFileName);
-    _visitor("screenshotNumber", _self.screenshotNumber);
     _visitor("discFillByte", _self.discFillByte);
     _visitor("discCenterX", _self.discCenterX);
     _visitor("discRadiusRows", _self.discRadiusRows);

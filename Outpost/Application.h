@@ -15,8 +15,9 @@ namespace Outpost
 class Application
 {
 public:
-  /// Runs until the window is closed or the game ends. Returns the process's exit code.
-  [[nodiscard]] int Run(HINSTANCE _instance);
+  /// Runs until the window is closed or the game ends, with the cheat on when _cheat (the command line's --cheat, D80). Returns the
+  /// process's exit code.
+  [[nodiscard]] int Run(HINSTANCE _instance, bool _cheat);
 
 private:
   void Fail(const std::wstring& _message) const;

@@ -3,8 +3,8 @@
 #include "Cga.h"
 #include "FlightSnapshot.h"
 #include "GameState.h"
-#include "Platform.h"
-#include "PlatformRig.h"
+#include "Host.h"
+#include "HostRig.h"
 #include "ReferenceRig.h"
 #include "Replay.h"
 #include "SpaceViewLayers.h"
@@ -467,19 +467,19 @@ public:
     constexpr std::uint8_t EARLY_VALUE = 3;
     const auto background = [](std::size_t _row, std::size_t _x) { return static_cast<std::uint8_t>(Pattern(_row, _x) ^ 2); };
     const auto late = [](std::size_t _row, std::size_t _x) { return static_cast<std::uint8_t>(Pattern(_row, _x) ^ 3); };
-    PlatformRig rig("SpaceViewPixels");
+    HostRig rig("SpaceViewPixels");
     rig.Start(
-      [&rig, &background, &late]
+      [&rig, &background, &late]() -> Elite::Task<void>
       {
-        Elite::Hardware& hardware = rig.Native();
+        Elite::Host& host = rig.Host();
         Elite::GameState& state = rig.State();
-        Elite::SetGraphicsMode(hardware); // the game's mode 4, in which the CGA shows the view
-        hardware.BeginSpaceViewFrame();
+        Elite::SetGraphicsMode(state, host); // the game's mode 4, in which the CGA shows the view
+        host.BeginSpaceViewFrame();
         for (std::size_t x = 0; x < Elite::SPACE_VIEW_WIDTH_PIXELS; ++x)
         {
           DrawPixel(state, EARLY_ROW, x, EARLY_VALUE);
         }
-        hardware.BeginSpaceViewObject();
+        host.BeginSpaceViewObject();
         for (std::size_t row = 0; row < Elite::SPACE_VIEW_HEIGHT_PIXELS; ++row)
         {
           for (std::size_t x = 0; x < Elite::SPACE_VIEW_WIDTH_PIXELS && row != EARLY_ROW; ++x)
@@ -487,9 +487,9 @@ public:
             DrawPixel(state, row, x, Pattern(row, x));
           }
         }
-        hardware.EndSpaceViewObject(PATTERN_SLOT);
-        hardware.BeginSpaceViewObject();
-        hardware.NoteSpaceViewModel();
+        host.EndSpaceViewObject(PATTERN_SLOT);
+        host.BeginSpaceViewObject();
+        host.NoteSpaceViewModel();
         for (std::size_t row = MODEL_FIRST_ROW; row <= MODEL_LAST_ROW; ++row)
         {
           for (std::size_t x = 0; x < Elite::SPACE_VIEW_WIDTH_PIXELS; ++x)
@@ -497,21 +497,21 @@ public:
             DrawPixel(state, row, x, static_cast<std::uint8_t>(Pattern(row, x) ^ 1));
           }
         }
-        hardware.EndSpaceViewObject(MODEL_SLOT);
-        hardware.BeginSpaceViewObject();
+        host.EndSpaceViewObject(MODEL_SLOT);
+        host.BeginSpaceViewObject();
         for (std::size_t x = 0; x < Elite::SPACE_VIEW_WIDTH_PIXELS; ++x)
         {
           DrawPixel(state, BACKGROUND_ROW, x, background(BACKGROUND_ROW, x));
         }
-        hardware.EndSpaceViewRendered();
-        hardware.BeginSpaceViewObject();
+        host.EndSpaceViewRendered();
+        host.BeginSpaceViewObject();
         for (std::size_t x = 0; x < Elite::SPACE_VIEW_WIDTH_PIXELS; ++x)
         {
           DrawPixel(state, LATE_ROW, x, late(LATE_ROW, x));
         }
-        hardware.EndSpaceViewObject(LATE_SLOT);
-        Elite::PresentSpaceView(state, hardware, false);
-        hardware.PublishFlightSnapshot(Elite::TakeFlightSnapshot(state), false);
+        host.EndSpaceViewObject(LATE_SLOT);
+        co_await Elite::PresentSpaceView(state, host);
+        host.PublishFlightSnapshot(Elite::TakeFlightSnapshot(state), false);
       });
     Assert::IsTrue(rig.Host().RunUntil(10'000'000) == Elite::StopReason::Terminated, L"the frame is drawn");
 

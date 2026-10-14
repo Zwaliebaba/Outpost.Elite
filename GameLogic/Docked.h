@@ -2,7 +2,7 @@
 #pragma once
 
 #include "GameState.h"
-#include "Hardware.h"
+#include "Host.h"
 #include "Input.h"
 #include "Text.h"
 
@@ -21,53 +21,45 @@ namespace Elite
 // parameters, its results come back, and every byte it writes is written as the original writes it, in
 // the same order and at the same width.
 
-/// The key that closed a docked screen, and AL as the original leaves it with the key in AH.
+/// The key that closed a docked screen.
 struct ScreenKey
 {
   std::uint8_t scanCode; ///< Esc, or the F-key of the screen to show next
-  std::uint8_t al;       ///< what the screen left in AL, shifted left by each GetKey that took a code, its Shift in bit 0
-  /// BP as the screen leaves it when it selects the system at the cursor as it closes (SelectSystemAtCursor), as the screens
-  /// shown next read it; a screen that does not leaves BP as it found it.
-  std::optional<std::uint16_t> countLeft;
 };
-
-/// AL as GetKey leaves it, from _al, for _key: shifted left with the key's Shift in bit 0 when it took a code, and as it was
-/// otherwise. The docked menus hold AL from one turn of their loops to the next, and fire the stick with it (ReadSteering).
-[[nodiscard]] std::uint8_t AlAfterKey(std::uint8_t _al, const KeyPress& _key) noexcept;
 
 /// AwardArchangelTitle (CS:49E4): 'ARCHANGEL' over the rank in commanderRankText.
 void AwardArchangelTitle(GameState& _state);
 
 /// WaitForScreenExitKey (CS:60B4), the tail that ShowSystemDataScreen, ShowMarketPricesScreen, ShowCommanderStatusScreen and
-/// ShowInventoryScreen jump into: GetKey until Esc, or an F-key other than the screen's own, _ownKey, then SelectSystemAtCursor
-/// with _countIfNone. _al is what the screen left in AL. Waits for keys as a rule (ADR-015).
-ScreenKey WaitForScreenExitKey(GameState& _state, Hardware& _hardware, std::uint8_t _ownKey, std::uint8_t _al, std::uint16_t _countIfNone);
+/// ShowInventoryScreen jump into: GetKey until Esc, or an F-key other than the screen's own, _ownKey, then SelectSystemAtCursor.
+/// Waits for keys as a rule (ADR-015).
+[[nodiscard]] Task<ScreenKey> WaitForScreenExitKey(GameState& _state, Host& _host, std::uint8_t _ownKey);
 
 /// ShowSellCargoScreen (CS:5A30), F2, with PrintNameAndPrice, PrintUnit and EndTradeRow as one unit (ADR-012 item 14): the
-/// products with their sell prices and the units held, then RunCargoTradeMenu, which returns the key that closes it. _backward
-/// is the direction flag, which DrawDockedFrame goes by. Waits for keys as a rule (ADR-015).
-ScreenKey ShowSellCargoScreen(GameState& _state, Hardware& _hardware, bool _backward);
+/// products with their sell prices and the units held, then RunCargoTradeMenu, which returns the key that closes it. Waits for
+/// keys as a rule (ADR-015).
+[[nodiscard]] Task<ScreenKey> ShowSellCargoScreen(GameState& _state, Host& _host);
 
 /// ShowBuyCargoScreen (CS:5AE9), F3, as ShowSellCargoScreen: the products with their buy prices and the quantities on sale,
 /// drawn from the market's random state the first time after an arrival, then RunCargoTradeMenu.
-ScreenKey ShowBuyCargoScreen(GameState& _state, Hardware& _hardware, bool _backward);
+[[nodiscard]] Task<ScreenKey> ShowBuyCargoScreen(GameState& _state, Host& _host);
 
 /// ShowCommanderStatusScreen (CS:5EA9), F9, docked or in flight: docked, a mission's briefing or debriefing first; then the
 /// commander, systems, fuel, cash, legal status, rating and equipment, and the wait for the key that closes it
-/// (WaitForScreenExitKey, with _countIfNone). _backward is the direction flag, which DrawDockedFrame goes by.
-ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _countIfNone);
+/// (WaitForScreenExitKey).
+[[nodiscard]] Task<ScreenKey> ShowCommanderStatusScreen(GameState& _state, Host& _host);
 
 /// ShowInventoryScreen (CS:6020), F10: fuel, cash and every product held, and the wait for the key that closes it, as
 /// ShowCommanderStatusScreen's.
-ScreenKey ShowInventoryScreen(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _countIfNone);
+[[nodiscard]] Task<ScreenKey> ShowInventoryScreen(GameState& _state, Host& _host);
 
 /// ShowMissionBriefing (CS:6DF2): missionStage=1, and the EMERGENCY screen of missionNumber, which waits for a key (Y or N
 /// for the supernova's refugees, who take the hold).
-void ShowMissionBriefing(GameState& _state, Hardware& _hardware, bool _backward);
+[[nodiscard]] Task<void> ShowMissionBriefing(GameState& _state, Host& _host);
 
 /// ShowMissionDebriefing (CS:6EB7): nothing while the mission is not done; otherwise the TASK COMPLETE screen, which waits
 /// for a key, and the reward.
-void ShowMissionDebriefing(GameState& _state, Hardware& _hardware, bool _backward);
+[[nodiscard]] Task<void> ShowMissionDebriefing(GameState& _state, Host& _host);
 
 /// PrintCreditsOnMessageLine (CS:658F): creditBalanceText at B800:0078 in the swapped textAttribute, which is swapped
 /// back after.
@@ -79,43 +71,34 @@ void FormatFuelLightYears(GameState& _state);
 /// DrawDockedFrame (CS:7C88), up to its title: a docked screen's text page from the first two bytes of its descriptor, the
 /// screen's attribute _screen and the frame's, _frame: the text mode set unless screenLayout says the text page shows,
 /// textAttribute the screen's attribute without its blink bit and the border its background, the page cleared, the frame's rows
-/// at lines 0, 2 and 24 and its sides in the frame's attribute, and its six corners and tees from frameCorners. _backward is the
-/// direction flag, which the clear and the rows' REP STOSW go by.
-void DrawDockedFrameAt(GameState& _state, Hardware& _hardware, std::uint8_t _screen, std::uint8_t _frame, bool _backward);
+/// at lines 0, 2 and 24 and its sides in the frame's attribute, and its six corners and tees from frameCorners. The clear and the
+/// rows' REP STOSW run forwards.
+void DrawDockedFrameAt(GameState& _state, Host& _host, std::uint8_t _screen, std::uint8_t _frame);
 
 /// DrawDockedFrame (CS:7C88): DrawDockedFrameAt from _descriptor, the bytes of GameData from where a frame's descriptor starts to the end
 /// of the member that holds it: the two attributes, then the title. The symbol table sizes a descriptor as it pleases, two bytes or the
 /// whole screen's text, so the caller passes the bytes its title is within. Returns the title.
-inline std::string_view DrawDockedFrame(GameState& _state, Hardware& _hardware, std::span<const std::uint8_t> _descriptor, bool _backward)
+inline std::string_view DrawDockedFrame(GameState& _state, Host& _host, std::span<const std::uint8_t> _descriptor)
 {
-  DrawDockedFrameAt(_state, _hardware, ByteWithin(_descriptor, 0), ByteWithin(_descriptor, 1), _backward);
+  DrawDockedFrameAt(_state, _host, ByteWithin(_descriptor, 0), ByteWithin(_descriptor, 1));
   return TextWithin(_descriptor, 2);
 }
 
 /// DrawDockedFrame (CS:7C88) for a frame's descriptor that is a constant of the data segment (D38), its two attributes and then
 /// its title, a table of the subsystem's: DrawDockedFrameAt from the attributes. Returns the title.
-std::string_view DrawDockedFrame(GameState& _state, Hardware& _hardware, std::string_view _descriptor, bool _backward);
+std::string_view DrawDockedFrame(GameState& _state, Host& _host, std::string_view _descriptor);
 
 /// DrawFrameSides (CS:7CE9): BAh in attribute _attribute at columns 0 and 39 of _rows rows of the text page in video memory from _cell,
 /// 65,536 for 0, as LOOP counts. The original takes the page's segment in ES, which is the video segment wherever it is called.
 void DrawFrameSides(GameState& _state, std::uint16_t _cell, std::uint16_t _rows, std::uint8_t _attribute);
 
-/// DrawFrameRow (CS:7CF8): the character and attribute _value in 38 cells of video memory from _cell, forwards or, _backwards, down.
-void DrawFrameRow(GameState& _state, std::uint16_t _cell, std::uint16_t _value, bool _backwards);
-
-/// How the docked screens end (DockedKeyDispatch, CS:0B40), and with them RunTitleAndDocked.
-struct DockedExit
-{
-  /// The disc menu left through LeaveGameLoopForDisk, which returns past RunTitleAndDocked (DiscMenuExit); otherwise F1 ended them.
-  bool leaves;
-  std::uint16_t countLeft; ///< BP, as the screens leave it
-  bool backward;           ///< the direction flag, as they leave it
-};
+/// DrawFrameRow (CS:7CF8): the character and attribute _value in 38 cells of video memory from _cell,.
+void DrawFrameRow(GameState& _state, std::uint16_t _cell, std::uint16_t _value);
 
 /// RunTitleAndDocked (CS:7D81): unless titleShown, the title (RunTitle, CS:7D8B) until a key, the credits and a new game; then the
 /// docked screens (DockedKeyDispatch, CS:0B40) from the status screen, or from the disc menu after a disk request, until F1 or the
-/// disc menu leaves for the disk. _countIfNone is BP and _backward the direction flag as GameLoop leaves them, which the screens
-/// carry from one to the next; after the title they are its 20h, PresentSpaceView's, and clear. Waits as a rule (ADR-015).
-DockedExit RunTitleAndDocked(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward);
+/// disc menu leaves for the disk. Returns whether the disc menu left for the disk, through LeaveGameLoopForDisk (DiscMenuExit);
+/// otherwise F1 ended them. Waits as a rule (ADR-015).
+[[nodiscard]] Task<bool> RunTitleAndDocked(GameState& _state, Host& _host);
 
 } // namespace Elite

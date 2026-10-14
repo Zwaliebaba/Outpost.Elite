@@ -112,11 +112,11 @@ void ShowCargoMessage(GameState& _state, std::string_view _text, std::uint8_t _s
 }
 
 // 6C25 and 6D10: "Quantity?", up to three characters typed into quantityText, and ParseQuantity on them.
-[[nodiscard]] Quantity ReadQuantity(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<Quantity> ReadQuantity(GameState& _state, Host& _host)
 {
   PrintTextModeString(_state, QUANTITY_PROMPT_TEXT, MESSAGE_OFFSET);
-  ReadTextLine(_state, _hardware, _state.Data().menus.quantityText, QUANTITY_DIGITS, GameState::VIDEO_SEGMENT, QUANTITY_INPUT_OFFSET);
-  return ParseQuantity(_state.Data().menus.quantityText);
+  co_await ReadTextLine(_state, _host, _state.Data().menus.quantityText, QUANTITY_DIGITS, QUANTITY_INPUT_OFFSET);
+  co_return ParseQuantity(_state.Data().menus.quantityText);
 }
 
 // The commander's credits, in tenths: the low word, then the high.
@@ -186,68 +186,68 @@ void StoreLot(GameState& _state, const CargoLot& _lot)
 
 // 6C0F: S on the sell screen, once OpenCargoMessage has saved the attribute: a typed quantity from the hold to the market, for
 // the sell price (CargoSold). Returns the message for ShowCargoMessage, after the jumps back the original takes to it.
-[[nodiscard]] std::string_view SellCargo(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<std::string_view> SellCargo(GameState& _state, Host& _host)
 {
   const CargoRefusal refusal = RefuseToSell(SelectedLot(_state));
   if (refusal != CargoRefusal::None)
   {
-    return RefusalText(refusal);
+    co_return RefusalText(refusal);
   }
-  const Quantity quantity = ReadQuantity(_state, _hardware);
+  const Quantity quantity = co_await ReadQuantity(_state, _host);
   if (!quantity.valid)
   {
-    return QUANTITY_ERROR_TEXT;
+    co_return QUANTITY_ERROR_TEXT;
   }
   if (quantity.value == 0)
   {
-    return NOTHING_SOLD_TEXT;
+    co_return NOTHING_SOLD_TEXT;
   }
   // The sell price, the word after the row's buy price.
   const CargoTrade trade = CargoSold(SelectedLot(_state), Low(quantity.value), SelectedRowPrices(_state).resale);
   if (trade.refusal != CargoRefusal::None)
   {
-    return RefusalText(trade.refusal);
+    co_return RefusalText(trade.refusal);
   }
   StoreLot(_state, trade.lot);
   PrintCargoQuantity(_state, trade.lot.held);
-  return SOLD_TEXT;
+  co_return SOLD_TEXT;
 }
 
 // 6CBD: B on the buy screen, once OpenCargoMessage has saved the attribute: a typed quantity from the market into the hold, if
 // there is room and the cash, for the buy price (CargoBought). Returns the message for ShowCargoMessage, after the jumps back
 // the original takes to it.
-[[nodiscard]] std::string_view BuyCargo(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<std::string_view> BuyCargo(GameState& _state, Host& _host)
 {
   const bool largeBay = _state.Data().commander.largeCargoBayFitted == 1;
   const CargoRefusal refusal = RefuseToBuy(SelectedLot(_state), largeBay);
   if (refusal != CargoRefusal::None)
   {
-    return RefusalText(refusal);
+    co_return RefusalText(refusal);
   }
-  const Quantity quantity = ReadQuantity(_state, _hardware);
+  const Quantity quantity = co_await ReadQuantity(_state, _host);
   if (!quantity.valid)
   {
-    return QUANTITY_ERROR_TEXT;
+    co_return QUANTITY_ERROR_TEXT;
   }
   if (quantity.value == 0)
   {
-    return NOTHING_BOUGHT_TEXT;
+    co_return NOTHING_BOUGHT_TEXT;
   }
   const CargoTrade trade = CargoBought(SelectedLot(_state), largeBay, Low(quantity.value), SelectedRowPrices(_state).price);
   if (trade.refusal != CargoRefusal::None)
   {
-    return RefusalText(trade.refusal);
+    co_return RefusalText(trade.refusal);
   }
   StoreLot(_state, trade.lot);
   PrintCargoQuantity(_state, trade.lot.onSale);
-  return BOUGHT_TEXT;
+  co_return BOUGHT_TEXT;
 }
 
 } // namespace
 
-ScreenKey ShowMarketPricesScreen(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _countIfNone)
+[[nodiscard]] Task<ScreenKey> ShowMarketPricesScreen(GameState& _state, Host& _host)
 {
-  const std::string_view title = DrawDockedFrame(_state, _hardware, MARKET_PRICES_FRAME, _backward);
+  const std::string_view title = DrawDockedFrame(_state, _host, MARKET_PRICES_FRAME);
   // The system's name, cut for good at its first space after the first letter.
   const std::span<std::uint8_t> name(_state.Data().commander.currentSystem.name);
   for (std::size_t letter = 1;; ++letter)
@@ -285,8 +285,7 @@ ScreenKey ShowMarketPricesScreen(GameState& _state, Hardware& _hardware, bool _b
       break;
     }
   }
-  // The last print leaves AL 0.
-  return WaitForScreenExitKey(_state, _hardware, SCAN_F8, 0, _countIfNone);
+  co_return co_await WaitForScreenExitKey(_state, _host, SCAN_F8);
 }
 
 bool SubtractCredits(GameState& _state, std::uint32_t _tenths)
@@ -430,21 +429,18 @@ void PrintCargoQuantity(GameState& _state, std::uint16_t _quantity)
   _state.Data().drawing.textAttribute = attribute;
 }
 
-ScreenKey RunCargoTradeMenu(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<ScreenKey> RunCargoTradeMenu(GameState& _state, Host& _host)
 {
   _state.Data().menus.menuFirstRowAttr = CARGO_MENU_FIRST_ROW;
   _state.Data().menus.menuRowCount = static_cast<std::uint8_t>(COMMODITY_KINDS);
-  // StartMenu's last ToggleMenuRowHighlight leaves AL the attribute it toggled the row to, which it left in textAttribute.
-  MenuLoop loop{StartMenu(_state).row, 0};
-  loop.al = _state.Data().drawing.textAttribute;
+  std::uint16_t row = StartMenu(_state).row;
   for (;;)
   {
     // 6B43: the steering; then the keys.
-    loop = SteerMenuCursor(_state, _hardware, loop);
+    row = SteerMenuCursor(_state, _host, row);
     for (;;)
     {
-      const KeyPress key = PollMenuKey(_state, _hardware);
-      loop.al = AlAfterKey(loop.al, key);
+      const KeyPress key = co_await PollMenuKey(_state, _host);
       const std::uint8_t code = key.scanCode;
       if (code == 0)
       {
@@ -454,28 +450,35 @@ ScreenKey RunCargoTradeMenu(GameState& _state, Hardware& _hardware)
       PrintCreditsOnMessageLine(_state);
       if (code == SCAN_B || code == SCAN_S)
       {
-        // B on the buy screen and S on the sell screen: a typed quantity bought or sold, and its message, after which AL is
-        // the attribute it pops back. On the other screen the key does nothing.
+        // B on the buy screen and S on the sell screen: a typed quantity bought or sold, and its message. On the other screen
+        // the key does nothing.
         const bool buy = code == SCAN_B;
         if ((_state.Data().docked.tradeScreenIsBuy == 1) == buy)
         {
           const std::uint8_t saved = OpenCargoMessage(_state);
-          ShowCargoMessage(_state, buy ? BuyCargo(_state, _hardware) : SellCargo(_state, _hardware), saved);
-          loop.al = saved;
+          std::string_view message;
+          if (buy)
+          {
+            message = co_await BuyCargo(_state, _host);
+          }
+          else
+          {
+            message = co_await SellCargo(_state, _host);
+          }
+          ShowCargoMessage(_state, message, saved);
         }
         break;
       }
       if (code == SCAN_UP || code == SCAN_DOWN)
       {
-        loop.row = (code == SCAN_UP ? MoveMenuCursorUp(_state, loop.row) : MoveMenuCursorDown(_state, loop.row)).row;
-        loop.al = _state.Data().drawing.textAttribute;
+        row = (code == SCAN_UP ? MoveMenuCursorUp(_state, row) : MoveMenuCursorDown(_state, row)).row;
         continue;
       }
       // The screen's own key, F2 to sell or F3 to buy, does nothing here.
       const auto own = static_cast<std::uint8_t>(SCAN_F2 + _state.Data().docked.tradeScreenIsBuy);
       if (code != own && IsScreenKey(code))
       {
-        return ScreenKey{code, loop.al, std::nullopt};
+        co_return ScreenKey{code};
       }
       break;
     }

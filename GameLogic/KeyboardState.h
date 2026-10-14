@@ -7,6 +7,13 @@
 namespace Elite
 {
 
+/// A key going down or coming up, as the host gives it to the game (D88): the key by the number keyDown indexes it by (Keys), 01h-7Fh.
+struct KeyEvent
+{
+  std::uint8_t key;
+  bool down;
+};
+
 /// The keys the game reads in keyDown, by their scan codes: what each does.
 namespace Keys
 {
@@ -55,9 +62,7 @@ inline constexpr std::uint8_t COMMA = 0x33;
 inline constexpr std::uint8_t PERIOD = 0x34;
 /// makes ReadScanCode OR 80h into the buffered code
 inline constexpr std::uint8_t RIGHT_SHIFT = 0x36;
-/// with Alt, the screen dump (GetKey, PollScreenDumpKey); scan code 37h is */PrtSc
-inline constexpr std::uint8_t PRINT_SCREEN = 0x37;
-/// with PrtSc the screen dump; with W the mis-jump latch
+/// with W the mis-jump latch
 inline constexpr std::uint8_t ALT = 0x38;
 /// fire on the keyboard (ReadFireButton); the pause screen clears it on resume
 inline constexpr std::uint8_t SPACE = 0x39;

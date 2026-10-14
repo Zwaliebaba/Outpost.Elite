@@ -151,9 +151,6 @@ void SetStartState(GameData& _data) noexcept
   FillText(_data.text.bountyText, "BOUNTY:000000 Cr");
   FillText(_data.text.shipIdentityText, "CLASS: 1234567 TYPE: 12345678901");
   Fill(_data.text.inputCursorText, {0x20, 0x20});
-  FillText(_data.video.screenshotTextFileName, "elite\0\0.lo");
-  FillText(_data.video.screenshotGraphicsFileName, "elite\0\0.hi");
-  _data.video.screenshotNumber = 0x3030;
   _data.video.fringeRandomA = 0x3039;
   _data.video.fringeRandomB = 0x0045;
   _data.playerShip.playerEnergy = 0x03FF;

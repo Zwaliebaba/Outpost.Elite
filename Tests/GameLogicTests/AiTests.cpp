@@ -52,7 +52,7 @@ void DrawRandomNumbers(TwinRig& _rig, std::uint32_t _draws)
 template <typename Struct> [[nodiscard]] std::uint8_t TwinByte(TwinRig& _rig, DataByte<Struct> _member)
 {
   std::uint8_t value = 0;
-  _rig.Both([&value, _member](Elite::Platform&, Elite::GameState& _state) { value = DataByteIn(_state, _member); });
+  _rig.Both([&value, _member](Elite::Host&, Elite::GameState& _state) { value = DataByteIn(_state, _member); });
   return value;
 }
 

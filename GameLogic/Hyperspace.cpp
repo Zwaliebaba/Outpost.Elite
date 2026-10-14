@@ -94,8 +94,8 @@ constexpr std::uint16_t COUNTDOWN_MESSAGE_FRAMES = 10;
 
 // GalacticJump (0x485B), which CompleteHyperspaceJump jumps to and which jumps back to 0x4733: the next galaxy, the ninth now
 // and then after the eighth, and the system nearest a random point of its galactic chart selected (FindNearestSystem, then
-// SelectSystemAtCursor). _countIfNone is BP, what FindNearestSystem makes the index from when no system is on the chart.
-void GalacticJump(GameState& _state, std::uint16_t _countIfNone)
+// SelectSystemAtCursor).
+void GalacticJump(GameState& _state)
 {
   if (_state.Data().commander.galaxyNumber == NINTH_GALAXY)
   {
@@ -117,9 +117,9 @@ void GalacticJump(GameState& _state, std::uint16_t _countIfNone)
   _state.Data().commander.chartCursorY = static_cast<std::uint8_t>((High(random) & 0x1F) + 0x30);
   _state.Data().commander.chartIsShortRange = 0;
   // The galactic chart holds every system, and none is far enough from that point for its distance to carry, so the search
-  // always finds one, and leaves BP its loop's count there, 100h less its index, for SelectSystemAtCursor's own search.
-  const std::uint8_t index = FindNearestSystem(_state, _countIfNone);
-  SelectSystemAtCursor(_state, Negate(index));
+  // always finds one, and moves the cursor onto it for SelectSystemAtCursor's own search.
+  (void)FindNearestSystem(_state);
+  SelectSystemAtCursor(_state);
 }
 
 // The arrival's message, and a fuel leak armed for missions 1 and 3 at their stages.
@@ -162,9 +162,9 @@ void AddCarried(std::uint16_t& _low, std::uint8_t& _high, std::uint16_t _value)
 
 } // namespace
 
-void ArriveInSystem(GameState& _state, Hardware& _hardware, bool _backward)
+void ArriveInSystem(GameState& _state, Host& _host)
 {
-  (void)SetUpLocalSpace(_state, _hardware, _backward);
+  (void)SetUpLocalSpace(_state, _host);
   if (_state.Data().commander.witchspaceCountdown != 0)
   {
     return;
@@ -236,14 +236,14 @@ MassLock IsMassLocked(GameState& _state)
   return lock;
 }
 
-void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward)
+[[nodiscard]] Task<void> CompleteHyperspaceJump(GameState& _state, Host& _host)
 {
   (void)EraseCompassAndBlips(_state);
   _state.Data().messages.messagePointer = Message::HyperspaceEngaged;
   _state.Data().messages.messageFrames = ENGAGED_MESSAGE_FRAMES;
   if (_state.Data().jump.galacticJumpPending == 1)
   {
-    GalacticJump(_state, _countIfNone);
+    GalacticJump(_state);
     // JMP 4733h, back into the shared tail below.
   }
   else
@@ -303,8 +303,8 @@ void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_
   }
 
   // The tunnel's frames end with FinishSpaceViewFrame's CLD, so the arrival copies forwards.
-  PlayHyperspaceTunnel(_state, _hardware, _backward);
-  ArriveInSystem(_state, _hardware, false);
+  co_await PlayHyperspaceTunnel(_state, _host);
+  ArriveInSystem(_state, _host);
   UpdateMissionSchedule(_state);
   _state.Data().commander.supernovaHeat = 0;
   _state.Data().commander.supernovaFrames = 0;
@@ -353,22 +353,19 @@ void DrawHyperspaceRings(GameState& _state)
   }
 }
 
-void PlayHyperspaceTunnel(GameState& _state, Hardware& _hardware, bool _backward)
+[[nodiscard]] Task<void> PlayHyperspaceTunnel(GameState& _state, Host& _host)
 {
-  // PUSH CX / POP CX keep the frames left round the frame's work. Every frame ends with
-  // FinishSpaceViewFrame's CLD, so only the first message line runs by _backward.
-  bool backward = _backward;
+  // PUSH CX / POP CX keep the frames left round the frame's work.
   for (std::uint16_t frames = HYPERSPACE_TUNNEL_FRAMES;;)
   {
-    UpdateMessageLine(_state, backward);
+    UpdateMessageLine(_state);
     DrawHyperspaceRings(_state);
-    FinishSpaceViewFrame(_state, _hardware);
+    co_await FinishSpaceViewFrame(_state, _host);
     // The frame as the game drew it, for a renderer that shows it in the cockpit (D68).
-    _hardware.PublishSpaceViewPicture(WithoutScene(TakeFlightSnapshot(_state)));
-    backward = false;
+    _host.PublishSpaceViewPicture(WithoutScene(TakeFlightSnapshot(_state)));
     if (--frames == 0)
     {
-      return;
+      co_return;
     }
   }
 }
@@ -425,7 +422,7 @@ void LatchHyperspaceTarget(GameState& _state)
   _state.Data().hyperspace.hyperspaceTarget = _state.Data().commander.selectedSystem;
 }
 
-bool TickHyperspaceCountdown(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward)
+[[nodiscard]] Task<bool> TickHyperspaceCountdown(GameState& _state, Host& _host)
 {
   if (_state.Data().jump.galacticDriveReadyFrames != 0)
   {
@@ -433,22 +430,22 @@ bool TickHyperspaceCountdown(GameState& _state, Hardware& _hardware, std::uint16
   }
   if (_state.Data().jump.hyperspaceCountdown == 0)
   {
-    return false;
+    co_return false;
   }
   _state.Data().jump.hyperspaceCountdownFrames = static_cast<std::uint8_t>(_state.Data().jump.hyperspaceCountdownFrames - 1);
   if (_state.Data().jump.hyperspaceCountdownFrames != 0)
   {
-    return false;
+    co_return false;
   }
   _state.Data().jump.hyperspaceCountdownFrames = COUNTDOWN_STEP_FRAMES;
   _state.Data().jump.hyperspaceCountdown = static_cast<std::uint8_t>(_state.Data().jump.hyperspaceCountdown - 1);
   ShowHyperspaceCountdown(_state);
   if (_state.Data().jump.hyperspaceCountdown != 0)
   {
-    return false;
+    co_return false;
   }
-  CompleteHyperspaceJump(_state, _hardware, _countIfNone, _backward);
-  return true;
+  co_await CompleteHyperspaceJump(_state, _host);
+  co_return true;
 }
 
 void ShowHyperspaceCountdown(GameState& _state)

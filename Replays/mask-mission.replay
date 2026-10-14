@@ -7,131 +7,410 @@
 # scattered round it, ram him. GAME OVER, then a new game, and the same commander, 3,680,037 random draws on
 # (mask-mission-fight.cdr), is copied in and loaded mid-replay: this time the ships spawn 10,000 units out. Two are
 # destroyed, and the mission ship spawned in each one's place is first a Constrictor, then a Cougar. The draw count
-# was found by a search over counts; the fight was played by a scratch program that steered at the nearest ship each
-# frame and fired when it was in the sights, and what it pressed is recorded here.
+# was found by a search over counts; the fight was played by a scratch program that steered at the nearest ship every
+# 50 ms and fired when it was in the sights, and what it pressed is recorded here: flown again when the clock became
+# milliseconds (D87).
 file JAMESON.CDR mask-mission.cdr
 wait 0.5; key space; wait 3.5      # any key: the credits, then the status screen
 key Escape; wait 0.3               # the disc menu
 key l; wait 0.3                    # Load Commander: it asks for a file name
 key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
-digest loaded 1bfdc137c8a73d92c2ce4507f5dc9787cda559b212e88783b5c89869456b0a89
+digest loaded 777531ee33d7183f16c25ce41cb81f3a69fdada3c1da83e65613c608095c9d99
 picture loaded 361ad782e46b4fca68ba8e14bbac08966458c215f96b0ec2b628c924935fc8d5
 outcome loaded galaxy=0 system=55 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=1000 legalStatus=0 kills=20 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=1 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=1 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=0 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=1 laserTypes=3 mission=2 missionStage=1 missionJumps=64 jumpedSinceBriefing=1 maskShipsLeft=5 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=1 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=48 fuel=126 shipSlotsInUse=1 cabinTemperature=12 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 key F1; wait 1.3                   # launch: the mask ship and its escorts, and the escorts ram the ship
-digest rammed d24f1c175d517ec60a7511e695085b4af02b4657cabdd03aaae811d57ad912d4
+digest rammed 7c9452c92e659df5651af60b942c4c7eed40441aea63f465714c1eee17f77219
 picture rammed 95c3eb1c72fbc66973a744a83bdc571ef21905b3089864f0b06cbf1bb7952da8
 outcome rammed galaxy=0 system=55 witchSpace=0 docked=0 inFlight=1 dead=1 creditsTenths=1600 legalStatus=0 kills=23 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=1 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=1 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=0 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=1 laserTypes=3 mission=2 missionStage=1 missionJumps=64 jumpedSinceBriefing=1 maskShipsLeft=5 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=1 invasion=0 invadedStationDestroyed=0 energy=0 foreShield=0 aftShield=255 speed=8 fuel=126 shipSlotsInUse=12 cabinTemperature=11 laserTemperature=0 altitude=254 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 wait 2.5                           # GAME OVER, then the title screen
-digest title 45fd701ceb5687b4567d35e19454877e2cd42b39cc66f8b16049bf390b8ab5c1
-picture title 31a0106ee91e92bc530a1c3959e4226acfaf09ea400e1bae1f658b0191012e51
+digest title 224f6ad035f609e8eb397c802f24af2ad1bf02b136588c28409bc5f1571fc4dc
+picture title da745788d870d2b7f75e1b750d19401db8e9deb1fa1404eaceac846d0fb32429
 outcome title galaxy=0 system=55 witchSpace=0 docked=0 inFlight=0 dead=1 creditsTenths=1600 legalStatus=0 kills=23 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=1 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=1 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=0 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=0 laserTypes=3 mission=2 missionStage=1 missionJumps=64 jumpedSinceBriefing=1 maskShipsLeft=5 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=1 invasion=0 invadedStationDestroyed=0 energy=0 foreShield=0 aftShield=255 speed=8 fuel=126 shipSlotsInUse=1 cabinTemperature=11 laserTemperature=0 altitude=254 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 key space; wait 3.5                # a new game: the credits, then the status screen
 file JAMESON.CDR mask-mission-fight.cdr
 key Escape; wait 0.3
 key l; wait 0.3
 key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
-digest loaded-again 65fba18348398973f8f2a9380868ad5fea81905416d63ee7a3f6959d3a629cb5
+digest loaded-again b8b4ba69c1708baa6a45ff4836edd399b1b4d50e3abd11073fbfbab5725a5521
 picture loaded-again 361ad782e46b4fca68ba8e14bbac08966458c215f96b0ec2b628c924935fc8d5
 outcome loaded-again galaxy=0 system=55 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=1000 legalStatus=0 kills=20 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=1 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=1 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=0 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=1 laserTypes=3 mission=2 missionStage=1 missionJumps=64 jumpedSinceBriefing=1 maskShipsLeft=5 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=1 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=8 fuel=126 shipSlotsInUse=1 cabinTemperature=12 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 key F1; wait 1                     # launch again: the mask ship and its escorts
 # The fight, as recorded: a step for each change of the keys, and the frames between.
 wait 0.050
-down Up; wait 0.350
-down Right; wait 0.400
-up Right; wait 0.150
-down Left; wait 0.350
-up Left; wait 0.400
-down Right; wait 0.050
-up Up; down space; wait 0.050
-down Down; up space; wait 0.250
-up Down; wait 0.100
-down space; wait 0.100
-up space; wait 0.400
-down Up; wait 0.100
-down space; wait 0.100
-up Right; wait 0.050
-up Up; down Down; wait 0.100
+down Up; wait 1.600
 down Right; wait 0.100
+up Right; up Up; down Down; down Left; wait 0.300
+up Down; up Left; down Right; wait 0.050
+down Up; wait 0.300
+up Right; up Up; down Down; down Left; wait 0.250
 up Down; wait 0.050
-down Up; wait 0.150
-up Up; down Down; wait 0.100
-down Up; up Down; wait 0.100
+up Left; down Right; wait 0.050
+down Up; wait 0.100
 up Up; wait 0.100
-down Up; wait 0.100
-up Right; up Up; wait 1.200
-down Right; down Down; up space; wait 0.200
-up Down; wait 0.700
-down Up; wait 0.250
-up Right; down space; wait 0.050
-up Up; down Down; wait 0.150
-down Right; wait 0.150
-up Down; wait 0.150
-up space; wait 0.700
-down Up; wait 0.100
+down Up; wait 0.200
+up Right; up Up; down Left; wait 0.250
+down Down; wait 0.200
+up Down; wait 0.050
+up Left; down Right; wait 0.050
+up Right; down Left; wait 0.150
+down Down; wait 0.200
+up Down; wait 0.050
+up Left; down Right; wait 0.400
+down Up; down space; wait 0.150
+up Up; wait 0.200
+down Up; wait 0.050
 up Right; wait 0.100
-down Left; wait 0.350
-up Left; wait 0.150
-down Left; wait 0.050
-up Left; down space; wait 0.050
-up Up; down Down; up space; wait 0.300
-down space; wait 0.050
-down Right; down Up; up Down; wait 0.050
-up space; wait 0.150
-up Right; wait 0.050
-down space; wait 0.050
-up Up; down Down; wait 0.200
+up Up; wait 1.050
 down Right; wait 0.050
-down Up; up Down; wait 0.250
-up Up; down Down; wait 0.200
-up Down; wait 0.350
+up Right; wait 0.100
+up space; down Down; wait 0.450
+up Down; down Up; wait 0.100
+down Left; wait 0.200
+up Left; up Up; down Down; down Right; wait 0.250
+up Right; wait 0.150
+down Right; wait 0.100
+up Down; up Right; down Left; down Up; wait 0.350
+up Left; up Up; down Down; down Right; wait 0.300
+up Down; up Right; down Left; down Up; wait 0.250
+up Up; wait 0.050
+up Left; down Down; down Right; wait 0.200
+up Down; up Right; down Left; wait 0.050
+down Up; wait 0.100
+up Up; wait 0.100
 down Up; wait 0.200
 up Up; wait 0.050
-up Right; down Down; wait 0.050
-down Right; wait 0.050
-up Right; wait 0.050
-up Down; wait 0.350
+up Left; down Right; wait 0.050
+up Right; down Left; wait 0.100
+down Up; wait 0.200
+up Up; wait 0.050
+up Left; down Right; wait 0.050
+up Right; down Left; wait 0.200
 down Up; wait 0.050
+down space; wait 0.100
+up Up; wait 0.100
+down Up; wait 0.050
+up Left; wait 0.050
 up Up; wait 0.050
 down Up; wait 0.100
-up Up; wait 0.150
-up space; wait 0.050
-down space; wait 0.050
-up space; wait 0.050
-down space; wait 0.050
-up space; wait 0.100
-down space; wait 0.050
-up space; wait 0.050
-down space; wait 0.050
-up space; wait 0.100
-down space; wait 0.050
-up space; wait 0.050
-down space; wait 0.050
-up space; wait 0.100
-down space; wait 0.050
-up space; wait 0.050
-down space; wait 0.050
-up space; wait 0.050
-down space; wait 0.050
-up space; wait 0.050
-down space; wait 0.050
-up space; wait 0.100
-down space; wait 0.050
-up space; wait 0.050
-down space; wait 0.050
-up space; wait 0.100
-down space; wait 0.050
-up space; wait 0.050
-down space; wait 0.050
-up space; wait 0.100
-down space; wait 0.050
-up space; wait 0.050
-down space; wait 0.050
-up space; wait 0.100
-down space; wait 0.050
-down Left; down Up; up space; wait 0.550
+up Up; wait 1.600
+down Left; wait 0.200
+up Left; wait 0.050
+down Up; wait 0.050
+down Left; wait 0.050
+up Left; up Up; wait 0.200
+down Left; wait 0.200
+up Left; wait 0.350
+down Left; wait 0.200
+up Left; wait 0.250
+down Left; wait 0.150
+up Left; wait 0.050
+down Left; wait 0.200
+up Left; wait 0.450
+down Left; wait 0.050
+up Left; wait 0.050
+down Left; wait 0.050
+up Left; wait 0.050
+down Left; wait 0.050
+up Left; wait 0.050
+down Left; wait 0.150
+up Left; wait 0.100
+down Left; wait 0.100
+up Left; wait 0.150
+down Left; wait 0.150
 up Left; wait 0.200
+down Left; wait 0.150
+up Left; down Up; wait 0.100
+up Up; down Left; wait 0.150
+up Left; wait 0.050
+down Left; wait 0.150
+up Left; wait 0.250
+down Left; wait 0.050
+up Left; wait 0.100
+down Left; wait 0.150
+up Left; wait 0.400
+down Left; wait 0.150
+up Left; wait 0.350
+down Left; wait 0.150
+up Left; wait 0.400
+down Left; wait 0.100
+up Left; wait 0.150
+down Left; wait 0.100
+up Left; wait 0.100
+down Left; wait 0.150
+up Left; wait 0.450
+down Left; wait 0.050
+up Left; wait 0.200
+down Left; wait 0.100
+up Left; wait 0.050
+down Left; wait 0.050
+up Left; wait 0.100
+down Left; wait 0.100
+up Left; wait 0.050
+down Left; wait 0.150
+up Left; wait 0.750
+down Left; wait 0.050
+up Left; wait 0.150
+down Left; wait 0.150
+up Left; wait 4.400
+up space; down Left; down Up; wait 0.150
+up Up; wait 0.150
+down Up; wait 0.200
+up Left; up Up; down Right; wait 0.150
+down Down; wait 0.150
+up Down; wait 0.100
+down Down; wait 0.200
+up Down; up Right; down Left; down space; wait 0.300
+down Up; wait 0.150
+up Up; wait 0.200
+up Left; down Up; wait 0.100
+up Up; wait 0.050
+down Up; wait 0.100
+up Up; wait 2.200
+down Up; wait 0.100
+up Up; wait 0.700
+down Left; wait 0.150
+up Left; wait 0.050
+down Left; wait 0.150
+up Left; wait 0.100
+down Up; wait 0.050
+down Left; wait 0.050
+up Up; wait 0.250
+down Up; wait 0.050
+up Left; wait 0.050
+up Up; wait 0.050
+down Up; wait 0.100
+up Up; wait 0.300
+down Up; wait 0.100
+up Up; wait 0.500
+down Left; wait 0.050
+up space; down Down; wait 0.650
+up Left; wait 0.100
+down Right; wait 0.050
+up Down; up Right; down Left; down Up; wait 0.350
+up Up; wait 0.050
+up Left; down Down; down Right; wait 0.300
+up Down; up Right; down Left; wait 0.050
+down Up; wait 0.100
+up Left; wait 0.050
+down Left; wait 0.150
+up Left; up Up; down Down; down Right; wait 0.250
+down space; wait 0.050
+up Down; up Right; up space; down Left; down Up; wait 0.050
+up Left; wait 0.050
+down Left; wait 0.200
+up Left; up Up; down Down; down Right; wait 0.300
+up Down; up Right; down Left; down Up; wait 0.300
+up Left; up Up; down Down; down Right; wait 0.250
+up Down; wait 0.050
+up Right; down Left; down space; wait 0.050
+down Up; wait 0.150
+up Up; wait 0.050
+up Left; up space; down Up; wait 1.100
+down Right; wait 0.450
+up Right; up Up; down Down; down Left; wait 0.200
+up Down; up Left; down space; wait 0.050
+up space; down Left; down Up; wait 0.600
+up Left; wait 0.050
+down Right; wait 0.050
+up Right; up Up; down Down; down Left; wait 0.200
+up Left; wait 0.150
+down Left; wait 0.050
+up Down; up Left; down Up; wait 0.300
+down Right; wait 0.050
+up Right; up Up; down Down; down Left; wait 0.050
+up Left; wait 0.150
+down Left; wait 0.100
+up Down; up Left; down Right; wait 0.050
+down Up; wait 0.300
+up Right; up Up; down Down; down Left; wait 0.250
+up Down; wait 0.050
+up Left; down Right; wait 0.050
+down Up; wait 0.150
+up Up; wait 0.100
+down Up; wait 0.150
+up Up; wait 0.050
+down Up; down space; wait 0.150
+up Up; wait 0.100
+down Up; wait 0.050
+up Right; wait 0.100
+up Up; wait 1.850
+up space; down Down; wait 1.100
+down Right; wait 0.300
+up Right; wait 0.200
+down Right; wait 0.050
+up Down; up Right; down Left; wait 0.050
+down Up; wait 0.050
+up Left; wait 0.150
+down Left; wait 0.150
+up Left; up Up; down Down; down Right; wait 0.050
+up Right; wait 0.050
+down Right; wait 0.200
+up Down; up Right; down Left; down space; wait 0.050
+up space; down Up; wait 0.250
+down space; wait 0.050
+up Left; up Up; up space; down Down; wait 0.150
+down Right; wait 0.150
+up Down; up Right; down Left; down Up; wait 0.250
+down space; wait 0.050
+up Left; up Up; up space; down Down; wait 0.200
+down Right; wait 0.050
+down space; wait 0.050
+up Down; up Right; up space; down Left; down Up; wait 0.050
+up Left; wait 0.150
+down Left; wait 0.050
+down space; wait 0.050
+up Left; up Up; up space; down Down; down Right; wait 0.050
+up Right; wait 0.250
+up Down; down Up; wait 0.250
+up Up; down space; wait 0.050
+up space; down Down; wait 0.750
+up Down; down Up; wait 0.300
+up Up; down space; wait 0.050
+up space; down Down; wait 0.250
+down space; wait 0.050
+up Down; up space; down Up; wait 0.250
+down space; wait 0.050
+up Up; up space; down Down; wait 0.250
+down space; wait 0.050
+up Down; up space; down Up; wait 0.250
+up Up; down space; wait 0.050
+down Down; wait 0.050
+up space; wait 0.100
+down space; wait 0.050
+up Down; wait 0.600
+up space; down Left; down Up; wait 0.750
+up Left; wait 0.050
+down Right; wait 0.400
+up Right; wait 0.400
+down Left; wait 0.200
+up Up; wait 0.050
+up Left; down Down; down Right; wait 0.350
+up Down; up Right; down Left; wait 0.050
+down Up; wait 0.400
+up Left; up Up; down Down; down Right; wait 0.350
+up Down; up Right; down Left; down Up; wait 0.300
+up Left; up Up; down Right; wait 0.050
+down Down; wait 0.300
+up Down; wait 0.050
+up Right; down Left; wait 0.050
+down Up; wait 0.250
+up Up; wait 0.050
+down Up; wait 0.250
+up Up; wait 0.050
+up Left; down Down; down Right; wait 0.200
+up Down; wait 0.100
+down Down; wait 0.350
+up Down; up Right; down Left; down Up; wait 0.350
+up Left; up Up; down Down; down Right; wait 0.300
+up Down; wait 0.050
+up Right; down Left; down Up; wait 0.250
+up Left; up Up; down Right; wait 0.050
+down Down; wait 0.250
+up Down; up Right; down Left; wait 0.050
+down Up; wait 0.250
+up Left; up Up; down Right; wait 0.050
+down Down; wait 0.200
+up Down; wait 0.050
+down Down; wait 0.300
+up Down; up Right; down Left; down Up; wait 0.250
+up Up; wait 0.050
+up Left; down Right; wait 0.050
+down Down; wait 0.100
+up Down; wait 0.050
+down Down; wait 0.250
+up Down; up Right; down Left; wait 0.050
+down Up; wait 0.200
+up Up; wait 0.050
+down Up; wait 0.250
+up Left; up Up; down Right; wait 0.050
+down Down; wait 0.250
+up Down; up Right; down Left; wait 0.050
+down Up; wait 9.750
+up Up; down Down; wait 9.050
+up Left; down Right; wait 0.750
+up Down; wait 0.050
+up Right; down Left; down Up; wait 0.300
+up Up; wait 0.050
+down Up; wait 0.350
+up Left; down Right; wait 0.600
+up Right; wait 0.250
+down Left; wait 0.500
+up Left; wait 0.050
+down Right; wait 0.050
+up Right; up Up; down Down; down Left; wait 0.350
+up Down; down space; wait 0.050
+up Left; up space; down Right; down Up; wait 0.050
+up Right; wait 0.050
+down Right; wait 0.200
+up Up; wait 0.050
+up Right; down Down; down Left; wait 0.250
+up Down; wait 0.050
+up Left; down Right; wait 0.050
+down Up; wait 0.150
+up Up; wait 0.050
+down Up; wait 0.200
+up Up; wait 0.100
+down Up; wait 0.200
+up Up; wait 0.050
+up Right; down Left; wait 0.050
+up Left; down Right; wait 0.150
+down Up; wait 0.150
+up Up; down space; wait 0.050
+down Up; wait 0.150
+up Right; up Up; wait 0.900
 down Right; wait 0.250
-up Right; up Up
-digest after-the-fight 16851e830c92f9f25718f6411f88dda45067d24e3eb64ac22499bf0ccbc9b10a
-picture after-the-fight 10e96be834e08a0ff7f810642cbd52e9890492b832f4f9f7461687d35980303f
-outcome after-the-fight galaxy=0 system=55 witchSpace=0 docked=0 inFlight=1 dead=0 creditsTenths=1400 legalStatus=0 kills=22 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=1 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=1 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=0 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=1 laserTypes=3 mission=2 missionStage=1 missionJumps=64 jumpedSinceBriefing=1 maskShipsLeft=3 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=1 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=20 fuel=126 shipSlotsInUse=11 cabinTemperature=10 laserTemperature=139 altitude=254 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
+up Right; wait 0.300
+down Up; wait 0.050
+down Right; wait 0.050
+up Up; wait 0.200
+up Right; wait 0.600
+up space; down Up; wait 1.400
+down Left; wait 0.450
+up Left; up Up; down Down; down Right; wait 0.350
+up Down; up Right; down Left; down Up; wait 0.300
+up Left; up Up; down Down; down Right; wait 0.350
+up Right; wait 0.100
+down Left; wait 0.500
+up Down; up Left; down Right; down Up; wait 0.200
+up Right; wait 0.100
+down Right; wait 0.050
+up Right; up Up; down Down; down Left; down space; wait 0.050
+up Left; up space; wait 0.100
+down Left; wait 0.150
+up Down; up Left; down Right; down Up; wait 0.250
+down space; wait 0.050
+up Right; up Up; up space; down Down; down Left; wait 0.250
+down space; wait 0.050
+up Down; up Left; up space; down Right; down Up; wait 0.250
+down space; wait 0.050
+up Right; up Up; up space; down Down; down Left; wait 0.050
+up Left; wait 0.050
+down Left; wait 0.200
+up Down; up Left; down Right; down Up; wait 0.300
+up Right; up Up; down Down; down Left; wait 0.250
+up Down; up Left; down Right; wait 0.050
+down Up; wait 0.250
+up Right; up Up; down Down; down Left; wait 0.200
+up Down; wait 0.250
+down Down; wait 0.050
+down space; wait 0.100
+up Down; wait 0.100
+down Down; wait 0.150
+up Down; up Left; wait 3.750
+up space; down Right; down Up; wait 0.450
+up Right; wait 0.250
+down Left; wait 0.050
+up Left; up Up; down Down; down Right; wait 0.050
+up Right; wait 0.250
+up Down; down Right; down space; wait 0.050
+up Right; up space; down Left; down Up; wait 0.050
+up Left; wait 0.200
+up Up; down space; wait 0.050
+down Down; wait 0.050
+up space; wait 0.150
+up Down; down space; wait 0.550
+up space; down Down; wait 0.050
+up Down
+digest after-the-fight ac8b3ec771e4857ac00ea536f6f1a58eedd2fe6aa79f73b4fd53298e1f1121a3
+picture after-the-fight e26c0b7307b485ecc58962d08b323f3eb98edc9436c2223e168d8872f8ed9339
+outcome after-the-fight galaxy=0 system=55 witchSpace=0 docked=0 inFlight=1 dead=0 creditsTenths=1400 legalStatus=0 kills=22 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=1 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=1 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=0 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=1 laserTypes=3 mission=2 missionStage=1 missionJumps=64 jumpedSinceBriefing=1 maskShipsLeft=3 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=1 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=242 aftShield=171 speed=20 fuel=126 shipSlotsInUse=15 cabinTemperature=10 laserTemperature=223 altitude=254 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0

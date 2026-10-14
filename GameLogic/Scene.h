@@ -2,7 +2,7 @@
 #pragma once
 
 #include "GameState.h"
-#include "Hardware.h"
+#include "Host.h"
 #include "Maths.h"
 #include "SpaceObject.h"
 #include "Ships.h"
@@ -22,7 +22,7 @@ namespace Elite
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
 // A vertex is the offset in the data segment of its three words, x, y and z, as the original holds it in SI or DI. A string
-// instruction's direction is the direction flag the routine finds: _backward.
+// instruction runs forwards (ADR-046).
 
 /// The vertices a blueprint's program starts from, by the handler its first word names.
 enum class BlueprintShape : std::uint8_t
@@ -80,14 +80,6 @@ struct ShipRangeCheck
   }
 };
 
-/// What DrawVisibleFaces leaves: the offset in the face list past the faces, and the direction flag, clear once an edge's DrawLine
-/// has filled.
-struct FacesEnd
-{
-  std::uint16_t next;
-  bool backward;
-};
-
 /// ProjectVertices (CS:2340): the first projectedVertexCount 6-byte vertices of vertexBuffer projected in place to 4-byte points,
 /// 80h + 256x/z and 40h + 256y/z rounded; a vertex nearer than nearPlaneZ gets x = 8000h and keeps a stale y. Each divide takes a
 /// memory operand, so the trap saturates only AL when it overflows.
@@ -125,7 +117,7 @@ void RunVertexProgram(GameState& _state, std::span<const std::uint8_t> _program,
 /// DrawVisibleFaces (CS:3AB3): for each of _faces faces of _blueprint's face list that faces the viewer (TriangleWindingSign on
 /// its first three vertices), its items in order: an edge (DrawClippedLine) of its face edges in its colour unless an end is off
 /// screen, or a triangle (FillTriangle) in its pattern unless a corner is. A face turned away is skipped.
-FacesEnd DrawVisibleFaces(GameState& _state, const Blueprint& _blueprint, std::uint16_t _faces, bool _backward);
+void DrawVisibleFaces(GameState& _state, const Blueprint& _blueprint, std::uint16_t _faces);
 
 /// CheckShipInRange (CS:3BEA): IsObjectNear, then |x|, |y| and |z| of _slot's position below maxAxisDistance and the high words
 /// of their squares, summed, below maxDistanceSquaredHigh after the second and the third. In range, _slot's size (+3Eh) is that
@@ -142,8 +134,8 @@ void TransformShip(GameState& _state, SpaceObject& _slot);
 
 /// RunBlueprintHandler (CS:3CDD): boxHalfWidth from _blueprint, the handler it names run (BuildBoxCornerVertices or
 /// BuildDodoVertices), then what the handler returns into at RenderBlueprintBody (CS:3CF2): the vertex program, the projection
-/// and the faces. Returns the direction flag as they leave it.
-bool RunBlueprintHandler(GameState& _state, const Blueprint& _blueprint, bool _backward);
+/// and the faces.
+void RunBlueprintHandler(GameState& _state, const Blueprint& _blueprint);
 
 /// ClassifyStationPosition (CS:3C72): ClassifyViewPosition on _slot's compass position, +20h/+22h/+24h: visible, with byte 0 bit 7
 /// set, when z is at least nearClipZ and twice |x| and twice |y| are at most z; the position stored at +10h/+12h/+14h and as
@@ -161,9 +153,8 @@ Vector TransformToView(GameState& _state, Vector _position);
 
 /// TransformAndDrawObjects (CS:3D25): the player's pitch, yaw and roll into rotation pairs 0-2; every one of shipSlotCount slots
 /// classified and transformed (ClassifyObject), from the slot each leaves DI on; then, from the farthest in, the visible objects
-/// drawn (DrawFarthestObject): the sun or the planet, the station as a disc, a dot, or a blueprint. _backward is the direction flag;
-/// returns it as the drawing leaves it.
-bool TransformAndDrawObjects(GameState& _state, Hardware& _hardware, bool _backward);
+/// drawn (DrawFarthestObject): the sun or the planet, the station as a disc, a dot, or a blueprint.
+void TransformAndDrawObjects(GameState& _state, Host& _host);
 
 /// What SizePlanet and SizeSun scale to an object's distance, its disc's radius in rows at 256 of its view units off (MOV DX,32h
 /// and MOV DX,64h), which makes the planet a sphere of 50 x 256 units and the sun one of 100 x 256 (ADR-035).
@@ -171,13 +162,12 @@ inline constexpr std::uint16_t PLANET_DISC_SCALE = 0x32;
 inline constexpr std::uint16_t SUN_DISC_SCALE = 0x64;
 
 /// DrawSunOrPlanet (CS:3F4F): the planet in _slot sized (SizePlanet), with its altitude, or the sun, with the cabin temperature, its
-/// fringe, fuel scooping, death by heat and a supernova's heat; then, in front of the view, its disc. _backward is the direction
-/// flag, which the disc and a supernova's energy bomb go by.
-void DrawSunOrPlanet(GameState& _state, Hardware& _hardware, SpaceObject& _slot, bool _backward);
+/// fringe, fuel scooping, death by heat and a supernova's heat; then, in front of the view, its disc.
+void DrawSunOrPlanet(GameState& _state, SpaceObject& _slot);
 
 /// DrawDistantStation (CS:45C6): the station in _slot as a disc in colour 3 at its compass position, +20h/+22h/+24h, projected
 /// (ProjectToScreen): radius 7 rows when its depth byte +25h is below 14h, smaller further off, and none from 21h to A5h.
-void DrawDistantStation(GameState& _state, SpaceObject& _slot, bool _backward);
+void DrawDistantStation(GameState& _state, SpaceObject& _slot);
 
 /// Whether _slot is in the view's cone this frame, which the game draws (ClassifyViewPosition): active and visible.
 [[nodiscard]] bool InView(const SpaceObject& _slot) noexcept;

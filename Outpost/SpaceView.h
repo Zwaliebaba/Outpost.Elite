@@ -13,7 +13,7 @@
 
 namespace Elite
 {
-class Platform;
+class Host;
 struct FlightSnapshot;
 } // namespace Elite
 
@@ -35,12 +35,12 @@ public:
   /// its 1987 view stretched over _view and the scene filling _window round it at the same scale (Hor+, D50), places in design
   /// units under a canvas (ADR-034). The game's layers lie over _view; beside it, the renderer draws by 1987's own rule what the
   /// game drew nothing of (D69). None while the screen does not show the last one. It holds until the next call.
-  [[nodiscard]] const Engine::SceneFrame* Frame(const Elite::Platform& _platform, const Engine::Rect& _view, const Engine::Rect& _window);
+  [[nodiscard]] const Engine::SceneFrame* Frame(const Elite::Host& _platform, const Engine::Rect& _view, const Engine::Rect& _window);
 
   /// The game's words in the frame the screen shows (SpaceViewLayers::HoldsWords), into _canvas over the cockpit, which covers
   /// none of them (D66): each block of lines on a panel in the cockpit's style (D68), and the ink of each, in the screen's
   /// colours, at its pixels of the view stretched over _place. None while the screen does not show the last frame.
-  static void DrawWords(const Elite::Platform& _platform, const Engine::Rect& _place, Engine::Canvas& _canvas);
+  static void DrawWords(const Elite::Host& _platform, const Engine::Rect& _place, Engine::Canvas& _canvas);
 
 private:
   // The scene of _snapshot: the camera at the origin, turned as the frame's camera was, each object drawn as a model, and the
@@ -56,7 +56,7 @@ private:
 
   // The stardust (D67), moved back by the player's velocity for the paced time since the last call and seen by the camera as it is
   // drawn now, as strokes in _palette's colour of 1987's dust; none while the frame draws no dust, nor moved.
-  void MoveStardust(const Elite::Platform& _platform, const std::array<std::uint32_t, 4>& _palette);
+  void MoveStardust(const Elite::Host& _platform, const std::array<std::uint32_t, 4>& _palette);
 
   std::vector<Elite::ShipModel> m_models; // by type
   Engine::SceneSnapshot m_before;

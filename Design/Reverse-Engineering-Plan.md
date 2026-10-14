@@ -1,6 +1,6 @@
 # ELITES.EXE — reverse-engineering and native port plan
 
-**Status:** proposed 2026-10-09. The owner's rulings are D1 to D81 in §8. A ruling becomes a decision when the ADR in §9 records it (AGENTS.md §6). Each phase's section in §5 says how its exit was met.
+**Status:** proposed 2026-10-09. The owner's rulings are D1 to D86 in §8. A ruling becomes a decision when the ADR in §9 records it (AGENTS.md §6). Each phase's section in §5 says how its exit was met.
 
 | Phase | State | Recorded in |
 |---|---|---|
@@ -342,11 +342,16 @@ What it removes, as measured on `main` at `d9a1843`: `Field<>`'s 750 uses, 268 s
 
 The rulings that shape it:
 
-- **D77.** The game waits by C++20 coroutines: a function that waits is a coroutine, and a wait is `co_await` of a key, a tick or a frame. The host resumes the game each tick, on one thread, deterministically. The game's logic keeps its shape; the docked screens of piece 5 are written against the same host.
+- **D77.** The game waits by C++20 coroutines: a function that waits is a coroutine, and a wait is `co_await` of a key, a tick or a frame. The host resumes the game each tick, on one thread, deterministically. The game's logic keeps its shape; the docked screens of piece 5 are written against the same host. *Amended by D85: piece 5's docked screens are state-driven, not coroutines; the coroutines stay through Phase 7.*
 - **D78.** The commander file keeps the `.cdr` format, written and read by an explicit serializer, so the corpus's prepared commanders and the players' saves still load.
 - **D79.** `ReferenceImage.cpp` is deleted once nothing builds from it. A question about what the original does is then measured against the owner's own `ELITES.EXE` (ADR-020), and AGENTS.md says so.
 - **D80.** What only DOS had becomes its Windows counterpart: the ` cheat` command tail a command-line flag, Alt+PrtSc's `eliteNN.hi`/`.lo` a PNG the shell saves, exit to DOS a quit; the exit message goes.
 - **D81.** The joystick goes, the IBM game port's and the Amstrad's: the game is flown with the keyboard and the mouse. It replaces step 8's XInput.
+- **D87.** The native host's time is whole milliseconds: a 1 ms tick and 60 Hz frames replace the PC's 1000.15 Hz and 59.92 Hz, `Cycles` goes, and every digest is re-recorded once, with its cause.
+- **D88.** A key reaches the game as its own event, the key and whether it went down or up, one queued event a tick, in order.
+- **D89.** The shell attaches Windows' mouse with piece 5's docked host (D83), not in step 7.
+- **D90.** One `Host` is the game's handle on the clock and the devices, passed where `Hardware` was.
+- **D91.** The interrupt model goes: the host runs the tick's work and delivers the keys at each wait, and the digests are re-recorded a second time.
 
 The steps, each its own change and ADR, in this order:
 
@@ -355,8 +360,8 @@ The steps, each its own change and ADR, in this order:
 3. **No `Field<>`.** The members are plain types at the same widths, so every sum wraps where it did; the 80 unnamed members are named, `SpaceObject` becomes a plain struct, and the rules against copies and compound assignment go. The state's headers stop being generated here, as source from now on, and `Tools/GenerateGameData.py`'s check leaves CI. *Done (ADR-044); the headers and the check went at step 5.*
 4. **The start state in C++.** Jameson and every first value are initializers, written once from the image and kept as source; `DataPlaces.h` and `ReferenceLoadImage` go, and the start digest is checked unchanged. This supersedes D73. *Done (ADR-044), second, after step 1: steps 2 and 3 follow step 5, as edits of plain source.*
 5. **The tables as source.** The `*Tables.h` stop being generated; `ReferenceImage.cpp`, both generators, the two `.tsv` files and their CI steps go (D79). *Done (ADR-044), with the state's headers, which stop being generated here rather than at step 3, and `Tools/MapReference.py` and `Tools/PrepareCommanders.py`, which read the same files.*
-6. **No 8086 in the game's code.** The direction flag, the BP and AL carry-throughs and the line records go, and the drawing routines take a CGA buffer, not a segment. Where a carried value reached the state, what it changes is reported and re-recorded.
-7. **The native host** (D77). `Hardware.h`, `Platform`, the game thread and `Cycles` go. Time is milliseconds, and the timer's 1 kHz work, the music, the effects and the counters, is a tick the host runs; keys arrive as the game's own key events; the sound routines drive the synth; the mouse is read natively; the commander files go through `FileStore` and step 1's serializer (D78); the video modes are set on `Cga` directly; D80's counterparts land. Keeping the millisecond clock and the frames' pacing should keep most replays exact; key delivery, which the PC delays a millisecond after its latch empties, is where they may move.
+6. **No 8086 in the game's code.** The direction flag, the BP and AL carry-throughs and the line records go, and the drawing routines take a CGA buffer, not a segment. Where a carried value reached the state, what it changes is reported and re-recorded. *Done (ADR-046): nothing moved. DX, BX and DI's carry-throughs went after, by D84; three replays moved, re-recorded with their cause.*
+7. **The native host** (D77). `Hardware.h`, `Platform`, the game thread and `Cycles` go. Time is milliseconds, and the timer's 1 kHz work, the music, the effects and the counters, is a tick the host runs; keys arrive as the game's own key events; the sound routines drive the synth; the mouse is read natively; the commander files go through `FileStore` and step 1's serializer (D78); the video modes are set on `Cga` directly; D80's counterparts land. Keeping the millisecond clock and the frames' pacing should keep most replays exact; key delivery, which the PC delays a millisecond after its latch empties, is where they may move. *In progress: the waits are coroutines and the game thread is gone (ADR-047), nothing moved; D80's counterparts have landed and the screenshots gone (ADR-048, D86); the commander files go through `FileStore` with no DOS between (ADR-049); the video modes are set on `Cga` (ADR-050); the game reads the mouse with no int 33h, and the shell does not yet attach one (ADR-051); time is milliseconds and a key an event (ADR-052, D87, D88), every digest re-recorded and four replays flown again; `Hardware`, `Guest` and the native entries give way to one `Host` (ADR-053, D90); the interrupt model, the scheduler and port 61h go, the tick's work and the keys running at the game's waits (ADR-054, D91).*
 8. **The joystick goes** (D81): the IBM game port, its calibration and the instruction cycles it counted, the Amstrad's stick, and the input device's choice of them. The twins and replays that fly by stick are re-recorded or retired. *Done (ADR-045), before steps 6 and 7: the three stick twins retired, every digest re-recorded after a comparison by member, one member moved where the Amstrad's stick was chosen.*
 9. **No 1987 in the comments.** The addresses go from the code; `Reference-Map.md` and the ADRs keep them, as history.
 10. **The tests on native rigs.** `ReferenceRig` and `TwinRig` become native, the tests that read the image go, and AGENTS.md is brought up to date: its CI steps, and D79.
@@ -486,6 +491,14 @@ After D44, no replay reaches the docked screens. Their rules are functions with 
 | D81 | Whether the joystick stays, natively, as step 8 planned through XInput (raised by the owner, 2026-10-14) | — | **It goes** (2026-10-14): the keyboard and the mouse fly the game. |
 | D82 | The docked screens as drawn, `Design/Canvas/docked/` (drawn by the owner, 2026-10-14) | — | **D01 to D11 and their requirements** (2026-10-14): Phase 6, piece 5. Supersedes D54's docked and chart gaps. |
 | D83 | How the docked screens are driven (set by the owner, 2026-10-14) | — | **The mouse is on while docked**, and is mandatory on the charts: no key moves their cursor (2026-10-14). |
+| D84 | Whether DX, BX and DI's carry-throughs go too, which step 6 did not name: DI decides what a launched missile is copied from (raised with ADR-046) | — | **They go** (2026-10-14): ADR-046 items 6 to 8. |
+| D85 | Whether the game keeps D77's coroutine waits or moves to screens driven by the game's state, the current screen in `GameState` and a tick that updates and draws it (raised by the owner, 2026-10-14) | Coroutines through Phase 7, which keep every replay exact while the PC goes; state-driven screens from piece 5. | **As recommended** (2026-10-14): the coroutine waits stay through Phase 7 (ADR-047); piece 5's docked screens are state-driven: the current screen and its cursor in `GameState`, mouse and key events in, drawn from the state; the title, the pause screen and flight's function-key screens follow afterwards, with one re-recording and its cause. Amends D77's "the docked screens of piece 5 are written against the same host". |
+| D86 | Whether D80's PNG screenshot is wanted (raised by the owner, 2026-10-14) | — | **The screenshots go** (2026-10-14): Alt+PrtSc does nothing; amends D80's "a PNG the shell saves". |
+| D87 | Whether the native host's time keeps the PC's rates, the 1000.15 Hz tick and the 59.92 Hz retrace, or is whole milliseconds (raised with step 7, 2026-10-14) | Whole milliseconds: a 1 ms tick and 60 Hz frames, `Cycles` gone, every digest re-recorded once with its cause, the outcomes checked. | **As recommended** (2026-10-14). |
+| D88 | When a key event from the host reaches the game, once the XT's latch and its 1 ms delivery go (raised with step 7, 2026-10-14) | One queued event a tick, in order: the game's own key and whether it went down or up. | **As recommended** (2026-10-14). |
+| D89 | Whether the shell attaches Windows' mouse now, its raw counts as mickeys, or with piece 5's docked host (raised with step 7, 2026-10-14) | — | **With piece 5** (2026-10-14), where D83's mouse and its capture are designed. |
+| D90 | What replaces `Hardware` as the game's handle on the host (raised with step 7, 2026-10-14) | One `Host` struct: the clock and the waits, the keys, the mouse, the synth, the CGA and the files, passed where `Hardware&` is. | **As recommended** (2026-10-14). |
+| D91 | Whether the interrupt model goes: the interrupt flag, the end of interrupt and the handlers, for the host running the tick's work and the keys at each wait (raised with step 7, 2026-10-14) | Keeping it moves nothing; dropping it is cleaner and moves the digests a second time. | **It goes** (2026-10-14), with a second re-recording. |
 
 ## 9. ADRs this plan produces
 
@@ -537,4 +550,13 @@ After D44, no replay reaches the docked screens. Their rules are functions with 
 | — | The docked screens themselves and their golden images (D44, D53, D75) | Phase 6, piece 5 — to write |
 | [ADR-044](ADR/ADR-044-wholly-native-state.md) | Wholly native, the state: written by name, then free of the 1987 layout (D76, D78) | Phase 7, steps 1 to 5 — written in part |
 | [ADR-045](ADR/ADR-045-the-joystick-goes.md) | The joystick goes: the keyboard and the mouse fly the game (D81) | Phase 7, step 8 — written |
+| [ADR-046](ADR/ADR-046-no-8086-in-the-game.md) | No 8086 in the game's code: the flag, ES, BP, AL and the line's registers go | Phase 7, step 6 — written |
+| [ADR-047](ADR/ADR-047-the-game-waits-as-a-coroutine.md) | The game waits as a coroutine: no native thread (D77) | Phase 7, step 7 — written |
+| [ADR-048](ADR/ADR-048-what-only-dos-had.md) | What only DOS had: the cheat is a flag, leaving is a quit, and the screenshots go (D80, D86) | Phase 7, step 7 — written |
+| [ADR-049](ADR/ADR-049-commander-files-through-the-store.md) | The commander files go through the store: no DOS between the game and its files (D78) | Phase 7, step 7 — written |
+| [ADR-050](ADR/ADR-050-video-modes-on-the-cga.md) | The video modes are set on the CGA: no BIOS video services (D77) | Phase 7, step 7 — written |
+| [ADR-051](ADR/ADR-051-the-game-reads-the-mouse.md) | The game reads the mouse: no int 33h (D77) | Phase 7, step 7 — written |
+| [ADR-052](ADR/ADR-052-milliseconds-and-key-events.md) | Time is milliseconds, and a key is an event (D87, D88) | Phase 7, step 7 — written |
+| [ADR-053](ADR/ADR-053-the-host.md) | The Host: one handle on the clock and the devices, and no Hardware (D90) | Phase 7, step 7 — written |
+| [ADR-054](ADR/ADR-054-no-interrupts.md) | No interrupts: the tick's work and the keys run at the game's waits (D91) | Phase 7, step 7 — written |
 | — | Wholly native: the other steps after the state (D76–D80) | Phase 7 — to write |

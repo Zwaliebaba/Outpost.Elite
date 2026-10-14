@@ -13,14 +13,14 @@ namespace
 // Sets the byte _member names to _value on the twin.
 template <typename Struct> void SetBoth(TwinRig& _rig, DataByte<Struct> _member, std::uint8_t _value)
 {
-  _rig.Both([_member, _value](Elite::Platform&, Elite::GameState& _state) { DataByteIn(_state, _member) = _value; });
+  _rig.Both([_member, _value](Elite::Host&, Elite::GameState& _state) { DataByteIn(_state, _member) = _value; });
 }
 
 // The twin is back at the title, out of flight.
 void AssertAtTheTitle(TwinRig& _rig)
 {
   _rig.Both(
-    [](Elite::Platform&, Elite::GameState& _state)
+    [](Elite::Host&, Elite::GameState& _state)
     {
       Assert::AreEqual(std::uint8_t{0}, std::uint8_t{_state.Data().flow.titleShown}, L"the title runs again");
       Assert::AreEqual(std::uint8_t{0}, std::uint8_t{_state.Data().flow.inFlight}, L"out of flight");

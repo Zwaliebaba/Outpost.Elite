@@ -56,9 +56,18 @@ constexpr std::array<std::uint8_t, 3> PALETTE_1 = {3, 5, 7}; // cyan, magenta, l
   return static_cast<std::size_t>(_index);
 }
 
+// The IBM PC BIOS's CRTC registers 0-15 and mode control value for each mode the game sets (VIDEO_PARMS, M7).
+constexpr std::array<std::uint8_t, 16> CRTC_TEXT_40_COLUMNS = {0x38, 0x28, 0x2D, 0x0A, 0x1F, 0x06, 0x19, 0x1C,
+                                                               0x02, 0x07, 0x06, 0x07, 0x00, 0x00, 0x00, 0x00};
+constexpr std::array<std::uint8_t, 16> CRTC_GRAPHICS_320 = {0x38, 0x28, 0x2D, 0x0A, 0x7F, 0x06, 0x64, 0x70,
+                                                            0x02, 0x01, 0x06, 0x07, 0x00, 0x00, 0x00, 0x00};
+constexpr std::uint8_t MODE_CONTROL_TEXT_40_COLUMNS = 0x28;
+constexpr std::uint8_t MODE_CONTROL_GRAPHICS_320 = 0x2A;
+constexpr std::uint8_t COLOR_SELECT_AFTER_MODE = 0x30;
+
 } // namespace
 
-Cga::Cga(const Cycles& _clock) noexcept
+Cga::Cga(const Milliseconds& _clock) noexcept
   : m_clock(_clock)
 {
 }
@@ -82,12 +91,25 @@ void Cga::SetColorSelect(std::uint8_t _value) noexcept
   m_colorSelect = static_cast<std::uint8_t>(_value & COLOR_SELECT_BITS);
 }
 
+void Cga::SetMode(CgaMode _mode) noexcept
+{
+  const bool graphics = _mode == CgaMode::Graphics320;
+  SetModeControl(0x00);
+  const std::array<std::uint8_t, 16>& table = graphics ? CRTC_GRAPHICS_320 : CRTC_TEXT_40_COLUMNS;
+  for (std::size_t index = 0; index < table.size(); ++index)
+  {
+    WriteCrtc(static_cast<std::uint8_t>(index), table[index]);
+  }
+  SetModeControl(graphics ? MODE_CONTROL_GRAPHICS_320 : MODE_CONTROL_TEXT_40_COLUMNS);
+  SetColorSelect(COLOR_SELECT_AFTER_MODE);
+}
+
 std::uint8_t Cga::ReadStatus() noexcept
 {
   auto status = Status();
   if ((status & STATUS_VERTICAL_SYNC) != 0)
   {
-    const Cycles start = RetraceStart();
+    const Milliseconds start = RetraceStart();
     if (start == m_retraceSeen)
     {
       status = static_cast<std::uint8_t>(status & ~STATUS_VERTICAL_SYNC);
@@ -99,60 +121,28 @@ std::uint8_t Cga::ReadStatus() noexcept
 
 std::uint8_t Cga::Status() const noexcept
 {
-  const Cycles phase = m_clock % CGA_CYCLES_PER_FRAME;
-  const auto line = static_cast<std::uint32_t>(phase / CGA_CYCLES_PER_LINE);
-  const Cycles lineCycle = phase % CGA_CYCLES_PER_LINE;
-
-  std::uint8_t status = 0;
-  if (line >= CGA_VISIBLE_LINES || lineCycle >= DISPLAY_CYCLES_PER_LINE)
-  {
-    status = static_cast<std::uint8_t>(status | STATUS_DISPLAY_INACTIVE);
-  }
-
-  const std::uint32_t syncLine =
-    std::uint32_t{Crtc(CrtcRegister::VerticalSyncPosition)} * (std::uint32_t{Crtc(CrtcRegister::MaximumScanLine)} + 1);
-  if (syncLine < CGA_LINES_PER_FRAME)
-  {
-    const std::uint32_t linesSinceSync = (line + CGA_LINES_PER_FRAME - syncLine) % CGA_LINES_PER_FRAME;
-    if (linesSinceSync < VERTICAL_SYNC_LINES)
-    {
-      status = static_cast<std::uint8_t>(status | STATUS_VERTICAL_SYNC);
-    }
-  }
-  return status;
+  return RetraceStart() != NO_EVENT ? static_cast<std::uint8_t>(STATUS_DISPLAY_INACTIVE | STATUS_VERTICAL_SYNC) : std::uint8_t{0};
 }
 
-Cycles Cga::RetraceStart() const noexcept
+Milliseconds Cga::RetraceStart() const noexcept
 {
-  const Cycles phase = m_clock % CGA_CYCLES_PER_FRAME;
-  const auto line = static_cast<std::uint32_t>(phase / CGA_CYCLES_PER_LINE);
-  const std::uint32_t syncLine =
-    std::uint32_t{Crtc(CrtcRegister::VerticalSyncPosition)} * (std::uint32_t{Crtc(CrtcRegister::MaximumScanLine)} + 1);
-  if (syncLine >= CGA_LINES_PER_FRAME)
-  {
-    return NO_EVENT;
-  }
-  const std::uint32_t linesSinceSync = (line + CGA_LINES_PER_FRAME - syncLine) % CGA_LINES_PER_FRAME;
-  if (linesSinceSync >= VERTICAL_SYNC_LINES)
-  {
-    return NO_EVENT;
-  }
-  return m_clock - (Cycles{linesSinceSync} * CGA_CYCLES_PER_LINE + m_clock % CGA_CYCLES_PER_LINE);
+  const Milliseconds start = FrameStart(FrameAt(m_clock));
+  return m_clock < start + RETRACE_MILLISECONDS ? start : NO_EVENT;
 }
 
-Cycles Cga::NextStatusChangeAt() const noexcept
+Milliseconds Cga::NextStatusChangeAt() const noexcept
 {
-  const Cycles lineCycle = m_clock % CGA_CYCLES_PER_LINE;
-  if (lineCycle < DISPLAY_CYCLES_PER_LINE)
+  const Milliseconds start = FrameStart(FrameAt(m_clock));
+  if (m_clock < start + RETRACE_MILLISECONDS)
   {
-    return m_clock + (DISPLAY_CYCLES_PER_LINE - lineCycle);
+    return start + RETRACE_MILLISECONDS;
   }
-  return m_clock + (CGA_CYCLES_PER_LINE - lineCycle);
+  return FrameStart(FrameAt(m_clock) + 1);
 }
 
 std::uint64_t Cga::FrameNumber() const noexcept
 {
-  return m_clock / CGA_CYCLES_PER_FRAME;
+  return FrameAt(m_clock);
 }
 
 void Cga::Render(VideoMemory _memory, FrameImage& _image) const noexcept

@@ -140,29 +140,14 @@ template <std::size_t Glyphs, std::size_t GlyphBytes>
   return BytesWithin(DrawingBuffer(_state), _at, 2);
 }
 
-// ES as a screen printer finds it: the CGA's video segment wherever the game prints on a screen. The one print that ES on the
-// data segment could reach is a chart's title (DrawChartTitle), for a chart entered from flight with its frame up already,
-// which the original would draw through the data segment from DS:0388; the GameState refused it at the title's second row,
-// DS:2388, a byte it did not hold, and this refuses it at the first.
-void CheckScreenSegment(std::uint16_t _segment)
+// REP STOSW: _count words of _value at _at, the CGA's memory. Returns where DI ends.
+std::uint16_t StoreWords(GameState& _state, std::uint16_t _at, std::uint16_t _count, std::uint16_t _value)
 {
-  if (_segment != GameState::VIDEO_SEGMENT)
-  {
-    throw std::out_of_range(std::format("Text: a screen printed through segment {:04X}h, which is not the CGA's", _segment));
-  }
-}
-
-// REP STOSW: _count words of _value at _segment:_at, the CGA's memory, forwards or, _backwards, down. Returns where DI ends.
-std::uint16_t StoreWords(GameState& _state, std::uint16_t _segment, std::uint16_t _at, std::uint16_t _count, std::uint16_t _value,
-                         bool _backwards)
-{
-  CheckScreenSegment(_segment);
-  const auto step = static_cast<std::uint16_t>(_backwards ? 0xFFFE : 2);
   std::uint16_t at = _at;
   for (std::uint16_t left = _count; left != 0; --left)
   {
     _state.SetVideoWord(at, _value);
-    at = static_cast<std::uint16_t>(at + step);
+    at = static_cast<std::uint16_t>(at + 2);
   }
   return at;
 }
@@ -180,18 +165,17 @@ template <std::size_t Bytes> void CopyNameInto(const std::array<std::uint8_t, By
 }
 
 // The line ReadTextLine reads: the buffer it types into, which the original holds in SI, and where RedrawInputLine echoes it,
-// in ES:DI. None of them changes from one turn of its loop to the next.
+// in DI. Neither changes from one turn of its loop to the next.
 struct TypedLine
 {
   std::span<std::uint8_t> buffer;
-  std::uint16_t segment;
   std::uint16_t cell;
 };
 
 // ReadTextLine's redraw (0x76FF): the line typed and the cursor printed, then the JMP back to counting the blink.
 void RedrawTypedLine(GameState& _state, const TypedLine& _line, std::uint16_t _length)
 {
-  RedrawInputLine(_state, _line.buffer, _length, _line.segment, _line.cell);
+  RedrawInputLine(_state, _line.buffer, _length, _line.cell);
 }
 
 // ReadTextLine's blink (0x76A3): 300 ticks to the next, the cursor flipped, and the line redrawn.
@@ -203,8 +187,8 @@ void RestartInputBlink(GameState& _state, const TypedLine& _line, std::uint16_t 
 }
 
 // MessageLine's second half (0x35B9): the message in messagePointer, unless it is already shown, on the message line,
-// cleared first a row at a time forwards or, _backwards, down. The original keeps SI round ClearMessageLine on the stack.
-void ShowMessage(GameState& _state, bool _backwards)
+// cleared first a row at a time. The original keeps SI round ClearMessageLine on the stack.
+void ShowMessage(GameState& _state)
 {
   _state.Data().messages.messageFrames = WithHigh(_state.Data().messages.messageFrames, MESSAGE_DRAWN);
   const Message message = _state.Data().messages.messagePointer;
@@ -214,8 +198,8 @@ void ShowMessage(GameState& _state, bool _backwards)
   {
     return;
   }
-  ClearMessageLine(_state, GameState::VIDEO_SEGMENT, _backwards);
-  (void)DrawScreenString(_state, MessageText(_state, message), MESSAGE_INK, GameState::VIDEO_SEGMENT, MESSAGE_LINE_OFFSET);
+  ClearMessageLine(_state);
+  (void)DrawScreenString(_state, MessageText(_state, message), MESSAGE_INK, MESSAGE_LINE_OFFSET);
 }
 
 // The digits FormatDecimal5 writes and the point after them in a number's text, from its first digit.
@@ -273,9 +257,8 @@ void DrawViewString(GameState& _state, std::string_view _text, std::uint16_t _in
   }
 }
 
-std::uint16_t DrawScreenChar(GameState& _state, std::uint8_t _character, std::uint16_t _ink, std::uint16_t _segment, std::uint16_t _cell)
+std::uint16_t DrawScreenChar(GameState& _state, std::uint8_t _character, std::uint16_t _ink, std::uint16_t _cell)
 {
-  CheckScreenSegment(_segment);
   std::uint16_t address = _cell;
   std::uint16_t down = CGA_TO_ODD_BANK;
   std::uint16_t up = CGA_TO_EVEN_BANK;
@@ -293,12 +276,12 @@ std::uint16_t DrawScreenChar(GameState& _state, std::uint8_t _character, std::ui
   return static_cast<std::uint16_t>(_cell + 2);
 }
 
-std::uint16_t DrawScreenString(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _segment, std::uint16_t _cell)
+std::uint16_t DrawScreenString(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _cell)
 {
   std::uint16_t cell = _cell;
   for (const char character : _text)
   {
-    cell = DrawScreenChar(_state, static_cast<std::uint8_t>(character), _ink, _segment, cell);
+    cell = DrawScreenChar(_state, static_cast<std::uint8_t>(character), _ink, cell);
   }
   return cell;
 }
@@ -425,7 +408,7 @@ std::string MessageText(const GameState& _state, Message _message)
   return std::string(index < MESSAGE_TEXTS.size() ? MESSAGE_TEXTS[index] : std::string_view{});
 }
 
-void UpdateMessageLine(GameState& _state, bool _backwards)
+void UpdateMessageLine(GameState& _state)
 {
   UpdateWarnings(_state);
   if (High(_state.Data().messages.messageFrames) != 0)
@@ -443,10 +426,10 @@ void UpdateMessageLine(GameState& _state, bool _backwards)
                                             : view == VIEW_LEFT ? Message::LeftView
                                                                 : Message::RightView;
   }
-  ShowMessage(_state, _backwards);
+  ShowMessage(_state);
 }
 
-void ClearMessageLine(GameState& _state, std::uint16_t _segment, bool _backwards)
+void ClearMessageLine(GameState& _state)
 {
   // REP STOSW a row at a time, DI going on from where each leaves it to the other bank.
   std::uint16_t row = MESSAGE_LINE_OFFSET;
@@ -454,7 +437,7 @@ void ClearMessageLine(GameState& _state, std::uint16_t _segment, bool _backwards
   std::uint16_t up = MESSAGE_TO_EVEN_BANK;
   for (std::uint16_t line = 0; line < MESSAGE_LINE_ROWS; ++line)
   {
-    row = Offset(StoreWords(_state, _segment, row, MESSAGE_LINE_WORDS, 0, _backwards), down);
+    row = Offset(StoreWords(_state, row, MESSAGE_LINE_WORDS, 0), down);
     std::swap(down, up);
   }
 }
@@ -512,10 +495,9 @@ std::uint16_t PrintTextModeString(GameState& _state, std::string_view _text, std
   return cell;
 }
 
-void ToggleMenuRowHighlight(GameState& _state, std::uint16_t _segment, std::uint16_t _row)
+void ToggleMenuRowHighlight(GameState& _state, std::uint16_t _row)
 {
   const std::uint8_t attribute = SwapTextAttributeNibbles(_state);
-  CheckScreenSegment(_segment);
   std::uint16_t cell = _row;
   for (std::uint16_t left = MENU_ROW_ATTRIBUTES; left != 0; --left)
   {
@@ -524,9 +506,8 @@ void ToggleMenuRowHighlight(GameState& _state, std::uint16_t _segment, std::uint
   }
 }
 
-void ClearDockedMessageLine(GameState& _state, std::uint16_t _segment)
+void ClearDockedMessageLine(GameState& _state)
 {
-  CheckScreenSegment(_segment);
   std::uint16_t cell = DOCKED_MESSAGE_OFFSET;
   for (std::uint16_t left = DOCKED_MESSAGE_CHARACTERS; left != 0; --left)
   {
@@ -588,11 +569,11 @@ void PrintTextLines(GameState& _state, std::string_view _texts, std::uint16_t _c
   }
 }
 
-void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<std::uint8_t> _buffer, std::uint8_t _most, std::uint16_t _segment,
-                  std::uint16_t _cell)
+[[nodiscard]] Task<void> ReadTextLine(GameState& _state, Host& _host, std::span<std::uint8_t> _buffer, std::uint8_t _most,
+                                      std::uint16_t _cell)
 {
-  const TypedLine line{_buffer, _segment, _cell};
-  ResetKeyboard(_state, _hardware);
+  const TypedLine line{_buffer, _cell};
+  ResetKeyboard(_state);
   _state.Data().drawing.textPaperPattern = 0;
   _state.Data().text.inputCharsLeft = _most;
   std::uint16_t length = 0;
@@ -606,8 +587,8 @@ void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<std::uint8_t
       RestartInputBlink(_state, line, length);
       continue;
     }
-    WaitForTimerTick(_state, _hardware);
-    const KeyPress key = GetKey(_state, _hardware);
+    co_await WaitForTimerTick(_state, _host);
+    const KeyPress key = GetKey(_state);
     if (key.scanCode == 0)
     {
       continue;
@@ -626,9 +607,9 @@ void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<std::uint8_t
       if (_state.Data().text.inputCursorText[0] != CURSOR_HIDDEN)
       {
         ToggleInputCursor(_state);
-        RedrawInputLine(_state, _buffer, length, _segment, _cell);
+        RedrawInputLine(_state, _buffer, length, _cell);
       }
-      return;
+      co_return;
     }
     if (character == BACKSPACE_KEY)
     {
@@ -636,7 +617,7 @@ void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<std::uint8_t
       {
         --length;
         _state.Data().text.inputCharsLeft = static_cast<std::uint8_t>(_state.Data().text.inputCharsLeft + 1);
-        RedrawInputLine(_state, _buffer, length, _segment, _cell);
+        RedrawInputLine(_state, _buffer, length, _cell);
       }
       continue;
     }
@@ -670,23 +651,22 @@ void ToggleInputCursor(GameState& _state)
   cursor = static_cast<std::uint8_t>(cursor ^ toggle);
 }
 
-void RedrawInputLine(GameState& _state, std::span<std::uint8_t> _buffer, std::uint16_t _length, std::uint16_t _segment, std::uint16_t _cell)
+void RedrawInputLine(GameState& _state, std::span<std::uint8_t> _buffer, std::uint16_t _length, std::uint16_t _cell)
 {
   _buffer[_length] = 0;
-  const std::uint16_t next = PrintStringForLayout(_state, TextIn(_buffer), MESSAGE_INK, _segment, _cell);
+  const std::uint16_t next = PrintStringForLayout(_state, TextIn(_buffer), MESSAGE_INK, _cell);
   // The cursor's glyph and a space, and the NUL after them, which nothing writes.
-  (void)PrintStringForLayout(_state, TextWithin(_state.Data().text.inputCursorText, 0), MESSAGE_INK, _segment, next);
+  (void)PrintStringForLayout(_state, TextWithin(_state.Data().text.inputCursorText, 0), MESSAGE_INK, next);
 }
 
-std::uint16_t PrintStringForLayout(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _segment,
-                                   std::uint16_t _cell)
+std::uint16_t PrintStringForLayout(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _cell)
 {
   // A tail jump to either printer.
   if (_state.Data().drawing.screenLayout == TEXT_LAYOUT)
   {
     return PrintTextModeString(_state, _text, _cell);
   }
-  return DrawScreenString(_state, _text, _ink, _segment, _cell);
+  return DrawScreenString(_state, _text, _ink, _cell);
 }
 
 } // namespace Elite

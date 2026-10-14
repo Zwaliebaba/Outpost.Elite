@@ -17,7 +17,7 @@ using Commander = Elite::CommanderState;
 // A byte of the game's data set on the twin.
 template <typename Struct> void SetBoth(TwinRig& _rig, DataByte<Struct> _member, std::uint8_t _value)
 {
-  _rig.Both([&](Elite::Platform&, Elite::GameState& _state) { DataByteIn(_state, _member) = _value; });
+  _rig.Both([&](Elite::Host&, Elite::GameState& _state) { DataByteIn(_state, _member) = _value; });
 }
 
 // Launches from Lave, and flies on for 6 seconds.

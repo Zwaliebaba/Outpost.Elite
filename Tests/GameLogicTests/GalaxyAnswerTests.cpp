@@ -47,7 +47,7 @@ constexpr std::size_t SYSTEMS = 256;
                 std::uint8_t{commander.selectedSystem.government}, std::uint8_t{commander.selectedSystem.techLevel},
                 std::uint8_t{commander.selectedSystem.populationTenthsBillion},
                 std::uint16_t{commander.selectedSystem.productivityMillionCredits}, std::uint16_t{commander.selectedSystem.radiusKm});
-  (void)Elite::SelectSystemAtCursor(_state, 0);
+  (void)Elite::SelectSystemAtCursor(_state);
   return answer + std::format(" {}", std::uint8_t{commander.selectedSystem.index});
 }
 

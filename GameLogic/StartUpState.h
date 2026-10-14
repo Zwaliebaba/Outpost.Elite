@@ -11,7 +11,7 @@ namespace Elite
 /// data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct StartUpState
 {
-  /// 1 when the command tail is exactly ' cheat' (CheckCheatArgument compares PSP:80h with DS:2063 XOR AAh); RunFlight then ignores the...
+  /// 1 when the game was started with the cheat on (CheckCheatArgument, D80), where 1987 read ' cheat' from the command tail; RunFlight then ignores the...
   std::uint8_t cheatEnabled;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.

@@ -51,7 +51,7 @@ constexpr std::array<CrowdedChart, 4> CROWDED_CHARTS = {{{0, 11}, {8, 64}, {8, 1
 // _value into the byte _member names, on the twin.
 template <typename Struct> void PokeBoth(TwinRig& _rig, DataByte<Struct> _member, std::uint8_t _value)
 {
-  _rig.Both([_member, _value](Elite::Platform&, Elite::GameState& _state) { DataByteIn(_state, _member) = _value; });
+  _rig.Both([_member, _value](Elite::Host&, Elite::GameState& _state) { DataByteIn(_state, _member) = _value; });
 }
 
 } // namespace
@@ -112,7 +112,7 @@ public:
     PokeBoth(rig, &Commander::chartCursorX, LEESTI.x);
     PokeBoth(rig, &Commander::chartCursorY, static_cast<std::uint8_t>(LEESTI.y / 2));
     rig.Play("key F7; wait 0.5\ndigest data");
-    rig.Both([](Elite::Platform&, Elite::GameState& _state)
+    rig.Both([](Elite::Host&, Elite::GameState& _state)
              { Assert::AreEqual(std::uint8_t{'1'}, std::uint8_t{_state.Data().galaxy.techLevelTensDigit}, L"two digits"); });
     rig.Play("key F7; wait 0.1; key a; wait 0.1; key Escape; wait 0.3\ndigest closed");
   }

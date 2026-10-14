@@ -2,7 +2,7 @@
 #pragma once
 
 #include "GameState.h"
-#include "Hardware.h"
+#include "Host.h"
 #include "Maths.h"
 #include "SpaceObject.h"
 #include "Ships.h"
@@ -21,16 +21,13 @@ namespace Elite
 /// UpdateObjectsAndSpawn (CS:4A10): once a frame, activeObjectCount and the class counts cleared (REP STOSB, upwards: the direction flag is
 /// clear wherever the game calls it, change 3c), then every active slot of shipSlotCount counted, debris apart, and run by its class's
 /// handler; maskingBackgroundColor cleared; then, with fewer than 10 active objects and no more than objectSlotCount, the mask mission's
-/// ships, an invasion's Thargoids, or the government's spawns. _dx is the DX it is called with, which goes on from handler to handler: each
-/// takes it and leaves its own, and the movers take DL for their range's box.
-void UpdateObjectsAndSpawn(GameState& _state, Hardware& _hardware, std::uint16_t _dx);
+/// ships, an invasion's Thargoids, or the government's spawns.
+void UpdateObjectsAndSpawn(GameState& _state);
 
 /// UpdateStationAi (CS:5595): class 1: the station at _station spins; while it is hostile and the government is no anarchy, it looks for an
 /// offender out of the box it guards and launches police, shuttles or traders at one (copies of itself); then it answers missiles aimed at
-/// it, or at the police in the safe zone, with its ECM. _dx is the DX it is called with. Returns DX as the original leaves it, of which
-/// UpdateObjectsAndSpawn's next handler can take DL for its range's box: _dx, 1C2h once it found the station near, ComputeVelocity's once
-/// it launched, or the last pixel of the last blip it erased.
-std::uint16_t UpdateStationAi(GameState& _state, SpaceObject& _station, std::uint16_t _dx);
+/// it, or at the police in the safe zone, with its ECM.
+void UpdateStationAi(GameState& _state, SpaceObject& _station);
 
 /// ClampTurnStep's step and the error it was taken from.
 struct TurnStep
@@ -92,16 +89,17 @@ Turn TurnTowardAngles(SpaceObject& _slot, Angles _wanted);
 MovedObject UpdateDriftingObjectAi(GameState& _state, SpaceObject& _slot);
 
 /// UpdateTraderOrPoliceAi (CS:569C): class 4: traders and the police at _slot: deciding, attacking, fleeing with jinks, breaking off; rocks
-/// only spin. _rangeLow is DL, the low byte of the box a ship breaking off measures its range by. Every path ends with MoveObject: returns
-/// what it did.
-MovedObject UpdateTraderOrPoliceAi(GameState& _state, SpaceObject& _slot, std::uint8_t _rangeLow);
+/// only spin. A ship breaking off measures its range by a box of its range byte in 256ths (ADR-046). Every path ends with MoveObject:
+/// returns what it did.
+MovedObject UpdateTraderOrPoliceAi(GameState& _state, SpaceObject& _slot);
 
 /// UpdateWolfAi (CS:57E8): class 5: attack passes at the player, a Thargoid launching Thargons and setting off its ECM now and then;
-/// _rangeLow as UpdateTraderOrPoliceAi's, for turning away. Returns what its MoveObject did.
-MovedObject UpdateWolfAi(GameState& _state, SpaceObject& _slot, std::uint8_t _rangeLow);
+/// its range measured as UpdateTraderOrPoliceAi's, for turning away. Returns what its MoveObject did.
+MovedObject UpdateWolfAi(GameState& _state, SpaceObject& _slot);
 
-/// UpdateHunterAi (CS:58DE): class 6: pack hunting; _rangeLow as UpdateTraderOrPoliceAi's, for evading. Returns what its MoveObject did.
-MovedObject UpdateHunterAi(GameState& _state, SpaceObject& _slot, std::uint8_t _rangeLow);
+/// UpdateHunterAi (CS:58DE): class 6: pack hunting; its range measured as UpdateTraderOrPoliceAi's, for evading. Returns what its
+/// MoveObject did.
+MovedObject UpdateHunterAi(GameState& _state, SpaceObject& _slot);
 
 /// CheckSafeZoneHoldFire (CS:5A10): whether _slot must hold its fire: while the player is in the station's safe zone
 /// (InSafeZone), unless a Thargoid invasion is on or _slot is a police Viper.

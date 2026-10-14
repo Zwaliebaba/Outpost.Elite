@@ -123,40 +123,33 @@ std::uint16_t Store(GameState& _state, std::uint16_t _offset, std::uint16_t _cou
   return std::span<const std::uint8_t>(TUNNEL_RECTANGLES).subspan(_rectangle * TUNNEL_RECTANGLE_BYTES, TUNNEL_RECTANGLE_BYTES);
 }
 
-// Where DrawTunnelRectangles stopped.
-struct TunnelDrawn
-{
-  std::size_t next; // past the last rectangle drawn, where the original leaves SI
-  bool filled;      // a DrawLine filled bytes with REP STOSB
-};
-
 // _count of tunnelRectangles from _first, each by DrawTunnelRectangle in the tunnel's colour, in the LOOP at CS:2DA1 or CS:2DEE.
-TunnelDrawn DrawTunnelRectangles(GameState& _state, std::size_t _first, std::uint16_t _count)
+void DrawTunnelRectangles(GameState& _state, std::size_t _first, std::uint16_t _count)
 {
-  TunnelDrawn drawn{_first, false};
+  std::size_t next = _first;
   std::uint16_t count = _count;
   for (;;)
   {
     _state.Data().drawing.drawColor = TUNNEL_COLOR;
-    drawn.filled = DrawTunnelRectangle(_state, drawn.next) || drawn.filled;
-    ++drawn.next;
+    DrawTunnelRectangle(_state, next);
+    ++next;
     if (--count == 0)
     {
-      return drawn;
+      return;
     }
   }
 }
 
 // MOV CX,_ticks, then WaitForTimerTick and the LOOP back to it: about _ticks milliseconds. The original leaves CX = 0.
-void WaitTimerTicks(GameState& _state, Hardware& _hardware, std::uint16_t _ticks)
+[[nodiscard]] Task<void> WaitTimerTicks(GameState& _state, Host& _host, std::uint16_t _ticks)
 {
   std::uint16_t count = _ticks;
   for (;;)
   {
-    WaitForTimerTick(_state, _hardware);
+    co_await WaitForTimerTick(_state, _host);
     if (--count == 0)
     {
-      return;
+      co_return;
     }
   }
 }
@@ -401,19 +394,17 @@ void RollWithSpin(GameState& _state, std::uint16_t _turn)
 
 } // namespace
 
-bool DrawTunnelRectangle(GameState& _state, std::size_t _rectangle)
+void DrawTunnelRectangle(GameState& _state, std::size_t _rectangle)
 {
   const std::span<const std::uint8_t> points = TunnelRectangle(_rectangle);
-  bool filled = false;
   std::size_t point = 0;
   for (std::uint16_t edge = 0; edge < TUNNEL_EDGES; ++edge)
   {
     const std::uint16_t from = FromCenter(WordIn(points, point));
     const std::uint16_t to = FromCenter(WordIn(points, point + 2));
-    filled = DrawLine(_state, Low(from), High(from), Low(to), High(to)) || filled;
+    DrawLine(_state, Low(from), High(from), Low(to), High(to));
     point += 2;
   }
-  return filled;
 }
 
 bool CheckDockingAlignment(const GameState& _state, const SpaceObject& _station, std::uint16_t _tolerance)
@@ -478,44 +469,34 @@ void MaskOutsideTunnel(GameState& _state, std::size_t _rectangle)
   } while (--left != 0);
 }
 
-void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
+[[nodiscard]] Task<void> PlayStationTunnel(GameState& _state, Host& _host)
 {
   // MOV AX,leavingStationMessage, or autoDockMessage when docked, for one frame.
   _state.Data().messages.messagePointer = _state.Data().flight.playerDocked != 0 ? Message::AutoDock : Message::LeavingStation;
   _state.Data().messages.messageFrames = 1;
-  UpdateMessageLine(_state, _backward);
+  UpdateMessageLine(_state);
   UpdateDashboard(_state);
 
   // Frame n of the first ten draws the first n rectangles, n in AX, pushed round the frame and popped for its INC. Leaving, the world moves on behind the tunnel, which masks the view outside the first rectangle; docking, each frame waits
-  // for the timer first. The direction flag goes as the original's does: a DrawLine that fills clears it, and so do
-  // MaskOutsideTunnel's and FinishSpaceViewFrame's CLD.
-  bool backward = _backward;
+  // for the timer first.
   for (std::uint16_t frame = 1;;)
   {
     if (_state.Data().flight.playerDocked == 0)
     {
-      backward = TransformAndDrawObjects(_state, _hardware, backward);
+      TransformAndDrawObjects(_state, _host);
       MoveObjectsByVelocity(_state);
-      if (UpdateStardust(_state))
-      {
-        backward = false;
-      }
+      UpdateStardust(_state);
       MaskOutsideTunnel(_state, 0);
-      backward = false;
     }
     else
     {
-      WaitTimerTicks(_state, _hardware, DOCKED_FIRST_TICKS);
+      co_await WaitTimerTicks(_state, _host, DOCKED_FIRST_TICKS);
     }
-    if (DrawTunnelRectangles(_state, 0, frame).filled)
-    {
-      backward = false;
-    }
-    FinishSpaceViewFrame(_state, _hardware);
+    DrawTunnelRectangles(_state, 0, frame);
+    co_await FinishSpaceViewFrame(_state, _host);
     // The frame as the game drew it, for a renderer that shows it in the cockpit (D68).
-    _hardware.PublishSpaceViewPicture(WithoutScene(TakeFlightSnapshot(_state)));
-    backward = false;
-    WaitTimerTicks(_state, _hardware, TUNNEL_FRAME_TICKS);
+    _host.PublishSpaceViewPicture(WithoutScene(TakeFlightSnapshot(_state)));
+    co_await WaitTimerTicks(_state, _host, TUNNEL_FRAME_TICKS);
     // INC AX / CMP AL,0Bh.
     frame = Offset(frame, 1);
     if (Low(frame) == TUNNEL_FRAMES + 1)
@@ -531,40 +512,32 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward)
   {
     if (_state.Data().flight.playerDocked == 0)
     {
-      backward = TransformAndDrawObjects(_state, _hardware, backward);
-      if (UpdateStardust(_state))
-      {
-        backward = false;
-      }
+      TransformAndDrawObjects(_state, _host);
+      UpdateStardust(_state);
       MoveObjectsByVelocity(_state);
       MaskOutsideTunnel(_state, first);
-      backward = false;
     }
     else
     {
-      WaitTimerTicks(_state, _hardware, TUNNEL_FRAME_TICKS);
+      co_await WaitTimerTicks(_state, _host, TUNNEL_FRAME_TICKS);
     }
-    if (DrawTunnelRectangles(_state, first, frames).filled)
-    {
-      backward = false;
-    }
-    FinishSpaceViewFrame(_state, _hardware);
-    _hardware.PublishSpaceViewPicture(WithoutScene(TakeFlightSnapshot(_state)));
-    backward = false;
+    DrawTunnelRectangles(_state, first, frames);
+    co_await FinishSpaceViewFrame(_state, _host);
+    _host.PublishSpaceViewPicture(WithoutScene(TakeFlightSnapshot(_state)));
     ++first;
     if (--frames == 0)
     {
-      return;
+      co_return;
     }
   }
 }
 
-void ToggleDockingComputer(GameState& _state, Hardware& _hardware)
+void ToggleDockingComputer(GameState& _state, Host& _host)
 {
   _state.Data().playerShip.dockingKeyReleased = 0;
   if (_state.Data().playerShip.dockingComputerOn == 1)
   {
-    StopAllSound(_state, _hardware);
+    StopAllSound(_state, _host);
     _state.Data().playerShip.dockingComputerOn = 0;
     _state.Data().playerShip.viewLocked = 0;
     if (_state.Data().playerShip.playerSpeed == 0)
@@ -591,7 +564,7 @@ void ToggleDockingComputer(GameState& _state, Hardware& _hardware)
   _state.Data().docking.dockingComputerSteering = 0;
   _state.Data().docking.dockingComputerState = SLOW_TO_STOP;
   _state.Data().playerShip.dockingComputerOn = 1;
-  StartMusic(_state, _hardware);
+  StartMusic(_state, _host);
   StartBeep(_state);
   PostDockingMessage(_state, Message::DockingComputerOn);
 }
@@ -649,7 +622,7 @@ void RunDockingComputer(GameState& _state)
   }
 }
 
-void CancelDockingComputer(GameState& _state, Hardware& _hardware)
+void CancelDockingComputer(GameState& _state, Host& _host)
 {
   if (_state.Data().playerShip.dockingComputerOn != 1)
   {
@@ -658,7 +631,7 @@ void CancelDockingComputer(GameState& _state, Hardware& _hardware)
   _state.Data().playerShip.dockingComputerOn = 0;
   _state.Data().playerShip.viewLocked = 0;
   // PUSH AX / POP AX round it: StopAllSound's AX does not come out.
-  StopAllSound(_state, _hardware);
+  StopAllSound(_state, _host);
 }
 
 } // namespace Elite

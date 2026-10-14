@@ -1,7 +1,7 @@
 // GameLogic/Reference.h
 #pragma once
 
-#include "DosFiles.h"
+#include "FileStore.h"
 
 #include <cstdint>
 #include <filesystem>

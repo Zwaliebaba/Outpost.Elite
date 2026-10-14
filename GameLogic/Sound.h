@@ -2,7 +2,7 @@
 #pragma once
 
 #include "GameState.h"
-#include "Hardware.h"
+#include "Host.h"
 
 #include <cstdint>
 #include <optional>
@@ -17,19 +17,19 @@ namespace Elite
 
 /// StartMusic (CS:7401): SilenceSpeakerTimer, the speaker's gate and data on in port 61h but not in speakerPortImage,
 /// and the title tune from its start.
-void StartMusic(GameState& _state, Hardware& _hardware);
+void StartMusic(GameState& _state, Host& _host);
 
-/// StopAllSound (CS:7423): StopSoundEffects and its STI, the music off and the speaker's gate and data cleared.
-void StopAllSound(GameState& _state, Hardware& _hardware);
+/// StopAllSound (CS:7423): StopSoundEffects, the music off and the speaker's gate and data cleared.
+void StopAllSound(GameState& _state, Host& _host);
 
 /// SilenceSpeakerTimer (CS:7436): PIT channel 2 in mode 3 with divisor 2, out of hearing.
-void SilenceSpeakerTimer(Hardware& _hardware);
+void SilenceSpeakerTimer(Host& _host);
 
 /// EmitNoiseSample (CS:7A93): the next bit of noiseSource to the speaker. Returns the port 61h value.
-std::uint8_t EmitNoiseSample(GameState& _state, Hardware& _hardware);
+std::uint8_t EmitNoiseSample(GameState& _state, Host& _host);
 
 /// ToggleSpeaker (CS:7AB8): flips the speaker's data bit. Returns the port 61h value.
-std::uint8_t ToggleSpeaker(GameState& _state, Hardware& _hardware);
+std::uint8_t ToggleSpeaker(GameState& _state, Host& _host);
 
 /// StartBeep (CS:7A57): beepTicks = 70.
 void StartBeep(GameState& _state);
@@ -50,9 +50,8 @@ void StartExplosionSound(GameState& _state);
 /// step length the step counter starts at.
 std::uint8_t StartPlayerDeathSound(GameState& _state);
 
-/// StartLaserSound (CS:7B71): unless a noise sweep runs, a tone sweep, step 20 shrinking by 2. The original starts it
-/// under CLI. Returns the step length the step counter starts at, or nothing when a noise sweep runs.
-std::optional<std::uint8_t> StartLaserSound(GameState& _state);
+/// StartLaserSound (CS:7B71): unless a noise sweep runs, a tone sweep, step 20 shrinking by 2.
+void StartLaserSound(GameState& _state);
 
 /// StartPlayerHitSound (CS:7B96): 100 ticks of noise, the tone sweep and the two-tone stopped. The original does it
 /// under CLI.

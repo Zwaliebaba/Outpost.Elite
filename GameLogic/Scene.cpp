@@ -229,8 +229,8 @@ void RotateVerticesToView(GameState& _state, std::size_t _first, std::uint16_t _
 
 // RenderBlueprint (CS:3CF2-3D20), what RenderBlueprintBody does with _blueprint's body: the vertex program from _accumulator, the
 // projection, the edge lists and the faces. Each count is a byte loaded into CL and stored with all of CX, whose CH the LOOPs
-// before it leave 0, or the edge count's doubling. Returns the direction flag as DrawVisibleFaces leaves it.
-[[nodiscard]] bool RenderBlueprint(GameState& _state, const Blueprint& _blueprint, Vector _accumulator, bool _backward)
+// before it leave 0, or the edge count's doubling.
+void RenderBlueprint(GameState& _state, const Blueprint& _blueprint, Vector _accumulator)
 {
   RunVertexProgram(_state, _blueprint.vertexProgram, _accumulator);
   std::uint16_t count = 0;
@@ -246,7 +246,7 @@ void RotateVerticesToView(GameState& _state, std::size_t _first, std::uint16_t _
   SetLow(count, static_cast<std::uint8_t>(_blueprint.faceEdges.size() / 2));
   count = static_cast<std::uint16_t>(count << 1);
   SetLow(count, _blueprint.faces);
-  return DrawVisibleFaces(_state, _blueprint, count, _backward).backward;
+  DrawVisibleFaces(_state, _blueprint, count);
 }
 
 // CWD / MOV DL,AH / MOV AH,AL / XOR AL,AL: DX:AX = _magnitude * 256, what ProjectVertices and DrawSunOrPlanetDisc divide. DH is
@@ -312,9 +312,8 @@ struct WindingProducts
 
 // An edge item (CS:3AF3): _item, the edge's offset in _blueprint's face edges, which the original's faceEdgeList points at; the edge's colour from
 // its high byte's low bits, then DrawClippedLine from its second vertex to its first, unless either's x is 7FFFh, the trap's
-// saturation. PUSH SI / POP SI round the line keep the list. Returns what DrawClippedLine returns: whether DrawLine filled, and
-// cleared the direction flag.
-[[nodiscard]] bool DrawFaceEdge(GameState& _state, const Blueprint& _blueprint, std::uint8_t _item)
+// saturation. PUSH SI / POP SI round the line keep the list.
+void DrawFaceEdge(GameState& _state, const Blueprint& _blueprint, std::uint8_t _item)
 {
   const std::uint16_t edge = Join(_blueprint.faceEdges[_item + 1u], _blueprint.faceEdges[_item]);
   _state.Data().drawing.drawColor = static_cast<std::uint8_t>(High(edge) & EDGE_COLOR_BITS);
@@ -326,16 +325,16 @@ struct WindingProducts
   const std::uint16_t fromX = VertexWord(points, from);
   if (toX == OFF_SCREEN || fromX == OFF_SCREEN)
   {
-    return false;
+    return;
   }
-  return DrawClippedLine(_state, fromX, VertexWord(points, from + 2), toX, VertexWord(points, to + 2));
+  DrawClippedLine(_state, fromX, VertexWord(points, from + 2), toX, VertexWord(points, to + 2));
 }
 
 // A triangle item (CS:3B30): _item, the offset of its pattern in faceFillPatterns, into triangleFillPattern, then the three
 // vertex bytes at _vertices of _list: FillTriangle unless a corner's x is 7FFFh. PUSH SI / POP SI round it keep the list. Returns
 // the offset past the vertex bytes.
 [[nodiscard]] std::uint16_t DrawFaceTriangle(GameState& _state, std::uint8_t _item, std::span<const std::uint8_t> _list,
-                                             std::uint16_t _vertices, bool _backward)
+                                             std::uint16_t _vertices)
 {
   // _item is even, and inside the table: TableTests checks every triangle item's.
   _state.Data().scene.triangleFillPattern = FACE_FILL_PATTERNS[_item / 2];
@@ -343,43 +342,39 @@ struct WindingProducts
   const auto offScreen = [](ScreenPoint _point) { return static_cast<std::uint16_t>(_point.x) == OFF_SCREEN; };
   if (!offScreen(triangle.first) && !offScreen(triangle.second) && !offScreen(triangle.third))
   {
-    FillTriangle(_state, triangle, _backward);
+    FillTriangle(_state, triangle);
   }
   return Offset(_vertices, TRIANGLE_VERTEX_BYTES);
 }
 
 // A facing face's items (CS:3AE8), at _items in _blueprint's face list: a count byte into CL, CH 0, then the items, an edge's one
-// byte counted off by LOOP and a triangle's four by SUB CX,4 / JE, which ends only on 0. Returns the offset in the list past them,
-// and the direction flag as the edges' DrawLine leave it.
-[[nodiscard]] FacesEnd DrawFaceItems(GameState& _state, const Blueprint& _blueprint, std::uint16_t _items, bool _backward)
+// byte counted off by LOOP and a triangle's four by SUB CX,4 / JE, which ends only on 0. Returns the offset in the list past them.
+[[nodiscard]] std::uint16_t DrawFaceItems(GameState& _state, const Blueprint& _blueprint, std::uint16_t _items)
 {
   const std::span<const std::uint8_t> list = _blueprint.faceList;
-  FacesEnd end{Offset(_items, 1), _backward};
+  std::uint16_t next = Offset(_items, 1);
   std::uint16_t left = list[_items];
   for (;;)
   {
-    const std::uint8_t item = list[end.next];
-    end.next = Offset(end.next, 1);
+    const std::uint8_t item = list[next];
+    next = Offset(next, 1);
     // SHL BL,1 / JB, then SHR BL,1: bit 7 says a triangle, and the rest is the offset.
     const auto offset = static_cast<std::uint8_t>(item & ~FACE_TRIANGLE);
     if ((item & FACE_TRIANGLE) == 0)
     {
-      if (DrawFaceEdge(_state, _blueprint, offset))
-      {
-        end.backward = false;
-      }
+      DrawFaceEdge(_state, _blueprint, offset);
       if (!Loop(left))
       {
-        return end;
+        return next;
       }
     }
     else
     {
-      end.next = DrawFaceTriangle(_state, offset, list, end.next, end.backward);
+      next = DrawFaceTriangle(_state, offset, list, next);
       left = static_cast<std::uint16_t>(left - TRIANGLE_ITEM_BYTES);
       if (left == 0)
       {
-        return end;
+        return next;
       }
     }
   }
@@ -527,7 +522,7 @@ void ClassifyViewPosition(GameState& _state, SpaceObject& _slot, Vector _view)
 
 // The station in _slot (CS:3DEE), when it is far enough away to draw as a disc: true if it is, and DrawDistantStation drew it.
 // One at depth 1 nearer than 1B58h has its compass position doubled into its view position instead.
-[[nodiscard]] bool DrawStationIfDistant(GameState& _state, SpaceObject& _slot, bool _backward)
+[[nodiscard]] bool DrawStationIfDistant(GameState& _state, SpaceObject& _slot)
 {
   const std::uint8_t depth = _slot.depth;
   if (depth == 0)
@@ -546,7 +541,7 @@ void ClassifyViewPosition(GameState& _state, SpaceObject& _slot, Vector _view)
     }
   }
   // PUSH DI / POP DI round it keep the slot.
-  DrawDistantStation(_state, _slot, _backward);
+  DrawDistantStation(_state, _slot);
   return true;
 }
 
@@ -571,38 +566,38 @@ void ClassifyViewPosition(GameState& _state, SpaceObject& _slot, Vector _view)
 
 // DrawObjectAsDot (CS:3E8C): _slot's view position projected (ProjectToScreen), as a disc of radius 2 in colour 3. PUSH DI /
 // POP DI round it keep the slot.
-void DrawObjectAsDot(GameState& _state, SpaceObject& _slot, bool _backward)
+void DrawObjectAsDot(GameState& _state, SpaceObject& _slot)
 {
   const ScreenPoint at = ProjectToScreen(ViewPosition(_slot));
   _state.Data().drawing.drawColor = DOT_COLOR;
-  DrawDisc(_state, DOT_RADIUS, static_cast<std::uint16_t>(at.x), static_cast<std::uint16_t>(at.y), _backward);
+  DrawDisc(_state, DOT_RADIUS, static_cast<std::uint16_t>(at.x), static_cast<std::uint16_t>(at.y));
 }
 
 // DrawObject (CS:3DE1), the visible object in _slot, not yet drawn: the sun or the planet (DrawSunOrPlanet); a station far enough
 // off as a disc (DrawStationIfDistant); nothing in a flashing object's off frames; a dot (DrawObjectAsDot) when its size (+3Eh)
 // passes its level of detail (+3Fh); else its blueprint, from blueprintTable by its type (RunBlueprintHandler), at its angles and
 // view position. PUSH DI / POP DI round the sun's, the station's and the dot's keep the slot, and the search the draws jump back
-// to loads what it reads. Returns the direction flag as the drawing leaves it.
-[[nodiscard]] bool DrawObject(GameState& _state, Hardware& _hardware, SpaceObject& _slot, bool _backward)
+// to loads what it reads.
+void DrawObject(GameState& _state, Host& _host, SpaceObject& _slot)
 {
   if (IsSunOrPlanet(_slot))
   {
-    _hardware.NoteSpaceViewRendered(); // the renderer draws it as a sphere (ADR-035); no byte of the state is written
-    DrawSunOrPlanet(_state, _hardware, _slot, _backward);
-    return _backward;
+    _host.NoteSpaceViewRendered(); // the renderer draws it as a sphere (ADR-035); no byte of the state is written
+    DrawSunOrPlanet(_state, _slot);
+    return;
   }
-  if (IsStation(_slot).station && DrawStationIfDistant(_state, _slot, _backward))
+  if (IsStation(_slot).station && DrawStationIfDistant(_state, _slot))
   {
-    return _backward;
+    return;
   }
   if (FlashedOff(_slot))
   {
-    return _backward;
+    return;
   }
   if (_slot.detail < _slot.size)
   {
-    DrawObjectAsDot(_state, _slot, _backward);
-    return _backward;
+    DrawObjectAsDot(_state, _slot);
+    return;
   }
   // MOV BL,[DI] / AND BX,3Eh: the type, doubled, indexes blueprintTable. The sun and the planet, types 1Eh and 1Fh, past its
   // 30 entries, were drawn above.
@@ -613,15 +608,14 @@ void DrawObjectAsDot(GameState& _state, SpaceObject& _slot, bool _backward)
   _state.Data().scene.drawCenterX = std::uint16_t{_slot.viewX};
   _state.Data().scene.drawCenterY = std::uint16_t{_slot.viewY};
   _state.Data().scene.drawCenterZ = std::uint16_t{_slot.viewZ};
-  _hardware.NoteSpaceViewModel(); // for a renderer that draws the model itself (ADR-033); no byte of the state is written
-  return RunBlueprintHandler(_state, blueprint, _backward);
+  _host.NoteSpaceViewModel(); // for a renderer that draws the model itself (ADR-033); no byte of the state is written
+  RunBlueprintHandler(_state, blueprint);
 }
 
 // DrawFarthestObject (CS:3D95), TransformAndDrawObjects' second pass, to which every draw jumps back: of shipSlotCount slots
 // (MOV CL / XOR CH,CH, then LOOP: 65,536 for 0), the visible object not yet drawn with the largest depth class (+3Dh), then
-// the largest view z, marked drawn (+1Eh bit 7) and drawn (DrawObject). Returns the direction flag as the drawing leaves it, or
-// none once no object is left.
-[[nodiscard]] std::optional<bool> DrawFarthestObject(GameState& _state, Hardware& _hardware, bool _backward)
+// the largest view z, marked drawn (+1Eh bit 7) and drawn (DrawObject). Returns false once no object is left.
+bool DrawFarthestObject(GameState& _state, Host& _host)
 {
   // DX the slot found, FFFFh none; AH its depth and BP its z, from 0.
   std::optional<SlotIndex> farthest;
@@ -645,15 +639,15 @@ void DrawObjectAsDot(GameState& _state, SpaceObject& _slot, bool _backward)
   }
   if (!farthest)
   {
-    return std::nullopt;
+    return false;
   }
   SpaceObject& object = _state.Slot(*farthest);
   object.flags = static_cast<std::uint8_t>(object.flags | STATE_DRAWN);
   // What the object draws, watched for the space view's layers (ADR-033), which read the buffer and write nothing.
-  _hardware.BeginSpaceViewObject();
-  const bool backward = DrawObject(_state, _hardware, object, _backward);
-  _hardware.EndSpaceViewObject(static_cast<std::uint8_t>(Number(*farthest)));
-  return backward;
+  _host.BeginSpaceViewObject();
+  DrawObject(_state, _host, object);
+  _host.EndSpaceViewObject(static_cast<std::uint8_t>(Number(*farthest)));
+  return true;
 }
 
 // One coordinate of the sun's or planet's centre (CS:4030, CS:404E): 256|_value| over _slot's view z, by DIV [DI+14h], rounded
@@ -682,7 +676,7 @@ void DrawObjectAsDot(GameState& _state, SpaceObject& _slot, bool _backward)
 
 // DrawSunOrPlanetDisc (CS:402C): a disc of radius _radius at _slot's view position projected, in its colour (+0Bh), drawn only
 // when the disc's whole box is on the 256x128 view: DrawDisc with twice the radius.
-void DrawSunOrPlanetDisc(GameState& _state, SpaceObject& _slot, std::uint16_t _radius, bool _backward)
+void DrawSunOrPlanetDisc(GameState& _state, SpaceObject& _slot, std::uint16_t _radius)
 {
   const auto row = Offset(ProjectDiscCoordinate(_slot, _slot.viewY), SCREEN_CENTER_Y);
   const auto x = Offset(ProjectDiscCoordinate(_slot, _slot.viewX), SCREEN_CENTER_X);
@@ -691,7 +685,7 @@ void DrawSunOrPlanetDisc(GameState& _state, SpaceObject& _slot, std::uint16_t _r
     return;
   }
   _state.Data().drawing.drawColor = High(_slot.pitch); // the disc's colour
-  DrawDisc(_state, static_cast<std::uint16_t>(_radius << 1), x, row, _backward);
+  DrawDisc(_state, static_cast<std::uint16_t>(_radius << 1), x, row);
 }
 
 // What SupernovaHeat makes of the sun once supernovaFrames has counted down to 1.
@@ -703,9 +697,9 @@ struct SupernovaGlow
 
 // SupernovaHeat (CS:3F57): once supernovaFrames has counted down to 1, where an INC keeps it, the sun's heat is supernovaHeat, first the
 // cabin temperature, growing by a quarter of itself (at least 1) a frame; when it overflows a byte, the player is killed (KillPlayer, with
-// StartPlayerDeathSound's STI) and an energy bomb goes off (DetonateEnergyBomb), and the heat is FFh. None while the countdown runs, or
+// StartPlayerDeathSound) and an energy bomb goes off (DetonateEnergyBomb), and the heat is FFh. None while the countdown runs, or
 // when it is 0. _slot is the sun's slot, DI.
-[[nodiscard]] std::optional<SupernovaGlow> SupernovaHeat(GameState& _state, Hardware& _hardware, SlotIndex _slot)
+[[nodiscard]] std::optional<SupernovaGlow> SupernovaHeat(GameState& _state, SlotIndex _slot)
 {
   if (_state.Data().commander.supernovaFrames == 0)
   {
@@ -730,15 +724,12 @@ struct SupernovaGlow
   SupernovaGlow glow{static_cast<std::uint8_t>(sum), _slot};
   if (sum > 0xFF)
   {
-    if (KillPlayer(_state))
-    {
-      _hardware.EnableInterrupts();
-    }
+    static_cast<void>(KillPlayer(_state));
     // DetonateEnergyBomb's LOOP leaves DI past the ship slots, by the count it loads: objectSlotCount less 3, a byte, 0 for
     // 65,536, which DI's 64 KiB wrap brings back to the first ship's slot: the slot that many on from the first ship's. In flight
     // objectSlotCount is 14h, as SetUpLocalSpace sets it and nothing else writes it, so that is the first debris slot, 17 on.
     const auto ships = static_cast<std::uint8_t>(_state.Data().flight.objectSlotCount - BOMB_FIRST_SLOT);
-    DetonateEnergyBomb(_state, _hardware);
+    DetonateEnergyBomb(_state);
     glow.slot = SlotAfter(SlotIndex::FirstShip, ships);
     glow.heat = 0xFF;
   }
@@ -759,10 +750,10 @@ struct SunDisc
 // over it on a carry, with FUEL SCOOPS ACTIVE for 5 frames; from FDh, KillPlayer, whose StartPlayerDeathSound leaves its step length
 // in AL over the radius's low byte, as there is no PUSH AX round it here, and a radius past a byte held to FFh. Returns the disc
 // in front of the view.
-[[nodiscard]] std::optional<SunDisc> SizeSun(GameState& _state, Hardware& _hardware, SpaceObject& _slot)
+[[nodiscard]] std::optional<SunDisc> SizeSun(GameState& _state, SpaceObject& _slot)
 {
   SunDisc disc{0, _state.IndexOf(_slot)};
-  if (const std::optional<SupernovaGlow> glow = SupernovaHeat(_state, _hardware, _state.IndexOf(_slot)))
+  if (const std::optional<SupernovaGlow> glow = SupernovaHeat(_state, _state.IndexOf(_slot)))
   {
     disc = SunDisc{glow->heat, glow->slot};
   }
@@ -807,7 +798,6 @@ struct SunDisc
     if (const std::optional<std::uint8_t> stepLength = KillPlayer(_state))
     {
       SetLow(disc.radius, *stepLength);
-      _hardware.EnableInterrupts();
     }
     if (High(disc.radius) != 0)
     {
@@ -819,8 +809,8 @@ struct SunDisc
 
 // SizePlanet (CS:3FF6): sunFringeMask cleared, the radius ScaleByInverseDistance makes of 50 at _slot's distance, and the
 // altitude, twice 255 less that radius held to 127. In front of the view, a radius of FDh or more kills the player, with
-// StartPlayerDeathSound's STI, and one past a byte draws as FFh. Returns the disc's radius in front of the view.
-std::optional<std::uint16_t> SizePlanet(GameState& _state, Hardware& _hardware, SpaceObject& _slot)
+// StartPlayerDeathSound, and one past a byte draws as FFh. Returns the disc's radius in front of the view.
+std::optional<std::uint16_t> SizePlanet(GameState& _state, SpaceObject& _slot)
 {
   _state.Data().drawing.sunFringeMask = FRINGE_NONE;
   // MOV DX,32h / XOR AX,AX: DX:AX = 50 * 65536.
@@ -840,10 +830,7 @@ std::optional<std::uint16_t> SizePlanet(GameState& _state, Hardware& _hardware, 
   if (radius >= FATAL_RADIUS)
   {
     // PUSH AX / CALL KillPlayer / POP AX.
-    if (KillPlayer(_state))
-    {
-      _hardware.EnableInterrupts();
-    }
+    static_cast<void>(KillPlayer(_state));
     if (High(radius) != 0)
     {
       radius = RADIUS_LIMIT;
@@ -1117,30 +1104,29 @@ bool TriangleWindingSign(Triangle _triangle)
   return Negative(sign);
 }
 
-FacesEnd DrawVisibleFaces(GameState& _state, const Blueprint& _blueprint, std::uint16_t _faces, bool _backward)
+void DrawVisibleFaces(GameState& _state, const Blueprint& _blueprint, std::uint16_t _faces)
 {
-  FacesEnd end{0, _backward};
   if (_faces == 0)
   {
-    return end;
+    return;
   }
+  std::uint16_t next = 0;
   // PUSH CX / POP CX round each face keep the count, and DEC CX / JE ends the faces.
   std::uint16_t faces = _faces;
   do
   {
-    const Triangle facing = LoadTriangle(_state, _blueprint.faceList, end.next, 0);
-    end.next = Offset(end.next, TRIANGLE_VERTEX_BYTES);
+    const Triangle facing = LoadTriangle(_state, _blueprint.faceList, next, 0);
+    next = Offset(next, TRIANGLE_VERTEX_BYTES);
     if (TriangleWindingSign(facing))
     {
-      end = DrawFaceItems(_state, _blueprint, end.next, end.backward);
+      next = DrawFaceItems(_state, _blueprint, next);
     }
     else
     {
       // SkipHiddenFace (CS:3B8D): MOV CL,[SI] / STC / ADC SI,CX, CH 0: past the count byte and the items.
-      end.next = Offset(end.next, Offset(_blueprint.faceList[end.next], 1));
+      next = Offset(next, Offset(_blueprint.faceList[next], 1));
     }
   } while (Loop(faces));
-  return end;
 }
 
 ShipRangeCheck CheckShipInRange(GameState& _state, SpaceObject& _slot)
@@ -1225,7 +1211,7 @@ SnapshotDrawing DrawingOf(const SpaceObject& _slot) noexcept
   return _slot.detail < _slot.size ? SnapshotDrawing::Dot : SnapshotDrawing::Model;
 }
 
-bool RunBlueprintHandler(GameState& _state, const Blueprint& _blueprint, bool _backward)
+void RunBlueprintHandler(GameState& _state, const Blueprint& _blueprint)
 {
   // PUSH DI and the way back to RenderBlueprintBody (CS:3CF2), then the handler's word, BL into boxHalfWidth with BH 0, and JMP AX
   // to the handler with SI past them. The slot and the way back are the stack the handler returns through, which this unit
@@ -1241,7 +1227,7 @@ bool RunBlueprintHandler(GameState& _state, const Blueprint& _blueprint, bool _b
   }
   // Every blueprint's vertex program begins by loading a vertex into the accumulator, so what the handler leaves in BP, BX and
   // DX is never read.
-  return RenderBlueprint(_state, _blueprint, Vector{}, _backward);
+  RenderBlueprint(_state, _blueprint, Vector{});
 }
 
 const Blueprint& BlueprintOf(std::uint8_t _kind)
@@ -1254,7 +1240,7 @@ std::uint16_t FaceFillPattern(std::uint8_t _index)
   return FACE_FILL_PATTERNS.at(_index);
 }
 
-bool TransformAndDrawObjects(GameState& _state, Hardware& _hardware, bool _backward)
+void TransformAndDrawObjects(GameState& _state, Host& _host)
 {
   (void)SetSinCos(_state, 0, _state.Data().playerShip.playerPitchAngle);
   (void)SetSinCos(_state, 1, _state.Data().playerShip.playerYawAngle);
@@ -1266,12 +1252,9 @@ bool TransformAndDrawObjects(GameState& _state, Hardware& _hardware, bool _backw
   {
     slot = SlotAfter(ClassifyObject(_state, _state.Slot(slot)));
   }
-  bool backward = _backward;
-  while (const std::optional<bool> drawn = DrawFarthestObject(_state, _hardware, backward))
+  while (DrawFarthestObject(_state, _host))
   {
-    backward = *drawn;
   }
-  return backward;
 }
 
 Vector TransformToViewWithBlip(GameState& _state, SpaceObject& _slot, Vector _position)
@@ -1288,25 +1271,25 @@ Vector TransformToView(GameState& _state, Vector _position)
   return RotateToViewDirection(_state, RotatePitchYawRoll(_state, _position));
 }
 
-void DrawSunOrPlanet(GameState& _state, Hardware& _hardware, SpaceObject& _slot, bool _backward)
+void DrawSunOrPlanet(GameState& _state, SpaceObject& _slot)
 {
   if (IsPlanet(_slot))
   {
-    if (const std::optional<std::uint16_t> radius = SizePlanet(_state, _hardware, _slot))
+    if (const std::optional<std::uint16_t> radius = SizePlanet(_state, _slot))
     {
-      DrawSunOrPlanetDisc(_state, _slot, *radius, _backward);
+      DrawSunOrPlanetDisc(_state, _slot, *radius);
     }
     return;
   }
   // The disc is the slot's that SizeSun leaves DI on: the sun's, or, once a supernova's heat killed and its energy bomb's LOOP moved
   // DI, that slot's, as the original draws it.
-  if (const std::optional<SunDisc> disc = SizeSun(_state, _hardware, _slot))
+  if (const std::optional<SunDisc> disc = SizeSun(_state, _slot))
   {
-    DrawSunOrPlanetDisc(_state, _state.Slot(disc->slot), disc->radius, _backward);
+    DrawSunOrPlanetDisc(_state, _state.Slot(disc->slot), disc->radius);
   }
 }
 
-void DrawDistantStation(GameState& _state, SpaceObject& _slot, bool _backward)
+void DrawDistantStation(GameState& _state, SpaceObject& _slot)
 {
   const ScreenPoint at = ProjectToScreen(CompassPosition(_slot));
   const auto x = static_cast<std::uint16_t>(at.x);
@@ -1315,7 +1298,7 @@ void DrawDistantStation(GameState& _state, SpaceObject& _slot, bool _backward)
   const std::uint8_t depth = High(_slot.compassZ); // the station's depth
   if (depth < NEAR_STATION_DEPTH)
   {
-    DrawDisc(_state, NEAR_STATION_RADIUS, x, row, _backward);
+    DrawDisc(_state, NEAR_STATION_RADIUS, x, row);
     return;
   }
   // r = (21h - depth) / 2, as bytes: SUB AL,25h / NEG AL / SUB AL,4 / JLE, none when 25h - depth, taken as signed, is 4 or less;
@@ -1330,7 +1313,7 @@ void DrawDistantStation(GameState& _state, SpaceObject& _slot, bool _backward)
   {
     return;
   }
-  DrawDisc(_state, static_cast<std::uint16_t>(rows << 1), x, row, _backward);
+  DrawDisc(_state, static_cast<std::uint16_t>(rows << 1), x, row);
 }
 
 void LoadPlayerAngles(GameState& _state)

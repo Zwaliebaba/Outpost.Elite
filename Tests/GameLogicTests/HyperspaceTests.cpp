@@ -68,7 +68,7 @@ public:
   {
     TwinRig rig("TwinJumps");
     Launch(rig);
-    rig.Both([](Elite::Platform&, Elite::GameState& _state) { _state.Data().jump.galacticDriveReadyFrames = 3; });
+    rig.Both([](Elite::Host&, Elite::GameState& _state) { _state.Data().jump.galacticDriveReadyFrames = 3; });
     rig.Play("wait 0.5");
     PlayJump(rig, {1, 7, true, 0, 1, 0});
     PlayJump(rig, {1, 8, false, 0, 3, 1});

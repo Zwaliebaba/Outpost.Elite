@@ -92,7 +92,6 @@
     <ClInclude Include="Docking.h" />
     <ClInclude Include="DockingState.h" />
     <ClInclude Include="DockingTables.h" />
-    <ClInclude Include="DosFiles.h" />
     <ClInclude Include="DrawingState.h" />
     <ClInclude Include="Equipment.h" />
     <ClInclude Include="EquipmentState.h" />
@@ -110,8 +109,6 @@
     <ClInclude Include="GameData.h" />
     <ClInclude Include="GameState.h" />
     <ClInclude Include="Gauges.h" />
-    <ClInclude Include="Guest.h" />
-    <ClInclude Include="Hardware.h" />
     <ClInclude Include="Hyperspace.h" />
     <ClInclude Include="HyperspaceState.h" />
     <ClInclude Include="HyperspaceTables.h" />
@@ -129,13 +126,11 @@
     <ClInclude Include="Message.h" />
     <ClInclude Include="MessagesState.h" />
     <ClInclude Include="Mouse.h" />
-    <ClInclude Include="NativeEntry.h" />
-    <ClInclude Include="NativeRoutines.h" />
     <ClInclude Include="Outcome.h" />
     <ClInclude Include="Pacing.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="PlanetLook.h" />
-    <ClInclude Include="Platform.h" />
+    <ClInclude Include="Host.h" />
     <ClInclude Include="PlayerShipState.h" />
     <ClInclude Include="Reference.h" />
     <ClInclude Include="Replay.h" />
@@ -145,7 +140,6 @@
     <ClInclude Include="Scene.h" />
     <ClInclude Include="SceneState.h" />
     <ClInclude Include="SceneTables.h" />
-    <ClInclude Include="Scheduler.h" />
     <ClInclude Include="Sha256.h" />
     <ClInclude Include="SharedTables.h" />
     <ClInclude Include="ShipModel.h" />
@@ -164,16 +158,15 @@
     <ClInclude Include="StartUpTables.h" />
     <ClInclude Include="StateDigest.h" />
     <ClInclude Include="StateWriter.h" />
+    <ClInclude Include="Task.h" />
     <ClInclude Include="Text.h" />
     <ClInclude Include="TextState.h" />
     <ClInclude Include="TextTables.h" />
-    <ClInclude Include="TimeOfDay.h" />
     <ClInclude Include="Timer.h" />
     <ClInclude Include="TimerState.h" />
     <ClInclude Include="TimerTables.h" />
     <ClInclude Include="Timing.h" />
     <ClInclude Include="Video.h" />
-    <ClInclude Include="VideoModes.h" />
     <ClInclude Include="VideoState.h" />
     <ClInclude Include="VideoTables.h" />
     <ClInclude Include="WorldState.h" />
@@ -186,7 +179,6 @@
     <ClCompile Include="DirectoryFileStore.cpp" />
     <ClCompile Include="Docked.cpp" />
     <ClCompile Include="Docking.cpp" />
-    <ClCompile Include="DosFiles.cpp" />
     <ClCompile Include="Equipment.cpp" />
     <ClCompile Include="FileStore.cpp" />
     <ClCompile Include="Flight.cpp" />
@@ -195,24 +187,21 @@
     <ClCompile Include="Game.cpp" />
     <ClCompile Include="GameState.cpp" />
     <ClCompile Include="Gauges.cpp" />
-    <ClCompile Include="Hardware.cpp" />
     <ClCompile Include="Hyperspace.cpp" />
     <ClCompile Include="Input.cpp" />
     <ClCompile Include="Market.cpp" />
     <ClCompile Include="Maths.cpp" />
     <ClCompile Include="Mouse.cpp" />
-    <ClCompile Include="NativeRoutines.cpp" />
     <ClCompile Include="Outcome.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="PlanetLook.cpp" />
-    <ClCompile Include="Platform.cpp" />
+    <ClCompile Include="Host.cpp" />
     <ClCompile Include="Reference.cpp" />
     <ClCompile Include="Replay.cpp" />
     <ClCompile Include="SaveLoad.cpp" />
     <ClCompile Include="Scene.cpp" />
-    <ClCompile Include="Scheduler.cpp" />
     <ClCompile Include="Sha256.cpp" />
     <ClCompile Include="ShipModel.cpp" />
     <ClCompile Include="Ships.cpp" />
@@ -224,10 +213,8 @@
     <ClCompile Include="StartUp.cpp" />
     <ClCompile Include="StateDigest.cpp" />
     <ClCompile Include="Text.cpp" />
-    <ClCompile Include="TimeOfDay.cpp" />
     <ClCompile Include="Timer.cpp" />
     <ClCompile Include="Video.cpp" />
-    <ClCompile Include="VideoModes.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -22,14 +22,13 @@ constexpr std::string_view STATUS_AGAIN = "key F10; wait 0.2\nkey F9; wait 0.2\n
 // Sets the byte _member names to _value on the twin.
 template <typename Struct> void SetBoth(TwinRig& _rig, DataByte<Struct> _member, std::uint8_t _value)
 {
-  _rig.Both([_member, _value](Elite::Platform&, Elite::GameState& _state) { DataByteIn(_state, _member) = _value; });
+  _rig.Both([_member, _value](Elite::Host&, Elite::GameState& _state) { DataByteIn(_state, _member) = _value; });
 }
 
 // Sets the units of product _product held, its lot in cargoHold, to _value on the twin.
 void SetHeld(TwinRig& _rig, std::size_t _product, std::uint8_t _value)
 {
-  _rig.Both([_product, _value](Elite::Platform&, Elite::GameState& _state)
-            { _state.Data().commander.cargoHold.lots[_product].held = _value; });
+  _rig.Both([_product, _value](Elite::Host&, Elite::GameState& _state) { _state.Data().commander.cargoHold.lots[_product].held = _value; });
 }
 
 // The status screen again, then _steps.
@@ -57,7 +56,7 @@ void LoadCommander(TwinRig& _rig, std::string_view _source)
 [[nodiscard]] std::uint32_t TwinCreditsTenths(TwinRig& _rig)
 {
   std::uint32_t tenths = 0;
-  _rig.Both([&tenths](Elite::Platform&, Elite::GameState& _state) { tenths = _state.Data().commander.creditsTenths; });
+  _rig.Both([&tenths](Elite::Host&, Elite::GameState& _state) { tenths = _state.Data().commander.creditsTenths; });
   return tenths;
 }
 
@@ -65,7 +64,7 @@ void LoadCommander(TwinRig& _rig, std::string_view _source)
 template <typename Struct> [[nodiscard]] std::uint8_t TwinByte(TwinRig& _rig, DataByte<Struct> _member)
 {
   std::uint8_t value = 0;
-  _rig.Both([&value, _member](Elite::Platform&, Elite::GameState& _state) { value = DataByteIn(_state, _member); });
+  _rig.Both([&value, _member](Elite::Host&, Elite::GameState& _state) { value = DataByteIn(_state, _member); });
   return value;
 }
 

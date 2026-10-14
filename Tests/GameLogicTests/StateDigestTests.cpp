@@ -20,8 +20,9 @@ namespace
 
 // The .cdr file's size: the commander's bytes (D78).
 constexpr std::size_t COMMANDER_FILE_BYTES = 208;
-// The state's bytes as its members write them: what the 1987 data segment's members took, less the joystick's ten (D81) and the Amstrad's flag (D12).
-constexpr std::size_t STATE_BYTES = 14'409;
+// The state's bytes as its members write them: what the 1987 data segment's members took, less the joystick's ten (D81), the Amstrad's flag (D12) and the
+// screenshots' 24 (D86).
+constexpr std::size_t STATE_BYTES = 14'340;
 
 // A byte unlike its neighbours for every place in a struct of _bytes bytes: what fills one before it is written by its members.
 [[nodiscard]] std::vector<std::uint8_t> Pattern(std::size_t _bytes)
@@ -93,15 +94,15 @@ public:
     Assert::AreEqual(std::uint32_t{state.CodeSegment()} + Elite::DATA_SEGMENT_PARAGRAPH, std::uint32_t{state.DataSegment()},
                      L"the data segment");
 
-    // The state as the 1987 image loaded it, less the joystick's members (D81) and the Amstrad's flag (D12), and video memory as mode 3 leaves it.
+    // The state as the 1987 image loaded it, less the joystick's members (D81), the Amstrad's flag (D12) and the screenshots' (D86), and video memory clear until the game sets its first mode.
     Elite::Sha256 start;
     start.Update(Elite::StateBytes(std::as_const(state).Data()));
-    Assert::AreEqual("6bfcf1f36320d5defb257644790e1cc99811930710e67eaff1f0d3faaaf4eaad", Elite::Sha256::ToHex(start.Finish()).c_str(),
+    Assert::AreEqual("2cd124d640cc79dfd6d6c65508f90b0e5c05646aa308ef7651cf45ebc767877d", Elite::Sha256::ToHex(start.Finish()).c_str(),
                      L"the start state, as the image loaded it");
-    for (std::uint16_t offset = 0; offset < Elite::Cga::VIDEO_MEMORY_BYTES; offset += 2)
+    for (std::uint16_t offset = 0; offset < Elite::Cga::VIDEO_MEMORY_BYTES; ++offset)
     {
-      if (state.VideoByte(offset) != 0x20 || state.VideoByte(static_cast<std::uint16_t>(offset + 1)) != 0x07)
-        Assert::Fail(L"video memory as video mode 3 leaves it: 0720h words");
+      if (state.VideoByte(offset) != 0)
+        Assert::Fail(L"video memory clear");
     }
 
     const std::uint8_t fuel = state.Data().commander.fuel;

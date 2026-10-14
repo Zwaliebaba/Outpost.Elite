@@ -4,7 +4,7 @@
 #include "FlightSnapshot.h"
 #include "GameState.h"
 #include "Maths.h"
-#include "PlatformRig.h"
+#include "HostRig.h"
 #include "Ships.h"
 #include "SpaceObject.h"
 
@@ -296,9 +296,9 @@ public:
   // The platform numbers each snapshot, stamps it with its clock, and links it to the one before unless it starts a flight.
   TEST_METHOD(ThePlatformKeepsTheLastTwo)
   {
-    PlatformRig rig("FlightSnapshotPublish");
+    HostRig rig("FlightSnapshotPublish");
     Place(rig.State(), 3, 5, 0, 0, 0);
-    Elite::Platform& platform = rig.Host();
+    Elite::Host& platform = rig.Host();
     Assert::AreEqual(std::uint64_t{0}, platform.LatestFlightSnapshot().sequence, L"none yet");
     platform.PublishFlightSnapshot(Elite::TakeFlightSnapshot(rig.State()), true);
     Assert::AreEqual(std::uint64_t{1}, platform.LatestFlightSnapshot().sequence);

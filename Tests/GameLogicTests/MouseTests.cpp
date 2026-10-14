@@ -7,8 +7,7 @@ using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 namespace GameLogicTests
 {
 
-// The mouse driver (Mouse, D33): the three int 33h calls the reference makes, typed. Without a driver the platform points
-// vector 33h at the ROM's IRET (PlatformTests).
+// The mouse (Mouse, ADR-051): what the game reads of it, the buttons held and the motion since its last read.
 TEST_CLASS(MouseTests)
 {
 public:
@@ -21,7 +20,7 @@ public:
     Assert::AreEqual(3u, std::uint32_t{mouse.Buttons()}, L"both held");
   }
 
-  // ReadMouseSteering (CS:79A1) reads the motion counters every frame.
+  // ReadMouseSteering (CS:79A1) reads the motion every frame; ResetMouseIfSelected forgets it.
   TEST_METHOD(MotionCountersAreSinceTheLastCall)
   {
     Elite::Mouse mouse(true);
@@ -35,6 +34,10 @@ public:
     const Elite::MouseMotion still = mouse.Motion();
     Assert::AreEqual(0u, std::uint32_t{still.acrossMickeys});
     Assert::AreEqual(0u, std::uint32_t{still.downMickeys});
+
+    mouse.Move(9, 9);
+    mouse.Reset();
+    Assert::AreEqual(0u, std::uint32_t{mouse.Motion().acrossMickeys}, L"forgotten");
   }
 };
 

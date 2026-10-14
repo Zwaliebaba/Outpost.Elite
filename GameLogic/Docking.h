@@ -2,7 +2,7 @@
 #pragma once
 
 #include "GameState.h"
-#include "Hardware.h"
+#include "Host.h"
 #include "SpaceObject.h"
 
 #include <cstdint>
@@ -19,9 +19,8 @@ namespace Elite
 /// for a frame (UpdateMessageLine) and the dashboard, then twenty frames of tunnelRectangles, the first ten one to ten of them and
 /// the last ten ten to one, from one further along each time, each presented (FinishSpaceViewFrame) and the first ten followed by
 /// 20 timer ticks. Leaving, the world moves on behind the tunnel (TransformAndDrawObjects, MoveObjectsByVelocity,
-/// UpdateStardust), masked outside it (MaskOutsideTunnel); docking, each frame waits for the timer first. _backward is the
-/// direction flag; it leaves it clear. Waits as a rule (ADR-015).
-void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward);
+/// UpdateStardust), masked outside it (MaskOutsideTunnel); docking, each frame waits for the timer first. Waits as a rule (ADR-015).
+[[nodiscard]] Task<void> PlayStationTunnel(GameState& _state, Host& _host);
 
 /// RunDockingComputer (CS:8622): one frame of the docking computer's flight, by dockingComputerState: 0 slow to a stop; 1 to 3
 /// roll and then pitch towards the approach point, 2000 out from the slot, twice; 4 fly to it; 5 to 7 the same towards the
@@ -30,8 +29,8 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward);
 void RunDockingComputer(GameState& _state);
 
 /// DrawTunnelRectangle (CS:1AA0): the four edges between the five points of rectangle _rectangle of tunnelRectangles, x and y
-/// signed bytes about the view's centre, by DrawLine in drawColor. Returns whether any DrawLine filled bytes with REP STOSB.
-bool DrawTunnelRectangle(GameState& _state, std::size_t _rectangle);
+/// signed bytes about the view's centre, by DrawLine in drawColor.
+void DrawTunnelRectangle(GameState& _state, std::size_t _rectangle);
 
 /// CheckDockingAlignment (CS:2D0F): whether the player's angles are within _tolerance of those that dock with the
 /// station in _station: pitch near 0 with yaw near a half turn, or the other way round, and roll near the station's
@@ -48,10 +47,10 @@ void MaskOutsideTunnel(GameState& _state, std::size_t _rectangle);
 /// the view unlocked, a stopped ship given speed 4, the low beep), or on (state 0, the music and the beep) when inside the
 /// station's safe zone and the station has not been shot; refused with the low beep otherwise. Each way posts its message for 25
 /// frames.
-void ToggleDockingComputer(GameState& _state, Hardware& _hardware);
+void ToggleDockingComputer(GameState& _state, Host& _host);
 
 /// CancelDockingComputer (CS:8BAA): the docking computer off, if it is on: dataA137 cleared, the view unlocked and all sound
 /// stopped (StopAllSound).
-void CancelDockingComputer(GameState& _state, Hardware& _hardware);
+void CancelDockingComputer(GameState& _state, Host& _host);
 
 } // namespace Elite

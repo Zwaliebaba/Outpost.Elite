@@ -135,9 +135,6 @@
     <ClInclude Include="DockingTables.h">
       <Filter>Docking</Filter>
     </ClInclude>
-    <ClInclude Include="DosFiles.h">
-      <Filter>Platform</Filter>
-    </ClInclude>
     <ClInclude Include="DrawingState.h">
       <Filter>State</Filter>
     </ClInclude>
@@ -188,12 +185,6 @@
     </ClInclude>
     <ClInclude Include="Gauges.h">
       <Filter>Flight</Filter>
-    </ClInclude>
-    <ClInclude Include="Guest.h">
-      <Filter>Native</Filter>
-    </ClInclude>
-    <ClInclude Include="Hardware.h">
-      <Filter>State</Filter>
     </ClInclude>
     <ClInclude Include="Hyperspace.h">
       <Filter>Hyperspace</Filter>
@@ -246,12 +237,6 @@
     <ClInclude Include="Mouse.h">
       <Filter>Platform</Filter>
     </ClInclude>
-    <ClInclude Include="NativeEntry.h">
-      <Filter>Native</Filter>
-    </ClInclude>
-    <ClInclude Include="NativeRoutines.h">
-      <Filter>Native</Filter>
-    </ClInclude>
     <ClInclude Include="Outcome.h">
       <Filter>Replay</Filter>
     </ClInclude>
@@ -264,7 +249,7 @@
     <ClInclude Include="PlanetLook.h">
       <Filter>Scene</Filter>
     </ClInclude>
-    <ClInclude Include="Platform.h">
+    <ClInclude Include="Host.h">
       <Filter>Platform</Filter>
     </ClInclude>
     <ClInclude Include="PlayerShipState.h">
@@ -293,9 +278,6 @@
     </ClInclude>
     <ClInclude Include="SceneTables.h">
       <Filter>Scene</Filter>
-    </ClInclude>
-    <ClInclude Include="Scheduler.h">
-      <Filter>Platform</Filter>
     </ClInclude>
     <ClInclude Include="Sha256.h">
       <Filter>Replay</Filter>
@@ -351,6 +333,9 @@
     <ClInclude Include="StateWriter.h">
       <Filter>State</Filter>
     </ClInclude>
+    <ClInclude Include="Task.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
     <ClInclude Include="Text.h">
       <Filter>Text</Filter>
     </ClInclude>
@@ -359,9 +344,6 @@
     </ClInclude>
     <ClInclude Include="TextTables.h">
       <Filter>Text</Filter>
-    </ClInclude>
-    <ClInclude Include="TimeOfDay.h">
-      <Filter>Platform</Filter>
     </ClInclude>
     <ClInclude Include="Timer.h">
       <Filter>Timer</Filter>
@@ -377,9 +359,6 @@
     </ClInclude>
     <ClInclude Include="Video.h">
       <Filter>Video</Filter>
-    </ClInclude>
-    <ClInclude Include="VideoModes.h">
-      <Filter>Platform</Filter>
     </ClInclude>
     <ClInclude Include="VideoState.h">
       <Filter>Video</Filter>
@@ -413,9 +392,6 @@
     <ClCompile Include="Docking.cpp">
       <Filter>Docking</Filter>
     </ClCompile>
-    <ClCompile Include="DosFiles.cpp">
-      <Filter>Platform</Filter>
-    </ClCompile>
     <ClCompile Include="Equipment.cpp">
       <Filter>Equipment</Filter>
     </ClCompile>
@@ -440,9 +416,6 @@
     <ClCompile Include="Gauges.cpp">
       <Filter>Flight</Filter>
     </ClCompile>
-    <ClCompile Include="Hardware.cpp">
-      <Filter>State</Filter>
-    </ClCompile>
     <ClCompile Include="Hyperspace.cpp">
       <Filter>Hyperspace</Filter>
     </ClCompile>
@@ -458,9 +431,6 @@
     <ClCompile Include="Mouse.cpp">
       <Filter>Platform</Filter>
     </ClCompile>
-    <ClCompile Include="NativeRoutines.cpp">
-      <Filter>Native</Filter>
-    </ClCompile>
     <ClCompile Include="Outcome.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
@@ -470,7 +440,7 @@
     <ClCompile Include="PlanetLook.cpp">
       <Filter>Scene</Filter>
     </ClCompile>
-    <ClCompile Include="Platform.cpp">
+    <ClCompile Include="Host.cpp">
       <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="Reference.cpp">
@@ -484,9 +454,6 @@
     </ClCompile>
     <ClCompile Include="Scene.cpp">
       <Filter>Scene</Filter>
-    </ClCompile>
-    <ClCompile Include="Scheduler.cpp">
-      <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="Sha256.cpp">
       <Filter>Replay</Filter>
@@ -521,17 +488,11 @@
     <ClCompile Include="Text.cpp">
       <Filter>Text</Filter>
     </ClCompile>
-    <ClCompile Include="TimeOfDay.cpp">
-      <Filter>Platform</Filter>
-    </ClCompile>
     <ClCompile Include="Timer.cpp">
       <Filter>Timer</Filter>
     </ClCompile>
     <ClCompile Include="Video.cpp">
       <Filter>Video</Filter>
-    </ClCompile>
-    <ClCompile Include="VideoModes.cpp">
-      <Filter>Platform</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

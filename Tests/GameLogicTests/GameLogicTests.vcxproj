@@ -86,7 +86,7 @@
     <ClInclude Include="AnswerFile.h" />
     <ClInclude Include="GuardReport.h" />
     <ClInclude Include="pch.h" />
-    <ClInclude Include="PlatformRig.h" />
+    <ClInclude Include="HostRig.h" />
     <ClInclude Include="ReferenceRig.h" />
     <ClInclude Include="StateDumps.h" />
     <ClInclude Include="TwinRig.h" />
@@ -100,7 +100,6 @@
     <ClCompile Include="EquipmentRulesTests.cpp" />
     <ClCompile Include="GameDataTests.cpp" />
     <ClCompile Include="DockedTests.cpp" />
-    <ClCompile Include="DosFilesTests.cpp" />
     <ClCompile Include="EquipmentTests.cpp" />
     <ClCompile Include="FlightSnapshotTests.cpp" />
     <ClCompile Include="FlightTests.cpp" />
@@ -119,10 +118,9 @@
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="PlanetLookTests.cpp" />
-    <ClCompile Include="PlatformTests.cpp" />
+    <ClCompile Include="HostTests.cpp" />
     <ClCompile Include="ReplayTests.cpp" />
     <ClCompile Include="SaveLoadTests.cpp" />
-    <ClCompile Include="SchedulerTests.cpp" />
     <ClCompile Include="Sha256Tests.cpp" />
     <ClCompile Include="ShipModelTests.cpp" />
     <ClCompile Include="SpaceViewLayersTests.cpp" />
@@ -131,9 +129,7 @@
     <ClCompile Include="StateDigestTests.cpp" />
     <ClCompile Include="TableTests.cpp" />
     <ClCompile Include="TextTests.cpp" />
-    <ClCompile Include="TimeOfDayTests.cpp" />
     <ClCompile Include="TwinRigTests.cpp" />
-    <ClCompile Include="VideoModesTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="EquipmentAnswers.txt" />

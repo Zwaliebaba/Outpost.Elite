@@ -19,13 +19,13 @@ using Commander = Elite::CommanderState;
 // The byte _member names, set to _value on the twin.
 template <typename Struct> void SetByte(TwinRig& _rig, DataByte<Struct> _member, std::uint8_t _value)
 {
-  _rig.Both([_member, _value](Elite::Platform&, Elite::GameState& _state) { DataByteIn(_state, _member) = _value; });
+  _rig.Both([_member, _value](Elite::Host&, Elite::GameState& _state) { DataByteIn(_state, _member) = _value; });
 }
 
 // The cash, in tenths of credits, on the twin.
 void SetCredits(TwinRig& _rig, std::uint32_t _tenths)
 {
-  _rig.Both([_tenths](Elite::Platform&, Elite::GameState& _state) { _state.Data().commander.creditsTenths = _tenths; });
+  _rig.Both([_tenths](Elite::Host&, Elite::GameState& _state) { _state.Data().commander.creditsTenths = _tenths; });
 }
 
 // The amount held of the cargo menu row _row's commodity, or the amount on sale: a member of its lot in cargoHold.
@@ -48,7 +48,7 @@ struct HoldByte
 // The amount _byte names, set to _value on the twin.
 void SetHold(TwinRig& _rig, HoldByte _byte, std::uint8_t _value)
 {
-  _rig.Both([_byte, _value](Elite::Platform&, Elite::GameState& _state)
+  _rig.Both([_byte, _value](Elite::Host&, Elite::GameState& _state)
             { _state.Data().commander.cargoHold.lots[std::size_t{_byte.row} - 1].*_byte.amount = _value; });
 }
 
@@ -142,7 +142,7 @@ public:
     TwinRig rig("TwinMarketPrices");
     rig.Play("key space; wait 4");
     rig.Both(
-      [](Elite::Platform&, Elite::GameState& _state)
+      [](Elite::Host&, Elite::GameState& _state)
       {
         constexpr std::string_view NAME = "LA VE";
         for (std::size_t index = 0; index < std::size(_state.Data().commander.currentSystem.name); ++index)
