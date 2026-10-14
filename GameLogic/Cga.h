@@ -65,6 +65,14 @@ struct FrameImage
   }
 };
 
+/// The two modes the game sets: 40x25 colour text for the docked screens, and 320x200 four-colour graphics for flight, the
+/// title and the charts.
+enum class CgaMode : std::uint8_t
+{
+  Text40Columns,
+  Graphics320
+};
+
 /// The 6845's registers, by number.
 enum class CrtcRegister : std::uint8_t
 {
@@ -186,6 +194,11 @@ public:
 
   /// OUT 3D9h,_value: the colour select register.
   void SetColorSelect(std::uint8_t _value) noexcept;
+
+  /// The card set to _mode, as the BIOS's set-mode left it: the video off, CRTC registers 0-15 from the mode's table (the
+  /// start address and the cursor 0), then mode control the mode's value and colour select 30h. Video memory is the game's
+  /// to clear.
+  void SetMode(CgaMode _mode) noexcept;
 
   /// IN AL,3DAh: the status, under paced time's rule for the vertical retrace (above).
   [[nodiscard]] std::uint8_t ReadStatus() noexcept;

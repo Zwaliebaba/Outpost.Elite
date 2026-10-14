@@ -473,7 +473,7 @@ void DrawDockedFrameAt(GameState& _state, Hardware& _hardware, std::uint8_t _scr
   if ((_state.Data().drawing.screenLayout & TEXT_LAYOUT) == 0)
   {
     _state.Data().drawing.screenLayout = TEXT_LAYOUT;
-    SetTextMode(_hardware);
+    SetTextMode(_state, _hardware);
   }
   // The screen's attribute, and its background as the border.
   const auto attribute = static_cast<std::uint8_t>(_screen & ATTRIBUTE_MASK);

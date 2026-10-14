@@ -191,9 +191,6 @@
     <ClCompile Include="TwinRigTests.cpp">
       <Filter>Rigs</Filter>
     </ClCompile>
-    <ClCompile Include="VideoModesTests.cpp">
-      <Filter>Platform</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="EquipmentAnswers.txt">

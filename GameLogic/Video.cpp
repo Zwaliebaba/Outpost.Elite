@@ -49,12 +49,10 @@ constexpr std::uint16_t CHART_FRAME_VERTICAL_LINES = 0xC0;
 constexpr std::uint8_t CHART_FRAME_LEFT_BYTE = 0x03;  // MOV AX,03C0h: AH, x=31 in colour 3
 constexpr std::uint8_t CHART_FRAME_RIGHT_BYTE = 0xC0; // AL, x=288
 
-constexpr std::uint8_t GRAPHICS_MODE = 4;         // BIOS mode 4: 320x200 in four colours
-constexpr std::uint8_t GRAPHICS_PALETTE = 0;      // green, red and brown
 constexpr std::uint8_t BRIGHT_ON_BLACK = 0x10;    // the colour select register: the bright palette, a black background
-constexpr std::uint8_t TEXT_MODE = 1;             // BIOS mode 1: 40x25 colour text
 constexpr std::uint8_t CURSOR_OFF_PAGE = 0x0E;    // the cursor address's high byte, past the 40x25 page
 constexpr std::uint8_t VIDEO_ON_BLINK_OFF = 0x08; // the mode control register: attribute bit 7 a bright background
+constexpr std::uint16_t BLANK_TEXT_CELL = 0x0720; // a space, light gray on black
 
 // The triangle fillers choose each edge's step, ADD or SUB, by rewriting the step instructions in their own code from tables of
 // opcodes after them (triangleStepOpcodes, CS:1CF3, and clippedTriangleStepOpcodes, CS:1FF8). Native code holds the choice with the
@@ -1266,11 +1264,20 @@ ScreenChange MakeGraphicsScreen(GameState& _state, Hardware& _hardware, std::uin
 {
   if ((_layout & TEXT_LAYOUT_BIT) != 0)
   {
-    SetGraphicsMode(_hardware);
+    SetGraphicsMode(_state, _hardware);
     return ScreenChange::ModeSet;
   }
   ClearCgaScreen(_state);
   return ScreenChange::Cleared;
+}
+
+// What a mode set leaves in video memory: all 16 KiB words of _fill.
+void FillVideoMemory(GameState& _state, std::uint16_t _fill)
+{
+  for (std::uint32_t offset = 0; offset < Cga::VIDEO_MEMORY_BYTES; offset += 2)
+  {
+    _state.SetVideoWord(static_cast<std::uint16_t>(offset), _fill);
+  }
 }
 
 } // namespace
@@ -1828,16 +1835,17 @@ ScreenChange DrawChartFrame(GameState& _state, Hardware& _hardware)
   return change;
 }
 
-void SetGraphicsMode(Hardware& _hardware)
+void SetGraphicsMode(GameState& _state, Hardware& _hardware)
 {
-  _hardware.SetVideoMode(GRAPHICS_MODE);
-  _hardware.SelectPalette(GRAPHICS_PALETTE);
+  _hardware.SetVideoMode(CgaMode::Graphics320);
+  FillVideoMemory(_state, 0);
   _hardware.SetColorSelect(BRIGHT_ON_BLACK);
 }
 
-void SetTextMode(Hardware& _hardware)
+void SetTextMode(GameState& _state, Hardware& _hardware)
 {
-  _hardware.SetVideoMode(TEXT_MODE);
+  _hardware.SetVideoMode(CgaMode::Text40Columns);
+  FillVideoMemory(_state, BLANK_TEXT_CELL);
   _hardware.SetCursorAddressHigh(CURSOR_OFF_PAGE);
   _hardware.SetModeControl(VIDEO_ON_BLINK_OFF);
 }

@@ -173,7 +173,6 @@
     <ClInclude Include="TimerTables.h" />
     <ClInclude Include="Timing.h" />
     <ClInclude Include="Video.h" />
-    <ClInclude Include="VideoModes.h" />
     <ClInclude Include="VideoState.h" />
     <ClInclude Include="VideoTables.h" />
     <ClInclude Include="WorldState.h" />
@@ -226,7 +225,6 @@
     <ClCompile Include="TimeOfDay.cpp" />
     <ClCompile Include="Timer.cpp" />
     <ClCompile Include="Video.cpp" />
-    <ClCompile Include="VideoModes.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

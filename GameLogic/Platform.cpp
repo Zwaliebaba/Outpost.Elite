@@ -53,7 +53,6 @@ Platform::Platform(GameState& _state, FileStore& _files, const Desc& _desc)
     m_events(m_clock),
     m_cga(m_clock),
     m_day(TimerTicksAt(_desc.startMoment)),
-    m_modes(_state, m_cga),
     m_mouse(_desc.mousePresent),
     m_files(_files),
     m_startMoment(_desc.startMoment),

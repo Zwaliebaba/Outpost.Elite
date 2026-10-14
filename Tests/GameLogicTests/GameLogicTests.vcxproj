@@ -132,7 +132,6 @@
     <ClCompile Include="TextTests.cpp" />
     <ClCompile Include="TimeOfDayTests.cpp" />
     <ClCompile Include="TwinRigTests.cpp" />
-    <ClCompile Include="VideoModesTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="EquipmentAnswers.txt" />

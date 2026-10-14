@@ -94,15 +94,15 @@ public:
     Assert::AreEqual(std::uint32_t{state.CodeSegment()} + Elite::DATA_SEGMENT_PARAGRAPH, std::uint32_t{state.DataSegment()},
                      L"the data segment");
 
-    // The state as the 1987 image loaded it, less the joystick's members (D81), the Amstrad's flag (D12) and the screenshots' (D86), and video memory as mode 3 leaves it.
+    // The state as the 1987 image loaded it, less the joystick's members (D81), the Amstrad's flag (D12) and the screenshots' (D86), and video memory clear until the game sets its first mode.
     Elite::Sha256 start;
     start.Update(Elite::StateBytes(std::as_const(state).Data()));
     Assert::AreEqual("2cd124d640cc79dfd6d6c65508f90b0e5c05646aa308ef7651cf45ebc767877d", Elite::Sha256::ToHex(start.Finish()).c_str(),
                      L"the start state, as the image loaded it");
-    for (std::uint16_t offset = 0; offset < Elite::Cga::VIDEO_MEMORY_BYTES; offset += 2)
+    for (std::uint16_t offset = 0; offset < Elite::Cga::VIDEO_MEMORY_BYTES; ++offset)
     {
-      if (state.VideoByte(offset) != 0x20 || state.VideoByte(static_cast<std::uint16_t>(offset + 1)) != 0x07)
-        Assert::Fail(L"video memory as video mode 3 leaves it: 0720h words");
+      if (state.VideoByte(offset) != 0)
+        Assert::Fail(L"video memory clear");
     }
 
     const std::uint8_t fuel = state.Data().commander.fuel;

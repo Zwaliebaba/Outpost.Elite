@@ -73,8 +73,8 @@ public:
   /// Int 33h AX=0Bh: the mouse's motion since the last call. With no driver, CX and DX come back as 0.
   [[nodiscard]] MouseMotion ReadMouseMotion();
 
-  /// Int 10h AH=0, AL=_mode: the BIOS sets the CGA's mode. Throws std::logic_error for a mode above 6, which the game never sets.
-  void SetVideoMode(std::uint8_t _mode);
+  /// The CGA set to _mode (Cga::SetMode), where the original asked the BIOS's int 10h.
+  void SetVideoMode(CgaMode _mode) noexcept;
 
   /// IN AL,3DAh: the CGA's status, bit 3 set during the vertical retrace.
   [[nodiscard]] std::uint8_t CgaStatus();
@@ -144,9 +144,6 @@ public:
 
   /// OUT 3D8h,_value: the CGA's mode control register: bit 3 the video on, bit 5 blinking.
   void SetModeControl(std::uint8_t _value);
-
-  /// Int 10h AH=0Bh, BH=1, BL=_palette: the BIOS selects mode 4's palette.
-  void SelectPalette(std::uint8_t _palette);
 
   /// The platform's file store, where the commander files are (D78): the game reads and writes it directly, where the original
   /// went through DOS's int 21h.

@@ -11,7 +11,6 @@
 #include "Task.h"
 #include "TimeOfDay.h"
 #include "Timing.h"
-#include "VideoModes.h"
 
 #include <array>
 #include <coroutine>
@@ -47,7 +46,7 @@ using ProgramRoutine = std::function<Task<void>()>;
 /// It holds, each what the game uses of the PC, without its port bus, its registers or its vector table (ADR-041): the clock and
 /// the events it waits for, with the two interrupts they request (Scheduler: the tick, the keys and their requests); the timer's
 /// the system control port; the sound, the tone and its bits (Speaker); the mouse driver (Mouse);
-/// the CGA (Cga); the BIOS's video services (VideoModes), its time of day (TimeOfDay) and its two hardware interrupt handlers;
+/// the CGA (Cga), whose modes the game sets on it; the BIOS's time of day (TimeOfDay) and its two hardware interrupt handlers;
 /// and the file store that holds the commander files (FileStore, D78).
 ///
 /// Time is the 8088's cycle count, a third of the crystal (Timing.h), and it is paced (ADR-008): the game's work takes no
@@ -124,9 +123,9 @@ public:
   /// fewer than a host would run before someone notices.
   static constexpr std::uint64_t DEFAULT_SPIN_LIMIT = 50'000'000;
 
-  /// Powers on: every device in its power-on state, the time of day and the video services as the BIOS leaves them for
-  /// DOS, video mode 3 set on the CGA and in _state's video memory, and the BIOS's two hardware interrupt handlers in place.
-  /// _state is the game's memory and _files where DOS's files are; both must outlive the platform. Not noexcept: the devices
+  /// Powers on: every device in its power-on state, the CGA with every register clear until the game sets its mode, the time
+  /// of day as the BIOS leaves it for DOS, and the BIOS's two hardware interrupt handlers in place. _state is the game's
+  /// memory and _files where the commander files are; both must outlive the platform. Not noexcept: the devices
   /// allocate.
   Platform(GameState& _state, FileStore& _files, const Desc& _desc);
   Platform(const Platform&) = delete;
@@ -313,12 +312,6 @@ public:
     return m_day;
   }
 
-  /// Int 10h's video modes, palette and teletype.
-  [[nodiscard]] VideoModes& Modes() noexcept
-  {
-    return m_modes;
-  }
-
   /// Where the commander files are (D78): the game reads and writes them directly.
   [[nodiscard]] FileStore& Files() noexcept
   {
@@ -411,7 +404,6 @@ private:
   std::array<SnapshotBeam, FlightSnapshot::MOST_BEAMS> m_beams{}; // the frame's beams, since BeginSpaceViewFrame
   std::size_t m_beamCount = 0;
   TimeOfDay m_day;
-  VideoModes m_modes;
   Mouse m_mouse;
   FileStore& m_files;
   DosDateTime m_startMoment;

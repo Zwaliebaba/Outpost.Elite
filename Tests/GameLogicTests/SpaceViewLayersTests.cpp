@@ -473,7 +473,7 @@ public:
       {
         Elite::Hardware& hardware = rig.Native();
         Elite::GameState& state = rig.State();
-        Elite::SetGraphicsMode(hardware); // the game's mode 4, in which the CGA shows the view
+        Elite::SetGraphicsMode(state, hardware); // the game's mode 4, in which the CGA shows the view
         hardware.BeginSpaceViewFrame();
         for (std::size_t x = 0; x < Elite::SPACE_VIEW_WIDTH_PIXELS; ++x)
         {

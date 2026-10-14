@@ -115,12 +115,9 @@ MouseMotion Hardware::ReadMouseMotion()
   return mouse.Motion();
 }
 
-void Hardware::SetVideoMode(std::uint8_t _mode)
+void Hardware::SetVideoMode(CgaMode _mode) noexcept
 {
-  if (!m_platform.Modes().SetMode(_mode))
-  {
-    throw std::logic_error("Hardware::SetVideoMode: a mode the game never sets");
-  }
+  m_platform.Video().SetMode(_mode);
 }
 
 std::uint8_t Hardware::CgaStatus()
@@ -141,11 +138,6 @@ void Hardware::SetCursorAddressHigh(std::uint8_t _value)
 void Hardware::SetModeControl(std::uint8_t _value)
 {
   m_platform.Video().SetModeControl(_value);
-}
-
-void Hardware::SelectPalette(std::uint8_t _palette)
-{
-  m_platform.Modes().SelectPalette(_palette);
 }
 
 FileStore& Hardware::Files() noexcept

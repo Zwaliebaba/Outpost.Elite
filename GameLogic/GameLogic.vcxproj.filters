@@ -378,9 +378,6 @@
     <ClInclude Include="Video.h">
       <Filter>Video</Filter>
     </ClInclude>
-    <ClInclude Include="VideoModes.h">
-      <Filter>Platform</Filter>
-    </ClInclude>
     <ClInclude Include="VideoState.h">
       <Filter>Video</Filter>
     </ClInclude>
@@ -526,9 +523,6 @@
     </ClCompile>
     <ClCompile Include="Video.cpp">
       <Filter>Video</Filter>
-    </ClCompile>
-    <ClCompile Include="VideoModes.cpp">
-      <Filter>Platform</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

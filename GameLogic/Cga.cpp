@@ -56,6 +56,15 @@ constexpr std::array<std::uint8_t, 3> PALETTE_1 = {3, 5, 7}; // cyan, magenta, l
   return static_cast<std::size_t>(_index);
 }
 
+// The IBM PC BIOS's CRTC registers 0-15 and mode control value for each mode the game sets (VIDEO_PARMS, M7).
+constexpr std::array<std::uint8_t, 16> CRTC_TEXT_40_COLUMNS = {0x38, 0x28, 0x2D, 0x0A, 0x1F, 0x06, 0x19, 0x1C,
+                                                               0x02, 0x07, 0x06, 0x07, 0x00, 0x00, 0x00, 0x00};
+constexpr std::array<std::uint8_t, 16> CRTC_GRAPHICS_320 = {0x38, 0x28, 0x2D, 0x0A, 0x7F, 0x06, 0x64, 0x70,
+                                                            0x02, 0x01, 0x06, 0x07, 0x00, 0x00, 0x00, 0x00};
+constexpr std::uint8_t MODE_CONTROL_TEXT_40_COLUMNS = 0x28;
+constexpr std::uint8_t MODE_CONTROL_GRAPHICS_320 = 0x2A;
+constexpr std::uint8_t COLOR_SELECT_AFTER_MODE = 0x30;
+
 } // namespace
 
 Cga::Cga(const Cycles& _clock) noexcept
@@ -80,6 +89,19 @@ void Cga::SetModeControl(std::uint8_t _value) noexcept
 void Cga::SetColorSelect(std::uint8_t _value) noexcept
 {
   m_colorSelect = static_cast<std::uint8_t>(_value & COLOR_SELECT_BITS);
+}
+
+void Cga::SetMode(CgaMode _mode) noexcept
+{
+  const bool graphics = _mode == CgaMode::Graphics320;
+  SetModeControl(0x00);
+  const std::array<std::uint8_t, 16>& table = graphics ? CRTC_GRAPHICS_320 : CRTC_TEXT_40_COLUMNS;
+  for (std::size_t index = 0; index < table.size(); ++index)
+  {
+    WriteCrtc(static_cast<std::uint8_t>(index), table[index]);
+  }
+  SetModeControl(graphics ? MODE_CONTROL_GRAPHICS_320 : MODE_CONTROL_TEXT_40_COLUMNS);
+  SetColorSelect(COLOR_SELECT_AFTER_MODE);
 }
 
 std::uint8_t Cga::ReadStatus() noexcept

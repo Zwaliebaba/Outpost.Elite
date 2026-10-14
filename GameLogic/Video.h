@@ -158,12 +158,13 @@ void ClearTextScreen(GameState& _state);
 /// the two verticals a byte at a time.
 ScreenChange DrawChartFrame(GameState& _state, Hardware& _hardware);
 
-/// SetGraphicsMode (CS:7CFE): BIOS mode 4, palette 0, and the colour select register bright on black.
-void SetGraphicsMode(Hardware& _hardware);
+/// SetGraphicsMode (CS:7CFE): the CGA in 320x200 graphics, video memory cleared, and the colour select register bright on
+/// black.
+void SetGraphicsMode(GameState& _state, Hardware& _hardware);
 
-/// SetTextMode (CS:7D11): BIOS mode 1, the cursor's address off the page, and the mode control register with blinking off,
-/// so that attribute bit 7 is a bright background.
-void SetTextMode(Hardware& _hardware);
+/// SetTextMode (CS:7D11): the CGA in 40x25 text, video memory blank, the cursor's address off the page, and the mode control
+/// register with blinking off, so that attribute bit 7 is a bright background.
+void SetTextMode(GameState& _state, Hardware& _hardware);
 
 /// DrawTitlePlanet (CS:7D4E): DrawDisc with sunFringeMask 1, then sunFringeMask 0.
 void DrawTitlePlanet(GameState& _state, std::uint16_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow);

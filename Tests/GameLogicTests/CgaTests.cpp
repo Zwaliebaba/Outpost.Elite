@@ -107,6 +107,15 @@ void AssertFirstPixels(const Elite::FrameImage& _image, std::uint32_t _line, std
   }
 }
 
+// CRTC registers 0-15 of _cga hold _expected.
+void AssertCrtc(const Elite::Cga& _cga, const std::array<std::uint8_t, 16>& _expected)
+{
+  for (std::size_t index = 0; index < _expected.size(); ++index)
+  {
+    Assert::AreEqual(std::uint32_t{_expected[index]}, std::uint32_t{_cga.Crtc(static_cast<Elite::CrtcRegister>(index))});
+  }
+}
+
 constexpr std::uint32_t STATUS_FLAGS = Elite::Cga::STATUS_DISPLAY_INACTIVE | Elite::Cga::STATUS_VERTICAL_SYNC;
 constexpr std::uint32_t DISPLAYING = 0;
 constexpr std::uint32_t BLANKING = Elite::Cga::STATUS_DISPLAY_INACTIVE;
@@ -383,6 +392,32 @@ public:
     Assert::AreEqual(0x3Fu, std::uint32_t{cga.ModeControl()});
     cga.SetColorSelect(0xFF);
     Assert::AreEqual(0x3Fu, std::uint32_t{cga.ColorSelect()});
+  }
+
+  // SetGraphicsMode (CS:7D1E): the card as the BIOS's mode 4 left it, for flight, the title and the charts.
+  TEST_METHOD(SetModeGraphicsProgramsTheBiosValues)
+  {
+    CgaRig rig;
+    Elite::Cga& cga = rig.Device();
+    cga.WriteCrtc(14, 0x0E);
+    cga.SetMode(Elite::CgaMode::Graphics320);
+    AssertCrtc(cga, {0x38, 0x28, 0x2D, 0x0A, 0x7F, 0x06, 0x64, 0x70, 0x02, 0x01, 0x06, 0x07, 0x00, 0x00, 0x00, 0x00});
+    Assert::AreEqual(0x2Au, std::uint32_t{cga.ModeControl()});
+    Assert::AreEqual(0x30u, std::uint32_t{cga.ColorSelect()});
+    Assert::IsTrue(cga.ShowsGraphicsFromStart());
+  }
+
+  // SetTextMode (CS:7D31): the card as the BIOS's mode 1 left it, for the docked screens.
+  TEST_METHOD(SetModeTextProgramsTheBiosValues)
+  {
+    CgaRig rig;
+    Elite::Cga& cga = rig.Device();
+    cga.SetMode(Elite::CgaMode::Graphics320);
+    cga.SetMode(Elite::CgaMode::Text40Columns);
+    AssertCrtc(cga, {0x38, 0x28, 0x2D, 0x0A, 0x1F, 0x06, 0x19, 0x1C, 0x02, 0x07, 0x06, 0x07, 0x00, 0x00, 0x00, 0x00});
+    Assert::AreEqual(0x28u, std::uint32_t{cga.ModeControl()});
+    Assert::AreEqual(0x30u, std::uint32_t{cga.ColorSelect()});
+    Assert::IsFalse(cga.ShowsGraphicsFromStart());
   }
 };
 
