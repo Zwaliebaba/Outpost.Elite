@@ -1,6 +1,6 @@
 # ELITES.EXE — reverse-engineering and native port plan
 
-**Status:** proposed 2026-10-09. The owner's rulings are D1 to D75 in §8. A ruling becomes a decision when the ADR in §9 records it (AGENTS.md §6). Each phase's section in §5 says how its exit was met.
+**Status:** proposed 2026-10-09. The owner's rulings are D1 to D80 in §8. A ruling becomes a decision when the ADR in §9 records it (AGENTS.md §6). Each phase's section in §5 says how its exit was met.
 
 | Phase | State | Recorded in |
 |---|---|---|
@@ -11,6 +11,7 @@
 | 4 — Detach | Closed 2026-10-10 | ADR-011 to ADR-019 |
 | 5 — The native platform and the natural layout | Closed 2026-10-12: pieces 1 to 3 done, change 3c's four parts with them. The guard D57 deleted is restored (D59). Piece 4 moved to Phase 6 (D52). | ADR-020 to ADR-026, ADR-029, ADR-030 |
 | 6 — The new game | Ruled (D39, D44–D55, D60–D75). Piece 1, the renderer's first part, written (ADR-031) and played by the owner; piece 2, the flight snapshot, written (ADR-032); piece 3's first part, the ships as models in the CGA view, written (ADR-033), and played; its second, the cockpit and HUD round the 1987 view, written (ADR-034), and played; the title moved into the cockpit (D64); the sun, the planet, the sky, the dust, the beams and the sights drawn by the renderer (ADR-035, D65), and played; the game's words over the cockpit, and the credits and the pause screen in it (ADR-036, D66), and played; the words on panels, and the tunnels in the cockpit (ADR-036, D68); the full window, Hor+, the renderer's stardust and tearing (ADR-037, D67, D69). Piece 4 ruled (D70); its first step, the loop turns that never wait gone, written (ADR-038); step b, the waits declared and the fields no longer counting, written (ADR-039, ADR-040, D71); step c's first three parts, the vector table and the ROM gone, the controller, the tick and the keys one scheduler, and the BIOS its time of day and its video services, written, and DOS's file services, native since D27, kept: step c done (ADR-041, D72); step d, the sound synthesised from what the game's routines set, written (ADR-042); step e met by the shell's loop; `DataPlaces.h` and the re-base checks kept until piece 5 (D73), and piece 4 done. Piece 5 ruled (D74, D75); its first step, the docked rules as functions with no screen code, written (ADR-043); its screens wait for the docked drawings (D54). Done ahead of it: D41 (ADR-027), D42 and D48's PerMonitorV2 (ADR-009), and D43 (ADR-030). | ADR-031 to ADR-043 |
+| 7 — Wholly native | Ruled (D76–D80), 2026-10-14: the code drops everything of 1987 but CGA, which stays until piece 5's screens replace it; before piece 5's screens | — |
 
 **Play-tests.** The owner played the build with D19 and D3 (`472a6b8`) and reported it good; played main at `7242663`, with the platform swap and change 1, and reported that it works perfectly; and played the game after D7 and reported that it works as designed.
 
@@ -271,6 +272,34 @@ Then come the changes on purpose, from which the game diverges freely (D26). The
 
 **Exit:** the game plays on the canvas's screens at every size D48 names; the progress outcomes and the subsystem answers pass, and the golden images are recorded and reported; and the owner has played it.
 
+### Phase 7 — Wholly native
+
+The owner ruled that the code becomes wholly native C++ (D76): no `Field<>`, no 1987 layout of the state, no copy from the original's memory image, no `Hardware.h` and no PC model behind it. CGA stays, its memory and the 1987 drawing routines, as the picture buffer piece 5's screens are drawn against, and goes with them. What the game *is* stays the 1987 game (ADR-007); what goes is every way the code still reaches it. The owner manages what changes: a step whose digests, pictures, outcomes or answers move re-records them and says which moved and why, rather than stopping for a ruling.
+
+What it removes, as measured on `main` at `d9a1843`: `Field<>`'s 750 uses, 268 state members at their 1987 offsets, 80 of them still unnamed, and `SpaceObject` as the 1987 slot; about 450 reads and writes of the state as bytes (`BytesOf`, `WordIn`, `SetWordIn`, `BytesWithin`, `_STATE_OFFSET`, `TextWithin`); `ReferenceImage.cpp`'s 13,289 lines of the 1987 image, `DataPlaces.h`, `ReferenceLoadImage`, the 18 generated `*Tables.h`, `Tools/GenerateGameData.py`, `Tools/GenerateTables.py`, `Symbols.tsv`, `DataPartition.tsv` and the two CI steps that check them; `Hardware.h`'s 180 call sites and the 146 functions that take it, `Platform` and its game thread, `NativeRoutines`, `Scheduler`, paced time in CPU cycles, the instruction-cycle count only the joystick reads, `DosFiles`, `VideoModes`, `TimeOfDay`, `GamePort` and the mouse driver's interrupt; and what is left of the 8086 in the game's code: the direction flag passed as `_backward` (347 uses), the values carried in BP (`_countIfNone`, 93) and AL (`AlAfterKey`), the `bl`/`bh` line records, segments as parameters, XT scan codes as the keys' identities, and some 1,360 comments citing the original's addresses.
+
+The rulings that shape it:
+
+- **D77.** The game waits by C++20 coroutines: a function that waits is a coroutine, and a wait is `co_await` of a key, a tick or a frame. The host resumes the game each tick, on one thread, deterministically. The game's logic keeps its shape; the docked screens of piece 5 are written against the same host.
+- **D78.** The commander file keeps the `.cdr` format, written and read by an explicit serializer, so the corpus's prepared commanders and the players' saves still load.
+- **D79.** `ReferenceImage.cpp` is deleted once nothing builds from it. A question about what the original does is then measured against the owner's own `ELITES.EXE` (ADR-020), and AGENTS.md says so.
+- **D80.** What only DOS had becomes its Windows counterpart: the ` cheat` command tail a command-line flag, Alt+PrtSc's `eliteNN.hi`/`.lo` a PNG the shell saves, exit to DOS a quit; the exit message goes.
+
+The steps, each its own change and ADR, in this order:
+
+1. **The state written by name, not by layout.** Each group of the state lists its members in order (`Visit`), and the state digest and the commander file are written from that list. In today's order and at today's widths it writes today's bytes exactly, so every digest holds; from then on the digest does not depend on the layout, which is what keeps steps 2 to 5 exact.
+2. **No bytes of the state.** Every read or write of the state as bytes becomes a member or a typed array.
+3. **No `Field<>`.** The members are plain types at the same widths, so every sum wraps where it did; the 80 unnamed members are named, `SpaceObject` becomes a plain struct, and the rules against copies and compound assignment go.
+4. **The start state in C++.** Jameson and every first value are initializers, written once from the image and kept as source; `DataPlaces.h` and `ReferenceLoadImage` go, and the start digest is checked unchanged. This supersedes D73.
+5. **The tables as source.** The `*Tables.h` stop being generated; `ReferenceImage.cpp`, both generators, the two `.tsv` files and their CI steps go (D79).
+6. **No 8086 in the game's code.** The direction flag, the BP and AL carry-throughs and the line records go, and the drawing routines take a CGA buffer, not a segment. Where a carried value reached the state, what it changes is reported and re-recorded.
+7. **The native host** (D77). `Hardware.h`, `Platform`, the game thread and `Cycles` go. Time is milliseconds, and the timer's 1 kHz work, the music, the effects and the counters, is a tick the host runs; keys arrive as the game's own key events; the sound routines drive the synth; the mouse is read natively; the commander files go through `FileStore` and step 1's serializer (D78); the video modes are set on `Cga` directly; D80's counterparts land. Keeping the millisecond clock and the frames' pacing should keep most replays exact; key delivery, which the PC delays a millisecond after its latch empties, is where they may move.
+8. **The joystick through XInput**, which the Windows SDK ships (R14), in place of the IBM game port and its calibration.
+9. **No 1987 in the comments.** The addresses go from the code; `Reference-Map.md` and the ADRs keep them, as history.
+10. **The tests on native rigs.** `ReferenceRig` and `TwinRig` become native, the tests that read the image go, and AGENTS.md is brought up to date: its CI steps, and D79.
+
+**Exit:** nothing in `GameLogic`, `Engine`, `Outpost` or the tests reaches the 1987 layout, image, memory map or PC; CGA alone remains, for piece 5; the suite, the checkers and CI pass; every moved answer is re-recorded with its cause; and the owner has played it.
+
 ## 6. Verification
 
 ### 6.1 The interpreter against an independent reference
@@ -386,6 +415,11 @@ After D44, no replay reaches the docked screens. Their rules are functions with 
 | D73 | What `DataPlaces.h`, through which `ReferenceLoadImage` builds the starting state from the 1987 image, and the state digests' re-base checks that read it become at the end of piece 4 (raised as piece 4 closed) | Keep both until piece 5. | **As recommended** (2026-10-14): both stay until piece 5 changes the docked state, which ends its match with 1987's; they are ruled again then. |
 | D74 | How piece 5 starts, as the canvas does not yet draw D54's docked gaps, which the plan has drawn first (raised at its start) | The rules first, as functions with no screen code that the 1987 screens call, so every replay stays exact; the screens wait for the drawings. | **As recommended** (2026-10-14). ADR-043 records it. |
 | D75 | Where the cargo is listed, as the canvas folds 1987's inventory (F10) into the market's In Hold column and its status screen shows the equipment only (raised at the start of piece 5) | — | **The status screen lists the cargo too** (2026-10-14), beside the equipment; the owner draws it with the other docked gaps (D54). |
+| D76 | Whether the code keeps anything of the 1987 version: `Field<>`, the layout, the copy from the image, `Hardware.h` and the PC behind it (asked by the owner, 2026-10-14) | — | **Wholly native** (2026-10-14): all of it goes but CGA, which stays until piece 5's screens replace it. The owner manages what changes: a step whose answers move re-records them and reports why. Phase 7. Supersedes D73; amends ADR-016 item 4. |
+| D77 | How the game waits once the game thread and `Hardware.h` go (raised with Phase 7) | C++20 coroutines, resumed by the host each tick. | **As recommended** (2026-10-14). |
+| D78 | What the commander file becomes once the state has no 1987 layout (raised with Phase 7) | The `.cdr` format, written and read by an explicit serializer. | **As recommended** (2026-10-14). |
+| D79 | What happens to `ReferenceImage.cpp` once nothing builds from it (raised with Phase 7) | Delete it; measure the original against the owner's `ELITES.EXE`. | **As recommended** (2026-10-14). |
+| D80 | What becomes of what only DOS had: the ` cheat` command tail, Alt+PrtSc's screenshot files, exit to DOS and its message (raised with Phase 7) | Their Windows counterparts. | **As recommended** (2026-10-14): a command-line flag, a PNG the shell saves, a quit; the message goes. |
 
 ## 9. ADRs this plan produces
 
@@ -435,3 +469,4 @@ After D44, no replay reaches the docked screens. Their rules are functions with 
 | [ADR-042](ADR/ADR-042-the-sound-is-the-games.md) | The native game loop, fourth step: the sound synthesised from what the game's sound routines set (D70) | Phase 6, piece 4 — written |
 | [ADR-043](ADR/ADR-043-the-docked-rules.md) | The docked screens, first step: the rules as functions with no screen code, with known answers (D53, D74) | Phase 6, piece 5 — written |
 | — | The docked screens themselves and their golden images (D44, D53, D75) | Phase 6, piece 5 — to write |
+| — | Wholly native: the ten steps of Phase 7, an ADR each (D76–D80) | Phase 7 — to write |
