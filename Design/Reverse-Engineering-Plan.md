@@ -347,6 +347,9 @@ The rulings that shape it:
 - **D79.** `ReferenceImage.cpp` is deleted once nothing builds from it. A question about what the original does is then measured against the owner's own `ELITES.EXE` (ADR-020), and AGENTS.md says so.
 - **D80.** What only DOS had becomes its Windows counterpart: the ` cheat` command tail a command-line flag, Alt+PrtSc's `eliteNN.hi`/`.lo` a PNG the shell saves, exit to DOS a quit; the exit message goes.
 - **D81.** The joystick goes, the IBM game port's and the Amstrad's: the game is flown with the keyboard and the mouse. It replaces step 8's XInput.
+- **D87.** The native host's time is whole milliseconds: a 1 ms tick and 60 Hz frames replace the PC's 1000.15 Hz and 59.92 Hz, `Cycles` goes, and every digest is re-recorded once, with its cause.
+- **D88.** A key reaches the game as its own event, the key and whether it went down or up, one queued event a tick, in order.
+- **D89.** The shell attaches Windows' mouse with piece 5's docked host (D83), not in step 7.
 
 The steps, each its own change and ADR, in this order:
 
@@ -489,6 +492,9 @@ After D44, no replay reaches the docked screens. Their rules are functions with 
 | D84 | Whether DX, BX and DI's carry-throughs go too, which step 6 did not name: DI decides what a launched missile is copied from (raised with ADR-046) | — | **They go** (2026-10-14): ADR-046 items 6 to 8. |
 | D85 | Whether the game keeps D77's coroutine waits or moves to screens driven by the game's state, the current screen in `GameState` and a tick that updates and draws it (raised by the owner, 2026-10-14) | Coroutines through Phase 7, which keep every replay exact while the PC goes; state-driven screens from piece 5. | **As recommended** (2026-10-14): the coroutine waits stay through Phase 7 (ADR-047); piece 5's docked screens are state-driven: the current screen and its cursor in `GameState`, mouse and key events in, drawn from the state; the title, the pause screen and flight's function-key screens follow afterwards, with one re-recording and its cause. Amends D77's "the docked screens of piece 5 are written against the same host". |
 | D86 | Whether D80's PNG screenshot is wanted (raised by the owner, 2026-10-14) | — | **The screenshots go** (2026-10-14): Alt+PrtSc does nothing; amends D80's "a PNG the shell saves". |
+| D87 | Whether the native host's time keeps the PC's rates, the 1000.15 Hz tick and the 59.92 Hz retrace, or is whole milliseconds (raised with step 7, 2026-10-14) | Whole milliseconds: a 1 ms tick and 60 Hz frames, `Cycles` gone, every digest re-recorded once with its cause, the outcomes checked. | **As recommended** (2026-10-14). |
+| D88 | When a key event from the host reaches the game, once the XT's latch and its 1 ms delivery go (raised with step 7, 2026-10-14) | One queued event a tick, in order: the game's own key and whether it went down or up. | **As recommended** (2026-10-14). |
+| D89 | Whether the shell attaches Windows' mouse now, its raw counts as mickeys, or with piece 5's docked host (raised with step 7, 2026-10-14) | — | **With piece 5** (2026-10-14), where D83's mouse and its capture are designed. |
 
 ## 9. ADRs this plan produces
 
