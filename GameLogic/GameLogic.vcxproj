@@ -151,7 +151,6 @@
     <ClInclude Include="SpaceObject.h" />
     <ClInclude Include="SpaceViewLayers.h" />
     <ClInclude Include="Speaker.h" />
-    <ClInclude Include="SquareWave.h" />
     <ClInclude Include="StartState.h" />
     <ClInclude Include="StartUp.h" />
     <ClInclude Include="StartUpState.h" />
@@ -208,7 +207,6 @@
     <ClCompile Include="Sound.cpp" />
     <ClCompile Include="SpaceViewLayers.cpp" />
     <ClCompile Include="Speaker.cpp" />
-    <ClCompile Include="SquareWave.cpp" />
     <ClCompile Include="StartState.cpp" />
     <ClCompile Include="StartUp.cpp" />
     <ClCompile Include="StateDigest.cpp" />

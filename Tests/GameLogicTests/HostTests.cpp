@@ -307,7 +307,7 @@ public:
     Assert::AreEqual(events + 1, host.Sound().Events().size(), L"the other bits leave the speaker alone");
 
     host.SetSpeakerBits(0x01);
-    Assert::IsTrue(host.Sound().Now().tone.gate);
+    Assert::IsTrue(host.Sound().Now().gate);
     Assert::IsFalse(host.Sound().Events().back().data);
   }
 };
