@@ -1,8 +1,6 @@
 // GameLogic/SquareWave.h
 #pragma once
 
-#include "Timing.h"
-
 #include <cstdint>
 #include <limits>
 
@@ -11,9 +9,8 @@ namespace Elite
 
 /// A channel of the IBM PC's 8253 interval timer in mode 3, the square wave, the only mode the game programs (ADR-006 item 2,
 /// ADR-041): its programming and phase, from which its output at any tick follows directly rather than by simulating the ticks
-/// in between. The timer is clocked at a twelfth of the crystal: one tick every CYCLES_PER_PIT_TICK cycles, tick k at cycle
-/// k * CYCLES_PER_PIT_TICK counted from power-on, so the ticks by a cycle are a division of the platform's own clock and nothing
-/// drifts. A plain aggregate (R8): the scheduler keeps channel 0's, the tick, and the speaker channel 2's, the tone, in each
+/// in between. The timer is clocked at a twelfth of the crystal, its ticks counted from power-on by the speaker, whose tone is
+/// channel 2 (Speaker). A plain aggregate (R8): the speaker keeps one in each
 /// event of its log.
 ///
 /// A count is loaded into the counting element on the tick after it is written. With an odd count N the output is high for
@@ -46,12 +43,6 @@ struct SquareWave
 
   /// The count register: the last count written, 1-65536, or 0 if none has been.
   [[nodiscard]] std::uint32_t CountRegister() const noexcept;
-
-  /// The number of the tick in progress at _cycle.
-  [[nodiscard]] static constexpr std::int64_t TickAt(Cycles _cycle) noexcept
-  {
-    return static_cast<std::int64_t>(_cycle / CYCLES_PER_PIT_TICK);
-  }
 
   /// The count _divisor stands for: 0 is the largest.
   [[nodiscard]] static constexpr std::uint32_t Reload(std::uint16_t _divisor) noexcept

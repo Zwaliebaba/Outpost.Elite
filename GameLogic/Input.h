@@ -45,7 +45,7 @@ void KeyboardInterrupt(GameState& _state, Hardware& _hardware);
 /// ResetKeyboard (CS:7668): every key up, keyBuffer empty, rollRate zero, with interrupts off; then interrupts on.
 void ResetKeyboard(GameState& _state, Hardware& _hardware);
 
-/// ReadScanCode (CS:7443): one scan code from the keyboard, acknowledged, into keyDown and keyBuffer, then the end of the
+/// ReadScanCode (CS:7443): one key event, taken (Hardware::TakeKey, D88), into keyDown and keyBuffer, then the end of the
 /// interrupt.
 void ReadScanCode(GameState& _state, Hardware& _hardware);
 

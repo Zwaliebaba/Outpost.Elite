@@ -34,9 +34,9 @@ public:
   /// The speaker's tone: OUT 43h,B6h, then _divisor's low and high bytes to the timer's channel 2 at 42h.
   void SetToneDivisor(std::uint16_t _divisor);
 
-  /// The timer's tick: OUT 43h,36h, then _divisor's low and high bytes to the timer's channel 0 at 40h. The control word can
-  /// raise IRQ 0 at once: with interrupts on, it is taken here, as the CPU takes it at the next instruction.
-  void SetTickDivisor(std::uint16_t _divisor);
+  /// The game's tick started, a millisecond from now and every millisecond after (D87), or stopped: where the original
+  /// programmed the timer's channel 0 to about 1 kHz and back. With interrupts on, one now due is taken here.
+  void SetTickRunning(bool _running);
 
   /// OUT 20h,20h: the end of an interrupt, to the interrupt controller. With interrupts on, one it held back is taken here.
   void EndOfInterrupt();
@@ -56,12 +56,9 @@ public:
   /// never leaves. The clock stands still, and a run that does nothing else stops as Spinning (Platform::Spin).
   void Spin();
 
-  /// IN AL,60h: the scan code the keyboard sent.
-  [[nodiscard]] std::uint8_t KeyboardData();
-
-  /// The XT's acknowledgement of a scan code, a pulse on bit 7 of port 61h: IN AL,61h, then OUT 61h with bit 7 set and
-  /// OUT 61h with it clear.
-  void AcknowledgeKeyboard();
+  /// The key event the keyboard's interrupt delivered (D88), taken: the next one can then arrive. Only inside the keyboard's
+  /// handler.
+  [[nodiscard]] KeyEvent TakeKey() noexcept;
 
   /// The mouse (ADR-051): the game reads it directly, where the original called its driver through int 33h.
   [[nodiscard]] Mouse& MouseDevice() noexcept;
@@ -145,7 +142,7 @@ public:
   /// The stamp a file written now takes: DOS's date and time at the platform's clock (Platform::FileStampNow).
   [[nodiscard]] FileStamp FileStampNow() const;
 
-  /// _point's cycles pass as they pass in a wait (Platform::Spend): the time the IBM PC spent on work the reference sets no
+  /// _point's time passes as it passes in a wait (Platform::Spend): the time the IBM PC spent on work the reference sets no
   /// pace for, paid where an interpreted run paid it (ADR-013).
   [[nodiscard]] Task<void> Spend(const PacingPoint& _point);
 

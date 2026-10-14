@@ -15,9 +15,6 @@ namespace GameLogicTests
 namespace
 {
 
-constexpr Elite::Cycles LINE = Elite::CGA_CYCLES_PER_LINE;
-constexpr Elite::Cycles FRAME = Elite::CGA_CYCLES_PER_FRAME;
-
 // A CGA on its own clock, with the video memory it renders from.
 class CgaRig
 {
@@ -28,9 +25,9 @@ public:
   {
   }
 
-  void SetClock(Elite::Cycles _cycles) noexcept
+  void SetClock(Elite::Milliseconds _time) noexcept
   {
-    m_clock = _cycles;
+    m_clock = _time;
   }
 
   void SetCrtc(Elite::CrtcRegister _index, std::uint8_t _value)
@@ -44,14 +41,7 @@ public:
     m_cga.SetColorSelect(_colorSelect);
   }
 
-  // What the BIOS programs for mode 4: sync at character row 70h of 2 scan lines.
-  void SetGraphicsTiming()
-  {
-    SetCrtc(Elite::CrtcRegister::VerticalSyncPosition, 0x70);
-    SetCrtc(Elite::CrtcRegister::MaximumScanLine, 1);
-  }
-
-  // What the BIOS programs for modes 0 and 1: sync at row 1Ch of 8 scan lines, cursor on lines 6-7.
+  // What the BIOS programs for modes 0 and 1: 8 scan lines a row, cursor on lines 6-7.
   void SetTextTiming()
   {
     SetCrtc(Elite::CrtcRegister::VerticalSyncPosition, 0x1C);
@@ -60,10 +50,10 @@ public:
     SetCrtc(Elite::CrtcRegister::CursorEnd, 0x07);
   }
 
-  // The status as the card drives it at _cycles, without paced time's rule for the retrace.
-  [[nodiscard]] std::uint32_t StatusAt(Elite::Cycles _cycles)
+  // The status as the card drives it at _time, without paced time's rule for the retrace.
+  [[nodiscard]] std::uint32_t StatusAt(Elite::Milliseconds _time)
   {
-    m_clock = _cycles;
+    m_clock = _time;
     return m_cga.Status();
   }
 
@@ -84,7 +74,7 @@ public:
   }
 
 private:
-  Elite::Cycles m_clock = 0;
+  Elite::Milliseconds m_clock = 0;
   std::array<std::uint8_t, Elite::Cga::VIDEO_MEMORY_BYTES> m_video{};
   Elite::Cga m_cga;
   std::unique_ptr<Elite::FrameImage> m_image;
@@ -127,45 +117,19 @@ constexpr std::uint32_t SYNC = Elite::Cga::STATUS_DISPLAY_INACTIVE | Elite::Cga:
 TEST_CLASS(CgaTests)
 {
 public:
-  // A visible line is 213 cycles of display and 91 of horizontal blanking, which sets bit 0.
-  TEST_METHOD(StatusBitZeroMarksHorizontalBlanking)
+  // The retrace is the first millisecond of each 60 Hz frame (D87): bits 0 and 3 then, and nothing otherwise.
+  TEST_METHOD(StatusMarksTheRetraceAtEachFrameStart)
   {
     CgaRig rig;
-    rig.SetGraphicsTiming();
-    Assert::AreEqual(DISPLAYING, rig.StatusAt(0) & STATUS_FLAGS);
-    Assert::AreEqual(DISPLAYING, rig.StatusAt(212) & STATUS_FLAGS, L"last displayed cycle of line 0");
-    Assert::AreEqual(BLANKING, rig.StatusAt(213) & STATUS_FLAGS, L"first blanking cycle of line 0");
-    Assert::AreEqual(BLANKING, rig.StatusAt(303) & STATUS_FLAGS);
-    Assert::AreEqual(DISPLAYING, rig.StatusAt(LINE) & STATUS_FLAGS, L"line 1 starts displaying");
-    Assert::AreEqual(DISPLAYING, rig.StatusAt(199 * LINE + 212) & STATUS_FLAGS, L"last visible line");
-    Assert::AreEqual(BLANKING, rig.StatusAt(199 * LINE + 213) & STATUS_FLAGS);
-  }
-
-  // Lines 200-261 are blanked throughout. Sync is the 16 lines from R7 x (R9 + 1), which is line 224 with the BIOS's values
-  // for both mode 4 and mode 1.
-  TEST_METHOD(StatusBitThreeMarksVerticalSync)
-  {
-    CgaRig rig;
-    rig.SetGraphicsTiming();
-    Assert::AreEqual(BLANKING, rig.StatusAt(200 * LINE) & STATUS_FLAGS, L"line 200: blanked, no sync");
-    Assert::AreEqual(BLANKING, rig.StatusAt(224 * LINE - 1) & STATUS_FLAGS, L"end of line 223");
-    Assert::AreEqual(SYNC, rig.StatusAt(224 * LINE) & STATUS_FLAGS, L"line 224: sync begins");
-    Assert::AreEqual(SYNC, rig.StatusAt(240 * LINE - 1) & STATUS_FLAGS, L"end of line 239");
-    Assert::AreEqual(BLANKING, rig.StatusAt(240 * LINE) & STATUS_FLAGS, L"line 240: sync over");
-    Assert::AreEqual(BLANKING, rig.StatusAt(FRAME - 1) & STATUS_FLAGS, L"end of line 261");
-    Assert::AreEqual(DISPLAYING, rig.StatusAt(FRAME) & STATUS_FLAGS, L"the next frame's first line");
-    Assert::AreEqual(SYNC, rig.StatusAt(5 * FRAME + 230 * LINE + 7) & STATUS_FLAGS, L"phase is the clock modulo the frame");
-
-    rig.SetTextTiming();
-    Assert::AreEqual(BLANKING, rig.StatusAt(224 * LINE - 1) & STATUS_FLAGS);
-    Assert::AreEqual(SYNC, rig.StatusAt(224 * LINE) & STATUS_FLAGS, L"mode 1's values give line 224 too");
-    Assert::AreEqual(BLANKING, rig.StatusAt(240 * LINE) & STATUS_FLAGS);
-
-    // Sync follows the register: row 60h of 2 lines is line 192, inside the visible area.
-    rig.SetCrtc(Elite::CrtcRegister::VerticalSyncPosition, 0x60);
-    rig.SetCrtc(Elite::CrtcRegister::MaximumScanLine, 1);
-    Assert::AreEqual(std::uint32_t{Elite::Cga::STATUS_VERTICAL_SYNC}, rig.StatusAt(192 * LINE) & STATUS_FLAGS);
-    Assert::AreEqual(DISPLAYING, rig.StatusAt(191 * LINE) & STATUS_FLAGS);
+    Assert::AreEqual(SYNC, rig.StatusAt(0) & STATUS_FLAGS, L"frame 0's retrace");
+    Assert::AreEqual(DISPLAYING, rig.StatusAt(1) & STATUS_FLAGS);
+    Assert::AreEqual(DISPLAYING, rig.StatusAt(15) & STATUS_FLAGS);
+    Assert::AreEqual(SYNC, rig.StatusAt(16) & STATUS_FLAGS, L"frame 1 starts at 16 ms");
+    Assert::AreEqual(SYNC, rig.StatusAt(33) & STATUS_FLAGS, L"frame 2 at 33 ms");
+    Assert::AreEqual(SYNC, rig.StatusAt(1'000) & STATUS_FLAGS, L"frame 60 at a second");
+    Assert::AreEqual(Elite::Milliseconds{1'001}, rig.Device().NextStatusChangeAt(), L"the retrace ends a millisecond on");
+    rig.SetClock(1'001);
+    Assert::AreEqual(Elite::Milliseconds{1'016}, rig.Device().NextStatusChangeAt(), L"and the next starts with frame 61");
   }
 
   // Paced time's rule (ADR-008 item 2): a read of the status reports each vertical retrace to the first read that sees it,
@@ -173,13 +137,11 @@ public:
   TEST_METHOD(EachRetraceIsReportedToTheFirstReadThatSeesIt)
   {
     CgaRig rig;
-    rig.SetGraphicsTiming();
-    rig.SetClock(224 * LINE + 10);
+    rig.SetClock(16);
     Assert::AreEqual(SYNC, std::uint32_t{rig.Device().ReadStatus()} & STATUS_FLAGS, L"the first read sees the retrace");
-    rig.SetClock(230 * LINE);
     Assert::AreEqual(BLANKING, std::uint32_t{rig.Device().ReadStatus()} & STATUS_FLAGS, L"a later read in it does not");
     Assert::AreEqual(SYNC, std::uint32_t{rig.Device().Status()} & STATUS_FLAGS, L"though the card still drives it");
-    rig.SetClock(FRAME + 239 * LINE);
+    rig.SetClock(33);
     Assert::AreEqual(SYNC, std::uint32_t{rig.Device().ReadStatus()} & STATUS_FLAGS, L"the next frame's retrace is reported");
   }
 
@@ -277,15 +239,15 @@ public:
     rig.SetMode(0x28, 0x00); // blink enabled
     rig.SetClock(0);
     Assert::AreEqual(14u, Dot(rig.Render(), 0, 0), L"frame 0: shown");
-    rig.SetClock(15 * FRAME + FRAME - 1);
+    rig.SetClock(Elite::FrameStart(16) - 1);
     Assert::AreEqual(14u, Dot(rig.Render(), 0, 0), L"frame 15: shown");
-    rig.SetClock(16 * FRAME);
+    rig.SetClock(Elite::FrameStart(16));
     Assert::AreEqual(1u, Dot(rig.Render(), 0, 0), L"frame 16: hidden on background 1");
-    rig.SetClock(32 * FRAME);
+    rig.SetClock(Elite::FrameStart(32));
     Assert::AreEqual(14u, Dot(rig.Render(), 0, 0), L"frame 32: shown again");
 
     rig.Poke(1, 0x1E); // the same without bit 7 never blinks
-    rig.SetClock(16 * FRAME);
+    rig.SetClock(Elite::FrameStart(16));
     Assert::AreEqual(14u, Dot(rig.Render(), 0, 0));
 
     rig.Poke(0, ' ');
@@ -293,7 +255,7 @@ public:
     rig.SetMode(0x08, 0x00); // blink disabled: background 9, light blue, at every frame
     rig.SetClock(0);
     Assert::AreEqual(9u, Dot(rig.Render(), 0, 0));
-    rig.SetClock(16 * FRAME);
+    rig.SetClock(Elite::FrameStart(16));
     Assert::AreEqual(9u, Dot(rig.Render(), 0, 0));
     rig.SetMode(0x28, 0x00);
     Assert::AreEqual(1u, Dot(rig.Render(), 0, 0), L"blink enabled: background 1");
@@ -315,9 +277,9 @@ public:
     Assert::AreEqual(7u, Dot(image, 16, 8 + 6));
     Assert::AreEqual(7u, Dot(image, 31, 8 + 7));
     Assert::AreEqual(0u, Dot(image, 32, 8 + 7), L"the next cell");
-    rig.SetClock(8 * FRAME);
+    rig.SetClock(Elite::FrameStart(8));
     Assert::AreEqual(0u, Dot(rig.Render(), 16, 8 + 6), L"frame 8: hidden");
-    rig.SetClock(16 * FRAME);
+    rig.SetClock(Elite::FrameStart(16));
     Assert::AreEqual(7u, Dot(rig.Render(), 16, 8 + 6), L"frame 16: shown");
 
     // Start beyond end splits it, as the 6845 does: lines 0-1 and 6-7.

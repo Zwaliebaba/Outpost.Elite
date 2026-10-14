@@ -1,6 +1,5 @@
 #include "pch.h"
 
-#include "TimeOfDay.h"
 #include "Cga.h"
 #include "Hardware.h"
 #include "Input.h"
@@ -23,15 +22,10 @@ namespace GameLogicTests
 namespace
 {
 
-// The first IRQ 0 after power-on, at the BIOS's 18.2 Hz.
-constexpr Elite::Cycles FIRST_TICK = 65536 * Elite::CYCLES_PER_PIT_TICK; // 262,144
-
-// What the 8088 takes over the ROM's IRET: Intel's 8086 figure and three words popped over the 8-bit bus.
-constexpr Elite::Cycles IRET_CYCLES = 24 + 3 * 4;
-
-// sti; then wait for ever, each poll finding nothing: what the program's idle loop does.
+// sti, the tick started; then wait for ever, each poll finding nothing: what the program's idle loop does.
 Elite::Task<void> WaitForEver(Elite::Hardware& _hardware)
 {
+  _hardware.SetTickRunning(true);
   _hardware.EnableInterrupts();
   for (;;)
   {
@@ -39,13 +33,12 @@ Elite::Task<void> WaitForEver(Elite::Hardware& _hardware)
   }
 }
 
-// Waits for the BIOS's tick count to change, with interrupts on, a poll at a time: sti; mov bx,es:[6Ch]; wait: cmp bx,es:[6Ch];
-// je wait.
-Elite::Task<void> WaitForTick(PlatformRig& _rig)
+// The tick started; then waits, a poll at a time with interrupts on, until _count interrupts have been taken.
+Elite::Task<void> WaitForInterrupts(PlatformRig& _rig, std::uint64_t _count)
 {
+  _rig.Native().SetTickRunning(true);
   _rig.Native().EnableInterrupts();
-  const std::uint32_t ticks = _rig.Host().Day().Ticks();
-  while (_rig.Host().Day().Ticks() == ticks)
+  while (_rig.Host().InterruptsTaken() < _count)
   {
     co_await _rig.Native().Wait();
   }
@@ -74,26 +67,20 @@ private:
 
 } // namespace
 
-// The native platform (Platform, D33): paced time, interrupts, the program as a coroutine, the handlers by identity and the ROM's two
-// answers, the BIOS's two hardware handlers, and DOS's console. What the emulated PC's tests held of the Pc, its Dispatcher, its native
-// code and its firmware, held of the platform that replaced them.
+// The native platform (Platform, D33): paced time in milliseconds (D87), interrupts, the program as a coroutine, the handlers by
+// identity, and the host's defaults where the game has none.
 TEST_CLASS(PlatformTests)
 {
 public:
-  // The whole chain: the timer's channel 0 at the BIOS's 18.2 Hz raises IRQ 0 at cycle 262,144, the controller grants it,
-  // and the vector names the BIOS's handler, which counts the tick and ends the interrupt. The program waits with
-  // interrupts on.
-  TEST_METHOD(TimerTickReachesTheBiosHandler)
+  // The whole chain: the tick, once started, raises the timer's interrupt every millisecond, the controller grants it, and with
+  // none of the game's handlers in place the default ends it. The program waits with interrupts on.
+  TEST_METHOD(TickReachesTheDefaultHandler)
   {
     PlatformRig rig("PlatformTimerTick");
     rig.Start([&rig]() -> Elite::Task<void> { co_await WaitForEver(rig.Native()); });
-    const std::uint32_t ticks = rig.Host().Day().Ticks();
-
-    Assert::IsTrue(rig.Host().RunUntil(262'000) == Elite::StopReason::Reached);
-    Assert::AreEqual(ticks, rig.Host().Day().Ticks(), L"not yet");
-    Assert::IsTrue(rig.Host().RunUntil(2 * FIRST_TICK + 1'000) == Elite::StopReason::Reached);
-    Assert::AreEqual(ticks + 2, rig.Host().Day().Ticks(), L"two ticks, so the first was ended");
-    Assert::AreEqual(std::uint64_t{2}, rig.Host().InterruptsTaken());
+    Assert::IsTrue(rig.Host().RunUntil(11) == Elite::StopReason::Reached, L"a tick at the run's end is the next run's");
+    Assert::AreEqual(std::uint64_t{10}, rig.Host().InterruptsTaken(), L"one a millisecond, each ended");
+    Assert::IsFalse(rig.Host().Events().InService(Elite::Irq::Timer));
   }
 
   // The program's start returning is its far return to the PSP, which is DOS's int 20h: the program ends.
@@ -101,14 +88,13 @@ public:
   {
     PlatformRig rig("PlatformTerminate");
     rig.Start([]() -> Elite::Task<void> { co_return; });
-    Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Elite::StopReason::Terminated);
+    Assert::IsTrue(rig.Host().RunUntil(1'000) == Elite::StopReason::Terminated);
     Assert::AreEqual(std::uint64_t{0}, rig.Host().Clock(), L"it took no time");
     Assert::AreEqual(std::uint64_t{1}, rig.Host().Entry().calls);
-    Assert::IsTrue(rig.Host().RunUntil(2'000'000) == Elite::StopReason::Terminated, L"and stays ended");
+    Assert::IsTrue(rig.Host().RunUntil(2'000) == Elite::StopReason::Terminated, L"and stays ended");
   }
 
   // Paced time (ADR-008): a loop that counts is work, and work takes no time: a turn that waits for nothing never idles.
-  // mov cx,1000; loop $, each LOOP a spin.
   TEST_METHOD(PacedWorkTakesNoTime)
   {
     PlatformRig rig("PlatformPacedWork");
@@ -122,18 +108,18 @@ public:
         }
         co_return;
       });
-    Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Elite::StopReason::Terminated);
+    Assert::IsTrue(rig.Host().RunUntil(1'000) == Elite::StopReason::Terminated);
     Assert::AreEqual(std::uint64_t{0}, rig.Host().Clock(), L"no time passed");
   }
 
-  // A loop that waits for the BIOS's tick count to change finds nothing at each poll, so the clock moves from event to event
-  // until the first IRQ 0, at cycle 262,144, and the loop ends right there.
+  // A loop that waits for interrupts finds nothing at each poll, so the clock moves from event to event until the one it
+  // waits for, and the loop ends right there: the fifth tick, at 5 ms.
   TEST_METHOD(PacedWaitEndsAtTheEventItWaitsFor)
   {
     PlatformRig rig("PlatformPacedWait");
-    rig.Start([&rig]() -> Elite::Task<void> { co_await WaitForTick(rig); });
-    Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Elite::StopReason::Terminated);
-    Assert::AreEqual(FIRST_TICK, rig.Host().Clock());
+    rig.Start([&rig]() -> Elite::Task<void> { co_await WaitForInterrupts(rig, 5); });
+    Assert::IsTrue(rig.Host().RunUntil(1'000) == Elite::StopReason::Terminated);
+    Assert::AreEqual(std::uint64_t{5}, rig.Host().Clock());
   }
 
   // An idle loop with interrupts off waits for ever, as on the real machine; the run reaches its end. cli; jmp $.
@@ -149,8 +135,8 @@ public:
           co_await rig.Native().Wait();
         }
       });
-    Assert::IsTrue(rig.Host().RunUntil(500'000) == Elite::StopReason::Reached);
-    Assert::AreEqual(std::uint64_t{500'000}, rig.Host().Clock());
+    Assert::IsTrue(rig.Host().RunUntil(500) == Elite::StopReason::Reached);
+    Assert::AreEqual(std::uint64_t{500}, rig.Host().Clock());
   }
 
   // A loop that never waits would hold paced time still for ever: the run stops as Spinning.
@@ -168,12 +154,12 @@ public:
         co_return;
       });
     rig.Host().SetSpinLimit(10'000);
-    Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Elite::StopReason::Spinning);
+    Assert::IsTrue(rig.Host().RunUntil(1'000) == Elite::StopReason::Spinning);
     Assert::AreEqual(std::uint64_t{0}, rig.Host().Clock());
   }
 
-  // Two runs of the same program to the same cycle end in the same state: the same interrupts taken and the same game state.
-  TEST_METHOD(RunsAreIdenticalToTheCycle)
+  // Two runs of the same program to the same moment end in the same state: the same interrupts taken and the same game state.
+  TEST_METHOD(RunsAreIdenticalToTheMillisecond)
   {
     std::array<std::uint64_t, 2> clocks{};
     std::array<std::uint64_t, 2> interrupts{};
@@ -182,28 +168,27 @@ public:
     {
       PlatformRig rig("PlatformRepeat");
       rig.Start([&rig]() -> Elite::Task<void> { co_await WaitForEver(rig.Native()); });
-      Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Elite::StopReason::Reached);
+      Assert::IsTrue(rig.Host().RunUntil(1'001) == Elite::StopReason::Reached);
       clocks[run] = rig.Host().Clock();
       interrupts[run] = rig.Host().InterruptsTaken();
       digests[run] = Elite::GameStateDigest(rig.State(), rig.Host().Video());
     }
     Assert::AreEqual(clocks[0], clocks[1]);
-    Assert::AreEqual(std::uint64_t{3}, interrupts[0], L"three ticks in a million cycles");
+    Assert::AreEqual(std::uint64_t{1'000}, interrupts[0], L"a thousand ticks in a second");
     Assert::AreEqual(interrupts[0], interrupts[1]);
     Assert::IsTrue(digests[0] == digests[1], L"the same game state");
   }
 
-  // D77: the program waits as a coroutine, is suspended where a run ends, and is resumed in the next: the first
-  // timer tick, at cycle 262,144, ends its wait, as it ended the original's.
+  // D77: the program waits as a coroutine, is suspended where a run ends, and is resumed in the next.
   TEST_METHOD(AWaitStopsAtTheEndOfARunAndCarriesOn)
   {
     PlatformRig rig("PlatformWaits");
-    rig.Start([&rig]() -> Elite::Task<void> { co_await WaitForTick(rig); });
-    Assert::IsTrue(rig.Host().RunUntil(100'000) == Elite::StopReason::Reached, L"the run ends inside the wait");
-    Assert::AreEqual(std::uint64_t{100'000}, rig.Host().Clock());
+    rig.Start([&rig]() -> Elite::Task<void> { co_await WaitForInterrupts(rig, 500); });
+    Assert::IsTrue(rig.Host().RunUntil(100) == Elite::StopReason::Reached, L"the run ends inside the wait");
+    Assert::AreEqual(std::uint64_t{100}, rig.Host().Clock());
     Assert::AreEqual(std::uint64_t{1}, rig.Host().Entry().calls);
-    Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Elite::StopReason::Terminated);
-    Assert::AreEqual(FIRST_TICK, rig.Host().Clock());
+    Assert::IsTrue(rig.Host().RunUntil(1'000) == Elite::StopReason::Terminated);
+    Assert::AreEqual(std::uint64_t{500}, rig.Host().Clock());
     Assert::AreEqual(std::uint64_t{1}, rig.Host().Entry().calls, L"one call, over two runs");
   }
 
@@ -218,7 +203,7 @@ public:
         const UnwindWitness witness(&unwound);
         co_await WaitForEver(rig.Native());
       });
-    Assert::IsTrue(rig.Host().RunUntil(100'000) == Elite::StopReason::Reached);
+    Assert::IsTrue(rig.Host().RunUntil(100) == Elite::StopReason::Reached);
     Assert::IsFalse(unwound, L"still waiting");
     rig.PowerOff();
     Assert::IsTrue(unwound, L"unwound");
@@ -238,8 +223,7 @@ public:
       L"the program's start");
   }
 
-  // A vector that names code no routine stands in for, as int 8 does once the game writes its segment again while the BIOS's
-  // handler is there: the first interrupt taken there is refused.
+  // A handler that names code no routine stands in for: the first interrupt taken there is refused.
   TEST_METHOD(AStrayHandlerIsRefused)
   {
     PlatformRig rig("PlatformStray");
@@ -249,16 +233,15 @@ public:
         rig.Native().SetHandler(Elite::Irq::Timer, Elite::IrqHandler::Stray);
         co_await WaitForEver(rig.Native());
       });
-    Assert::ExpectException<std::logic_error>([&rig] { (void)rig.Host().RunUntil(1'000'000); }, L"at the first IRQ 0");
+    Assert::ExpectException<std::logic_error>([&rig] { (void)rig.Host().RunUntil(1'000); }, L"at the first tick");
   }
 
-  // The game's own timer handler in vector 8: IRQ 0 is taken as the 8088 takes one, at each rising edge of channel 0 while
-  // the program waits, with IF cleared and the entry's cycles on the instruction clock; the handler's end of interrupt lets
-  // the next one in.
-  TEST_METHOD(HardwareInterruptsAreTakenAsThe8088TakesThem)
+  // The game's own tick handler: the timer's interrupt is taken at each tick while the program waits, with interrupts off
+  // inside; the handler's end of interrupt lets the next one in.
+  TEST_METHOD(InterruptsAreTakenAtEachTick)
   {
     PlatformRig rig("PlatformIrq");
-    std::vector<Elite::Cycles> taken;
+    std::vector<Elite::Milliseconds> taken;
     bool enabledInside = false;
     rig.Host().SetGameHandler(Elite::Irq::Timer,
                               [&rig, &taken, &enabledInside]
@@ -267,28 +250,26 @@ public:
                                 enabledInside = enabledInside || rig.Host().InterruptsEnabled();
                                 rig.Native().EndOfInterrupt();
                               });
-    const std::uint32_t ticks = rig.Host().Day().Ticks();
     rig.Start(
       [&rig]() -> Elite::Task<void>
       {
         rig.Native().SetHandler(Elite::Irq::Timer, Elite::IrqHandler::Game);
         co_await WaitForEver(rig.Native());
       });
-    Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Elite::StopReason::Reached);
-    Assert::IsTrue(taken == std::vector<Elite::Cycles>{FIRST_TICK, 2 * FIRST_TICK, 3 * FIRST_TICK}, L"at each edge");
-    Assert::IsFalse(enabledInside, L"IF cleared in the handler");
+    Assert::IsTrue(rig.Host().RunUntil(4) == Elite::StopReason::Reached);
+    Assert::IsTrue(taken == std::vector<Elite::Milliseconds>{1, 2, 3}, L"at each tick");
+    Assert::IsFalse(enabledInside, L"interrupts off in the handler");
     Assert::AreEqual(std::uint64_t{3}, rig.Host().InterruptsTaken());
-    Assert::AreEqual(ticks, rig.Host().Day().Ticks(), L"the BIOS's handler did not run");
     Assert::IsFalse(rig.Host().Events().InService(Elite::Irq::Timer), L"every one ended");
     Assert::AreEqual(std::uint64_t{3}, rig.Host().GameHandler(Elite::Irq::Timer).calls);
   }
 
-  // The BIOS's handlers serve the timer's and the keyboard's interrupts at power-on, as its vectors leave them.
-  TEST_METHOD(TheBiosServesBothInterruptsAtPowerOn)
+  // The host's defaults serve the timer's and the keyboard's interrupts at power-on.
+  TEST_METHOD(TheDefaultsServeBothInterruptsAtPowerOn)
   {
     PlatformRig rig("PlatformVectors");
-    Assert::IsTrue(rig.Native().Handler(Elite::Irq::Timer) == Elite::IrqHandler::Bios, L"the BIOS's timer handler");
-    Assert::IsTrue(rig.Native().Handler(Elite::Irq::Keyboard) == Elite::IrqHandler::Bios, L"the BIOS's keyboard handler");
+    Assert::IsTrue(rig.Native().Handler(Elite::Irq::Timer) == Elite::IrqHandler::Bios, L"the timer's");
+    Assert::IsTrue(rig.Native().Handler(Elite::Irq::Keyboard) == Elite::IrqHandler::Bios, L"the keyboard's");
   }
 
   // What the game's own test, IsMouseDriverInstalled (CS:02D4), finds: whether a mouse is attached.
@@ -303,55 +284,25 @@ public:
     Assert::IsFalse(Elite::IsMouseDriverInstalled(attached.Native()), L"taken away");
   }
 
-  // The BIOS's hardware handlers, native in the ROM's place, on each of the paths the ROM's code takes: the timer handler's
-  // four (a tick, a tick that carries into the high word, a tick in the hour the day ends in, and the day's last tick), and
-  // the keyboard handler's. What they leave is what the ROM's code, interpreted from the same state, gave before D7 deleted the
-  // interpreter; its stack pushes are gone with the processor (D33), and the instruction clock with the joystick (D81).
-  TEST_METHOD(BiosHandlersDoWhatTheRomDid)
+  // A key event before the game's keyboard handler is in place is taken and dropped, and the interrupt ended: nothing reaches
+  // the game's state, and the next event can arrive.
+  TEST_METHOD(TheDefaultKeyboardHandlerDropsTheKey)
   {
-    struct Case
-    {
-      std::uint32_t ticks;
-      std::uint32_t ticksAfter;
-      std::uint8_t rolledOver;
-    };
-    const std::array<Case, 4> cases = {{
-      {0x00051000, 0x00051001, 0},
-      {0x0005FFFF, 0x00060000, 0},
-      {0x00180100, 0x00180101, 0},
-      {0x001800AF, 0x00000000, 1},
-    }};
-    for (const Case& test : cases)
-    {
-      PlatformRig rig("PlatformBiosTimer");
-      Elite::Platform& platform = rig.Host();
-      platform.Day().SetClock(test.ticks);
-      platform.Events().Request(Elite::Irq::Timer);
-      platform.TakeDueInterrupts();
-      Assert::AreEqual(test.ticksAfter, platform.Day().Ticks(), L"the count");
-      Assert::IsFalse(platform.Events().InService(Elite::Irq::Timer) || platform.Events().InService(Elite::Irq::Keyboard), L"ended");
-      Assert::AreEqual(std::uint32_t{test.rolledOver}, std::uint32_t{platform.Day().ReadClock().rolledOver}, L"TIMER_OFL");
-    }
-
-    // The keyboard handler, with a key latched: the scan code read, the key acknowledged on the system control
-    // port, and the interrupt ended; the key is not buffered.
-    PlatformRig rig("PlatformBiosKeyboard");
+    PlatformRig rig("PlatformDefaultKeyboard");
     Elite::Platform& platform = rig.Host();
-    platform.Events().Inject(0x1E);
+    platform.Events().Inject(Elite::KeyEvent{.key = 0x1E, .down = true});
     while (!platform.Events().LatchFull())
     {
       platform.Idle(Elite::NO_EVENT);
     }
     const std::string digest = Elite::GameStateDigest(rig.State(), platform.Video());
     platform.TakeDueInterrupts();
-    Assert::IsFalse(platform.Events().LatchFull(), L"acknowledged");
-    Assert::AreEqual(0x4Cu, std::uint32_t{platform.SystemControl()}, L"bit 7 high, then low");
+    Assert::IsFalse(platform.Events().LatchFull(), L"taken");
     Assert::IsTrue(Elite::GameStateDigest(rig.State(), platform.Video()) == digest, L"nothing buffered");
     Assert::IsFalse(platform.Events().InService(Elite::Irq::Timer) || platform.Events().InService(Elite::Irq::Keyboard), L"ended");
   }
 
-  // The system control port reads back what was written; bits 0-1 reach the speaker, the tone's gate and its data, and bit 7
-  // holds the keyboard without touching either.
+  // The system control port reads back what was written; bits 0-1 reach the speaker, the tone's gate and its data.
   TEST_METHOD(SystemControlReadsBackAndDrivesGateAndSpeaker)
   {
     PlatformRig rig("PlatformSystemControl");
@@ -359,19 +310,19 @@ public:
     Assert::AreEqual(0x4Cu, std::uint32_t{platform.SystemControl()}, L"power-on value");
     const std::size_t events = platform.Sound().Events().size();
 
-    platform.Idle(1000);
+    platform.Idle(10);
     platform.SetSystemControl(0x4F);
     Assert::AreEqual(0x4Fu, std::uint32_t{platform.SystemControl()});
     Assert::IsTrue(platform.Sound().Now().tone.gate);
     const Elite::Speaker::Event& on = platform.Sound().Events().back();
     Assert::AreEqual(platform.Clock(), on.at);
     Assert::IsTrue(on.gate && on.data);
-    Assert::AreEqual(events + 1, platform.Sound().Events().size(), L"the gate and the bits at one cycle are one event");
+    Assert::AreEqual(events + 1, platform.Sound().Events().size(), L"the gate and the bits at one moment are one event");
 
-    platform.Idle(2000);
+    platform.Idle(20);
     platform.SetSystemControl(0xCF);
     platform.SetSystemControl(0x4F);
-    Assert::AreEqual(events + 1, platform.Sound().Events().size(), L"the acknowledge pulse leaves the speaker alone");
+    Assert::AreEqual(events + 1, platform.Sound().Events().size(), L"bit 7 leaves the speaker alone");
 
     platform.SetSystemControl(0x4D);
     Assert::IsTrue(platform.Sound().Now().tone.gate);

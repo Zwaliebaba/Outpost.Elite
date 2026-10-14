@@ -7,6 +7,13 @@
 namespace Elite
 {
 
+/// A key going down or coming up, as the host gives it to the game (D88): the key by the number keyDown indexes it by (Keys), 01h-7Fh.
+struct KeyEvent
+{
+  std::uint8_t key;
+  bool down;
+};
+
 /// The keys the game reads in keyDown, by their scan codes: what each does.
 namespace Keys
 {

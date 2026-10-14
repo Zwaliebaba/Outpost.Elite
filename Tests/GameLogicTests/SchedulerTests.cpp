@@ -3,9 +3,6 @@
 #include "Scheduler.h"
 #include "Timing.h"
 
-#include <array>
-#include <vector>
-
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
 namespace GameLogicTests
@@ -14,11 +11,8 @@ namespace GameLogicTests
 namespace
 {
 
-// The game's timer: channel 0 in mode 3, divisor 04A9h (InstallTimerInterrupt, 0x00C6).
-constexpr std::uint16_t GAME_DIVISOR = 0x04A9;
-constexpr Elite::Cycles GAME_PERIOD_CYCLES = GAME_DIVISOR * Elite::CYCLES_PER_PIT_TICK; // 4772
-
-constexpr Elite::Cycles DELAY = Elite::Scheduler::DELIVERY_DELAY_CYCLES;
+constexpr Elite::KeyEvent A_DOWN{.key = 0x1E, .down = true};
+constexpr Elite::KeyEvent A_UP{.key = 0x1E, .down = false};
 
 // A scheduler on its own clock.
 class SchedulerRig
@@ -34,22 +28,22 @@ public:
     return m_events;
   }
 
-  void SetClock(Elite::Cycles _cycle) noexcept
+  void SetClock(Elite::Milliseconds _time) noexcept
   {
-    m_clock = _cycle;
+    m_clock = _time;
   }
 
-  // Moves the clock to _cycle, as the platform does in a wait, and advances the scheduler.
-  void MoveTo(Elite::Cycles _cycle) noexcept
+  // Moves the clock to _time, as the platform does in a wait, and advances the scheduler.
+  void MoveTo(Elite::Milliseconds _time) noexcept
   {
-    m_clock = _cycle;
+    m_clock = _time;
     m_events.Advance();
   }
 
   // MoveTo, then whether the timer's interrupt was requested; if so it is taken and ended, as the game's handler does.
-  [[nodiscard]] bool TickedAt(Elite::Cycles _cycle) noexcept
+  [[nodiscard]] bool TickedAt(Elite::Milliseconds _time) noexcept
   {
-    MoveTo(_cycle);
+    MoveTo(_time);
     if (!m_events.Requested(Elite::Irq::Timer))
     {
       return false;
@@ -59,169 +53,96 @@ public:
     return true;
   }
 
-  // What ReadScanCode (0x7443) does: take the interrupt, read the scan code, pulse the keyboard's hold, end the interrupt.
-  [[nodiscard]] std::uint32_t ServiceKeyboard() noexcept
+  // What ReadScanCode does: take the interrupt, take the event, end the interrupt.
+  [[nodiscard]] Elite::KeyEvent ServiceKeyboard() noexcept
   {
     (void)m_events.Take();
-    const std::uint32_t code = m_events.ScanCode();
-    m_events.HoldKeyboard(true);
-    m_events.HoldKeyboard(false);
+    const Elite::KeyEvent event = m_events.TakeKey();
     m_events.EndOfInterrupt();
-    return code;
+    return event;
   }
 
 private:
-  Elite::Cycles m_clock = 0;
+  Elite::Milliseconds m_clock = 0;
   Elite::Scheduler m_events;
 };
 
+[[nodiscard]] bool Same(const Elite::KeyEvent& _left, const Elite::KeyEvent& _right) noexcept
+{
+  return _left.key == _right.key && _left.down == _right.down;
+}
+
 } // namespace
 
-// What paced time waits for and the two interrupts the game takes (Scheduler, ADR-041): channel 0 of the 8253, the XT keyboard's
-// latch and the 8259's two lines, with the rules the game met them by.
+// What time waits for and the two interrupts the game takes (Scheduler, D87, D88): the millisecond tick, key events one a
+// millisecond, and the two requests' rules.
 TEST_CLASS(SchedulerTests)
 {
 public:
   // ── The tick ──
 
-  // As the BIOS leaves it: mode 3, divisor 65536, so the first tick is 65536 timer ticks after power-on.
-  TEST_METHOD(PowerOnTickRunsAtEighteenHertz)
+  // At power-on the tick is stopped: nothing is due.
+  TEST_METHOD(TickIsStoppedAtPowerOn)
   {
     SchedulerRig rig;
-    const Elite::Cycles first = 65536 * Elite::CYCLES_PER_PIT_TICK;
-    Assert::AreEqual(first, rig.Events().NextTickAt(), L"the first is due there");
-    Assert::IsFalse(rig.TickedAt(first - 1));
-    Assert::IsTrue(rig.TickedAt(first));
-    Assert::IsFalse(rig.TickedAt(2 * first - 1));
-    Assert::IsTrue(rig.TickedAt(2 * first));
+    Assert::IsFalse(rig.Events().TickRunning());
+    Assert::AreEqual(Elite::NO_EVENT, rig.Events().NextTickAt());
+    Assert::IsFalse(rig.TickedAt(1'000));
   }
 
-  // The game's divisor: one tick every 1193 timer ticks, 4772 cycles, counted from the timer tick after the count is written.
-  TEST_METHOD(GameDivisorTicksEvery4772Cycles)
+  // Started, the tick is due at every whole millisecond after; stopped, at none.
+  TEST_METHOD(TickRunsEveryMillisecondOnceStarted)
   {
     SchedulerRig rig;
-    rig.SetClock(1000);
-    rig.Events().SetTickDivisor(GAME_DIVISOR);
-
-    std::vector<Elite::Cycles> raised;
-    for (Elite::Cycles cycle = 1001; cycle <= 1000 + 20 * GAME_PERIOD_CYCLES + 10; ++cycle)
+    rig.SetClock(1'000);
+    rig.Events().SetTickRunning(true);
+    Assert::AreEqual(Elite::Milliseconds{1'001}, rig.Events().NextTickAt(), L"the first a millisecond on");
+    for (Elite::Milliseconds time = 1'001; time <= 1'020; ++time)
     {
-      if (rig.TickedAt(cycle))
-      {
-        raised.push_back(cycle);
-      }
+      Assert::IsTrue(rig.TickedAt(time));
     }
-    Assert::AreEqual(std::size_t{20}, raised.size());
-    for (std::size_t index = 0; index < raised.size(); ++index)
-    {
-      // Loaded on timer tick 251 (cycle 1004), so the edges are on timer ticks 251 + 1193k.
-      Assert::AreEqual(1004 + (index + 1) * GAME_PERIOD_CYCLES, raised[index]);
-    }
-  }
-
-  // The clock can stop on any cycle, few of them a multiple of a timer tick. Advancing by such steps must neither lose nor gain
-  // time: each tick lands in the step that crosses its edge.
-  TEST_METHOD(SubTickRemaindersAreCarriedExactly)
-  {
-    SchedulerRig rig;
-    rig.SetClock(1000);
-    rig.Events().SetTickDivisor(GAME_DIVISOR);
-
-    constexpr std::array<Elite::Cycles, 6> STEPS = {7, 13, 3, 23, 2, 9};
-    Elite::Cycles cycle = 1000;
-    std::size_t raised = 0;
-    for (std::size_t step = 0; cycle < 2'000'000; ++step)
-    {
-      const Elite::Cycles previous = cycle;
-      cycle += STEPS[step % STEPS.size()];
-      if (rig.TickedAt(cycle))
-      {
-        ++raised;
-        const Elite::Cycles edge = 1004 + raised * GAME_PERIOD_CYCLES;
-        Assert::IsTrue(previous < edge && edge <= cycle, L"the tick in the step that crosses its edge");
-      }
-    }
-    Assert::AreEqual(static_cast<std::size_t>((cycle - 1004) / GAME_PERIOD_CYCLES), raised, L"no edge lost or gained");
-  }
-
-  // A control word sets a mode 3 output high at once. When it was low, that is a rising edge, and the timer's interrupt is
-  // requested.
-  TEST_METHOD(ProgrammingALowOutputIsAnEdge)
-  {
-    SchedulerRig rig;
-    const Elite::Cycles lowHalf = 40'000 * Elite::CYCLES_PER_PIT_TICK; // phase 40000 of 65536: low
-    Assert::IsFalse(rig.TickedAt(lowHalf));
-    Assert::IsFalse(rig.Events().TickOutputAt(lowHalf));
-    rig.Events().SetTickDivisor(GAME_DIVISOR);
-    Assert::IsTrue(rig.Events().TickOutputAt(lowHalf));
-    Assert::IsTrue(rig.TickedAt(lowHalf));
+    rig.Events().SetTickRunning(false);
+    Assert::IsFalse(rig.TickedAt(1'021));
+    Assert::AreEqual(Elite::NO_EVENT, rig.Events().NextEventAt());
   }
 
   // ── The keys ──
 
-  TEST_METHOD(DelayIsOneMillisecond)
-  {
-    Assert::AreEqual(Elite::MicrosecondsToCycles(1'000), DELAY);
-    Assert::AreEqual(Elite::Cycles{4772}, DELAY);
-  }
-
-  // A code injected with the latch empty arrives DELIVERY_DELAY_CYCLES later, latched, and requests the keyboard's interrupt.
-  TEST_METHOD(CodeArrivesAfterTheDelayWithItsInterrupt)
+  // An event queued with the latch empty arrives at the next millisecond, latched, and requests the keyboard's interrupt.
+  TEST_METHOD(EventArrivesAtTheNextMillisecondWithItsInterrupt)
   {
     SchedulerRig rig;
     rig.MoveTo(100);
-    rig.Events().Inject(0x1E); // A, make
-    Assert::AreEqual(100 + DELAY, rig.Events().NextDeliveryAt(), L"due a delay on");
-    rig.MoveTo(100 + DELAY - 1);
-    Assert::IsFalse(rig.Events().Requested(Elite::Irq::Keyboard));
+    rig.Events().Inject(A_DOWN);
+    Assert::AreEqual(Elite::Milliseconds{101}, rig.Events().NextDeliveryAt(), L"due a millisecond on");
     Assert::IsFalse(rig.Events().LatchFull());
-    Assert::AreEqual(0x00u, std::uint32_t{rig.Events().ScanCode()}, L"an empty latch reads 0");
 
-    rig.MoveTo(100 + DELAY);
+    rig.MoveTo(101);
     Assert::IsTrue(rig.Events().Requested(Elite::Irq::Keyboard));
     Assert::IsTrue(rig.Events().LatchFull());
-    Assert::AreEqual(0x1Eu, std::uint32_t{rig.Events().ScanCode()});
-    Assert::AreEqual(0x1Eu, std::uint32_t{rig.Events().ScanCode()}, L"reading does not empty the latch");
     Assert::AreEqual(Elite::NO_EVENT, rig.Events().NextDeliveryAt(), L"nothing more is due");
+    Assert::IsTrue(Same(A_DOWN, rig.ServiceKeyboard()));
   }
 
-  // The latch holds one code until the keyboard is held and let go; the next code comes a delay after.
-  TEST_METHOD(NextCodeWaitsForTheAcknowledgePulse)
+  // The latch holds one event until the handler takes it; the next comes a millisecond after, in order (D88).
+  TEST_METHOD(NextEventWaitsForTheLatchToEmpty)
   {
     SchedulerRig rig;
-    rig.Events().Inject(0x1E);
-    rig.Events().Inject(0x9E); // A, break
-    rig.MoveTo(DELAY);
+    rig.Events().Inject(A_DOWN);
+    rig.Events().Inject(A_UP);
+    rig.MoveTo(1);
     Assert::IsTrue(rig.Events().Requested(Elite::Irq::Keyboard));
 
-    rig.MoveTo(50 * DELAY);
-    Assert::AreEqual(std::size_t{1}, rig.Events().QueuedCodes(), L"nothing more while the latch is full");
-    Assert::AreEqual(0x1Eu, rig.ServiceKeyboard());
-    Assert::IsFalse(rig.Events().LatchFull(), L"the pulse empties the latch");
-    Assert::IsFalse(rig.Events().Requested(Elite::Irq::Keyboard));
+    rig.MoveTo(50);
+    Assert::AreEqual(std::size_t{1}, rig.Events().QueuedEvents(), L"nothing more while the latch is full");
+    Assert::IsTrue(Same(A_DOWN, rig.ServiceKeyboard()));
+    Assert::IsFalse(rig.Events().LatchFull(), L"taking empties the latch");
+    Assert::AreEqual(Elite::Milliseconds{51}, rig.Events().NextDeliveryAt());
 
-    rig.MoveTo(51 * DELAY - 1);
-    Assert::IsFalse(rig.Events().Requested(Elite::Irq::Keyboard));
-    rig.MoveTo(51 * DELAY);
+    rig.MoveTo(51);
     Assert::IsTrue(rig.Events().Requested(Elite::Irq::Keyboard));
-    Assert::AreEqual(0x9Eu, rig.ServiceKeyboard());
-    Assert::AreEqual(std::size_t{0}, rig.Events().QueuedCodes());
-  }
-
-  // While the keyboard is held it delivers nothing.
-  TEST_METHOD(HoldingTheKeyboardKeepsItQuiet)
-  {
-    SchedulerRig rig;
-    rig.Events().HoldKeyboard(true);
-    rig.Events().Inject(0x1C);
-    rig.MoveTo(10 * DELAY);
-    Assert::IsFalse(rig.Events().LatchFull());
-    rig.Events().HoldKeyboard(false);
-    rig.MoveTo(11 * DELAY - 1);
-    Assert::IsFalse(rig.Events().LatchFull());
-    rig.MoveTo(11 * DELAY);
-    Assert::IsTrue(rig.Events().LatchFull());
-    Assert::AreEqual(0x1Cu, std::uint32_t{rig.Events().ScanCode()});
+    Assert::IsTrue(Same(A_UP, rig.ServiceKeyboard()));
+    Assert::AreEqual(std::size_t{0}, rig.Events().QueuedEvents());
   }
 
   // ── The requests ──

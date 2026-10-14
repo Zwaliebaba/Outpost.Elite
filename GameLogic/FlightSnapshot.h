@@ -150,7 +150,7 @@ struct FlightSnapshot
   static constexpr std::uint8_t NO_SIGHT = 0xFF;
 
   std::uint64_t sequence = 0;    ///< its number: 1 for the first published, 0 for none
-  Cycles pacedTime = 0;          ///< the platform's clock when it was published
+  Milliseconds pacedTime = 0;    ///< the platform's clock when it was published
   std::uint16_t playerPitch = 0; ///< the player's orientation, 800h per turn
   std::uint16_t playerYaw = 0;
   std::uint16_t playerRoll = 0;

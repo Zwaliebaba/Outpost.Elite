@@ -9,7 +9,6 @@
 #include "SpaceViewLayers.h"
 #include "Speaker.h"
 #include "Task.h"
-#include "TimeOfDay.h"
 #include "Timing.h"
 
 #include <array>
@@ -28,7 +27,7 @@ class GameState;
 /// Why RunUntil returned.
 enum class StopReason : std::uint8_t
 {
-  Reached,    ///< The clock reached the cycle asked for.
+  Reached,    ///< The clock reached the time asked for.
   Terminated, ///< The program ended: its start routine returned, to DOS's int 20h.
   Spinning    ///< The program ran SpinLimit() turns without waiting once.
 };
@@ -44,15 +43,14 @@ using ProgramRoutine = std::function<Task<void>()>;
 /// the platform (ADR-014); the game's memory is the GameState's.
 ///
 /// It holds, each what the game uses of the PC, without its port bus, its registers or its vector table (ADR-041): the clock and
-/// the events it waits for, with the two interrupts they request (Scheduler: the tick, the keys and their requests); the timer's
-/// the system control port; the sound, the tone and its bits (Speaker); the mouse driver (Mouse);
-/// the CGA (Cga), whose modes the game sets on it; the BIOS's time of day (TimeOfDay) and its two hardware interrupt handlers;
-/// and the file store that holds the commander files (FileStore, D78).
+/// the events it waits for, with the two interrupts they request (Scheduler: the tick, the keys and their requests); the system
+/// control port; the sound, the tone and its bits (Speaker); the mouse (Mouse); the CGA (Cga), whose modes the game sets on it;
+/// what runs when the game has no handler of its own; and the file store that holds the commander files (FileStore, D78).
 ///
-/// Time is the 8088's cycle count, a third of the crystal (Timing.h), and it is paced (ADR-008): the game's work takes no
-/// time. The clock moves only while the game waits, and then straight to the next thing a device will do: the timer's next
-/// interrupt, the keyboard's next delivery or the CGA's next change of status, or the end of the run. So interrupts land only
-/// inside the game's waits, at the same points however long its work took.
+/// Time is whole milliseconds (Timing.h, D87), and it is paced (ADR-008): the game's work takes no time. The clock moves only
+/// while the game waits, and then straight to the next thing a device will do: the next tick, the next key's delivery or the
+/// CGA's next change of status, or the end of the run. So interrupts land only inside the game's waits, at the same points
+/// however long its work took.
 ///
 /// Waiting is declared (ADR-039). Each wait of the game polls for what it waits for, and when a poll finds nothing it says
 /// so (Wait): the clock moves to the next device event. A poll that took something it does not want, and a loop that never
@@ -60,7 +58,7 @@ using ProgramRoutine = std::function<Task<void>()>;
 ///
 /// Interrupts are taken where they fall due, as the 8088 takes them: at the end of a wait's poll and of a spin, and when
 /// native code lets them in (EnableInterrupts), ends one (Hardware::EndOfInterrupt) or reprograms the timer
-/// (Hardware::SetTickDivisor). The interrupt controller's rules hold: in service and end of interrupt (Scheduler). The handler
+/// (Hardware::SetTickRunning). The interrupt controller's rules hold: in service and end of interrupt (Scheduler). The handler
 /// is the one installed by name: the game's own, the BIOS's, or a stray one, which throws.
 ///
 /// The game runs as a coroutine on the host's thread (D77): the program's start routine, and every routine it calls that waits,
@@ -73,7 +71,7 @@ public:
   /// How the platform powers on.
   struct Desc
   {
-    DosDateTime startMoment;   ///< DOS's date and time at power-on; the BIOS's tick count starts at its time of day.
+    DosDateTime startMoment;   ///< The date and time at power-on, which the commander files' stamps count from.
     bool mousePresent = false; ///< Whether a mouse is attached (Mouse::Present).
     bool cheat = false;        ///< Whether the game starts with the cheat on: the shell's --cheat, where 1987 read ' cheat' (D80).
   };
@@ -123,10 +121,9 @@ public:
   /// fewer than a host would run before someone notices.
   static constexpr std::uint64_t DEFAULT_SPIN_LIMIT = 50'000'000;
 
-  /// Powers on: every device in its power-on state, the CGA with every register clear until the game sets its mode, the time
-  /// of day as the BIOS leaves it for DOS, and the BIOS's two hardware interrupt handlers in place. _state is the game's
-  /// memory and _files where the commander files are; both must outlive the platform. Not noexcept: the devices
-  /// allocate.
+  /// Powers on: every device in its power-on state, the CGA with every register clear until the game sets its mode, the tick
+  /// stopped, and none of the game's handlers in place. _state is the game's memory and _files where the commander files are;
+  /// both must outlive the platform. Not noexcept: the devices allocate.
   Platform(GameState& _state, FileStore& _files, const Desc& _desc);
   Platform(const Platform&) = delete;
   Platform& operator=(const Platform&) = delete;
@@ -162,8 +159,8 @@ public:
 
   // ── Running ──
 
-  /// Runs until the clock reaches _cycle, or until the program can go no further.
-  [[nodiscard]] StopReason RunUntil(Cycles _cycle);
+  /// Runs until the clock reaches _time, or until the program can go no further.
+  [[nodiscard]] StopReason RunUntil(Milliseconds _time);
 
   /// The number of steps the program may run without waiting before RunUntil stops with StopReason::Spinning: its spins
   /// (Spin), and the interrupts and handlers it runs. A loop that spins for ever would otherwise run with the clock standing
@@ -179,7 +176,7 @@ public:
   }
 
   /// The platform's clock.
-  [[nodiscard]] Cycles Clock() const noexcept
+  [[nodiscard]] Milliseconds Clock() const noexcept
   {
     return m_clock;
   }
@@ -192,22 +189,20 @@ public:
 
   // ── The devices, for the hosts: the keys, the stick, the mouse, the picture and the sound ──
 
-  /// The tick, the keys and the two interrupts' requests: where a host injects the keyboard's codes (Scheduler::Inject).
+  /// The tick, the keys and the two interrupts' requests: where a host gives the game its key events (Scheduler::Inject).
   [[nodiscard]] Scheduler& Events() noexcept
   {
     return m_events;
   }
 
-  /// IN AL,61h: the system control port, as last written: bit 0 is the tone's gate, bit 1 the speaker's data, and bit 7
-  /// high holds the keyboard clear. At power-on it holds 4Ch, what the XT BIOS's keyboard reset writes last (keyboard enabled,
-  /// clock not held, speaker and gate off).
+  /// IN AL,61h: the system control port, as last written: bit 0 is the tone's gate and bit 1 the speaker's data. At power-on
+  /// it holds 4Ch, what the XT BIOS's keyboard reset writes last (speaker and gate off).
   [[nodiscard]] std::uint8_t SystemControl() const noexcept
   {
     return m_systemControl;
   }
 
-  /// OUT 61h,_value: the speaker takes bits 0 and 1, the tone's gate and its data, and bit 7 holds the keyboard (Scheduler::HoldKeyboard).
-  /// Not noexcept: the speaker logs a change.
+  /// OUT 61h,_value: the speaker takes bits 0 and 1, the tone's gate and its data. Not noexcept: the speaker logs a change.
   void SetSystemControl(std::uint8_t _value);
 
   /// The mouse, which the host moves and the game reads (ADR-051).
@@ -307,19 +302,13 @@ public:
     return m_cga.GraphicsColors();
   }
 
-  /// The time of day, which the BIOS's timer handler counts and int 1Ah reads.
-  [[nodiscard]] TimeOfDay& Day() noexcept
-  {
-    return m_day;
-  }
-
   /// Where the commander files are (D78): the game reads and writes them directly.
   [[nodiscard]] FileStore& Files() noexcept
   {
     return m_files;
   }
 
-  /// The stamp a file written now takes: DOS's date and time at the clock, from the start moment (Desc::startMoment).
+  /// The stamp a file written now takes: the date and time at the clock, from the start moment (Desc::startMoment).
   [[nodiscard]] FileStamp FileStampNow() const;
 
   // ── For native code, through Hardware ──
@@ -341,10 +330,10 @@ public:
   /// would never end.
   void Spin();
 
-  /// _cycles pass as they pass in a wait, a step at a time to each device event, the game suspended there if that is the run's
-  /// end and the interrupts that fall due taken: paced time's charge for work the 8088 took time over where the program sets no
-  /// pace of its own (ADR-013).
-  [[nodiscard]] Task<void> Spend(Cycles _cycles);
+  /// _duration passes as it passes in a wait, a step at a time to each device event, the game suspended there if that is the
+  /// run's end and the interrupts that fall due taken: paced time's charge for work the 8088 took time over where the program
+  /// sets no pace of its own (ADR-013).
+  [[nodiscard]] Task<void> Spend(Milliseconds _duration);
 
   /// The interrupts now due are taken, each handler run to its return, as the 8088 takes them at the next instruction once
   /// interrupts are on. If the program stops on the way, the game is abandoned by an exception that leaves its coroutines, and
@@ -353,9 +342,10 @@ public:
 
   /// Moves the clock to the next device event, or to _limit if that comes first, and lets the devices raise what falls due:
   /// what paced time does when the program waits.
-  void Idle(Cycles _limit);
+  void Idle(Milliseconds _limit);
 
-  /// What serves _irq now. At power-on the BIOS's handlers serve both.
+  /// What serves _irq now. At power-on the host's default serves both (IrqHandler::Bios): it ends the interrupt, and takes and
+  /// drops a key.
   [[nodiscard]] IrqHandler Handler(Irq _irq) const noexcept
   {
     return m_handlers[static_cast<std::size_t>(_irq)];
@@ -378,7 +368,7 @@ private:
   GameState& m_state;
 
   // Declared in the order they are built: each device holds references to the ones above it.
-  Cycles m_clock = 0;
+  Milliseconds m_clock = 0;
   Speaker m_speaker;
   Scheduler m_events;
   std::uint8_t m_systemControl = POWER_ON_SYSTEM_CONTROL;
@@ -387,7 +377,6 @@ private:
   SpaceViewLayers m_spaceView;
   std::array<SnapshotBeam, FlightSnapshot::MOST_BEAMS> m_beams{}; // the frame's beams, since BeginSpaceViewFrame
   std::size_t m_beamCount = 0;
-  TimeOfDay m_day;
   Mouse m_mouse;
   FileStore& m_files;
   DosDateTime m_startMoment;
@@ -402,7 +391,7 @@ private:
 
   std::uint64_t m_spinLimit = DEFAULT_SPIN_LIMIT;
   std::uint64_t m_stepsSinceIdle = 0;
-  Cycles m_runLimit = NO_EVENT;
+  Milliseconds m_runLimit = NO_EVENT;
 
   bool m_terminated = false; // the program's start routine has returned
 

@@ -105,25 +105,14 @@ enum class CrtcRegister : std::uint8_t
 /// no writes. Mode control (3D8h) and colour select (3D9h) keep their low six bits. These 20 bytes, mode control, colour
 /// select and the 18 CRTC registers, are what the game-state digest hashes of the card (StateDigest.h).
 ///
-/// Timing. Time is the platform's cycle count (Timing.h), which the CGA reads on every status read and render; it never reads
-/// the host's clock. A frame is CGA_CYCLES_PER_FRAME cycles of 262 lines of 304 cycles, and its phase is
-/// clock % CGA_CYCLES_PER_FRAME: at phase 0 the beam is at the left of the first visible line. Lines 0-199 are visible and
-/// 200-261 are not. Within a visible line the first DISPLAY_CYCLES_PER_LINE cycles are the 640 displayed dots (640 of the
-/// line's 912 dots at three dots a cycle, 213.3 cycles, rounded down) and the remaining 91 are horizontal blanking. The
-/// status register (3DAh) reports:
-///   - bit 0, display enable inactive: during horizontal blanking and on lines 200-261;
-///   - bit 3, vertical sync: for VERTICAL_SYNC_LINES (16, fixed in the 6845) lines starting at line R7 x (R9 + 1), the sync
-///     position in character rows times scan lines a row, wrapping into the next frame. With the BIOS's values for mode 4
-///     (R7 = 0x70, R9 = 1) and for modes 0 and 1 (R7 = 0x1C, R9 = 7) that is line 224, so sync runs from line 224 to 239. A
-///     position at or past line 262 never comes round, and there is then no sync;
-///   - bit 2 set and bit 1 clear, the light pen's switch open and no trigger: no pen is fitted;
-///   - bits 4-7 set: they are not driven.
-/// The reference reads 3DAh at 0x04C4, 0x05D0 and 0x4602, and each masks the value with `and al, 8` at once, so only bit 3
-/// reaches it.
+/// Timing. Time is the platform's millisecond clock (Timing.h, D87), which the CGA reads on every status read and render; it
+/// never reads the host's clock. Frames are 60 a second, frame n starting at FrameStart(n), and the vertical retrace is the
+/// first RETRACE_MILLISECONDS of each. The status register reports bit 3, vertical sync, and bit 0, display inactive, during
+/// the retrace, and nothing else; the game masks the status with `and al, 8` at once, so only bit 3 reaches it.
 ///
 /// Paced time's rule (ADR-008 item 2): ReadStatus reports each vertical retrace to the first read that sees it, and to no
 /// later one. The game waits for a retrace by reading the status until bit 3 is set, a level rather than an edge. On the real
-/// machine the drawing between two such waits outlasts the 16 lines of the retrace, so each wait meets the next one. In paced
+/// machine the drawing between two such waits outlasts the retrace, so each wait meets the next one. In paced
 /// time the drawing takes no time and the retrace would still be on, so the second wait would not wait at all. So a retrace
 /// that has been seen is over for the program, and each wait meets the next one, as it did. Status() is the status without
 /// the rule.
@@ -148,7 +137,7 @@ enum class CrtcRegister : std::uint8_t
 /// Graphics lines alternate between the banks at B800:0000 (even lines) and B800:2000 (odd), 80 bytes a line, the leftmost
 /// pixel in a byte's top bits.
 ///
-/// Blinking runs off the frame number, clock / CGA_CYCLES_PER_FRAME. The cursor is shown for 8 frames and hidden for 8; a
+/// Blinking runs off the frame number (FrameAt). The cursor is shown for 8 frames and hidden for 8; a
 /// blinking character for 16 and 16, half the cursor's rate. Both are shown in the first half of their period, from frame 0.
 /// The cursor is the cell whose address is R14:R15. It covers scan lines R10 to R11 of the cell (bits 0-4 of each), and when
 /// R10's start is greater than R11's end it is split, covering lines 0 to R11 and R10 to 7, as on the 6845. It is drawn in
@@ -178,13 +167,12 @@ public:
   static constexpr std::uint8_t STATUS_DISPLAY_INACTIVE = 0x01;
   static constexpr std::uint8_t STATUS_VERTICAL_SYNC = 0x08;
 
-  static constexpr Cycles DISPLAY_CYCLES_PER_LINE = 213;
-  static constexpr std::uint32_t VERTICAL_SYNC_LINES = 16;
+  static constexpr Milliseconds RETRACE_MILLISECONDS = 1;
   static constexpr std::uint64_t CURSOR_BLINK_HALF_PERIOD_FRAMES = 8;
   static constexpr std::uint64_t CHARACTER_BLINK_HALF_PERIOD_FRAMES = 16;
 
-  /// _clock is the platform's cycle counter, which must outlive the CGA.
-  explicit Cga(const Cycles& _clock) noexcept;
+  /// _clock is the platform's millisecond clock, which must outlive the CGA.
+  explicit Cga(const Milliseconds& _clock) noexcept;
 
   /// OUT 3D4h,_register then OUT 3D5h,_value: CRTC register _register, its index taken modulo 32.
   void WriteCrtc(std::uint8_t _register, std::uint8_t _value) noexcept;
@@ -217,12 +205,10 @@ public:
   /// The status as the card drives it now, without paced time's rule.
   [[nodiscard]] std::uint8_t Status() const noexcept;
 
-  /// The next cycle after now at which Status() can change: the next end of a line's display period
-  /// or the next start of a line. Some of these leave it as it was (in the vertical blank, for one),
-  /// but no change falls between two of them.
-  [[nodiscard]] Cycles NextStatusChangeAt() const noexcept;
+  /// The next millisecond after now at which Status() changes: the end of the retrace in progress, or the next one's start.
+  [[nodiscard]] Milliseconds NextStatusChangeAt() const noexcept;
 
-  /// Frames begun since power-on: clock / CGA_CYCLES_PER_FRAME.
+  /// The frame in progress (FrameAt).
   [[nodiscard]] std::uint64_t FrameNumber() const noexcept;
 
   [[nodiscard]] std::uint8_t ModeControl() const noexcept
@@ -241,8 +227,8 @@ public:
   }
 
 private:
-  /// The cycle at which the vertical retrace in progress began, or NO_EVENT if there is none.
-  [[nodiscard]] Cycles RetraceStart() const noexcept;
+  /// The millisecond the vertical retrace in progress began at, or NO_EVENT if there is none.
+  [[nodiscard]] Milliseconds RetraceStart() const noexcept;
   [[nodiscard]] std::uint32_t StartAddress() const noexcept;
   [[nodiscard]] std::uint32_t CursorAddress() const noexcept;
   [[nodiscard]] bool CursorShown() const noexcept;
@@ -251,11 +237,11 @@ private:
   void RenderText(VideoMemory _memory, FrameImage& _image) const noexcept;
   void RenderGraphics320(VideoMemory _memory, FrameImage& _image) const noexcept;
 
-  const Cycles& m_clock;
+  const Milliseconds& m_clock;
   std::array<std::uint8_t, CRTC_REGISTER_COUNT> m_crtc{};
   std::uint8_t m_modeControl = 0;
   std::uint8_t m_colorSelect = 0;
-  Cycles m_retraceSeen = NO_EVENT; // the start of the last retrace a read reported
+  Milliseconds m_retraceSeen = NO_EVENT; // the start of the last retrace a read reported
 };
 
 } // namespace Elite

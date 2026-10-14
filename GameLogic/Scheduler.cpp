@@ -7,81 +7,51 @@
 namespace Elite
 {
 
-Scheduler::Scheduler(const Cycles& _clock)
+Scheduler::Scheduler(const Milliseconds& _clock)
   : m_clock(_clock)
 {
-  m_tick.loaded = true;
-  m_tick.reload = SquareWave::FULL_COUNT;
-  m_nextEdgeTick = m_tick.NextRisingEdge(Now());
 }
 
 // ── The tick ──
 
-void Scheduler::SetTickDivisor(std::uint16_t _divisor) noexcept
+void Scheduler::SetTickRunning(bool _running) noexcept
 {
-  // The edges up to now count under the old programming first. Then the control word, which sets a low output high: an edge.
-  // Then the count, loaded on the next tick, before which the output stays high.
-  Advance();
-  const std::int64_t now = Now();
-  if (!m_tick.OutputHigh(now))
-  {
-    Request(Irq::Timer);
-  }
-  m_tick.reload = SquareWave::Reload(_divisor);
-  m_tick.originTick = now + 1;
-  m_nextEdgeTick = m_tick.NextRisingEdge(now);
-}
-
-Cycles Scheduler::NextTickAt() const noexcept
-{
-  if (m_nextEdgeTick == SquareWave::NEVER)
-  {
-    return NO_EVENT;
-  }
-  return static_cast<Cycles>(m_nextEdgeTick) * CYCLES_PER_PIT_TICK;
+  m_nextTickAt = _running ? m_clock + TICK_MILLISECONDS : NO_EVENT;
 }
 
 // ── The keys ──
 
-void Scheduler::Inject(std::uint8_t _scanCode)
+void Scheduler::Inject(const KeyEvent& _event)
 {
-  m_queue.push_back(_scanCode);
+  m_queue.push_back(_event);
   ScheduleDelivery();
+}
+
+KeyEvent Scheduler::TakeKey() noexcept
+{
+  m_latchFull = false;
+  ScheduleDelivery();
+  return m_latch;
 }
 
 void Scheduler::ScheduleDelivery() noexcept
 {
-  if (m_scheduled || m_latchFull || m_queue.empty() || m_held)
+  if (m_scheduled || m_latchFull || m_queue.empty())
   {
     return;
   }
-  m_deliverAt = m_clock + DELIVERY_DELAY_CYCLES;
+  m_deliverAt = m_clock + 1;
   m_scheduled = true;
-}
-
-void Scheduler::HoldKeyboard(bool _held) noexcept
-{
-  m_held = _held;
-  if (_held)
-  {
-    // Held clear: the latch empties, and a delivery under way starts over once the hold is released.
-    m_latchFull = false;
-    m_latch = 0;
-    m_scheduled = false;
-    return;
-  }
-  ScheduleDelivery();
 }
 
 // ── The requests ──
 
 void Scheduler::Advance() noexcept
 {
-  const std::int64_t now = Now();
-  if (now >= m_nextEdgeTick)
+  if (m_clock >= m_nextTickAt)
   {
     Request(Irq::Timer);
-    m_nextEdgeTick = m_tick.NextRisingEdge(now);
+    m_nextTickAt = m_clock + TICK_MILLISECONDS;
   }
   if (m_scheduled && m_clock >= m_deliverAt)
   {
@@ -93,7 +63,7 @@ void Scheduler::Advance() noexcept
   }
 }
 
-Cycles Scheduler::NextEventAt() const noexcept
+Milliseconds Scheduler::NextEventAt() const noexcept
 {
   return std::min(NextTickAt(), NextDeliveryAt());
 }

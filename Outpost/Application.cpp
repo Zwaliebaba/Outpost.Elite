@@ -33,7 +33,6 @@ constexpr int START_SCALE = 2;
 constexpr bool START_FULL_SCREEN = true; // borderless over the whole screen, F11 returning to a window START_SCALE times (D42)
 constexpr std::uint32_t SAMPLE_RATE = 44'100;
 constexpr std::uint64_t LONGEST_CATCH_UP_MILLISECONDS = 250;
-constexpr std::uint8_t BREAK_BIT = 0x80;
 constexpr std::uint32_t COCKPIT_BACKGROUND = 0x000000; // round the view in the frame's window, and past the design at other shapes
 
 // Initialises COM on this thread for XAudio2, and undoes it.
@@ -139,9 +138,9 @@ int Application::Run(HINSTANCE _instance, bool _cheat)
   game->Start(Elite::PSP_SEGMENT);
   Elite::Platform* const platform = &game->Host();
 
-  const Elite::Cycles start = platform->Clock();
+  const Elite::Milliseconds start = platform->Clock();
   std::uint64_t elapsedMilliseconds = 0;
-  Elite::Cycles audioCycle = start;
+  Elite::Milliseconds audioTime = start;
   auto wallStart = std::chrono::steady_clock::now();
   const auto frame = std::make_unique<Elite::FrameImage>();
   std::vector<std::uint32_t> pixels(frame->pixels.size());
@@ -162,7 +161,7 @@ int Application::Run(HINSTANCE _instance, bool _cheat)
       // keys they copy. A key the XT does not have is not sent.
       if (Elite::KeyNameOf(key.scanCode))
       {
-        platform->Events().Inject(static_cast<std::uint8_t>(key.scanCode | (key.down ? 0 : BREAK_BIT)));
+        platform->Events().Inject(Elite::KeyEvent{.key = key.scanCode, .down = key.down});
       }
     }
     if (window.TakeResized() && !renderer.Resize())
@@ -180,19 +179,19 @@ int Application::Run(HINSTANCE _instance, bool _cheat)
       wallStart += std::chrono::milliseconds(target - elapsedMilliseconds - LONGEST_CATCH_UP_MILLISECONDS);
       target = elapsedMilliseconds + LONGEST_CATCH_UP_MILLISECONDS;
     }
-    reason = platform->RunUntil(Elite::ReplayCycle(start, target));
+    reason = platform->RunUntil(Elite::ReplayTime(start, target));
     elapsedMilliseconds = target;
     if (reason != Elite::StopReason::Reached)
     {
       break;
     }
 
-    const std::size_t count = Elite::Speaker::SampleCount(audioCycle, platform->Clock(), SAMPLE_RATE);
+    const std::size_t count = Elite::Speaker::SampleCount(audioTime, platform->Clock(), SAMPLE_RATE);
     samples.resize(count);
-    samples.resize(platform->Sound().RenderSamples(audioCycle, platform->Clock(), SAMPLE_RATE, samples));
+    samples.resize(platform->Sound().RenderSamples(audioTime, platform->Clock(), SAMPLE_RATE, samples));
     audio.Submit(samples);
-    audioCycle = platform->Clock();
-    platform->Sound().DiscardBefore(Elite::Speaker::FirstSampleStart(audioCycle, SAMPLE_RATE));
+    audioTime = platform->Clock();
+    platform->Sound().DiscardBefore(Elite::Speaker::FirstSampleStart(audioTime, SAMPLE_RATE));
 
     // In flight and on the title, the cockpit with the space view in its window (ADR-034, D63, D64); on every other screen, the
     // CGA picture.

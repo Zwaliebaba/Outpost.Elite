@@ -16,8 +16,6 @@ namespace
 constexpr std::uint8_t MOST_MOUSE_STEP = 0x3F; // mickeys / 8, either way
 constexpr std::uint16_t MOUSE_STEP_LIMIT = 0x40;
 
-constexpr std::uint8_t OVERRUN_CODE = 0xFF;
-constexpr std::uint8_t BREAK_BIT = 0x80;
 constexpr std::uint8_t SHIFT_BIT = 0x80; // on a code in keyBuffer
 constexpr std::uint8_t W_CODE = 0x11;
 constexpr std::uint8_t D_CODE = 0x20;
@@ -228,39 +226,35 @@ void ResetKeyboard(GameState& _state, Hardware& _hardware)
 
 void ReadScanCode(GameState& _state, Hardware& _hardware)
 {
-  const std::uint8_t scan = _hardware.KeyboardData();
-  _hardware.AcknowledgeKeyboard();
-  if (scan != OVERRUN_CODE)
+  const KeyEvent event = _hardware.TakeKey();
+  const auto key = static_cast<std::uint8_t>(event.key & ~SHIFT_BIT);
+  if (!event.down)
   {
-    if ((scan & BREAK_BIT) != 0)
+    KeyDown(_state)[key] = 0;
+    if (key == D_CODE && _state.Data().flow.inFlight == 1)
     {
-      const auto code = static_cast<std::uint8_t>(scan & ~BREAK_BIT);
-      KeyDown(_state)[code] = 0;
-      if (code == D_CODE && _state.Data().flow.inFlight == 1)
-      {
-        _state.Data().playerShip.dockingKeyReleased = 1;
-      }
+      _state.Data().playerShip.dockingKeyReleased = 1;
     }
-    else
+  }
+  else
+  {
+    if (key == W_CODE && _state.Data().keyboard.keyDown[Keys::ALT] == 1)
     {
-      if (scan == W_CODE && _state.Data().keyboard.keyDown[Keys::ALT] == 1)
-      {
-        _state.Data().jump.forceMisjump = 1;
-      }
-      KeyDown(_state)[scan] = 1;
-      std::uint8_t code = scan;
-      if (_state.Data().keyboard.keyDown[Keys::LEFT_SHIFT] == 1 || _state.Data().keyboard.keyDown[Keys::RIGHT_SHIFT] == 1)
-      {
-        code |= SHIFT_BIT;
-      }
-      const std::uint8_t count = _state.Data().input.keyBufferCount;
-      if (count != KEY_BUFFER_CODES)
-      {
-        const std::uint16_t write = _state.Data().input.keyBufferWrite;
-        _state.Data().input.keyBuffer[write] = code;
-        _state.Data().input.keyBufferWrite = static_cast<std::uint16_t>((write + 1) & KEY_BUFFER_WRAP);
-        _state.Data().input.keyBufferCount = static_cast<std::uint8_t>(count + 1);
-      }
+      _state.Data().jump.forceMisjump = 1;
+    }
+    KeyDown(_state)[key] = 1;
+    std::uint8_t code = key;
+    if (_state.Data().keyboard.keyDown[Keys::LEFT_SHIFT] == 1 || _state.Data().keyboard.keyDown[Keys::RIGHT_SHIFT] == 1)
+    {
+      code |= SHIFT_BIT;
+    }
+    const std::uint8_t count = _state.Data().input.keyBufferCount;
+    if (count != KEY_BUFFER_CODES)
+    {
+      const std::uint16_t write = _state.Data().input.keyBufferWrite;
+      _state.Data().input.keyBuffer[write] = code;
+      _state.Data().input.keyBufferWrite = static_cast<std::uint16_t>((write + 1) & KEY_BUFFER_WRAP);
+      _state.Data().input.keyBufferCount = static_cast<std::uint8_t>(count + 1);
     }
   }
   _hardware.EndOfInterrupt();

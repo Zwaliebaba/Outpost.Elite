@@ -1,7 +1,7 @@
 // GameLogic/Scheduler.h
 #pragma once
 
-#include "SquareWave.h"
+#include "KeyboardState.h"
 #include "Timing.h"
 
 #include <array>
@@ -12,15 +12,15 @@
 namespace Elite
 {
 
-/// The two hardware interrupts the game takes (ADR-041): the timer's, IRQ 0 on int 8, and the keyboard's, IRQ 1 on int 9.
+/// The two interrupts the game takes (ADR-041): its tick's, and the keyboard's.
 enum class Irq : std::uint8_t
 {
   Timer,
   Keyboard
 };
 
-/// What serves an interrupt: the BIOS's handler, the game's own, or a vector that names code no routine stands in for, as int 8
-/// does once the game writes its segment again while the BIOS's handler is there; one taken there throws std::logic_error.
+/// What serves an interrupt: the game's own handler, or none of the game's, when the host's default runs (Platform); a stray
+/// one throws std::logic_error.
 enum class IrqHandler : std::uint8_t
 {
   Bios,
@@ -28,65 +28,48 @@ enum class IrqHandler : std::uint8_t
   Stray
 };
 
-/// What paced time waits for and the two interrupts the game takes (ADR-041): the timer's tick, the keyboard's codes, and the
-/// requests they raise. It stands where the PC's 8259, the 8253's channel 0 and the XT keyboard's latch stood, with their rules
-/// as the game met them, so that every interrupt lands on the cycle it did.
+/// What time waits for and the two interrupts the game takes (D87, D88): the tick, the keys, and the requests they raise.
 ///
-/// The tick. Channel 0 of the interval timer in mode 3 (SquareWave), its gate tied high: its output's rising edge requests the
-/// timer's interrupt. At power-on, as the BIOS leaves it, its divisor is 0, which is 65,536, so the tick is about 18.2 Hz. The
-/// game sets its own divisor (SetTickDivisor) and puts 0 back. Programming it sets a low output high at once, and that is an
-/// edge. A move of the clock that spans several rising edges requests the interrupt once, as the edges coalesced in the 8259's
-/// request register.
+/// The tick. While it runs (SetTickRunning), the timer's interrupt is requested at every whole millisecond after it started.
 ///
-/// The keys. The host injects make and break codes into a queue. Whenever the latch is empty, the keyboard is not held and a
-/// code is waiting, the next code arrives DELIVERY_DELAY_CYCLES later: it is latched, and requests the keyboard's interrupt. The
-/// latch then stays full, and nothing more arrives, until the keyboard is held, which empties the latch, and let go, which
-/// starts the next delivery: the XT's acknowledge, bit 7 of the system control port pulsed, which the game's handler
-/// (ReadScanCode, 0x7443) makes after reading the code. The latch read empty is 0, as the XT's cleared shift register was.
-/// DELIVERY_DELAY_CYCLES is 1 ms, a chosen figure, not a measured one: the XT sends each code over a serial line in about that,
-/// and the same order as the game's 1 kHz tick keeps the two interrupts interleaving as they would on the machine.
+/// The keys. The host queues key events (Inject). Whenever the latch is empty and an event is waiting, the next whole
+/// millisecond delivers it: it is latched, and requests the keyboard's interrupt. The latch stays full until the handler takes
+/// the event (TakeKey), so one event arrives a millisecond at most, in order (D88).
 ///
 /// The requests. Each of the two is a latch: a second while one is pending is not queued. One is granted when nothing of its
-/// priority or higher is in service, the timer's ranking above the keyboard's, as the 8259 nests them; taking it (Take) puts it
-/// in service, and the end of interrupt, OUT 20h,20h, ends the highest in service.
+/// priority or higher is in service, the timer's ranking above the keyboard's; taking it (Take) puts it in service, and the end
+/// of interrupt ends the highest in service.
 class Scheduler
 {
 public:
-  static constexpr Cycles DELIVERY_DELAY_CYCLES = MicrosecondsToCycles(1'000);
-
   /// Not noexcept: the keys' queue may allocate when it is made, as MSVC's debug deque does.
-  explicit Scheduler(const Cycles& _clock);
+  explicit Scheduler(const Milliseconds& _clock);
 
   // ── The tick ──
 
-  /// OUT 43h,36h, then _divisor's low and high bytes: channel 0, both bytes of the count, mode 3. A low output set high by the
-  /// control word requests the timer's interrupt.
-  void SetTickDivisor(std::uint16_t _divisor) noexcept;
+  /// The tick started, from the next whole millisecond on, or stopped.
+  void SetTickRunning(bool _running) noexcept;
 
-  /// The cycle at which the next tick requests the timer's interrupt, or NO_EVENT.
-  [[nodiscard]] Cycles NextTickAt() const noexcept;
-
-  /// Channel 0's output during the tick containing _cycle. Valid from its last change on.
-  [[nodiscard]] bool TickOutputAt(Cycles _cycle) const noexcept
+  [[nodiscard]] bool TickRunning() const noexcept
   {
-    return m_tick.OutputHigh(SquareWave::TickAt(_cycle));
+    return m_nextTickAt != NO_EVENT;
+  }
+
+  /// When the next tick requests the timer's interrupt, or NO_EVENT.
+  [[nodiscard]] Milliseconds NextTickAt() const noexcept
+  {
+    return m_nextTickAt;
   }
 
   // ── The keys ──
 
-  /// Queues a scan code from the keyboard: a make code, or a break code (make | 0x80).
-  void Inject(std::uint8_t _scanCode);
+  /// Queues a key event from the host.
+  void Inject(const KeyEvent& _event);
 
-  /// The cycle at which the next code is delivered, or NO_EVENT if none is on its way.
-  [[nodiscard]] Cycles NextDeliveryAt() const noexcept
+  /// When the next event is delivered, or NO_EVENT if none is on its way.
+  [[nodiscard]] Milliseconds NextDeliveryAt() const noexcept
   {
     return m_scheduled ? m_deliverAt : NO_EVENT;
-  }
-
-  /// IN AL,60h: the latched scan code, or 0 with the latch empty.
-  [[nodiscard]] std::uint8_t ScanCode() const noexcept
-  {
-    return m_latchFull ? m_latch : 0;
   }
 
   [[nodiscard]] bool LatchFull() const noexcept
@@ -94,23 +77,21 @@ public:
     return m_latchFull;
   }
 
-  [[nodiscard]] std::size_t QueuedCodes() const noexcept
+  /// The latched event, the latch emptied, and the next delivery started if one is waiting. Only with the latch full.
+  [[nodiscard]] KeyEvent TakeKey() noexcept;
+
+  [[nodiscard]] std::size_t QueuedEvents() const noexcept
   {
     return m_queue.size();
   }
 
-  /// The system control port's bit 7 as written: held, the latch empties and nothing is delivered; let go, the next delivery
-  /// starts if one can.
-  void HoldKeyboard(bool _held) noexcept;
-
   // ── The requests ──
 
-  /// What falls due by the clock: the tick's request if its output rose since the last call, and the next code if its time has
-  /// come.
+  /// What falls due by the clock: the tick's request if its time has come, and the next event if its has.
   void Advance() noexcept;
 
-  /// The next cycle at which something falls due, or NO_EVENT.
-  [[nodiscard]] Cycles NextEventAt() const noexcept;
+  /// The next millisecond at which something falls due, or NO_EVENT.
+  [[nodiscard]] Milliseconds NextEventAt() const noexcept;
 
   /// Whether a request would be granted now.
   [[nodiscard]] bool InterruptPending() const noexcept;
@@ -118,7 +99,7 @@ public:
   /// The request granted now, put in service. Only when one is pending.
   [[nodiscard]] Irq Take() noexcept;
 
-  /// The non-specific end of interrupt: the highest in service ends.
+  /// The end of interrupt: the highest in service ends.
   void EndOfInterrupt() noexcept;
 
   [[nodiscard]] bool Requested(Irq _irq) const noexcept
@@ -131,7 +112,7 @@ public:
     return m_inService[Index(_irq)];
   }
 
-  /// A request, as a device's edge raises it. A test's way in; the tick and the keys raise their own.
+  /// A request, as a device raises it. A test's way in; the tick and the keys raise their own.
   void Request(Irq _irq) noexcept
   {
     m_requested[Index(_irq)] = true;
@@ -143,25 +124,18 @@ private:
     return static_cast<std::size_t>(_irq);
   }
 
-  [[nodiscard]] std::int64_t Now() const noexcept
-  {
-    return SquareWave::TickAt(m_clock);
-  }
-
-  // Starts the next delivery's delay if a code can be delivered and none is under way.
+  // Starts the next delivery if an event is waiting, the latch is empty and none is under way.
   void ScheduleDelivery() noexcept;
 
-  const Cycles& m_clock;
+  const Milliseconds& m_clock;
 
-  SquareWave m_tick{};
-  std::int64_t m_nextEdgeTick = SquareWave::NEVER; // the tick's next rising edge after the last Advance()
+  Milliseconds m_nextTickAt = NO_EVENT;
 
-  std::deque<std::uint8_t> m_queue;
-  std::uint8_t m_latch = 0;
+  std::deque<KeyEvent> m_queue;
+  KeyEvent m_latch{};
   bool m_latchFull = false;
-  bool m_held = false;
   bool m_scheduled = false;
-  Cycles m_deliverAt = 0;
+  Milliseconds m_deliverAt = 0;
 
   std::array<bool, 2> m_requested{};
   std::array<bool, 2> m_inService{};

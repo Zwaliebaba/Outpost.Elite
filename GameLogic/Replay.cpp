@@ -60,7 +60,6 @@ constexpr auto KEY_NAMES = std::to_array<KeyName>({
 });
 
 constexpr std::string_view WHITESPACE = " \t\r";
-constexpr std::uint8_t BREAK_BIT = 0x80;
 constexpr std::size_t DIGEST_HEX_DIGITS = 64;
 
 std::string_view Trim(std::string_view _text) noexcept
@@ -423,16 +422,16 @@ StopReason ReplayPlayer::Play(const Step& _step, Checkpoint& _checkpoint)
   case StepKind::Wait:
   case StepKind::End:
     m_elapsedMilliseconds += _step.waitMilliseconds;
-    return m_platform.RunUntil(ReplayCycle(m_start, m_elapsedMilliseconds));
+    return m_platform.RunUntil(ReplayTime(m_start, m_elapsedMilliseconds));
   case StepKind::Key:
-    m_platform.Events().Inject(_step.scanCode);
-    m_platform.Events().Inject(static_cast<std::uint8_t>(_step.scanCode | BREAK_BIT));
+    m_platform.Events().Inject(KeyEvent{.key = _step.scanCode, .down = true});
+    m_platform.Events().Inject(KeyEvent{.key = _step.scanCode, .down = false});
     break;
   case StepKind::Down:
-    m_platform.Events().Inject(_step.scanCode);
+    m_platform.Events().Inject(KeyEvent{.key = _step.scanCode, .down = true});
     break;
   case StepKind::Up:
-    m_platform.Events().Inject(static_cast<std::uint8_t>(_step.scanCode | BREAK_BIT));
+    m_platform.Events().Inject(KeyEvent{.key = _step.scanCode, .down = false});
     break;
   case StepKind::Digest:
     _checkpoint = TakeCheckpoint(m_state, m_platform.Video());

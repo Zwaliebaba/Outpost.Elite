@@ -12,8 +12,6 @@ namespace Elite
 namespace
 {
 
-constexpr std::uint8_t KEYBOARD_ACKNOWLEDGE = 0x80; // port 61h bit 7, the XT's PB7
-
 constexpr std::uint8_t CRTC_CURSOR_ADDRESS_HIGH = 0x0E;
 
 } // namespace
@@ -33,9 +31,9 @@ void Hardware::SetToneDivisor(std::uint16_t _divisor)
   m_platform.Sound().SetTone(_divisor);
 }
 
-void Hardware::SetTickDivisor(std::uint16_t _divisor)
+void Hardware::SetTickRunning(bool _running)
 {
-  m_platform.Events().SetTickDivisor(_divisor);
+  m_platform.Events().SetTickRunning(_running);
   m_platform.TakeDueInterrupts();
 }
 
@@ -65,16 +63,9 @@ void Hardware::Spin()
   m_platform.Spin();
 }
 
-std::uint8_t Hardware::KeyboardData()
+KeyEvent Hardware::TakeKey() noexcept
 {
-  return m_platform.Events().ScanCode();
-}
-
-void Hardware::AcknowledgeKeyboard()
-{
-  const auto pulse = static_cast<std::uint8_t>(m_platform.SystemControl() | KEYBOARD_ACKNOWLEDGE);
-  m_platform.SetSystemControl(pulse);
-  m_platform.SetSystemControl(static_cast<std::uint8_t>(pulse & ~KEYBOARD_ACKNOWLEDGE));
+  return m_platform.Events().TakeKey();
 }
 
 Mouse& Hardware::MouseDevice() noexcept
@@ -119,7 +110,7 @@ FileStamp Hardware::FileStampNow() const
 
 Task<void> Hardware::Spend(const PacingPoint& _point)
 {
-  return m_platform.Spend(_point.cycles);
+  return m_platform.Spend(_point.milliseconds);
 }
 
 // ── What the emulated PC kept in memory, outside the game's (D33) ──

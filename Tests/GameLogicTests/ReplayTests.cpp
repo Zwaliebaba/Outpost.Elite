@@ -61,9 +61,9 @@ public:
     Assert::AreEqual("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", steps[3].expectedDigest.c_str());
   }
 
-  // Time in a replay is whole milliseconds from its start, converted once (ReplayCycle): a thousand waits
-  // of a millisecond end on the same cycle as one wait of a second, which is what lets a recorder that
-  // samples time as it likes and a player that sums the waits agree to the cycle.
+  // Time in a replay is whole milliseconds from its start (ReplayTime): a thousand waits of a millisecond end
+  // on the same moment as one wait of a second, which is what lets a recorder that samples time as it likes
+  // and a player that sums the waits agree.
   TEST_METHOD(WaitsAddUpExactly)
   {
     std::vector<Elite::Step> one;
@@ -72,7 +72,7 @@ public:
     Assert::IsTrue(Elite::ParseSteps("wait 1", one, error), L"parses");
     for (int index = 0; index < 1000; ++index)
       Assert::IsTrue(Elite::ParseSteps("wait 0.001", many, error), L"parses");
-    Elite::Cycles ends[2] = {};
+    Elite::Milliseconds ends[2] = {};
     for (int run = 0; run < 2; ++run)
     {
       ReferenceRig rig("Waits");
@@ -84,7 +84,7 @@ public:
       ends[run] = rig.Host().Clock();
     }
     Assert::AreEqual(ends[0], ends[1]);
-    Assert::AreEqual(Elite::ReplayCycle(0, 1'000), ends[0]);
+    Assert::AreEqual(Elite::ReplayTime(0, 1'000), ends[0]);
   }
 
   TEST_METHOD(MistakesAreNamed)
@@ -295,7 +295,7 @@ public:
     std::vector<Elite::Step> steps;
     std::string error;
     Assert::IsTrue(Elite::ParseSteps("file pilot.cdr first.cdr", steps, error), L"parses");
-    const Elite::Cycles before = rig.Host().Clock();
+    const Elite::Milliseconds before = rig.Host().Clock();
     Elite::Checkpoint checkpoint;
     Assert::IsTrue(player.Play(steps[0], checkpoint) == Elite::StopReason::Reached, L"copies");
     Assert::AreEqual(before, rig.Host().Clock(), L"no time passes");

@@ -360,9 +360,6 @@
     <ClInclude Include="TextTables.h">
       <Filter>Text</Filter>
     </ClInclude>
-    <ClInclude Include="TimeOfDay.h">
-      <Filter>Platform</Filter>
-    </ClInclude>
     <ClInclude Include="Timer.h">
       <Filter>Timer</Filter>
     </ClInclude>
@@ -514,9 +511,6 @@
     </ClCompile>
     <ClCompile Include="Text.cpp">
       <Filter>Text</Filter>
-    </ClCompile>
-    <ClCompile Include="TimeOfDay.cpp">
-      <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="Timer.cpp">
       <Filter>Timer</Filter>

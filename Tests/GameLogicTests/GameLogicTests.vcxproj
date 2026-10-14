@@ -130,7 +130,6 @@
     <ClCompile Include="StateDigestTests.cpp" />
     <ClCompile Include="TableTests.cpp" />
     <ClCompile Include="TextTests.cpp" />
-    <ClCompile Include="TimeOfDayTests.cpp" />
     <ClCompile Include="TwinRigTests.cpp" />
   </ItemGroup>
   <ItemGroup>

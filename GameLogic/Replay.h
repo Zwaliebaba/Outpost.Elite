@@ -118,12 +118,12 @@ struct Step
 /// send. Where two names share a code (Return and KP_Enter), the first in the table.
 [[nodiscard]] std::optional<std::string_view> KeyNameOf(std::uint8_t _scanCode) noexcept;
 
-/// The moment a replay has reached, _milliseconds after it began at machine cycle _start. Time in a replay
-/// is counted in whole milliseconds from its start and converted once, so a host that samples time at
-/// any rate and a player that sums the waits land on the same cycle.
-[[nodiscard]] constexpr Cycles ReplayCycle(Cycles _start, std::uint64_t _milliseconds) noexcept
+/// The moment a replay has reached, _milliseconds after it began at _start on the platform's clock. Time in a replay is
+/// counted in whole milliseconds from its start, so a host that samples time at any rate and a player that sums the waits
+/// land on the same moment.
+[[nodiscard]] constexpr Milliseconds ReplayTime(Milliseconds _start, std::uint64_t _milliseconds) noexcept
 {
-  return _start + MicrosecondsToCycles(_milliseconds * 1000);
+  return _start + _milliseconds;
 }
 
 /// Plays steps on a machine running the reference, from the moment it is made: _platform, and _state, the game's memory it
@@ -138,7 +138,7 @@ public:
   /// machine's DOS was given.
   ReplayPlayer(Platform& _platform, const GameState& _state, FileStore& _files, std::filesystem::path _sources);
 
-  /// Plays one step: a wait or an end runs the machine on to the next moment (Platform::RunUntil, ReplayCycle),
+  /// Plays one step: a wait or an end runs the machine on to the next moment (Platform::RunUntil, ReplayTime),
   /// a key queues its codes on the keyboard, a digest sets _checkpoint to TakeCheckpoint, a file step copies its
   /// file into the store. A shot does nothing here; writing pictures is the caller's. Returns why the run
   /// stopped, StopReason::Reached if it did not; ExpectedStop says which the step must return. A digest after
@@ -160,7 +160,7 @@ private:
   const GameState& m_state;
   FileStore* m_files = nullptr;
   std::filesystem::path m_sources;
-  Cycles m_start = 0;
+  Milliseconds m_start = 0;
   std::uint64_t m_elapsedMilliseconds = 0;
 };
 

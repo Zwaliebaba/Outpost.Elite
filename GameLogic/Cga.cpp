@@ -67,7 +67,7 @@ constexpr std::uint8_t COLOR_SELECT_AFTER_MODE = 0x30;
 
 } // namespace
 
-Cga::Cga(const Cycles& _clock) noexcept
+Cga::Cga(const Milliseconds& _clock) noexcept
   : m_clock(_clock)
 {
 }
@@ -109,7 +109,7 @@ std::uint8_t Cga::ReadStatus() noexcept
   auto status = Status();
   if ((status & STATUS_VERTICAL_SYNC) != 0)
   {
-    const Cycles start = RetraceStart();
+    const Milliseconds start = RetraceStart();
     if (start == m_retraceSeen)
     {
       status = static_cast<std::uint8_t>(status & ~STATUS_VERTICAL_SYNC);
@@ -121,60 +121,28 @@ std::uint8_t Cga::ReadStatus() noexcept
 
 std::uint8_t Cga::Status() const noexcept
 {
-  const Cycles phase = m_clock % CGA_CYCLES_PER_FRAME;
-  const auto line = static_cast<std::uint32_t>(phase / CGA_CYCLES_PER_LINE);
-  const Cycles lineCycle = phase % CGA_CYCLES_PER_LINE;
-
-  std::uint8_t status = 0;
-  if (line >= CGA_VISIBLE_LINES || lineCycle >= DISPLAY_CYCLES_PER_LINE)
-  {
-    status = static_cast<std::uint8_t>(status | STATUS_DISPLAY_INACTIVE);
-  }
-
-  const std::uint32_t syncLine =
-    std::uint32_t{Crtc(CrtcRegister::VerticalSyncPosition)} * (std::uint32_t{Crtc(CrtcRegister::MaximumScanLine)} + 1);
-  if (syncLine < CGA_LINES_PER_FRAME)
-  {
-    const std::uint32_t linesSinceSync = (line + CGA_LINES_PER_FRAME - syncLine) % CGA_LINES_PER_FRAME;
-    if (linesSinceSync < VERTICAL_SYNC_LINES)
-    {
-      status = static_cast<std::uint8_t>(status | STATUS_VERTICAL_SYNC);
-    }
-  }
-  return status;
+  return RetraceStart() != NO_EVENT ? static_cast<std::uint8_t>(STATUS_DISPLAY_INACTIVE | STATUS_VERTICAL_SYNC) : std::uint8_t{0};
 }
 
-Cycles Cga::RetraceStart() const noexcept
+Milliseconds Cga::RetraceStart() const noexcept
 {
-  const Cycles phase = m_clock % CGA_CYCLES_PER_FRAME;
-  const auto line = static_cast<std::uint32_t>(phase / CGA_CYCLES_PER_LINE);
-  const std::uint32_t syncLine =
-    std::uint32_t{Crtc(CrtcRegister::VerticalSyncPosition)} * (std::uint32_t{Crtc(CrtcRegister::MaximumScanLine)} + 1);
-  if (syncLine >= CGA_LINES_PER_FRAME)
-  {
-    return NO_EVENT;
-  }
-  const std::uint32_t linesSinceSync = (line + CGA_LINES_PER_FRAME - syncLine) % CGA_LINES_PER_FRAME;
-  if (linesSinceSync >= VERTICAL_SYNC_LINES)
-  {
-    return NO_EVENT;
-  }
-  return m_clock - (Cycles{linesSinceSync} * CGA_CYCLES_PER_LINE + m_clock % CGA_CYCLES_PER_LINE);
+  const Milliseconds start = FrameStart(FrameAt(m_clock));
+  return m_clock < start + RETRACE_MILLISECONDS ? start : NO_EVENT;
 }
 
-Cycles Cga::NextStatusChangeAt() const noexcept
+Milliseconds Cga::NextStatusChangeAt() const noexcept
 {
-  const Cycles lineCycle = m_clock % CGA_CYCLES_PER_LINE;
-  if (lineCycle < DISPLAY_CYCLES_PER_LINE)
+  const Milliseconds start = FrameStart(FrameAt(m_clock));
+  if (m_clock < start + RETRACE_MILLISECONDS)
   {
-    return m_clock + (DISPLAY_CYCLES_PER_LINE - lineCycle);
+    return start + RETRACE_MILLISECONDS;
   }
-  return m_clock + (CGA_CYCLES_PER_LINE - lineCycle);
+  return FrameStart(FrameAt(m_clock) + 1);
 }
 
 std::uint64_t Cga::FrameNumber() const noexcept
 {
-  return m_clock / CGA_CYCLES_PER_FRAME;
+  return FrameAt(m_clock);
 }
 
 void Cga::Render(VideoMemory _memory, FrameImage& _image) const noexcept

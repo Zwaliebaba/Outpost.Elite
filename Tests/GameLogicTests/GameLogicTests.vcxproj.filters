@@ -185,9 +185,6 @@
     <ClCompile Include="TextTests.cpp">
       <Filter>Text</Filter>
     </ClCompile>
-    <ClCompile Include="TimeOfDayTests.cpp">
-      <Filter>Platform</Filter>
-    </ClCompile>
     <ClCompile Include="TwinRigTests.cpp">
       <Filter>Rigs</Filter>
     </ClCompile>
