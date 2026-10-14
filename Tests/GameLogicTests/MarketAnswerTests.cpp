@@ -51,6 +51,20 @@ constexpr std::array<std::array<std::uint16_t, 3>, 3> EDGE_RANDOM_STATES = {
   return line;
 }
 
+// The same line from the market's rules (PricesOf), with no state: each commodity's buy and sell price at _economy,
+// _government and _techLevel.
+[[nodiscard]] std::string RulePrices(std::uint8_t _economy, std::uint8_t _government, std::uint8_t _techLevel)
+{
+  const Elite::MarketPlace place{.economy = _economy, .government = _government, .techLevel = _techLevel};
+  std::string line = std::format("prices {} {} {}", _economy, _government, _techLevel);
+  for (std::uint8_t commodity = 0; commodity < Elite::COMMODITY_KINDS; ++commodity)
+  {
+    const Elite::CommodityPrices prices = Elite::PricesOf(commodity, place);
+    line += std::format(" {}/{}", prices.buyTenths, prices.sellTenths);
+  }
+  return line;
+}
+
 // The quantities on sale ShowBuyCargoScreen rolls the first time it shows after an arrival, randomState0-2 being _random:
 // StartMarketRandom, then RollQuantityOnSale for each commodity in turn, '-' for none.
 [[nodiscard]] std::string Quantities(Elite::GameState& _state, const std::array<std::uint16_t, 3>& _random)
@@ -66,6 +80,27 @@ constexpr std::array<std::array<std::uint16_t, 3>, 3> EDGE_RANDOM_STATES = {
     line += onSale ? std::format(" {}", *onSale) : std::string(" -");
   }
   return line;
+}
+
+// The quantities' answers, onto _answers: the loaded commander's random state and the 255 NextRandom steps it through, then the
+// edges.
+void AppendQuantities(Elite::GameState& _state, std::vector<std::string>& _answers)
+{
+  std::array<std::uint16_t, 3> random = {_state.Data().commander.randomState0, _state.Data().commander.randomState1,
+                                         _state.Data().commander.randomState2};
+  for (std::size_t walked = 0; walked < WALKED_RANDOM_STATES; ++walked)
+  {
+    _answers.push_back(Quantities(_state, random));
+    _state.Data().commander.randomState0 = random[0];
+    _state.Data().commander.randomState1 = random[1];
+    _state.Data().commander.randomState2 = random[2];
+    (void)Elite::NextRandom(_state);
+    random = {_state.Data().commander.randomState0, _state.Data().commander.randomState1, _state.Data().commander.randomState2};
+  }
+  for (const std::array<std::uint16_t, 3>& edge : EDGE_RANDOM_STATES)
+  {
+    _answers.push_back(Quantities(_state, edge));
+  }
 }
 
 } // namespace
@@ -93,21 +128,29 @@ public:
       }
     }
 
-    std::array<std::uint16_t, 3> random = {state.Data().commander.randomState0, state.Data().commander.randomState1,
-                                           state.Data().commander.randomState2};
-    for (std::size_t walked = 0; walked < WALKED_RANDOM_STATES; ++walked)
+    AppendQuantities(state, answers);
+    CheckSubsystemAnswers(MARKET_ANSWERS_FILE, answers,
+                          ECONOMIES * GOVERNMENTS * TECH_LEVELS.size() + WALKED_RANDOM_STATES + EDGE_RANDOM_STATES.size());
+  }
+
+  // The market's rules give the same 256 markets with no state (D53, D74): PricesOf, for each economy, government and tech
+  // level, is the price lines' answer, the quantities' lines being the routines' as above.
+  TEST_METHOD(TheRulesPriceEveryMarketAsRecorded)
+  {
+    ReferenceRig rig("MarketRuleAnswers");
+    Elite::GameState& state = rig.State();
+    std::vector<std::string> answers;
+    for (std::size_t economy = 0; economy < ECONOMIES; ++economy)
     {
-      answers.push_back(Quantities(state, random));
-      state.Data().commander.randomState0 = random[0];
-      state.Data().commander.randomState1 = random[1];
-      state.Data().commander.randomState2 = random[2];
-      (void)Elite::NextRandom(state);
-      random = {state.Data().commander.randomState0, state.Data().commander.randomState1, state.Data().commander.randomState2};
+      for (std::size_t government = 0; government < GOVERNMENTS; ++government)
+      {
+        for (const std::uint8_t techLevel : TECH_LEVELS)
+        {
+          answers.push_back(RulePrices(static_cast<std::uint8_t>(economy), static_cast<std::uint8_t>(government), techLevel));
+        }
+      }
     }
-    for (const std::array<std::uint16_t, 3>& edge : EDGE_RANDOM_STATES)
-    {
-      answers.push_back(Quantities(state, edge));
-    }
+    AppendQuantities(state, answers);
     CheckSubsystemAnswers(MARKET_ANSWERS_FILE, answers,
                           ECONOMIES * GOVERNMENTS * TECH_LEVELS.size() + WALKED_RANDOM_STATES + EDGE_RANDOM_STATES.size());
   }

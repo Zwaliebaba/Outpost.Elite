@@ -89,6 +89,12 @@
     <ClCompile Include="CorpusTests.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
+    <ClCompile Include="EquipmentAnswerTests.cpp">
+      <Filter>Equipment</Filter>
+    </ClCompile>
+    <ClCompile Include="EquipmentRulesTests.cpp">
+      <Filter>Equipment</Filter>
+    </ClCompile>
     <ClCompile Include="FieldTests.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
@@ -126,6 +132,9 @@
       <Filter>Input</Filter>
     </ClCompile>
     <ClCompile Include="MarketAnswerTests.cpp">
+      <Filter>Market</Filter>
+    </ClCompile>
+    <ClCompile Include="MarketRulesTests.cpp">
       <Filter>Market</Filter>
     </ClCompile>
     <ClCompile Include="MarketTests.cpp">
@@ -193,6 +202,9 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <None Include="EquipmentAnswers.txt">
+      <Filter>Equipment</Filter>
+    </None>
     <None Include="GalaxyAnswers.txt">
       <Filter>Galaxy</Filter>
     </None>
