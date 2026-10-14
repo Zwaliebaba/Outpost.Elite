@@ -391,23 +391,6 @@ public:
     Assert::IsTrue(platform.Sound().Now().tone.gate);
     Assert::IsFalse(platform.Sound().Events().back().data);
   }
-
-  // ExitToDos (CS:00AD) prints the exit message in mode 2 through DOS's int 21h AH=09h, which writes through the BIOS's
-  // teletype at the cursor, keeping the attribute there, and moves the cursor on the CRTC.
-  TEST_METHOD(PrintStringWritesAtTheCursorThroughTheBios)
-  {
-    PlatformRig rig("PlatformPrint");
-    rig.Native().PrintDosString("ABC$");
-
-    const Elite::GameState& state = rig.State();
-    Assert::AreEqual(std::uint32_t{'A'}, std::uint32_t{state.VideoByte(0)});
-    Assert::AreEqual(0x07u, std::uint32_t{state.VideoByte(1)}, L"the attribute is kept");
-    Assert::AreEqual(std::uint32_t{'B'}, std::uint32_t{state.VideoByte(2)});
-    Assert::AreEqual(std::uint32_t{'C'}, std::uint32_t{state.VideoByte(4)});
-    const Elite::Cga& cga = rig.Host().Video();
-    Assert::AreEqual(0x00u, std::uint32_t{cga.Crtc(Elite::CrtcRegister::CursorAddressHigh)}, L"the CRTC's cursor at 3");
-    Assert::AreEqual(0x03u, std::uint32_t{cga.Crtc(Elite::CrtcRegister::CursorAddressLow)});
-  }
 };
 
 } // namespace GameLogicTests

@@ -39,10 +39,6 @@ struct DiscMenuExit
 /// no more files.
 void PerformDiskRequest(GameState& _state, Hardware& _hardware, std::uint8_t _request, std::uint16_t _attributes);
 
-/// ShowDiskError (CS:0470): diskError cleared and diskErrorText shown: its characters over the text page's when
-/// screenLayout says the text page shows, and drawn in colour 3 on the graphics screen otherwise.
-void ShowDiskError(GameState& _state);
-
 /// PrintCommanderCatalogue (CS:68CE): ten text rows blanked, and commanderFileList's commanderFileCount names printed in
 /// columns of ten.
 void PrintCommanderCatalogue(GameState& _state);

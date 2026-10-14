@@ -28,12 +28,6 @@ constexpr std::uint8_t SAVE_COMMANDER = 2;
 // keyBuffer is a ring of 16 codes: the write index wraps after its last.
 constexpr std::uint16_t KEY_BUFFER_WRAP_MASK = 0x000F;
 
-// Alt and PrtSc held for a moment: GetKey saves a screenshot while both are down. PrtSc also types '*' at a prompt.
-// On a chart, which reads its keys once a frame, 117 ms on the IBM PC (D18): held for longer than a frame, so
-// that GetKey sees both keys down and takes the screenshot.
-constexpr std::string_view CHART_SCREENSHOT_KEYS = "down Alt_L; down KP_Multiply; wait 0.15; up KP_Multiply; up Alt_L; wait 0.05";
-constexpr std::string_view QUICK_SCREENSHOT_KEYS = "down Alt_L; down KP_Multiply; wait 0.002; up KP_Multiply; up Alt_L; wait 0.05";
-
 // _code at the end of keyBuffer, as ReadScanCode puts a key there: how a test sends a code no replay can name, such as
 // the Amstrad joystick's 77h-7Ch.
 void QueueScanCode(Elite::GameState& _state, std::uint8_t _code)
@@ -82,17 +76,9 @@ constexpr std::array<WrittenFile, 2> DISC_MENU_FILES = {{
   {"A.CDR", "87b5b23a48fee9234ff2ed89cc580f3059890ab9fe7d1cc1a7d091371437aa62"},
   {"ABCDEFI.CDR", "87b5b23a48fee9234ff2ed89cc580f3059890ab9fe7d1cc1a7d091371437aa62"},
 }};
-// The screenshots' and the commander saved before leaving for DOS, beside the two directories that stood in their way.
-constexpr std::array<WrittenFile, 5> SCREENSHOT_FILES = {{
-  {"ELITE00.HI", DIRECTORY},
-  {"ELITE01.HI", "17b7f6a85f96fc70301256d3a943efeb21e9edc79f4513fd53316d0bcdadbda3"},
-  {"ELITE10.LO", "2f7fe60980eaf7493f2c46f1d59fded9258033a2ebede87808966196409ea976"}, // the disc menu without J...Joystick (D81)
-  {"ELITE11.LO", DIRECTORY},
+// The commander saved before leaving for DOS.
+constexpr std::array<WrittenFile, 1> QUIT_FILES = {{
   {"X.CDR", "a71fb1c01109def521b285ec6cdb25f045be9e74ce4298f533f794981ebd5cdd"},
-}};
-// The screenshot in flight.
-constexpr std::array<WrittenFile, 1> FLIGHT_SCREENSHOT_FILES = {{
-  {"ELITE01.HI", "6ddc6d729059be522ea65076eb0c078e16ab4b6e1e482df9805d8870bcc7bc00"},
 }};
 
 // The Disc/Control menu's every path but leaving for DOS: the catalogue empty and with a name, the version, keys that do
@@ -146,7 +132,7 @@ void PlayEveryDiscMenuPath(TwinRig& _rig)
 
 } // namespace
 
-// Twins of the Disc/Control menu and the screenshots, which reach what no replay does (ADR-016).
+// Twins of the Disc/Control menu and of leaving for DOS, which reach what no replay does (ADR-016).
 TEST_CLASS(SaveLoadTests)
 {
 public:
@@ -158,38 +144,16 @@ public:
     PlayEveryDiscMenuPath(rig);
   }
 
-  // Screenshots with SaveScreenshot's native code: of the galactic chart and of the file name prompt's text page, each
-  // also with a directory where DOS must create the file, so that DISC ERROR shows; then E and Y at the menu, which
-  // ends the program. The twin must write the files the original wrote.
-  TEST_METHOD(ScreenshotsAndLeavingForDosAgree)
+  // A commander saved from the chart's Escape, then E and Y at the menu, which ends the program: exit to DOS is a quit (D80),
+  // with no farewell. Alt and PrtSc's screenshots, which this twin took on the way until D86, are gone.
+  TEST_METHOD(SavingAndLeavingForDosAgree)
   {
-    TwinRig twin("TwinScreenshots");
+    TwinRig twin("TwinQuit");
     twin.Play("key space; wait 3.3\nkey F5; wait 0.1");
-    twin.Play(CHART_SCREENSHOT_KEYS);
-    // The numbers run '99', then '00', the name of a directory.
-    twin.Both([](Elite::Platform&, Elite::GameState& _state) { _state.Data().video.screenshotNumber = 0x3939; });
-    std::filesystem::create_directories(twin.Files() / "ELITE00.HI");
-    twin.Play(CHART_SCREENSHOT_KEYS);
-    // GetKey hands the chart one key a frame: the screenshots' Alt and PrtSc go first, then Escape closes it.
     twin.Play("wait 0.6; key Escape; wait 0.15; key s; wait 0.05");
-    // '09', then '10'; then '11', a directory.
-    twin.Both([](Elite::Platform&, Elite::GameState& _state) { _state.Data().video.screenshotNumber = 0x3930; });
-    twin.Play(QUICK_SCREENSHOT_KEYS);
-    std::filesystem::create_directories(twin.Files() / "ELITE11.LO");
-    twin.Play(QUICK_SCREENSHOT_KEYS);
-    twin.Play("key BackSpace; key BackSpace; key x; key Return; wait 0.1\ndigest saved");
+    twin.Play("key x; key Return; wait 0.1\ndigest saved");
     twin.Play("key e; wait 0.05; key y; wait 0.5", Elite::StopReason::Terminated);
-    Assert::IsTrue(HoldsExactly(twin.Files(), SCREENSHOT_FILES), L"the files the original wrote");
-  }
-
-  // A screenshot in flight, which PollScreenDumpKey takes from RunFlight's loop while Alt and PrtSc are down: its
-  // path to SaveScreenshot.
-  TEST_METHOD(ScreenshotInFlightAgrees)
-  {
-    TwinRig twin("TwinFlightScreenshot");
-    twin.Play("key space; wait 3.3\nkey F1; wait 2\ndigest launched");
-    twin.Play("down Alt_L; down KP_Multiply; wait 0.1; up KP_Multiply; up Alt_L; wait 0.1\ndigest dumped");
-    Assert::IsTrue(HoldsExactly(twin.Files(), FLIGHT_SCREENSHOT_FILES), L"the screenshot the original wrote");
+    Assert::IsTrue(HoldsExactly(twin.Files(), QUIT_FILES), L"the commander the game saved");
   }
 
   // D43: a commander saved with every field D43 names beyond what the game writes, as only a hand-edited file holds them,

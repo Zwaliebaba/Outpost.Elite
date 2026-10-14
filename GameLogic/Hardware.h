@@ -76,10 +76,6 @@ public:
   /// Int 10h AH=0, AL=_mode: the BIOS sets the CGA's mode. Throws std::logic_error for a mode above 6, which the game never sets.
   void SetVideoMode(std::uint8_t _mode);
 
-  /// Int 21h AH=9: DOS prints _text, the text DS:DX names, up to its '$', a character at a time through the BIOS's teletype. A
-  /// text with no '$' throws std::logic_error, and nothing is printed.
-  void PrintDosString(std::string_view _text);
-
   /// IN AL,3DAh: the CGA's status, bit 3 set during the vertical retrace.
   [[nodiscard]] std::uint8_t CgaStatus();
 
@@ -211,8 +207,8 @@ public:
   /// Whether a mouse driver is loaded (Platform::MouseDriverLoaded): what the game's test of int 33h's vector finds.
   [[nodiscard]] bool MouseDriverLoaded() const noexcept;
 
-  /// The command tail DOS gave the program, which its PSP held at 81h, its length at 80h: what the program was started with.
-  [[nodiscard]] std::string_view CommandTail() const noexcept;
+  /// Whether the game was started with the cheat on (Platform::CheatRequested, D80).
+  [[nodiscard]] bool CheatRequested() const noexcept;
 
 private:
   Platform& m_platform;

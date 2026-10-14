@@ -78,12 +78,6 @@ constexpr std::uint16_t SPACE_VIEW_LINE_PAIRS = 0x3F;
 constexpr std::uint16_t CHART_SCREEN_OFFSET = 0x0648; // x=32, line 40
 constexpr std::uint8_t CHART_LINE_PAIRS = 0x40;
 
-constexpr std::uint8_t FIRST_DIGIT = '0';
-constexpr std::uint8_t PAST_DIGITS = ':';               // the character after '9'
-constexpr std::size_t SCREENSHOT_NAME_DIGITS = 5;       // a screenshot's name's digits, after its 'elite'
-constexpr std::uint16_t TEXT_PAGE_BYTES = 0x07D0;       // 40x25 cells of character and attribute
-constexpr std::uint16_t GRAPHICS_SCREEN_BYTES = 0x3F40; // both of mode 4's banks, the gap between them included
-
 constexpr std::uint16_t SMALL_DISC_RADIUS = 5; // below it, DrawDisc draws a sprite
 constexpr std::uint16_t SMALL_DISC_ROWS = 4;
 constexpr std::uint8_t CLIP_SPRITE_LEFT = 0x55;  // only the sprite's right byte is drawn
@@ -1284,70 +1278,6 @@ ScreenChange MakeGraphicsScreen(GameState& _state, Hardware& _hardware, std::uin
 std::span<std::uint8_t, DRAWING_BUFFER_BYTES> DrawingBuffer(GameState& _state) noexcept
 {
   return BytesOf(_state.Data().drawing.drawingBuffer);
-}
-
-void SaveScreenshot(GameState& _state, Hardware& _hardware)
-{
-  RestoreDivideAndKeyboardInterrupts(_hardware);
-  (void)RestoreTimerInterrupt(_state, _hardware);
-  _state.Data().disk.diskError = 0;
-  // The original puts its own critical-error handler, CS:02F0, on int 24h round the write, and the handler that was there back
-  // after it. Nothing raises int 24h: DOS answers a failed call with CF set and an error.
-  WriteScreenshotFile(_state, _hardware);
-  if (_state.Data().disk.diskError != 0)
-  {
-    ShowDiskError(_state);
-  }
-  InstallTimerInterrupt(_state, _hardware);
-  InstallDivideAndKeyboardInterrupts(_state, _hardware);
-}
-
-void WriteScreenshotFile(GameState& _state, Hardware& _hardware)
-{
-  _hardware.SetDiskTransferArea(_state.Data().saveLoad.diskTransferArea);
-  // The two digits, the second counting fastest: '00', '01' ... '99', '00'.
-  std::uint16_t digits = _state.Data().video.screenshotNumber;
-  SetHigh(digits, static_cast<std::uint8_t>(High(digits) + 1));
-  if (High(digits) == PAST_DIGITS)
-  {
-    SetHigh(digits, FIRST_DIGIT);
-    SetLow(digits, static_cast<std::uint8_t>(Low(digits) + 1));
-    if (Low(digits) == PAST_DIGITS)
-    {
-      SetLow(digits, FIRST_DIGIT);
-    }
-  }
-  _state.Data().video.screenshotNumber = digits;
-  // The two digits into both names, after their 'elite'.
-  const auto writeDigits = [digits](std::uint8_t(&_name)[11])
-  {
-    _name[SCREENSHOT_NAME_DIGITS] = Low(digits);
-    _name[SCREENSHOT_NAME_DIGITS + 1] = High(digits);
-  };
-  writeDigits(_state.Data().video.screenshotTextFileName);
-  writeDigits(_state.Data().video.screenshotGraphicsFileName);
-  // eliteNN.lo for the text page, eliteNN.hi for the graphics screen: DS:DX the name, up to the NUL each ends with, which
-  // nothing writes.
-  const std::string_view name = (_state.Data().drawing.screenLayout & TEXT_LAYOUT_BIT) != 0
-                                  ? TextIn(_state.Data().video.screenshotTextFileName)
-                                  : TextIn(_state.Data().video.screenshotGraphicsFileName);
-  const DosAnswer created = _hardware.CreateFile(name, 0);
-  if (created.failed)
-  {
-    _state.Data().disk.diskError = 1;
-    return;
-  }
-  _state.Data().disk.fileHandle = created.value;
-  // From B800:0000: the text page, or both graphics banks and the gap between them.
-  const std::uint16_t bytes = (_state.Data().drawing.screenLayout & TEXT_LAYOUT_BIT) != 0 ? TEXT_PAGE_BYTES : GRAPHICS_SCREEN_BYTES;
-  if (_hardware.WriteFile(_state.Data().disk.fileHandle, _state.VideoBytes().first(bytes)).failed)
-  {
-    _state.Data().disk.diskError = 1;
-  }
-  if (_hardware.CloseFile(_state.Data().disk.fileHandle).failed)
-  {
-    _state.Data().disk.diskError = 1;
-  }
 }
 
 [[nodiscard]] Task<void> FinishSpaceViewFrame(GameState& _state, Hardware& _hardware)

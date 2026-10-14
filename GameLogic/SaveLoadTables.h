@@ -64,9 +64,6 @@ constexpr std::array<std::uint8_t, 6> COMMANDER_FILE_PATTERN = {
   0x2A, 0x2E, 0x63, 0x64, 0x72, 0x00, // DS:20EF
 };
 
-/// diskErrorText (DS:228B in 1987): 'DISC ERROR'
-constexpr std::string_view DISK_ERROR_TEXT = "DISC ERROR";
-
 /// versionString (DS:7B50 in 1987): Release:1? 1-10-87
 constexpr std::string_view VERSION_STRING = "Release:1? 1-10-87";
 

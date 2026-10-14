@@ -18,8 +18,6 @@ constexpr std::uint16_t MOUSE_BUTTON_PRESSES = 0x0005;
 
 constexpr std::uint8_t CRTC_CURSOR_ADDRESS_HIGH = 0x0E;
 
-constexpr char DOS_STRING_TERMINATOR = '$'; // int 21h AH=09h's
-
 } // namespace
 
 std::uint8_t Hardware::SystemControl()
@@ -122,20 +120,6 @@ void Hardware::SetVideoMode(std::uint8_t _mode)
   if (!m_platform.Modes().SetMode(_mode))
   {
     throw std::logic_error("Hardware::SetVideoMode: a mode the game never sets");
-  }
-}
-
-void Hardware::PrintDosString(std::string_view _text)
-{
-  // Each character up to the '$' through the BIOS's teletype, as DOS writes them.
-  const std::size_t end = _text.find(DOS_STRING_TERMINATOR);
-  if (end == std::string_view::npos)
-  {
-    throw std::logic_error("Hardware::PrintDosString: a text with no '$', which DOS would print on past");
-  }
-  for (const char character : _text.substr(0, end))
-  {
-    m_platform.Modes().WriteTeletype(static_cast<std::uint8_t>(character));
   }
 }
 
@@ -249,9 +233,9 @@ bool Hardware::MouseDriverLoaded() const noexcept
   return m_platform.MouseDriverLoaded();
 }
 
-std::string_view Hardware::CommandTail() const noexcept
+bool Hardware::CheatRequested() const noexcept
 {
-  return m_platform.CommandTail();
+  return m_platform.CheatRequested();
 }
 
 } // namespace Elite

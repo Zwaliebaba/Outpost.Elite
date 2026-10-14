@@ -55,9 +55,7 @@ inline constexpr std::uint8_t COMMA = 0x33;
 inline constexpr std::uint8_t PERIOD = 0x34;
 /// makes ReadScanCode OR 80h into the buffered code
 inline constexpr std::uint8_t RIGHT_SHIFT = 0x36;
-/// with Alt, the screen dump (GetKey, PollScreenDumpKey); scan code 37h is */PrtSc
-inline constexpr std::uint8_t PRINT_SCREEN = 0x37;
-/// with PrtSc the screen dump; with W the mis-jump latch
+/// with W the mis-jump latch
 inline constexpr std::uint8_t ALT = 0x38;
 /// fire on the keyboard (ReadFireButton); the pause screen clears it on resume
 inline constexpr std::uint8_t SPACE = 0x39;

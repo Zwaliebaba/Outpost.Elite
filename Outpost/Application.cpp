@@ -96,7 +96,7 @@ void Application::Fail(const std::wstring& _message) const
   MessageBoxW(m_window, _message.c_str(), TITLE, MB_OK | MB_ICONERROR);
 }
 
-int Application::Run(HINSTANCE _instance)
+int Application::Run(HINSTANCE _instance, bool _cheat)
 {
   const ComScope com;
   Engine::Window window;
@@ -132,6 +132,7 @@ int Application::Run(HINSTANCE _instance)
   Elite::DirectoryFileStore files(commanders.empty() ? std::filesystem::current_path() : commanders);
   Elite::Platform::Desc desc;
   desc.startMoment = Elite::START_MOMENT; // fixed, as on a PC/XT without a clock card
+  desc.cheat = _cheat;
   // Every routine is native, in place of the original (ADR-010): the native platform runs them over the memory the GameState
   // owns (D19, D33).
   const auto game = std::make_unique<Elite::Game>(files, desc);

@@ -44,14 +44,6 @@ struct Triangle
   ScreenPoint third;
 };
 
-/// SaveScreenshot (CS:01B7): with the game's divide, keyboard and timer handlers taken out and CriticalErrorInterrupt on
-/// int 24h, WriteScreenshotFile, then ShowDiskError if it failed; then int 24h as it was, and the game's handlers put back.
-void SaveScreenshot(GameState& _state, Hardware& _hardware);
-
-/// WriteScreenshotFile (CS:03FD): screenshotNumber stepped, and eliteNN.lo (the text page) or eliteNN.hi (both graphics
-/// banks) written from B800:0000 through DOS, with its disk transfer area at diskTransferArea; diskError = 1 on a failure.
-void WriteScreenshotFile(GameState& _state, Hardware& _hardware);
-
 /// FinishSpaceViewFrame (CS:0570): DrawLaserSights, then PresentSpaceView and ClearDrawBuffer, both forwards. It waits.
 [[nodiscard]] Task<void> FinishSpaceViewFrame(GameState& _state, Hardware& _hardware);
 

@@ -46,18 +46,6 @@ constexpr std::uint8_t MOUSE_LEFT_AND_RIGHT = 0x03;
   return (_keys & 1) != 0;
 }
 
-// SaveScreenshot (CS:01B7) while Alt and PrtSc are held. Returns whether it saved one. The original pushes and pops every
-// register but ES around the call, so that a screenshot leaves only ES, on the CGA's memory.
-bool SaveScreenshotIfAsked(GameState& _state, Hardware& _hardware)
-{
-  if (_state.Data().keyboard.keyDown[Keys::PRINT_SCREEN] != 1 || _state.Data().keyboard.keyDown[Keys::ALT] != 1)
-  {
-    return false;
-  }
-  SaveScreenshot(_state, _hardware);
-  return true;
-}
-
 // Whether IntegrateRate tests _input against the rate at _rate for a reversal: XOR BL,[rate], which leaves BL the key
 // XOR the rate.
 [[nodiscard]] bool TestsReversal(const GameState& _state, std::uint8_t _input, const std::uint8_t& _rate)
@@ -189,7 +177,7 @@ MouseDriver IsMouseDriverInstalled(Hardware& _hardware)
 
 [[nodiscard]] Task<void> AwaitNextKey(Hardware& _hardware, const KeyPress& _key)
 {
-  if (_key.taken || _key.screenshot)
+  if (_key.taken)
   {
     _hardware.Spin();
     co_return;
@@ -210,7 +198,7 @@ Steering ReadSteering(GameState& _state, Hardware& _hardware)
 KeyPress GetKey(GameState& _state, Hardware& _hardware)
 {
   _hardware.DisableInterrupts();
-  KeyPress key{false, 0, false, false};
+  KeyPress key{false, 0, false};
   const std::uint8_t count = _state.Data().input.keyBufferCount;
   if (count != 0)
   {
@@ -218,10 +206,9 @@ KeyPress GetKey(GameState& _state, Hardware& _hardware)
     const std::uint8_t code = _state.Data().input.keyBuffer[read];
     _state.Data().input.keyBufferRead = static_cast<std::uint16_t>((read + 1) & KEY_BUFFER_WRAP);
     _state.Data().input.keyBufferCount = static_cast<std::uint8_t>(count - 1);
-    key = KeyPress{true, static_cast<std::uint8_t>(code & ~SHIFT_BIT), (code & SHIFT_BIT) != 0, false};
+    key = KeyPress{true, static_cast<std::uint8_t>(code & ~SHIFT_BIT), (code & SHIFT_BIT) != 0};
   }
   _hardware.EnableInterrupts();
-  key.screenshot = SaveScreenshotIfAsked(_state, _hardware);
   return key;
 }
 
@@ -327,11 +314,6 @@ Steering ReadMouseSteering(GameState& _state, Hardware& _hardware)
   // NEG AH / SAR AL,1 / SAR AH,1: half of each step, the pitch negated, added to the rates the last frame left.
   return Steering{MouseRate(rollStep, Low(_state.Data().playerShip.rollRate)),
                   MouseRate(Negate(pitchStep), High(_state.Data().playerShip.rollRate))};
-}
-
-void PollScreenDumpKey(GameState& _state, Hardware& _hardware)
-{
-  SaveScreenshotIfAsked(_state, _hardware);
 }
 
 void ResetMouseIfSelected(const GameState& _state, Hardware& _hardware)

@@ -1,6 +1,6 @@
 # ELITES.EXE — reverse-engineering and native port plan
 
-**Status:** proposed 2026-10-09. The owner's rulings are D1 to D85 in §8. A ruling becomes a decision when the ADR in §9 records it (AGENTS.md §6). Each phase's section in §5 says how its exit was met.
+**Status:** proposed 2026-10-09. The owner's rulings are D1 to D86 in §8. A ruling becomes a decision when the ADR in §9 records it (AGENTS.md §6). Each phase's section in §5 says how its exit was met.
 
 | Phase | State | Recorded in |
 |---|---|---|
@@ -356,7 +356,7 @@ The steps, each its own change and ADR, in this order:
 4. **The start state in C++.** Jameson and every first value are initializers, written once from the image and kept as source; `DataPlaces.h` and `ReferenceLoadImage` go, and the start digest is checked unchanged. This supersedes D73. *Done (ADR-044), second, after step 1: steps 2 and 3 follow step 5, as edits of plain source.*
 5. **The tables as source.** The `*Tables.h` stop being generated; `ReferenceImage.cpp`, both generators, the two `.tsv` files and their CI steps go (D79). *Done (ADR-044), with the state's headers, which stop being generated here rather than at step 3, and `Tools/MapReference.py` and `Tools/PrepareCommanders.py`, which read the same files.*
 6. **No 8086 in the game's code.** The direction flag, the BP and AL carry-throughs and the line records go, and the drawing routines take a CGA buffer, not a segment. Where a carried value reached the state, what it changes is reported and re-recorded. *Done (ADR-046): nothing moved. DX, BX and DI's carry-throughs went after, by D84; three replays moved, re-recorded with their cause.*
-7. **The native host** (D77). `Hardware.h`, `Platform`, the game thread and `Cycles` go. Time is milliseconds, and the timer's 1 kHz work, the music, the effects and the counters, is a tick the host runs; keys arrive as the game's own key events; the sound routines drive the synth; the mouse is read natively; the commander files go through `FileStore` and step 1's serializer (D78); the video modes are set on `Cga` directly; D80's counterparts land. Keeping the millisecond clock and the frames' pacing should keep most replays exact; key delivery, which the PC delays a millisecond after its latch empties, is where they may move. *In progress: the waits are coroutines and the game thread is gone (ADR-047), nothing moved.*
+7. **The native host** (D77). `Hardware.h`, `Platform`, the game thread and `Cycles` go. Time is milliseconds, and the timer's 1 kHz work, the music, the effects and the counters, is a tick the host runs; keys arrive as the game's own key events; the sound routines drive the synth; the mouse is read natively; the commander files go through `FileStore` and step 1's serializer (D78); the video modes are set on `Cga` directly; D80's counterparts land. Keeping the millisecond clock and the frames' pacing should keep most replays exact; key delivery, which the PC delays a millisecond after its latch empties, is where they may move. *In progress: the waits are coroutines and the game thread is gone (ADR-047), nothing moved; D80's counterparts have landed and the screenshots gone (ADR-048, D86).*
 8. **The joystick goes** (D81): the IBM game port, its calibration and the instruction cycles it counted, the Amstrad's stick, and the input device's choice of them. The twins and replays that fly by stick are re-recorded or retired. *Done (ADR-045), before steps 6 and 7: the three stick twins retired, every digest re-recorded after a comparison by member, one member moved where the Amstrad's stick was chosen.*
 9. **No 1987 in the comments.** The addresses go from the code; `Reference-Map.md` and the ADRs keep them, as history.
 10. **The tests on native rigs.** `ReferenceRig` and `TwinRig` become native, the tests that read the image go, and AGENTS.md is brought up to date: its CI steps, and D79.
@@ -488,6 +488,7 @@ After D44, no replay reaches the docked screens. Their rules are functions with 
 | D83 | How the docked screens are driven (set by the owner, 2026-10-14) | — | **The mouse is on while docked**, and is mandatory on the charts: no key moves their cursor (2026-10-14). |
 | D84 | Whether DX, BX and DI's carry-throughs go too, which step 6 did not name: DI decides what a launched missile is copied from (raised with ADR-046) | — | **They go** (2026-10-14): ADR-046 items 6 to 8. |
 | D85 | Whether the game keeps D77's coroutine waits or moves to screens driven by the game's state, the current screen in `GameState` and a tick that updates and draws it (raised by the owner, 2026-10-14) | Coroutines through Phase 7, which keep every replay exact while the PC goes; state-driven screens from piece 5. | **As recommended** (2026-10-14): the coroutine waits stay through Phase 7 (ADR-047); piece 5's docked screens are state-driven: the current screen and its cursor in `GameState`, mouse and key events in, drawn from the state; the title, the pause screen and flight's function-key screens follow afterwards, with one re-recording and its cause. Amends D77's "the docked screens of piece 5 are written against the same host". |
+| D86 | Whether D80's PNG screenshot is wanted (raised by the owner, 2026-10-14) | — | **The screenshots go** (2026-10-14): Alt+PrtSc does nothing; amends D80's "a PNG the shell saves". |
 
 ## 9. ADRs this plan produces
 
@@ -541,4 +542,5 @@ After D44, no replay reaches the docked screens. Their rules are functions with 
 | [ADR-045](ADR/ADR-045-the-joystick-goes.md) | The joystick goes: the keyboard and the mouse fly the game (D81) | Phase 7, step 8 — written |
 | [ADR-046](ADR/ADR-046-no-8086-in-the-game.md) | No 8086 in the game's code: the flag, ES, BP, AL and the line's registers go | Phase 7, step 6 — written |
 | [ADR-047](ADR/ADR-047-the-game-waits-as-a-coroutine.md) | The game waits as a coroutine: no native thread (D77) | Phase 7, step 7 — written |
+| [ADR-048](ADR/ADR-048-what-only-dos-had.md) | What only DOS had: the cheat is a flag, leaving is a quit, and the screenshots go (D80, D86) | Phase 7, step 7 — written |
 | — | Wholly native: the other steps after the state (D76–D80) | Phase 7 — to write |

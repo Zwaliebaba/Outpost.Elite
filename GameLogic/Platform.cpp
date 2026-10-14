@@ -58,7 +58,7 @@ Platform::Platform(GameState& _state, FileStore& _files, const Desc& _desc)
     m_files(_files, _desc.startMoment),
     m_mouseDriverLoaded(_desc.mousePresent),
     m_flags(ENTRY_FLAGS),
-    m_commandTail(_desc.commandTail)
+    m_cheat(_desc.cheat)
 {
 }
 

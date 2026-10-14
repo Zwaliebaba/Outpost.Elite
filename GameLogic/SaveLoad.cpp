@@ -76,10 +76,6 @@ constexpr auto EXTENSION_BYTES = static_cast<std::uint16_t>(COMMANDER_EXTENSION.
 constexpr std::uint16_t CATALOGUE_ROWS = 10;
 constexpr std::uint16_t CATALOGUE_COLUMN_BYTES = 0x12; // nine cells
 constexpr std::uint8_t TEXT_LAYOUT_BIT = 2;            // screenLayout: the text page shows
-constexpr std::uint16_t GRAPHICS_ERROR_POSITION = 0x0C90;
-constexpr std::uint16_t TEXT_ERROR_POSITION = 0x0330;
-constexpr std::uint16_t DISK_ERROR_CHARACTERS = 10;
-constexpr std::uint16_t ERROR_INK = 0xFFFF; // colour 3
 
 // commanderFileName up to its NUL: the name the original hands DOS in DS:DX. Every writer leaves a NUL inside it: the image's
 // '12345678.CDR', ReadTextLine's eight characters at most and their NUL, the NUL after the ".CDR" appended to a name
@@ -508,24 +504,6 @@ void SaveStartupCommander(GameState& _state)
   // REP MOVSB within the data segment, a byte at a time: commanderBlock into startupCommander, the whole record, as the direction flag
   // is clear wherever the game calls it: the only STD, MaskOutsideTunnel's, has its CLD before the routine returns (change 3c).
   _state.Data().saveLoad.startupCommander = _state.Data().commander;
-}
-
-void ShowDiskError(GameState& _state)
-{
-  _state.Data().disk.diskError = 0;
-  if ((_state.Data().drawing.screenLayout & TEXT_LAYOUT_BIT) == 0)
-  {
-    DrawScreenString(_state, DISK_ERROR_TEXT, ERROR_INK, GRAPHICS_ERROR_POSITION);
-    return;
-  }
-  // The characters alone, over the text page's attributes.
-  static_assert(DISK_ERROR_TEXT.size() == DISK_ERROR_CHARACTERS);
-  std::uint16_t to = TEXT_ERROR_POSITION;
-  for (const char character : DISK_ERROR_TEXT)
-  {
-    _state.SetVideoByte(to, static_cast<std::uint8_t>(character));
-    to = Offset(to, 2);
-  }
 }
 
 [[nodiscard]] Task<DiscMenuExit> ShowDiscControlScreen(GameState& _state, Hardware& _hardware)

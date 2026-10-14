@@ -2268,7 +2268,6 @@ void UpdateFuelLeak(GameState& _state, Hardware& _hardware)
     _hardware.EndSpaceViewRendered();
     UpdateFuelLeak(_state, _hardware);
     UpdateMessageLine(_state);
-    PollScreenDumpKey(_state, _hardware);
     co_await FinishSpaceViewFrame(_state, _hardware);
     // The frame as it was drawn, for a renderer that draws between frames (ADR-032); the first continues nothing before it.
     _hardware.PublishFlightSnapshot(TakeFlightSnapshot(_state), !firstFrame);

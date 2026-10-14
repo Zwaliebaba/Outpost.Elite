@@ -77,7 +77,7 @@ public:
   {
     DosDateTime startMoment;   ///< DOS's date and time at power-on; the BIOS's tick count starts at its time of day.
     bool mousePresent = false; ///< Whether a mouse driver is loaded.
-    std::string commandTail;   ///< The program's command tail, as COMMAND.COM passes it, leading space included: " cheat".
+    bool cheat = false;        ///< Whether the game starts with the cheat on: the shell's --cheat, where 1987 read ' cheat' (D80).
   };
 
   /// A native routine at an address, and how often it ran.
@@ -140,10 +140,10 @@ public:
   /// memory any more.
   void StartProgram() noexcept;
 
-  /// The program's command tail (Desc::commandTail).
-  [[nodiscard]] const std::string& CommandTail() const noexcept
+  /// Whether the game was started with the cheat on (Desc::cheat).
+  [[nodiscard]] bool CheatRequested() const noexcept
   {
-    return m_commandTail;
+    return m_cheat;
   }
 
   /// _routine is the program's start, where DOS starts it: the platform makes the coroutine at the first RunUntil and resumes
@@ -420,7 +420,7 @@ private:
   std::array<IrqHandler, 2> m_handlers{IrqHandler::Bios, IrqHandler::Bios};
   bool m_mouseDriverLoaded = false;
   std::uint16_t m_flags;
-  std::string m_commandTail;
+  bool m_cheat = false;
 
   HookedProgram m_entry;
   std::array<HookedRoutine, 2> m_gameHandlers{};

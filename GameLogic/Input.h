@@ -39,7 +39,6 @@ struct KeyPress
   bool taken;            ///< keyBuffer held a code, and GetKey took it
   std::uint8_t scanCode; ///< the code's scan code, 01h-7Fh; 0 when it took none, which its callers read as no key
   bool shift;            ///< Shift was held when the key went down
-  bool screenshot;       ///< Alt and PrtSc were held, and it saved a screenshot
 };
 
 /// KeyboardInterrupt (CS:0201): int 9's handler, without the IRET: ReadScanCode.
@@ -76,21 +75,17 @@ void ResetMouseIfSelected(const GameState& _state, Hardware& _hardware);
 /// (ADR-015).
 [[nodiscard]] Task<void> WaitForKeyPress(GameState& _state, Hardware& _hardware);
 
-/// After a wait's GetKey that brought no key the wait wants (ADR-039): when it took no code and saved no screenshot, nothing
-/// changed and the wait idles (Hardware::Wait); when it took one or saved one, the original's next poll comes at once
-/// (Hardware::Spin).
+/// After a wait's GetKey that brought no key the wait wants (ADR-039): when it took no code, nothing changed and the wait idles
+/// (Hardware::Wait); when it took one, the original's next poll comes at once (Hardware::Spin).
 [[nodiscard]] Task<void> AwaitNextKey(Hardware& _hardware, const KeyPress& _key);
 
 /// ReadSteering (CS:7536): the roll and the pitch from the selected device, within -23..23: the keyboard's (ReadKeyboardSteering)
 /// integrated into keyboardRollRate and keyboardPitchRate, or the mouse's (ReadMouseSteering).
 [[nodiscard]] Steering ReadSteering(GameState& _state, Hardware& _hardware);
 
-/// GetKey (CS:7616): the next code from keyBuffer, taken with interrupts off; then interrupts on, and SaveScreenshot while Alt and
-/// PrtSc are held.
+/// GetKey (CS:7616): the next code from keyBuffer, taken with interrupts off; then interrupts on. Its screenshot while Alt and PrtSc
+/// are held went with D86.
 [[nodiscard]] KeyPress GetKey(GameState& _state, Hardware& _hardware);
-
-/// PollScreenDumpKey (CS:7F3D): SaveScreenshot while Alt and PrtSc are held.
-void PollScreenDumpKey(GameState& _state, Hardware& _hardware);
 
 /// ApplyReverseControls (CS:8EA5): the reversing options on _steering: reverseYControl negates the pitch, and
 /// reverseXAndY then both. ApplyReverseControlsToDx (CS:8EBA) is the same routine on DL and DH, and its callers call this.

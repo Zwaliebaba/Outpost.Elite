@@ -1,16 +1,15 @@
 # Leaves for DOS, as a player does: Esc for the disc menu, E for Exit to DOS, and Y when it asks if you are sure.
-# Start then wipes the program's code (WipeProgram), puts the screen back in 80-column text, prints its parting
-# message, "Thank you for playing ELITE - Have a nice DOS!", empties the BIOS's key buffer and ends (int 20h), 0.2 s
-# after Y. That happens in the end step (GameLogic/Replay.h): the last step of a replay that runs the machine, and
+# Start then wipes the program's code (WipeProgram) and ends, 0.2 s after Y: exit to DOS is a quit (D80), and the
+# 80-column farewell, "Thank you for playing ELITE - Have a nice DOS!", is gone. That happens in the end step (GameLogic/Replay.h): the last step of a replay that runs the machine, and
 # the only one in which the program may end, as it must. The digest after it reads what the program left: its data
-# and the text screen.
+# and the menu's text page.
 wait 0.5; key space; wait 3.5      # any key: the credits, then the status screen
 key Escape; wait 0.3               # the disc menu
 key e; wait 0.3                    # Exit to DOS: Are you sure (Y/N)?
-digest asked ad933db8a22353de72475a498eb0b457c5b2d10ef942b13990c50a25584a8676
+digest asked 394cc8fcb844cd40b821ff06c9d92ba5909f0d62aa37d232d0ae287ee20491af
 picture asked f56e92b38af848f34b6636f1a14ad2c3cb768315c78c2d530bd3e9cf740509f8
 outcome asked galaxy=0 system=7 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=1000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=0 laserMounts=1 laserTypes=0 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=48 fuel=255 shipSlotsInUse=1 cabinTemperature=12 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 key y; end 1                       # Y: the program ends
-digest at-dos dd5b6c3c52d537f88f16e8b703686f9e260dd5f7acf6665fbe898ac7dd3f26fc
-picture at-dos c915388c1f3a1f7ce787dd0e13f7e5034d486f3ab45cb0d0811593e90085eb46
+digest at-dos 857bb719787653d4d3da471b22fbb5463b80402b0c07997ce1241b3e17b0d5ef
+picture at-dos f56e92b38af848f34b6636f1a14ad2c3cb768315c78c2d530bd3e9cf740509f8
 outcome at-dos galaxy=0 system=7 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=1000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=0 laserMounts=1 laserTypes=0 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=48 fuel=255 shipSlotsInUse=1 cabinTemperature=12 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0

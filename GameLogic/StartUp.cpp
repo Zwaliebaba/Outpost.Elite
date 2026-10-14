@@ -25,15 +25,10 @@ namespace Elite
 namespace
 {
 
-constexpr std::uint8_t CHEAT_KEY = 0xAA;
-constexpr std::uint8_t CHEAT_ARGUMENT_BYTES = 6; // ' cheat'
-
 constexpr std::uint16_t NEW_GAME_ENERGY = 0x3FF;
 constexpr std::uint8_t FULL_SHIELD = 0xFF;
 constexpr std::uint8_t NEW_GAME_CABIN_TEMPERATURE = 0x0C;
 constexpr std::uint8_t NEW_GAME_ALTITUDE = 0xFF;
-
-constexpr std::uint8_t VIDEO_MODE_TEXT_80 = 0x02; // 80x25 text
 
 constexpr std::uint16_t CREDITS_FIRST_LINE = 0x202;
 constexpr std::uint16_t CREDITS_LINES = 9;
@@ -52,15 +47,6 @@ constexpr std::uint16_t CREDITS_TIMER_TICKS = 3000; // 3 s
 {
   const std::string_view credits = TextOf(CREDITS_SCREEN_TEXT);
   return credits.substr(_at, credits.find('\0', _at) - _at);
-}
-
-// ExitToDos (CS:00AD): the BIOS's text mode and the farewell, exitMessage up to its '$'. The original then empties the BIOS's
-// key buffer, which the ROM's int 9 handler keeps empty. The RETF that follows, to PSP:0000 where Start pushed it, is Start's
-// own return, and the program ends there.
-void ExitToDos(Hardware& _hardware)
-{
-  _hardware.SetVideoMode(VIDEO_MODE_TEXT_80);
-  _hardware.PrintDosString(TextOf(EXIT_MESSAGE));
 }
 
 } // namespace
@@ -92,23 +78,8 @@ void RestoreDivideAndKeyboardInterrupts(Hardware& _hardware)
 
 void CheckCheatArgument(GameState& _state, const Hardware& _hardware)
 {
-  _state.Data().startUp.cheatEnabled = 0;
-  // The command tail DOS gave the program, which the original reads from its PSP: its length, then the text, which
-  // cheatArgumentKey holds XORed with AAh.
-  const std::string_view tail = _hardware.CommandTail();
-  if (tail.size() != CHEAT_ARGUMENT_BYTES)
-  {
-    return;
-  }
-  for (std::uint16_t at = 0; at < CHEAT_ARGUMENT_BYTES; ++at)
-  {
-    const auto expected = static_cast<std::uint8_t>(CHEAT_ARGUMENT_KEY[at] ^ CHEAT_KEY);
-    if (static_cast<std::uint8_t>(tail[at]) != expected)
-    {
-      return;
-    }
-  }
-  _state.Data().startUp.cheatEnabled = 1;
+  // The shell's --cheat (D80), where the original read ' cheat' from the command tail DOS gave it.
+  _state.Data().startUp.cheatEnabled = _hardware.CheatRequested() ? 1 : 0;
 }
 
 void StartNewGame(GameState& _state)
@@ -164,8 +135,8 @@ void StartNewGame(GameState& _state)
     const std::uint8_t request = _state.Data().saveLoad.diskOperation;
     if (request == 0)
     {
+      // Exit to DOS is a quit (D80): the program ends, with no farewell.
       WipeProgram(_hardware);
-      ExitToDos(_hardware);
       co_return;
     }
     // The request, which the original makes with its own critical-error handler, CS:02F0, on int 24h, and the handler that was

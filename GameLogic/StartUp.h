@@ -25,7 +25,7 @@ namespace Elite
 /// Start (CS:0000), the program's entry from DOS: the start-up commander kept (SaveStartupCommander); then
 /// from RestartPlay the timer, int 0 and int 9, the cheat argument and GameLoop, which comes back only for a disk request
 /// (HandleDiskRequest): the interrupts put back, and the request made with the game's own critical-error handler on int 24h, after which it
-/// starts again. Returns when the program ends, once a request to leave has wiped the program and said farewell (ExitToDos). Waits
+/// starts again. Returns when the program ends, once a request to leave has wiped the program: a quit (D80). Waits
 /// in GameLoop.
 [[nodiscard]] Task<void> Start(GameState& _state, Hardware& _hardware);
 
@@ -44,7 +44,8 @@ void InstallDivideAndKeyboardInterrupts(GameState& _state, Hardware& _hardware);
 /// on.
 void RestoreDivideAndKeyboardInterrupts(Hardware& _hardware);
 
-/// CheckCheatArgument (CS:02A5): cheatEnabled=1 when the command tail DOS gave the program is exactly ' cheat', 0 otherwise.
+/// CheckCheatArgument (CS:02A5): cheatEnabled=1 when the game was started with the cheat on (Hardware::CheatRequested, D80), 0
+/// otherwise.
 void CheckCheatArgument(GameState& _state, const Hardware& _hardware);
 
 /// WipeProgram (CS:0554): interrupts off. The original then fills CS:0564-8F30 with the code segment's low byte, which nothing
