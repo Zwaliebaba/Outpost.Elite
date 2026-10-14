@@ -14,9 +14,9 @@ Game::Game(FileStore& _files, const Host::Desc& _desc)
 {
 }
 
-void Game::Start(std::uint16_t _pspSegment)
+void Game::Start()
 {
-  m_state.Start(static_cast<std::uint16_t>(_pspSegment + PSP_PARAGRAPHS));
+  m_state.Start();
   GameState* const state = &m_state;
   Elite::Host* const host = &m_host;
   m_host.SetEntry([state, host]() -> Task<void> { co_await Elite::Start(*state, *host); });

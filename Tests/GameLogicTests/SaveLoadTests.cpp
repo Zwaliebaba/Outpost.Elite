@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "HostRig.h"
+#include "Repository.h"
 #include "SaveLoad.h"
 #include "Sha256.h"
 #include "Text.h"

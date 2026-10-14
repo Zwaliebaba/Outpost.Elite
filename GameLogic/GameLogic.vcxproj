@@ -132,7 +132,7 @@
     <ClInclude Include="PlanetLook.h" />
     <ClInclude Include="Host.h" />
     <ClInclude Include="PlayerShipState.h" />
-    <ClInclude Include="Reference.h" />
+    <ClInclude Include="Repository.h" />
     <ClInclude Include="Replay.h" />
     <ClInclude Include="SaveLoad.h" />
     <ClInclude Include="SaveLoadState.h" />
@@ -197,7 +197,7 @@
     </ClCompile>
     <ClCompile Include="PlanetLook.cpp" />
     <ClCompile Include="Host.cpp" />
-    <ClCompile Include="Reference.cpp" />
+    <ClCompile Include="Repository.cpp" />
     <ClCompile Include="Replay.cpp" />
     <ClCompile Include="SaveLoad.cpp" />
     <ClCompile Include="Scene.cpp" />

@@ -3,7 +3,6 @@
 
 #include "Cga.h"
 #include "GameData.h"
-#include "Reference.h"
 #include "SpaceObject.h"
 
 #include <algorithm>
@@ -39,16 +38,6 @@ public:
   GameState();
   GameState(const GameState&) = delete;
   GameState& operator=(const GameState&) = delete;
-
-  [[nodiscard]] std::uint16_t CodeSegment() const noexcept
-  {
-    return m_codeSegment;
-  }
-
-  [[nodiscard]] std::uint16_t DataSegment() const noexcept
-  {
-    return m_dataSegment;
-  }
 
   /// The game's state by member: `_state.Data().commander.fuel`.
   [[nodiscard]] GameData& Data() noexcept
@@ -114,9 +103,8 @@ private:
   // Only a Game starts a GameState.
   friend class Game;
 
-  /// Takes the game's state as the program starts (SetStartState), with its code segment at _codeSegment and its data segment
-  /// DATA_SEGMENT_PARAGRAPH paragraphs on. Video memory is left as it is.
-  void Start(std::uint16_t _codeSegment);
+  /// Takes the game's state as the program starts (SetStartState). Video memory is left as it is.
+  void Start();
 
   /// _offset, when it is in video memory; otherwise throws std::out_of_range.
   [[nodiscard]] static std::uint16_t CheckedVideo(std::uint16_t _offset)
@@ -146,8 +134,6 @@ private:
 
   std::unique_ptr<GameData> m_data;
   std::array<std::uint8_t, Cga::VIDEO_MEMORY_BYTES> m_video{};
-  std::uint16_t m_codeSegment = 0;
-  std::uint16_t m_dataSegment = 0;
 };
 
 /// The little-endian word at _bytes[_at] and _bytes[_at + 1].

@@ -255,7 +255,7 @@
     <ClInclude Include="PlayerShipState.h">
       <Filter>State</Filter>
     </ClInclude>
-    <ClInclude Include="Reference.h">
+    <ClInclude Include="Repository.h">
       <Filter>Reference</Filter>
     </ClInclude>
     <ClInclude Include="Replay.h">
@@ -440,7 +440,7 @@
     <ClCompile Include="Host.cpp">
       <Filter>Platform</Filter>
     </ClCompile>
-    <ClCompile Include="Reference.cpp">
+    <ClCompile Include="Repository.cpp">
       <Filter>Reference</Filter>
     </ClCompile>
     <ClCompile Include="Replay.cpp">

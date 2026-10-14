@@ -10,7 +10,7 @@ namespace Elite
 {
 
 /// The game as a host runs it (D19, D33, D90): the GameState, which owns the game's memory, and the Host, whose clock and
-/// devices run the game over it. Every host and rig makes one: the shell and the tests' ReferenceRig.
+/// devices run the game over it. Every host and rig makes one: the shell and the tests' GameRig.
 ///
 /// The Host reads and writes the game's memory through the GameState, and the routines it runs hold both, so the Host must not
 /// outlive the GameState. That holds by construction: the members are built in the order GameState, Host and destroyed in
@@ -25,10 +25,9 @@ public:
   Game(const Game&) = delete;
   Game& operator=(const Game&) = delete;
 
-  /// Starts the game once, with the PSP at _pspSegment: the GameState as the program starts (SetStartState), its code
-  /// segment's paragraph the PSP plus 10h. The Host's program is then Start, and its tick's and keys' handlers TimerInterrupt
+  /// Starts the game once: the GameState as the program starts (SetStartState). The Host's program is then Start, and its tick's and keys' handlers TimerInterrupt
   /// and KeyboardInterrupt, which run once the game installs them.
-  void Start(std::uint16_t _pspSegment);
+  void Start();
 
   /// The Host the game runs on: its clock, its devices and its picture.
   [[nodiscard]] Elite::Host& Host() noexcept

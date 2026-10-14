@@ -1,5 +1,6 @@
 #include "pch.h"
 
+#include "Repository.h"
 #include "Text.h"
 #include "TwinRig.h"
 

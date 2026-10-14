@@ -2,11 +2,12 @@
 
 #include "Cga.h"
 #include "FlightSnapshot.h"
+#include "GameRig.h"
 #include "GameState.h"
 #include "Host.h"
 #include "HostRig.h"
-#include "ReferenceRig.h"
 #include "Replay.h"
+#include "Repository.h"
 #include "SpaceViewLayers.h"
 #include "Video.h"
 
@@ -245,7 +246,7 @@ constexpr std::size_t GLYPH_ROWS = 8;
 // The latest frame's layers explain what the screen shows: where the over layer holds a pixel it is the screen's, where a model
 // drew last the renderer's model shows, and everywhere else the screen shows the under layer, or the background, colour 0, where
 // that is clear. And the screen is what the CGA shows of it, in the colours GraphicsColors names.
-void CheckFrame(ReferenceRig& _rig, Elite::FrameImage& _image, Seen& _seen)
+void CheckFrame(GameRig& _rig, Elite::FrameImage& _image, Seen& _seen)
 {
   const Elite::SpaceViewLayers& layers = _rig.Host().SpaceView();
   _rig.Host().Render(_image);
@@ -581,7 +582,7 @@ public:
     std::string error;
     Assert::IsTrue(Elite::ParseSteps(ReadText(directory / REPLAY), steps, error), L"the replay parses");
 
-    ReferenceRig rig("SpaceViewLayers");
+    GameRig rig("SpaceViewLayers");
     Elite::ReplayPlayer player(rig.Host(), rig.State(), rig.Store(), directory);
     const auto image = std::make_unique<Elite::FrameImage>();
     Seen seen;
@@ -684,7 +685,7 @@ public:
     std::string error;
     Assert::IsTrue(Elite::ParseSteps(ReadText(directory / ENTERING_REPLAY), steps, error), L"the replay parses");
 
-    ReferenceRig rig("SpaceViewEntering");
+    GameRig rig("SpaceViewEntering");
     Elite::ReplayPlayer player(rig.Host(), rig.State(), rig.Store(), directory);
     const auto image = std::make_unique<Elite::FrameImage>();
     Seen seen;
@@ -726,7 +727,7 @@ public:
     std::string error;
     Assert::IsTrue(Elite::ParseSteps(ReadText(directory / PAUSE_REPLAY), steps, error), L"the replay parses");
 
-    ReferenceRig rig("SpaceViewPause");
+    GameRig rig("SpaceViewPause");
     Elite::ReplayPlayer player(rig.Host(), rig.State(), rig.Store(), directory);
     const auto image = std::make_unique<Elite::FrameImage>();
     Seen seen;

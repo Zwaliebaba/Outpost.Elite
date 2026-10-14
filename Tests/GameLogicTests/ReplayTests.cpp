@@ -1,7 +1,8 @@
 #include "pch.h"
 
-#include "ReferenceRig.h"
+#include "GameRig.h"
 #include "Replay.h"
+#include "Repository.h"
 
 #include <format>
 #include <fstream>
@@ -75,7 +76,7 @@ public:
     Elite::Milliseconds ends[2] = {};
     for (int run = 0; run < 2; ++run)
     {
-      ReferenceRig rig("Waits");
+      GameRig rig("Waits");
       Elite::ReplayPlayer player(rig.Host(), rig.State());
       Elite::Checkpoint checkpoint;
       for (const Elite::Step& step : run == 0 ? one : many)
@@ -242,7 +243,7 @@ public:
                               {"end 1", Elite::StopReason::Reached, false}};
     for (const Ending& ending : endings)
     {
-      ReferenceRig rig("EndStep");
+      GameRig rig("EndStep");
       std::vector<Elite::Step> steps;
       std::string error;
       Assert::IsTrue(Elite::ParseSteps(TO_THE_QUESTION, steps, error), L"parses");
@@ -290,7 +291,7 @@ public:
     write("first.cdr", first);
     write("second.cdr", second);
 
-    ReferenceRig rig("FileStep");
+    GameRig rig("FileStep");
     Elite::ReplayPlayer player(rig.Host(), rig.State(), rig.Store(), sources.Path());
     std::vector<Elite::Step> steps;
     std::string error;
@@ -320,7 +321,7 @@ public:
   TEST_METHOD(AFileStepThatCannotBeDoneThrows)
   {
     ScratchDirectory sources("FileStepMissing");
-    ReferenceRig rig("FileStepFails");
+    GameRig rig("FileStepFails");
     std::vector<Elite::Step> steps;
     std::string error;
     Assert::IsTrue(Elite::ParseSteps("wait 0.5\nfile PILOT.CDR missing.cdr", steps, error), L"parses");

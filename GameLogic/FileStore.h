@@ -43,6 +43,9 @@ struct DosDateTime
   std::uint8_t hundredths = 0;
 };
 
+/// The moment DOS's clock starts from: midnight on 1 January 1980, as on a PC/XT without a clock card.
+inline constexpr DosDateTime START_MOMENT = {1980, 1, 1, 0, 0, 0, 0};
+
 /// The moment _centiseconds after _start, on DOS's calendar.
 [[nodiscard]] DosDateTime MomentAfter(const DosDateTime& _start, std::uint64_t _centiseconds);
 

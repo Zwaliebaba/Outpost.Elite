@@ -2,7 +2,7 @@
 
 #include "AnswerFile.h"
 #include "Galaxy.h"
-#include "ReferenceRig.h"
+#include "GameRig.h"
 
 #include <format>
 
@@ -62,7 +62,7 @@ public:
   // recorded in GALAXY_ANSWERS_FILE: 2,048 of them, and Lave, system 7 of the first galaxy, as published.
   TEST_METHOD(EverySystemIsTheOriginals)
   {
-    ReferenceRig rig("GalaxyAnswers");
+    GameRig rig("GalaxyAnswers");
     std::vector<std::string> answers;
     for (std::size_t galaxy = 0; galaxy < GALAXIES; ++galaxy)
     {

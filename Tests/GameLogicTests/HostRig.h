@@ -2,9 +2,9 @@
 #pragma once
 
 #include "DirectoryFileStore.h"
+#include "GameRig.h"
 #include "GameState.h"
 #include "Host.h"
-#include "ReferenceRig.h"
 
 #include <memory>
 #include <string_view>
@@ -14,8 +14,7 @@ namespace GameLogicTests
 {
 
 /// The Host on its own (D33, D90): powered on over a GameState with nothing loaded, the commander files in a scratch
-/// directory, and a program whose start is a routine the test gives (Start), which reaches the Host as the game's routines do. With no image loaded the GameState's code and data segments are both
-/// at segment 0, so data-segment offsets are linear addresses.
+/// directory, and a program whose start is a routine the test gives (Start), which reaches the Host as the game's routines do.
 class HostRig
 {
 public:

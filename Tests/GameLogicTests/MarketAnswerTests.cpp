@@ -1,9 +1,9 @@
 #include "pch.h"
 
 #include "AnswerFile.h"
+#include "GameRig.h"
 #include "Market.h"
 #include "Maths.h"
-#include "ReferenceRig.h"
 
 #include <array>
 #include <format>
@@ -111,7 +111,7 @@ public:
   // lines. The quantities depend on the random state alone; no economy enters them.
   TEST_METHOD(EveryMarketIsTheOriginals)
   {
-    ReferenceRig rig("MarketAnswers");
+    GameRig rig("MarketAnswers");
     Elite::GameState& state = rig.State();
     std::vector<std::string> answers;
     for (std::size_t economy = 0; economy < ECONOMIES; ++economy)
@@ -134,7 +134,7 @@ public:
   // level, is the price lines' answer, the quantities' lines being the routines' as above.
   TEST_METHOD(TheRulesPriceEveryMarketAsRecorded)
   {
-    ReferenceRig rig("MarketRuleAnswers");
+    GameRig rig("MarketRuleAnswers");
     Elite::GameState& state = rig.State();
     std::vector<std::string> answers;
     for (std::size_t economy = 0; economy < ECONOMIES; ++economy)

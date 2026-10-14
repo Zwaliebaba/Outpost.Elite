@@ -8,7 +8,6 @@
 #include "DirectoryFileStore.h"
 #include "Game.h"
 #include "Host.h"
-#include "Reference.h"
 #include "Renderer.h"
 #include "Replay.h"
 #include "SpaceView.h"
@@ -135,7 +134,7 @@ int Application::Run(HINSTANCE _instance, bool _cheat)
   // Every routine is native, in place of the original (ADR-010): the native platform runs them over the memory the GameState
   // owns (D19, D33).
   const auto game = std::make_unique<Elite::Game>(files, desc);
-  game->Start(Elite::PSP_SEGMENT);
+  game->Start();
   Elite::Host* const platform = &game->Host();
 
   const Elite::Milliseconds start = platform->Clock();

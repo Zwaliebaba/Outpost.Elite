@@ -1,7 +1,6 @@
 #include "pch.h"
 
 #include "Galaxy.h"
-#include "Reference.h"
 #include "TwinRig.h"
 
 #include <array>
@@ -121,7 +120,7 @@ public:
   // ADR-027): each is shown from the dock and stays within its 32 items and its labels' buffer, and the game runs on.
   TEST_METHOD(CrowdedShortRangeChartsStayInTheirBuffers)
   {
-    ReferenceRig rig("CrowdedShortRangeCharts");
+    GameRig rig("CrowdedShortRangeCharts");
     Elite::ReplayPlayer player(rig.Host(), rig.State());
     const auto play = [&player](std::string_view _steps)
     {
@@ -156,7 +155,7 @@ public:
   // galaxySeeds, which has eight, so they are the six bytes after the table, gap29A6's, as the reference's image held them.
   TEST_METHOD(NinthGalaxySeedsAreTheBytesAfterTheTable)
   {
-    ReferenceRig rig("NinthGalaxySeeds");
+    GameRig rig("NinthGalaxySeeds");
     Elite::GameState& state = rig.State();
     state.Data().commander.galaxyNumber = 8;
     Elite::LoadGalaxySeeds(state);
