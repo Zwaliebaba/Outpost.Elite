@@ -1,8 +1,6 @@
 // GameLogic/AudioState.h
 #pragma once
 
-#include "Field.h"
-
 #include <cstdint>
 #include <type_traits>
 
@@ -13,34 +11,31 @@ namespace Elite
 /// names, in their order there; the GameState holds it in GameData.
 struct AudioState
 {
-  AudioState() noexcept = default;
-  explicit AudioState(const AudioState&) noexcept = default;
-
   /// the value last written to port 0x61; the timer handler toggles bit 1 for sound effects
-  Field<std::uint8_t> speakerPortImage;
+  std::uint8_t speakerPortImage;
   /// counts down from 70 (StartBeep); speaker bit 1 = bit 0 of the count, so 500 Hz for 70 ms
-  Field<std::uint8_t> beepTicks;
+  std::uint8_t beepTicks;
   /// counts down from 70 (StartLowBeep); speaker bit 1 = bit 1 of the count, 250 Hz
-  Field<std::uint8_t> lowBeepTicks;
+  std::uint8_t lowBeepTicks;
   /// sweep that toggles the speaker (ToggleSpeaker); started by 0x7B71
-  Field<std::uint8_t> toneSweepActive;
+  std::uint8_t toneSweepActive;
   /// sweep that plays noiseSource samples (EmitNoiseSample); started by 0x7AC3, 0x7AFC, 0x7B09
-  Field<std::uint8_t> noiseSweepActive;
+  std::uint8_t noiseSweepActive;
   /// samples per step; falls by sweepStepShrink each step
-  Field<std::uint8_t> sweepStepLength;
+  std::uint8_t sweepStepLength;
   /// ticks to the next sample
-  Field<std::uint8_t> sweepTickCounter;
+  std::uint8_t sweepTickCounter;
   /// samples left in this step
-  Field<std::uint8_t> sweepStepCounter;
+  std::uint8_t sweepStepCounter;
   /// ticks between samples; +1 a step, the sweep ends at 7
-  Field<std::uint8_t> sweepPeriodTicks;
+  std::uint8_t sweepPeriodTicks;
   /// one noise sample a tick while nonzero; 100 from 0x7B96
-  Field<std::uint8_t> noiseBurstTicks;
+  std::uint8_t noiseBurstTicks;
   /// silent tail of the current note
-  Field<std::uint16_t> noteGapTicks;
-  Field<std::uint16_t> noteTicksLeft;
+  std::uint16_t noteGapTicks;
+  std::uint16_t noteTicksLeft;
   /// next note; 0x47 restarts at DS:A1B4
-  Field<std::uint16_t> musicPointer;
+  std::uint16_t musicPointer;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)

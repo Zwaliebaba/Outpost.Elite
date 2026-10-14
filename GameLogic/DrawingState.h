@@ -1,8 +1,6 @@
 // GameLogic/DrawingState.h
 #pragma once
 
-#include "Field.h"
-
 #include <cstdint>
 #include <type_traits>
 
@@ -14,23 +12,20 @@ namespace Elite
 /// their order there; the GameState holds it in GameData.
 struct DrawingState
 {
-  DrawingState() noexcept = default;
-  explicit DrawingState(const DrawingState&) noexcept = default;
-
   /// the drawing buffer, 256x128 at 2bpp, 64 bytes a row: rows 1-126 are the space view, spaceViewBuffer at DS:0040, which PresentSpaceV...
-  Field<std::uint8_t> drawingBuffer[8192];
+  std::uint8_t drawingBuffer[8192];
   /// colour 0-3 for the line and circle drawers (DrawDisc indexes the pattern bytes at DS:2CE0 with it); the title sets 2, ApplyEnemyLas...
-  Field<std::uint8_t> drawColor;
+  std::uint8_t drawColor;
   /// read by DrawDisc as an AND mask on the disc fill: DrawSunOrPlanet sets 1/3/7 for the sun as its radius passes 0x28/0xB4, 0 for the...
-  Field<std::uint8_t> sunFringeMask;
+  std::uint8_t sunFringeMask;
   /// pixel pattern behind each glyph in the graphics printer (3130: ink from BX where the glyph is set, this word where it is clear); 0...
-  Field<std::uint16_t> textPaperPattern;
+  std::uint16_t textPaperPattern;
   /// FFh in the file; 0 cockpit (ShowCockpitScreen), 1 chart frame (DrawChartFrame), 2 text mode (DrawDockedFrame); also selects the tex...
-  Field<std::uint8_t> screenLayout;
+  std::uint8_t screenLayout;
   /// CGA text attribute for PrintTextModeString; DrawDockedFrame sets it from the frame's first byte
-  Field<std::uint8_t> textAttribute;
+  std::uint8_t textAttribute;
   /// colour-select value UpdateDamageFlash writes each frame: 9 (bright blue) while the masking device runs, else 0 (cleared at 4A4C); e...
-  Field<std::uint8_t> maskingBackgroundColor;
+  std::uint8_t maskingBackgroundColor;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)

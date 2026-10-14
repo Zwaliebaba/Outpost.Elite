@@ -57,7 +57,7 @@ private:
     }
   }
 
-  template <typename U> [[nodiscard]] static std::uint32_t Bits(const Elite::Field<U>& _field) noexcept
+  template <typename U> [[nodiscard]] static std::uint32_t Bits(const U& _field) noexcept
   {
     const U value = _field;
     if constexpr (std::is_enum_v<U>)

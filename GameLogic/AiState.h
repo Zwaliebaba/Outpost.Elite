@@ -1,7 +1,6 @@
 // GameLogic/AiState.h
 #pragma once
 
-#include "Field.h"
 #include "SpaceObject.h"
 
 #include <cstdint>
@@ -14,22 +13,19 @@ namespace Elite
 /// segment's, by their names, in their order there; the GameState holds it in GameData.
 struct AiState
 {
-  AiState() noexcept = default;
-  explicit AiState(const AiState&) noexcept = default;
-
   /// active objects of class other than 7 this frame; spawning needs < 10
-  Field<std::uint8_t> activeObjectCount;
+  std::uint8_t activeObjectCount;
   /// active objects per behaviour class 0-7, recounted each frame by UpdateObjectsAndSpawn: class 3 the drifters ('Debris' and
   /// 'Simple'), 4 the traders, 5 the wolves, which also gate the mask and invasion spawns, and 6 the hunters
-  Field<std::uint8_t> behaviorClassCounts[8];
+  std::uint8_t behaviorClassCounts[8];
   /// spawnGovernment x 4, set by UpdateObjectsAndSpawn
-  Field<std::uint16_t> spawnLimitOffset;
+  std::uint16_t spawnLimitOffset;
   /// NPC ECM: 20 from the station or a fleeing trader, 30 from a Thargoid; counted down only by UpdateStationAi, which removes all missi...
-  Field<std::uint8_t> npcEcmFrames;
+  std::uint8_t npcEcmFrames;
   /// mask ship slot kept while its escorts are placed
-  Field<SlotIndex> maskShipSlot;
+  SlotIndex maskShipSlot;
   /// currentSystem.government x 8, set by UpdateObjectsAndSpawn
-  Field<std::uint16_t> spawnOddsOffset;
+  std::uint16_t spawnOddsOffset;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)

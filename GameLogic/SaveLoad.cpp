@@ -108,7 +108,7 @@ constexpr std::uint16_t ERROR_INK = 0xFFFF; // colour 3
 [[nodiscard]] DosAnswer ReadCommanderFile(GameState& _state, Hardware& _hardware)
 {
   const std::vector<std::uint8_t> commander = CommanderFileBytes(_state);
-  std::array<Field<std::uint8_t>, COMMANDER_FILE_BYTES> file{};
+  std::array<std::uint8_t, COMMANDER_FILE_BYTES> file{};
   for (std::size_t index = 0; index < file.size(); ++index)
   {
     file[index] = commander[index];
@@ -151,7 +151,7 @@ constexpr std::uint8_t MOST_KILLS = 0xFE;
 constexpr std::string_view CREDITS_UNIT_TEXT = " Credits";
 
 // _field held to _most.
-void HoldTo(Field<std::uint8_t>& _field, std::uint8_t _most) noexcept
+void HoldTo(std::uint8_t& _field, std::uint8_t _most) noexcept
 {
   if (_field > _most)
   {
@@ -268,9 +268,9 @@ void ListCommanderFiles(GameState& _state, Hardware& _hardware, std::uint16_t _a
     if (_state.Data().saveLoad.diskTransferArea[FOUND_ATTRIBUTE] == 0)
     {
       // The name the search found, up to its '.', at the index in commanderFileList that commanderFileListNext holds.
-      const std::span<const Field<std::uint8_t>> foundName =
-        std::span<const Field<std::uint8_t>>(_state.Data().saveLoad.diskTransferArea).subspan(FOUND_NAME);
-      const std::span<Field<std::uint8_t>> list(_state.Data().saveLoad.commanderFileList);
+      const std::span<const std::uint8_t> foundName =
+        std::span<const std::uint8_t>(_state.Data().saveLoad.diskTransferArea).subspan(FOUND_NAME);
+      const std::span<std::uint8_t> list(_state.Data().saveLoad.commanderFileList);
       std::size_t to = _state.Data().saveLoad.commanderFileListNext;
       for (std::size_t from = 0; foundName[from] != '.'; ++from)
       {
@@ -537,7 +537,7 @@ std::uint8_t ShowDiskResult(GameState& _state)
     return 0;
   }
   // The name without its extension: a NUL over its '.', which the search, SI going up, looks for.
-  const std::span<Field<std::uint8_t>> name(_state.Data().saveLoad.commanderFileName);
+  const std::span<std::uint8_t> name(_state.Data().saveLoad.commanderFileName);
   std::size_t letter = 1;
   for (; name[letter] != '.'; ++letter)
   {
@@ -549,7 +549,7 @@ std::uint8_t ShowDiskResult(GameState& _state)
     return 0;
   }
   // Its eight bytes copied to defaultCommanderName by a LOOP.
-  const std::span<Field<std::uint8_t>> commander(_state.Data().commander.defaultCommanderName);
+  const std::span<std::uint8_t> commander(_state.Data().commander.defaultCommanderName);
   std::size_t from = 0;
   std::uint8_t copied = 0;
   for (std::uint16_t left = MOST_NAME_CHARACTERS;;)
@@ -597,7 +597,7 @@ void SaveStartupCommander(GameState& _state)
 {
   // REP MOVSB within the data segment, a byte at a time: commanderBlock into startupCommander, the whole record, as the direction flag
   // is clear wherever the game calls it: the only STD, MaskOutsideTunnel's, has its CLD before the routine returns (change 3c).
-  CopyMembers(_state.Data().saveLoad.startupCommander, _state.Data().commander);
+  _state.Data().saveLoad.startupCommander = _state.Data().commander;
 }
 
 void ShowDiskError(GameState& _state)
@@ -644,7 +644,7 @@ DiscMenuExit ShowDiscControlScreen(GameState& _state, Hardware& _hardware, bool 
 bool PromptCommanderFileName(GameState& _state, Hardware& _hardware)
 {
   PrintAt(_state, FILE_NAME_PROMPT_TEXT, STATUS_POSITION);
-  const std::span<Field<std::uint8_t>> name(_state.Data().saveLoad.commanderFileName);
+  const std::span<std::uint8_t> name(_state.Data().saveLoad.commanderFileName);
   ReadTextLine(_state, _hardware, name, MOST_NAME_CHARACTERS, GameState::VIDEO_SEGMENT, NAME_POSITION);
   // A letter, then letters and digits, folded to upper case.
   std::size_t letter = 0;
@@ -694,7 +694,7 @@ void PrintCommanderCatalogue(GameState& _state)
   // Name n at row n mod 10, column n / 10, 9 cells apart: CBW and DIV DL by 10, which cannot overflow, as ListCommanderFiles
   // lists at most 40. Each name follows the one before's NUL in commanderFileList, which holds the 40 names of eight characters
   // at most and their NULs.
-  const std::span<const Field<std::uint8_t>> list(_state.Data().saveLoad.commanderFileList);
+  const std::span<const std::uint8_t> list(_state.Data().saveLoad.commanderFileList);
   std::size_t at = 0;
   const std::uint8_t count = _state.Data().saveLoad.commanderFileCount;
   for (std::uint8_t index = 0; index < count; ++index)

@@ -2,7 +2,6 @@
 #pragma once
 
 #include "CommanderState.h"
-#include "Field.h"
 
 #include <cstdint>
 #include <type_traits>
@@ -14,17 +13,14 @@ namespace Elite
 /// 1987 data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct HyperspaceState
 {
-  HyperspaceState() noexcept = default;
-  explicit HyperspaceState(const HyperspaceState&) noexcept = default;
-
   /// 'Hyperspaced into galaxy ', the digit GalacticJump writes, galaxyNumber + '1', and the NUL
-  Field<std::uint8_t> arrivalGalaxyText[26];
+  std::uint8_t arrivalGalaxyText[26];
   /// 3 bytes; working copy animated by DrawHyperspaceRings
-  Field<std::uint8_t> hyperspaceRings[10][3];
+  std::uint8_t hyperspaceRings[10][3];
   /// the selected system's record, latched when the countdown starts
   SystemRecord hyperspaceTarget;
   /// two ASCII digits at the end of hyperspaceCountdownMessage, written by ShowHyperspaceCountdown
-  Field<std::uint8_t> hyperspaceCountdownDigits[2];
+  std::uint8_t hyperspaceCountdownDigits[2];
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)

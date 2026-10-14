@@ -167,7 +167,7 @@ struct SpawnLimit
 
 // The entry of the government spawnLimitOffset holds in _column, a column of spawnLimitsByGovernment, against the class count
 // _count: below while there is room.
-[[nodiscard]] SpawnLimit BelowSpawnLimit(const GameState& _state, std::size_t _column, const Field<std::uint8_t>& _count)
+[[nodiscard]] SpawnLimit BelowSpawnLimit(const GameState& _state, std::size_t _column, const std::uint8_t& _count)
 {
   const std::uint8_t limit = SPAWN_LIMITS_BY_GOVERNMENT[SpawnLimitRow(_state) + _column];
   return SpawnLimit{_count < limit};
@@ -666,7 +666,7 @@ std::uint16_t RunBehaviorHandler(GameState& _state, Hardware& _hardware, SpaceOb
 }
 
 // behaviorClassCounts' eight bytes, a count for each behaviour class.
-[[nodiscard]] std::span<Field<std::uint8_t>> ClassCounts(GameState& _state)
+[[nodiscard]] std::span<std::uint8_t> ClassCounts(GameState& _state)
 {
   return _state.Data().ai.behaviorClassCounts;
 }
@@ -679,7 +679,7 @@ void UpdateObjectsAndSpawn(GameState& _state, Hardware& _hardware, std::uint16_t
   // cleared, a byte at a time, upwards, as the direction flag is clear wherever the game calls it: the only STD, MaskOutsideTunnel's, has
   // its CLD before the routine returns (change 3c).
   _state.Data().ai.activeObjectCount = 0;
-  for (Field<std::uint8_t>& classCount : ClassCounts(_state))
+  for (std::uint8_t& classCount : ClassCounts(_state))
   {
     classCount = 0;
   }
@@ -699,7 +699,7 @@ void UpdateObjectsAndSpawn(GameState& _state, Hardware& _hardware, std::uint16_t
       }
       // The class's count in behaviorClassCounts, by the class: INC BYTE PTR [BX+behaviorClassCounts]. A class is 0-7: every
       // slot's is a template's, one of the eight, or copied from another slot's.
-      Field<std::uint8_t>& classCount = ClassCounts(_state)[behavior];
+      std::uint8_t& classCount = ClassCounts(_state)[behavior];
       classCount = static_cast<std::uint8_t>(classCount + 1);
       dx = RunBehaviorHandler(_state, _hardware, object, behavior, dx);
     }

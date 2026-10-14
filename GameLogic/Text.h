@@ -28,18 +28,18 @@ namespace Elite
 
 /// _member's bytes, a text or a buffer of the state: an array of bytes.
 template <typename Member>
-  requires (std::rank_v<Member> == 1 && std::is_same_v<std::remove_extent_t<Member>, Field<std::uint8_t>>)
-[[nodiscard]] std::span<Field<std::uint8_t>, sizeof(Member)> BytesOf(Member& _member) noexcept
+  requires (std::rank_v<Member> == 1 && std::is_same_v<std::remove_extent_t<Member>, std::uint8_t>)
+[[nodiscard]] std::span<std::uint8_t, sizeof(Member)> BytesOf(Member& _member) noexcept
 {
-  return std::span<Field<std::uint8_t>, sizeof(Member)>(&_member[0], sizeof(Member));
+  return std::span<std::uint8_t, sizeof(Member)>(&_member[0], sizeof(Member));
 }
 
 /// BytesOf, to read.
 template <typename Member>
-  requires (std::rank_v<Member> == 1 && std::is_same_v<std::remove_extent_t<Member>, Field<std::uint8_t>>)
-[[nodiscard]] std::span<const Field<std::uint8_t>, sizeof(Member)> BytesOf(const Member& _member) noexcept
+  requires (std::rank_v<Member> == 1 && std::is_same_v<std::remove_extent_t<Member>, std::uint8_t>)
+[[nodiscard]] std::span<const std::uint8_t, sizeof(Member)> BytesOf(const Member& _member) noexcept
 {
-  return std::span<const Field<std::uint8_t>, sizeof(Member)>(&_member[0], sizeof(Member));
+  return std::span<const std::uint8_t, sizeof(Member)>(&_member[0], sizeof(Member));
 }
 
 /// Throws the std::out_of_range of _count bytes from _at of a buffer of _bytes: what the original would reach past the buffer's end,
@@ -73,14 +73,14 @@ template <typename T, std::size_t Extent> [[nodiscard]] T& ElementWithin(std::sp
 
 /// The text in _bytes from its _at up to its NUL, which must be within them: a NUL past their end throws std::out_of_range, as
 /// BytesWithin does, where the original would read on.
-[[nodiscard]] std::string_view TextWithin(std::span<const Field<std::uint8_t>> _bytes, std::size_t _at);
+[[nodiscard]] std::string_view TextWithin(std::span<const std::uint8_t> _bytes, std::size_t _at);
 
 /// _pieces one after another: a text the original reads as one, from constants of its image and bytes the game writes between
 /// them, which the state holds apart since change 3c.
 [[nodiscard]] std::string JoinTexts(std::initializer_list<std::string_view> _pieces);
 
 /// _byte, a character the game writes into a text, as a text of its own (JoinTexts).
-[[nodiscard]] inline std::string_view CharText(const Field<std::uint8_t>& _byte) noexcept
+[[nodiscard]] inline std::string_view CharText(const std::uint8_t& _byte) noexcept
 {
   return std::string_view(reinterpret_cast<const char*>(&_byte), 1);
 }
@@ -118,11 +118,11 @@ std::uint16_t DrawScreenChar(GameState& _state, std::uint8_t _character, std::ui
 std::uint16_t DrawScreenString(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _segment, std::uint16_t _cell);
 
 /// FormatDecimal5 (CS:3407): _value as five ASCII digits into the first five of _digits, a buffer of the data segment.
-void FormatDecimal5(std::uint16_t _value, std::span<Field<std::uint8_t>> _digits);
+void FormatDecimal5(std::uint16_t _value, std::span<std::uint8_t> _digits);
 
 /// BlankLeadingZeros (CS:3432): up to _most of _text's leading characters below '1' become spaces. Every caller's _most is
 /// less than the digits it blanks, which always end in one kept; LOOP would let 65,536 go for 0.
-void BlankLeadingZeros(std::span<Field<std::uint8_t>> _text, std::uint8_t _most);
+void BlankLeadingZeros(std::span<std::uint8_t> _text, std::uint8_t _most);
 
 /// DrawSmallViewChar (CS:349A): the 5-row letter _letter ('A'-'Z') in _ink over the drawing buffer at _place, the
 /// buffer kept around the letter's shape. Returns the next letter's place, six pixels on.
@@ -189,7 +189,7 @@ void PrintTextLines(GameState& _state, std::span<const std::string_view> _lines,
 void PrintTextLines(GameState& _state, std::string_view _texts, std::uint16_t _cell, std::uint16_t _lines);
 
 /// _bytes, a member of texts the game writes into, as PrintTextLines reads them.
-[[nodiscard]] inline std::string_view TextsOf(std::span<const Field<std::uint8_t>> _bytes) noexcept
+[[nodiscard]] inline std::string_view TextsOf(std::span<const std::uint8_t> _bytes) noexcept
 {
   return std::string_view(reinterpret_cast<const char*>(_bytes.data()), _bytes.size());
 }
@@ -198,15 +198,15 @@ void PrintTextLines(GameState& _state, std::string_view _texts, std::uint16_t _c
 /// characters, after ResetKeyboard and with textPaperPattern cleared; echoed by RedrawInputLine at _segment:_cell, with a
 /// cursor that blinks every 300 timer ticks. Enter ends it, Backspace deletes, a key with no character does nothing, and
 /// letters are lower case unless Shift is held. The buffer holds a NUL after it. Waits for keys as a rule (ADR-015).
-void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<Field<std::uint8_t>> _buffer, std::uint8_t _most,
-                  std::uint16_t _segment, std::uint16_t _cell);
+void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<std::uint8_t> _buffer, std::uint8_t _most, std::uint16_t _segment,
+                  std::uint16_t _cell);
 
 /// ToggleInputCursor (CS:7727): the input cursor's character flips between blank and block.
 void ToggleInputCursor(GameState& _state);
 
 /// RedrawInputLine (CS:773A): a NUL after the _length characters typed into _buffer, then they and inputCursorText after
 /// them, each by PrintStringForLayout from _segment:_cell in the ink FFFFh.
-void RedrawInputLine(GameState& _state, std::span<Field<std::uint8_t>> _buffer, std::uint16_t _length, std::uint16_t _segment,
+void RedrawInputLine(GameState& _state, std::span<std::uint8_t> _buffer, std::uint16_t _length, std::uint16_t _segment,
                      std::uint16_t _cell);
 
 /// PrintStringForLayout (CS:7750): _text by PrintTextModeString at B800:_cell in the text layout, and by DrawScreenString in

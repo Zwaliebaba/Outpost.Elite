@@ -20,34 +20,19 @@ namespace GameLogicTests
 namespace
 {
 
-using Byte = Elite::Field<std::uint8_t>;
-using Word = Elite::Field<std::uint16_t>;
-
-// A copy from one member to another does not compile, nor do compound assignment and increment: the only write is an
-// assignment from a value, which counts.
-static_assert(!std::is_assignable_v<Byte&, const Byte&>);
-static_assert(!std::is_assignable_v<Word&, Word&&>);
-static_assert(std::is_assignable_v<Byte&, std::uint8_t> && std::is_assignable_v<Word&, std::uint16_t>);
-template <typename Member>
-concept CompoundAssignable = requires(Member& _field) { _field += 1; };
-template <typename Member>
-concept Incrementable = requires(Member& _field) { ++_field; };
-template <typename Member>
-concept Decrementable = requires(Member& _field) { _field--; };
-static_assert(!CompoundAssignable<Byte> && !Incrementable<Byte> && !Decrementable<Word>);
-
-// The state copies as a whole, explicitly.
+// The state is plain data: it copies as a whole, and its structs as values.
 static_assert(std::is_trivially_copyable_v<Elite::GameData> && std::is_standard_layout_v<Elite::GameData>);
+static_assert(std::is_copy_assignable_v<Elite::SpaceObject> && std::is_aggregate_v<Elite::SystemRecord>);
 
 // A helper that writes a member takes it by reference.
-void StoreSeven(Byte& _field)
+void StoreSeven(std::uint8_t& _field)
 {
   _field = 7;
 }
 
 } // namespace
 
-TEST_CLASS(FieldTests)
+TEST_CLASS(GameDataTests)
 {
 public:
   // A member's write stores its value, which the state is written with, a word's low byte first, and a copy from another member

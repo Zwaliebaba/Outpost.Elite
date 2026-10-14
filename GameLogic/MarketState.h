@@ -1,8 +1,6 @@
 // GameLogic/MarketState.h
 #pragma once
 
-#include "Field.h"
-
 #include <cstdint>
 #include <type_traits>
 
@@ -13,23 +11,22 @@ namespace Elite
 /// data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct MarketState
 {
-  MarketState() noexcept = default;
-  explicit MarketState(const MarketState&) noexcept = default;
-
-  Field<std::uint16_t> data8C10;
-  Field<std::uint16_t> data8C12;
-  Field<std::uint16_t> data8C14;
+  /// where ComputeMarketPrices leaves its walk: the economy's and the government's price factors, a row of eight words to a
+  /// product, and productTradeRecords, each past the last commodity
+  std::uint16_t economyFactorIndex;
+  std::uint16_t governmentFactorIndex;
+  std::uint16_t tradeRecordIndex;
   /// a copy of the commander's randomState0-2, three words stepped by NextMarketRandom
-  Field<std::uint16_t> marketRandomState[3];
+  std::uint16_t marketRandomState[3];
   /// currentSystem.techLevel clamped to 9
-  Field<std::uint8_t> marketTechLevel;
+  std::uint8_t marketTechLevel;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
   {
-    _visitor("data8C10", _self.data8C10);
-    _visitor("data8C12", _self.data8C12);
-    _visitor("data8C14", _self.data8C14);
+    _visitor("economyFactorIndex", _self.economyFactorIndex);
+    _visitor("governmentFactorIndex", _self.governmentFactorIndex);
+    _visitor("tradeRecordIndex", _self.tradeRecordIndex);
     _visitor("marketRandomState", _self.marketRandomState);
     _visitor("marketTechLevel", _self.marketTechLevel);
   }

@@ -3,7 +3,6 @@
 #include "GameState.h"
 
 #include "StartState.h"
-#include "StateWriter.h"
 
 #include <stdexcept>
 
@@ -19,7 +18,7 @@ void GameState::Start(std::uint16_t _codeSegment)
 {
   m_codeSegment = _codeSegment;
   m_dataSegment = static_cast<std::uint16_t>(_codeSegment + DATA_SEGMENT_PARAGRAPH);
-  ZeroMembers(*m_data);
+  *m_data = GameData{};
   SetStartState(*m_data);
 }
 

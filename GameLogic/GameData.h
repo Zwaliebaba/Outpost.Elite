@@ -38,14 +38,11 @@ namespace Elite
 {
 
 /// The game's state (D19, D38): the reference's data segment distributed, a struct of its groups' structs, each what one subsystem writes
-/// or what several share, which the GameState holds. Every byte and word is a Field, of alignment 1: native code
-/// reads and writes members (`_state.Data().commander.fuel = fuel`), and passes one by reference to a helper that writes it. The state
+/// or what several share, which the GameState holds. Every member is a plain byte, word or double word at the width the
+/// original computes it at, so every sum wraps where it did: native code reads and writes members (`_state.Data().commander.fuel = fuel`), and passes one by reference to a helper that writes it. The state
 /// starts as SetStartState sets it (StartState.h).
 struct GameData
 {
-  GameData() noexcept = default;
-  explicit GameData(const GameData&) noexcept = default;
-
   AiState ai;
   CombatState combat;
   DockedState docked;

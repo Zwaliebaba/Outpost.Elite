@@ -13,17 +13,6 @@ namespace Elite
 namespace
 {
 
-// What a member of the state holds: a Field's value, or the member's own type.
-template <typename T> struct StoredType
-{
-  using Type = T;
-};
-
-template <typename U> struct StoredType<Field<U>>
-{
-  using Type = U;
-};
-
 // _element and on, an array of one or more dimensions element by element in their order, from _next up to _end.
 template <typename Element, typename Value> void FillElements(Element& _element, const Value*& _next, const Value* _end) noexcept
 {
@@ -36,7 +25,7 @@ template <typename Element, typename Value> void FillElements(Element& _element,
   }
   else if (_next != _end)
   {
-    _element = static_cast<typename StoredType<Element>::Type>(*_next);
+    _element = static_cast<Element>(*_next);
     ++_next;
   }
 }
@@ -61,10 +50,10 @@ void SetStartState(GameData& _data) noexcept
 {
   _data.combat.laserBeamColorToggle = 0x03;
   _data.combat.laserBeamColor = 0x02;
-  _data.docked.data83F7 = 0x30;
-  _data.docked.data83F9 = 0x30;
+  _data.docked.fuelUnitsDigit = 0x30;
+  _data.docked.fuelTenthsDigit = 0x30;
   FillText(_data.docked.fuelDigits, "00000");
-  _data.docked.data84F5 = 0x3F;
+  _data.docked.missileCountDigit = 0x3F;
   FillText(_data.docked.productNames, "Food         t  \0"
                                       "Textiles     t  \0"
                                       "Radioactives t  \0"
@@ -115,8 +104,8 @@ void SetStartState(GameData& _data) noexcept
   Fill(_data.galaxy.distanceDigits, {0x20, 0x20, 0x20, 0x30, 0x30});
   FillText(_data.galaxy.findInput, "12345678");
   FillText(_data.galaxy.findInputEcho, "12345678");
-  _data.galaxy.data7D48 = 0x2E;
-  _data.galaxy.data7D49 = 0x2E;
+  _data.galaxy.techLevelTensDigit = 0x2E;
+  _data.galaxy.techLevelUnitsDigit = 0x2E;
   FillText(_data.galaxy.selectedDistanceText, "\0"
                                               "01234");
   FillText(_data.galaxy.populationDigits, "000.0");
@@ -178,10 +167,10 @@ void SetStartState(GameData& _data) noexcept
   FillText(_data.menus.quantityText, "00000");
   _data.drawing.screenLayout = 0xFF;
   _data.world.shipSlotCount = 0x20;
-  Fill(_data.commander.gap756B, {0x43, 0x6F, 0x6D, 0x6D, 0x61, 0x6E, 0x64, 0x65, 0x72, 0x20, 0x66, 0x69, 0x6C, 0x65, 0x1A});
+  Fill(_data.commander.fileSignature, {0x43, 0x6F, 0x6D, 0x6D, 0x61, 0x6E, 0x64, 0x65, 0x72, 0x20, 0x66, 0x69, 0x6C, 0x65, 0x1A});
   Fill(_data.commander.commanderTitle, {0x0F, 0x0D});
   FillText(_data.commander.commanderRankText, "COMMANDER");
-  Fill(_data.commander.gap7585, {0x20});
+  Fill(_data.commander.rankTextEnd, {0x20});
   FillText(_data.commander.creditBalanceText, "      100.0 Credits");
   _data.commander.randomState0 = 0x5A4A;
   _data.commander.randomState1 = 0x0248;

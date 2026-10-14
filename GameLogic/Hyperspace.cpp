@@ -10,7 +10,6 @@
 #include "Maths.h"
 #include "Ships.h"
 #include "Sound.h"
-#include "StateWriter.h"
 #include "Text.h"
 #include "Video.h"
 
@@ -154,7 +153,7 @@ void PostArrival(GameState& _state)
 
 // add [_low], low byte of _value; adc [_high], high byte: _value added to the top 16 bits of a coordinate, _low's high byte
 // and _high.
-void AddCarried(Field<std::uint16_t>& _low, Field<std::uint8_t>& _high, std::uint16_t _value)
+void AddCarried(std::uint16_t& _low, std::uint8_t& _high, std::uint16_t _value)
 {
   const auto sum = static_cast<unsigned>(High(_low) + Low(_value));
   _low = WithHigh(_low, static_cast<std::uint8_t>(sum));
@@ -262,8 +261,7 @@ void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_
   // 0x4733: the destination becomes the current system, its whole record, which the original copies a byte at a time.
   _state.Data().commander.selectedSystem.distanceTenthsLy = 0;
   const bool galactic = _state.Data().jump.galacticJumpPending == 1;
-  CopyMembers(_state.Data().commander.currentSystem,
-              galactic ? _state.Data().commander.selectedSystem : _state.Data().hyperspace.hyperspaceTarget);
+  _state.Data().commander.currentSystem = galactic ? _state.Data().commander.selectedSystem : _state.Data().hyperspace.hyperspaceTarget;
   _state.Data().commander.marketQuantitiesSet = 0;
   CommanderState& commander = _state.Data().commander;
   LoadSystemSeeds(_state, galactic ? commander.selectedSystem.index : commander.hyperspaceTargetIndex);
@@ -333,7 +331,7 @@ void DrawHyperspaceRings(GameState& _state)
 {
   // LOOP over the ten rings, three bytes each: the delay, the radius and the colour. PUSH CX and PUSH SI keep the count and
   // the ring round DrawCircle.
-  for (Field<std::uint8_t>(&ring)[HYPERSPACE_RING_BYTES] : _state.Data().hyperspace.hyperspaceRings)
+  for (std::uint8_t(&ring)[HYPERSPACE_RING_BYTES] : _state.Data().hyperspace.hyperspaceRings)
   {
     const std::uint8_t delay = ring[0];
     if (delay != 0)
@@ -408,7 +406,7 @@ void UpdateMissionSchedule(GameState& _state)
       _state.Data().commander.fledMaskShip = 1;
     }
   }
-  if (_state.Data().commander.galaxyNumber == 0 && _state.Data().commander.data7629 != 1)
+  if (_state.Data().commander.galaxyNumber == 0 && _state.Data().commander.missionsInFirstGalaxy != 1)
   {
     return;
   }
@@ -424,7 +422,7 @@ void LatchHyperspaceTarget(GameState& _state)
 {
   _state.Data().commander.hyperspaceTargetIndex = std::uint8_t{_state.Data().commander.selectedSystem.index};
   // The selected system's record, which the original copies a byte at a time.
-  CopyMembers(_state.Data().hyperspace.hyperspaceTarget, _state.Data().commander.selectedSystem);
+  _state.Data().hyperspace.hyperspaceTarget = _state.Data().commander.selectedSystem;
 }
 
 bool TickHyperspaceCountdown(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward)
@@ -458,7 +456,7 @@ void ShowHyperspaceCountdown(GameState& _state)
   StartBeep(_state);
   const std::uint8_t countdown = _state.Data().jump.hyperspaceCountdown;
   // Two characters: "10", or a space and the digit.
-  Field<std::uint8_t>(&digits)[2] = _state.Data().hyperspace.hyperspaceCountdownDigits;
+  std::uint8_t(&digits)[2] = _state.Data().hyperspace.hyperspaceCountdownDigits;
   digits[0] = countdown == COUNTDOWN_TEN ? '1' : ' ';
   digits[1] = countdown == COUNTDOWN_TEN ? '0' : static_cast<std::uint8_t>(countdown + '0');
   _state.Data().messages.messagePointer = Message::HyperspaceCountdown;

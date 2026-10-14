@@ -32,7 +32,7 @@ void SetCredits(TwinRig& _rig, std::uint32_t _tenths)
 struct HoldByte
 {
   std::uint8_t row;
-  Elite::Field<std::uint8_t> Commander::CargoHold::Lot::*amount;
+  std::uint8_t Commander::CargoHold::Lot::*amount;
 };
 
 [[nodiscard]] HoldByte Held(std::uint8_t _row)

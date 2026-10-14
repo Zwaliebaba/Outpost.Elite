@@ -111,9 +111,6 @@
     <ClInclude Include="CommanderState.h">
       <Filter>State</Filter>
     </ClInclude>
-    <ClInclude Include="Field.h">
-      <Filter>State</Filter>
-    </ClInclude>
     <ClInclude Include="DirectoryFileStore.h">
       <Filter>Platform</Filter>
     </ClInclude>

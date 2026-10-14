@@ -1,8 +1,6 @@
 // GameLogic/StateWriter.h
 #pragma once
 
-#include "Field.h"
-
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -48,9 +46,9 @@ public:
   }
 
 private:
-  template <typename U> void WriteValue(const Field<U>& _field)
+  template <typename U> void WriteValue(const U& _value)
   {
-    const U value = _field;
+    const U value = _value;
     std::uint32_t bits = 0;
     if constexpr (std::is_enum_v<U>)
     {
@@ -106,7 +104,7 @@ public:
   }
 
 private:
-  template <typename U> void ReadValue(Field<U>& _field)
+  template <typename U> void ReadValue(U& _value)
   {
     if (m_bytes.size() - m_at < sizeof(U))
     {
@@ -120,11 +118,11 @@ private:
     m_at += sizeof(U);
     if constexpr (std::is_enum_v<U>)
     {
-      _field = static_cast<U>(static_cast<std::underlying_type_t<U>>(bits));
+      _value = static_cast<U>(static_cast<std::underlying_type_t<U>>(bits));
     }
     else
     {
-      _field = static_cast<U>(bits);
+      _value = static_cast<U>(bits);
     }
   }
 
@@ -147,20 +145,6 @@ template <typename T> std::size_t ReadStateBytes(T& _value, std::span<const std:
   StateReader reader(_bytes);
   reader({}, _value);
   return reader.Count();
-}
-
-/// _to's members set to _from's, a struct of the state, a SpaceObject or an array of them: a copy by the members, whatever their
-/// layout. Field's rules make every copy of the state explicit, and this is the explicit copy of a whole struct.
-template <typename T> void CopyMembers(T& _to, const T& _from)
-{
-  (void)ReadStateBytes(_to, StateBytes(_from));
-}
-
-/// _value's members each set to 0, a struct of the state, a SpaceObject or an array of them.
-template <typename T> void ZeroMembers(T& _value)
-{
-  const std::vector<std::uint8_t> zeros(StateBytes(_value).size());
-  (void)ReadStateBytes(_value, zeros);
 }
 
 } // namespace Elite

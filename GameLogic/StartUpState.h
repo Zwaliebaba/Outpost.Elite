@@ -1,8 +1,6 @@
 // GameLogic/StartUpState.h
 #pragma once
 
-#include "Field.h"
-
 #include <cstdint>
 #include <type_traits>
 
@@ -13,13 +11,10 @@ namespace Elite
 /// data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct StartUpState
 {
-  StartUpState() noexcept = default;
-  explicit StartUpState(const StartUpState&) noexcept = default;
-
   /// 1 in the file; cleared at start-up unless the ROM at FC00:0016 reads Amstrad
-  Field<std::uint8_t> amstradPresent;
+  std::uint8_t amstradPresent;
   /// 1 when the command tail is exactly ' cheat' (CheckCheatArgument compares PSP:80h with DS:2063 XOR AAh); RunFlight then ignores the...
-  Field<std::uint8_t> cheatEnabled;
+  std::uint8_t cheatEnabled;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)

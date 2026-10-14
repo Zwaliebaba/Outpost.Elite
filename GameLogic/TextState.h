@@ -1,8 +1,6 @@
 // GameLogic/TextState.h
 #pragma once
 
-#include "Field.h"
-
 #include <cstdint>
 #include <type_traits>
 
@@ -13,19 +11,16 @@ namespace Elite
 /// data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct TextState
 {
-  TextState() noexcept = default;
-  explicit TextState(const TextState&) noexcept = default;
-
   /// 'BOUNTY:000000 Cr'; ShowBountyMessage writes the digits at DS:4B12
-  Field<std::uint8_t> bountyText[17];
+  std::uint8_t bountyText[17];
   /// 'CLASS: 1234567 TYPE: 12345678901'; ShowShipIdentity fills the fields at DS:4B23 (7) and DS:4B31 (11)
-  Field<std::uint8_t> shipIdentityText[33];
+  std::uint8_t shipIdentityText[33];
   /// cursor glyph, a space and a zero: printed after the text by RedrawInputLine; ToggleInputCursor flips the first byte
-  Field<std::uint8_t> inputCursorText[3];
+  std::uint8_t inputCursorText[3];
   /// ReadTextLine's countdown, 300 timer ticks per cursor toggle
-  Field<std::uint16_t> cursorBlinkTicks;
+  std::uint16_t cursorBlinkTicks;
   /// characters ReadTextLine may still accept
-  Field<std::uint8_t> inputCharsLeft;
+  std::uint8_t inputCharsLeft;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)

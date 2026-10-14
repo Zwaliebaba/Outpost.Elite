@@ -1,8 +1,6 @@
 // GameLogic/SceneState.h
 #pragma once
 
-#include "Field.h"
-
 #include <cstdint>
 #include <type_traits>
 
@@ -13,28 +11,25 @@ namespace Elite
 /// data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct SceneState
 {
-  SceneState() noexcept = default;
-  explicit SceneState(const SceneState&) noexcept = default;
-
   /// written by DrawVisibleFaces (0x3B38) from faceFillPatterns, read by DrawStackedSpansFromRow (0x1CDD): low byte on even rows, high b...
-  Field<std::uint16_t> triangleFillPattern;
+  std::uint16_t triangleFillPattern;
   /// 42 vertices of three words, x, y and z, in view space, 34-41 the box's corners BuildBoxCornerVertices writes; ProjectVertices
   /// projects the first projectedVertexCount in place into points of two words, x and y
-  Field<std::uint16_t> vertexBuffer[126];
+  std::uint16_t vertexBuffer[126];
   /// read by ProjectVertices
-  Field<std::uint16_t> projectedVertexCount;
+  std::uint16_t projectedVertexCount;
   /// blueprint byte +2 (RunBlueprintHandler); 15 to 200; BuildDodoVertices ignores it
-  Field<std::uint16_t> boxHalfWidth;
+  std::uint16_t boxHalfWidth;
   /// object +0x0A for the blueprint handler (0x3E5A)
-  Field<std::uint16_t> drawPitchAngle;
+  std::uint16_t drawPitchAngle;
   /// object +0x0C
-  Field<std::uint16_t> drawYawAngle;
+  std::uint16_t drawYawAngle;
   /// object +0x0E
-  Field<std::uint16_t> drawRollAngle;
+  std::uint16_t drawRollAngle;
   /// view-space centre of the object being drawn; ReflectVertexAboutCenter and OffsetVertexByCenter
-  Field<std::uint16_t> drawCenterX;
-  Field<std::uint16_t> drawCenterY;
-  Field<std::uint16_t> drawCenterZ;
+  std::uint16_t drawCenterX;
+  std::uint16_t drawCenterY;
+  std::uint16_t drawCenterZ;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)

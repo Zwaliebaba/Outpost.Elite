@@ -114,7 +114,7 @@ constexpr std::uint8_t MINERALS_FROM = 0x28;
 }
 
 // Row _row's fitted count in the commander's block, from 1, fuel's.
-[[nodiscard]] Field<std::uint8_t>& Fitted(GameState& _state, std::uint8_t _row)
+[[nodiscard]] std::uint8_t& Fitted(GameState& _state, std::uint8_t _row)
 {
   return _state.Data().commander.*ElementWithin(std::span(EQUIPMENT_ITEMS), std::size_t{_row} - 1);
 }
@@ -139,13 +139,13 @@ constexpr std::uint8_t MINERALS_FROM = 0x28;
 }
 
 // INC BYTE PTR [_byte].
-void IncrementByte(Field<std::uint8_t>& _byte)
+void IncrementByte(std::uint8_t& _byte)
 {
   _byte = static_cast<std::uint8_t>(_byte + 1);
 }
 
 // ADD [_field],_amount, held at 250 (FAh) from 251 up: gems, gold and platinum.
-void AddPrecious(Field<std::uint8_t>& _field, std::uint8_t _amount)
+void AddPrecious(std::uint8_t& _field, std::uint8_t _amount)
 {
   _field = static_cast<std::uint8_t>(_field + _amount);
   if (_field > PRECIOUS_HELD_MOST)
@@ -274,7 +274,7 @@ void ShowEquipMessage(GameState& _state, std::string_view _text, std::uint8_t _s
   {
     return RefusalText(EquipmentRefusal::NotEnoughCredits);
   }
-  Field<std::uint8_t>& fitted = Fitted(_state, row);
+  std::uint8_t& fitted = Fitted(_state, row);
   fitted = CountAfterFitting(row, fitted);
   if (row == FUEL_ROW)
   {
@@ -303,7 +303,7 @@ void ShowEquipMessage(GameState& _state, std::string_view _text, std::uint8_t _s
   {
     return RefusalText(refusal);
   }
-  Field<std::uint8_t>& fitted = Fitted(_state, row);
+  std::uint8_t& fitted = Fitted(_state, row);
   const auto left = static_cast<std::uint8_t>(fitted - 1);
   fitted = left;
   if (left == 0)
@@ -521,10 +521,9 @@ void TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
       IncrementByte(_state.Data().commander.cargoHold.lots[product].held);
       _state.Data().commander.cargoHold.cargoUsedTonnes = static_cast<std::uint8_t>(_state.Data().commander.cargoHold.cargoUsedTonnes + 1);
       // The product's name, its first 13 bytes, over the message's.
-      const std::span<const Field<std::uint8_t>> name = std::span<const Field<std::uint8_t>>(_state.Data().docked.productNames)
-                                                          .subspan(std::size_t{product} * PRODUCT_NAME_BYTES, SCOOPED_NAME_BYTES);
-      const std::span<Field<std::uint8_t>> scooped =
-        BytesWithin(std::span(_state.Data().equipment.scoopedCargoText), 0, SCOOPED_NAME_BYTES);
+      const std::span<const std::uint8_t> name = std::span<const std::uint8_t>(_state.Data().docked.productNames)
+                                                   .subspan(std::size_t{product} * PRODUCT_NAME_BYTES, SCOOPED_NAME_BYTES);
+      const std::span<std::uint8_t> scooped = BytesWithin(std::span(_state.Data().equipment.scoopedCargoText), 0, SCOOPED_NAME_BYTES);
       for (std::size_t letter = 0; letter < SCOOPED_NAME_BYTES; ++letter)
       {
         scooped[letter] = std::uint8_t{name[letter]};
@@ -559,9 +558,9 @@ void TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
     {
       (void)RemoveObject(_state, _slot);
       CommanderState::CargoHold& hold = _state.Data().commander.cargoHold;
-      Field<std::uint8_t>& held = type == TYPE_SPLINTER     ? hold.lots[COMMODITY_ALLOYS].held
-                                  : type == TYPE_ESCAPE_POD ? hold.lots[COMMODITY_SLAVES].held
-                                                            : hold.lots[COMMODITY_ALIEN_ITEMS].held;
+      std::uint8_t& held = type == TYPE_SPLINTER     ? hold.lots[COMMODITY_ALLOYS].held
+                           : type == TYPE_ESCAPE_POD ? hold.lots[COMMODITY_SLAVES].held
+                                                     : hold.lots[COMMODITY_ALIEN_ITEMS].held;
       held = static_cast<std::uint8_t>(held + 1);
       _state.Data().commander.cargoHold.cargoUsedTonnes = static_cast<std::uint8_t>(_state.Data().commander.cargoHold.cargoUsedTonnes + 1);
       message = type == TYPE_SPLINTER ? Message::MetalAlloys : type == TYPE_ESCAPE_POD ? Message::EscapePodRetrieved : Message::AlienItems;
@@ -584,7 +583,7 @@ ScreenKey ShowEquipShipScreen(GameState& _state, Hardware& _hardware, bool _back
   const std::uint8_t onSale = EquipmentRowsOnSale(place.techLevel);
   _state.Data().menus.menuRowCount = 0;
   std::uint16_t cell = FIRST_ITEM_OFFSET;
-  const std::span<Field<std::uint8_t>> priceText(_state.Data().menus.priceText);
+  const std::span<std::uint8_t> priceText(_state.Data().menus.priceText);
   for (std::uint8_t row = 1; row <= onSale; ++row)
   {
     _state.Data().menus.menuRowCount = row;

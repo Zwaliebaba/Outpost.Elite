@@ -53,7 +53,7 @@ void ResetHyperspaceRings(GameState& _state);
 void EnterWitchSpace(GameState& _state);
 
 /// UpdateMissionSchedule (CS:4953): the mask ship's and the missions' jump counts, on an arrival outside witch space; the
-/// missions' only outside the first galaxy, or with data7629 set.
+/// missions' only outside the first galaxy, or with missionsInFirstGalaxy set.
 void UpdateMissionSchedule(GameState& _state);
 
 /// LatchHyperspaceTarget (CS:49F6): the selected system becomes the hyperspace target: its index, and systemRecordBytes

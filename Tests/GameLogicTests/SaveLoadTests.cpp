@@ -229,10 +229,10 @@ public:
         commander.selectedSystem.economy = 0x80;
         commander.missileCount = 9;
         commander.killCount = 0xFF;
-        for (Elite::Field<std::uint8_t>& letter : commander.defaultCommanderName)
+        for (std::uint8_t& letter : commander.defaultCommanderName)
           letter = 'A';
         commander.creditsTenths = 1234;
-        for (Elite::Field<std::uint8_t>& character : commander.creditBalanceText)
+        for (std::uint8_t& character : commander.creditBalanceText)
           character = 'X';
         Elite::PerformDiskRequest(state, rig.Native(), SAVE_COMMANDER, 0);
         Elite::PerformDiskRequest(state, rig.Native(), LOAD_COMMANDER, 0);

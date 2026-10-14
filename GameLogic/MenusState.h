@@ -1,8 +1,6 @@
 // GameLogic/MenusState.h
 #pragma once
 
-#include "Field.h"
-
 #include <cstdint>
 #include <type_traits>
 
@@ -13,29 +11,23 @@ namespace Elite
 /// segment's, by their names, in their order there; the GameState holds it in GameData.
 struct MenusState
 {
-  MenusState() noexcept = default;
-  explicit MenusState(const MenusState&) noexcept = default;
-
   /// FormatTenths output, "nnnn.n", and its NUL
-  Field<std::uint8_t> priceText[7];
+  std::uint8_t priceText[7];
   /// the price ComputeResalePrice reads
-  Field<std::uint16_t> resalePriceInput;
+  std::uint16_t resalePriceInput;
   /// rows in the current cursor menu (17 for cargo, the listed equipment)
-  Field<std::uint8_t> menuRowCount;
+  std::uint8_t menuRowCount;
   /// text-memory address of the first row's first attribute byte
-  Field<std::uint16_t> menuFirstRowAttr;
+  std::uint16_t menuFirstRowAttr;
   /// 1-based; also the item index SelectLaserType tests
-  Field<std::uint8_t> menuSelectedRow;
+  std::uint8_t menuSelectedRow;
   /// A row's two prices on a trade screen or the shipyard's, in tenths of credits.
   struct ScreenPrice
   {
-    ScreenPrice() noexcept = default;
-    explicit ScreenPrice(const ScreenPrice&) noexcept = default;
-
     /// a cargo row's buy price; an equipment row's price
-    Field<std::uint16_t> price;
+    std::uint16_t price;
     /// a cargo row's sell price; an equipment row's resale price
-    Field<std::uint16_t> resale;
+    std::uint16_t resale;
 
     /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
     template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
@@ -57,7 +49,7 @@ struct MenusState
   /// cargo rows from 0; equipment rows from index 1
   ScreenPrice screenPrices[17];
   /// number text for the trade screens and the typed quantity
-  Field<std::uint8_t> quantityText[6];
+  std::uint8_t quantityText[6];
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)

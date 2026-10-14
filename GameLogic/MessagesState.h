@@ -1,7 +1,6 @@
 // GameLogic/MessagesState.h
 #pragma once
 
-#include "Field.h"
 #include "Message.h"
 
 #include <cstdint>
@@ -14,17 +13,14 @@ namespace Elite
 /// 1987 data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct MessagesState
 {
-  MessagesState() noexcept = default;
-  explicit MessagesState(const MessagesState&) noexcept = default;
-
   /// pointer of the text on the message line now; UpdateMessageLine redraws only when messagePointer differs
-  Field<Message> messageShown;
+  Message messageShown;
   /// text the message line should show; written with messageFrames by about 18 routines
-  Field<Message> messagePointer;
+  Message messagePointer;
   /// frames left; posters write it as a word, which also zeroes messageDrawn
-  Field<std::uint16_t> messageFrames;
+  std::uint16_t messageFrames;
   /// 20 when a warning is raised; counts down
-  Field<std::uint8_t> warningFrames;
+  std::uint8_t warningFrames;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)

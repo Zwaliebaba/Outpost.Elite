@@ -1,8 +1,6 @@
 // GameLogic/PlayerShipState.h
 #pragma once
 
-#include "Field.h"
-
 #include <cstdint>
 #include <type_traits>
 
@@ -14,57 +12,54 @@ namespace Elite
 /// their order there; the GameState holds it in GameData.
 struct PlayerShipState
 {
-  PlayerShipState() noexcept = default;
-  explicit PlayerShipState(const PlayerShipState&) noexcept = default;
-
   /// set to 1 when an ECM goes off: NPC (0x566E) or the player's E key with ecmFitted (0x82AD); read and cleared at 0x257D, which picks...
-  Field<std::uint8_t> ecmFired;
+  std::uint8_t ecmFired;
   /// the sun's apparent radius from DrawSunOrPlanet; CheckTemperatureWarning at >= 0xE1
-  Field<std::uint8_t> cabinTemperature;
+  std::uint8_t cabinTemperature;
   /// 2*min(127, 255 - planet radius) from DrawSunOrPlanet; 0xFF at launch (29D0); CheckAltitudeWarning below 0x32
-  Field<std::uint8_t> altitude;
+  std::uint8_t altitude;
   /// drawn on the top dashboard bar (2614, cell 368Ch, the FORE-SHIELD row); ApplyEnemyLaserHit takes 15 off it
-  Field<std::uint8_t> foreShield;
+  std::uint8_t foreShield;
   /// drawn on the AFT-SHIELD bar (2623, cell 37CCh)
-  Field<std::uint8_t> aftShield;
+  std::uint8_t aftShield;
   /// 0-3FFh; DrainEnergy, UseMaskingDevice and ApplyEnemyLaserHit take from it, below 0 sets playerDead; CheckEnergyWarning below 0x100;...
-  Field<std::uint16_t> playerEnergy;
+  std::uint16_t playerEnergy;
   /// 0 idle, 1 primed and looking for a target (T or I), 2 locked on missileTarget; also the colour index DrawMissileLockIndicator draws
-  Field<std::uint8_t> missileState;
+  std::uint8_t missileState;
   /// set when playerEnergy goes below 0 (DrainEnergy, ApplyEnemyLaserHit) or by KillPlayer; GameLoop then reruns the title
-  Field<std::uint8_t> playerDead;
+  std::uint8_t playerDead;
   /// orientation angle, 800h per turn; with playerYawAngle sets the velocity direction (UpdatePlayerVelocity); re-derived after each pit...
-  Field<std::uint16_t> playerPitchAngle;
+  std::uint16_t playerPitchAngle;
   /// orientation angle, 800h per turn; see playerPitchAngle
-  Field<std::uint16_t> playerYawAngle;
+  std::uint16_t playerYawAngle;
   /// 800h per turn; the roll input is added to it directly; the docking computer matches it to the station's spin
-  Field<std::uint16_t> playerRollAngle;
+  std::uint16_t playerRollAngle;
   /// set by UpdateMissileAi; CheckMissileWarning clears it
-  Field<std::uint8_t> incomingMissileAlert;
+  std::uint8_t incomingMissileAlert;
   /// signed -23..+23: the input code adds to it with clamping (0x79F9) and the steering code stores it (0x84CC, 0x86DF and later); drawn...
-  Field<std::uint16_t> rollRate;
+  std::uint16_t rollRate;
   /// set by ReadScanCode when D (20h) is released while inFlight; ProcessFlightKeys then toggles the docking computer if fitted; cleared...
-  Field<std::uint8_t> dockingKeyReleased;
+  std::uint8_t dockingKeyReleased;
   /// 80 when the capsule launches (2F14); TickEscapePod counts it down and ends RunFlight; also suppresses enemy fire; while non-zero Ki...
-  Field<std::uint8_t> escapePodFrames;
+  std::uint8_t escapePodFrames;
   /// 1 while the docking computer flies the ship (UpdatePlayerMotion calls RunDockingComputer)
-  Field<std::uint8_t> dockingComputerOn;
+  std::uint8_t dockingComputerOn;
   /// per-frame displacement subtracted from every object by MoveObjectsByVelocity
-  Field<std::uint16_t> playerVelocityX;
+  std::uint16_t playerVelocityX;
   /// see playerVelocityX
-  Field<std::uint16_t> playerVelocityY;
+  std::uint16_t playerVelocityY;
   /// see playerVelocityX
-  Field<std::uint16_t> playerVelocityZ;
+  std::uint16_t playerVelocityZ;
   /// 4-48 in steps of 4 (. and ,), 0 while the docking computer stops the ship; the jump drive needs 48
-  Field<std::uint16_t> playerSpeed;
+  std::uint16_t playerSpeed;
   /// 1 makes UpdatePlayerVelocity recompute the velocity
-  Field<std::uint8_t> velocityDirty;
+  std::uint8_t velocityDirty;
   /// F1 0, F2 400h, F3 200h, F4 600h (800h per turn); 0 front, 0x200 left, 0x400 rear, 0x600 right; RotateToViewDirection
-  Field<std::uint16_t> viewAngle;
+  std::uint16_t viewAngle;
   /// set by the docking computer's final approach; F1-F4 are ignored while 1
-  Field<std::uint8_t> viewLocked;
+  std::uint8_t viewLocked;
   /// 1 for the frame the laser fires; ResolveLaserFire clears it
-  Field<std::uint8_t> laserFiring;
+  std::uint8_t laserFiring;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)

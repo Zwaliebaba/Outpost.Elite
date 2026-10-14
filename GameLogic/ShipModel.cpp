@@ -80,7 +80,7 @@ void BuildVertices(const Blueprint& _blueprint, ShipModel& _model)
     BuildDodoVertices(*state);
   }
   RunVertexProgram(*state, _blueprint.vertexProgram, Vector{});
-  const std::span<const Field<std::uint16_t>> buffer(std::as_const(*state).Data().scene.vertexBuffer);
+  const std::span<const std::uint16_t> buffer(std::as_const(*state).Data().scene.vertexBuffer);
   for (std::size_t vertex = 0; vertex < _blueprint.projectedVertices; ++vertex)
   {
     const auto coordinate = [&buffer, vertex](std::size_t _axis)

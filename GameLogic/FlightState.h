@@ -1,7 +1,6 @@
 // GameLogic/FlightState.h
 #pragma once
 
-#include "Field.h"
 #include "Message.h"
 #include "SpaceObject.h"
 
@@ -15,22 +14,16 @@ namespace Elite
 /// data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct FlightState
 {
-  FlightState() noexcept = default;
-  explicit FlightState(const FlightState&) noexcept = default;
-
   /// A particle of stardust.
   struct DustParticle
   {
-    DustParticle() noexcept = default;
-    explicit DustParticle(const DustParticle&) noexcept = default;
-
     /// signed words, on screen while the high bytes are -0x20..0x1F and -0x10..0x0F
-    Field<std::uint16_t> x;
-    Field<std::uint16_t> y;
+    std::uint16_t x;
+    std::uint16_t y;
     /// 0x28-0x47, frames left
-    Field<std::uint8_t> lifetime;
+    std::uint8_t lifetime;
     /// in stardustPrevious, 1 for a particle respawned this frame
-    Field<std::uint8_t> respawned;
+    std::uint8_t respawned;
 
     /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
     template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
@@ -56,99 +49,99 @@ struct FlightState
   /// their start-of-frame copy, for the streaks
   DustParticle stardustPrevious[30];
   /// written by ComputeStardustShift; 4 at full playerSpeed
-  Field<std::uint8_t> stardustShift;
+  std::uint8_t stardustShift;
   /// HandleFlightFunctionKeys: a screen replaced the cockpit, so it must be restored
-  Field<std::uint8_t> flightScreenShown;
+  std::uint8_t flightScreenShown;
   /// +5 per shot, saturating at FFh; the fire button does nothing at F0h or above
-  Field<std::uint8_t> laserTemperature;
+  std::uint8_t laserTemperature;
   /// 1 green, 3 yellow, 2 red, 0 flashing red; written by UpdateConditionColor
-  Field<std::uint8_t> conditionColor;
+  std::uint8_t conditionColor;
   /// first of the 22 dashboard cache bytes DS:4222-4237 that InvalidateDashboard sets to 0x80
-  Field<std::uint8_t> missileCountShown;
+  std::uint8_t missileCountShown;
   /// dashboard cache of missileState
-  Field<std::uint8_t> missileLockShown;
+  std::uint8_t missileLockShown;
   /// byte; dashboard cache of energyBankFill
-  Field<std::uint8_t> energyBanksShown[4];
+  std::uint8_t energyBanksShown[4];
   /// byte; per-bank fill computed by DrawEnergyBanks from playerEnergy, bottom bank last
-  Field<std::uint8_t> energyBankFill[4];
+  std::uint8_t energyBankFill[4];
   /// dashboard cache
-  Field<std::uint8_t> rollRateShown;
+  std::uint8_t rollRateShown;
   /// dashboard cache
-  Field<std::uint8_t> pitchRateShown;
+  std::uint8_t pitchRateShown;
   /// dashboard cache
-  Field<std::uint8_t> altitudeShown;
+  std::uint8_t altitudeShown;
   /// dashboard cache
-  Field<std::uint8_t> cabinTemperatureShown;
+  std::uint8_t cabinTemperatureShown;
   /// dashboard cache
-  Field<std::uint8_t> fuelShown;
+  std::uint8_t fuelShown;
   /// dashboard cache: 0x20 or 0x81
-  Field<std::uint8_t> ecmGlyphShown;
+  std::uint8_t ecmGlyphShown;
   /// dashboard cache: 0x20 or 0x82
-  Field<std::uint8_t> safeZoneGlyphShown;
+  std::uint8_t safeZoneGlyphShown;
   /// dashboard cache
-  Field<std::uint8_t> laserTemperatureShown;
+  std::uint8_t laserTemperatureShown;
   /// compared but never written by UpdateDashboard, so the fore shield bar is redrawn every frame unless the shield is 0x80
-  Field<std::uint8_t> foreShieldShown;
+  std::uint8_t foreShieldShown;
   /// compared but never written, as foreShieldShown
-  Field<std::uint8_t> aftShieldShown;
+  std::uint8_t aftShieldShown;
   /// dashboard cache
-  Field<std::uint8_t> conditionColorShown;
+  std::uint8_t conditionColorShown;
   /// dashboard cache
-  Field<std::uint8_t> speedShown;
+  std::uint8_t speedShown;
   /// 1 after a successful dock (0x2C4F), 0 at 0x2A11; ShowCommanderStatusScreen debriefs only when it is 1
-  Field<std::uint8_t> playerDocked;
+  std::uint8_t playerDocked;
   /// bit 0: inside the station's safe zone (UpdateSafeZone)
-  Field<std::uint8_t> safeZoneFlags;
+  std::uint8_t safeZoneFlags;
   /// currentSystem.government on arrival (0x2B56), 0 in witch space (0x2A51); spawn limits and the station handler use it
-  Field<std::uint8_t> spawnGovernment;
+  std::uint8_t spawnGovernment;
   /// text of the active warning
-  Field<Message> warningMessage;
+  Message warningMessage;
   /// last warning raised; the next search starts after it
-  Field<std::uint8_t> warningIndex;
+  std::uint8_t warningIndex;
   /// slots before the debris: 20 (SetUpLocalSpace), 1 in the file
-  Field<std::uint8_t> objectSlotCount;
+  std::uint8_t objectSlotCount;
   /// 16
-  Field<std::uint8_t> debrisSlotCount;
+  std::uint8_t debrisSlotCount;
   /// UpdateCompass; TransformAndDrawObjects classifies the station only when 1
-  Field<std::uint8_t> compassTargetIsStation;
+  std::uint8_t compassTargetIsStation;
   /// selectedSystem.distanceTenthsLy*36/10 (at least 1), set when H starts the countdown; taken from fuel on arrival (4720)
-  Field<std::uint8_t> hyperspaceFuelCost;
+  std::uint8_t hyperspaceFuelCost;
   /// negated new pitch angle while UpdatePlayerMotion re-derives the orientation
-  Field<std::uint16_t> pitchAngleScratch;
+  std::uint16_t pitchAngleScratch;
   /// negated new yaw angle, as pitchAngleScratch
-  Field<std::uint16_t> yawAngleScratch;
+  std::uint16_t yawAngleScratch;
   /// 1 for one frame after J: UpdatePlayerVelocity multiplies the playerSpeed by 32
-  Field<std::uint8_t> jumpDriveEngaged;
+  std::uint8_t jumpDriveEngaged;
   /// slot the missile is locked on
-  Field<SlotIndex> missileTarget;
+  SlotIndex missileTarget;
   /// laser type (0-3) for this view, from GetViewLaser; damage is type + 1; set at 0x8297 when fire is pressed; DrawLaserBeams picks its...
-  Field<std::uint8_t> firingLaserType;
+  std::uint8_t firingLaserType;
   /// toggled on each frame a type-0 laser is fired; that type fires only on alternate frames
-  Field<std::uint8_t> laserAlternateFrame;
+  std::uint8_t laserAlternateFrame;
   /// 1 after I until the ship in the sights is identified
-  Field<std::uint8_t> shipIdRequested;
+  std::uint8_t shipIdRequested;
   /// 40 at death; RunFlight keeps running frames until it reaches 0
-  Field<std::uint8_t> gameOverFrames;
+  std::uint8_t gameOverFrames;
   /// the '8) ' of '(F8) ' at the end of the pause menu's frame-rate line; rewritten by F1-F10
-  Field<std::uint8_t> frameRateKeyLabel[3];
+  std::uint8_t frameRateKeyLabel[3];
   /// pause option R, 'Keyboard Recentre', 1 in the file: a key against the current rate zeroes it first. First of five (value, letter) r...
-  Field<std::uint8_t> keyboardRecenter;
+  std::uint8_t keyboardRecenter;
   /// pause option D, 'Keyboard Damping', 1 in the file: an idle axis decays 3 a frame toward 0
-  Field<std::uint8_t> keyboardDamping;
+  std::uint8_t keyboardDamping;
   /// pause option Y, 'Reverse Y control', 0 in the file: negates pitch (ApplyReverseControls)
-  Field<std::uint8_t> reverseYControl;
+  std::uint8_t reverseYControl;
   /// pause option B, 'Reverse X and Y', 0 in the file: negates roll and pitch
-  Field<std::uint8_t> reverseXAndY;
+  std::uint8_t reverseXAndY;
   /// pause option S, 'Sound Toggle', 1 in the file; TimerTick does nothing more when it is 0
-  Field<std::uint8_t> soundEnabled;
+  std::uint8_t soundEnabled;
   /// toggled by 'L' (0x8379, 0x838C) when antiEcmEmulatorFitted; at 1 the station starts no ECM
-  Field<std::uint8_t> antiEcmActive;
+  std::uint8_t antiEcmActive;
   /// TimerTick plays nothing while it is 1
-  Field<std::uint8_t> gamePaused;
+  std::uint8_t gamePaused;
   /// 50 in the file, which is F7's choice, though the label in the file reads (F8) (40 ms); the shortest a frame may take
-  Field<std::uint8_t> minimumFrameMs;
+  std::uint8_t minimumFrameMs;
   /// set on a 500/65536 chance at launch (Missile Jammed... Can't Launch!); M then fails until reset at 2A33
-  Field<std::uint8_t> missileJammed;
+  std::uint8_t missileJammed;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)

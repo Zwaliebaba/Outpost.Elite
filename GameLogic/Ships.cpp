@@ -6,7 +6,6 @@
 #include "Flight.h"
 #include "Maths.h"
 #include "ShipsTables.h"
-#include "StateWriter.h"
 #include "Text.h"
 
 #include <span>
@@ -175,7 +174,7 @@ void AddToCoordinate(SpaceObject& _slot, int _axis, std::int16_t _value)
 void ClearObjectSlot(SpaceObject& _slot)
 {
   // MOV [SI],CH while CX counts down from 40h: CH is 0 throughout, so every member is 0.
-  ZeroMembers(_slot);
+  _slot = {};
 }
 
 void InitPoliceViper(SpaceObject& _slot)
@@ -519,7 +518,7 @@ void CopyObject(const SpaceObject& _source, SpaceObject& _destination)
 {
   // REP MOVSW from DS:SI to ES:DI, ES = DS: the whole record, every member, as the direction flag is clear wherever the game calls
   // it: the only STD, MaskOutsideTunnel's, has its CLD before the routine returns (change 3c).
-  CopyMembers(_destination, _source);
+  _destination = _source;
 }
 
 std::optional<MovedObject> UpdateDebrisAi(GameState& _state, SpaceObject& _slot)

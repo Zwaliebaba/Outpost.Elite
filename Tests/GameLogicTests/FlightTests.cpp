@@ -1,7 +1,6 @@
 #include "pch.h"
 
 #include "GameState.h"
-#include "StateWriter.h"
 #include "Text.h"
 #include "TwinRig.h"
 
@@ -55,7 +54,7 @@ public:
     for (std::uint16_t index = 3; index < 20; ++index)
     {
       Elite::SpaceObject& ship = state.Slot(static_cast<Elite::SlotIndex>(index));
-      Elite::ZeroMembers(ship);
+      ship = {};
       ship.type = 0x85; // a Sidewinder, active
       ship.x = static_cast<std::uint16_t>(index * 0x100);
       ship.z = 0x2000;

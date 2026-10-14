@@ -1,8 +1,6 @@
 // GameLogic/DiskState.h
 #pragma once
 
-#include "Field.h"
-
 #include <cstdint>
 #include <type_traits>
 
@@ -13,13 +11,10 @@ namespace Elite
 /// segment's, by their names, in their order there; the GameState holds it in GameData.
 struct DiskState
 {
-  DiskState() noexcept = default;
-  explicit DiskState(const DiskState&) noexcept = default;
-
   /// set by CriticalErrorInterrupt (0x02F6) and PerformDiskRequest's error path (0x03A2), cleared by Start (0x0078) before each operation
-  Field<std::uint8_t> diskError;
+  std::uint8_t diskError;
   /// DOS handle of the open commander or screenshot file
-  Field<std::uint16_t> fileHandle;
+  std::uint16_t fileHandle;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)

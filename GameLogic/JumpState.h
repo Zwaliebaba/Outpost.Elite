@@ -1,8 +1,6 @@
 // GameLogic/JumpState.h
 #pragma once
 
-#include "Field.h"
-
 #include <cstdint>
 #include <type_traits>
 
@@ -13,19 +11,16 @@ namespace Elite
 /// their names, in their order there; the GameState holds it in GameData.
 struct JumpState
 {
-  JumpState() noexcept = default;
-  explicit JumpState(const JumpState&) noexcept = default;
-
   /// set by ReadScanCode when W (11h) is pressed while Alt is held; on hyperspace arrival (478C) it forces EnterWitchSpace, which puts t...
-  Field<std::uint8_t> forceMisjump;
+  std::uint8_t forceMisjump;
   /// set when H is pressed inside the galactic drive window; CompleteHyperspaceJump then makes a galactic jump
-  Field<std::uint8_t> galacticJumpPending;
+  std::uint8_t galacticJumpPending;
   /// 40 when G arms the galactic drive; H within that window starts a galactic jump
-  Field<std::uint8_t> galacticDriveReadyFrames;
+  std::uint8_t galacticDriveReadyFrames;
   /// 10 when the countdown starts, -1 every 10 frames; arrival at 0
-  Field<std::uint8_t> hyperspaceCountdown;
+  std::uint8_t hyperspaceCountdown;
   /// frames left in the current countdown step (10)
-  Field<std::uint8_t> hyperspaceCountdownFrames;
+  std::uint8_t hyperspaceCountdownFrames;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)

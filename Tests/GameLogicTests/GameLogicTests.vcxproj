@@ -98,7 +98,7 @@
     <ClCompile Include="CorpusTests.cpp" />
     <ClCompile Include="EquipmentAnswerTests.cpp" />
     <ClCompile Include="EquipmentRulesTests.cpp" />
-    <ClCompile Include="FieldTests.cpp" />
+    <ClCompile Include="GameDataTests.cpp" />
     <ClCompile Include="DockedTests.cpp" />
     <ClCompile Include="DosFilesTests.cpp" />
     <ClCompile Include="EquipmentTests.cpp" />

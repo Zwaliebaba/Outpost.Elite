@@ -6,7 +6,6 @@
 #include "StateWriter.h"
 
 #include <algorithm>
-#include <cstring>
 #include <memory>
 #include <stdexcept>
 #include <utility>
@@ -21,6 +20,8 @@ namespace
 
 // The .cdr file's size: the commander's bytes (D78).
 constexpr std::size_t COMMANDER_FILE_BYTES = 208;
+// The state's bytes as its members write them: what the 1987 data segment's members took.
+constexpr std::size_t STATE_BYTES = 14'420;
 
 // A byte unlike its neighbours for every place in a struct of _bytes bytes: what fills one before it is written by its members.
 [[nodiscard]] std::vector<std::uint8_t> Pattern(std::size_t _bytes)
@@ -38,20 +39,15 @@ constexpr std::size_t COMMANDER_FILE_BYTES = 208;
 TEST_CLASS(StateDigestTests)
 {
 public:
-  // The state written by its members (StateWriter, D76) is GameData's bytes, every one in its order, while the structs lay their
-  // members out as the 1987 data segment did: each member listed once, in place, at its width. So the digest is unchanged by
-  // writing the state this way. Read back from the bytes, the state is them again.
+  // The state written by its members (StateWriter, D76) is 14,420 bytes, every member once, in its order, at its width,
+  // whatever the structs' layout. Read back from bytes and written again, the state gives the same bytes.
   TEST_METHOD(TheStateWrittenByItsMembersIsItsBytes)
   {
-    const std::vector<std::uint8_t> pattern = Pattern(sizeof(Elite::GameData));
+    const std::vector<std::uint8_t> pattern = Pattern(STATE_BYTES);
     const auto data = std::make_unique<Elite::GameData>();
-    std::memcpy(static_cast<void*>(data.get()), pattern.data(), pattern.size());
-    Assert::IsTrue(std::ranges::equal(Elite::StateBytes(*data), pattern), L"GameData written by its members is its bytes");
-
+    Assert::AreEqual(STATE_BYTES, Elite::ReadStateBytes(*data, pattern), L"every byte read");
+    Assert::IsTrue(std::ranges::equal(Elite::StateBytes(*data), pattern), L"and written by its members, the same bytes");
     const auto read = std::make_unique<Elite::GameData>();
-    std::memset(static_cast<void*>(read.get()), 0, sizeof(Elite::GameData));
-    Assert::AreEqual(pattern.size(), Elite::ReadStateBytes(*read, pattern), L"every byte read");
-    Assert::AreEqual(0, std::memcmp(read.get(), pattern.data(), pattern.size()), L"and read back over it, the same bytes");
 
     // The commander file (D78) is the commander's 208 bytes.
     Assert::AreEqual(COMMANDER_FILE_BYTES, Elite::StateBytes(data->commander).size(), L"the .cdr file's size");

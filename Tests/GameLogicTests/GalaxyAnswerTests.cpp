@@ -35,7 +35,7 @@ constexpr std::size_t SYSTEMS = 256;
   Elite::DescribeSystem(_state);
 
   std::string name;
-  const std::span<const Elite::Field<std::uint8_t>> characters =
+  const std::span<const std::uint8_t> characters =
     Elite::BytesOf(_state.Data().commander.selectedSystem.name).first(_state.Data().commander.selectedSystem.nameLength);
   for (const std::uint8_t character : characters)
   {

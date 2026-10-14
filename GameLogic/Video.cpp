@@ -146,13 +146,13 @@ constexpr std::uint16_t SPACE_VIEW_BUFFER_START = 64;
 // spans, discs and triangles are clipped to its 256x128 pixels, and the direction flag is clear wherever the original runs them
 // (its one STD, at CS:2E4A, is cleared at CS:2E5C with no call between), so no string instruction runs down past its start. A
 // byte off it, which the original would reach in the data segment around the buffer, throws std::out_of_range.
-[[nodiscard]] Field<std::uint8_t>& BufferByte(GameState& _state, std::uint16_t _offset)
+[[nodiscard]] std::uint8_t& BufferByte(GameState& _state, std::uint16_t _offset)
 {
   return ByteWithin(DrawingBuffer(_state), _offset);
 }
 
 // The word of the drawing buffer at _offset, as BufferByte finds its bytes.
-[[nodiscard]] std::span<Field<std::uint8_t>> BufferWord(GameState& _state, std::uint16_t _offset)
+[[nodiscard]] std::span<std::uint8_t> BufferWord(GameState& _state, std::uint16_t _offset)
 {
   return BytesWithin(DrawingBuffer(_state), _offset, 2);
 }
@@ -160,7 +160,7 @@ constexpr std::uint16_t SPACE_VIEW_BUFFER_START = 64;
 // AND [_offset],_keep / OR [_offset],_color: the pixels _keep clears, then _color's set, two writes.
 void Plot(GameState& _state, std::uint16_t _offset, std::uint8_t _keep, std::uint8_t _color)
 {
-  Field<std::uint8_t>& pixels = BufferByte(_state, _offset);
+  std::uint8_t& pixels = BufferByte(_state, _offset);
   const auto kept = static_cast<std::uint8_t>(pixels & _keep);
   pixels = kept;
   pixels = static_cast<std::uint8_t>(kept | _color);
@@ -676,7 +676,7 @@ void DrawSmallDisc(GameState& _state, const SmallDiscPlace& _place)
         // Both bytes, as a word, the sprite's left byte at the lower address: AND WORD [DI] with the bits' complement,
         // then OR WORD [DI] with the bits in the fill.
         const std::uint16_t word = SwapBytes(bits);
-        const std::span<Field<std::uint8_t>> pixels = BufferWord(_state, at);
+        const std::span<std::uint8_t> pixels = BufferWord(_state, at);
         const auto kept = static_cast<std::uint16_t>(WordIn(pixels, 0) & ~word);
         SetWordIn(pixels, 0, kept);
         SetWordIn(pixels, 0, static_cast<std::uint16_t>(kept | (word & Join(fill, fill))));
@@ -968,8 +968,8 @@ struct ClippedEdge
 };
 
 // ADD fraction,[m] / ADC whole,[m], or SUB / SBB: _edge stepped by the slope at _wholeSlope and _fractionSlope.
-[[nodiscard]] ClippedEdge StepClippedEdge(ClippedEdge _edge, const Field<std::uint16_t>& _wholeSlope,
-                                          const Field<std::uint16_t>& _fractionSlope, bool _subtract)
+[[nodiscard]] ClippedEdge StepClippedEdge(ClippedEdge _edge, const std::uint16_t& _wholeSlope, const std::uint16_t& _fractionSlope,
+                                          bool _subtract)
 {
   const std::uint16_t slopeFraction = _fractionSlope;
   const std::uint16_t slopeWhole = _wholeSlope;
@@ -1004,7 +1004,7 @@ struct ClippedEdge
 // XOR DX,DX / DIV _rows / store / XOR AX,AX / DIV _rows / store: _pixels over _rows rows as 16.16, the whole part stored first.
 // Every caller's rows are at least 1, and the first divide's high word is 0 and the second's the remainder, so neither
 // overflows into the trap.
-void ClippedSlope(std::uint16_t _pixels, std::uint16_t _rows, Field<std::uint16_t>& _whole, Field<std::uint16_t>& _fraction)
+void ClippedSlope(std::uint16_t _pixels, std::uint16_t _rows, std::uint16_t& _whole, std::uint16_t& _fraction)
 {
   _whole = static_cast<std::uint16_t>(_pixels / _rows);
   _fraction = static_cast<std::uint16_t>((std::uint32_t{static_cast<std::uint16_t>(_pixels % _rows)} << 16) / _rows);
@@ -1304,7 +1304,7 @@ ScreenChange MakeGraphicsScreen(GameState& _state, Hardware& _hardware, std::uin
 
 } // namespace
 
-std::span<Field<std::uint8_t>, DRAWING_BUFFER_BYTES> DrawingBuffer(GameState& _state) noexcept
+std::span<std::uint8_t, DRAWING_BUFFER_BYTES> DrawingBuffer(GameState& _state) noexcept
 {
   return BytesOf(_state.Data().drawing.drawingBuffer);
 }
@@ -1342,7 +1342,7 @@ void WriteScreenshotFile(GameState& _state, Hardware& _hardware)
   }
   _state.Data().video.screenshotNumber = digits;
   // The two digits into both names, after their 'elite'.
-  const auto writeDigits = [digits](Field<std::uint8_t>(&_name)[11])
+  const auto writeDigits = [digits](std::uint8_t(&_name)[11])
   {
     _name[SCREENSHOT_NAME_DIGITS] = Low(digits);
     _name[SCREENSHOT_NAME_DIGITS + 1] = High(digits);

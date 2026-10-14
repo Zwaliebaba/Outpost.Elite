@@ -60,7 +60,7 @@ constexpr std::uint32_t START_TIME = 0x645C; // 12 << 11 | 34 << 5 | 56 / 2
 constexpr Elite::Cycles TWO_SECONDS = 9'545'454;
 constexpr std::uint32_t TWO_SECONDS_LATER_TIME = 0x645D;
 
-using Bytes = std::span<Elite::Field<std::uint8_t>>;
+using Bytes = std::span<std::uint8_t>;
 using Snapshot = std::vector<std::uint8_t>;
 
 [[nodiscard]] std::wstring Widen(std::string_view _text)
@@ -321,7 +321,7 @@ public:
     const Elite::GameState& state = m_rig.State();
     Snapshot bytes = Elite::StateBytes(state.Data());
     bytes.insert(bytes.end(), state.VideoBytes().begin(), state.VideoBytes().end());
-    for (const Elite::Field<std::uint8_t>& byte : m_block)
+    for (const std::uint8_t& byte : m_block)
     {
       bytes.push_back(byte);
     }
@@ -358,7 +358,7 @@ private:
 
   ReferenceRig m_rig;
   /// A buffer of a commander's size, which the reads and writes go through.
-  std::array<Elite::Field<std::uint8_t>, BLOCK_BYTES> m_block{};
+  std::array<std::uint8_t, BLOCK_BYTES> m_block{};
   std::uint64_t m_lastChanges = 0;
 };
 

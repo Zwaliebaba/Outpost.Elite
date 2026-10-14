@@ -1,7 +1,6 @@
 // GameLogic/WorldState.h
 #pragma once
 
-#include "Field.h"
 #include "SpaceObject.h"
 
 #include <cstdint>
@@ -14,11 +13,8 @@ namespace Elite
 /// their names, in their order there; the GameState holds it in GameData.
 struct WorldState
 {
-  WorldState() noexcept = default;
-  explicit WorldState(const WorldState&) noexcept = default;
-
   /// 36 (0x24) from SetUpLocalSpace: object slots then debris slots
-  Field<std::uint8_t> shipSlotCount;
+  std::uint8_t shipSlotCount;
   /// 36 64-byte records: slot 0 sun, 1 planet (planetSlot), 2 station (stationSlot), 3-19 ships (firstShipSlot), 20-35 debris (debrisSlots)
   SpaceObject shipSlots[36];
 

@@ -249,7 +249,7 @@ ScreenKey ShowMarketPricesScreen(GameState& _state, Hardware& _hardware, bool _b
 {
   const std::string_view title = DrawDockedFrame(_state, _hardware, MARKET_PRICES_FRAME, _backward);
   // The system's name, cut for good at its first space after the first letter.
-  const std::span<Field<std::uint8_t>> name(_state.Data().commander.currentSystem.name);
+  const std::span<std::uint8_t> name(_state.Data().commander.currentSystem.name);
   for (std::size_t letter = 1;; ++letter)
   {
     const std::uint8_t character = name[letter];
@@ -320,13 +320,13 @@ void ComputeMarketPrices(GameState& _state)
   const MarketPlace place{.economy = _state.Data().commander.currentSystem.economy,
                           .government = _state.Data().commander.currentSystem.government,
                           .techLevel = _state.Data().commander.currentSystem.techLevel};
-  // data8C10 and data8C12 walk the economy's and the government's column of the price factors, a row of eight words to a
-  // product, and data8C14 productTradeRecords, each holding the index of the word or the record it is on where the original
+  // economyFactorIndex and governmentFactorIndex walk the economy's and the government's column of the price factors, a row of eight words to a
+  // product, and tradeRecordIndex productTradeRecords, each holding the index of the word or the record it is on where the original
   // holds its address: they are left past the last commodity. marketTechLevel keeps the tech level the prices are by, and
   // resalePriceInput the last buy price, from which its resale price was computed.
-  _state.Data().market.data8C10 = static_cast<std::uint16_t>(place.economy + COMMODITY_KINDS * PRICE_FACTOR_ROW_WORDS);
-  _state.Data().market.data8C12 = static_cast<std::uint16_t>(place.government + COMMODITY_KINDS * PRICE_FACTOR_ROW_WORDS);
-  _state.Data().market.data8C14 = COMMODITY_KINDS;
+  _state.Data().market.economyFactorIndex = static_cast<std::uint16_t>(place.economy + COMMODITY_KINDS * PRICE_FACTOR_ROW_WORDS);
+  _state.Data().market.governmentFactorIndex = static_cast<std::uint16_t>(place.government + COMMODITY_KINDS * PRICE_FACTOR_ROW_WORDS);
+  _state.Data().market.tradeRecordIndex = COMMODITY_KINDS;
   _state.Data().market.marketTechLevel = MarketTechLevel(place.techLevel);
   const std::span<MenusState::ScreenPrice> prices = ScreenPrices(_state);
   for (std::uint8_t commodity = 0; commodity < COMMODITY_KINDS; ++commodity)
@@ -340,7 +340,7 @@ void ComputeMarketPrices(GameState& _state)
 
 std::uint16_t NextMarketRandom(GameState& _state)
 {
-  Field<std::uint16_t>(&random)[3] = _state.Data().market.marketRandomState;
+  std::uint16_t(&random)[3] = _state.Data().market.marketRandomState;
   const std::uint16_t a = random[0];
   const std::uint16_t b = random[1];
   const std::uint16_t c = random[2];
@@ -371,7 +371,7 @@ std::optional<std::uint8_t> RollQuantityOnSale(GameState& _state)
   return static_cast<std::uint8_t>((drawn - QUANTITY_RANDOM_BIAS) ^ (High(random) & QUANTITY_RANDOM_HIGH_MASK));
 }
 
-Quantity ParseQuantity(std::span<const Field<std::uint8_t>> _text)
+Quantity ParseQuantity(std::span<const std::uint8_t> _text)
 {
   Quantity quantity{.value = 0, .valid = false, .end = 0, .lastRead = 0};
   const auto next = [&_text, &quantity]()

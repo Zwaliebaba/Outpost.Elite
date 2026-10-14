@@ -86,8 +86,7 @@ void DrawDockedFrameAt(GameState& _state, Hardware& _hardware, std::uint8_t _scr
 /// DrawDockedFrame (CS:7C88): DrawDockedFrameAt from _descriptor, the bytes of GameData from where a frame's descriptor starts to the end
 /// of the member that holds it: the two attributes, then the title. The symbol table sizes a descriptor as it pleases, two bytes or the
 /// whole screen's text, so the caller passes the bytes its title is within. Returns the title.
-inline std::string_view DrawDockedFrame(GameState& _state, Hardware& _hardware, std::span<const Field<std::uint8_t>> _descriptor,
-                                        bool _backward)
+inline std::string_view DrawDockedFrame(GameState& _state, Hardware& _hardware, std::span<const std::uint8_t> _descriptor, bool _backward)
 {
   DrawDockedFrameAt(_state, _hardware, ByteWithin(_descriptor, 0), ByteWithin(_descriptor, 1), _backward);
   return TextWithin(_descriptor, 2);

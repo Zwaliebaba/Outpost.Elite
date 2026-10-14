@@ -1,8 +1,6 @@
 // GameLogic/KeyboardState.h
 #pragma once
 
-#include "Field.h"
-
 #include <cstdint>
 #include <type_traits>
 
@@ -94,12 +92,9 @@ inline constexpr std::uint8_t AMSTRAD_MOUSE_LEFT = 0x7E;
 /// order there; the GameState holds it in GameData.
 struct KeyboardState
 {
-  KeyboardState() noexcept = default;
-  explicit KeyboardState(const KeyboardState&) noexcept = default;
-
   /// 1 while the key is held, indexed by the scan code itself (Keys; entry 0 unused; the map's 'scan code - 1' misses the inc ah at
   /// 7452); written by ReadScanCode
-  Field<std::uint8_t> keyDown[128];
+  std::uint8_t keyDown[128];
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)

@@ -50,7 +50,7 @@ constexpr std::uint8_t KEY_BUFFER_CODES = 0x10;
 constexpr std::uint16_t KEY_BUFFER_WRAP = 0x0F; // keyBuffer is a ring of 16: an index past its last is its first
 
 // keyDown's 128 bytes, a byte a scan code: 1 while its key is held.
-[[nodiscard]] std::span<Field<std::uint8_t>> KeyDown(GameState& _state)
+[[nodiscard]] std::span<std::uint8_t> KeyDown(GameState& _state)
 {
   return _state.Data().keyboard.keyDown;
 }
@@ -88,14 +88,14 @@ bool SaveScreenshotIfAsked(GameState& _state, Hardware& _hardware)
 
 // Whether IntegrateRate tests _input against the rate at _rate for a reversal: XOR BL,[rate], which leaves BL the key
 // XOR the rate.
-[[nodiscard]] bool TestsReversal(const GameState& _state, std::uint8_t _input, const Field<std::uint8_t>& _rate)
+[[nodiscard]] bool TestsReversal(const GameState& _state, std::uint8_t _input, const std::uint8_t& _rate)
 {
   return _input != 0 && _state.Data().flight.keyboardRecenter == 1 && _rate != 0;
 }
 
 // One axis of ApplyKeyboardRates (0x7543): a new key adds to the rate, within +-23, or with keyboardRecenter snaps
 // an opposite rate to 0, which it stores at once; no key lets keyboardDamping take up to 3 off it.
-[[nodiscard]] std::uint8_t IntegrateRate(GameState& _state, std::uint8_t _input, Field<std::uint8_t>& _rate)
+[[nodiscard]] std::uint8_t IntegrateRate(GameState& _state, std::uint8_t _input, std::uint8_t& _rate)
 {
   const std::uint8_t rate = _rate;
   if (_input == 0)
@@ -142,7 +142,7 @@ Steering ApplyKeyboardRates(GameState& _state, Steering _keys)
 }
 
 // One axis of ReadKeyboardSteering: the ramp grows while the same key is held, inside +-23, and restarts on a change.
-void RampAxis(std::uint8_t _key, Field<std::uint8_t>& _lastKey, Field<std::uint8_t>& _ramp)
+void RampAxis(std::uint8_t _key, std::uint8_t& _lastKey, std::uint8_t& _ramp)
 {
   const bool held = _key == _lastKey;
   _lastKey = _key;
@@ -188,7 +188,7 @@ Steering ReadAmstradStick(GameState& _state)
 
 // One axis of ReadJoystickSteering: (_count - centre) * 256 / centre by a DIV that can overflow into the game's trap; halved and
 // saturated at 127, over 8, less a dead zone of 4, with the sign put back.
-[[nodiscard]] std::uint8_t StickAxis(std::uint16_t _count, const Field<std::uint16_t>& _center)
+[[nodiscard]] std::uint8_t StickAxis(std::uint16_t _count, const std::uint16_t& _center)
 {
   auto difference = static_cast<std::uint16_t>(_count - _center);
   const bool negative = (difference & 0x8000) != 0;
@@ -323,7 +323,7 @@ void ResetKeyboard(GameState& _state, Hardware& _hardware)
 {
   _hardware.DisableInterrupts();
   // REP STOSW: every key released, two at a time.
-  for (Field<std::uint8_t>& key : KeyDown(_state))
+  for (std::uint8_t& key : KeyDown(_state))
   {
     key = 0;
   }
@@ -521,7 +521,7 @@ Steering ReadKeyboardSteering(GameState& _state)
 {
   std::uint8_t roll = 0;
   std::uint8_t pitch = 0;
-  const auto held = [](const Field<std::uint8_t>& _first, const Field<std::uint8_t>& _second) { return (_first | _second) != 0; };
+  const auto held = [](const std::uint8_t& _first, const std::uint8_t& _second) { return (_first | _second) != 0; };
   if (held(_state.Data().keyboard.keyDown[Keys::UP], _state.Data().keyboard.keyDown[Keys::Q]))
   {
     --pitch;

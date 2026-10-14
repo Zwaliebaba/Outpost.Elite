@@ -334,7 +334,7 @@ DustPosition MoveDust(GameState& _state, std::size_t _particle, DustPosition _po
     else if (!IsDustNearCenter(position))
     {
       // DEC BYTE [SI+4] / JE: the lifetime counted down, the particle born again at 0.
-      Field<std::uint8_t>& lifetime = _state.Data().flight.stardust[_particle].lifetime;
+      std::uint8_t& lifetime = _state.Data().flight.stardust[_particle].lifetime;
       lifetime = static_cast<std::uint8_t>(lifetime - 1);
       if (lifetime != 0)
       {
@@ -488,8 +488,7 @@ void DrawBar(GameState& _state, const std::array<std::uint16_t, Lines>& _lines, 
 
 // MOV AL,[_value] / CMP AL,[_shown] / JE / (MOV [_shown],AL) / MOV DI,_line / CALL DrawThreeLineBar, with CH = 0 as the earlier
 // draws leave it (UpdateDashboard).
-void RedrawThreeLineBar(GameState& _state, const Field<std::uint8_t>& _value, Field<std::uint8_t>& _shown, std::uint16_t _line,
-                        bool _remember)
+void RedrawThreeLineBar(GameState& _state, const std::uint8_t& _value, std::uint8_t& _shown, std::uint16_t _line, bool _remember)
 {
   const std::uint8_t value = _value;
   if (value == _shown)
@@ -504,7 +503,7 @@ void RedrawThreeLineBar(GameState& _state, const Field<std::uint8_t>& _value, Fi
 }
 
 // SUB byte,_value / JAE / MOV byte,0 on _field: the difference written, and 0 over it on a borrow.
-void SubtractFloored(Field<std::uint8_t>& _field, std::uint8_t _value)
+void SubtractFloored(std::uint8_t& _field, std::uint8_t _value)
 {
   const std::uint8_t before = _field;
   _field = static_cast<std::uint8_t>(before - _value);
@@ -515,7 +514,7 @@ void SubtractFloored(Field<std::uint8_t>& _field, std::uint8_t _value)
 }
 
 // cmp [_shown], al; mov [_shown], al; je, with AL = _glyph: whether the glyph changed.
-[[nodiscard]] bool ExchangeShown(Field<std::uint8_t>& _shown, std::uint8_t _glyph)
+[[nodiscard]] bool ExchangeShown(std::uint8_t& _shown, std::uint8_t _glyph)
 {
   const bool changed = _shown != _glyph;
   _shown = _glyph;
@@ -788,11 +787,11 @@ KeyPress WaitForKey(GameState& _state, Hardware& _hardware)
 }
 
 // The pause screen's five options' flags, which R, D, Y, B and S toggle, in the order the original keeps them, each before its letter.
-[[nodiscard]] Field<std::uint8_t>& PauseOption(GameState& _state, std::size_t _index)
+[[nodiscard]] std::uint8_t& PauseOption(GameState& _state, std::size_t _index)
 {
   FlightState& flight = _state.Data().flight;
-  const std::array<Field<std::uint8_t>*, PAUSE_OPTIONS> flags = {&flight.keyboardRecenter, &flight.keyboardDamping, &flight.reverseYControl,
-                                                                 &flight.reverseXAndY, &flight.soundEnabled};
+  const std::array<std::uint8_t*, PAUSE_OPTIONS> flags = {&flight.keyboardRecenter, &flight.keyboardDamping, &flight.reverseYControl,
+                                                          &flight.reverseXAndY, &flight.soundEnabled};
   return *flags.at(_index);
 }
 
@@ -835,7 +834,7 @@ void ShowPauseOptions(GameState& _state)
   {
     if (KEYS[index] == _key)
     {
-      Field<std::uint8_t>& option = PauseOption(_state, index);
+      std::uint8_t& option = PauseOption(_state, index);
       option = static_cast<std::uint8_t>(option ^ 1);
       StartBeep(_state);
       return true;
@@ -1707,7 +1706,7 @@ void SaveStardustPositions(GameState& _state)
   // cleared again at 2E5C, with no call between).
   for (std::size_t particle = 0; particle < STARDUST_COUNT; ++particle)
   {
-    CopyMembers(_state.Data().flight.stardustPrevious[particle], _state.Data().flight.stardust[particle]);
+    _state.Data().flight.stardustPrevious[particle] = _state.Data().flight.stardust[particle];
   }
 }
 
@@ -1749,14 +1748,14 @@ void InvalidateDashboard(GameState& _state)
 {
   // REP STOSB with ES = DS, upwards over the dashboard's cache, missileCountShown to speedShown: every value a gauge shows, stale.
   FlightState& flight = _state.Data().flight;
-  for (Field<std::uint8_t>* const shown : {&flight.missileCountShown,   &flight.missileLockShown,      &flight.energyBanksShown[0],
-                                           &flight.energyBanksShown[1], &flight.energyBanksShown[2],   &flight.energyBanksShown[3],
-                                           &flight.energyBankFill[0],   &flight.energyBankFill[1],     &flight.energyBankFill[2],
-                                           &flight.energyBankFill[3],   &flight.rollRateShown,         &flight.pitchRateShown,
-                                           &flight.altitudeShown,       &flight.cabinTemperatureShown, &flight.fuelShown,
-                                           &flight.ecmGlyphShown,       &flight.safeZoneGlyphShown,    &flight.laserTemperatureShown,
-                                           &flight.foreShieldShown,     &flight.aftShieldShown,        &flight.conditionColorShown,
-                                           &flight.speedShown})
+  for (std::uint8_t* const shown : {&flight.missileCountShown,   &flight.missileLockShown,      &flight.energyBanksShown[0],
+                                    &flight.energyBanksShown[1], &flight.energyBanksShown[2],   &flight.energyBanksShown[3],
+                                    &flight.energyBankFill[0],   &flight.energyBankFill[1],     &flight.energyBankFill[2],
+                                    &flight.energyBankFill[3],   &flight.rollRateShown,         &flight.pitchRateShown,
+                                    &flight.altitudeShown,       &flight.cabinTemperatureShown, &flight.fuelShown,
+                                    &flight.ecmGlyphShown,       &flight.safeZoneGlyphShown,    &flight.laserTemperatureShown,
+                                    &flight.foreShieldShown,     &flight.aftShieldShown,        &flight.conditionColorShown,
+                                    &flight.speedShown})
   {
     *shown = DASHBOARD_STALE;
   }
@@ -1922,7 +1921,7 @@ void DrawEnergyBanks(GameState& _state)
   // banks below it are empty: the bank written is the last of those the count has left.
   const std::uint16_t energy = _state.Data().playerShip.playerEnergy;
   std::uint8_t wholeBanks = High(energy);
-  Field<std::uint8_t>(&fills)[ENERGY_BANKS] = _state.Data().flight.energyBankFill;
+  std::uint8_t(&fills)[ENERGY_BANKS] = _state.Data().flight.energyBankFill;
   std::uint16_t banks = ENERGY_BANKS;
   for (; banks != 0 && wholeBanks != 0; --banks, --wholeBanks)
   {
@@ -1939,7 +1938,7 @@ void DrawEnergyBanks(GameState& _state)
 
   // Each bank against its shown value, from the top bank's bar upwards, PUSH CX, DI and SI round each: the count left in CX, so
   // CH = 0 for the bar.
-  Field<std::uint8_t>(&shown)[ENERGY_BANKS] = _state.Data().flight.energyBanksShown;
+  std::uint8_t(&shown)[ENERGY_BANKS] = _state.Data().flight.energyBanksShown;
   std::uint16_t line = ENERGY_BANK_LINE;
   for (std::uint16_t count = ENERGY_BANKS; count != 0; --count)
   {
@@ -1987,7 +1986,7 @@ void UpdateEnergyAndLaserHeat(GameState& _state)
     return;
   }
   const auto lost = static_cast<std::size_t>(Low(NextRandom(_state)) / EQUIPMENT_LOSS_DIVISOR);
-  Field<std::uint8_t>& equipment = _state.Data().commander.*EQUIPMENT_ITEMS[1 + lost];
+  std::uint8_t& equipment = _state.Data().commander.*EQUIPMENT_ITEMS[1 + lost];
   if (equipment == 0)
   {
     return;

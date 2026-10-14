@@ -85,8 +85,8 @@ constexpr std::uint16_t UNIT_AFTER_NAME = 0x0D;  // and then its unit
 constexpr std::uint16_t PRODUCT_NAME_BYTES = 0x11;
 constexpr std::uint16_t TRADE_ROWS = 0x11;
 // A trade row's price in screenPrices: a product's buy price, then its sell price.
-constexpr Field<std::uint16_t> MenusState::ScreenPrice::*BUY_PRICE = &MenusState::ScreenPrice::price;
-constexpr Field<std::uint16_t> MenusState::ScreenPrice::*SELL_PRICE = &MenusState::ScreenPrice::resale;
+constexpr std::uint16_t MenusState::ScreenPrice::*BUY_PRICE = &MenusState::ScreenPrice::price;
+constexpr std::uint16_t MenusState::ScreenPrice::*SELL_PRICE = &MenusState::ScreenPrice::resale;
 constexpr std::uint16_t INVENTORY_ROWS = 0x12; // the 17 products and the refugees
 constexpr std::uint16_t QUANTITY_DIGITS_BLANKED = 4;
 constexpr std::uint8_t LEGAL_STATUS_OFFENDER = 1;
@@ -154,13 +154,13 @@ KeyPress WaitForKey(GameState& _state, Hardware& _hardware)
 }
 
 // The cash's text and its NUL: FormatCredits fills all but the last of creditBalanceText's bytes.
-[[nodiscard]] std::span<const Field<std::uint8_t>> CashRun(const GameState& _state)
+[[nodiscard]] std::span<const std::uint8_t> CashRun(const GameState& _state)
 {
   return _state.Data().commander.creditBalanceText;
 }
 
 // The selected system's name and its NUL, where TerminateSelectedSystemName leaves it after an eight-letter name.
-[[nodiscard]] std::span<const Field<std::uint8_t>> SelectedNameRun(const GameState& _state)
+[[nodiscard]] std::span<const std::uint8_t> SelectedNameRun(const GameState& _state)
 {
   return _state.Data().commander.selectedSystem.name;
 }
@@ -169,7 +169,7 @@ KeyPress WaitForKey(GameState& _state, Hardware& _hardware)
 // from the first character that is not a space.
 std::string_view SkipCashSpaces(const GameState& _state)
 {
-  const Field<std::uint8_t>(&cash)[sizeof(CommanderState::creditBalanceText)] = _state.Data().commander.creditBalanceText;
+  const std::uint8_t(&cash)[sizeof(CommanderState::creditBalanceText)] = _state.Data().commander.creditBalanceText;
   for (std::size_t first = 0;; ++first)
   {
     if (cash[first] != SPACE)
@@ -180,7 +180,7 @@ std::string_view SkipCashSpaces(const GameState& _state)
 }
 
 // _quantity as five digits into _text, up to four of their leading zeros blanked.
-void FormatQuantity(std::uint16_t _quantity, std::span<Field<std::uint8_t>> _text)
+void FormatQuantity(std::uint16_t _quantity, std::span<std::uint8_t> _text)
 {
   FormatDecimal5(_quantity, _text);
   BlankLeadingZeros(_text, static_cast<std::uint8_t>(QUANTITY_DIGITS_BLANKED));
@@ -192,9 +192,9 @@ void FormatQuantity(std::uint16_t _quantity, std::span<Field<std::uint8_t>> _tex
 {
   const CommanderState& commander = _state.Data().commander;
   std::string text;
-  for (const std::span<const Field<std::uint8_t>> piece :
-       {std::span<const Field<std::uint8_t>>(commander.commanderRankText), std::span<const Field<std::uint8_t>>(commander.gap7585),
-        std::span<const Field<std::uint8_t>>(commander.creditBalanceText)})
+  for (const std::span<const std::uint8_t> piece :
+       {std::span<const std::uint8_t>(commander.commanderRankText), std::span<const std::uint8_t>(commander.rankTextEnd),
+        std::span<const std::uint8_t>(commander.creditBalanceText)})
   {
     const std::string_view part = TextIn(piece);
     text += part;
@@ -224,7 +224,7 @@ void FormatQuantity(std::uint16_t _quantity, std::span<Field<std::uint8_t>> _tex
 [[nodiscard]] std::string FuelLightYearsText(const GameState& _state)
 {
   const DockedState& docked = _state.Data().docked;
-  return JoinTexts({CharText(docked.data83F7), FUEL_TEXT_POINT, CharText(docked.data83F9), FUEL_TEXT_SUFFIX});
+  return JoinTexts({CharText(docked.fuelUnitsDigit), FUEL_TEXT_POINT, CharText(docked.fuelTenthsDigit), FUEL_TEXT_SUFFIX});
 }
 
 // Product _product's name and unit, up to its NUL.
@@ -264,7 +264,7 @@ constexpr TradeRow FIRST_TRADE_ROW{TRADE_ROWS, 0, LINE_6};
 
 // A trade row's product name and price (PrintNameAndPrice): the price _price of the row's prices, four cells after the name.
 // Returns where the price's print stops.
-std::uint16_t PrintNameAndPrice(GameState& _state, const TradeRow& _row, Field<std::uint16_t> MenusState::ScreenPrice::*_price)
+std::uint16_t PrintNameAndPrice(GameState& _state, const TradeRow& _row, std::uint16_t MenusState::ScreenPrice::*_price)
 {
   const std::uint16_t named = PrintTextModeString(_state, ProductName(_state, _row.product), _row.cell);
   FormatTenths(_state, ElementWithin(std::span(_state.Data().menus.screenPrices), _row.product).*_price);
@@ -485,8 +485,8 @@ void FormatFuelLightYears(GameState& _state)
   DockedState& docked = _state.Data().docked;
   FormatDecimal5(static_cast<std::uint8_t>(tenths / FUEL_UNITS_PER_TENTH), docked.fuelDigits);
   // The units and the tenths, the last two of the five digits, into the text either side of its point.
-  docked.data83F7 = std::uint8_t{docked.fuelDigits[FUEL_UNITS_DIGIT]};
-  docked.data83F9 = std::uint8_t{docked.fuelDigits[FUEL_TENTHS_DIGIT]};
+  docked.fuelUnitsDigit = std::uint8_t{docked.fuelDigits[FUEL_UNITS_DIGIT]};
+  docked.fuelTenthsDigit = std::uint8_t{docked.fuelDigits[FUEL_TENTHS_DIGIT]};
 }
 
 void DrawDockedFrameAt(GameState& _state, Hardware& _hardware, std::uint8_t _screen, std::uint8_t _frame, bool _backward)
@@ -707,12 +707,12 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
   _state.Data().drawing.textAttribute = STATUS_ATTRIBUTE;
   // AL keeps the missiles' digit until a row prints, whose NUL then leaves 0 there.
   auto al = static_cast<std::uint8_t>(_state.Data().commander.missileCount + DIGIT_ZERO);
-  _state.Data().docked.data84F5 = al;
+  _state.Data().docked.missileCountDigit = al;
 
   // One row for each item fitted, and after a laser the mounts it is fitted to.
   std::uint16_t row = LINE_10;
   // The equipment items from the missiles (EQUIPMENT_ITEMS), the fuel's after.
-  const std::span<Field<std::uint8_t> CommanderState::*const> fitted = std::span(EQUIPMENT_ITEMS).subspan(1, EQUIPMENT_ROWS);
+  const std::span<std::uint8_t CommanderState::*const> fitted = std::span(EQUIPMENT_ITEMS).subspan(1, EQUIPMENT_ROWS);
   std::size_t item = 0;
   _state.Data().menus.menuSelectedRow = FIRST_EQUIPMENT_MENU_ROW;
   for (std::uint16_t left = EQUIPMENT_ROWS;;)
@@ -721,7 +721,7 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
     {
       // The missiles' name has their count's digit inside it, which the original writes into the text above; the rest are
       // constant.
-      const std::string missiles = JoinTexts({MISSILE_NAME_OPEN, CharText(_state.Data().docked.data84F5), MISSILE_NAME_CLOSE});
+      const std::string missiles = JoinTexts({MISSILE_NAME_OPEN, CharText(_state.Data().docked.missileCountDigit), MISSILE_NAME_CLOSE});
       const std::string_view name = item == 0 ? std::string_view(missiles) : EQUIPMENT_NAMES[item];
       const std::uint16_t named = PrintTextModeString(_state, name, row);
       al = 0;
@@ -774,8 +774,8 @@ ScreenKey ShowInventoryScreen(GameState& _state, Hardware& _hardware, bool _back
   PrintTextModeString(_state, SkipCashSpaces(_state), cashCell);
 
   // Every product held, and the refugees: name, quantity, unit, a row each; an empty row does not move the place on.
-  const std::span<Field<std::uint8_t>> quantityText =
-    std::span<Field<std::uint8_t>>(_state.Data().docked.productNames).subspan(INVENTORY_QUANTITY_IN_NAMES, QUANTITY_TEXT_BYTES);
+  const std::span<std::uint8_t> quantityText =
+    std::span<std::uint8_t>(_state.Data().docked.productNames).subspan(INVENTORY_QUANTITY_IN_NAMES, QUANTITY_TEXT_BYTES);
   std::uint16_t row = LINE_6;
   std::uint16_t product = 0;
   for (std::uint16_t left = INVENTORY_ROWS;;)
@@ -784,7 +784,7 @@ ScreenKey ShowInventoryScreen(GameState& _state, Hardware& _hardware, bool _back
     if (amount != 0)
     {
       // The name cut at its twelfth character by a NUL, which becomes a space again before the unit after it.
-      const std::span<Field<std::uint8_t>> name =
+      const std::span<std::uint8_t> name =
         BytesOf(_state.Data().docked.productNames).subspan(std::size_t{product} * PRODUCT_NAME_BYTES, PRODUCT_NAME_BYTES);
       name[PRODUCT_NAME_END] = NUL;
       const std::string_view named = TextIn(name);

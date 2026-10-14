@@ -1,8 +1,6 @@
 // GameLogic/MathsState.h
 #pragma once
 
-#include "Field.h"
-
 #include <cstdint>
 #include <type_traits>
 
@@ -13,17 +11,11 @@ namespace Elite
 /// data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct MathsState
 {
-  MathsState() noexcept = default;
-  explicit MathsState(const MathsState&) noexcept = default;
-
   /// A rotation's sine and cosine.
   struct StoredSinCos
   {
-    StoredSinCos() noexcept = default;
-    explicit StoredSinCos(const StoredSinCos&) noexcept = default;
-
-    Field<std::uint16_t> sine;
-    Field<std::uint16_t> cosine;
+    std::uint16_t sine;
+    std::uint16_t cosine;
 
     /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
     template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)

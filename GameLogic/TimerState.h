@@ -1,8 +1,6 @@
 // GameLogic/TimerState.h
 #pragma once
 
-#include "Field.h"
-
 #include <cstdint>
 #include <type_traits>
 
@@ -13,15 +11,12 @@ namespace Elite
 /// data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct TimerState
 {
-  TimerState() noexcept = default;
-  explicit TimerState(const TimerState&) noexcept = default;
-
   /// port 0x61 at start-up, restored on exit
-  Field<std::uint8_t> savedSpeakerPort;
+  std::uint8_t savedSpeakerPort;
   /// incremented by TimerTick; reset by RateLimit
-  Field<std::uint16_t> timerTicks;
+  std::uint16_t timerTicks;
   /// incremented every tick; bit 9 drives a blink at 0x2914
-  Field<std::uint16_t> millisecondCounter;
+  std::uint16_t millisecondCounter;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)

@@ -1,8 +1,6 @@
 // GameLogic/FlowState.h
 #pragma once
 
-#include "Field.h"
-
 #include <cstdint>
 #include <type_traits>
 
@@ -13,15 +11,12 @@ namespace Elite
 /// data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct FlowState
 {
-  FlowState() noexcept = default;
-  explicit FlowState(const FlowState&) noexcept = default;
-
   /// incremented every tick; compared with minimumFrameMs and cleared by PresentSpaceView
-  Field<std::uint8_t> msSinceFrame;
+  std::uint8_t msSinceFrame;
   /// 1 while RunFlight's loop owns the screen (GameLoop), 0 on the title and docked screens and while HandleFlightFunctionKeys runs a sc...
-  Field<std::uint8_t> inFlight;
+  std::uint8_t inFlight;
   /// 1 once the title has run; cleared on death (GameLoop) and by Abort on the pause screen, so the title runs again
-  Field<std::uint8_t> titleShown;
+  std::uint8_t titleShown;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)

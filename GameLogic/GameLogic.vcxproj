@@ -84,7 +84,6 @@
     <ClInclude Include="CombatState.h" />
     <ClInclude Include="CombatTables.h" />
     <ClInclude Include="CommanderState.h" />
-    <ClInclude Include="Field.h" />
     <ClInclude Include="DirectoryFileStore.h" />
     <ClInclude Include="DiskState.h" />
     <ClInclude Include="Docked.h" />

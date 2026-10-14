@@ -1,8 +1,6 @@
 // GameLogic/VideoState.h
 #pragma once
 
-#include "Field.h"
-
 #include <cstdint>
 #include <type_traits>
 
@@ -13,39 +11,33 @@ namespace Elite
 /// data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct VideoState
 {
-  VideoState() noexcept = default;
-  explicit VideoState(const VideoState&) noexcept = default;
-
   /// 'elite' + two digits + '.lo' and its NUL, for the text layout
-  Field<std::uint8_t> screenshotTextFileName[11];
+  std::uint8_t screenshotTextFileName[11];
   /// 'elite' + two digits + '.hi' and its NUL, for the graphics layouts
-  Field<std::uint8_t> screenshotGraphicsFileName[11];
+  std::uint8_t screenshotGraphicsFileName[11];
   /// two ASCII digits, '00' in the file, incremented before each screenshot
-  Field<std::uint16_t> screenshotNumber;
+  std::uint16_t screenshotNumber;
   /// colorFillBytes[drawColor], set by DrawDisc for FillSpan
-  Field<std::uint8_t> discFillByte;
+  std::uint8_t discFillByte;
   /// DrawDisc's centre x
-  Field<std::uint16_t> discCenterX;
+  std::uint16_t discCenterX;
   /// DrawDisc's radius/2: the rows above and below the centre
-  Field<std::uint8_t> discRadiusRows;
+  std::uint8_t discRadiusRows;
   /// DrawDisc's row counter
-  Field<std::uint8_t> discRowsLeft;
+  std::uint8_t discRowsLeft;
   /// fractional step through circleProfile per row (0x20000/rows)
-  Field<std::uint16_t> discProfileStepFraction;
+  std::uint16_t discProfileStepFraction;
   /// whole-byte step through circleProfile per row
-  Field<std::uint16_t> discProfileStepWhole;
+  std::uint16_t discProfileStepWhole;
   /// Fibonacci generator state with fringeRandomB: (a,b) becomes (b,a+b)
-  Field<std::uint16_t> fringeRandomA;
+  std::uint16_t fringeRandomA;
   /// its high byte AND sunFringeMask is added to each half-width
-  Field<std::uint16_t> fringeRandomB;
+  std::uint16_t fringeRandomB;
   /// A point of DrawCircle's chords.
   struct CirclePoint
   {
-    CirclePoint() noexcept = default;
-    explicit CirclePoint(const CirclePoint&) noexcept = default;
-
-    Field<std::uint16_t> x;
-    Field<std::uint16_t> row;
+    std::uint16_t x;
+    std::uint16_t row;
 
     /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
     template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
@@ -67,43 +59,43 @@ struct VideoState
   /// DrawCircle's polygon
   CirclePoint circlePoints[32];
   /// FillTriangle: apex x (flat bottom), B.x (flat top) or top x (general)
-  Field<std::uint8_t> triangleEdgeStartX;
+  std::uint8_t triangleEdgeStartX;
   /// FillTriangle: apex x, C.x, or top x
-  Field<std::uint8_t> triangleEdgeStartX2;
+  std::uint8_t triangleEdgeStartX2;
   /// the lowest row, where DrawStackedSpans starts; FillClippedOneRow writes the row byte too
-  Field<std::uint8_t> triangleBottomRow;
+  std::uint8_t triangleBottomRow;
   /// rows from top to the lower vertex (flat) or to the middle vertex (general)
-  Field<std::uint8_t> triangleUpperRows;
+  std::uint8_t triangleUpperRows;
   /// general triangle: rows from top to bottom
-  Field<std::uint8_t> triangleTotalRows;
+  std::uint8_t triangleTotalRows;
   /// general triangle: middle vertex x
-  Field<std::uint8_t> triangleMiddleX;
+  std::uint8_t triangleMiddleX;
   /// general triangle: bottom vertex x
-  Field<std::uint8_t> triangleBottomX;
+  std::uint8_t triangleBottomX;
   /// FillClippedTriangle: first edge start x (apex, B.x or top)
-  Field<std::uint16_t> clippedEdgeStartX;
+  std::uint16_t clippedEdgeStartX;
   /// FillClippedTriangle: second edge start x (apex, C.x or top)
-  Field<std::uint16_t> clippedEdgeStartX2;
+  std::uint16_t clippedEdgeStartX2;
   /// rows to the lower (flat) or middle (general) vertex
-  Field<std::uint16_t> clippedUpperRows;
+  std::uint16_t clippedUpperRows;
   /// general: rows top to bottom
-  Field<std::uint16_t> clippedTotalRows;
+  std::uint16_t clippedTotalRows;
   /// first drawn row; 0x8000 = none yet
-  Field<std::uint16_t> clippedFirstRow;
+  std::uint16_t clippedFirstRow;
   /// 16.16 slope of edge A or the long edge, fraction word (second div)
-  Field<std::uint16_t> clippedSlopeAFraction;
+  std::uint16_t clippedSlopeAFraction;
   /// its integer word (first div)
-  Field<std::uint16_t> clippedSlopeAWhole;
+  std::uint16_t clippedSlopeAWhole;
   /// 16.16 slope of edge B or the short edge, fraction word
-  Field<std::uint16_t> clippedSlopeBFraction;
+  std::uint16_t clippedSlopeBFraction;
   /// its integer word
-  Field<std::uint16_t> clippedSlopeBWhole;
+  std::uint16_t clippedSlopeBWhole;
   /// general: middle vertex x
-  Field<std::uint16_t> clippedMiddleX;
+  std::uint16_t clippedMiddleX;
   /// general: bottom vertex x
-  Field<std::uint16_t> clippedBottomX;
+  std::uint16_t clippedBottomX;
   /// general: rows drawn, the span count for DrawStackedSpansFromRow
-  Field<std::uint8_t> clippedRowCount;
+  std::uint8_t clippedRowCount;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)

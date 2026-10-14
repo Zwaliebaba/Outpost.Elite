@@ -95,7 +95,7 @@
     <ClCompile Include="EquipmentRulesTests.cpp">
       <Filter>Equipment</Filter>
     </ClCompile>
-    <ClCompile Include="FieldTests.cpp">
+    <ClCompile Include="GameDataTests.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
     <ClCompile Include="DockedTests.cpp">

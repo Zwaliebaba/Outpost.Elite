@@ -52,7 +52,7 @@ constexpr std::array<std::string_view, 9> RATING_NAMES = {
 
 /// equipmentNames (DS:84D2): each pointer's text, up to its NUL.
 constexpr std::array<std::string_view, 13> EQUIPMENT_NAMES = {
-  std::string_view{},                      // DS:84EC, a buffer: the status screen writes the missiles' count at its '?' (data84F5)
+  std::string_view{},                      // DS:84EC, a buffer: the status screen writes the missiles' count at its '?' (missileCountDigit)
   std::string_view{"Cargo Bay Extension"}, // DS:84F8
   std::string_view{"ECM System"},          // DS:850C
   std::string_view{"Pulse Laser"},         // DS:8517

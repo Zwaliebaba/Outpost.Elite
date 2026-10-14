@@ -1,8 +1,6 @@
 // GameLogic/SoundState.h
 #pragma once
 
-#include "Field.h"
-
 #include <cstdint>
 #include <type_traits>
 
@@ -13,15 +11,12 @@ namespace Elite
 /// data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct SoundState
 {
-  SoundState() noexcept = default;
-  explicit SoundState(const SoundState&) noexcept = default;
-
   /// 2-8 by effect
-  Field<std::uint8_t> sweepStepShrink;
+  std::uint8_t sweepStepShrink;
   /// 0-0x3FF into noiseSource, advanced by EmitNoiseSample
-  Field<std::uint16_t> noiseSourceIndex;
+  std::uint16_t noiseSourceIndex;
   /// when 1, TimerTick plays the tune at musicPointer on PIT channel 2
-  Field<std::uint8_t> musicPlaying;
+  std::uint8_t musicPlaying;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)

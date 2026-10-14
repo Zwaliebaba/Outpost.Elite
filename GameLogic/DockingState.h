@@ -1,8 +1,6 @@
 // GameLogic/DockingState.h
 #pragma once
 
-#include "Field.h"
-
 #include <cstdint>
 #include <type_traits>
 
@@ -13,17 +11,14 @@ namespace Elite
 /// data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct DockingState
 {
-  DockingState() noexcept = default;
-  explicit DockingState(const DockingState&) noexcept = default;
-
   /// RunDockingComputer's steering, AL=roll, AH=pitch
-  Field<std::uint16_t> dockingComputerSteering;
+  std::uint16_t dockingComputerSteering;
   /// RunDockingComputer's state, 0-11
-  Field<std::uint8_t> dockingComputerState;
+  std::uint8_t dockingComputerState;
   /// angle RunDockingComputer is turning to
-  Field<std::uint16_t> dockingTargetAngle;
+  std::uint16_t dockingTargetAngle;
   /// each alignment phase of RunDockingComputer runs twice
-  Field<std::uint8_t> dockingAlignPasses;
+  std::uint8_t dockingAlignPasses;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
