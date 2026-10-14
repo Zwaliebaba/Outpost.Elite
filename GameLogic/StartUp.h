@@ -55,11 +55,6 @@ void WipeProgram(Hardware& _hardware);
 /// direction flag is clear wherever the game calls it, change 3c), and the per-game state reset.
 void StartNewGame(GameState& _state);
 
-/// The 64 bytes after the space view's buffer, DS:2000-203F in 1987, where ClearDrawBuffer leaves DI once it has filled the buffer
-/// going up, and which M's launch then copies its missile from (LaunchPlayerMissile): amstradPresent as Start left it, amstradSignature,
-/// speakerPortImage, diskOperation, exitMessage and dosVersionMessage's first seven, by name (D38).
-[[nodiscard]] std::array<std::uint8_t, SpaceObject::BYTES> BytesAfterDrawBuffer(const GameState& _state);
-
 /// ShowCredits (CS:8F02): the space view's buffer cleared (ClearDrawBuffer), the
 /// nine lines of creditsScreenText drawn in it, presented (FinishSpaceViewFrame), then 3000 timer ticks, about 3 s. Waits.
 void ShowCredits(GameState& _state, Hardware& _hardware);

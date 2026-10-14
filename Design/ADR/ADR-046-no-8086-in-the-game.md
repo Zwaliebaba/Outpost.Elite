@@ -1,6 +1,6 @@
 # ADR-046 — No 8086 in the game's code: the flag, ES, BP, AL and the line's registers go
 
-**Status:** accepted 2026-10-14, with the change that implements it, step 6 of Phase 7 ([Reverse-Engineering-Plan.md §5, Phase 7](../Reverse-Engineering-Plan.md#phase-7--wholly-native)), under the owner's ruling D76.
+**Status:** accepted 2026-10-14, with the change that implements it, step 6 of Phase 7 ([Reverse-Engineering-Plan.md §5, Phase 7](../Reverse-Engineering-Plan.md#phase-7--wholly-native)), under the owner's ruling D76. **Amended 2026-10-14:** DX, BX and DI go too, by D84 (items 6 to 8).
 
 ## Context
 
@@ -26,7 +26,27 @@ Nothing. The state, its layout and its writes are untouched, so every digest of 
 
 Two cases change only where the game failed or cannot go: a screen print through the data segment, which threw `std::out_of_range`, now draws on the CGA; and a chart with no system on it, which cannot happen, selects the current system instead of an index made from BP.
 
+## Decision, amended: DX, BX and DI (D84)
+
+6. **BX goes** (D84). It never reached the state: the explosions handed it on only for the divide trap of a barrel count to save, and the count's two divides take the cargo, not BX. `ExplodeObject`, `DropCargo`, `SpawnFragments` and `UpdateMissileAi` return nothing, and `Explosion`, `MissileFlight` and the crosshair search's `bx` go. A struck missile's target is the one it flew at, read before it explodes, where the original read the target of the record ExplodeObject left DI on: the missile's own, as no missile carries cargo.
+7. **DX goes** (D84). The AI's handlers passed it from one ship to the next, and the traders, wolves and hunters took its low byte as the low byte of the box their range is measured by (`WithinRange`). That box is now the range byte in 256ths, its low byte 0. `MovedObject`'s and `Velocity`'s `dx` go.
+8. **DI goes** (D84). A launched missile was copied from wherever DI was left: a ship slot, or the 64 bytes past the dashboard's cache, the stardust or the drawing buffer as the 1987 data segment held them (`LaunchDi`, `BytesAfterDrawBuffer`). Its slot is now cleared first, then made a missile (`InitMissile`). The tables that only those bytes read go: `AMSTRAD_PRESENT`, `AMSTRAD_SIGNATURE`, `DOS_VERSION_MESSAGE` and `EQUIPMENT_LOSS_MESSAGE`.
+
+## What moved with items 6 to 8, and how it was measured
+
+The state was dumped by member at every digest point of the corpus and the twins before the change (26 replays and 33 twins, 451 points) and after it, and compared by path:
+
+| What | Result |
+|---|---|
+| Points that moved | 11, in three replays; every twin's point as it was |
+| `attack-the-station` | from its point `missile` (line 18): the launched missile's `compassZ`, where its slot had held the bytes DI was left on; then the fight, which the missile's flight changes: its next four points, aft shield and ships in play |
+| `masking-device-and-anti-ecm` | the same from its missile launch (line 24), and its next three points |
+| `hyperspace-and-fight` | from `pirates` (line 18): the pirates' paths, the random numbers they drew and the fore shield, as their range is measured without DX's low byte; at `after-the-fight` the recorded fight no longer destroys a pirate: kills 0 and credits 100.0 where they were 1 and 120.0. Its header says so |
+| Pictures | six, at those points |
+
+The digests were re-based from the dump after the change, the pictures and outcomes recorded by `OUTPOST_ELITE_RECORD_GUARD`, and a second recording reproduced every file byte for byte. The suite then passes in check mode under g++: 178 tests.
+
 ## What this forecloses, and what it leaves
 
-- **A register as a parameter** for these five. A routine that needs a value takes it by name.
-- **Left for later steps, or for the owner:** DX and BX still pass between the AI's handlers, the explosions and the missiles as 1987 left them in registers (`RunBehaviorHandler`'s `_dx`, `ExplodeObject`'s `_bx`, `Explosion`, `MissileFlight`), and DI still decides where a launched missile's bytes are copied from (`LaunchDi`, D38), which reads the bytes past the drawing buffer, the stardust or the dashboard cache as the 1987 data segment held them. The plan's step 6 named the flag, BP, AL and the line's records; these are the same kind of thing, and DI's reaches the state, so they are raised with the owner rather than taken here.
+- **A register as a parameter** for these, BX, DX and DI among them. A routine that needs a value takes it by name.
+- **The 1987 data segment past a buffer.** Nothing reads it any more; a missile is a missile from its template.

@@ -1,6 +1,6 @@
 # ELITES.EXE — reverse-engineering and native port plan
 
-**Status:** proposed 2026-10-09. The owner's rulings are D1 to D81 in §8. A ruling becomes a decision when the ADR in §9 records it (AGENTS.md §6). Each phase's section in §5 says how its exit was met.
+**Status:** proposed 2026-10-09. The owner's rulings are D1 to D84 in §8. A ruling becomes a decision when the ADR in §9 records it (AGENTS.md §6). Each phase's section in §5 says how its exit was met.
 
 | Phase | State | Recorded in |
 |---|---|---|
@@ -355,7 +355,7 @@ The steps, each its own change and ADR, in this order:
 3. **No `Field<>`.** The members are plain types at the same widths, so every sum wraps where it did; the 80 unnamed members are named, `SpaceObject` becomes a plain struct, and the rules against copies and compound assignment go. The state's headers stop being generated here, as source from now on, and `Tools/GenerateGameData.py`'s check leaves CI. *Done (ADR-044); the headers and the check went at step 5.*
 4. **The start state in C++.** Jameson and every first value are initializers, written once from the image and kept as source; `DataPlaces.h` and `ReferenceLoadImage` go, and the start digest is checked unchanged. This supersedes D73. *Done (ADR-044), second, after step 1: steps 2 and 3 follow step 5, as edits of plain source.*
 5. **The tables as source.** The `*Tables.h` stop being generated; `ReferenceImage.cpp`, both generators, the two `.tsv` files and their CI steps go (D79). *Done (ADR-044), with the state's headers, which stop being generated here rather than at step 3, and `Tools/MapReference.py` and `Tools/PrepareCommanders.py`, which read the same files.*
-6. **No 8086 in the game's code.** The direction flag, the BP and AL carry-throughs and the line records go, and the drawing routines take a CGA buffer, not a segment. Where a carried value reached the state, what it changes is reported and re-recorded. *Done (ADR-046): nothing moved; DX, BX and DI's carry-throughs, which the step did not name, are left for the owner.*
+6. **No 8086 in the game's code.** The direction flag, the BP and AL carry-throughs and the line records go, and the drawing routines take a CGA buffer, not a segment. Where a carried value reached the state, what it changes is reported and re-recorded. *Done (ADR-046): nothing moved. DX, BX and DI's carry-throughs went after, by D84; three replays moved, re-recorded with their cause.*
 7. **The native host** (D77). `Hardware.h`, `Platform`, the game thread and `Cycles` go. Time is milliseconds, and the timer's 1 kHz work, the music, the effects and the counters, is a tick the host runs; keys arrive as the game's own key events; the sound routines drive the synth; the mouse is read natively; the commander files go through `FileStore` and step 1's serializer (D78); the video modes are set on `Cga` directly; D80's counterparts land. Keeping the millisecond clock and the frames' pacing should keep most replays exact; key delivery, which the PC delays a millisecond after its latch empties, is where they may move.
 8. **The joystick goes** (D81): the IBM game port, its calibration and the instruction cycles it counted, the Amstrad's stick, and the input device's choice of them. The twins and replays that fly by stick are re-recorded or retired. *Done (ADR-045), before steps 6 and 7: the three stick twins retired, every digest re-recorded after a comparison by member, one member moved where the Amstrad's stick was chosen.*
 9. **No 1987 in the comments.** The addresses go from the code; `Reference-Map.md` and the ADRs keep them, as history.
@@ -486,6 +486,7 @@ After D44, no replay reaches the docked screens. Their rules are functions with 
 | D81 | Whether the joystick stays, natively, as step 8 planned through XInput (raised by the owner, 2026-10-14) | — | **It goes** (2026-10-14): the keyboard and the mouse fly the game. |
 | D82 | The docked screens as drawn, `Design/Canvas/docked/` (drawn by the owner, 2026-10-14) | — | **D01 to D11 and their requirements** (2026-10-14): Phase 6, piece 5. Supersedes D54's docked and chart gaps. |
 | D83 | How the docked screens are driven (set by the owner, 2026-10-14) | — | **The mouse is on while docked**, and is mandatory on the charts: no key moves their cursor (2026-10-14). |
+| D84 | Whether DX, BX and DI's carry-throughs go too, which step 6 did not name: DI decides what a launched missile is copied from (raised with ADR-046) | — | **They go** (2026-10-14): ADR-046 items 6 to 8. |
 
 ## 9. ADRs this plan produces
 

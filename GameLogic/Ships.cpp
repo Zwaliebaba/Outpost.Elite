@@ -119,15 +119,6 @@ struct PositionFit
   return PositionFit{true, lastHigh};
 }
 
-// What RotateBySinCos leaves in DX: its last product, the second coordinate doubled times the sine, then SHL AX,1 / RCL DX,1 /
-// SHL AX,1 / ADC DX,0, the high word of the product doubled, rounded on the bit below.
-[[nodiscard]] std::uint16_t RotationLeftover(std::int16_t _second, std::int16_t _sine) noexcept
-{
-  const auto doubled = static_cast<std::int16_t>(static_cast<std::uint16_t>(_second) << 1);
-  const auto product = static_cast<std::uint32_t>(std::int32_t{doubled} * _sine) << 1;
-  return static_cast<std::uint16_t>((product >> 16) + ((product >> 15) & 1));
-}
-
 // AND AX,7FFh / SHR AX,1 / NEG AX when the bit shifted out was set: a scatter of +-1023.
 [[nodiscard]] std::uint16_t Scatter(std::uint16_t _random) noexcept
 {
@@ -404,7 +395,7 @@ Vector GetVectorToPlayer(const SpaceObject& _slot)
 
 Velocity ComputeVelocity(GameState& _state, SpaceObject& _slot)
 {
-  const SinCos pitch = SetSinCos(_state, 7, _slot.pitch);
+  (void)SetSinCos(_state, 7, _slot.pitch);
   (void)SetSinCos(_state, 6, _slot.yaw);
   // (0, speed) by pair 6, then (0, what that left) by pair 7: x, then y and z.
   const auto speed = static_cast<std::int16_t>(SignExtend(_slot.speed)); // CBW
@@ -413,7 +404,7 @@ Velocity ComputeVelocity(GameState& _state, SpaceObject& _slot)
   const Pair second = RotateByStoredSinCos(_state, 7, Pair{0, first.second});
   _slot.velocityY = Low(static_cast<std::uint16_t>(second.first));
   _slot.velocityZ = Low(static_cast<std::uint16_t>(second.second));
-  return Velocity{Vector{first.first, second.first, second.second}, RotationLeftover(first.second, pitch.sine)};
+  return Velocity{Vector{first.first, second.first, second.second}};
 }
 
 MovedObject MoveObject(GameState& _state, SpaceObject& _slot)
@@ -423,23 +414,12 @@ MovedObject MoveObject(GameState& _state, SpaceObject& _slot)
   {
     AddToCoordinate(_slot, static_cast<int>(axis), static_cast<std::int16_t>(SignExtend(_slot.*VELOCITY[axis])));
   }
-  // The last CWD leaves DX the z velocity's sign; then an erased blip leaves its last pixel there.
-  std::uint16_t dx = SignWord(SignExtend(_slot.velocityZ));
   const NearTest near = IsObjectNear(_state, _slot);
-  if (near.erasedBlip)
-  {
-    dx = PixelPlace(*near.erasedBlip);
-  }
   if (near.nearby)
   {
-    return MovedObject{near, std::nullopt, dx};
+    return MovedObject{near, std::nullopt};
   }
-  const std::optional<DashboardPixel> removed = RemoveObject(_state, _slot);
-  if (removed)
-  {
-    dx = PixelPlace(*removed);
-  }
-  return MovedObject{near, removed, dx};
+  return MovedObject{near, RemoveObject(_state, _slot)};
 }
 
 std::optional<DashboardPixel> RemoveObject(GameState& _state, SpaceObject& _slot)

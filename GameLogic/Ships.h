@@ -67,18 +67,12 @@ struct MovedObject
 {
   NearTest near;                             ///< what IsObjectNear found of it
   std::optional<DashboardPixel> removedBlip; ///< when it was not near, it was removed: what RemoveObject erased of its blip
-  /// What the original leaves in DX: the z velocity's CWD, or the last blip erased, its row in the high byte and its column in
-  /// the low. UpdateObjectsAndSpawn's next handler takes DL of it for its range's box.
-  std::uint16_t dx;
 };
 
 /// What ComputeVelocity gives.
 struct Velocity
 {
   Vector words; ///< the velocity as the rotations give it, in words; the slot keeps their low bytes
-  /// What the original leaves in DX: RotateBySinCos' last product, z turned by the pitch's sine, doubled and rounded.
-  /// UpdateObjectsAndSpawn's next handler takes DL of it after the station launches a ship.
-  std::uint16_t dx;
 };
 
 /// The slot ReclaimShipSlot found.
@@ -175,7 +169,7 @@ void FacePlayerWithRandomRoll(GameState& _state, SpaceObject& _slot);
 
 /// ComputeVelocity (CS:4F48): _slot's velocity bytes from its speed and heading: the pitch into rotation pair 7 and the yaw
 /// into pair 6, then (0, speed) turned by pair 6 and (0, what that left) by pair 7. Returns the velocity as those rotations
-/// give it, in words, of which the slot keeps the low bytes, and what the second rotation leaves in DX.
+/// give it, in words, of which the slot keeps the low bytes.
 Velocity ComputeVelocity(GameState& _state, SpaceObject& _slot);
 
 /// MoveObject (CS:4F6E): _slot's velocity bytes, sign-extended, added to its 24-bit position, x, y then z, each as ADD on the

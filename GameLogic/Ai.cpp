@@ -113,11 +113,11 @@ constexpr std::uint8_t STATE_FORMATION = 2;
 constexpr std::uint8_t STATE_TURN_AWAY = 3;
 constexpr std::uint8_t STATE_CLOSING = 4;
 
-// WithinRange: whether _slot is within the box whose half size has its range byte for the high byte and _low, what DL holds
-// there, for the low.
-[[nodiscard]] bool WithinRange(const SpaceObject& _slot, std::uint8_t _low)
+// WithinRange: whether _slot is within the box whose half size is its range byte, in 256ths: the high byte, the low byte 0
+// (ADR-046).
+[[nodiscard]] bool WithinRange(const SpaceObject& _slot)
 {
-  return ObjectWithinBox(_slot, Join(_slot.range, _low));
+  return ObjectWithinBox(_slot, Join(_slot.range, 0));
 }
 
 // TurnToVector: _slot turned toward the angles of _vector, ConvertVectorToAngles' then TurnTowardAngles'.
@@ -429,13 +429,12 @@ std::optional<DashboardPixel> CheckMissilesAtStation(GameState& _state, const Sp
   return erased;
 }
 
-// UpdateWolfAi's state 3 (586D): turning away, a Thargoid launching Thargons, until beyond its range, whose box takes _rangeLow,
-// what DL holds there, for its low byte; then a pass is counted off. After the last it rests, calmed (aggression 9) and no
+// UpdateWolfAi's state 3 (586D): turning away, a Thargoid launching Thargons, until beyond its range (WithinRange); then a pass is counted off. After the last it rests, calmed (aggression 9) and no
 // longer hostile, and a Thargon drifts (state 0Ah); so does one whose mother is gone or is no Thargoid with a blip. Returns what
 // MoveObject did.
-MovedObject WolfTurnAway(GameState& _state, SpaceObject& _slot, std::uint8_t _rangeLow)
+MovedObject WolfTurnAway(GameState& _state, SpaceObject& _slot)
 {
-  if (WithinRange(_slot, _rangeLow))
+  if (WithinRange(_slot))
   {
     (void)TurnToVector(_state, _slot, GetObjectPosition(_slot));
     (void)ComputeVelocity(_state, _slot);
@@ -505,11 +504,11 @@ MovedObject WolfTurnAway(GameState& _state, SpaceObject& _slot, std::uint8_t _ra
   return Angles{Offset(Offset(toPlayer.first, HALF_TURN), _slot.jinkPitch), Offset(toPlayer.second, _slot.jinkYaw)};
 }
 
-// UpdateHunterAi's state 3 (5987): evading with random jinks, and a missile at odds of 5DCh in 65536, until beyond its range,
-// whose box takes _rangeLow, what DL holds there, for its low byte. Returns what MoveObject did.
-MovedObject HunterEvade(GameState& _state, SpaceObject& _slot, std::uint8_t _rangeLow)
+// UpdateHunterAi's state 3 (5987): evading with random jinks, and a missile at odds of 5DCh in 65536, until beyond its range
+// (WithinRange). Returns what MoveObject did.
+MovedObject HunterEvade(GameState& _state, SpaceObject& _slot)
 {
-  if (!WithinRange(_slot, _rangeLow))
+  if (!WithinRange(_slot))
   {
     _slot.aiState = STATE_IDLE;
     return MoveObject(_state, _slot);
@@ -614,10 +613,10 @@ MovedObject TraderFlee(GameState& _state, SpaceObject& _slot)
 }
 
 // UpdateTraderOrPoliceAi's state 4 and above (57BC): flying on away until beyond its range, then attacking again; weak, any but
-// the police flee. Its range's box takes _rangeLow, what DL holds there, for its low byte. Returns what MoveObject did.
-MovedObject TraderBreakOff(GameState& _state, SpaceObject& _slot, std::uint8_t _rangeLow)
+// the police flee. Its range is measured by WithinRange. Returns what MoveObject did.
+MovedObject TraderBreakOff(GameState& _state, SpaceObject& _slot)
 {
-  if (!WithinRange(_slot, _rangeLow))
+  if (!WithinRange(_slot))
   {
     _slot.aiState = TRADER_ATTACKING;
     return MoveObject(_state, _slot);
@@ -632,36 +631,35 @@ MovedObject TraderBreakOff(GameState& _state, SpaceObject& _slot, std::uint8_t _
   return MoveObject(_state, _slot);
 }
 
-// CALL [BX+behaviorHandlers] (4A41): the handler of class _behavior for _slot, which may take DL of _dx, the DX the last handler or the
-// caller left, for its range's box (VectorWithinBox after MOV DH,[DI+1Ch] at 57BC, 5873 and 5987). BX holds the class doubled, which
-// UpdateMissileAi's explosion would save in the divide trap. Returns what the handler leaves in DX. The table's eight words, which nothing
-// writes, name these eight handlers; a class of 8 or more, which no template gives, would run data as code, and runs nothing.
-std::uint16_t RunBehaviorHandler(GameState& _state, Hardware& _hardware, SpaceObject& _slot, std::uint8_t _behavior, std::uint16_t _dx)
+// CALL [BX+behaviorHandlers] (4A41): the handler of class _behavior for _slot. The table's eight words, which nothing writes, name
+// these eight handlers; a class of 8 or more, which no template gives, would run data as code, and runs nothing.
+void RunBehaviorHandler(GameState& _state, Hardware& _hardware, SpaceObject& _slot, std::uint8_t _behavior)
 {
   switch (_behavior)
   {
-  case INERT_CLASS:
-    return _dx;
   case STATION_CLASS:
-    return UpdateStationAi(_state, _slot, _dx);
+    UpdateStationAi(_state, _slot);
+    return;
   case MISSILE_CLASS:
-    return UpdateMissileAi(_state, _hardware, _slot, static_cast<std::uint16_t>(_behavior << 1), _dx).dx;
+    UpdateMissileAi(_state, _hardware, _slot);
+    return;
   case DRIFTING_CLASS:
-    return UpdateDriftingObjectAi(_state, _slot).dx;
+    (void)UpdateDriftingObjectAi(_state, _slot);
+    return;
   case TRADER_CLASS:
-    return UpdateTraderOrPoliceAi(_state, _slot, Low(_dx)).dx;
+    (void)UpdateTraderOrPoliceAi(_state, _slot);
+    return;
   case WOLF_CLASS:
-    return UpdateWolfAi(_state, _slot, Low(_dx)).dx;
+    (void)UpdateWolfAi(_state, _slot);
+    return;
   case HUNTER_CLASS:
-    return UpdateHunterAi(_state, _slot, Low(_dx)).dx;
+    (void)UpdateHunterAi(_state, _slot);
+    return;
   case DEBRIS_CLASS:
-  {
-    // A fragment that has run out of lifetime is only cleared, and leaves DX alone.
-    const std::optional<MovedObject> moved = UpdateDebrisAi(_state, _slot);
-    return moved ? moved->dx : _dx;
-  }
+    (void)UpdateDebrisAi(_state, _slot);
+    return;
   default:
-    return _dx;
+    return;
   }
 }
 
@@ -673,7 +671,7 @@ std::uint16_t RunBehaviorHandler(GameState& _state, Hardware& _hardware, SpaceOb
 
 } // namespace
 
-void UpdateObjectsAndSpawn(GameState& _state, Hardware& _hardware, std::uint16_t _dx)
+void UpdateObjectsAndSpawn(GameState& _state, Hardware& _hardware)
 {
   // PUSH DS / POP ES / MOV DI,activeObjectCount / XOR AL,AL / MOV CX,9 / REP STOSB: activeObjectCount and the eight behaviorClassCounts
   // cleared, a byte at a time, upwards, as the direction flag is clear wherever the game calls it: the only STD, MaskOutsideTunnel's, has
@@ -684,8 +682,7 @@ void UpdateObjectsAndSpawn(GameState& _state, Hardware& _hardware, std::uint16_t
     classCount = 0;
   }
   // Every slot of shipSlotCount, by LOOP: an active one counted, but for debris, and in its class's count, and its class's handler
-  // run, CX and DI pushed round it. DX goes on from one handler to the next.
-  std::uint16_t dx = _dx;
+  // run, CX and DI pushed round it.
   SlotIndex slot = SlotIndex::Sun;
   for (std::uint32_t slots = LoopCount(_state.Data().world.shipSlotCount); slots != 0; --slots)
   {
@@ -701,7 +698,7 @@ void UpdateObjectsAndSpawn(GameState& _state, Hardware& _hardware, std::uint16_t
       // slot's is a template's, one of the eight, or copied from another slot's.
       std::uint8_t& classCount = ClassCounts(_state)[behavior];
       classCount = static_cast<std::uint8_t>(classCount + 1);
-      dx = RunBehaviorHandler(_state, _hardware, object, behavior, dx);
+      RunBehaviorHandler(_state, _hardware, object, behavior);
     }
     slot = SlotAfter(slot);
   }
@@ -821,34 +818,14 @@ VectorToObject GetVectorToObject(const SpaceObject& _slot, const SpaceObject& _o
   return VectorToObject{vector, VectorWithinBox(vector, static_cast<std::uint16_t>(_halfSize >> 2))};
 }
 
-std::uint16_t UpdateStationAi(GameState& _state, SpaceObject& _station, std::uint16_t _dx)
+void UpdateStationAi(GameState& _state, SpaceObject& _station)
 {
   _station.roll = Offset(_station.roll, STATION_SPIN);
-  std::uint16_t dx = _dx;
   if (_state.Data().flight.spawnGovernment >= 1 && (_station.flags & FLAG_HOSTILE) != 0)
   {
-    // DX: the last pixel of the blip IsObjectNear erased, or MOV DX,1C2h, the guarded box, once it is near; then what
-    // ComputeVelocity leaves once it launched.
-    const OffenderLaunch launch = LaunchAtOffender(_state, _station);
-    if (launch.near.erasedBlip)
-    {
-      dx = PixelPlace(*launch.near.erasedBlip);
-    }
-    if (launch.near.nearby)
-    {
-      dx = STATION_GUARD_BOX;
-    }
-    if (launch.launched)
-    {
-      dx = launch.launched->dx;
-    }
+    (void)LaunchAtOffender(_state, _station);
   }
-  // DX: the last pixel of the last blip RemoveAllMissiles erased, once the ECM ran.
-  if (const std::optional<DashboardPixel> erased = CheckMissilesAtStation(_state, _station))
-  {
-    dx = PixelPlace(*erased);
-  }
-  return dx;
+  (void)CheckMissilesAtStation(_state, _station);
 }
 
 MovedObject UpdateDriftingObjectAi(GameState& _state, SpaceObject& _slot)
@@ -869,7 +846,7 @@ MovedObject UpdateDriftingObjectAi(GameState& _state, SpaceObject& _slot)
   return moved;
 }
 
-MovedObject UpdateTraderOrPoliceAi(GameState& _state, SpaceObject& _slot, std::uint8_t _rangeLow)
+MovedObject UpdateTraderOrPoliceAi(GameState& _state, SpaceObject& _slot)
 {
   if (IsDebrisType(_slot))
   {
@@ -890,11 +867,11 @@ MovedObject UpdateTraderOrPoliceAi(GameState& _state, SpaceObject& _slot, std::u
   case TRADER_FLEEING:
     return TraderFlee(_state, _slot);
   default:
-    return TraderBreakOff(_state, _slot, _rangeLow);
+    return TraderBreakOff(_state, _slot);
   }
 }
 
-MovedObject UpdateWolfAi(GameState& _state, SpaceObject& _slot, std::uint8_t _rangeLow)
+MovedObject UpdateWolfAi(GameState& _state, SpaceObject& _slot)
 {
   // A Thargoid sets off its ECM at odds of 100 in 65536; a Thargoid or a Thargon spins.
   bool spins = IsThargoidType(_slot);
@@ -943,7 +920,7 @@ MovedObject UpdateWolfAi(GameState& _state, SpaceObject& _slot, std::uint8_t _ra
     return moved;
   }
   case STATE_TURN_AWAY:
-    return WolfTurnAway(_state, _slot, _rangeLow);
+    return WolfTurnAway(_state, _slot);
   default:
     // A Thargon adrift slows down to 10.
     if (_slot.speed >= SLOWEST_ADRIFT)
@@ -955,7 +932,7 @@ MovedObject UpdateWolfAi(GameState& _state, SpaceObject& _slot, std::uint8_t _ra
   }
 }
 
-MovedObject UpdateHunterAi(GameState& _state, SpaceObject& _slot, std::uint8_t _rangeLow)
+MovedObject UpdateHunterAi(GameState& _state, SpaceObject& _slot)
 {
   switch (_slot.aiState)
   {
@@ -989,7 +966,7 @@ MovedObject UpdateHunterAi(GameState& _state, SpaceObject& _slot, std::uint8_t _
     return MoveObject(_state, _slot);
   }
   case STATE_TURN_AWAY:
-    return HunterEvade(_state, _slot, _rangeLow);
+    return HunterEvade(_state, _slot);
   default:
   {
     // Closing on the player while farther than 5000 on some axis.

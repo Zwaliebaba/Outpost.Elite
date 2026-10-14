@@ -25,32 +25,10 @@ struct ThargoidTest
   bool thargoid;
 };
 
-/// What ExplodeObject leaves of the registers its callers go on with.
-struct Explosion
-{
-  SlotIndex slot;   ///< DI's slot: the object, or past the slots FindFreeShipSlot looks at once a barrel's search for one failed
-  std::uint16_t bx; ///< BX, which the barrel count's divide of a later explosion saves, should it trap
-  /// DX, when it writes DX: what the last blip it erased or the last object it moved leaves there (MovedObject). UpdateMissileAi
-  /// hands it on to UpdateObjectsAndSpawn's next handler.
-  std::optional<std::uint16_t> dx;
-};
-
 /// What FindShipInCrosshairs finds.
 struct CrosshairTarget
 {
   std::optional<SlotIndex> slot; ///< the nearest drawn object over the view's centre, if there is one
-  /// What the original leaves in BX: BL the type byte of the last slot it looked at, BH what the last slot it tested left there,
-  /// which is all of BX when that was the last slot. ExplodeObject's barrel count saves it, should its divide trap.
-  std::uint16_t bx;
-  /// DI's slot, what the original leaves there: the slot found, or past the slots it looked at, which HandleMissileKeys' launch copies
-  /// from.
-  SlotIndex diSlot;
-};
-
-/// What UpdateMissileAi leaves that UpdateObjectsAndSpawn's next handler can read.
-struct MissileFlight
-{
-  std::uint16_t dx; ///< DX, of which the next handler takes DL for its range's box
 };
 
 /// What CreditKill did with a kill.
@@ -107,9 +85,8 @@ std::optional<DashboardPixel> RemoveAllMissiles(GameState& _state);
 
 /// ExplodeObject (CS:4FC1): _object removed (TallyMaskMissionKill first, then RemoveObject); when it was drawn this frame, the explosion's
 /// sound, its fragments in debris slots (copied from it), and its cargo's barrels in free ship slots: one for a ship that carries the
-/// device, else a random byte / (255 / (cargo + 1) + 1). _bx is the BX it is called with, which the barrel count's first divide saves when
-/// a cargo of FFh makes it divide by 0. Returns what it leaves in DI, BX and DX.
-Explosion ExplodeObject(GameState& _state, Hardware& _hardware, SpaceObject& _object, std::uint16_t _bx);
+/// device, else a random byte / (255 / (cargo + 1) + 1).
+void ExplodeObject(GameState& _state, Hardware& _hardware, SpaceObject& _object);
 
 /// TallyMaskMissionKill (CS:50FE): while maskMissionShipsLeft is not 0, an Asp at _slot with the mission's bounty counts it down,
 /// and one that carries the device sets maskShipDestroyed.
@@ -121,20 +98,10 @@ void TallyMaskMissionKill(GameState& _state, const SpaceObject& _slot);
 /// high byte below 70 too, hit squarely.
 void TryFireLaserAtPlayer(GameState& _state, SpaceObject& _slot, std::uint16_t _pitchError, std::uint16_t _yawError);
 
-/// Where M's launch copies the missile from (LaunchPlayerMissile), where the routines before it leave DI: on a slot, or past a buffer one
-/// of them filled; and past such a buffer, the 64 bytes the original's data segment holds there, by the members and constants that hold
-/// them now, which the routine that filled it names (D38).
-struct MissileSource
-{
-  SlotIndex slot;                                                   ///< DI's slot, when past is none
-  std::optional<std::array<std::uint8_t, SpaceObject::BYTES>> past; ///< none when DI is on a slot
-};
-
-/// LaunchPlayerMissile (CS:5242): the 64 bytes at _source copied (CopyObject) into a ship slot, free or reclaimed, and made a missile
-/// (InitMissile) 100 along the player's nose, locked on missileTarget, aimed at where that is, its velocity set and moved twice. A slot
-/// ReclaimShipSlot evicts is copied onto itself, as the original's XCHG SI,DI leaves it. The copy runs up: the direction flag is clear
-/// wherever the game calls it (change 3c).
-void LaunchPlayerMissile(GameState& _state, const MissileSource& _source);
+/// LaunchPlayerMissile (CS:5242): a ship slot, free or reclaimed, cleared and made a missile (InitMissile) 100 along the player's nose,
+/// locked on missileTarget, aimed at where that is, its velocity set and moved twice. The original copied into it the 64 bytes wherever
+/// DI was left, a slot or the bytes past a buffer; the slot starts cleared instead (ADR-046).
+void LaunchPlayerMissile(GameState& _state);
 
 /// LaunchShipFromObject (CS:534E): a copy of _launcher (CopyObject) in a free ship slot, made what _kind names and moved clear of it: 14h a
 /// missile at the player, moved three times, and 7 a Thargon whose mother is _launcher, moved twice. Returns the slot, or nothing when no
@@ -154,9 +121,8 @@ void TryLaunchThargon(GameState& _state, SpaceObject& _slot);
 /// UpdateMissileAi (CS:54F2): class 2: the missile at _missile spins, and flies at its target, or at the player, raising the alert; when
 /// its target is gone it explodes. Within C8h of it on every axis it explodes (ExplodeObject) on it: the player takes 320h damage
 /// (TakeDamage); a station is a crime of 5 on legalStatus, or in an invasion loses 10 of its energy and explodes at the last; a ship is
-/// credited (CreditKill) and explodes unless indestructible. _bx and _dx are the BX and DX it is called with, which an explosion passes on.
-/// Returns what it leaves in DX.
-MissileFlight UpdateMissileAi(GameState& _state, Hardware& _hardware, SpaceObject& _missile, std::uint16_t _bx, std::uint16_t _dx);
+/// credited (CreditKill) and explodes unless indestructible.
+void UpdateMissileAi(GameState& _state, Hardware& _hardware, SpaceObject& _missile);
 
 /// FindShipInCrosshairs (CS:8A46): the nearest of objectSlotCount - 2 slots from stationSlot that is active, drawn this frame,
 /// not passed over (+1Eh bits 5 and 6 both set), and over the view's centre: |x| * 256 / z and |y| * 256 / z both below its

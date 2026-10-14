@@ -241,29 +241,6 @@ void ShowCredits(GameState& _state, Hardware& _hardware)
   }
 }
 
-std::array<std::uint8_t, SpaceObject::BYTES> BytesAfterDrawBuffer(const GameState& _state)
-{
-  std::array<std::uint8_t, SpaceObject::BYTES> bytes{};
-  std::size_t at = 0;
-  const auto append = [&bytes, &at](std::uint8_t _byte) { bytes.at(at++) = _byte; };
-  append(AMSTRAD_PRESENT); // amstradPresent, which Start cleared on an IBM PC
-  for (const std::uint8_t byte : AMSTRAD_SIGNATURE)
-  {
-    append(byte);
-  }
-  append(_state.Data().audio.speakerPortImage);
-  append(_state.Data().saveLoad.diskOperation);
-  for (const std::uint8_t byte : EXIT_MESSAGE)
-  {
-    append(byte);
-  }
-  for (std::size_t index = 0; at < bytes.size(); ++index)
-  {
-    append(DOS_VERSION_MESSAGE.at(index));
-  }
-  return bytes;
-}
-
 // ── The entry of the program ──
 
 void StartEntry(Guest& _guest)

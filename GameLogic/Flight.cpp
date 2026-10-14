@@ -660,93 +660,6 @@ constexpr std::array<DotStep, 8> COMPASS_RING = {
 
 // ---- The flight keys ------------------------------------------------------------------------------
 
-// What the routines before M's launch leave in DI, from which the launch copies the missile (LaunchPlayerMissile): InvalidateDashboard past
-// the cache it fills; ResetStardust past the particles; ClearDrawBuffer past the buffer its REP STOSW of 1000h words fills from 0, upwards,
-// as the direction flag is clear wherever the game calls it (change 3c); and IsMassLocked on the last slot it looked at, as the original
-// leaves it: the sun's, the planet's, then where its look at the ships stopped. Otherwise DI is where CheckCollisions' look at the slots
-// stopped, or FindShipInCrosshairs'.
-enum class PastBuffer : std::uint8_t
-{
-  None,           ///< DI is on a slot
-  DashboardCache, ///< past the dashboard's cache (InvalidateDashboard)
-  Stardust,       ///< past the stardust (ResetStardust)
-  DrawBuffer      ///< past the drawing buffer (ClearDrawBuffer)
-};
-
-struct LaunchDi
-{
-  SlotIndex slot; ///< DI's slot, when past is None
-  PastBuffer past;
-};
-
-// The 64 bytes after the dashboard's cache, DS:4238-4277 in 1987, where InvalidateDashboard leaves DI: equipmentLossMessage,
-// playerHitBy, playerHitPending, playerDocked and collisionRanges' first ten words (D38).
-[[nodiscard]] std::array<std::uint8_t, SpaceObject::BYTES> BytesAfterDashboardCache(const GameState& _state)
-{
-  std::array<std::uint8_t, SpaceObject::BYTES> bytes{};
-  std::size_t at = 0;
-  const auto append = [&bytes, &at](std::uint8_t _byte) { bytes.at(at++) = _byte; };
-  for (const std::uint8_t byte : EQUIPMENT_LOSS_MESSAGE)
-  {
-    append(byte);
-  }
-  append(Low(Number(_state.Data().combat.playerHitBy)));
-  append(High(Number(_state.Data().combat.playerHitBy)));
-  append(_state.Data().combat.playerHitPending);
-  append(_state.Data().flight.playerDocked);
-  for (std::size_t range = 0; at < bytes.size(); ++range)
-  {
-    append(Low(COLLISION_RANGES[range]));
-    append(High(COLLISION_RANGES[range]));
-  }
-  return bytes;
-}
-
-// The 64 bytes after the stardust, where ResetStardust leaves DI: stardustPrevious's first, its members in order (D38).
-[[nodiscard]] std::array<std::uint8_t, SpaceObject::BYTES> BytesAfterStardust(const GameState& _state)
-{
-  std::array<std::uint8_t, SpaceObject::BYTES> bytes{};
-  const std::vector<std::uint8_t> previous = StateBytes(_state.Data().flight.stardustPrevious);
-  std::ranges::copy_n(previous.begin(), bytes.size(), bytes.begin());
-  return bytes;
-}
-
-// What M's launch copies the missile from, where _di leaves DI (LaunchPlayerMissile): past the dashboard's cache, the stardust or the
-// drawing buffer, the bytes the original's data segment holds there, by name; otherwise its slot.
-[[nodiscard]] MissileSource MissileSourceAt(const GameState& _state, LaunchDi _di)
-{
-  switch (_di.past)
-  {
-  case PastBuffer::DashboardCache:
-    return MissileSource{_di.slot, BytesAfterDashboardCache(_state)};
-  case PastBuffer::Stardust:
-    return MissileSource{_di.slot, BytesAfterStardust(_state)};
-  case PastBuffer::DrawBuffer:
-    return MissileSource{_di.slot, BytesAfterDrawBuffer(_state)};
-  case PastBuffer::None:
-    break;
-  }
-  return MissileSource{_di.slot, std::nullopt};
-}
-
-[[nodiscard]] LaunchDi DiAfterMassLock(const MassLock& _lock, LaunchDi _di) noexcept
-{
-  LaunchDi di = _di;
-  if (_lock.sun)
-  {
-    di = LaunchDi{SlotIndex::Sun, PastBuffer::None};
-  }
-  if (_lock.planet)
-  {
-    di = LaunchDi{SlotIndex::Planet, PastBuffer::None};
-  }
-  if (_lock.ships)
-  {
-    di = LaunchDi{_lock.ships->slot, PastBuffer::None};
-  }
-  return di;
-}
-
 // CALL GetKey / JE back to it, de-assembled: GetKey until a key comes (ADR-039), the waits at 0x0BF3 (FlightScreenDispatch),
 // 0x8153 (ProcessFlightKeys' Ctrl+Esc) and 0x8DC7 (RunPauseScreen). Returns the key.
 KeyPress WaitForKey(GameState& _state, Hardware& _hardware)
@@ -1121,12 +1034,9 @@ void PostHyperspaceRefusal(GameState& _state, Message _message)
   return true;
 }
 
-// 0x8171-0x826C: T primes a missile, which locks on what is in the sights; U unarms it; M launches it. _di is the DI
-// ProcessFlightKeys holds here, which M's launch copies the missile from (LaunchPlayerMissile), unless the primed missile looked
-// in the sights this frame and FindShipInCrosshairs left DI.
-void HandleMissileKeys(GameState& _state, LaunchDi _di)
+// 0x8171-0x826C: T primes a missile, which locks on what is in the sights; U unarms it; M launches it (LaunchPlayerMissile).
+void HandleMissileKeys(GameState& _state)
 {
-  LaunchDi source = _di;
   if (_state.Data().keyboard.keyDown[Keys::T] == 1 && _state.Data().commander.missileCount != 0 &&
       _state.Data().playerShip.missileState == 0 && _state.Data().jump.hyperspaceCountdown == 0 &&
       _state.Data().flight.shipIdRequested != 1)
@@ -1139,7 +1049,6 @@ void HandleMissileKeys(GameState& _state, LaunchDi _di)
   if (_state.Data().playerShip.missileState == 1)
   {
     const CrosshairTarget target = FindShipInCrosshairs(_state);
-    source = LaunchDi{target.diSlot, PastBuffer::None};
     if (target.slot && (_state.Slot(*target.slot).flags & FLAG_MASKED) == 0)
     {
       _state.Data().flight.missileTarget = *target.slot;
@@ -1176,7 +1085,7 @@ void HandleMissileKeys(GameState& _state, LaunchDi _di)
     _state.Data().flight.shipIdRequested = 0;
     SetMessage(_state, Message::MissileLaunched, 0x14);
     _state.Data().commander.missileCount = static_cast<std::uint8_t>(_state.Data().commander.missileCount - 1);
-    LaunchPlayerMissile(_state, MissileSourceAt(_state, source));
+    LaunchPlayerMissile(_state);
   }
 }
 
@@ -2019,7 +1928,7 @@ ScreenChange SetUpLocalSpace(GameState& _state, Hardware& _hardware)
   return change;
 }
 
-SlotIndex CheckCollisions(GameState& _state, Hardware& _hardware)
+void CheckCollisions(GameState& _state, Hardware& _hardware)
 {
   // MOV CL,objectSlotCount / XOR CH,CH, PUSH CX and POP CX round each slot, then DEC CX / JE: a count of 0 runs 65,536 times.
   SlotIndex slot = SlotIndex::Sun;
@@ -2032,7 +1941,6 @@ SlotIndex CheckCollisions(GameState& _state, Hardware& _hardware)
     }
     slot = SlotAfter(slot);
   }
-  return slot;
 }
 
 SafeZone InSafeZone(const GameState& _state)
@@ -2227,11 +2135,6 @@ void XorCompassDot(GameState& _state, std::uint8_t _x, std::uint8_t _y, bool _in
   }
 }
 
-std::uint16_t PixelPlace(DashboardPixel _pixel) noexcept
-{
-  return Join(_pixel.y, _pixel.x);
-}
-
 std::optional<DashboardPixel> EraseScannerBlip(GameState& _state, SpaceObject& _slot)
 {
   if (IsStation(_slot).station || (_slot.flags & FLAG_BLIP_DRAWN) == 0)
@@ -2370,11 +2273,10 @@ void RunFlight(GameState& _state, Hardware& _hardware)
     // The frame as it was drawn, for a renderer that draws between frames (ADR-032); the first continues nothing before it.
     _hardware.PublishFlightSnapshot(TakeFlightSnapshot(_state), !firstFrame);
     firstFrame = false;
-    // PresentSpaceView's MOV DX,1FF0h, which UpdateObjectsAndSpawn hands to its first handler.
-    UpdateObjectsAndSpawn(_state, _hardware, PRESENT_SPACE_VIEW_DX);
+    UpdateObjectsAndSpawn(_state, _hardware);
     UpdatePlayerMotion(_state, _hardware);
     // DI past the slots, from which M's launch copies the missile unless a routine before it moves DI (ProcessFlightKeys).
-    const SlotIndex slotsEnd = CheckCollisions(_state, _hardware);
+    CheckCollisions(_state, _hardware);
     if (_state.Data().flight.playerDocked == 1)
     {
       PlayStationTunnel(_state, _hardware);
@@ -2383,7 +2285,7 @@ void RunFlight(GameState& _state, Hardware& _hardware)
       StopAllSound(_state, _hardware);
       return;
     }
-    const FlightKeysExit keys = ProcessFlightKeys(_state, _hardware, slotsEnd);
+    const FlightKeysExit keys = ProcessFlightKeys(_state, _hardware);
     if (keys.aborted)
     {
       return;
@@ -2430,7 +2332,7 @@ bool TickEscapePod(GameState& _state)
   return _state.Data().playerShip.escapePodFrames == 0;
 }
 
-FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, SlotIndex _diSlot)
+FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware)
 {
   if (_state.Data().flight.gameOverFrames != 0)
   {
@@ -2442,12 +2344,9 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, SlotInd
     return FlightKeysExit{false};
   }
   const FlightScreens screens = HandleFlightFunctionKeys(_state, _hardware);
-  // DI, from which M's launch copies the missile, as the routines before it leave it: InvalidateDashboard once the cockpit came
-  // back, ResetStardust once the view changed, IsMassLocked once J asked it, and ClearDrawBuffer once the pause screen resumed.
-  LaunchDi di = screens.restored ? LaunchDi{_diSlot, PastBuffer::DashboardCache} : LaunchDi{_diSlot, PastBuffer::None};
-  if (screens.view != 0 && _state.Data().playerShip.viewLocked != 1 && ChangeView(_state, screens.view))
+  if (screens.view != 0 && _state.Data().playerShip.viewLocked != 1)
   {
-    di = LaunchDi{di.slot, PastBuffer::Stardust};
+    (void)ChangeView(_state, screens.view);
   }
   if (_state.Data().keyboard.keyDown[Keys::G] == 1 && _state.Data().commander.galacticHyperdriveFitted == 1 &&
       _state.Data().jump.galacticDriveReadyFrames == 0 && _state.Data().jump.hyperspaceCountdown == 0)
@@ -2476,10 +2375,7 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, SlotInd
   }
   if (_state.Data().keyboard.keyDown[Keys::J] == 1)
   {
-    if (const JumpDriveRequest request = EngageJumpDrive(_state); request.lock)
-    {
-      di = DiAfterMassLock(*request.lock, di);
-    }
+    (void)EngageJumpDrive(_state);
   }
   if (_state.Data().keyboard.keyDown[Keys::ESC] == 1)
   {
@@ -2498,11 +2394,10 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, SlotInd
       {
         return FlightKeysExit{true};
       }
-      di = LaunchDi{di.slot, PastBuffer::DrawBuffer};
     }
     _state.Data().flight.gamePaused = 0;
   }
-  HandleMissileKeys(_state, di);
+  HandleMissileKeys(_state);
   HandleFireButton(_state, _hardware);
   if (_state.Data().keyboard.keyDown[Keys::E] == 1 && _state.Data().commander.ecmFitted == 1)
   {

@@ -225,9 +225,8 @@ void UpdateSafeZone(GameState& _state);
 [[nodiscard]] Vector ComputeDeathDebrisVector(GameState& _state);
 
 /// CheckCollisions (CS:2BC5): the player against each active one of objectSlotCount slots from shipSlots: inside its type's collisionRanges
-/// box, a ship's damage, or the station's docking, scrape or crash, the impact sound's STI on each. Returns where its look at the slots
-/// stopped, past the last, whose slot the original leaves in DI.
-SlotIndex CheckCollisions(GameState& _state, Hardware& _hardware);
+/// box, a ship's damage, or the station's docking, scrape or crash, the impact sound's STI on each.
+void CheckCollisions(GameState& _state, Hardware& _hardware);
 
 /// UpdateWarnings (CS:36B6): unless the game is over, the current warning posted again while warningFrames lasts, else the
 /// four warning checks from the one after the last warning.
@@ -249,10 +248,6 @@ bool UpdateCompass(GameState& _state);
 /// XorCompassDot (CS:42A4): the compass dot at _x, _y from the dashboard's origin XORed into video memory: its eight
 /// neighbours, a ring, and the centre too while _inFront, solid.
 void XorCompassDot(GameState& _state, std::uint8_t _x, std::uint8_t _y, bool _inFront);
-
-/// A dashboard pixel's place as the original holds it in DX: x in DL, y in DH. What a routine that ends by XORing a pixel
-/// leaves there.
-[[nodiscard]] std::uint16_t PixelPlace(DashboardPixel _pixel) noexcept;
 
 /// EraseScannerBlip (CS:42D6): unless _slot is a station's, its scanner blip XORed out when one is drawn, and the flag that
 /// says so cleared. Returns the blip's last pixel, when it erased one.
@@ -324,9 +319,9 @@ struct FlightKeysExit
 /// keys' screens and views (HandleFlightFunctionKeys, then ChangeView); G arms the galactic drive; H starts the hyperspace countdown, which
 /// ends it; D toggles the docking computer; J the jump drive; Esc pauses (RunPauseScreen), or with Ctrl freezes until a key; T, U and M the
 /// missile; fire; E the ECM; B the energy bomb; C the escape pod; I identifies; N the masking device; L the anti-ECM emulator.
-/// _diSlot is the slot DI is on, from which M's launch copies the missile (LaunchPlayerMissile) unless a routine before it moves DI. Waits
+/// Waits
 /// for keys on the screens', the pause's and the freeze's paths (ADR-015).
-FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, SlotIndex _diSlot);
+FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware);
 
 /// RunPauseScreen (CS:8D6A): the speaker silenced (SilenceSpeakerTimer), then the pause menu drawn and its options presented until
 /// a key ends it: space resumes; R, D, Y, B and S toggle the options; F1-F10 set the frame time and draw the menu again; A leaves
