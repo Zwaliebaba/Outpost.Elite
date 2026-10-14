@@ -1,6 +1,6 @@
 # ELITES.EXE — reverse-engineering and native port plan
 
-**Status:** proposed 2026-10-09. The owner's rulings are D1 to D84 in §8. A ruling becomes a decision when the ADR in §9 records it (AGENTS.md §6). Each phase's section in §5 says how its exit was met.
+**Status:** proposed 2026-10-09. The owner's rulings are D1 to D85 in §8. A ruling becomes a decision when the ADR in §9 records it (AGENTS.md §6). Each phase's section in §5 says how its exit was met.
 
 | Phase | State | Recorded in |
 |---|---|---|
@@ -342,7 +342,7 @@ What it removes, as measured on `main` at `d9a1843`: `Field<>`'s 750 uses, 268 s
 
 The rulings that shape it:
 
-- **D77.** The game waits by C++20 coroutines: a function that waits is a coroutine, and a wait is `co_await` of a key, a tick or a frame. The host resumes the game each tick, on one thread, deterministically. The game's logic keeps its shape; the docked screens of piece 5 are written against the same host.
+- **D77.** The game waits by C++20 coroutines: a function that waits is a coroutine, and a wait is `co_await` of a key, a tick or a frame. The host resumes the game each tick, on one thread, deterministically. The game's logic keeps its shape; the docked screens of piece 5 are written against the same host. *Amended by D85: piece 5's docked screens are state-driven, not coroutines; the coroutines stay through Phase 7.*
 - **D78.** The commander file keeps the `.cdr` format, written and read by an explicit serializer, so the corpus's prepared commanders and the players' saves still load.
 - **D79.** `ReferenceImage.cpp` is deleted once nothing builds from it. A question about what the original does is then measured against the owner's own `ELITES.EXE` (ADR-020), and AGENTS.md says so.
 - **D80.** What only DOS had becomes its Windows counterpart: the ` cheat` command tail a command-line flag, Alt+PrtSc's `eliteNN.hi`/`.lo` a PNG the shell saves, exit to DOS a quit; the exit message goes.
@@ -487,6 +487,7 @@ After D44, no replay reaches the docked screens. Their rules are functions with 
 | D82 | The docked screens as drawn, `Design/Canvas/docked/` (drawn by the owner, 2026-10-14) | — | **D01 to D11 and their requirements** (2026-10-14): Phase 6, piece 5. Supersedes D54's docked and chart gaps. |
 | D83 | How the docked screens are driven (set by the owner, 2026-10-14) | — | **The mouse is on while docked**, and is mandatory on the charts: no key moves their cursor (2026-10-14). |
 | D84 | Whether DX, BX and DI's carry-throughs go too, which step 6 did not name: DI decides what a launched missile is copied from (raised with ADR-046) | — | **They go** (2026-10-14): ADR-046 items 6 to 8. |
+| D85 | Whether the game keeps D77's coroutine waits or moves to screens driven by the game's state, the current screen in `GameState` and a tick that updates and draws it (raised by the owner, 2026-10-14) | Coroutines through Phase 7, which keep every replay exact while the PC goes; state-driven screens from piece 5. | **As recommended** (2026-10-14): the coroutine waits stay through Phase 7 (ADR-047); piece 5's docked screens are state-driven: the current screen and its cursor in `GameState`, mouse and key events in, drawn from the state; the title, the pause screen and flight's function-key screens follow afterwards, with one re-recording and its cause. Amends D77's "the docked screens of piece 5 are written against the same host". |
 
 ## 9. ADRs this plan produces
 

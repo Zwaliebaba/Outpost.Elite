@@ -1,6 +1,6 @@
 # ADR-047 — The game waits as a coroutine: no native thread
 
-**Status:** accepted 2026-10-14, with the change that implements it, the first part of step 7 of Phase 7 ([Reverse-Engineering-Plan.md §5, Phase 7](../Reverse-Engineering-Plan.md#phase-7--wholly-native)), under the owner's ruling D77.
+**Status:** accepted 2026-10-14, with the change that implements it, the first part of step 7 of Phase 7 ([Reverse-Engineering-Plan.md §5, Phase 7](../Reverse-Engineering-Plan.md#phase-7--wholly-native)), under the owner's ruling D77. **Amended 2026-10-14 by D85:** the coroutine waits are Phase 7's; piece 5's docked screens are state-driven (below).
 
 ## Context
 
@@ -28,3 +28,4 @@ The whole suite took 3.5 s of wall time under g++ where it took 8.3 s before, by
 
 - **A second thread for the game.** It runs on the host's thread, resumed by `RunUntil`.
 - **A wait outside a coroutine.** A routine that waits returns a `Task`; `[[nodiscard]]` on every `Task` and on the wait's awaiter makes a wait nobody awaits a compile error.
+- **Coroutines as the shape of new screens** (D85). The game's place in a coroutine frame is state the digest does not see, a host cannot ask after and a save cannot hold, and a mouse click has to be fed to whichever wait is running. Piece 5's docked screens keep the current screen and its cursor in `GameState`, take mouse and key events, and are drawn from the state; the title, the pause screen and flight's function-key screens follow, after Phase 7, with one re-recording and its cause.
