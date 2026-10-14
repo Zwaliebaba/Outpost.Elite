@@ -60,8 +60,8 @@ using NativeRoutine = std::function<void()>;
 ///
 /// Interrupts are taken where they fall due, as the 8088 takes them: at the end of a wait's poll and of a spin, and when
 /// native code lets them in (EnableInterrupts), ends one (Hardware::EndOfInterrupt) or reprograms the timer
-/// (Hardware::SetTickDivisor). The interrupt controller's rules hold: in service, end of interrupt, masking. The handler is
-/// the one the vector table names: the game's own, the BIOS's, or the ROM's IRET.
+/// (Hardware::SetTickDivisor). The interrupt controller's rules hold: in service and end of interrupt (Scheduler). The handler
+/// is the one installed by name: the game's own, the BIOS's, or a stray one, which throws.
 ///
 /// The game runs on a thread of its own, the native thread (ADR-010 item 8): the program's start routine, and everything it
 /// calls, which is all of the game's code. When the clock reaches the end of a run there, the native thread hands the
@@ -104,7 +104,7 @@ public:
   /// over the 8-bit bus (three pushes, two vector reads).
   static constexpr Cycles HARDWARE_INTERRUPT_CYCLES = 61 + 5 * 4;
 
-  /// Powers on: every device in its power-on state, the vector table and the BIOS's data area as the BIOS leaves them for
+  /// Powers on: every device in its power-on state, the time of day and the video services as the BIOS leaves them for
   /// DOS, video mode 3 set on the CGA and in _state's video memory, and the BIOS's two hardware interrupt handlers in place.
   /// _state is the game's memory and _files where DOS's files are; both must outlive the platform. Not noexcept: the devices
   /// allocate.

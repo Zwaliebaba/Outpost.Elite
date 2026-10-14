@@ -7,7 +7,7 @@
 namespace Elite
 {
 
-Scheduler::Scheduler(const Cycles& _clock) noexcept
+Scheduler::Scheduler(const Cycles& _clock)
   : m_clock(_clock)
 {
   m_tick.loaded = true;

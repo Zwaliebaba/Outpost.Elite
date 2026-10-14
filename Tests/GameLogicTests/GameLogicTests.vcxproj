@@ -96,6 +96,8 @@
     <ClCompile Include="CgaFontTests.cpp" />
     <ClCompile Include="CgaTests.cpp" />
     <ClCompile Include="CorpusTests.cpp" />
+    <ClCompile Include="EquipmentAnswerTests.cpp" />
+    <ClCompile Include="EquipmentRulesTests.cpp" />
     <ClCompile Include="FieldTests.cpp" />
     <ClCompile Include="DockedTests.cpp" />
     <ClCompile Include="DosFilesTests.cpp" />
@@ -109,6 +111,7 @@
     <ClCompile Include="HyperspaceTests.cpp" />
     <ClCompile Include="InputTests.cpp" />
     <ClCompile Include="MarketAnswerTests.cpp" />
+    <ClCompile Include="MarketRulesTests.cpp" />
     <ClCompile Include="MarketTests.cpp" />
     <ClCompile Include="MathsAnswerTests.cpp" />
     <ClCompile Include="MouseTests.cpp" />
@@ -134,6 +137,7 @@
     <ClCompile Include="VideoModesTests.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="EquipmentAnswers.txt" />
     <None Include="GalaxyAnswers.txt" />
     <None Include="KnownAnswers.txt" />
     <None Include="KnownOutcomes.txt" />

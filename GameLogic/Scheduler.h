@@ -54,7 +54,8 @@ class Scheduler
 public:
   static constexpr Cycles DELIVERY_DELAY_CYCLES = MicrosecondsToCycles(1'000);
 
-  explicit Scheduler(const Cycles& _clock) noexcept;
+  /// Not noexcept: the keys' queue may allocate when it is made, as MSVC's debug deque does.
+  explicit Scheduler(const Cycles& _clock);
 
   // ── The tick ──
 
