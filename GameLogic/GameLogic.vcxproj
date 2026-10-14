@@ -164,6 +164,7 @@
     <ClInclude Include="StartUpTables.h" />
     <ClInclude Include="StateDigest.h" />
     <ClInclude Include="StateWriter.h" />
+    <ClInclude Include="Task.h" />
     <ClInclude Include="Text.h" />
     <ClInclude Include="TextState.h" />
     <ClInclude Include="TextTables.h" />

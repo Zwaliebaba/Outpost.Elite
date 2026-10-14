@@ -351,6 +351,9 @@
     <ClInclude Include="StateWriter.h">
       <Filter>State</Filter>
     </ClInclude>
+    <ClInclude Include="Task.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
     <ClInclude Include="Text.h">
       <Filter>Text</Filter>
     </ClInclude>

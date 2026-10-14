@@ -436,23 +436,23 @@ constexpr ChartKeys SHORT_RANGE_CHART_KEYS{.drawFrame = &DrawShortRangeChart,
 // recentres the cursor, and Esc or an F key other than the chart's own closes it, selecting the system at the cursor unless the
 // hyperspace countdown runs. Returns the key that closes it; otherwise the original jumps back to the chart's frame (CS:0CF9,
 // CS:0F60).
-std::optional<ScreenKey> ReadChartKey(GameState& _state, Hardware& _hardware, const ChartKeys& _chart)
+[[nodiscard]] Task<std::optional<ScreenKey>> ReadChartKey(GameState& _state, Hardware& _hardware, const ChartKeys& _chart)
 {
   const KeyPress key = GetKey(_state, _hardware);
   const std::uint8_t scanCode = key.scanCode;
   if (scanCode == 0)
   {
-    return std::nullopt;
+    co_return std::nullopt;
   }
   if (scanCode == SCAN_D)
   {
     ShowNearestSystemDistance(_state);
-    return std::nullopt;
+    co_return std::nullopt;
   }
   if (scanCode == SCAN_F)
   {
-    FindSystemByName(_state, _hardware);
-    return std::nullopt;
+    co_await FindSystemByName(_state, _hardware);
+    co_return std::nullopt;
   }
   // PUSH AX / POP AX round ReadFireButton keep the key.
   if (scanCode == SCAN_KEYPAD_5 || ReadFireButton(_state, _hardware))
@@ -462,7 +462,7 @@ std::optional<ScreenKey> ReadChartKey(GameState& _state, Hardware& _hardware, co
   const bool closes = scanCode == SCAN_ESCAPE || (scanCode >= SCAN_F1 && scanCode <= SCAN_F10 && scanCode != _chart.ownKey);
   if (!closes)
   {
-    return std::nullopt;
+    co_return std::nullopt;
   }
   // PUSH AX / POP AX round the selection keep the key.
   if (_state.Data().jump.hyperspaceCountdown == 0)
@@ -472,22 +472,22 @@ std::optional<ScreenKey> ReadChartKey(GameState& _state, Hardware& _hardware, co
     commander.*_chart.keptCursorX = std::uint8_t{commander.chartCursorX};
     commander.*_chart.keptCursorY = std::uint8_t{commander.chartCursorY};
   }
-  return ScreenKey{scanCode};
+  co_return ScreenKey{scanCode};
 }
 
 // A chart's frames until a key closes it (CS:0CF9, CS:0F60): the frame drawn, the IBM PC's redraw paid (D18), presented, the
 // cursor steered, and the key read.
-ScreenKey RunChartFrames(GameState& _state, Hardware& _hardware, const ChartKeys& _chart)
+[[nodiscard]] Task<ScreenKey> RunChartFrames(GameState& _state, Hardware& _hardware, const ChartKeys& _chart)
 {
   for (;;)
   {
     _chart.drawFrame(_state, _hardware);
-    _hardware.Spend(_chart.pacing);
-    PresentChartFrame(_state, _hardware);
+    co_await _hardware.Spend(_chart.pacing);
+    co_await PresentChartFrame(_state, _hardware);
     (void)MoveChartCursor(_state, _hardware);
-    if (const std::optional<ScreenKey> key = ReadChartKey(_state, _hardware, _chart))
+    if (const std::optional<ScreenKey> key = co_await ReadChartKey(_state, _hardware, _chart))
     {
-      return *key;
+      co_return *key;
     }
   }
 }
@@ -652,7 +652,7 @@ void SelectNearestSystem(GameState& _state)
 
 } // namespace
 
-ScreenKey ShowGalacticChart(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<ScreenKey> ShowGalacticChart(GameState& _state, Hardware& _hardware)
 {
   _state.Data().drawing.sunFringeMask = 0;
   LoadSystemSeeds(_state, _state.Data().commander.currentSystem.index);
@@ -666,10 +666,10 @@ ScreenKey ShowGalacticChart(GameState& _state, Hardware& _hardware)
   _state.Data().commander.chartCursorX = std::uint8_t{_state.Data().commander.galacticCursorX};
   _state.Data().commander.chartCursorY = std::uint8_t{_state.Data().commander.galacticCursorY};
   _state.Data().commander.chartIsShortRange = 0;
-  return RunChartFrames(_state, _hardware, GALACTIC_CHART_KEYS);
+  co_return co_await RunChartFrames(_state, _hardware, GALACTIC_CHART_KEYS);
 }
 
-ScreenKey ShowShortRangeChart(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<ScreenKey> ShowShortRangeChart(GameState& _state, Hardware& _hardware)
 {
   _state.Data().drawing.sunFringeMask = 0;
   (void)DrawChartFrame(_state, _hardware);
@@ -703,7 +703,7 @@ ScreenKey ShowShortRangeChart(GameState& _state, Hardware& _hardware)
     }
   }
   PlaceChartLabels(_state);
-  return RunChartFrames(_state, _hardware, SHORT_RANGE_CHART_KEYS);
+  co_return co_await RunChartFrames(_state, _hardware, SHORT_RANGE_CHART_KEYS);
 }
 
 SystemSeeds ReadSystemSeeds(const GameState& _state)
@@ -938,7 +938,7 @@ std::uint8_t GenerateSystemName(GameState& _state)
   return length;
 }
 
-void FindSystemByName(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<void> FindSystemByName(GameState& _state, Hardware& _hardware)
 {
   LoadGalaxySeeds(_state);
   DrawScreenString(_state, FIND_PROMPT, INK_1, CHART_TEXT_LINE_1);
@@ -948,12 +948,12 @@ void FindSystemByName(GameState& _state, Hardware& _hardware)
   {
     typed[byte] = 0;
   }
-  ReadTextLine(_state, _hardware, typed, static_cast<std::uint8_t>(SYSTEM_NAME_BYTES), CHART_TEXT_LINE_2);
+  co_await ReadTextLine(_state, _hardware, typed, static_cast<std::uint8_t>(SYSTEM_NAME_BYTES), CHART_TEXT_LINE_2);
   if (typed[0] == 0)
   {
     // Nothing typed: on into ShowNearestSystemDistance, by a jump back to its entry.
     ShowNearestSystemDistance(_state);
-    return;
+    co_return;
   }
 
   // The name echoed for the error message and upper-cased in place, a space after it; the count to compare its length,
@@ -985,11 +985,11 @@ void FindSystemByName(GameState& _state, Hardware& _hardware)
       if (!GetShortRangeOffset(_state).onChart)
       {
         ShowNotOnMap(_state);
-        return;
+        co_return;
       }
       MoveCursorToSystem(_state);
       ShowNearestSystemDistance(_state);
-      return;
+      co_return;
     }
     ++system;
     if (system == 0)
@@ -1133,7 +1133,7 @@ void ClearChartTextLines(GameState& _state, std::uint16_t _ink)
   DrawScreenString(_state, BLANK_CHART_LINE, _ink, CHART_TEXT_LINE_2);
 }
 
-ScreenKey ShowSystemDataScreen(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<ScreenKey> ShowSystemDataScreen(GameState& _state, Hardware& _hardware)
 {
   const std::uint16_t titleEnd = PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, SYSTEM_DATA_FRAME), DATA_TITLE);
   TerminateSelectedSystemName(_state);
@@ -1199,7 +1199,7 @@ ScreenKey ShowSystemDataScreen(GameState& _state, Hardware& _hardware)
   galaxy.radiusDigits[0] = SPACE;
   PrintTextModeString(_state, JoinTexts({RADIUS_LABEL, DigitsText(galaxy.radiusDigits), RADIUS_UNIT_TEXT}), RADIUS_ROW);
   ShowSystemDescription(_state);
-  return WaitForScreenExitKey(_state, _hardware, SCAN_F7);
+  co_return co_await WaitForScreenExitKey(_state, _hardware, SCAN_F7);
 }
 
 void TerminateSelectedSystemName(GameState& _state)

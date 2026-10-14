@@ -173,7 +173,7 @@ MouseDriver IsMouseDriverInstalled(Hardware& _hardware)
   return MouseDriver{_hardware.MouseDriverLoaded()};
 }
 
-void WaitForKeyPress(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<void> WaitForKeyPress(GameState& _state, Hardware& _hardware)
 {
   // GetKey until a key comes, the JE back to the entry at 6DECh.
   for (;;)
@@ -181,20 +181,20 @@ void WaitForKeyPress(GameState& _state, Hardware& _hardware)
     const KeyPress key = GetKey(_state, _hardware);
     if (key.scanCode != 0)
     {
-      return;
+      co_return;
     }
-    AwaitNextKey(_hardware, key);
+    co_await AwaitNextKey(_hardware, key);
   }
 }
 
-void AwaitNextKey(Hardware& _hardware, const KeyPress& _key)
+[[nodiscard]] Task<void> AwaitNextKey(Hardware& _hardware, const KeyPress& _key)
 {
   if (_key.taken || _key.screenshot)
   {
     _hardware.Spin();
-    return;
+    co_return;
   }
-  _hardware.Wait();
+  co_await _hardware.Wait();
 }
 
 Steering ReadSteering(GameState& _state, Hardware& _hardware)

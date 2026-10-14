@@ -74,12 +74,12 @@ void ResetMouseIfSelected(const GameState& _state, Hardware& _hardware);
 
 /// WaitForKeyPress (CS:6DEC): GetKey until it gives a key. Waits as a rule, a turn of its loop for each time GetKey finds none
 /// (ADR-015).
-void WaitForKeyPress(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<void> WaitForKeyPress(GameState& _state, Hardware& _hardware);
 
 /// After a wait's GetKey that brought no key the wait wants (ADR-039): when it took no code and saved no screenshot, nothing
 /// changed and the wait idles (Hardware::Wait); when it took one or saved one, the original's next poll comes at once
 /// (Hardware::Spin).
-void AwaitNextKey(Hardware& _hardware, const KeyPress& _key);
+[[nodiscard]] Task<void> AwaitNextKey(Hardware& _hardware, const KeyPress& _key);
 
 /// ReadSteering (CS:7536): the roll and the pitch from the selected device, within -23..23: the keyboard's (ReadKeyboardSteering)
 /// integrated into keyboardRollRate and keyboardPitchRate, or the mouse's (ReadMouseSteering).

@@ -469,7 +469,7 @@ public:
     const auto late = [](std::size_t _row, std::size_t _x) { return static_cast<std::uint8_t>(Pattern(_row, _x) ^ 3); };
     PlatformRig rig("SpaceViewPixels");
     rig.Start(
-      [&rig, &background, &late]
+      [&rig, &background, &late]() -> Elite::Task<void>
       {
         Elite::Hardware& hardware = rig.Native();
         Elite::GameState& state = rig.State();
@@ -510,7 +510,7 @@ public:
           DrawPixel(state, LATE_ROW, x, late(LATE_ROW, x));
         }
         hardware.EndSpaceViewObject(LATE_SLOT);
-        Elite::PresentSpaceView(state, hardware);
+        co_await Elite::PresentSpaceView(state, hardware);
         hardware.PublishFlightSnapshot(Elite::TakeFlightSnapshot(state), false);
       });
     Assert::IsTrue(rig.Host().RunUntil(10'000'000) == Elite::StopReason::Terminated, L"the frame is drawn");

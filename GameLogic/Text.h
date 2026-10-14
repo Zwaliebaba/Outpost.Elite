@@ -196,7 +196,8 @@ void PrintTextLines(GameState& _state, std::string_view _texts, std::uint16_t _c
 /// characters, after ResetKeyboard and with textPaperPattern cleared; echoed by RedrawInputLine at B800:_cell, with a
 /// cursor that blinks every 300 timer ticks. Enter ends it, Backspace deletes, a key with no character does nothing, and
 /// letters are lower case unless Shift is held. The buffer holds a NUL after it. Waits for keys as a rule (ADR-015).
-void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<std::uint8_t> _buffer, std::uint8_t _most, std::uint16_t _cell);
+[[nodiscard]] Task<void> ReadTextLine(GameState& _state, Hardware& _hardware, std::span<std::uint8_t> _buffer, std::uint8_t _most,
+                                      std::uint16_t _cell);
 
 /// ToggleInputCursor (CS:7727): the input cursor's character flips between blank and block.
 void ToggleInputCursor(GameState& _state);

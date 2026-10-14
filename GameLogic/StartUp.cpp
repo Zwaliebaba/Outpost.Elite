@@ -144,7 +144,7 @@ void StartNewGame(GameState& _state)
   _state.Data().commander.maskSystemJumps = 0;
 }
 
-void Start(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<void> Start(GameState& _state, Hardware& _hardware)
 {
   // The original keeps the PSP's segment in pspSegment to read its command tail from, and asks DOS's version, which is 3.30
   // (ADR-006 item 3): the platform gives the tail (CheckCheatArgument), and DOS 1's refusal never comes.
@@ -156,7 +156,7 @@ void Start(GameState& _state, Hardware& _hardware)
     // CopyProtection (CS:04A3) came here: it does nothing once protectionShown is set, as the D5 byte sets it (ADR-001).
     InstallDivideAndKeyboardInterrupts(_state, _hardware);
     CheckCheatArgument(_state, _hardware);
-    GameLoop(_state, _hardware);
+    co_await GameLoop(_state, _hardware);
 
     // HandleDiskRequest (CS:0065): GameLoop comes back only for diskOperation, 0 to leave.
     RestoreDivideAndKeyboardInterrupts(_hardware);
@@ -166,7 +166,7 @@ void Start(GameState& _state, Hardware& _hardware)
     {
       WipeProgram(_hardware);
       ExitToDos(_hardware);
-      return;
+      co_return;
     }
     // The request, which the original makes with its own critical-error handler, CS:02F0, on int 24h, and the handler that was
     // there put back after it. Nothing raises int 24h: DOS answers a failed call with CF set and an error. A listing searches
@@ -182,19 +182,19 @@ void WipeProgram(Hardware& _hardware)
   _hardware.DisableInterrupts();
 }
 
-void GameLoop(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<void> GameLoop(GameState& _state, Hardware& _hardware)
 {
   for (;;)
   {
     _state.Data().flow.inFlight = 0;
-    if (RunTitleAndDocked(_state, _hardware))
+    if (co_await RunTitleAndDocked(_state, _hardware))
     {
       // LeaveGameLoopForDisk: the original drops the disc menu's return address and RunTitleAndDocked's, so that its RET returns
       // into Start.
-      return;
+      co_return;
     }
     _state.Data().flow.inFlight = 1;
-    RunFlight(_state, _hardware);
+    co_await RunFlight(_state, _hardware);
     // After a death the title runs again.
     if (_state.Data().playerShip.playerDead == 1)
     {
@@ -204,7 +204,7 @@ void GameLoop(GameState& _state, Hardware& _hardware)
   }
 }
 
-void ShowCredits(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<void> ShowCredits(GameState& _state, Hardware& _hardware)
 {
   // The space view's layers watch the frame (ADR-033), which holds only the credits' words (D66).
   _hardware.BeginSpaceViewFrame();
@@ -227,13 +227,13 @@ void ShowCredits(GameState& _state, Hardware& _hardware)
     line += text.size() + 1;
     text = CreditsLine(line);
   }
-  FinishSpaceViewFrame(_state, _hardware);
+  co_await FinishSpaceViewFrame(_state, _hardware);
   // The frame as it was drawn, for a renderer that draws it in the title's cockpit (D64, D66): the words and nothing of the scene.
   _hardware.PublishFlightSnapshot(WithoutScene(TakeTitleSnapshot(_state, ELITE_TITLE_TEXT, SnapshotDisc{})), false);
   // WaitForTimerTick keeps every register; the LOOP counts the ticks left.
   for (std::uint16_t ticksLeft = CREDITS_TIMER_TICKS;;)
   {
-    WaitForTimerTick(_state, _hardware);
+    co_await WaitForTimerTick(_state, _hardware);
     if (--ticksLeft == 0)
     {
       break;
@@ -243,25 +243,11 @@ void ShowCredits(GameState& _state, Hardware& _hardware)
 
 // ── The entry of the program ──
 
-void StartEntry(Guest& _guest)
+Task<void> StartEntry(Guest& _guest)
 {
   // Start's first instructions push the far return to PSP:0000, where DOS's INT 20h ends the program, for its RETF to take once
   // Start returns; on the platform the program ends when Start returns.
-  Start(_guest.State(), _guest.Devices());
-}
-
-namespace
-{
-
-constexpr std::array ENTRIES = {
-  NativeEntry{EntryKind::Start, &StartEntry}, // CS:0000
-};
-
-} // namespace
-
-std::span<const NativeEntry> StartUpEntries() noexcept
-{
-  return ENTRIES;
+  co_await Start(_guest.State(), _guest.Devices());
 }
 
 } // namespace Elite

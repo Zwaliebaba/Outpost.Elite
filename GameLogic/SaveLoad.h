@@ -26,12 +26,12 @@ struct DiscMenuExit
 /// ShowDiscControlScreen (CS:660B), with RunDiscControlKeys, ShowDiskResult and PromptCommanderFileName, which
 /// jumps into its key loop after a bad name, as one unit (ADR-012 item 14): the Disc/Control menu, or, back from Start's disk
 /// work, what it came to or the question whether to retry it; then its keys. Waits for keys as a rule (ADR-015).
-DiscMenuExit ShowDiscControlScreen(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<DiscMenuExit> ShowDiscControlScreen(GameState& _state, Hardware& _hardware);
 
 /// PromptCommanderFileName (CS:6862): FILENAME? and up to 8 characters through ReadTextLine into commanderFileName, folded to
 /// upper case, and ".CDR" after them. Returns false for a bad name, which the original answers by dropping its return address
 /// and reading the menu's keys on in its place (RejectFileName). Waits for keys as a rule (ADR-015).
-[[nodiscard]] bool PromptCommanderFileName(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<bool> PromptCommanderFileName(GameState& _state, Hardware& _hardware);
 
 /// PerformDiskRequest (CS:02FF): DOS's disk transfer area set to diskTransferArea, then _request 1 loads commanderFileName
 /// into commanderBlock, 2 saves it, 3 deletes it, and anything else lists the *.cdr files with no attribute beyond

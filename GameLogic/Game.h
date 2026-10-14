@@ -14,7 +14,7 @@ namespace Elite
 ///
 /// The platform reads and writes the game's memory through the GameState, and the native routines it runs hold both, so the
 /// platform must not outlive the GameState. That holds by construction: the members are built in the order GameState,
-/// Platform and destroyed in reverse, the platform first, and its native thread with it. A Game is over 100 KiB, the
+/// Platform and destroyed in reverse, the platform first, and the program's coroutine with it. A Game is over 100 KiB, the
 /// GameState's storage, so a host makes it on the heap.
 class Game
 {

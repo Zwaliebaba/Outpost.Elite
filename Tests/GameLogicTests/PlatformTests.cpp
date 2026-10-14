@@ -30,28 +30,28 @@ constexpr Elite::Cycles FIRST_TICK = 65536 * Elite::CYCLES_PER_PIT_TICK; // 262,
 constexpr Elite::Cycles IRET_CYCLES = 24 + 3 * 4;
 
 // sti; then wait for ever, each poll finding nothing: what the program's idle loop does.
-void WaitForEver(Elite::Hardware& _hardware)
+Elite::Task<void> WaitForEver(Elite::Hardware& _hardware)
 {
   _hardware.EnableInterrupts();
   for (;;)
   {
-    _hardware.Wait();
+    co_await _hardware.Wait();
   }
 }
 
 // Waits for the BIOS's tick count to change, with interrupts on, a poll at a time: sti; mov bx,es:[6Ch]; wait: cmp bx,es:[6Ch];
 // je wait.
-void WaitForTick(PlatformRig& _rig)
+Elite::Task<void> WaitForTick(PlatformRig& _rig)
 {
   _rig.Native().EnableInterrupts();
   const std::uint32_t ticks = _rig.Host().Day().Ticks();
   while (_rig.Host().Day().Ticks() == ticks)
   {
-    _rig.Native().Wait();
+    co_await _rig.Native().Wait();
   }
 }
 
-// Sets its flag when it is destroyed: whether what the native thread was running was unwound.
+// Sets its flag when it is destroyed: whether the program's coroutine was destroyed with what it held.
 class UnwindWitness
 {
 public:
@@ -74,7 +74,7 @@ private:
 
 } // namespace
 
-// The native platform (Platform, D33): paced time, interrupts, the native thread, the handlers by identity and the ROM's two
+// The native platform (Platform, D33): paced time, interrupts, the program as a coroutine, the handlers by identity and the ROM's two
 // answers, the BIOS's two hardware handlers, and DOS's console. What the emulated PC's tests held of the Pc, its Dispatcher, its native
 // code and its firmware, held of the platform that replaced them.
 TEST_CLASS(PlatformTests)
@@ -86,7 +86,7 @@ public:
   TEST_METHOD(TimerTickReachesTheBiosHandler)
   {
     PlatformRig rig("PlatformTimerTick");
-    rig.Start([&rig] { WaitForEver(rig.Native()); });
+    rig.Start([&rig]() -> Elite::Task<void> { co_await WaitForEver(rig.Native()); });
     const std::uint32_t ticks = rig.Host().Day().Ticks();
 
     Assert::IsTrue(rig.Host().RunUntil(262'000) == Elite::StopReason::Reached);
@@ -100,7 +100,7 @@ public:
   TEST_METHOD(ProgramEndsWhenItsStartReturns)
   {
     PlatformRig rig("PlatformTerminate");
-    rig.Start([] {});
+    rig.Start([]() -> Elite::Task<void> { co_return; });
     Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Elite::StopReason::Terminated);
     Assert::AreEqual(std::uint64_t{0}, rig.Host().Clock(), L"it took no time");
     Assert::AreEqual(std::uint64_t{1}, rig.Host().Entry().calls);
@@ -113,13 +113,14 @@ public:
   {
     PlatformRig rig("PlatformPacedWork");
     rig.Start(
-      [&rig]
+      [&rig]() -> Elite::Task<void>
       {
         for (std::uint16_t count = 1000; count != 0;)
         {
           --count;
           rig.Native().Spin();
         }
+        co_return;
       });
     Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Elite::StopReason::Terminated);
     Assert::AreEqual(std::uint64_t{0}, rig.Host().Clock(), L"no time passed");
@@ -130,7 +131,7 @@ public:
   TEST_METHOD(PacedWaitEndsAtTheEventItWaitsFor)
   {
     PlatformRig rig("PlatformPacedWait");
-    rig.Start([&rig] { WaitForTick(rig); });
+    rig.Start([&rig]() -> Elite::Task<void> { co_await WaitForTick(rig); });
     Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Elite::StopReason::Terminated);
     Assert::AreEqual(FIRST_TICK, rig.Host().Clock());
   }
@@ -140,12 +141,12 @@ public:
   {
     PlatformRig rig("PlatformPacedLimit");
     rig.Start(
-      [&rig]
+      [&rig]() -> Elite::Task<void>
       {
         rig.Native().DisableInterrupts();
         for (;;)
         {
-          rig.Native().Wait();
+          co_await rig.Native().Wait();
         }
       });
     Assert::IsTrue(rig.Host().RunUntil(500'000) == Elite::StopReason::Reached);
@@ -157,13 +158,14 @@ public:
   {
     PlatformRig rig("PlatformPacedSpin");
     rig.Start(
-      [&rig]
+      [&rig]() -> Elite::Task<void>
       {
         rig.Native().EnableInterrupts();
         for (;;)
         {
           rig.Native().Spin();
         }
+        co_return;
       });
     rig.Host().SetSpinLimit(10'000);
     Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Elite::StopReason::Spinning);
@@ -179,7 +181,7 @@ public:
     for (std::size_t run = 0; run < 2; ++run)
     {
       PlatformRig rig("PlatformRepeat");
-      rig.Start([&rig] { WaitForEver(rig.Native()); });
+      rig.Start([&rig]() -> Elite::Task<void> { co_await WaitForEver(rig.Native()); });
       Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Elite::StopReason::Reached);
       clocks[run] = rig.Host().Clock();
       interrupts[run] = rig.Host().InterruptsTaken();
@@ -191,12 +193,12 @@ public:
     Assert::IsTrue(digests[0] == digests[1], L"the same game state");
   }
 
-  // ADR-010 item 8: the program waits on the native thread, stops where a run ends, and carries on in the next: the first
+  // D77: the program waits as a coroutine, is suspended where a run ends, and is resumed in the next: the first
   // timer tick, at cycle 262,144, ends its wait, as it ended the original's.
   TEST_METHOD(AWaitStopsAtTheEndOfARunAndCarriesOn)
   {
     PlatformRig rig("PlatformWaits");
-    rig.Start([&rig] { WaitForTick(rig); });
+    rig.Start([&rig]() -> Elite::Task<void> { co_await WaitForTick(rig); });
     Assert::IsTrue(rig.Host().RunUntil(100'000) == Elite::StopReason::Reached, L"the run ends inside the wait");
     Assert::AreEqual(std::uint64_t{100'000}, rig.Host().Clock());
     Assert::AreEqual(std::uint64_t{1}, rig.Host().Entry().calls);
@@ -205,16 +207,16 @@ public:
     Assert::AreEqual(std::uint64_t{1}, rig.Host().Entry().calls, L"one call, over two runs");
   }
 
-  // A platform destroyed while the program waits unwinds what the native thread is running, and does not hang.
-  TEST_METHOD(PowerOffMidWaitUnwindsTheNativeThread)
+  // A platform destroyed while the program waits destroys its coroutine, and every routine it waits in, and does not hang.
+  TEST_METHOD(PowerOffMidWaitDestroysTheProgram)
   {
     PlatformRig rig("PlatformAbandoned");
     bool unwound = false;
     rig.Start(
-      [&rig, &unwound]
+      [&rig, &unwound]() -> Elite::Task<void>
       {
         const UnwindWitness witness(&unwound);
-        WaitForEver(rig.Native());
+        co_await WaitForEver(rig.Native());
       });
     Assert::IsTrue(rig.Host().RunUntil(100'000) == Elite::StopReason::Reached);
     Assert::IsFalse(unwound, L"still waiting");
@@ -227,8 +229,13 @@ public:
     PlatformRig rig("PlatformTwice");
     rig.Host().SetGameHandler(Elite::Irq::Timer, [] {});
     Assert::ExpectException<std::logic_error>([&rig] { rig.Host().SetGameHandler(Elite::Irq::Timer, [] {}); }, L"a handler");
-    rig.Start([] {});
-    Assert::ExpectException<std::logic_error>([&rig] { rig.Start([] {}); }, L"the program's start");
+    rig.Start([]() -> Elite::Task<void> { co_return; });
+    Assert::ExpectException<std::logic_error>(
+      [&rig]
+      {
+        rig.Start([]() -> Elite::Task<void> { co_return; });
+      },
+      L"the program's start");
   }
 
   // A vector that names code no routine stands in for, as int 8 does once the game writes its segment again while the BIOS's
@@ -237,10 +244,10 @@ public:
   {
     PlatformRig rig("PlatformStray");
     rig.Start(
-      [&rig]
+      [&rig]() -> Elite::Task<void>
       {
         rig.Native().SetHandler(Elite::Irq::Timer, Elite::IrqHandler::Stray);
-        WaitForEver(rig.Native());
+        co_await WaitForEver(rig.Native());
       });
     Assert::ExpectException<std::logic_error>([&rig] { (void)rig.Host().RunUntil(1'000'000); }, L"at the first IRQ 0");
   }
@@ -262,10 +269,10 @@ public:
                               });
     const std::uint32_t ticks = rig.Host().Day().Ticks();
     rig.Start(
-      [&rig]
+      [&rig]() -> Elite::Task<void>
       {
         rig.Native().SetHandler(Elite::Irq::Timer, Elite::IrqHandler::Game);
-        WaitForEver(rig.Native());
+        co_await WaitForEver(rig.Native());
       });
     Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Elite::StopReason::Reached);
     Assert::IsTrue(taken == std::vector<Elite::Cycles>{FIRST_TICK, 2 * FIRST_TICK, 3 * FIRST_TICK}, L"at each edge");
@@ -301,7 +308,12 @@ public:
   TEST_METHOD(TheRomsIretServesAVectorNothingHooks)
   {
     PlatformRig rig("PlatformRomIret");
-    rig.Start([&rig] { (void)rig.Native().ReadMouseMotion(); });
+    rig.Start(
+      [&rig]() -> Elite::Task<void>
+      {
+        (void)rig.Native().ReadMouseMotion();
+        co_return;
+      });
     Assert::IsTrue(rig.Host().RunUntil(1'000) == Elite::StopReason::Terminated);
   }
 

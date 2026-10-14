@@ -34,11 +34,11 @@ struct Quantity
 /// ReadQuantity as one unit (ADR-012 item 14): the cursor moved by the steering and the arrow keys, and B or S with a quantity
 /// typed on the buy or sell screen (tradeScreenIsBuy), each with its message. Returns Esc or the F-key that ends it, other than
 /// the screen's own. Waits for keys as a rule (ADR-015).
-ScreenKey RunCargoTradeMenu(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<ScreenKey> RunCargoTradeMenu(GameState& _state, Hardware& _hardware);
 
 /// ShowMarketPricesScreen (CS:5E2C): the F8 screen, the system's name cut at its first space and every commodity's buy and
 /// sell price, then the wait for the key that closes it (WaitForScreenExitKey). Waits for keys as a rule (ADR-015).
-ScreenKey ShowMarketPricesScreen(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<ScreenKey> ShowMarketPricesScreen(GameState& _state, Hardware& _hardware);
 
 /// SubtractCredits (CS:65BA), the body PayForEquipmentItem runs into and SpendCredits jumps to: _tenths of credits off
 /// creditsTenths, and the balance reformatted. Returns false, and the credits as they were, when they are not enough.

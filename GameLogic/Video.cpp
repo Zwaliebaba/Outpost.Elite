@@ -1231,16 +1231,16 @@ void FillClippedGeneral(GameState& _state, ScreenPoint _a, ScreenPoint _b, Scree
 
 // IN AL,DX / AND AL,8 / JZ: the CGA's status until it reports a vertical retrace. A read that sees a retrace uses it up
 // (Cga::SetRetraceSeenOnce), so these are the original's reads, one a poll, and a poll that sees none waits (ADR-039).
-void WaitForRetrace(Hardware& _hardware)
+[[nodiscard]] Task<void> WaitForRetrace(Hardware& _hardware)
 {
   for (;;)
   {
     const auto retrace = static_cast<std::uint8_t>(_hardware.CgaStatus() & STATUS_VERTICAL_RETRACE);
     if (retrace != 0)
     {
-      return;
+      co_return;
     }
-    _hardware.Wait();
+    co_await _hardware.Wait();
   }
 }
 
@@ -1350,43 +1350,43 @@ void WriteScreenshotFile(GameState& _state, Hardware& _hardware)
   }
 }
 
-void FinishSpaceViewFrame(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<void> FinishSpaceViewFrame(GameState& _state, Hardware& _hardware)
 {
   // MOV AX,B800h / MOV ES,AX, the sights, then XOR AL,AL / CLD: the copy and the clear run forwards. The sights are watched for
   // the space view, which the renderer draws in their place (ADR-035).
   _hardware.BeginSpaceViewObject();
   DrawLaserSights(_state);
   _hardware.EndSpaceViewRendered();
-  PresentSpaceView(_state, _hardware);
+  co_await PresentSpaceView(_state, _hardware);
   ClearDrawBuffer(_state);
 }
 
-void PresentChartFrame(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<void> PresentChartFrame(GameState& _state, Hardware& _hardware)
 {
   // MOV AX,B800h / MOV ES,AX / CLD: AL, the bands CopyChartBufferToScreen skips, is 0 whatever the caller passed, and both
   // copy forwards.
-  CopyChartBufferToScreen(_state, _hardware, 0);
+  co_await CopyChartBufferToScreen(_state, _hardware, 0);
   ClearDrawBuffer(_state);
 }
 
-void PresentSpaceView(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<void> PresentSpaceView(GameState& _state, Hardware& _hardware)
 {
   // MOV AL,[msSinceFrame] / CMP AL,[minimumFrameMs] / JB back to the start at 0599h, while the timer interrupt counts
   // msSinceFrame up.
   while (_state.Data().flow.msSinceFrame < _state.Data().flight.minimumFrameMs)
   {
-    _hardware.Wait();
+    co_await _hardware.Wait();
   }
   _state.Data().flow.msSinceFrame = 0;
-  WaitRetraceThenDelay(_hardware);
+  co_await WaitRetraceThenDelay(_hardware);
   CopyLinePairs(_state, SPACE_VIEW_BUFFER_START, SPACE_VIEW_SCREEN_OFFSET, SPACE_VIEW_LINE_PAIRS);
 }
 
-void CopyChartBufferToScreen(GameState& _state, Hardware& _hardware, std::uint8_t _bandsSkipped)
+[[nodiscard]] Task<void> CopyChartBufferToScreen(GameState& _state, Hardware& _hardware, std::uint8_t _bandsSkipped)
 {
   // MOV DX,3DAh / PUSH AX, the retrace's loop at 05D0 and the delay's at 05D8, then POP AX: the bands are a value, not a word on
   // the stack. The delay, MOV AX,2BCh / DEC AX / JNZ, is the 8088's speed and takes no paced time.
-  WaitForRetrace(_hardware);
+  co_await WaitForRetrace(_hardware);
   // _bandsSkipped bands of 8 lines: SHL BL,1 twice / SUB BL,40h / NEG BL, so 64 - 4 * the bands line pairs as a byte, from
   // DS:the bands * 512, as SHL AH,1 leaves the bands doubled in AH.
   const auto linePairs = static_cast<std::uint8_t>(CHART_LINE_PAIRS - static_cast<std::uint8_t>(_bandsSkipped << 2));
@@ -1827,11 +1827,11 @@ void FillClippedTriangle(GameState& _state, Triangle _doubled)
   }
 }
 
-void WaitRetraceThenDelay(Hardware& _hardware)
+[[nodiscard]] Task<void> WaitRetraceThenDelay(Hardware& _hardware)
 {
   // MOV DX,3DAh and the retrace's loop at 4602, then MOV AX,7D0h and the delay's at 460A, which counts AX down to 0: the
   // 8088's speed, which takes no paced time.
-  WaitForRetrace(_hardware);
+  co_await WaitForRetrace(_hardware);
 }
 
 ScreenChange ShowCockpitScreen(GameState& _state, Hardware& _hardware)

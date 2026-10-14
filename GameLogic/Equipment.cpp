@@ -261,47 +261,47 @@ void ShowEquipMessage(GameState& _state, std::string_view _text, std::uint8_t _s
 // counted (CountAfterFitting), its resale price shown but for fuel's, and a laser's mount chosen. From the cargo bay on, the row's
 // laser type is selected first, as the original selects it before its checks. Returns the message for ShowEquipMessage, after
 // the jumps back the original takes on the way.
-[[nodiscard]] std::string_view BuyEquipment(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<std::string_view> BuyEquipment(GameState& _state, Hardware& _hardware)
 {
   const std::uint8_t row = _state.Data().menus.menuSelectedRow;
   const bool laser = row >= FIRST_FITTED_ROW && SelectLaserType(_state);
   const EquipmentRefusal refusal = RefuseToFit(row, CurrentFitting(_state));
   if (refusal != EquipmentRefusal::None)
   {
-    return RefusalText(refusal);
+    co_return RefusalText(refusal);
   }
   if (!PayForEquipmentItem(_state))
   {
-    return RefusalText(EquipmentRefusal::NotEnoughCredits);
+    co_return RefusalText(EquipmentRefusal::NotEnoughCredits);
   }
   std::uint8_t& fitted = Fitted(_state, row);
   fitted = CountAfterFitting(row, fitted);
   if (row == FUEL_ROW)
   {
-    return FUEL_PURCHASED_TEXT;
+    co_return FUEL_PURCHASED_TEXT;
   }
   ShowEquipmentSellPrice(_state);
   if (row == MISSILE_ROW)
   {
-    return MISSILE_PURCHASED_TEXT;
+    co_return MISSILE_PURCHASED_TEXT;
   }
   if (laser)
   {
-    ChooseMountToFitLaser(_state, _hardware);
+    co_await ChooseMountToFitLaser(_state, _hardware);
   }
-  return ITEM_PURCHASED_TEXT;
+  co_return ITEM_PURCHASED_TEXT;
 }
 
 // 6295: S on the equipment menu, once OpenEquipMessage has saved the attribute: the row refused (RefuseToRemove) or taken back
 // for its resale price, its resale column cleared once the last is sold, and a laser's mount chosen. Returns the message for
 // ShowEquipMessage, after the jumps back the original takes on the way.
-[[nodiscard]] std::string_view SellEquipment(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<std::string_view> SellEquipment(GameState& _state, Hardware& _hardware)
 {
   const std::uint8_t row = _state.Data().menus.menuSelectedRow;
   const EquipmentRefusal refusal = RefuseToRemove(row, CurrentFitting(_state));
   if (refusal != EquipmentRefusal::None)
   {
-    return RefusalText(refusal);
+    co_return RefusalText(refusal);
   }
   std::uint8_t& fitted = Fitted(_state, row);
   const auto left = static_cast<std::uint8_t>(fitted - 1);
@@ -313,13 +313,13 @@ void ShowEquipMessage(GameState& _state, std::string_view _text, std::uint8_t _s
   AddCredits(_state, RowPrices(_state, row).resale);
   if (row == MISSILE_ROW)
   {
-    return MISSILE_SOLD_TEXT;
+    co_return MISSILE_SOLD_TEXT;
   }
   if (SelectLaserType(_state))
   {
-    ChooseMountToRemoveLaser(_state, _hardware);
+    co_await ChooseMountToRemoveLaser(_state, _hardware);
   }
-  return ITEM_SOLD_TEXT;
+  co_return ITEM_SOLD_TEXT;
 }
 
 // 63C3 and 6490: the mount box at _box painted in textAttribute, then the one left of it, from FORE round to LEFT,
@@ -408,7 +408,7 @@ using MountSpace = bool (*)(GameState&);
 
 // 63B5-6448 and 6482-6515, one loop at two addresses: the box moved by the steering's roll or the arrow keys until Space does
 // its work (_space), from the box at _start.
-void RunMountChooser(GameState& _state, Hardware& _hardware, MountSpace _space, std::uint16_t _start)
+[[nodiscard]] Task<void> RunMountChooser(GameState& _state, Hardware& _hardware, MountSpace _space, std::uint16_t _start)
 {
   std::uint16_t box = _start;
   for (;;)
@@ -421,7 +421,7 @@ void RunMountChooser(GameState& _state, Hardware& _hardware, MountSpace _space, 
     }
     for (;;)
     {
-      const KeyPress key = PollMenuKey(_state, _hardware);
+      const KeyPress key = co_await PollMenuKey(_state, _hardware);
       const std::uint8_t code = key.scanCode;
       if (code == 0)
       {
@@ -433,7 +433,7 @@ void RunMountChooser(GameState& _state, Hardware& _hardware, MountSpace _space, 
       {
         if (_space(_state))
         {
-          return;
+          co_return;
         }
         break;
       }
@@ -564,7 +564,7 @@ void TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
   _state.Data().messages.messageFrames = SCOOP_MESSAGE_FRAMES;
 }
 
-ScreenKey ShowEquipShipScreen(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<ScreenKey> ShowEquipShipScreen(GameState& _state, Hardware& _hardware)
 {
   PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, EQUIP_SHIP_FRAME), TITLE_OFFSET);
   PrintCountedTextLines(_state, EQUIP_HELP_TEXT, HELP_TEXT_OFFSET);
@@ -606,7 +606,7 @@ ScreenKey ShowEquipShipScreen(GameState& _state, Hardware& _hardware)
     PrintTextModeString(_state, resaleText, Offset(cell, RESALE_COLUMN));
     cell = Offset(cell, ROW_BYTES);
   }
-  return RunEquipShipMenu(_state, _hardware, EQUIP_MENU_FIRST_ROW);
+  co_return co_await RunEquipShipMenu(_state, _hardware, EQUIP_MENU_FIRST_ROW);
 }
 
 bool SelectLaserType(GameState& _state)
@@ -617,7 +617,7 @@ bool SelectLaserType(GameState& _state)
   return type.has_value();
 }
 
-ScreenKey RunEquipShipMenu(GameState& _state, Hardware& _hardware, std::uint16_t _firstRow)
+[[nodiscard]] Task<ScreenKey> RunEquipShipMenu(GameState& _state, Hardware& _hardware, std::uint16_t _firstRow)
 {
   _state.Data().menus.menuFirstRowAttr = _firstRow;
   std::uint16_t row = StartMenu(_state).row;
@@ -627,7 +627,7 @@ ScreenKey RunEquipShipMenu(GameState& _state, Hardware& _hardware, std::uint16_t
     row = SteerMenuCursor(_state, _hardware, row);
     for (;;)
     {
-      const KeyPress key = PollMenuKey(_state, _hardware);
+      const KeyPress key = co_await PollMenuKey(_state, _hardware);
       const std::uint8_t code = key.scanCode;
       if (code == 0)
       {
@@ -639,7 +639,16 @@ ScreenKey RunEquipShipMenu(GameState& _state, Hardware& _hardware, std::uint16_t
       {
         // B buys and S sells the row's item, and its message.
         const std::uint8_t saved = OpenEquipMessage(_state);
-        ShowEquipMessage(_state, code == SCAN_B ? BuyEquipment(_state, _hardware) : SellEquipment(_state, _hardware), saved);
+        std::string_view message;
+        if (code == SCAN_B)
+        {
+          message = co_await BuyEquipment(_state, _hardware);
+        }
+        else
+        {
+          message = co_await SellEquipment(_state, _hardware);
+        }
+        ShowEquipMessage(_state, message, saved);
         break;
       }
       if (code == SCAN_UP || code == SCAN_DOWN)
@@ -650,7 +659,7 @@ ScreenKey RunEquipShipMenu(GameState& _state, Hardware& _hardware, std::uint16_t
       // The screen's own F4 does nothing here.
       if (code != SCAN_F4 && IsScreenKey(code))
       {
-        return ScreenKey{code};
+        co_return ScreenKey{code};
       }
       break;
     }
@@ -674,20 +683,20 @@ void DrawLaserMountMenu(GameState& _state)
   _state.Data().equipment.selectedLaserMount = 0;
 }
 
-void ChooseMountToFitLaser(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<void> ChooseMountToFitLaser(GameState& _state, Hardware& _hardware)
 {
   DrawLaserMountMenu(_state);
   // DrawLaserMountMenu leaves SI on FORE's box.
-  RunMountChooser(_state, _hardware, &FitLaserOnMount, FIRST_MOUNT_BOX);
+  co_await RunMountChooser(_state, _hardware, &FitLaserOnMount, FIRST_MOUNT_BOX);
 }
 
-void ChooseMountToRemoveLaser(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<void> ChooseMountToRemoveLaser(GameState& _state, Hardware& _hardware)
 {
   DrawLaserMountMenu(_state);
   _state.Data().drawing.textAttribute = HELP_ATTRIBUTE;
   PrintTextModeString(_state, SELL_LASER_TEXT, SELL_LASER_OFFSET);
   // SI, pushed and popped round the print, on FORE's box.
-  RunMountChooser(_state, _hardware, &RemoveLaserFromMount, FIRST_MOUNT_BOX);
+  co_await RunMountChooser(_state, _hardware, &RemoveLaserFromMount, FIRST_MOUNT_BOX);
 }
 
 void RedrawEquipHelpText(GameState& _state)
@@ -806,17 +815,17 @@ std::uint16_t SteerMenuCursor(GameState& _state, Hardware& _hardware, std::uint1
   return ((pitch & 0x80) != 0 ? MoveMenuCursorUp(_state, _row) : MoveMenuCursorDown(_state, _row)).row;
 }
 
-KeyPress PollMenuKey(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<KeyPress> PollMenuKey(GameState& _state, Hardware& _hardware)
 {
   for (std::uint16_t ticks = TICKS_PER_POLL;;)
   {
-    WaitForTimerTick(_state, _hardware);
+    co_await WaitForTimerTick(_state, _hardware);
     if (--ticks == 0)
     {
       break;
     }
   }
-  return GetKey(_state, _hardware);
+  co_return GetKey(_state, _hardware);
 }
 
 // ── The shipyard's rules ──

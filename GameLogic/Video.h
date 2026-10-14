@@ -53,20 +53,20 @@ void SaveScreenshot(GameState& _state, Hardware& _hardware);
 void WriteScreenshotFile(GameState& _state, Hardware& _hardware);
 
 /// FinishSpaceViewFrame (CS:0570): DrawLaserSights, then PresentSpaceView and ClearDrawBuffer, both forwards. It waits.
-void FinishSpaceViewFrame(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<void> FinishSpaceViewFrame(GameState& _state, Hardware& _hardware);
 
 /// PresentChartFrame (CS:0587): CopyChartBufferToScreen of the whole chart, with no bands skipped whatever the caller passed, then
 /// ClearDrawBuffer, both forwards. It waits.
-void PresentChartFrame(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<void> PresentChartFrame(GameState& _state, Hardware& _hardware);
 
 /// PresentSpaceView (CS:0599): waits until msSinceFrame reaches minimumFrameMs and clears it, WaitRetraceThenDelay, then copies
 /// spaceViewBuffer's 63 line pairs to the screen at B800:01E8. Its loops turn through _hardware.
-void PresentSpaceView(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<void> PresentSpaceView(GameState& _state, Hardware& _hardware);
 
 /// CopyChartBufferToScreen (CS:05CC): waits for a vertical retrace and a delay, then copies 64 - 4 * _bandsSkipped line pairs, as
 /// a byte, of the drawing buffer from its byte _bandsSkipped * 512 to the chart's place on the screen, at B800:0648. Its loops turn
 /// through _hardware.
-void CopyChartBufferToScreen(GameState& _state, Hardware& _hardware, std::uint8_t _bandsSkipped);
+[[nodiscard]] Task<void> CopyChartBufferToScreen(GameState& _state, Hardware& _hardware, std::uint8_t _bandsSkipped);
 
 /// ClearDrawBuffer (CS:060D): the drawing buffer (DrawingBuffer) zeroed a word at a time as REP STOSW does.
 void ClearDrawBuffer(GameState& _state);
@@ -141,7 +141,7 @@ void FillClippedTriangle(GameState& _state, Triangle _doubled);
 
 /// WaitRetraceThenDelay (CS:45FF): waits for a vertical retrace on the CGA's status port, then spins 2000 turns, a delay the
 /// 8088's speed made. Its loops turn through _hardware.
-void WaitRetraceThenDelay(Hardware& _hardware);
+[[nodiscard]] Task<void> WaitRetraceThenDelay(Hardware& _hardware);
 
 /// How ShowCockpitScreen and DrawChartFrame made the screen ready for what they draw.
 enum class ScreenChange : std::uint8_t

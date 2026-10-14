@@ -20,7 +20,7 @@ namespace Elite
 /// the last ten ten to one, from one further along each time, each presented (FinishSpaceViewFrame) and the first ten followed by
 /// 20 timer ticks. Leaving, the world moves on behind the tunnel (TransformAndDrawObjects, MoveObjectsByVelocity,
 /// UpdateStardust), masked outside it (MaskOutsideTunnel); docking, each frame waits for the timer first. Waits as a rule (ADR-015).
-void PlayStationTunnel(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<void> PlayStationTunnel(GameState& _state, Hardware& _hardware);
 
 /// RunDockingComputer (CS:8622): one frame of the docking computer's flight, by dockingComputerState: 0 slow to a stop; 1 to 3
 /// roll and then pitch towards the approach point, 2000 out from the slot, twice; 4 fly to it; 5 to 7 the same towards the

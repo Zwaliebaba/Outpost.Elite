@@ -198,7 +198,7 @@ public:
   {
     PlatformRig rig("SaveLoadClamp");
     rig.Start(
-      [&rig]
+      [&rig]() -> Elite::Task<void>
       {
         Elite::GameState& state = rig.State();
         Elite::CommanderState& commander = state.Data().commander;
@@ -223,6 +223,7 @@ public:
           character = 'X';
         Elite::PerformDiskRequest(state, rig.Native(), SAVE_COMMANDER, 0);
         Elite::PerformDiskRequest(state, rig.Native(), LOAD_COMMANDER, 0);
+        co_return;
       });
     Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Elite::StopReason::Terminated);
     Elite::GameState& state = rig.State();

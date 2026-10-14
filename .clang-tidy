@@ -131,6 +131,10 @@ CheckOptions:
   # ── Functions: PascalCase ──────────────────────────────────────────────────────────
   - { key: readability-identifier-naming.FunctionCase,             value: CamelCase  }
   - { key: readability-identifier-naming.MethodCase,               value: CamelCase  }
+  # The coroutine protocol's names are the standard's (R4): a Task's promise and awaiters spell them as the language looks them
+  # up, and nothing else may (D77, ADR-047).
+  - { key: readability-identifier-naming.MethodIgnoredRegexp,      value: '^(await_ready|await_suspend|await_resume|get_return_object|initial_suspend|final_suspend|return_value|return_void|unhandled_exception)$' }
+  - { key: readability-identifier-naming.StructIgnoredRegexp,      value: '^promise_type$' }
 
   # ── Constants: UPPER_CASE (R3); enumerators stay PascalCase above ──────────────────
   - { key: readability-identifier-naming.ConstexprVariableCase,    value: UPPER_CASE }

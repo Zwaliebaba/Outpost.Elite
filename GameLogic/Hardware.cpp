@@ -59,9 +59,9 @@ void Hardware::DisableInterrupts() noexcept
   m_platform.DisableInterrupts();
 }
 
-void Hardware::Wait()
+Platform::RunAwaiter Hardware::Wait()
 {
-  m_platform.Wait();
+  return m_platform.Wait();
 }
 
 void Hardware::Spin()
@@ -227,9 +227,9 @@ DosAnswer Hardware::FindNextFile()
   return m_platform.Files().FindNext();
 }
 
-void Hardware::Spend(const PacingPoint& _point)
+Task<void> Hardware::Spend(const PacingPoint& _point)
 {
-  m_platform.Spend(_point.cycles);
+  return m_platform.Spend(_point.cycles);
 }
 
 // ── What the emulated PC kept in memory, outside the game's (D33) ──

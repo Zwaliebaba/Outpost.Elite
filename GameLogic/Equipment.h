@@ -46,20 +46,20 @@ void LaunchEscapePod(GameState& _state);
 /// ShowEquipShipScreen (CS:5BF2): the F4 screen, each item up to the system's tech level with its price into screenPrices and
 /// its resale price, then RunEquipShipMenu from the first item's row, which returns the key that closes it. Waits for keys as a
 /// rule (ADR-015).
-ScreenKey ShowEquipShipScreen(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<ScreenKey> ShowEquipShipScreen(GameState& _state, Hardware& _hardware);
 
 /// RunEquipShipMenu (CS:6111), with OpenEquipMessage, ShowEquipMessage, ReportNotEnoughCredits and the buying and selling it
 /// runs into as one unit (ADR-012 item 14): the equipment menu from row _firstRow of the text page (menuFirstRowAttr), the
 /// cursor moved by the steering and the arrow keys, and B and S to buy and sell, each with its message. Returns Esc or the
 /// F-key, other than F4, that ends it. Waits for keys as a rule (ADR-015).
-ScreenKey RunEquipShipMenu(GameState& _state, Hardware& _hardware, std::uint16_t _firstRow);
+[[nodiscard]] Task<ScreenKey> RunEquipShipMenu(GameState& _state, Hardware& _hardware, std::uint16_t _firstRow);
 
 /// ChooseMountToFitLaser (CS:63B2): the mount menu, and the mount a bought laser goes on, chosen with the steering or the
 /// arrow keys and Space. Waits for keys as a rule (ADR-015).
-void ChooseMountToFitLaser(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<void> ChooseMountToFitLaser(GameState& _state, Hardware& _hardware);
 
 /// ChooseMountToRemoveLaser (CS:646F): the mount menu, and the mount a sold laser comes off, as ChooseMountToFitLaser.
-void ChooseMountToRemoveLaser(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<void> ChooseMountToRemoveLaser(GameState& _state, Hardware& _hardware);
 
 /// DrawLaserMountMenu (CS:6367): the mount header, each of the four mounts' laser or "Free" on the line after it, and
 /// FORE's box highlighted; selectedLaserMount = 0.
@@ -106,7 +106,7 @@ MenuCursor MoveMenuCursorDown(GameState& _state, std::uint16_t _row);
 std::uint16_t SteerMenuCursor(GameState& _state, Hardware& _hardware, std::uint16_t _row);
 
 /// 100 timer ticks, then GetKey. Returns the key.
-KeyPress PollMenuKey(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<KeyPress> PollMenuKey(GameState& _state, Hardware& _hardware);
 
 // ── The shipyard's rules (D53, D74): values in, values out, no state and no screen ──
 //

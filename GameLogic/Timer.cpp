@@ -227,14 +227,14 @@ void TimerTick(GameState& _state, Hardware& _hardware)
   TickSoundEffects(_state, _hardware);
 }
 
-void WaitForTimerTick(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<void> WaitForTimerTick(GameState& _state, Hardware& _hardware)
 {
   // PUSH AX, MOV AX,[timerTicks], then the compare at 7776 and JE back to it, and POP AX: AX holds the tick it started at. The
   // stack the PUSH used is not state the game reads, nor the digest (ADR-008 item 5).
   const std::uint16_t ticks = _state.Data().timer.timerTicks;
   while (ticks == _state.Data().timer.timerTicks)
   {
-    _hardware.Wait();
+    co_await _hardware.Wait();
   }
 }
 

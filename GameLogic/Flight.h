@@ -305,7 +305,7 @@ struct FlightScreens
 /// F1-F4; in witch space F5, F7, F8, and F6 until its countdown is down to 1, post the navigation computer's error instead. A screen
 /// shown first sets flightScreenShown and erases the compass and the blips, and the cockpit comes back as it leaves
 /// (RestoreFlightScreen). inFlight is 0 throughout, but for the status screen. Waits for keys on the screens' paths (ADR-015).
-FlightScreens HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<FlightScreens> HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware);
 
 /// How ProcessFlightKeys ends.
 struct FlightKeysExit
@@ -321,13 +321,13 @@ struct FlightKeysExit
 /// missile; fire; E the ECM; B the energy bomb; C the escape pod; I identifies; N the masking device; L the anti-ECM emulator.
 /// Waits
 /// for keys on the screens', the pause's and the freeze's paths (ADR-015).
-FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<FlightKeysExit> ProcessFlightKeys(GameState& _state, Hardware& _hardware);
 
 /// RunPauseScreen (CS:8D6A): the speaker silenced (SilenceSpeakerTimer), then the pause menu drawn and its options presented until
 /// a key ends it: space resumes; R, D, Y, B and S toggle the options; F1-F10 set the frame time and draw the menu again; A leaves
 /// for the title, titleShown cleared. Returns whether A left, when the
 /// original drops its own return address and its caller's. Waits for keys as a rule (ADR-015).
-bool RunPauseScreen(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<bool> RunPauseScreen(GameState& _state, Hardware& _hardware);
 
 /// RunFlight (CS:7E9B): the mouse reset if it steers, local space set up (SetUpLocalSpace) and the
 /// station's tunnel played; then a frame at a time: the dashboard, the objects drawn, the lasers, the stardust, the fuel leak, the
@@ -335,6 +335,6 @@ bool RunPauseScreen(GameState& _state, Hardware& _hardware);
 /// docked, the tunnel again and the keyboard and the sound reset; otherwise the flight keys, the hyperspace countdown and the escape
 /// pod. While the player is dead, unless cheatEnabled, GAME OVER for 40 frames, then ELITE on the message line. Waits as a rule
 /// (ADR-015).
-void RunFlight(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<void> RunFlight(GameState& _state, Hardware& _hardware);
 
 } // namespace Elite

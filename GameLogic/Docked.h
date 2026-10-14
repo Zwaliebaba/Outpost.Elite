@@ -33,33 +33,33 @@ void AwardArchangelTitle(GameState& _state);
 /// WaitForScreenExitKey (CS:60B4), the tail that ShowSystemDataScreen, ShowMarketPricesScreen, ShowCommanderStatusScreen and
 /// ShowInventoryScreen jump into: GetKey until Esc, or an F-key other than the screen's own, _ownKey, then SelectSystemAtCursor.
 /// Waits for keys as a rule (ADR-015).
-ScreenKey WaitForScreenExitKey(GameState& _state, Hardware& _hardware, std::uint8_t _ownKey);
+[[nodiscard]] Task<ScreenKey> WaitForScreenExitKey(GameState& _state, Hardware& _hardware, std::uint8_t _ownKey);
 
 /// ShowSellCargoScreen (CS:5A30), F2, with PrintNameAndPrice, PrintUnit and EndTradeRow as one unit (ADR-012 item 14): the
 /// products with their sell prices and the units held, then RunCargoTradeMenu, which returns the key that closes it. Waits for
 /// keys as a rule (ADR-015).
-ScreenKey ShowSellCargoScreen(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<ScreenKey> ShowSellCargoScreen(GameState& _state, Hardware& _hardware);
 
 /// ShowBuyCargoScreen (CS:5AE9), F3, as ShowSellCargoScreen: the products with their buy prices and the quantities on sale,
 /// drawn from the market's random state the first time after an arrival, then RunCargoTradeMenu.
-ScreenKey ShowBuyCargoScreen(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<ScreenKey> ShowBuyCargoScreen(GameState& _state, Hardware& _hardware);
 
 /// ShowCommanderStatusScreen (CS:5EA9), F9, docked or in flight: docked, a mission's briefing or debriefing first; then the
 /// commander, systems, fuel, cash, legal status, rating and equipment, and the wait for the key that closes it
 /// (WaitForScreenExitKey).
-ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<ScreenKey> ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware);
 
 /// ShowInventoryScreen (CS:6020), F10: fuel, cash and every product held, and the wait for the key that closes it, as
 /// ShowCommanderStatusScreen's.
-ScreenKey ShowInventoryScreen(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<ScreenKey> ShowInventoryScreen(GameState& _state, Hardware& _hardware);
 
 /// ShowMissionBriefing (CS:6DF2): missionStage=1, and the EMERGENCY screen of missionNumber, which waits for a key (Y or N
 /// for the supernova's refugees, who take the hold).
-void ShowMissionBriefing(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<void> ShowMissionBriefing(GameState& _state, Hardware& _hardware);
 
 /// ShowMissionDebriefing (CS:6EB7): nothing while the mission is not done; otherwise the TASK COMPLETE screen, which waits
 /// for a key, and the reward.
-void ShowMissionDebriefing(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<void> ShowMissionDebriefing(GameState& _state, Hardware& _hardware);
 
 /// PrintCreditsOnMessageLine (CS:658F): creditBalanceText at B800:0078 in the swapped textAttribute, which is swapped
 /// back after.
@@ -99,6 +99,6 @@ void DrawFrameRow(GameState& _state, std::uint16_t _cell, std::uint16_t _value);
 /// docked screens (DockedKeyDispatch, CS:0B40) from the status screen, or from the disc menu after a disk request, until F1 or the
 /// disc menu leaves for the disk. Returns whether the disc menu left for the disk, through LeaveGameLoopForDisk (DiscMenuExit);
 /// otherwise F1 ended them. Waits as a rule (ADR-015).
-[[nodiscard]] bool RunTitleAndDocked(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<bool> RunTitleAndDocked(GameState& _state, Hardware& _hardware);
 
 } // namespace Elite

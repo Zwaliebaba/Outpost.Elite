@@ -39,7 +39,7 @@ ClockReading RestoreTimerInterrupt(GameState& _state, Hardware& _hardware);
 [[nodiscard]] std::uint16_t ClockLessADayHigh(const ClockReading& _clock) noexcept;
 
 /// WaitForTimerTick (CS:7772): until timerTicks changes, at most one tick. Waits as a rule (ADR-015).
-void WaitForTimerTick(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<void> WaitForTimerTick(GameState& _state, Hardware& _hardware);
 
 /// TimerTick (CS:7150): one tick's counters and the sound.
 void TimerTick(GameState& _state, Hardware& _hardware);

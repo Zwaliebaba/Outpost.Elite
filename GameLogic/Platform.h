@@ -9,18 +9,18 @@
 #include "Scheduler.h"
 #include "SpaceViewLayers.h"
 #include "Speaker.h"
+#include "Task.h"
 #include "TimeOfDay.h"
 #include "Timing.h"
 #include "VideoModes.h"
 
 #include <array>
+#include <coroutine>
 #include <cstddef>
 #include <cstdint>
-#include <exception>
 #include <functional>
-#include <semaphore>
+#include <optional>
 #include <string>
-#include <thread>
 
 namespace Elite
 {
@@ -35,8 +35,11 @@ enum class StopReason : std::uint8_t
   Spinning    ///< The program ran SpinLimit() turns without waiting once.
 };
 
-/// A routine in C++ that stands in for the program's own code (ADR-010): its start, or one of its interrupt handlers.
+/// A routine in C++ that stands in for one of the program's interrupt handlers (ADR-010), which run to their end.
 using NativeRoutine = std::function<void()>;
+
+/// The program's start (ADR-010), a coroutine that waits (D77): the platform resumes it each run until it ends.
+using ProgramRoutine = std::function<Task<void>()>;
 
 /// The native platform the game runs on (D23, D27, D33): the IBM PC's devices and the services of its ROM and DOS, as the
 /// game uses them, with no processor and no memory map. A de-assembled routine reaches it only through Hardware, which takes
@@ -62,11 +65,10 @@ using NativeRoutine = std::function<void()>;
 /// (Hardware::SetTickDivisor). The interrupt controller's rules hold: in service and end of interrupt (Scheduler). The handler
 /// is the one installed by name: the game's own, the BIOS's, or a stray one, which throws.
 ///
-/// The game runs on a thread of its own, the native thread (ADR-010 item 8): the program's start routine, and everything it
-/// calls, which is all of the game's code. When the clock reaches the end of a run there, the native thread hands the
-/// platform back and RunUntil returns; the next RunUntil carries on where it stopped. The host thread and the native thread
-/// take turns through two semaphores, so only one runs at a time, and a run is a function of the program, its start moment
-/// and its inputs: there is no wall clock anywhere.
+/// The game runs as a coroutine on the host's thread (D77): the program's start routine, and every routine it calls that waits,
+/// each a Task that co_awaits the next. When the clock reaches the end of a run inside a wait, the wait suspends the game and
+/// RunUntil returns; the next RunUntil resumes it where it stopped. There is one thread, and a run is a function of the program,
+/// its start moment and its inputs: there is no wall clock anywhere.
 class Platform
 {
 public:
@@ -79,10 +81,41 @@ public:
   };
 
   /// A native routine at an address, and how often it ran.
-  struct HookedRoutine
+  template <typename Routine> struct Hooked
   {
-    NativeRoutine routine;
+    Routine routine;
     std::uint64_t calls = 0;
+  };
+  using HookedRoutine = Hooked<NativeRoutine>;
+  using HookedProgram = Hooked<ProgramRoutine>;
+
+  /// What a wait's poll that found nothing gives the routine that waits (Wait), to co_await: ready, unless the clock reached the
+  /// run's end, when the game is suspended until the next RunUntil. Once it goes on, the interrupts now due are taken.
+  class [[nodiscard]] RunAwaiter
+  {
+  public:
+    explicit RunAwaiter(Platform& _platform) noexcept
+      : m_platform(_platform)
+    {
+    }
+
+    [[nodiscard]] bool await_ready() const noexcept
+    {
+      return m_platform.m_clock < m_platform.m_runLimit;
+    }
+
+    void await_suspend(std::coroutine_handle<> _waiting) noexcept
+    {
+      m_platform.m_suspended = _waiting;
+    }
+
+    void await_resume() const
+    {
+      m_platform.EndTurn();
+    }
+
+  private:
+    Platform& m_platform;
   };
 
   /// The system control port at power-on (SystemControl).
@@ -113,16 +146,16 @@ public:
     return m_commandTail;
   }
 
-  /// _routine is the program's start, where DOS starts it. It runs on the native thread; when it returns, the program has
-  /// ended. Throws std::logic_error if the program has one already.
-  void SetEntry(NativeRoutine _routine);
+  /// _routine is the program's start, where DOS starts it: the platform makes the coroutine at the first RunUntil and resumes
+  /// it each run; when it returns, the program has ended. Throws std::logic_error if the program has one already.
+  void SetEntry(ProgramRoutine _routine);
 
   /// _routine is the game's own handler of _irq, which runs whenever it is the handler there (SetHandler) and the interrupt is
   /// taken, and returns from it as IRET does. Throws std::logic_error if the game has one there already.
   void SetGameHandler(Irq _irq, NativeRoutine _routine);
 
   /// The program's start routine, and how often it ran.
-  [[nodiscard]] const HookedRoutine& Entry() const noexcept
+  [[nodiscard]] const HookedProgram& Entry() const noexcept
   {
     return m_entry;
   }
@@ -307,23 +340,23 @@ public:
 
   [[nodiscard]] bool InterruptsEnabled() const noexcept;
 
-  /// A wait's poll that found nothing (ADR-039): the clock moves to the next device event, the run ends there if that is its
-  /// end, and the interrupts now due are taken.
-  void Wait();
+  /// A wait's poll that found nothing (ADR-039): the clock moves to the next device event; the game co_awaits what this gives,
+  /// which suspends it there if that is the run's end; then the interrupts now due are taken.
+  [[nodiscard]] RunAwaiter Wait();
 
   /// A turn of a loop that waits for nothing: a wait's poll that took something it does not want, or a loop that never ends.
   /// The clock stands still. Past SpinLimit() such steps with no wait between, the run stops as Spinning, as the original's
   /// would never end.
   void Spin();
 
-  /// _cycles pass as they pass in a wait, a step at a time to each device event, the run ending there if that is its end and
-  /// the interrupts that fall due taken: paced time's charge for work the 8088 took time over where the program sets no pace
-  /// of its own (ADR-013).
-  void Spend(Cycles _cycles);
+  /// _cycles pass as they pass in a wait, a step at a time to each device event, the game suspended there if that is the run's
+  /// end and the interrupts that fall due taken: paced time's charge for work the 8088 took time over where the program sets no
+  /// pace of its own (ADR-013).
+  [[nodiscard]] Task<void> Spend(Cycles _cycles);
 
   /// The interrupts now due are taken, each handler run to its return, as the 8088 takes them at the next instruction once
-  /// interrupts are on. If the program stops on the way, the native code is abandoned by an exception that the native thread
-  /// catches, and RunUntil reports the stop.
+  /// interrupts are on. If the program stops on the way, the game is abandoned by an exception that leaves its coroutines, and
+  /// RunUntil reports the stop.
   void TakeDueInterrupts();
 
   /// Moves the clock to the next device event, or to _limit if that comes first, and lets the devices raise what falls due:
@@ -363,11 +396,7 @@ private:
   [[nodiscard]] StopReason Stopped() const noexcept;
   void Interrupt(Irq _irq);
   void EndTurn();
-  void StartNative();
-  void ResumeNative();
-  void HandToNative() noexcept;
-  void NativeMain();
-  void ReachedRunLimit();
+  void Resume();
   void RunBiosTimerHandler();
   void RunBiosKeyboardHandler();
 
@@ -393,7 +422,7 @@ private:
   std::uint16_t m_flags;
   std::string m_commandTail;
 
-  HookedRoutine m_entry;
+  HookedProgram m_entry;
   std::array<HookedRoutine, 2> m_gameHandlers{};
   std::uint64_t m_interruptsTaken = 0;
 
@@ -401,19 +430,12 @@ private:
   std::uint64_t m_stepsSinceIdle = 0;
   Cycles m_runLimit = NO_EVENT;
 
-  bool m_started = false;    // the program's start routine has been begun
-  bool m_terminated = false; // and it has returned
+  bool m_terminated = false; // the program's start routine has returned
 
-  // The native thread (ADR-010 item 8), made for the program's start. The host thread and it take turns, handing over through
-  // the two semaphores; these flags are read only by the one holding the platform.
-  std::thread m_nativeThread;
-  std::binary_semaphore m_toNative{0};
-  std::binary_semaphore m_toHost{0};
-  std::exception_ptr m_nativeError;
-  bool m_nativeActive = false;   // the program's routine is in progress on the native thread
-  bool m_onNativeThread = false; // the native thread holds the platform
-  bool m_abandon = false;        // the native thread is to unwind what it is running
-  bool m_shutdown = false;       // the native thread is to end
+  // The program's coroutine (D77), made at the first RunUntil, and the wait it is suspended in, if it is. Destroying the
+  // platform destroys the coroutine, and every routine it was waiting in, as a host's Game ends.
+  std::optional<Task<void>> m_program;
+  std::coroutine_handle<> m_suspended;
 };
 
 } // namespace Elite

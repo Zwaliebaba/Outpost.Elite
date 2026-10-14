@@ -302,28 +302,28 @@ std::uint16_t PrintAt(GameState& _state, std::string_view _text, std::uint16_t _
 }
 
 // CALL GetKey / JZ back: GetKey until a key comes (ADR-039). Returns the key.
-KeyPress WaitForKey(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<KeyPress> WaitForKey(GameState& _state, Hardware& _hardware)
 {
   for (;;)
   {
     const KeyPress key = GetKey(_state, _hardware);
     if (key.scanCode != 0)
     {
-      return key;
+      co_return key;
     }
-    AwaitNextKey(_hardware, key);
+    co_await AwaitNextKey(_hardware, key);
   }
 }
 
 // WaitForKey until one of _first and _second comes, every other key going back to it too. Returns it.
-std::uint8_t WaitForEitherKey(GameState& _state, Hardware& _hardware, std::uint8_t _first, std::uint8_t _second)
+[[nodiscard]] Task<std::uint8_t> WaitForEitherKey(GameState& _state, Hardware& _hardware, std::uint8_t _first, std::uint8_t _second)
 {
   for (;;)
   {
-    const std::uint8_t scan = WaitForKey(_state, _hardware).scanCode;
+    const std::uint8_t scan = (co_await WaitForKey(_state, _hardware)).scanCode;
     if (scan == _first || scan == _second)
     {
-      return scan;
+      co_return scan;
     }
   }
 }
@@ -368,7 +368,7 @@ void RejectFileName(GameState& _state)
 
 // The disc menu's keys: DiscControlKeyLoop (CS:665E), or ShowControlDevice before it when _showDevice; and everything they run
 // until the menu is left.
-DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _showDevice)
+[[nodiscard]] Task<DiscMenuExit> RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _showDevice)
 {
   bool showDevice = _showDevice;
   for (;;)
@@ -378,33 +378,33 @@ DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _sh
       ShowControlDevice(_state);
       showDevice = false;
     }
-    const KeyPress key = WaitForKey(_state, _hardware);
+    const KeyPress key = co_await WaitForKey(_state, _hardware);
     // PUSH AX and POP AX round it.
     BlankHelpRows(_state);
     const std::uint8_t scan = key.scanCode;
     if (scan == SCAN_E)
     {
       PrintAt(_state, EXIT_QUESTION_TEXT, STATUS_POSITION);
-      if (WaitForEitherKey(_state, _hardware, SCAN_N, SCAN_Y) == SCAN_N)
+      if (co_await WaitForEitherKey(_state, _hardware, SCAN_N, SCAN_Y) == SCAN_N)
       {
         showDevice = true;
         continue;
       }
-      return LeaveGameLoopForDisk(_state, EXIT_TO_DOS);
+      co_return LeaveGameLoopForDisk(_state, EXIT_TO_DOS);
     }
     if (scan == SCAN_L || scan == SCAN_S || scan == SCAN_D)
     {
-      if (!PromptCommanderFileName(_state, _hardware))
+      if (!co_await PromptCommanderFileName(_state, _hardware))
       {
         // The prompt's return address dropped, and the menu's keys read on in its place.
         RejectFileName(_state);
         continue;
       }
-      return LeaveGameLoopForDisk(_state, scan == SCAN_L ? LOAD_COMMANDER : scan == SCAN_S ? SAVE_COMMANDER : DELETE_COMMANDER);
+      co_return LeaveGameLoopForDisk(_state, scan == SCAN_L ? LOAD_COMMANDER : scan == SCAN_S ? SAVE_COMMANDER : DELETE_COMMANDER);
     }
     if (scan == SCAN_C)
     {
-      return LeaveGameLoopForDisk(_state, CATALOGUE_COMMANDERS);
+      co_return LeaveGameLoopForDisk(_state, CATALOGUE_COMMANDERS);
     }
     if (scan == SCAN_K)
     {
@@ -435,7 +435,7 @@ DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _sh
       continue;
     }
     _state.Data().saveLoad.resumeAtDiskMenu = 0;
-    return DiscMenuExit{false, scan};
+    co_return DiscMenuExit{false, scan};
   }
 }
 
@@ -528,40 +528,40 @@ void ShowDiskError(GameState& _state)
   }
 }
 
-DiscMenuExit ShowDiscControlScreen(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<DiscMenuExit> ShowDiscControlScreen(GameState& _state, Hardware& _hardware)
 {
   if (_state.Data().saveLoad.resumeAtDiskMenu == 0)
   {
     PrintAt(_state, DrawDockedFrame(_state, _hardware, DISC_CONTROL_FRAME), TITLE_POSITION);
     PrintCountedTextLines(_state, DISC_MENU_TEXT, MENU_POSITION);
-    return RunDiscControlKeys(_state, _hardware, true);
+    co_return co_await RunDiscControlKeys(_state, _hardware, true);
   }
   // Back from Start's disk work.
   if (_state.Data().disk.diskError == 0)
   {
     ShowDiskResult(_state);
-    return RunDiscControlKeys(_state, _hardware, false);
+    co_return co_await RunDiscControlKeys(_state, _hardware, false);
   }
   PrintAt(_state, RETRY_TEXT, STATUS_POSITION);
-  if (WaitForEitherKey(_state, _hardware, SCAN_N, SCAN_Y) == SCAN_N)
+  if (co_await WaitForEitherKey(_state, _hardware, SCAN_N, SCAN_Y) == SCAN_N)
   {
-    return RunDiscControlKeys(_state, _hardware, true);
+    co_return co_await RunDiscControlKeys(_state, _hardware, true);
   }
   PrintAt(_state, BLANK_STATUS_TEXT, STATUS_POSITION);
-  return LeaveGameLoopForDisk(_state, _state.Data().saveLoad.diskOperation);
+  co_return LeaveGameLoopForDisk(_state, _state.Data().saveLoad.diskOperation);
 }
 
-bool PromptCommanderFileName(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<bool> PromptCommanderFileName(GameState& _state, Hardware& _hardware)
 {
   PrintAt(_state, FILE_NAME_PROMPT_TEXT, STATUS_POSITION);
   const std::span<std::uint8_t> name(_state.Data().saveLoad.commanderFileName);
-  ReadTextLine(_state, _hardware, name, MOST_NAME_CHARACTERS, NAME_POSITION);
+  co_await ReadTextLine(_state, _hardware, name, MOST_NAME_CHARACTERS, NAME_POSITION);
   // A letter, then letters and digits, folded to upper case.
   std::size_t letter = 0;
   auto character = static_cast<std::uint8_t>(name[letter] & LOWER_CASE_BIT_CLEAR);
   if (name[letter] == 0 || character < 'A' || character > 'Z')
   {
-    return false;
+    co_return false;
   }
   name[letter] = character;
   for (;;)
@@ -578,7 +578,7 @@ bool PromptCommanderFileName(GameState& _state, Hardware& _hardware)
     }
     if (!IsNameCharacter(character))
     {
-      return false;
+      co_return false;
     }
     name[letter] = character;
   }
@@ -590,7 +590,7 @@ bool PromptCommanderFileName(GameState& _state, Hardware& _hardware)
     ++letter;
     if (--left == 0)
     {
-      return true;
+      co_return true;
     }
   }
 }

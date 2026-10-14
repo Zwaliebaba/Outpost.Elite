@@ -30,8 +30,8 @@ public:
   {
   }
 
-  /// The program's start: _routine runs on the native thread from the first RunUntil, and the program ends when it returns.
-  void Start(Elite::NativeRoutine _routine)
+  /// The program's start: _routine, a coroutine (D77), runs from the first RunUntil, and the program ends when it returns.
+  void Start(Elite::ProgramRoutine _routine)
   {
     m_platform->SetEntry(std::move(_routine));
   }
@@ -52,7 +52,7 @@ public:
     return *m_state;
   }
 
-  /// The platform destroyed, its native thread unwound, as a host's Game is at the end.
+  /// The platform destroyed, the program's coroutine with it, as a host's Game is at the end.
   void PowerOff() noexcept
   {
     m_platform.reset();

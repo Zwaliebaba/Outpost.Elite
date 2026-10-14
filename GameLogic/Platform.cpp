@@ -31,14 +31,9 @@ constexpr std::uint8_t KEYBOARD_CLEAR = 0x80;
 
 constexpr std::uint32_t CENTISECONDS_PER_MINUTE = 60 * 100;
 
-// Thrown through native code when the program stops inside a service or an interrupt: the native thread catches it, and
-// RunUntil reports the stop.
+// Thrown through the game's coroutines when the program stops inside a service or an interrupt: RunUntil catches it where the
+// program's coroutine ends, and reports the stop.
 struct ProgramStopped
-{
-};
-
-// Thrown through what the native thread is running when the platform is destroyed under it.
-struct NativeAbandoned
 {
 };
 
@@ -67,21 +62,7 @@ Platform::Platform(GameState& _state, FileStore& _files, const Desc& _desc)
 {
 }
 
-Platform::~Platform()
-{
-  if (!m_nativeThread.joinable())
-  {
-    return;
-  }
-  if (m_nativeActive)
-  {
-    m_abandon = true;
-    HandToNative();
-  }
-  m_shutdown = true;
-  m_toNative.release();
-  m_nativeThread.join();
-}
+Platform::~Platform() = default;
 
 // ── The program ──
 
@@ -90,7 +71,7 @@ void Platform::StartProgram() noexcept
   m_files.StartProgram();
 }
 
-void Platform::SetEntry(NativeRoutine _routine)
+void Platform::SetEntry(ProgramRoutine _routine)
 {
   if (m_entry.routine)
   {
@@ -116,20 +97,16 @@ StopReason Platform::RunUntil(Cycles _cycle)
   m_runLimit = _cycle;
   while (m_clock < _cycle)
   {
-    if (!m_started)
+    if (!m_terminated)
     {
-      StartNative();
-    }
-    else if (m_nativeActive)
-    {
-      ResumeNative();
+      Resume();
     }
     if (const StopReason reason = Stopped(); reason != StopReason::Reached)
     {
       m_runLimit = NO_EVENT;
       return reason;
     }
-    if (!m_nativeActive)
+    if (!m_suspended)
     {
       throw std::logic_error("Platform: the program's routine ended with no reason to stop");
     }
@@ -147,83 +124,41 @@ StopReason Platform::Stopped() const noexcept
   return StopReason::Reached;
 }
 
-void Platform::StartNative()
+// The program's coroutine started, or resumed in the wait it is suspended in, until it suspends again or ends. Its end is
+// the program's: its far return to PSP:0000 is DOS's int 20h; a stop on the way ends it by ProgramStopped; any other exception
+// is thrown on to the host.
+void Platform::Resume()
 {
-  if (!m_entry.routine)
+  if (!m_program)
   {
-    throw std::logic_error("Platform: no program to run");
+    if (!m_entry.routine)
+    {
+      throw std::logic_error("Platform: no program to run");
+    }
+    ++m_entry.calls;
+    m_program.emplace(m_entry.routine());
+    m_program->Handle().resume();
   }
-  m_started = true;
-  m_nativeThread = std::thread([this] { NativeMain(); });
-  m_nativeActive = true;
-  ResumeNative();
-}
-
-void Platform::ResumeNative()
-{
-  HandToNative();
-  if (m_nativeError)
+  else if (m_suspended)
   {
-    std::rethrow_exception(std::exchange(m_nativeError, nullptr));
+    std::exchange(m_suspended, nullptr).resume();
   }
-}
-
-void Platform::HandToNative() noexcept
-{
-  m_onNativeThread = true;
-  m_toNative.release();
-  m_toHost.acquire();
-  m_onNativeThread = false;
-}
-
-void Platform::NativeMain()
-{
-  for (;;)
+  if (!m_program->Done())
   {
-    m_toNative.acquire();
-    if (m_shutdown)
-    {
-      return;
-    }
-    try
-    {
-      ++m_entry.calls;
-      m_entry.routine();
-      // The start routine's far return, to PSP:0000, is DOS's int 20h: the program has ended.
-      m_terminated = true;
-    }
-    catch (const ProgramStopped&)
-    {
-      // The program stopped inside a service or an interrupt, its reason recorded on the way; RunUntil reports it.
-      if (Stopped() == StopReason::Reached)
-      {
-        m_nativeError = std::make_exception_ptr(std::logic_error("Platform: the program stopped with no reason recorded"));
-      }
-    }
-    catch (const NativeAbandoned&)
-    {
-      m_abandon = false; // unwound, as the destructor asked
-    }
-    catch (...)
-    {
-      m_nativeError = std::current_exception();
-    }
-    m_nativeActive = false;
-    m_toHost.release();
+    return;
   }
-}
-
-void Platform::ReachedRunLimit()
-{
-  if (!m_onNativeThread)
+  try
   {
-    throw std::logic_error("Platform: native code waited off the native thread");
+    m_program->Rethrow();
+    m_terminated = true;
   }
-  m_toHost.release();
-  m_toNative.acquire();
-  if (m_abandon)
+  catch (const ProgramStopped&)
   {
-    throw NativeAbandoned{};
+    // The program stopped inside a service or an interrupt, its reason recorded on the way; RunUntil reports it.
+    if (Stopped() == StopReason::Reached)
+    {
+      throw std::logic_error("Platform: the program stopped with no reason recorded");
+    }
   }
 }
 
@@ -357,25 +292,22 @@ void Platform::Idle(Cycles _limit)
   m_events.Advance();
 }
 
-void Platform::Wait()
+Platform::RunAwaiter Platform::Wait()
 {
   Idle(m_runLimit);
-  EndTurn();
+  return RunAwaiter(*this);
 }
 
 void Platform::Spin()
 {
+  // The clock stands still, below the run's end, where the last wait left it.
   ++m_stepsSinceIdle;
   EndTurn();
 }
 
-// After a wait or a spin: the run's end if the clock reached it, and the interrupts now due.
+// After a wait or a spin, and the game resumed if the wait reached the run's end: the interrupts now due.
 void Platform::EndTurn()
 {
-  if (m_clock >= m_runLimit)
-  {
-    ReachedRunLimit();
-  }
   TakeDueInterrupts();
   if (Stopped() != StopReason::Reached)
   {
@@ -383,7 +315,7 @@ void Platform::EndTurn()
   }
 }
 
-void Platform::Spend(Cycles _cycles)
+Task<void> Platform::Spend(Cycles _cycles)
 {
   const Cycles until = m_clock + _cycles;
   while (m_clock < until)
@@ -391,7 +323,8 @@ void Platform::Spend(Cycles _cycles)
     Idle(std::min(until, m_runLimit));
     if (m_clock >= m_runLimit)
     {
-      ReachedRunLimit();
+      co_await RunAwaiter(*this);
+      continue;
     }
     TakeDueInterrupts();
   }

@@ -49,8 +49,8 @@ public:
   void DisableInterrupts() noexcept;
 
   /// A wait's poll that found what it waits for missing (ADR-039): the clock moves to the next device event, as the original's
-  /// loop idles there; then the interrupts that fall due are taken.
-  void Wait();
+  /// loop idles there; the routine that waits co_awaits what this gives (D77), and then the interrupts that fall due are taken.
+  [[nodiscard]] Platform::RunAwaiter Wait();
 
   /// A turn of a loop that waits for nothing at that turn: a poll that took something it does not want, or a loop the original
   /// never leaves. The clock stands still, and a run that does nothing else stops as Spinning (Platform::Spin).
@@ -197,7 +197,7 @@ public:
 
   /// _point's cycles pass as they pass in a wait (Platform::Spend): the time the IBM PC spent on work the reference sets no
   /// pace for, paid where an interpreted run paid it (ADR-013).
-  void Spend(const PacingPoint& _point);
+  [[nodiscard]] Task<void> Spend(const PacingPoint& _point);
 
   // ── What the emulated PC kept in memory, outside the game's (D33) ──
 

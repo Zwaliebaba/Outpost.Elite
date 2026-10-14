@@ -8,11 +8,10 @@
 namespace Elite
 {
 
-/// What an entry the platform reaches is (ADR-041): the program's start, which leaves by RETF to the far return to PSP:0000 it
-/// pushed, where DOS's int 20h ends the program; or the game's handler of an interrupt, which leaves by IRET.
+/// What an entry the platform reaches is (ADR-041), besides the program's start (StartEntry): the game's handler of an interrupt,
+/// which leaves by IRET.
 enum class EntryKind : std::uint8_t
 {
-  Start,
   TimerHandler,
   KeyboardHandler
 };

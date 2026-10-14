@@ -74,7 +74,7 @@ void ArriveInSystem(GameState& _state, Hardware& _hardware);
 /// the destination made current, its seeds loaded; witch space on a mis-jump, else the charts' cursors on it; then the tunnel
 /// (PlayHyperspaceTunnel), the arrival (ArriveInSystem), the missions'
 /// schedule and the arrival's message. Waits, in the tunnel's frames.
-void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<void> CompleteHyperspaceJump(GameState& _state, Hardware& _hardware);
 
 /// DrawHyperspaceRings (CS:48C0): one frame of the hyperspace rings: each counts its delay down, then grows by an eighth, at
 /// least 1, below 150, and from 20 on is drawn (DrawCircle) in its colour about the space view's centre.
@@ -82,11 +82,11 @@ void DrawHyperspaceRings(GameState& _state);
 
 /// PlayHyperspaceTunnel (CS:4906): fifty frames of the hyperspace rings: UpdateMessageLine, DrawHyperspaceRings and
 /// FinishSpaceViewFrame. Waits, a turn of its loop for each frame after the first.
-void PlayHyperspaceTunnel(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<void> PlayHyperspaceTunnel(GameState& _state, Hardware& _hardware);
 
 /// TickHyperspaceCountdown (CS:7F79): the galactic drive's ready frames, and the hyperspace countdown, a step every ten frames
 /// (ShowHyperspaceCountdown), which jumps (CompleteHyperspaceJump) when it runs out. Returns
 /// whether it jumped. Waits then.
-bool TickHyperspaceCountdown(GameState& _state, Hardware& _hardware);
+[[nodiscard]] Task<bool> TickHyperspaceCountdown(GameState& _state, Hardware& _hardware);
 
 } // namespace Elite

@@ -141,15 +141,15 @@ void DrawTunnelRectangles(GameState& _state, std::size_t _first, std::uint16_t _
 }
 
 // MOV CX,_ticks, then WaitForTimerTick and the LOOP back to it: about _ticks milliseconds. The original leaves CX = 0.
-void WaitTimerTicks(GameState& _state, Hardware& _hardware, std::uint16_t _ticks)
+[[nodiscard]] Task<void> WaitTimerTicks(GameState& _state, Hardware& _hardware, std::uint16_t _ticks)
 {
   std::uint16_t count = _ticks;
   for (;;)
   {
-    WaitForTimerTick(_state, _hardware);
+    co_await WaitForTimerTick(_state, _hardware);
     if (--count == 0)
     {
-      return;
+      co_return;
     }
   }
 }
@@ -469,7 +469,7 @@ void MaskOutsideTunnel(GameState& _state, std::size_t _rectangle)
   } while (--left != 0);
 }
 
-void PlayStationTunnel(GameState& _state, Hardware& _hardware)
+[[nodiscard]] Task<void> PlayStationTunnel(GameState& _state, Hardware& _hardware)
 {
   // MOV AX,leavingStationMessage, or autoDockMessage when docked, for one frame.
   _state.Data().messages.messagePointer = _state.Data().flight.playerDocked != 0 ? Message::AutoDock : Message::LeavingStation;
@@ -490,13 +490,13 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware)
     }
     else
     {
-      WaitTimerTicks(_state, _hardware, DOCKED_FIRST_TICKS);
+      co_await WaitTimerTicks(_state, _hardware, DOCKED_FIRST_TICKS);
     }
     DrawTunnelRectangles(_state, 0, frame);
-    FinishSpaceViewFrame(_state, _hardware);
+    co_await FinishSpaceViewFrame(_state, _hardware);
     // The frame as the game drew it, for a renderer that shows it in the cockpit (D68).
     _hardware.PublishSpaceViewPicture(WithoutScene(TakeFlightSnapshot(_state)));
-    WaitTimerTicks(_state, _hardware, TUNNEL_FRAME_TICKS);
+    co_await WaitTimerTicks(_state, _hardware, TUNNEL_FRAME_TICKS);
     // INC AX / CMP AL,0Bh.
     frame = Offset(frame, 1);
     if (Low(frame) == TUNNEL_FRAMES + 1)
@@ -519,15 +519,15 @@ void PlayStationTunnel(GameState& _state, Hardware& _hardware)
     }
     else
     {
-      WaitTimerTicks(_state, _hardware, TUNNEL_FRAME_TICKS);
+      co_await WaitTimerTicks(_state, _hardware, TUNNEL_FRAME_TICKS);
     }
     DrawTunnelRectangles(_state, first, frames);
-    FinishSpaceViewFrame(_state, _hardware);
+    co_await FinishSpaceViewFrame(_state, _hardware);
     _hardware.PublishSpaceViewPicture(WithoutScene(TakeFlightSnapshot(_state)));
     ++first;
     if (--frames == 0)
     {
-      return;
+      co_return;
     }
   }
 }
