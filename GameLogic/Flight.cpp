@@ -331,7 +331,7 @@ DustPosition MoveDust(GameState& _state, std::size_t _particle, DustPosition _po
   }
 }
 
-// UpdateFrontStardust (0x06C0) and UpdateRearStardust (0x0742), which UpdateStardust jumps to: the pitch shifts the dust
+// UpdateFrontStardust and UpdateRearStardust, which UpdateStardust jumps to: the pitch shifts the dust
 // vertically and the roll rolls it, _rear reversing both; then each of the 30 particles on screen moves (MoveDust) and is drawn
 // (DrawDust), PUSH CX and POP CX keeping the count round each.
 void UpdateFrontOrRearStardust(GameState& _state, bool _rear)
@@ -362,7 +362,7 @@ void UpdateFrontOrRearStardust(GameState& _state, bool _rear)
   }
 }
 
-// 0x084D: the side views only draw; ShiftStardustSideways has moved the dust. Each particle on screen is drawn (DrawDust),
+// the side views only draw; ShiftStardustSideways has moved the dust. Each particle on screen is drawn (DrawDust),
 // PUSH CX and PUSH SI keeping the count and the particle round it.
 void DrawSideStardust(GameState& _state)
 {
@@ -376,7 +376,7 @@ void DrawSideStardust(GameState& _state)
   }
 }
 
-// UpdateLeftStardust (0x07C5) and UpdateRightStardust (0x0809), which UpdateStardust jumps to: pitch rolls the dust and speed
+// UpdateLeftStardust and UpdateRightStardust, which UpdateStardust jumps to: pitch rolls the dust and speed
 // moves it sideways, _left mirroring both, and then they draw it (DrawSideStardust).
 void UpdateSideStardust(GameState& _state, bool _left)
 {
@@ -419,7 +419,7 @@ void FillFiveLineWord(GameState& _state, std::uint16_t _line, std::uint16_t _wor
   }
 }
 
-// DrawFiveLineBarPixels (0x264D) and its copy in DrawThreeLineBar: _pixels, 0-48, on the _lines scanlines of the dashboard line
+// DrawFiveLineBarPixels and its copy in DrawThreeLineBar: _pixels, 0-48, on the _lines scanlines of the dashboard line
 // at B800:_line, a column of bytes at a time: colour 1 for each four, the partial byte from barPartialBytes, then colour 2 to
 // pixel 48. When there are fewer than four, the first run's loop leaves CH alone, so the second runs _countHigh:CL times, CH as
 // the caller left it.
@@ -509,7 +509,7 @@ void SubtractFloored(std::uint8_t& _field, std::uint8_t _value)
   return VectorWithinBox(Vector{Signed(_station.x), Signed(_station.y), 0}, _halfSize);
 }
 
-// 0x2BD9-0x2C8D: _slot, an active one, against the player. Outside its type's collisionRanges box, a station's collided bit
+// _slot, an active one, against the player. Outside its type's collisionRanges box, a station's collided bit
 // is cleared. Inside, a ship costs 450 and is removed. The station docks the player when it is drawn, the player is aligned
 // within 100 (CheckDockingAlignment), inside a box of 90 about its x and y, not invaded and not hostile; nearly aligned, within
 // 250, it scrapes for 30 inside a box of 110 and crashes for 400 outside it; otherwise, or when it has collided already, it
@@ -576,7 +576,7 @@ void CheckCollision(GameState& _state, SpaceObject& _slot)
 
 // ---- The warnings ---------------------------------------------------------------------------------
 
-// SetWarning (0x36E7): posts warning _warning, its message WARNING_MESSAGES[_warning] (warningTexts), for 20 frames.
+// SetWarning: posts warning _warning, its message WARNING_MESSAGES[_warning] (warningTexts), for 20 frames.
 void SetWarning(GameState& _state, std::uint8_t _warning)
 {
   _state.Data().messages.warningFrames = 0x14;
@@ -584,8 +584,8 @@ void SetWarning(GameState& _state, std::uint8_t _warning)
   _state.Data().flight.warningMessage = WARNING_MESSAGES[_warning];
 }
 
-// CheckMissileWarning, CheckAltitudeWarning, CheckTemperatureWarning and CheckEnergyWarning (0x36FD,
-// 0x370E, 0x371A, 0x3726): whether warning _check applies. The missile check clears its alert.
+// CheckMissileWarning, CheckAltitudeWarning, CheckTemperatureWarning and CheckEnergyWarning: whether
+// warning _check applies. The missile check clears its alert.
 [[nodiscard]] bool WarningApplies(GameState& _state, std::uint16_t _check)
 {
   switch (_check)
@@ -628,7 +628,7 @@ void RunWarningChecks(GameState& _state, std::uint16_t _first, std::uint16_t _ch
 
 // ---- The scanner and the compass ------------------------------------------------------------------
 
-// ScaleCompassAxis (0x41FF-0x4217, and again at 0x421B-0x4233): CMP CX,AX / JB, then CWD, three SHL AX / RCL DX and DIV CX:
+// ScaleCompassAxis (in two copies): CMP CX,AX / JB, then CWD, three SHL AX / RCL DX and DIV CX:
 // 8 * _magnitude / _range when _range is not below _magnitude, else _magnitude; then at most 7. A magnitude of 8000h, which
 // NEG leaves so, is negative to CWD, and the divide traps.
 [[nodiscard]] std::uint16_t ScaleCompassAxis(std::uint16_t _magnitude, std::uint16_t _range)
@@ -655,8 +655,8 @@ constexpr std::array<DotStep, 8> COMPASS_RING = {
 
 // ---- The flight keys ------------------------------------------------------------------------------
 
-// CALL GetKey / JE back to it, de-assembled: GetKey until a key comes (ADR-039), the waits at 0x0BF3 (FlightScreenDispatch),
-// 0x8153 (ProcessFlightKeys' Ctrl+Esc) and 0x8DC7 (RunPauseScreen). Returns the key.
+// CALL GetKey / JE back to it, de-assembled: GetKey until a key comes (ADR-039), the waits in FlightScreenDispatch,
+// ProcessFlightKeys' Ctrl+Esc and RunPauseScreen. Returns the key.
 [[nodiscard]] Task<KeyPress> WaitForKey(GameState& _state, Host& _host)
 {
   for (;;)
@@ -683,7 +683,7 @@ constexpr std::array<DotStep, 8> COMPASS_RING = {
 constexpr std::array<std::string_view, PAUSE_OPTIONS> PAUSE_LETTERS = {RECENTER_LETTER, DAMPING_LETTER, Y_REVERSE_LETTER, XY_REVERSE_LETTER,
                                                                        SOUND_LETTER};
 
-// PauseShowOptions (0x8D8F): the five option letters, in reverse video when on. The loop at 0x8D98 pushes and pops CX, DI
+// PauseShowOptions: the five option letters, in reverse video when on. The loop pushes and pops CX, DI
 // and SI round DrawViewChar: the options left, the letter's place and the next option's flag.
 void ShowPauseOptions(GameState& _state)
 {
@@ -710,7 +710,7 @@ void ShowPauseOptions(GameState& _state)
   }
 }
 
-// 0x8DD4-0x8E1E: R, D, Y, B and S toggle their option, with a beep. False for any other key.
+// R, D, Y, B and S toggle their option, with a beep. False for any other key.
 [[nodiscard]] bool TogglePauseOption(GameState& _state, std::uint8_t _key)
 {
   constexpr std::array<std::uint8_t, PAUSE_OPTIONS> KEYS = {SCAN_R, SCAN_D, SCAN_Y, SCAN_B, SCAN_S};
@@ -732,12 +732,12 @@ enum class PauseExit : std::uint8_t
 {
   Resume,      // space: the flight goes on
   Abort,       // A: the title, the original dropping its own return address and ProcessFlightKeys'
-  NewFrameRate // an F key set the frame time, and the menu is drawn again (JMP 8D6Dh)
+  NewFrameRate // an F key set the frame time, and the menu is drawn again
 };
 
-// 0x8D6D-0x8D8C: the drawing buffer cleared and the menu's eight lines drawn into it, in every colour on a paper of 0: each line of
+// the drawing buffer cleared and the menu's eight lines drawn into it, in every colour on a paper of 0: each line of
 // pauseMenuText its place in the space view, a word, then its text, the last line's ending in frameRateKeyLabel, which the original
-// writes into it. The loop at 0x8D7C pushes and pops CX round each line, and SI walks the lines' places and texts.
+// writes into it. The loop pushes and pops CX round each line, and SI walks the lines' places and texts.
 void DrawPauseMenu(GameState& _state)
 {
   ClearDrawBuffer(_state);
@@ -760,7 +760,7 @@ void DrawPauseMenu(GameState& _state)
   }
 }
 
-// 0x8E52-0x8E88: F1-F10, the minimum frame time from frameTimeChoices, and its key in the menu's label, 1-9, or 10 with a closing
+// F1-F10, the minimum frame time from frameTimeChoices, and its key in the menu's label, 1-9, or 10 with a closing
 // bracket.
 void SetFrameTime(GameState& _state, std::uint8_t _key)
 {
@@ -781,8 +781,8 @@ void SetFrameTime(GameState& _state, std::uint8_t _key)
   }
 }
 
-// The pause screen from PauseShowOptions (0x8D8F): the options, presented (PresentSpaceView, after MOV AX,0B800h / MOV ES,AX),
-// then its keys, waited for at 0x8DC7, until one ends it. The jumps
+// The pause screen from PauseShowOptions: the options, presented (PresentSpaceView, after MOV AX,0B800h / MOV ES,AX),
+// then its keys, waited for, until one ends it. The jumps
 // back to PauseShowOptions and to the wait load or write every register they read, and carry nothing.
 [[nodiscard]] Task<PauseExit> RunPauseOptions(GameState& _state, Host& _host)
 {
@@ -834,7 +834,7 @@ void SetFrameTime(GameState& _state, std::uint8_t _key)
   }
 }
 
-// FlightScreenDispatch (0x0BDE): leaving the function keys: the cockpit back (RestoreFlightScreen, then ResetKeyboard) if a
+// FlightScreenDispatch: leaving the function keys: the cockpit back (RestoreFlightScreen, then ResetKeyboard) if a
 // screen was shown, then inFlight set. Returns what RestoreFlightScreen did, when it ran.
 std::optional<ScreenChange> LeaveFlightScreens(GameState& _state, Host& _host)
 {
@@ -848,7 +848,7 @@ std::optional<ScreenChange> LeaveFlightScreens(GameState& _state, Host& _host)
   return change;
 }
 
-// 0x0C13 and 0x0C72: flightScreenShown set, then push ax; call EraseCompassAndBlips; pop ax: a screen is about to be shown.
+// flightScreenShown set, then push ax; call EraseCompassAndBlips; pop ax: a screen is about to be shown.
 // Returns whether EraseCompassAndBlips erased anything.
 bool EraseForFlightScreen(GameState& _state)
 {
@@ -856,17 +856,17 @@ bool EraseForFlightScreen(GameState& _state)
   return EraseCompassAndBlips(_state);
 }
 
-// FlightScreenDispatch (0x0BF8): the screen for _key, then the screen for the key that screen returns, until F1-F4 or the
-// navigation computer's error leaves (0x0BDE): the jumps back to the tests at 0x0BF8 carry the key.
+// FlightScreenDispatch: the screen for _key, then the screen for the key that screen returns, until F1-F4 or the
+// navigation computer's error leaves: the jumps back to the tests carry the key.
 [[nodiscard]] Task<FlightScreens> DispatchFlightScreens(GameState& _state, Host& _host, std::uint8_t _key)
 {
   FlightScreens screens{0, std::nullopt};
   std::uint8_t key = _key;
-  // 0x0C13, 0x0C72 and 0x0CA0: flightScreenShown set and the compass and the blips erased (EraseForFlightScreen).
+  // flightScreenShown set and the compass and the blips erased (EraseForFlightScreen).
   const auto erase = [&_state] { (void)EraseForFlightScreen(_state); };
   // A screen shown, and the key that closed it. Then JMP FlightScreenDispatch.
   const auto shown = [&key](const ScreenKey& _closed) { key = _closed.scanCode; };
-  // 0x0BDE, jumped back to: the cockpit back if a screen was shown (LeaveFlightScreens).
+  // Where the screens leave: the cockpit back if a screen was shown (LeaveFlightScreens).
   const auto leave = [&_state, &_host, &screens]
   {
     screens.restored = LeaveFlightScreens(_state, _host);
@@ -928,7 +928,7 @@ bool EraseForFlightScreen(GameState& _state)
       }
       erase();
     }
-    // 0x0C45: F9 and F10; any other key the screens return is waited past.
+    // F9 and F10; any other key the screens return is waited past.
     if (key == SCAN_F9)
     {
       ResetKeyboard(_state);
@@ -943,12 +943,12 @@ bool EraseForFlightScreen(GameState& _state)
       shown(co_await ShowInventoryScreen(_state, _host));
       continue;
     }
-    // JMP 0BF3h, and GetKey until a key comes.
+    // Back to GetKey, until a key comes.
     key = (co_await WaitForKey(_state, _host)).scanCode;
   }
 }
 
-// 0x7FC5-0x802B: F1-F4 pick the view: a view not shown already is set, with a beep, and the stardust scattered afresh.
+// F1-F4 pick the view: a view not shown already is set, with a beep, and the stardust scattered afresh.
 // Returns the last random number ResetStardust drew, when it ran.
 std::optional<std::uint16_t> ChangeView(GameState& _state, std::uint8_t _key)
 {
@@ -967,13 +967,13 @@ std::optional<std::uint16_t> ChangeView(GameState& _state, std::uint8_t _key)
   return ResetStardust(_state);
 }
 
-// mov ax, text; jmp back to 0x80A3, the tail that posts _message for 25 frames.
+// mov ax, text; jmp back to the tail that posts _message for 25 frames.
 void PostHyperspaceRefusal(GameState& _state, Message _message)
 {
   SetMessage(_state, _message, 0x19);
 }
 
-// 0x8068-0x80FF: H, unless the docking computer is on or a countdown runs. True when the countdown started, which ends ProcessFlightKeys.
+// H, unless the docking computer is on or a countdown runs. True when the countdown started, which ends ProcessFlightKeys.
 [[nodiscard]] bool PressHyperspace(GameState& _state)
 {
   if (_state.Data().playerShip.dockingComputerOn == 1 || _state.Data().jump.hyperspaceCountdown != 0)
@@ -1028,7 +1028,7 @@ void PostHyperspaceRefusal(GameState& _state, Message _message)
   return true;
 }
 
-// 0x8171-0x826C: T primes a missile, which locks on what is in the sights; U unarms it; M launches it (LaunchPlayerMissile).
+// T primes a missile, which locks on what is in the sights; U unarms it; M launches it (LaunchPlayerMissile).
 void HandleMissileKeys(GameState& _state)
 {
   if (_state.Data().keyboard.keyDown[Keys::T] == 1 && _state.Data().commander.missileCount != 0 &&
@@ -1083,7 +1083,7 @@ void HandleMissileKeys(GameState& _state)
   }
 }
 
-// 0x826F-0x829E: fire heats the laser by 5; a pulse laser (type 0) fires every other frame.
+// fire heats the laser by 5; a pulse laser (type 0) fires every other frame.
 void HandleFireButton(GameState& _state, Host& _host)
 {
   if (!ReadFireButton(_state, _host))
@@ -1114,7 +1114,7 @@ void HandleFireButton(GameState& _state, Host& _host)
   _state.Data().playerShip.laserFiring = 1;
 }
 
-// 0x82F7-0x8363: I identifies the ship in the sights, and locks a missile on it if there is one.
+// I identifies the ship in the sights, and locks a missile on it if there is one.
 void HandleIdentifyKey(GameState& _state)
 {
   if (_state.Data().flight.shipIdRequested != 1)
@@ -1154,7 +1154,7 @@ void HandleIdentifyKey(GameState& _state)
   }
 }
 
-// 0x8379-0x839E: L runs the anti-ECM emulator, at one unit of energy a frame: SUB WORD [playerEnergy],1, and 0
+// L runs the anti-ECM emulator, at one unit of energy a frame: SUB WORD [playerEnergy],1, and 0
 // written over it on a borrow.
 void HandleAntiEcmKey(GameState& _state)
 {
@@ -1175,7 +1175,7 @@ void HandleAntiEcmKey(GameState& _state)
 // The axes ApplyPitch turns are 10000 long: forward is +z, and up is -y.
 constexpr std::int16_t AXIS_LENGTH = 0x2710;
 
-// 0x84F2-0x8586: _pitch, -23 to 23, turns the camera frame by twice as much, and the three angles are derived from the
+// _pitch, -23 to 23, turns the camera frame by twice as much, and the three angles are derived from the
 // turned frame again.
 void ApplyPitch(GameState& _state, std::int8_t _pitch)
 {
@@ -1204,7 +1204,7 @@ void ApplyPitch(GameState& _state, std::int8_t _pitch)
   _state.Data().playerShip.velocityDirty = 1;
 }
 
-// 0x2A57-0x2B53: the sun in slot 0, the planet in slot 1 and the station in slot 2, each byte written as the original
+// the sun in slot 0, the planet in slot 1 and the station in slot 2, each byte written as the original
 // writes it.
 void PlaceSunPlanetAndStation(GameState& _state)
 {
@@ -1547,8 +1547,8 @@ std::uint16_t ResetStardust(GameState& _state)
 
 void SaveStardustPositions(GameState& _state)
 {
-  // REP MOVSB with ES = DS, upwards: DF is clear wherever the reference calls it (its one STD, at 2E4A, is
-  // cleared again at 2E5C, with no call between).
+  // REP MOVSB with ES = DS, upwards: DF is clear wherever the reference calls it (its one STD is
+  // cleared again, with no call between).
   for (std::size_t particle = 0; particle < STARDUST_COUNT; ++particle)
   {
     _state.Data().flight.stardustPrevious[particle] = _state.Data().flight.stardust[particle];
@@ -2434,7 +2434,7 @@ void DrainEnergy(GameState& _state, std::int8_t _amount)
 
 JumpDriveRequest EngageJumpDrive(GameState& _state)
 {
-  // MOV AX,message, then the shared tail at 8450 posts it for 5 frames.
+  // MOV AX,message, then the shared tail posts it for 5 frames.
   const auto post = [&_state](Message _message) { SetMessage(_state, _message, JUMP_DRIVE_MESSAGE_FRAMES); };
   std::optional<MassLock> lock;
   if (_state.Data().playerShip.dockingComputerOn != 1)
@@ -2580,7 +2580,7 @@ void MoveObjectsByVelocity(GameState& _state)
     {
       co_return exit == PauseExit::Abort;
     }
-    // JMP 8D6Dh, the menu again, which loads or writes every register it reads.
+    // The menu again, which loads or writes every register it reads.
   }
 }
 

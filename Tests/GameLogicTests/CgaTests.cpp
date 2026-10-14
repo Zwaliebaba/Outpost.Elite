@@ -325,7 +325,7 @@ public:
     Assert::IsFalse(anyCursorDot(), L"R10 bits 5-6 = 01");
 
     rig.SetCrtc(Elite::CrtcRegister::CursorStart, 0x06);
-    rig.SetCrtc(Elite::CrtcRegister::CursorAddressHigh, 0x0E); // SetTextMode, 0x7D11
+    rig.SetCrtc(Elite::CrtcRegister::CursorAddressHigh, 0x0E); // SetTextMode
     Assert::IsFalse(anyCursorDot(), L"cursor address 0E00h is off the page");
 
     rig.SetCrtc(Elite::CrtcRegister::CursorAddressHigh, 0x00);
@@ -356,7 +356,7 @@ public:
     Assert::AreEqual(0x3Fu, std::uint32_t{cga.ColorSelect()});
   }
 
-  // SetGraphicsMode (CS:7D1E): the card as the BIOS's mode 4 left it, for flight, the title and the charts.
+  // SetGraphicsMode: the card as the BIOS's mode 4 left it, for flight, the title and the charts.
   TEST_METHOD(SetModeGraphicsProgramsTheBiosValues)
   {
     CgaRig rig;
@@ -369,7 +369,7 @@ public:
     Assert::IsTrue(cga.ShowsGraphicsFromStart());
   }
 
-  // SetTextMode (CS:7D31): the card as the BIOS's mode 1 left it, for the docked screens.
+  // SetTextMode: the card as the BIOS's mode 1 left it, for the docked screens.
   TEST_METHOD(SetModeTextProgramsTheBiosValues)
   {
     CgaRig rig;

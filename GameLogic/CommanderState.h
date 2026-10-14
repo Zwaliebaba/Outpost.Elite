@@ -21,23 +21,23 @@ struct SystemRecord
   std::uint8_t index;
   /// printed as nnn.n Light Years; 0 = none selected (No System Selected), 47h or more = out of range; compared with fuel*10/36 by H
   std::uint16_t distanceTenthsLy;
-  /// 0-7, index into DS:7CBD names (Anarchy ... Corporate State); the current system's prices equipment and the market, and picks
-  /// the ship spawn tables (0x4A86)
+  /// 0-7, index into names (Anarchy ... Corporate State); the current system's prices equipment and the market, and picks
+  /// the ship spawn tables
   std::uint8_t government;
-  /// 0-7, index into DS:7C0C names (Poor Agricultural ... Rich Industrial); the current system's prices equipment and the market
+  /// 0-7, index into names (Poor Agricultural ... Rich Industrial); the current system's prices equipment and the market
   std::uint8_t economy;
   /// 0-based, shown +1; the current system's equipment for sale has tech byte < this+2, market prices use min(this,9), and 9+ makes
-  /// the station a Dodo (0x2ADE)
+  /// the station a Dodo
   std::uint8_t techLevel;
   /// tenths of a billion
   std::uint8_t populationTenthsBillion;
-  /// 0xFF = Human Colonials; otherwise size adjective index (DS:7D9E)
+  /// 0xFF = Human Colonials; otherwise an index into speciesSizeNames
   std::uint8_t speciesAdjective1;
-  /// index into DS:7DC5
+  /// index into speciesColorNames
   std::uint8_t speciesAdjective2;
-  /// index into DS:7E01
+  /// index into speciesTraitNames
   std::uint8_t speciesAdjective3;
-  /// index into DS:7E3D (Rodents ... Insects)
+  /// index into speciesTypeNames (Rodents ... Insects)
   std::uint8_t speciesType;
   /// millions of credits
   std::uint16_t productivityMillionCredits;
@@ -86,7 +86,7 @@ inline constexpr std::uint8_t COMMODITY_PLATINUM = 14;
 inline constexpr std::uint8_t COMMODITY_GEM_STONES = 15;
 inline constexpr std::uint8_t COMMODITY_ALIEN_ITEMS = 16;
 
-/// The commander (D38): commanderBlock, DS:756B-763A in 1987, its members in their order there. Written by its members, it is the
+/// The commander (D38): commanderBlock, its members in their order there. Written by its members, it is the
 /// .cdr file's format, 208 bytes (D78), which SaveCommanderFile writes from it and LoadCommanderFile reads over it, and Replays/*.cdr are
 /// files of it (ADR-008 item 8). Several subsystems write it.
 struct CommanderState
@@ -95,7 +95,7 @@ struct CommanderState
   std::uint8_t fileSignature[15];
   /// frame bytes 0x0F 0x0D then "COMMANDER " (ShowCommanderStatusScreen)
   std::uint8_t commanderTitle[2];
-  /// 'COMMANDER', the rank inside commanderTitle (DS:757A, frame bytes first); AwardArchangelTitle overwrites it
+  /// 'COMMANDER', the rank inside commanderTitle (frame bytes first); AwardArchangelTitle overwrites it
   std::uint8_t commanderRankText[9];
   /// the space and the NUL after the rank, the end of the status screen's title
   std::uint8_t rankTextEnd[2];
@@ -126,7 +126,7 @@ struct CommanderState
   SystemRecord currentSystem;
   /// the system selected on a chart, the hyperspace target
   SystemRecord selectedSystem;
-  /// with descriptionSeed1 (DS:75DF) stepped by NextDescriptionRandom; set by SelectSystemAtCursor (0x1284)
+  /// with descriptionSeed1 stepped by NextDescriptionRandom; set by SelectSystemAtCursor
   std::uint16_t descriptionSeed0;
   /// descriptionSeed0 XOR systemSeed2
   std::uint16_t descriptionSeed1;
@@ -138,7 +138,7 @@ struct CommanderState
   std::uint8_t missileCount;
   /// item 3; hold 35 t instead of 20
   std::uint8_t largeCargoBayFitted;
-  /// item 4 (by the order of DS:7EC4 and DS:84D2)
+  /// item 4, in the equipment list's order
   std::uint8_t ecmFitted;
   /// item 5; one per mount fitted
   std::uint8_t pulseLaserCount;
@@ -154,13 +154,13 @@ struct CommanderState
   std::uint8_t energyUnitFitted;
   /// item 11
   std::uint8_t dockingComputerFitted;
-  /// item 12; cleared at 0x4802
+  /// item 12; cleared
   std::uint8_t galacticHyperdriveFitted;
-  /// item 13; one more rock may spawn while it is 1 (0x4AB2)
+  /// item 13; one more rock may spawn while it is 1
   std::uint8_t miningLaserCount;
   /// item 14
   std::uint8_t militaryLaserCount;
-  /// mission 2 reward, 'N' in flight (0x836F)
+  /// mission 2 reward, 'N' in flight
   std::uint8_t maskingDeviceFitted;
   /// bits 0-3: fore, aft, right, left hold a laser
   std::uint8_t laserMountsFitted;
@@ -168,9 +168,9 @@ struct CommanderState
   std::uint8_t laserMountTypes;
   /// cash in tenths of a credit
   std::uint32_t creditsTenths;
-  /// 0 clean, 1-39 offender, 40+ fugitive (DS:842A); saturates at 255; -5 per jump (0x4727)
+  /// 0 clean, 1-39 offender, 40+ fugitive; saturates at 255; -5 per jump
   std::uint8_t legalStatus;
-  /// incremented by CreditKill for kills with a bounty, saturates at 254; rating = first DS:8457 threshold above it; enemy missiles need...
+  /// incremented by CreditKill for kills with a bounty, saturates at 254; rating = first threshold above it; enemy missiles need...
   std::uint8_t killCount;
   /// JAMESON
   std::uint8_t defaultCommanderName[9];
@@ -230,15 +230,15 @@ struct CommanderState
     }
   };
   CargoHold cargoHold;
-  /// 0 after an arrival (0x4754); ShowBuyCargoScreen then rolls the quantities on sale and sets 1
+  /// 0 after an arrival; ShowBuyCargoScreen then rolls the quantities on sale and sets 1
   std::uint8_t marketQuantitiesSet;
   /// jumps counted by UpdateMissionSchedule
   std::uint8_t missionJumpCount;
-  /// 0 none, 1 supernova refugees, 2 masking device, 3 Thargoid invasion; set at 0x499B, cleared by ShowMissionDebriefing
+  /// 0 none, 1 supernova refugees, 2 masking device, 3 Thargoid invasion; set, cleared by ShowMissionDebriefing
   std::uint8_t missionNumber;
   /// 1 lets UpdateMissionSchedule count the missions' jumps in the first galaxy too; a new game clears it, only a file sets it
   std::uint8_t missionsInFirstGalaxy;
-  /// nonzero in witch space: 100 on entry (0x4917), lowered by Thargoid kills (0x8C03); the status screen shows WITCH SPACE
+  /// nonzero in witch space: 100 on entry, lowered by Thargoid kills; the status screen shows WITCH SPACE
   std::uint8_t witchspaceCountdown;
   /// frames before a fuel leak starts; 50 set on arrival in missions 1 and 3
   std::uint8_t fuelLeakDelayFrames;
@@ -246,25 +246,25 @@ struct CommanderState
   std::uint8_t fuelLeakFrames;
   /// set when the ship carrying the masking device is destroyed
   std::uint8_t maskShipDestroyed;
-  /// set by TryScoopObject (0x447A); mission 2 debrief fits the cloaking device
+  /// set by TryScoopObject; mission 2 debrief fits the cloaking device
   std::uint8_t maskingDeviceRecovered;
   /// 5 at the mission 2 briefing; decremented by TallyMaskMissionKill; mask spawning runs while nonzero
   std::uint8_t maskMissionShipsLeft;
-  /// mission 3: set by ShowMissionBriefing; ships may fire in the safe zone, docking is refused (0x2C32), missiles damage the station; c...
+  /// mission 3: set by ShowMissionBriefing; ships may fire in the safe zone, docking is refused, missiles damage the station; c...
   std::uint8_t thargoidInvasionActive;
-  /// set at 0x5589 and 0x8B46
+  /// set
   std::uint8_t invadedStationDestroyed;
-  /// mission 3 reward, 'L' in flight (0x8385) toggles DS:AC0E
+  /// mission 3 reward, 'L' in flight toggles
   std::uint8_t antiEcmEmulatorFitted;
-  /// 0 until supernovaFrames runs out; then starts from cabinTemperature and grows by max(1, h/4) a frame, killing on overflow (0x3F68-0...
+  /// 0 until supernovaFrames runs out; then starts from cabinTemperature and grows by max(1, h/4) a frame, killing on overflow
   std::uint8_t supernovaHeat;
-  /// 400 after the supernova briefing (0x6E77); counts down at 0x3F5E and stays 1; cleared on arrival
+  /// 400 after the supernova briefing; counts down and stays 1; cleared on arrival
   std::uint16_t supernovaFrames;
   /// 0 not briefed, 1 briefed, 2 debriefing on screen
   std::uint8_t missionStage;
-  /// set on every hyperspace arrival (0x47E1), cleared at a briefing; mission 1 completes only after a jump
+  /// set on every hyperspace arrival, cleared at a briefing; mission 1 completes only after a jump
   std::uint8_t jumpedSinceBriefing;
-  /// set at 0x4968; mission 2 debrief "Running away from the mask ship..."
+  /// set; mission 2 debrief "Running away from the mask ship..."
   std::uint8_t fledMaskShip;
   /// 2 at the mission 2 briefing; -1 per arrival; 1 means the mask ship's system
   std::uint8_t maskSystemJumps;
@@ -354,7 +354,7 @@ struct CommanderState
 
 static_assert(std::is_trivially_copyable_v<CommanderState> && std::is_standard_layout_v<CommanderState>);
 
-/// The commander's equipment, a member to an item, in the equipment list's order (DS:7EC4 and DS:84D2): the fuel first and the
+/// The commander's equipment, a member to an item, in the equipment list's order: the fuel first and the
 /// military laser last, as the shipyard's rows count them from 1 and the status screen's list from the missiles.
 inline constexpr std::uint8_t CommanderState::*const EQUIPMENT_ITEMS[] = {
   &CommanderState::fuel,

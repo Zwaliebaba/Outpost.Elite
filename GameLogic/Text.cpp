@@ -52,7 +52,7 @@ constexpr std::uint8_t FIRST_GLYPH = 0x20;         // screenFont starts at the s
 constexpr std::uint8_t FIRST_SMALL_LETTER = 0x41;  // smallFont starts at 'A'
 constexpr std::uint16_t VIEW_ROW_BYTES = 0x40;     // a row of the space-view buffer
 constexpr std::uint16_t CGA_TO_ODD_BANK = 0x2000;  // from an even line to the odd one below it
-constexpr std::uint16_t CGA_TO_EVEN_BANK = 0xE050; // and back to the next even line (-0x1FB0)
+constexpr std::uint16_t CGA_TO_EVEN_BANK = 0xE050; // and back to the next even line (-)
 constexpr std::uint16_t GLYPH_ROWS = 8;
 constexpr std::uint16_t SCREEN_GLYPH_BYTES = 16; // a screenFont glyph: a word a row
 constexpr std::uint16_t SMALL_GLYPH_ROWS = 5;
@@ -172,13 +172,13 @@ struct TypedLine
   std::uint16_t cell;
 };
 
-// ReadTextLine's redraw (0x76FF): the line typed and the cursor printed, then the JMP back to counting the blink.
+// ReadTextLine's redraw: the line typed and the cursor printed, then the JMP back to counting the blink.
 void RedrawTypedLine(GameState& _state, const TypedLine& _line, std::uint16_t _length)
 {
   RedrawInputLine(_state, _line.buffer, _length, _line.cell);
 }
 
-// ReadTextLine's blink (0x76A3): 300 ticks to the next, the cursor flipped, and the line redrawn.
+// ReadTextLine's blink: 300 ticks to the next, the cursor flipped, and the line redrawn.
 void RestartInputBlink(GameState& _state, const TypedLine& _line, std::uint16_t _length)
 {
   _state.Data().text.cursorBlinkTicks = CURSOR_BLINK_TICKS;
@@ -186,7 +186,7 @@ void RestartInputBlink(GameState& _state, const TypedLine& _line, std::uint16_t 
   RedrawTypedLine(_state, _line, _length);
 }
 
-// MessageLine's second half (0x35B9): the message in messagePointer, unless it is already shown, on the message line,
+// MessageLine's second half: the message in messagePointer, unless it is already shown, on the message line,
 // cleared first a row at a time. The original keeps SI round ClearMessageLine on the stack.
 void ShowMessage(GameState& _state)
 {
@@ -328,7 +328,7 @@ SmallViewPlace DrawSmallViewChar(GameState& _state, std::uint8_t _letter, std::u
   for (std::uint16_t line = 0; line < SMALL_GLYPH_ROWS; ++line)
   {
     // The letter's pixels cleared from the buffer, then set in the ink: AND [DI],BP and OR [DI],AX, two word
-    // writes (34C2, 34C4).
+    // writes.
     const std::uint16_t pixels = SmallGlyphRow(letter, line, _place.shift);
     const std::span<std::uint8_t> word = DrawingBufferWord(_state, address);
     SetWordIn(word, 0, static_cast<std::uint16_t>(WordIn(word, 0) & ~pixels));

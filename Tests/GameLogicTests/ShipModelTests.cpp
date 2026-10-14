@@ -316,7 +316,7 @@ public:
   {
     Assert::AreEqual(1.0f, Elite::PatternMix(0)[0], L"solid 0");
     Assert::AreEqual(1.0f, Elite::PatternMix(9)[3], L"solid 3");
-    const std::array<float, 4> checker = Elite::PatternMix(6); // 6699h: colours 2 and 1
+    const std::array<float, 4> checker = Elite::PatternMix(6); // colours 2 and 1
     Assert::IsTrue(checker[1] == 0.5f && checker[2] == 0.5f, L"a checkerboard of 2 and 1");
     for (std::uint8_t pattern = 0; pattern < 16; ++pattern)
     {

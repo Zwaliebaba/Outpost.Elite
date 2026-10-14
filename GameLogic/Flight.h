@@ -61,7 +61,7 @@ struct DashboardPixel
   std::uint8_t mask;
 };
 
-/// GetPreviousDustScreenPosition (CS:08A1): where particle _particle, an index of stardust, was in the drawing buffer last
+/// GetPreviousDustScreenPosition: where particle _particle, an index of stardust, was in the drawing buffer last
 /// frame, from its entry in stardustPrevious, when it was on screen then.
 [[nodiscard]] std::optional<DustScreenPosition> GetPreviousDustScreenPosition(const GameState& _state, std::size_t _particle);
 
@@ -82,162 +82,162 @@ struct DrawnDust
 /// The pixel value UpdateStardust draws the stardust in (stardustColor).
 [[nodiscard]] std::uint8_t StardustColor() noexcept;
 
-/// ComputeDustStripMask (CS:08B9): 2^n - 1 just covering |_step| / 2, the strip a respawned particle lands in.
+/// ComputeDustStripMask: 2^n - 1 just covering |_step| / 2, the strip a respawned particle lands in.
 [[nodiscard]] std::uint16_t ComputeDustStripMask(std::int16_t _step);
 
-/// ShiftStardustSideways (CS:08CB): _step added to x of every particle on screen, a particle that leaves it born again on
+/// ShiftStardustSideways: _step added to x of every particle on screen, a particle that leaves it born again on
 /// the edge it moves away from, in the strip ComputeDustStripMask gives for _step.
 void ShiftStardustSideways(GameState& _state, std::int16_t _step);
 
-/// RespawnDustAtSideEdge (CS:08F2): particle _particle born again, its lifetime and its copy's at random
+/// RespawnDustAtSideEdge: particle _particle born again, its lifetime and its copy's at random
 /// and the copy marked new, at a random y on the edge a sideways _step moves away from, its x in the strip
 /// _stripMask covers. Returns where.
 [[nodiscard]] DustPosition RespawnDustAtSideEdge(GameState& _state, std::size_t _particle, std::int16_t _step, std::uint16_t _stripMask);
 
-/// RollStardust (CS:0927): every particle turned by rotationSinCos[7].
+/// RollStardust: every particle turned by rotationSinCos[7].
 void RollStardust(GameState& _state);
 
-/// ShiftStardustVertically (CS:0940): ShiftStardustSideways for y.
+/// ShiftStardustVertically: ShiftStardustSideways for y.
 void ShiftStardustVertically(GameState& _state, std::int16_t _step);
 
-/// RespawnDustAtVerticalEdge (CS:0969): RespawnDustAtSideEdge for a vertical _step: a random x, and y in the strip on
+/// RespawnDustAtVerticalEdge: RespawnDustAtSideEdge for a vertical _step: a random x, and y in the strip on
 /// the edge the step moves away from.
 [[nodiscard]] DustPosition RespawnDustAtVerticalEdge(GameState& _state, std::size_t _particle, std::int16_t _step,
                                                      std::uint16_t _stripMask);
 
-/// RespawnDustAnywhere (CS:09A3): particle _particle born again anywhere on screen.
+/// RespawnDustAnywhere: particle _particle born again anywhere on screen.
 [[nodiscard]] DustPosition RespawnDustAnywhere(GameState& _state, std::size_t _particle);
 
-/// IsDustOnScreen (CS:09D6): whether the high byte of x is in -20h..1Fh and that of y in -10h..0Fh.
+/// IsDustOnScreen: whether the high byte of x is in -20h..1Fh and that of y in -10h..0Fh.
 [[nodiscard]] bool IsDustOnScreen(DustPosition _position);
 
-/// IsDustNearCenter (CS:09EE): whether the high byte of x is in -6..6 and that of y in -3..3, where the rear
+/// IsDustNearCenter: whether the high byte of x is in -6..6 and that of y in -3..3, where the rear
 /// view respawns a particle.
 [[nodiscard]] bool IsDustNearCenter(DustPosition _position);
 
-/// ScaleDustStep (CS:0A06): _position shifted right by stardustShift, the step a particle moves this frame.
+/// ScaleDustStep: _position shifted right by stardustShift, the step a particle moves this frame.
 [[nodiscard]] DustStep ScaleDustStep(const GameState& _state, DustPosition _position);
 
-/// LoadDustPosition (CS:0A13): the position of particle _particle, an index of stardust.
+/// LoadDustPosition: the position of particle _particle, an index of stardust.
 [[nodiscard]] DustPosition LoadDustPosition(const GameState& _state, std::size_t _particle);
 
-/// StoreDustPosition (CS:0A19): particle _particle moved to _position.
+/// StoreDustPosition: particle _particle moved to _position.
 void StoreDustPosition(GameState& _state, std::size_t _particle, DustPosition _position);
 
-/// StorePreviousDustPosition (CS:0A1F): the particle's entry in stardustPrevious, which follows stardust, set to _position.
+/// StorePreviousDustPosition: the particle's entry in stardustPrevious, which follows stardust, set to _position.
 void StorePreviousDustPosition(GameState& _state, std::size_t _particle, DustPosition _position);
 
-/// DustToScreen (CS:0A28): where _position is in the drawing buffer.
+/// DustToScreen: where _position is in the drawing buffer.
 [[nodiscard]] DustScreenPosition DustToScreen(DustPosition _position);
 
-/// ResetStardust (CS:0A43): all 30 particles scattered at random, within 23h of the centre, with random lifetimes;
+/// ResetStardust: all 30 particles scattered at random, within 23h of the centre, with random lifetimes;
 /// messageFrames cleared first when its low byte is 0, so that the new view's title prints. Returns the last random number
 /// it drew, whose low byte gave the last particle's lifetime.
 std::uint16_t ResetStardust(GameState& _state);
 
-/// SaveStardustPositions (CS:0A88): stardust copied over stardustPrevious a byte at a time, for the jump drive's
+/// SaveStardustPositions: stardust copied over stardustPrevious a byte at a time, for the jump drive's
 /// streaks.
 void SaveStardustPositions(GameState& _state);
 
-/// UpdateStardust (CS:068F): the 30 stardust particles moved and drawn for viewAngle, once a frame, in stardustColor; streaks
+/// UpdateStardust: the 30 stardust particles moved and drawn for viewAngle, once a frame, in stardustColor; streaks
 /// from where they were while the jump drive is engaged (SaveStardustPositions first). The front and rear views shift them by
 /// the pitch, roll them by the roll and move them by the speed (ComputeStardustShift), the rear inwards with lifetimes; the side
 /// views shift them sideways by the speed (UpdateSideStardust).
 void UpdateStardust(GameState& _state);
 
-/// ComputeStardustShift (CS:0887): stardustShift = (34h - playerSpeed) / 12 + 4, one less while jumpDriveEngaged. A speed
+/// ComputeStardustShift: stardustShift = (34h - playerSpeed) / 12 + 4, one less while jumpDriveEngaged. A speed
 /// above 34h, which the game never sets, divides into the game's trap.
 void ComputeStardustShift(GameState& _state);
 
-/// RestoreFlightScreen (CS:15CF): the cockpit back after a function key's screen (ShowCockpitScreen), every gauge marked stale
+/// RestoreFlightScreen: the cockpit back after a function key's screen (ShowCockpitScreen), every gauge marked stale
 /// (InvalidateDashboard), a beep, and messageShown cleared. Returns what ShowCockpitScreen did.
 ScreenChange RestoreFlightScreen(GameState& _state, Host& _host);
 
-/// UpdateDashboard (CS:254F): once a frame, in the CGA's video memory: the condition light, the energy and the laser's heat
+/// UpdateDashboard: once a frame, in the CGA's video memory: the condition light, the energy and the laser's heat
 /// (UpdateEnergyAndLaserHeat), the safe zone's S and the ECM's E, the energy banks, the missiles, the pitch and roll
 /// indicators, then the bars for the laser's temperature, the altitude, the cabin's temperature, the fuel, the shields and the
 /// speed, each redrawn only when its value changed, the shields every frame.
 void UpdateDashboard(GameState& _state);
 
-/// DrawFiveLineBar (CS:2645): _value * 12 / 63, 0-48 pixels, as a bar 5 scanlines high on the dashboard line at B800:_line:
+/// DrawFiveLineBar: _value * 12 / 63, 0-48 pixels, as a bar 5 scanlines high on the dashboard line at B800:_line:
 /// colour 1, a partial byte from barPartialBytes, then colour 2 to the 48th pixel. For a value of fewer than 4 pixels the second
 /// run counts _countHigh, CH as the caller leaves it, in its high byte.
 void DrawFiveLineBar(GameState& _state, std::uint16_t _line, std::uint8_t _value, std::uint8_t _countHigh);
 
-/// DrawThreeLineBar (CS:273E): DrawFiveLineBar's bar 3 scanlines high.
+/// DrawThreeLineBar: DrawFiveLineBar's bar 3 scanlines high.
 void DrawThreeLineBar(GameState& _state, std::uint16_t _line, std::uint8_t _value, std::uint8_t _countHigh);
 
-/// DrawEnergyBanks (CS:283B): playerEnergy split into the four bank bytes of energyBankFill, FFh full, the rest, then 0, and
+/// DrawEnergyBanks: playerEnergy split into the four bank bytes of energyBankFill, FFh full, the rest, then 0, and
 /// each bank that changed redrawn (DrawFiveLineBar) from B800:3E38 upwards.
 void DrawEnergyBanks(GameState& _state);
 
-/// UpdateEnergyAndLaserHeat (CS:2882): unless the game is over or the escape pod flies, the laser cooled by 2 to 0, and the
+/// UpdateEnergyAndLaserHeat: unless the game is over or the escape pod flies, the laser cooled by 2 to 0, and the
 /// shields up by 1 to FFh at full energy, or the energy up by 1, or 3 with the energy unit, to 3FFh, each written and then
 /// floored or capped over it; then below one bank, at odds of 50 in 65536, one of the 13 equipment bytes from missileCount lost
 /// and its message posted.
 void UpdateEnergyAndLaserHeat(GameState& _state);
 
-/// SetUpLocalSpace (CS:29D0): the current system's seeds (LoadSystemSeeds), every gauge stale, the slot counts, the slots cleared
+/// SetUpLocalSpace: the current system's seeds (LoadSystemSeeds), every gauge stale, the slot counts, the slots cleared
 /// (ClearAllObjects), the cockpit shown (ShowCockpitScreen), the stardust scattered, the flight's
 /// variables reset; then out of witch space the sun, the planet and the station, and spawnGovernment, else spawnGovernment 0.
 /// Returns what ShowCockpitScreen did.
 ScreenChange SetUpLocalSpace(GameState& _state, Host& _host);
 
-/// UpdatePlayerMotion (CS:8472): skipped during GAME OVER after its first frame; with the escape pod flying, only the world moves
+/// UpdatePlayerMotion: skipped during GAME OVER after its first frame; with the escape pod flying, only the world moves
 /// (MoveObjectsByVelocity). Otherwise the steering for the frame, the docking computer's (RunDockingComputer) or the selected
 /// device's (ReadSteering, then ApplyReverseControls) after . and , change the speed; the roll, -23 to 23, turns the roll angle
 /// by twice as much, and the pitch the camera's frame (ApplyPitch); then, unless the docking computer flies, the velocity
 /// (UpdatePlayerVelocity) and the world moved (MoveObjectsByVelocity). Waits sometimes, in the stick's read.
 void UpdatePlayerMotion(GameState& _state, Host& _host);
 
-/// InvalidateDashboard (CS:2540): the 22 dashboard cache bytes from missileCountShown filled with 0x80, so that
+/// InvalidateDashboard: the 22 dashboard cache bytes from missileCountShown filled with 0x80, so that
 /// UpdateDashboard redraws every gauge.
 void InvalidateDashboard(GameState& _state);
 
-/// DrawSignedIndicator (CS:26BE): the roll or pitch indicator for _value, held to -23..23, on the five scanlines of the
+/// DrawSignedIndicator: the roll or pitch indicator for _value, held to -23..23, on the five scanlines of the
 /// dashboard line at B800:_line: the strip in colour 2, then the marker from indicatorMarkers.
 void DrawSignedIndicator(GameState& _state, std::uint16_t _line, std::int8_t _value);
 
-/// DrawMissileIcons (CS:2799): when missileCount changed, that many missileIcon cells at B800:3E0C and the background
+/// DrawMissileIcons: when missileCount changed, that many missileIcon cells at B800:3E0C and the background
 /// up to four.
 void DrawMissileIcons(GameState& _state);
 
-/// DrawMissileLockIndicator (CS:2804): when missileState changed, the 12x6-pixel block at B800:1E15 in
+/// DrawMissileLockIndicator: when missileState changed, the 12x6-pixel block at B800:1E15 in
 /// colorFillBytes[missileState].
 void DrawMissileLockIndicator(GameState& _state);
 
-/// DrawConditionLight (CS:290C): when it changed, conditionLightBitmap at B800:176C in conditionColor, which
+/// DrawConditionLight: when it changed, conditionLightBitmap at B800:176C in conditionColor, which
 /// flashes black and red on bit 9 of millisecondCounter while it is 0.
 void DrawConditionLight(GameState& _state);
 
-/// UpdateConditionColor (CS:2959): conditionColor from the ship's state: 0 flashing, 2 red, 3 yellow or 1 green.
+/// UpdateConditionColor: conditionColor from the ship's state: 0 flashing, 2 red, 3 yellow or 1 green.
 void UpdateConditionColor(GameState& _state);
 
-/// InSafeZone (CS:2E63): safeZoneFlags, read.
+/// InSafeZone: safeZoneFlags, read.
 [[nodiscard]] SafeZone InSafeZone(const GameState& _state);
 
-/// UpdateSafeZone (CS:2E69): safeZoneFlags from the station in stationSlot: bit 0 set while it is an active station, IsObjectNear
+/// UpdateSafeZone: safeZoneFlags from the station in stationSlot: bit 0 set while it is an active station, IsObjectNear
 /// and nearer than 32C8h, over what the original's AL held: IsObjectNear's last high byte, or the low byte of the distance.
 void UpdateSafeZone(GameState& _state);
 
-/// ComputeDeathDebrisVector (CS:2F8B): (0, 40, 0) turned by the view and, off the front view, by the roll, then by the yaw
+/// ComputeDeathDebrisVector: (0, 40, 0) turned by the view and, off the front view, by the roll, then by the yaw
 /// and the pitch, through rotationSinCos[8], [7] and [6], which it sets.
 [[nodiscard]] Vector ComputeDeathDebrisVector(GameState& _state);
 
-/// CheckCollisions (CS:2BC5): the player against each active one of objectSlotCount slots from shipSlots: inside its type's collisionRanges
+/// CheckCollisions: the player against each active one of objectSlotCount slots from shipSlots: inside its type's collisionRanges
 /// box, a ship's damage, or the station's docking, scrape or crash, the impact sound on each.
 void CheckCollisions(GameState& _state);
 
-/// UpdateWarnings (CS:36B6): unless the game is over, the current warning posted again while warningFrames lasts, else the
+/// UpdateWarnings: unless the game is over, the current warning posted again while warningFrames lasts, else the
 /// four warning checks from the one after the last warning.
 void UpdateWarnings(GameState& _state);
 
-/// UpdateScannerBlip (CS:40EC): unless _slot is debris, a station, the sun or the planet, its scanner blip moved to the
+/// UpdateScannerBlip: unless _slot is debris, a station, the sun or the planet, its scanner blip moved to the
 /// camera-frame position _camera, y and z scaled by 1.25: the slot marked scanned, the old blip XORed out if one is drawn
 /// and the new one in.
 void UpdateScannerBlip(GameState& _state, SpaceObject& _slot, Vector _camera);
 
-/// UpdateCompass (CS:418F): while titleShown, the compass dot moved to the station when the planet is near
+/// UpdateCompass: while titleShown, the compass dot moved to the station when the planet is near
 /// (IsObjectNearKeepBlip), else to the planet (compassTargetIsStation 1 or 0). The target's and the station's scale shifts go to
 /// their depth bytes (+3Dh); the target's scaled position turned to the view goes to the station's compass words and, turned to
 /// the camera's frame, gives the dot: x and y as 8 * |c| / (|z| + 1000), at most 7, normalised by sqrtTable when their squares
@@ -245,50 +245,50 @@ void UpdateScannerBlip(GameState& _state, SpaceObject& _slot, Vector _camera);
 /// Returns whether it ran: false, doing nothing, unless titleShown.
 bool UpdateCompass(GameState& _state);
 
-/// XorCompassDot (CS:42A4): the compass dot at _x, _y from the dashboard's origin XORed into video memory: its eight
+/// XorCompassDot: the compass dot at _x, _y from the dashboard's origin XORed into video memory: its eight
 /// neighbours, a ring, and the centre too while _inFront, solid.
 void XorCompassDot(GameState& _state, std::uint8_t _x, std::uint8_t _y, bool _inFront);
 
-/// EraseScannerBlip (CS:42D6): unless _slot is a station's, its scanner blip XORed out when one is drawn, and the flag that
+/// EraseScannerBlip: unless _slot is a station's, its scanner blip XORed out when one is drawn, and the flag that
 /// says so cleared. Returns the blip's last pixel, when it erased one.
 std::optional<DashboardPixel> EraseScannerBlip(GameState& _state, SpaceObject& _slot);
 
-/// EraseCompassAndBlips (CS:4594): the compass dot XORed out of video memory when stationSlot's blip flag says it is drawn, the
+/// EraseCompassAndBlips: the compass dot XORed out of video memory when stationSlot's blip flag says it is drawn, the
 /// flag cleared first, and then each ship slot's scanner blip, EraseScannerBlip. Returns whether it erased anything.
 bool EraseCompassAndBlips(GameState& _state);
 
-/// XorScannerBlip (CS:42F6): the scanner blip for the scanner bytes _x, _y and _z XORed into video memory: a stick from
+/// XorScannerBlip: the scanner blip for the scanner bytes _x, _y and _z XORed into video memory: a stick from
 /// (3Dh + _x, 1Fh - _z / 4) of |_y / 4| pixels, up or down, and a pixel right of its end. Returns that last pixel.
 DashboardPixel XorScannerBlip(GameState& _state, std::uint8_t _x, std::uint8_t _y, std::uint8_t _z);
 
-/// XorDashboardPixel (CS:43C4): the colour-2 pixel at _x, _y from the dashboard's origin (96, 144) XORed into
+/// XorDashboardPixel: the colour-2 pixel at _x, _y from the dashboard's origin (96, 144) XORed into
 /// video memory. Returns the mask, from dashboardPixelMasks.
 std::uint8_t XorDashboardPixel(GameState& _state, std::uint8_t _x, std::uint8_t _y);
 
-/// UpdateFuelLeak (CS:499F): a fuel leak's delay counted down, then its frames, each taking 5 fuel and posting fuelLeakText;
+/// UpdateFuelLeak: a fuel leak's delay counted down, then its frames, each taking 5 fuel and posting fuelLeakText;
 /// the border red while it leaks and maskingBackgroundColor otherwise, with the bright palette, unless the delay has just run out.
 void UpdateFuelLeak(GameState& _state, Host& _host);
 
-/// TickEscapePod (CS:7F69): escapePodFrames counted down while it runs. Returns whether the pod has arrived, when the original
+/// TickEscapePod: escapePodFrames counted down while it runs. Returns whether the pod has arrived, when the original
 /// drops its own return address so that its RET leaves RunFlight.
 bool TickEscapePod(GameState& _state);
 
-/// DrainEnergy (CS:839F): playerEnergy less _amount, sign-extended; on a borrow it is 0 and the player dead.
+/// DrainEnergy: playerEnergy less _amount, sign-extended; on a borrow it is 0 and the player dead.
 void DrainEnergy(GameState& _state, std::int8_t _amount);
 
 /// What EngageJumpDrive did: in Hyperspace.h, beside the MassLock it holds, which this header cannot include (Hyperspace.h
 /// includes Ships.h, which includes this).
 struct JumpDriveRequest;
 
-/// EngageJumpDrive (CS:8430): J: the jump drive engaged (jumpDriveEngaged, velocityDirty) at full speed, 48, unless the docking
+/// EngageJumpDrive: J: the jump drive engaged (jumpDriveEngaged, velocityDirty) at full speed, 48, unless the docking
 /// computer is on or IsMassLocked says it is mass-locked; otherwise disengaged. Its message is posted for 5 frames.
 JumpDriveRequest EngageJumpDrive(GameState& _state);
 
-/// UpdatePlayerVelocity (CS:8599): when velocityDirty, the velocity from playerSpeed along the pitch and the yaw, through
+/// UpdatePlayerVelocity: when velocityDirty, the velocity from playerSpeed along the pitch and the yaw, through
 /// rotationSinCos[6] and [7], which it sets. While jumpDriveEngaged it is 32 times the speed, for one frame.
 void UpdatePlayerVelocity(GameState& _state);
 
-/// MoveObjectsByVelocity (CS:85EC): the player's velocity, sign-extended, taken from the 24-bit position of each of
+/// MoveObjectsByVelocity: the player's velocity, sign-extended, taken from the 24-bit position of each of
 /// shipSlotCount slots from shipSlots, and from its compass words: the player stays at the origin.
 void MoveObjectsByVelocity(GameState& _state);
 
@@ -299,7 +299,7 @@ struct FlightScreens
   std::optional<ScreenChange> restored; ///< what RestoreFlightScreen did, once a screen was shown
 };
 
-/// HandleFlightFunctionKeys (CS:0BB3): F1-F10 in flight, scanned in keyDown. A key held is flushed (ResetKeyboard), and the screens
+/// HandleFlightFunctionKeys: F1-F10 in flight, scanned in keyDown. A key held is flushed (ResetKeyboard), and the screens
 /// shown from it (FlightScreenDispatch): F5 the galactic chart, F6 the short-range chart, F7 the system's data, F8 the market
 /// prices, F9 the commander's status and F10 the inventory, each from the key the last returned, any other key waited past, until
 /// F1-F4; in witch space F5, F7, F8, and F6 until its countdown is down to 1, post the navigation computer's error instead. A screen
@@ -315,7 +315,7 @@ struct FlightKeysExit
   bool aborted;
 };
 
-/// ProcessFlightKeys (CS:7FA8): the flight controls other than steering, unless the game is over or the escape pod flies: the function
+/// ProcessFlightKeys: the flight controls other than steering, unless the game is over or the escape pod flies: the function
 /// keys' screens and views (HandleFlightFunctionKeys, then ChangeView); G arms the galactic drive; H starts the hyperspace countdown, which
 /// ends it; D toggles the docking computer; J the jump drive; Esc pauses (RunPauseScreen), or with Ctrl freezes until a key; T, U and M the
 /// missile; fire; E the ECM; B the energy bomb; C the escape pod; I identifies; N the masking device; L the anti-ECM emulator.
@@ -323,13 +323,13 @@ struct FlightKeysExit
 /// for keys on the screens', the pause's and the freeze's paths (ADR-015).
 [[nodiscard]] Task<FlightKeysExit> ProcessFlightKeys(GameState& _state, Host& _host);
 
-/// RunPauseScreen (CS:8D6A): the speaker silenced (SilenceSpeakerTimer), then the pause menu drawn and its options presented until
+/// RunPauseScreen: the speaker silenced (SilenceSpeakerTimer), then the pause menu drawn and its options presented until
 /// a key ends it: space resumes; R, D, Y, B and S toggle the options; F1-F10 set the frame time and draw the menu again; A leaves
 /// for the title, titleShown cleared. Returns whether A left, when the
 /// original drops its own return address and its caller's. Waits for keys as a rule (ADR-015).
 [[nodiscard]] Task<bool> RunPauseScreen(GameState& _state, Host& _host);
 
-/// RunFlight (CS:7E9B): the mouse reset if it steers, local space set up (SetUpLocalSpace) and the
+/// RunFlight: the mouse reset if it steers, local space set up (SetUpLocalSpace) and the
 /// station's tunnel played; then a frame at a time: the dashboard, the objects drawn, the lasers, the stardust, the fuel leak, the
 /// message line, the screen dump key, the frame presented, the objects moved and spawned, the player's motion and the collisions;
 /// docked, the tunnel again and the keyboard and the sound reset; otherwise the flight keys, the hyperspace countdown and the escape

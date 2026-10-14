@@ -13,11 +13,11 @@ namespace Elite
 /// data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct SaveLoadState
 {
-  /// what ShowDiscControlScreen asks Start to do, written at 0x7E90: 0 Exit to DOS (Start calls WipeProgram at 0x0072, then exits), 1 lo...
+  /// what ShowDiscControlScreen asks Start to do, written: 0 Exit to DOS (Start calls WipeProgram, then exits), 1 lo...
   std::uint8_t diskOperation;
   /// file names without extension, NUL-terminated, written by PerformDiskRequest's catalogue
   std::uint8_t commanderFileList[370];
-  /// names in commanderFileList, capped at 40 (0x03E3)
+  /// names in commanderFileList, capped at 40
   std::uint8_t commanderFileCount;
   /// write pointer into commanderFileList
   std::uint16_t commanderFileListNext;
@@ -25,9 +25,9 @@ struct SaveLoadState
   CommanderState startupCommander;
   /// '12345678.CDR' template; load, save and delete use it
   std::uint8_t commanderFileName[13];
-  /// 0 keyboard, 2 mouse (names DS:8670); 1987's 1, the joystick, went with D81
+  /// 0 keyboard, 2 mouse (names); 1987's 1, the joystick, went with D81
   std::uint8_t inputDevice;
-  /// 1 after 0x7E90; makes RunTitleAndDocked reopen ShowDiscControlScreen to show the result; cleared when an F-key leaves it
+  /// 1 after LeaveGameLoopForDisk; makes RunTitleAndDocked reopen ShowDiscControlScreen to show the result; cleared when an F-key leaves it
   std::uint8_t resumeAtDiskMenu;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.

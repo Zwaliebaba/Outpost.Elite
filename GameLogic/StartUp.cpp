@@ -113,12 +113,12 @@ void StartNewGame(GameState& _state)
   for (;;)
   {
     InstallTimerInterrupt(_state, _host);
-    // CopyProtection (CS:04A3) came here: it does nothing once protectionShown is set, as the D5 byte sets it (ADR-001).
+    // CopyProtection came here: it does nothing once protectionShown is set, as the D5 byte sets it (ADR-001).
     InstallDivideAndKeyboardInterrupts(_state, _host);
     CheckCheatArgument(_state, _host);
     co_await GameLoop(_state, _host);
 
-    // HandleDiskRequest (CS:0065): GameLoop comes back only for diskOperation, 0 to leave.
+    // HandleDiskRequest: GameLoop comes back only for diskOperation, 0 to leave.
     RestoreDivideAndKeyboardInterrupts(_host);
     RestoreTimerInterrupt(_state, _host);
     const std::uint8_t request = _state.Data().saveLoad.diskOperation;

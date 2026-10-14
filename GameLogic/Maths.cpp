@@ -30,7 +30,7 @@ constexpr std::uint16_t TANGENT_TOP_BYTES = 0x1FE;
 constexpr std::uint32_t MASK_24_BITS = 0xFFFFFF;
 constexpr std::uint32_t SIGN_24_BITS = 0x800000;
 constexpr std::uint16_t SCALED_POSITION_LIMIT = 0x24B8; // GetPositionScaleShift's ceiling
-// ScaleByInverseDistance's divide, DIV BX at CS:40E0, a word divide's opcode.
+// ScaleByInverseDistance's divide, DIV BX, a word divide's opcode.
 constexpr DivideTrap SCALE_DIVIDE_TRAP = DivideTrap::Word;
 constexpr std::uint16_t SCALE_LIMIT = 0xFF;
 

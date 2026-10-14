@@ -16,11 +16,11 @@ struct PacingPoint
   Milliseconds milliseconds;
 };
 
-/// A frame of the galactic chart: the loop's call of PresentChartFrame, at CS:0DB1. 521,504 to 522,342 cycles
+/// A frame of the galactic chart: the loop's call of PresentChartFrame. 521,504 to 522,342 cycles
 /// over 24 frames, 109.3 ms, so each lands on the seventh retrace: 116.7 ms, 8.6 frames a second.
 inline constexpr PacingPoint GALACTIC_CHART_PACING{109};
 
-/// A frame of the short-range chart: the loop's call of PresentChartFrame, at CS:0FD7. 400,233 to 402,216 cycles
+/// A frame of the short-range chart: the loop's call of PresentChartFrame. 400,233 to 402,216 cycles
 /// over 32 frames, 84.1 ms, just past five retraces, so the IBM PC's frames took five or six: 84 to 100 ms.
 inline constexpr PacingPoint SHORT_RANGE_CHART_PACING{84};
 

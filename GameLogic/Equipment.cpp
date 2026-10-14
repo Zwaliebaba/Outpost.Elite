@@ -154,7 +154,7 @@ void AddPrecious(std::uint8_t& _field, std::uint8_t _amount)
   }
 }
 
-// TryScoopObject's box test (4414-443F): whether _view is in the scoop's box: y from 30 to 229, then x and z within 149 either
+// TryScoopObject's box test: whether _view is in the scoop's box: y from 30 to 229, then x and z within 149 either
 // side.
 [[nodiscard]] bool TestScoopBox(const Vector& _view) noexcept
 {
@@ -167,7 +167,7 @@ void AddPrecious(std::uint8_t& _field, std::uint8_t _amount)
          Magnitude(static_cast<std::uint16_t>(_view.z)) < SCOOP_HALF_WIDTH;
 }
 
-// PrintEquipmentSellColumn (0x6949): _text in the resale column of menuSelectedRow's row, in the resale price's attribute, and
+// PrintEquipmentSellColumn: _text in the resale column of menuSelectedRow's row, in the resale price's attribute, and
 // the menu's attribute put back.
 void PrintEquipmentSellColumn(GameState& _state, std::string_view _text)
 {
@@ -240,7 +240,7 @@ void PrintEquipmentSellColumn(GameState& _state, std::string_view _text)
   return static_cast<std::uint16_t>(Join(_rows, 0) >> 2);
 }
 
-// 61CF and 628A: B and S push CX, SI and textAttribute for 6214 to pop after the message, and set the message's attribute.
+// B and S push CX, SI and textAttribute for ShowEquipMessage to pop after the message, and set the message's attribute.
 // Returns the attribute, which the original pushes in AL.
 [[nodiscard]] std::uint8_t OpenEquipMessage(GameState& _state)
 {
@@ -249,7 +249,7 @@ void PrintEquipmentSellColumn(GameState& _state, std::string_view _text)
   return saved;
 }
 
-// 6214: the message _text on the message line, and textAttribute put back to _saved, which the original pops into AL before its
+// The message _text on the message line, and textAttribute put back to _saved, which the original pops into AL before its
 // jump back to the steering.
 void ShowEquipMessage(GameState& _state, std::string_view _text, std::uint8_t _saved)
 {
@@ -257,7 +257,7 @@ void ShowEquipMessage(GameState& _state, std::string_view _text, std::uint8_t _s
   _state.Data().drawing.textAttribute = _saved;
 }
 
-// 61DA: B on the equipment menu, once OpenEquipMessage has saved the attribute: the row refused (RefuseToFit) or paid for, and
+// B on the equipment menu, once OpenEquipMessage has saved the attribute: the row refused (RefuseToFit) or paid for, and
 // counted (CountAfterFitting), its resale price shown but for fuel's, and a laser's mount chosen. From the cargo bay on, the row's
 // laser type is selected first, as the original selects it before its checks. Returns the message for ShowEquipMessage, after
 // the jumps back the original takes on the way.
@@ -292,7 +292,7 @@ void ShowEquipMessage(GameState& _state, std::string_view _text, std::uint8_t _s
   co_return ITEM_PURCHASED_TEXT;
 }
 
-// 6295: S on the equipment menu, once OpenEquipMessage has saved the attribute: the row refused (RefuseToRemove) or taken back
+// S on the equipment menu, once OpenEquipMessage has saved the attribute: the row refused (RefuseToRemove) or taken back
 // for its resale price, its resale column cleared once the last is sold, and a laser's mount chosen. Returns the message for
 // ShowEquipMessage, after the jumps back the original takes on the way.
 [[nodiscard]] Task<std::string_view> SellEquipment(GameState& _state, Host& _host)
@@ -322,7 +322,7 @@ void ShowEquipMessage(GameState& _state, std::string_view _text, std::uint8_t _s
   co_return ITEM_SOLD_TEXT;
 }
 
-// 63C3 and 6490: the mount box at _box painted in textAttribute, then the one left of it, from FORE round to LEFT,
+// The mount box at _box painted in textAttribute, then the one left of it, from FORE round to LEFT,
 // highlighted. Returns that box.
 std::uint16_t MoveMountBoxLeft(GameState& _state, std::uint16_t _box)
 {
@@ -340,7 +340,7 @@ std::uint16_t MoveMountBoxLeft(GameState& _state, std::uint16_t _box)
   return box;
 }
 
-// 63E1 and 64AE: the mount box at _box painted in textAttribute, then the one right of it, from LEFT round to FORE,
+// The mount box at _box painted in textAttribute, then the one right of it, from LEFT round to FORE,
 // highlighted. Returns that box.
 std::uint16_t MoveMountBoxRight(GameState& _state, std::uint16_t _box)
 {
@@ -358,8 +358,8 @@ std::uint16_t MoveMountBoxRight(GameState& _state, std::uint16_t _box)
   return box;
 }
 
-// 6438 and 6505: the mount message _text on the message line, in the menu's attribute; the second reached from 653D by the
-// jump back to 6509, the tail the two messages share. The PUSH SI / POP SI round it keep the box, which the routine never
+// The mount message _text on the message line, in the menu's attribute; the second reached by the
+// jump back into the tail the two messages share. The PUSH SI / POP SI round it keep the box, which the routine never
 // touches.
 void PrintMountMessage(GameState& _state, std::string_view _text)
 {
@@ -367,7 +367,7 @@ void PrintMountMessage(GameState& _state, std::string_view _text)
   PrintTextModeString(_state, _text, MESSAGE_OFFSET);
 }
 
-// 642A: Space in ChooseMountToFitLaser. A free mount gets the bought laser (WithLaserFitted), and the help text is redrawn over
+// Space in ChooseMountToFitLaser. A free mount gets the bought laser (WithLaserFitted), and the help text is redrawn over
 // the mount menu. Returns whether it did; otherwise it says the mount is occupied.
 bool FitLaserOnMount(GameState& _state)
 {
@@ -385,9 +385,9 @@ bool FitLaserOnMount(GameState& _state)
   return true;
 }
 
-// 64F7: Space in ChooseMountToRemoveLaser. A mount holding the sold laser's type is freed (WithLaserCleared), and the help
+// Space in ChooseMountToRemoveLaser. A mount holding the sold laser's type is freed (WithLaserCleared), and the help
 // text redrawn. Returns whether it was; otherwise it says why. "Wrong laser type!" jumps back into the message code the other
-// message runs on into (653D to 6509).
+// message runs on into.
 bool RemoveLaserFromMount(GameState& _state)
 {
   const LaserMounts mounts = CurrentMounts(_state);
@@ -406,7 +406,7 @@ bool RemoveLaserFromMount(GameState& _state)
 // Space's work on the selected mount, for one of the two mount choosers: true once it is done.
 using MountSpace = bool (*)(GameState&);
 
-// 63B5-6448 and 6482-6515, one loop at two addresses: the box moved by the steering's roll or the arrow keys until Space does
+// One loop, in two copies: the box moved by the steering's roll or the arrow keys until Space does
 // its work (_space), from the box at _start.
 [[nodiscard]] Task<void> RunMountChooser(GameState& _state, Host& _host, MountSpace _space, std::uint16_t _start)
 {
@@ -623,7 +623,7 @@ bool SelectLaserType(GameState& _state)
   std::uint16_t row = StartMenu(_state).row;
   for (;;)
   {
-    // 612F: the steering; then the keys.
+    // The steering; then the keys.
     row = SteerMenuCursor(_state, _host, row);
     for (;;)
     {

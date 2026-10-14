@@ -172,7 +172,7 @@ void DrawBeam(GameState& _state, std::uint8_t _x, std::uint16_t _target)
   DrawLine(_state, Low(_target), High(_target), _x, BEAM_ROW);
 }
 
-// The crosshairs' test on one axis (8A7C, 8A93): |the view coordinate _axis of _slot| * 256 over its view z, below _radius.
+// The crosshairs' test on one axis: |the view coordinate _axis of _slot| * 256 over its view z, below _radius.
 [[nodiscard]] bool ScaledWithinRadius(const SpaceObject& _slot, ObjectWord _axis, std::uint16_t _radius)
 {
   std::uint16_t magnitude = _slot.*_axis;
@@ -185,7 +185,7 @@ void DrawBeam(GameState& _state, std::uint8_t _x, std::uint16_t _target)
   return DivideWord(dividend, _slot.viewZ).quotient < _radius;
 }
 
-// 8BE5: _tenths shown (ShowBountyMessage) and added to the credits (AddCredits); then, while a mis-jump's countdown runs, the
+// _tenths shown (ShowBountyMessage) and added to the credits (AddCredits); then, while a mis-jump's countdown runs, the
 // kill of a Thargon or a Thargoid counts it down by 5 or 35, the SUB written before the 1 written over a borrow or a 0, and
 // at 1 the Nav-Comp's repair is announced.
 void PayBounty(GameState& _state, const SpaceObject& _slot, std::uint16_t _tenths)
@@ -217,7 +217,7 @@ void PayBounty(GameState& _state, const SpaceObject& _slot, std::uint16_t _tenth
   _state.Data().messages.messageFrames = REPAIR_MESSAGE_FRAMES;
 }
 
-// The fragments of an exploding object: from 4FEE, _count of them, at least one, each a Splinter in a debris slot copied from _object
+// The fragments of an exploding object: _count of them, at least one, each a Splinter in a debris slot copied from _object
 // (CopyObject), its velocity halved and scattered by a random -15..16 on each axis (halved again for an asteroid the mining laser hit), and
 // run for a frame, or for eleven when the station explodes. PUSH CX and POP CX keep the count round each.
 void SpawnFragments(GameState& _state, const SpaceObject& _object, std::uint16_t _count)
@@ -279,7 +279,7 @@ void SpawnFragments(GameState& _state, const SpaceObject& _object, std::uint16_t
   }
 }
 
-// DropCargo (5099), the tail ExplodeObject ends in: the barrels _object leaves, one when it carries the device, else a random byte /
+// DropCargo, the tail ExplodeObject ends in: the barrels _object leaves, one when it carries the device, else a random byte /
 // (255 / (cargo + 1) + 1), its first divide by 0 into the game's trap for a cargo of FFh. Each barrel goes in a free ship slot, copied
 // from _object (CopyObject), with a random heading, its velocity set and moved; once no slot is free, none is for the rest.
 void DropCargo(GameState& _state, const SpaceObject& _object)
@@ -323,7 +323,7 @@ void DropCargo(GameState& _state, const SpaceObject& _object)
   }
 }
 
-// 8B63: _target destroyed by the player's laser: credited (CreditKill), a missile locked on it unlocked
+// _target destroyed by the player's laser: credited (CreditKill), a missile locked on it unlocked
 // (CheckMissileTargetDestroyed), and exploded (ExplodeObject); then the beams, and the laser's flags cleared.
 void DestroyTarget(GameState& _state, Host& _host, SpaceObject& _target)
 {
@@ -335,7 +335,7 @@ void DestroyTarget(GameState& _state, Host& _host, SpaceObject& _target)
   _state.Data().playerShip.laserFiring = 0;
 }
 
-// From 8AD2: the player's laser hits _target, which is marked hostile, with the impact's sound; the damage is the
+// The player's laser hits _target, which is marked hostile, with the impact's sound; the damage is the
 // laser's type + 1, and a mining laser marks an asteroid mined. A station's hit cancels the docking computer and is a crime of
 // 28h, added to legalStatus up to FFh, or in an invasion does half the damage, rounded up (NEG AL / SAR AL,1 / NEG AL). The
 // damage goes on the aggression, up to FFh, and off the energy, each written and then FFh or nothing over it. Returns whether
@@ -987,7 +987,7 @@ std::optional<SlotIndex> LaunchShipFromObject(GameState& _state, const SpaceObje
   {
     return std::nullopt;
   }
-  // Any other DL launches nothing (CS:536C). The original also takes 15h, an escape pod (CS:5386), and 5, a Krait (CS:53B5), which
+  // Any other DL launches nothing. The original also takes 15h, an escape pod, and 5, a Krait, which
   // no caller passes: those branches were deleted with InitEscapePod and InitKraitHunter (D22).
   if (_kind != MISSILE_LAUNCH && _kind != THARGON_LAUNCH)
   {
@@ -1093,7 +1093,7 @@ ThargoidTest Routine8C51(const SpaceObject& _slot)
 
 void UseMaskingDevice(GameState& _state)
 {
-  // SUB, then 0 written over it on a borrow: two writes (8ECF, 8ED6).
+  // SUB, then 0 written over it on a borrow: two writes.
   const std::uint16_t energy = _state.Data().playerShip.playerEnergy;
   _state.Data().playerShip.playerEnergy = static_cast<std::uint16_t>(energy - MASKING_ENERGY);
   if (energy < MASKING_ENERGY)

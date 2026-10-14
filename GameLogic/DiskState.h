@@ -11,7 +11,7 @@ namespace Elite
 /// the GameState holds it in GameData.
 struct DiskState
 {
-  /// set by CriticalErrorInterrupt (0x02F6) and PerformDiskRequest's error path (0x03A2), cleared by Start (0x0078) before each operation
+  /// set by CriticalErrorInterrupt and PerformDiskRequest's error path, cleared by Start before each operation
   std::uint8_t diskError;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.

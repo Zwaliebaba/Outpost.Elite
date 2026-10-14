@@ -14,443 +14,431 @@ namespace Elite
 namespace
 {
 
-/// economyNames (DS:7C0C): each pointer's text, up to its NUL.
+/// economyNames: each pointer's text, up to its NUL.
 constexpr std::array<std::string_view, 8> ECONOMY_NAMES = {
-  std::string_view{"Poor Agricultural"},    // DS:7C2B
-  std::string_view{"Average Agricultural"}, // DS:7C3D
-  std::string_view{"Rich Agricultural"},    // DS:7C52
-  std::string_view{"Mainly Agricultural"},  // DS:7C64
-  std::string_view{"Mainly Industrial"},    // DS:7C78
-  std::string_view{"Poor Industrial"},      // DS:7C8A
-  std::string_view{"Average Industrial"},   // DS:7C9A
-  std::string_view{"Rich Industrial"},      // DS:7CAD
+  std::string_view{"Poor Agricultural"},    // [0]
+  std::string_view{"Average Agricultural"}, // [1]
+  std::string_view{"Rich Agricultural"},    // [2]
+  std::string_view{"Mainly Agricultural"},  // [3]
+  std::string_view{"Mainly Industrial"},    // [4]
+  std::string_view{"Poor Industrial"},      // [5]
+  std::string_view{"Average Industrial"},   // [6]
+  std::string_view{"Rich Industrial"},      // [7]
 };
 
-/// governmentNames (DS:7CBD): each pointer's text, up to its NUL.
+/// governmentNames: each pointer's text, up to its NUL.
 constexpr std::array<std::string_view, 8> GOVERNMENT_NAMES = {
-  std::string_view{"Anarchy"},          // DS:7CDC
-  std::string_view{"Feudal"},           // DS:7CE4
-  std::string_view{"Multi-Government"}, // DS:7CEB
-  std::string_view{"Dictatorship"},     // DS:7CFC
-  std::string_view{"Communist"},        // DS:7D09
-  std::string_view{"Confederacy"},      // DS:7D13
-  std::string_view{"Democracy"},        // DS:7D1F
-  std::string_view{"Corporate State"},  // DS:7D29
+  std::string_view{"Anarchy"},          // [0]
+  std::string_view{"Feudal"},           // [1]
+  std::string_view{"Multi-Government"}, // [2]
+  std::string_view{"Dictatorship"},     // [3]
+  std::string_view{"Communist"},        // [4]
+  std::string_view{"Confederacy"},      // [5]
+  std::string_view{"Democracy"},        // [6]
+  std::string_view{"Corporate State"},  // [7]
 };
 
-/// speciesSizeNames (DS:7D9E): each pointer's text, up to its NUL.
+/// speciesSizeNames: each pointer's text, up to its NUL.
 constexpr std::array<std::string_view, 8> SPECIES_SIZE_NAMES = {
-  std::string_view{"Large "},  // DS:7DAE
-  std::string_view{"Fierce "}, // DS:7DB5
-  std::string_view{"Small "},  // DS:7DBD
-  std::string_view{},          // DS:7DC4
-  std::string_view{},          // DS:7DC4
-  std::string_view{},          // DS:7DC4
-  std::string_view{},          // DS:7DC4
-  std::string_view{},          // DS:7DC4
+  std::string_view{"Large "},  // [0]
+  std::string_view{"Fierce "}, // [1]
+  std::string_view{"Small "},  // [2]
+  std::string_view{},          // [3]
+  std::string_view{},          // [4]
+  std::string_view{},          // [5]
+  std::string_view{},          // [6]
+  std::string_view{},          // [7]
 };
 
-/// speciesColorNames (DS:7DC5): each pointer's text, up to its NUL.
+/// speciesColorNames: each pointer's text, up to its NUL.
 constexpr std::array<std::string_view, 8> SPECIES_COLOR_NAMES = {
-  std::string_view{"Green "},    // DS:7DD5
-  std::string_view{"Red "},      // DS:7DDC
-  std::string_view{"Yellow "},   // DS:7DE1
-  std::string_view{"Blue "},     // DS:7DE9
-  std::string_view{"Black "},    // DS:7DEF
-  std::string_view{"Harmless "}, // DS:7DF6
-  std::string_view{},            // DS:7E00
-  std::string_view{},            // DS:7E00
+  std::string_view{"Green "},    // [0]
+  std::string_view{"Red "},      // [1]
+  std::string_view{"Yellow "},   // [2]
+  std::string_view{"Blue "},     // [3]
+  std::string_view{"Black "},    // [4]
+  std::string_view{"Harmless "}, // [5]
+  std::string_view{},            // [6]
+  std::string_view{},            // [7]
 };
 
-/// speciesTraitNames (DS:7E01): each pointer's text, up to its NUL.
+/// speciesTraitNames: each pointer's text, up to its NUL.
 constexpr std::array<std::string_view, 8> SPECIES_TRAIT_NAMES = {
-  std::string_view{"Slimy "},    // DS:7E11
-  std::string_view{"Bug-Eyed "}, // DS:7E18
-  std::string_view{"Horned "},   // DS:7E22
-  std::string_view{"Bony "},     // DS:7E2A
-  std::string_view{"Fat "},      // DS:7E30
-  std::string_view{"Furry "},    // DS:7E35
-  std::string_view{},            // DS:7E3C
-  std::string_view{},            // DS:7E3C
+  std::string_view{"Slimy "},    // [0]
+  std::string_view{"Bug-Eyed "}, // [1]
+  std::string_view{"Horned "},   // [2]
+  std::string_view{"Bony "},     // [3]
+  std::string_view{"Fat "},      // [4]
+  std::string_view{"Furry "},    // [5]
+  std::string_view{},            // [6]
+  std::string_view{},            // [7]
 };
 
-/// speciesTypeNames (DS:7E3D): each pointer's text, up to its NUL.
+/// speciesTypeNames: each pointer's text, up to its NUL.
 constexpr std::array<std::string_view, 8> SPECIES_TYPE_NAMES = {
-  std::string_view{"Rodents)"},   // DS:7E4D
-  std::string_view{"Frogs)"},     // DS:7E56
-  std::string_view{"Lizards)"},   // DS:7E5D
-  std::string_view{"Lobsters)"},  // DS:7E66
-  std::string_view{"Birds)"},     // DS:7E70
-  std::string_view{"Humanoids)"}, // DS:7E77
-  std::string_view{"Felines)"},   // DS:7E82
-  std::string_view{"Insects)"},   // DS:7E8B
+  std::string_view{"Rodents)"},   // [0]
+  std::string_view{"Frogs)"},     // [1]
+  std::string_view{"Lizards)"},   // [2]
+  std::string_view{"Lobsters)"},  // [3]
+  std::string_view{"Birds)"},     // [4]
+  std::string_view{"Humanoids)"}, // [5]
+  std::string_view{"Felines)"},   // [6]
+  std::string_view{"Insects)"},   // [7]
 };
 
-/// DS:7C1C
 constexpr std::string_view ECONOMY_LABEL_TEXT = "Economy:      ";
 
-/// DS:7CCD
 constexpr std::string_view GOVERNMENT_LABEL_TEXT = "Government:   ";
 
-/// DS:7D39
 constexpr std::string_view TECH_LEVEL_LABEL_TEXT = "Tech. Level:  ";
 
-/// DS:7D4B
 constexpr std::string_view DISTANCE_LABEL_TEXT = "Distance:     ";
 
-/// DS:7D61
 constexpr std::string_view LIGHT_YEARS_TEXT = " Light Years";
 
-/// DS:7D6E
 constexpr std::string_view POPULATION_LABEL_TEXT = "Population:   ";
 
-/// DS:7D82
 constexpr std::string_view POPULATION_UNIT_TEXT = " Billion";
 
-/// DS:7D8B
 constexpr std::string_view SPECIES_OPEN_TEXT = "(";
 
-/// DS:7D8D
 constexpr std::string_view HUMAN_COLONIALS_TEXT = "Human Colonials)";
 
-/// DS:7E94
 constexpr std::string_view PRODUCTIVITY_LABEL_TEXT = "Productivity: ";
 
-/// DS:7EA8
 constexpr std::string_view PRODUCTIVITY_UNIT_TEXT = " M CR";
 
-/// DS:7EC0
 constexpr std::string_view RADIUS_UNIT_TEXT = " km";
 
 /// Every phrase descriptionPhraseLists' lists point at, in the order of their addresses: its text up to its NUL, which
 /// may hold the control codes (1-31) and phrase codes (80h on) ExpandDescriptionText expands.
 inline constexpr std::array<std::string_view, 195> DESCRIPTION_PHRASES = {
-  std::string_view{"fabled "},                                          // 0 DS:97C7
-  std::string_view{"notable "},                                         // 1 DS:97CF
-  std::string_view{"well known "},                                      // 2 DS:97D8
-  std::string_view{"famous "},                                          // 3 DS:97E4
-  std::string_view{"noted "},                                           // 4 DS:97EC
-  std::string_view{"very "},                                            // 5 DS:97FD
-  std::string_view{"mildly "},                                          // 6 DS:9803
-  std::string_view{"most "},                                            // 7 DS:980B
-  std::string_view{"reasonably "},                                      // 8 DS:9811
-  std::string_view{},                                                   // 9 DS:981D
-  std::string_view{"ancient "},                                         // 10 DS:9828
-  std::string_view{"\227"},                                             // 11 DS:9831
-  std::string_view{"great "},                                           // 12 DS:9833
-  std::string_view{"vast "},                                            // 13 DS:983A
-  std::string_view{"pink "},                                            // 14 DS:9840
-  std::string_view{"\005\234 \233\006plantations "},                    // 15 DS:9850
-  std::string_view{"mountains "},                                       // 16 DS:9862
-  std::string_view{"\232"},                                             // 17 DS:986D
-  std::string_view{"\245forests "},                                     // 18 DS:986F
-  std::string_view{"oceans "},                                          // 19 DS:9879
-  std::string_view{"\246"},                                             // 20 DS:988B
-  std::string_view{"mountain "},                                        // 21 DS:988D
-  std::string_view{"edible "},                                          // 22 DS:9897
-  std::string_view{"tree "},                                            // 23 DS:989F
-  std::string_view{"spotted "},                                         // 24 DS:98A5
-  std::string_view{"\235"},                                             // 25 DS:98B8
-  std::string_view{"\236"},                                             // 26 DS:98BA
-  std::string_view{"\206\004oid "},                                     // 27 DS:98BC
-  std::string_view{"\244"},                                             // 28 DS:98C3
-  std::string_view{"\243"},                                             // 29 DS:98C5
-  std::string_view{"walking \215"},                                     // 30 DS:98D1
-  std::string_view{"crab "},                                            // 31 DS:98DB
-  std::string_view{"bat "},                                             // 32 DS:98E1
-  std::string_view{"lobst "},                                           // 33 DS:98E6
-  std::string_view{"\003"},                                             // 34 DS:98ED
-  std::string_view{"ancient "},                                         // 35 DS:98F9
-  std::string_view{"exceptional "},                                     // 36 DS:9902
-  std::string_view{"eccentric "},                                       // 37 DS:990F
-  std::string_view{"ingrained "},                                       // 38 DS:991A
-  std::string_view{"\227"},                                             // 39 DS:9925
-  std::string_view{"shyness "},                                         // 40 DS:9931
-  std::string_view{"silliness "},                                       // 41 DS:993A
-  std::string_view{"mating traditions "},                               // 42 DS:9945
-  std::string_view{"loathing of \211"},                                 // 43 DS:9958
-  std::string_view{"love for \211"},                                    // 44 DS:9966
-  std::string_view{"food blenders "},                                   // 45 DS:997B
-  std::string_view{"tourists "},                                        // 46 DS:998A
-  std::string_view{"poetry "},                                          // 47 DS:9994
-  std::string_view{"discos "},                                          // 48 DS:999C
-  std::string_view{"\221"},                                             // 49 DS:99A4
-  std::string_view{"its \202\203"},                                     // 50 DS:99B0
-  std::string_view{"the \002\204\205"},                                 // 51 DS:99B7
-  std::string_view{"its inhabitants' \207\210"},                        // 52 DS:99BF
-  std::string_view{"\237\006"},                                         // 53 DS:99D3
-  std::string_view{"its \220\221"},                                     // 54 DS:99D6
-  std::string_view{"beset "},                                           // 55 DS:99E7
-  std::string_view{"plagued "},                                         // 56 DS:99EE
-  std::string_view{"ravaged "},                                         // 57 DS:99F7
-  std::string_view{"cursed "},                                          // 58 DS:9A00
-  std::string_view{"scourged "},                                        // 59 DS:9A08
-  std::string_view{"\226civil war "},                                   // 60 DS:9A1C
-  std::string_view{"\215\204\205\004s "},                               // 61 DS:9A28
-  std::string_view{"a \215disease "},                                   // 62 DS:9A2F
-  std::string_view{"\226earth quakes "},                                // 63 DS:9A3B
-  std::string_view{"\226solar activity "},                              // 64 DS:9A4A
-  std::string_view{"killer "},                                          // 65 DS:9A65
-  std::string_view{"deadly "},                                          // 66 DS:9A6D
-  std::string_view{"evil "},                                            // 67 DS:9A75
-  std::string_view{"lethal "},                                          // 68 DS:9A7B
-  std::string_view{"vicious "},                                         // 69 DS:9A83
-  std::string_view{"juice "},                                           // 70 DS:9A96
-  std::string_view{"brandy "},                                          // 71 DS:9A9D
-  std::string_view{"water "},                                           // 72 DS:9AA5
-  std::string_view{"brew "},                                            // 73 DS:9AAC
-  std::string_view{"gargle blasters "},                                 // 74 DS:9AB2
-  std::string_view{"\003"},                                             // 75 DS:9ACD
-  std::string_view{"\002\205"},                                         // 76 DS:9ACF
-  std::string_view{"\002\003"},                                         // 77 DS:9AD2
-  std::string_view{"\002\215"},                                         // 78 DS:9AD5
-  std::string_view{"\215\003"},                                         // 79 DS:9AD8
-  std::string_view{"fabulous "},                                        // 80 DS:9AE5
-  std::string_view{"exotic "},                                          // 81 DS:9AEF
-  std::string_view{"hoopy "},                                           // 82 DS:9AF7
-  std::string_view{"unusual "},                                         // 83 DS:9AFE
-  std::string_view{"exciting "},                                        // 84 DS:9B07
-  std::string_view{"cuisine "},                                         // 85 DS:9B1B
-  std::string_view{"night life "},                                      // 86 DS:9B24
-  std::string_view{"casinos "},                                         // 87 DS:9B30
-  std::string_view{"sit coms "},                                        // 88 DS:9B39
-  std::string_view{"\237\006"},                                         // 89 DS:9B43
-  std::string_view{"\001"},                                             // 90 DS:9B50
-  std::string_view{"The planet \001"},                                  // 91 DS:9B52
-  std::string_view{"The world \001"},                                   // 92 DS:9B5F
-  std::string_view{"This planet "},                                     // 93 DS:9B6B
-  std::string_view{"This world "},                                      // 94 DS:9B78
-  std::string_view{"\201\200for \212"},                                 // 95 DS:9B8E
-  std::string_view{"\201\200for \212and \212"},                         // 96 DS:9B96
-  std::string_view{"\213by \214"},                                      // 97 DS:9BA3
-  std::string_view{"\201\200for \212but \213by \214"},                  // 98 DS:9BA9
-  std::string_view{"a \224\225"},                                       // 99 DS:9BBA
-  std::string_view{"\004n unremarkable "},                              // 100 DS:9BC9
-  std::string_view{"boring "},                                          // 101 DS:9BDA
-  std::string_view{"dull "},                                            // 102 DS:9BE2
-  std::string_view{"tedious "},                                         // 103 DS:9BE8
-  std::string_view{"revolting "},                                       // 104 DS:9BF1
-  std::string_view{"planet "},                                          // 105 DS:9C06
-  std::string_view{"world "},                                           // 106 DS:9C0E
-  std::string_view{"place "},                                           // 107 DS:9C15
-  std::string_view{"little planet "},                                   // 108 DS:9C1C
-  std::string_view{"dump "},                                            // 109 DS:9C2B
-  std::string_view{"frequent "},                                        // 110 DS:9C3B
-  std::string_view{"occasional "},                                      // 111 DS:9C45
-  std::string_view{"unpredictable "},                                   // 112 DS:9C51
-  std::string_view{"dreadful "},                                        // 113 DS:9C60
-  std::string_view{"deadly "},                                          // 114 DS:9C6A
-  std::string_view{"funny "},                                           // 115 DS:9C7C
-  std::string_view{"wierd "},                                           // 116 DS:9C83
-  std::string_view{"unusual "},                                         // 117 DS:9C8A
-  std::string_view{"strange "},                                         // 118 DS:9C93
-  std::string_view{"peculiar "},                                        // 119 DS:9C9C
-  std::string_view{"son of a bitch "},                                  // 120 DS:9CB0
-  std::string_view{"scoundrel "},                                       // 121 DS:9CC0
-  std::string_view{"blackguard "},                                      // 122 DS:9CCB
-  std::string_view{"rogue "},                                           // 123 DS:9CD7
-  std::string_view{"whoreson beetle headed flap ear'd knave "},         // 124 DS:9CDE
-  std::string_view{"I hear a \227looking ship appeared at Errius"},     // 125 DS:9D11
-  std::string_view{"Yeah, I hear a \227ship left Errius a while back"}, // 126 DS:9D3B
-  std::string_view{"Get your iron ass over to Errius"},                 // 127 DS:9D69
-  std::string_view{"Some \230new ship was seen at Errius"},             // 128 DS:9D8A
-  std::string_view{"Try Errius"},                                       // 129 DS:9DAC
-  std::string_view{"parking meters "},                                  // 130 DS:9DC1
-  std::string_view{"dust clouds "},                                     // 131 DS:9DD1
-  std::string_view{"ice bergs "},                                       // 132 DS:9DDE
-  std::string_view{"rock formations "},                                 // 133 DS:9DE9
-  std::string_view{"volcanoes "},                                       // 134 DS:9DFA
-  std::string_view{"plant "},                                           // 135 DS:9E0F
-  std::string_view{"tulip "},                                           // 136 DS:9E16
-  std::string_view{"banana "},                                          // 137 DS:9E1D
-  std::string_view{"corn "},                                            // 138 DS:9E25
-  std::string_view{"weed "},                                            // 139 DS:9E2B
-  std::string_view{"\003"},                                             // 140 DS:9E3B
-  std::string_view{"\002\003"},                                         // 141 DS:9E3D
-  std::string_view{"\002\215"},                                         // 142 DS:9E40
-  std::string_view{"inhabitant "},                                      // 143 DS:9E43
-  std::string_view{"\002\003"},                                         // 144 DS:9E4F
-  std::string_view{"shrew "},                                           // 145 DS:9E5C
-  std::string_view{"beast "},                                           // 146 DS:9E63
-  std::string_view{"bison "},                                           // 147 DS:9E6A
-  std::string_view{"snake "},                                           // 148 DS:9E71
-  std::string_view{"wolf "},                                            // 149 DS:9E78
-  std::string_view{"leopard "},                                         // 150 DS:9E88
-  std::string_view{"cat "},                                             // 151 DS:9E91
-  std::string_view{"monkey "},                                          // 152 DS:9E96
-  std::string_view{"goat "},                                            // 153 DS:9E9E
-  std::string_view{"fish "},                                            // 154 DS:9EA4
-  std::string_view{"\005\217\216"},                                     // 155 DS:9EB4
-  std::string_view{"\002\005\235\240"},                                 // 156 DS:9EB8
-  std::string_view{"its \005\220\236\240"},                             // 157 DS:9EBD
-  std::string_view{"\241\242"},                                         // 158 DS:9EC6
-  std::string_view{"\005\217\216"},                                     // 159 DS:9EC9
-  std::string_view{"meat "},                                            // 160 DS:9ED7
-  std::string_view{"cutlet "},                                          // 161 DS:9EDD
-  std::string_view{"steak "},                                           // 162 DS:9EE5
-  std::string_view{"burgers "},                                         // 163 DS:9EEC
-  std::string_view{"soup "},                                            // 164 DS:9EF5
-  std::string_view{"ice "},                                             // 165 DS:9F05
-  std::string_view{"mud "},                                             // 166 DS:9F0A
-  std::string_view{"zero-G "},                                          // 167 DS:9F0F
-  std::string_view{"vacuum "},                                          // 168 DS:9F17
-  std::string_view{"\002ultra "},                                       // 169 DS:9F1F
-  std::string_view{"hockey "},                                          // 170 DS:9F31
-  std::string_view{"cricket "},                                         // 171 DS:9F39
-  std::string_view{"karate "},                                          // 172 DS:9F42
-  std::string_view{"polo "},                                            // 173 DS:9F4A
-  std::string_view{"tennis "},                                          // 174 DS:9F50
-  std::string_view{"wasp "},                                            // 175 DS:9F62
-  std::string_view{"moth "},                                            // 176 DS:9F68
-  std::string_view{"grub "},                                            // 177 DS:9F6E
-  std::string_view{"ant "},                                             // 178 DS:9F74
-  std::string_view{"\003"},                                             // 179 DS:9F79
-  std::string_view{"poet "},                                            // 180 DS:9F85
-  std::string_view{"arts graduate "},                                   // 181 DS:9F8B
-  std::string_view{"yak "},                                             // 182 DS:9F9A
-  std::string_view{"snail "},                                           // 183 DS:9F9F
-  std::string_view{"slug "},                                            // 184 DS:9FA6
-  std::string_view{"dense "},                                           // 185 DS:9FB6
-  std::string_view{"lush "},                                            // 186 DS:9FBD
-  std::string_view{"rain "},                                            // 187 DS:9FC3
-  std::string_view{"bamboo "},                                          // 188 DS:9FC9
-  std::string_view{"deciduous "},                                       // 189 DS:9FD1
-  std::string_view{"green "},                                           // 190 DS:9FE6
-  std::string_view{"black "},                                           // 191 DS:9FED
-  std::string_view{"yellow stripey "},                                  // 192 DS:9FF4
-  std::string_view{"pinky grey "},                                      // 193 DS:A004
-  std::string_view{"white "},                                           // 194 DS:A010
+  std::string_view{"fabled "},                                          // 0
+  std::string_view{"notable "},                                         // 1
+  std::string_view{"well known "},                                      // 2
+  std::string_view{"famous "},                                          // 3
+  std::string_view{"noted "},                                           // 4
+  std::string_view{"very "},                                            // 5
+  std::string_view{"mildly "},                                          // 6
+  std::string_view{"most "},                                            // 7
+  std::string_view{"reasonably "},                                      // 8
+  std::string_view{},                                                   // 9
+  std::string_view{"ancient "},                                         // 10
+  std::string_view{"\227"},                                             // 11
+  std::string_view{"great "},                                           // 12
+  std::string_view{"vast "},                                            // 13
+  std::string_view{"pink "},                                            // 14
+  std::string_view{"\005\234 \233\006plantations "},                    // 15
+  std::string_view{"mountains "},                                       // 16
+  std::string_view{"\232"},                                             // 17
+  std::string_view{"\245forests "},                                     // 18
+  std::string_view{"oceans "},                                          // 19
+  std::string_view{"\246"},                                             // 20
+  std::string_view{"mountain "},                                        // 21
+  std::string_view{"edible "},                                          // 22
+  std::string_view{"tree "},                                            // 23
+  std::string_view{"spotted "},                                         // 24
+  std::string_view{"\235"},                                             // 25
+  std::string_view{"\236"},                                             // 26
+  std::string_view{"\206\004oid "},                                     // 27
+  std::string_view{"\244"},                                             // 28
+  std::string_view{"\243"},                                             // 29
+  std::string_view{"walking \215"},                                     // 30
+  std::string_view{"crab "},                                            // 31
+  std::string_view{"bat "},                                             // 32
+  std::string_view{"lobst "},                                           // 33
+  std::string_view{"\003"},                                             // 34
+  std::string_view{"ancient "},                                         // 35
+  std::string_view{"exceptional "},                                     // 36
+  std::string_view{"eccentric "},                                       // 37
+  std::string_view{"ingrained "},                                       // 38
+  std::string_view{"\227"},                                             // 39
+  std::string_view{"shyness "},                                         // 40
+  std::string_view{"silliness "},                                       // 41
+  std::string_view{"mating traditions "},                               // 42
+  std::string_view{"loathing of \211"},                                 // 43
+  std::string_view{"love for \211"},                                    // 44
+  std::string_view{"food blenders "},                                   // 45
+  std::string_view{"tourists "},                                        // 46
+  std::string_view{"poetry "},                                          // 47
+  std::string_view{"discos "},                                          // 48
+  std::string_view{"\221"},                                             // 49
+  std::string_view{"its \202\203"},                                     // 50
+  std::string_view{"the \002\204\205"},                                 // 51
+  std::string_view{"its inhabitants' \207\210"},                        // 52
+  std::string_view{"\237\006"},                                         // 53
+  std::string_view{"its \220\221"},                                     // 54
+  std::string_view{"beset "},                                           // 55
+  std::string_view{"plagued "},                                         // 56
+  std::string_view{"ravaged "},                                         // 57
+  std::string_view{"cursed "},                                          // 58
+  std::string_view{"scourged "},                                        // 59
+  std::string_view{"\226civil war "},                                   // 60
+  std::string_view{"\215\204\205\004s "},                               // 61
+  std::string_view{"a \215disease "},                                   // 62
+  std::string_view{"\226earth quakes "},                                // 63
+  std::string_view{"\226solar activity "},                              // 64
+  std::string_view{"killer "},                                          // 65
+  std::string_view{"deadly "},                                          // 66
+  std::string_view{"evil "},                                            // 67
+  std::string_view{"lethal "},                                          // 68
+  std::string_view{"vicious "},                                         // 69
+  std::string_view{"juice "},                                           // 70
+  std::string_view{"brandy "},                                          // 71
+  std::string_view{"water "},                                           // 72
+  std::string_view{"brew "},                                            // 73
+  std::string_view{"gargle blasters "},                                 // 74
+  std::string_view{"\003"},                                             // 75
+  std::string_view{"\002\205"},                                         // 76
+  std::string_view{"\002\003"},                                         // 77
+  std::string_view{"\002\215"},                                         // 78
+  std::string_view{"\215\003"},                                         // 79
+  std::string_view{"fabulous "},                                        // 80
+  std::string_view{"exotic "},                                          // 81
+  std::string_view{"hoopy "},                                           // 82
+  std::string_view{"unusual "},                                         // 83
+  std::string_view{"exciting "},                                        // 84
+  std::string_view{"cuisine "},                                         // 85
+  std::string_view{"night life "},                                      // 86
+  std::string_view{"casinos "},                                         // 87
+  std::string_view{"sit coms "},                                        // 88
+  std::string_view{"\237\006"},                                         // 89
+  std::string_view{"\001"},                                             // 90
+  std::string_view{"The planet \001"},                                  // 91
+  std::string_view{"The world \001"},                                   // 92
+  std::string_view{"This planet "},                                     // 93
+  std::string_view{"This world "},                                      // 94
+  std::string_view{"\201\200for \212"},                                 // 95
+  std::string_view{"\201\200for \212and \212"},                         // 96
+  std::string_view{"\213by \214"},                                      // 97
+  std::string_view{"\201\200for \212but \213by \214"},                  // 98
+  std::string_view{"a \224\225"},                                       // 99
+  std::string_view{"\004n unremarkable "},                              // 100
+  std::string_view{"boring "},                                          // 101
+  std::string_view{"dull "},                                            // 102
+  std::string_view{"tedious "},                                         // 103
+  std::string_view{"revolting "},                                       // 104
+  std::string_view{"planet "},                                          // 105
+  std::string_view{"world "},                                           // 106
+  std::string_view{"place "},                                           // 107
+  std::string_view{"little planet "},                                   // 108
+  std::string_view{"dump "},                                            // 109
+  std::string_view{"frequent "},                                        // 110
+  std::string_view{"occasional "},                                      // 111
+  std::string_view{"unpredictable "},                                   // 112
+  std::string_view{"dreadful "},                                        // 113
+  std::string_view{"deadly "},                                          // 114
+  std::string_view{"funny "},                                           // 115
+  std::string_view{"wierd "},                                           // 116
+  std::string_view{"unusual "},                                         // 117
+  std::string_view{"strange "},                                         // 118
+  std::string_view{"peculiar "},                                        // 119
+  std::string_view{"son of a bitch "},                                  // 120
+  std::string_view{"scoundrel "},                                       // 121
+  std::string_view{"blackguard "},                                      // 122
+  std::string_view{"rogue "},                                           // 123
+  std::string_view{"whoreson beetle headed flap ear'd knave "},         // 124
+  std::string_view{"I hear a \227looking ship appeared at Errius"},     // 125
+  std::string_view{"Yeah, I hear a \227ship left Errius a while back"}, // 126
+  std::string_view{"Get your iron ass over to Errius"},                 // 127
+  std::string_view{"Some \230new ship was seen at Errius"},             // 128
+  std::string_view{"Try Errius"},                                       // 129
+  std::string_view{"parking meters "},                                  // 130
+  std::string_view{"dust clouds "},                                     // 131
+  std::string_view{"ice bergs "},                                       // 132
+  std::string_view{"rock formations "},                                 // 133
+  std::string_view{"volcanoes "},                                       // 134
+  std::string_view{"plant "},                                           // 135
+  std::string_view{"tulip "},                                           // 136
+  std::string_view{"banana "},                                          // 137
+  std::string_view{"corn "},                                            // 138
+  std::string_view{"weed "},                                            // 139
+  std::string_view{"\003"},                                             // 140
+  std::string_view{"\002\003"},                                         // 141
+  std::string_view{"\002\215"},                                         // 142
+  std::string_view{"inhabitant "},                                      // 143
+  std::string_view{"\002\003"},                                         // 144
+  std::string_view{"shrew "},                                           // 145
+  std::string_view{"beast "},                                           // 146
+  std::string_view{"bison "},                                           // 147
+  std::string_view{"snake "},                                           // 148
+  std::string_view{"wolf "},                                            // 149
+  std::string_view{"leopard "},                                         // 150
+  std::string_view{"cat "},                                             // 151
+  std::string_view{"monkey "},                                          // 152
+  std::string_view{"goat "},                                            // 153
+  std::string_view{"fish "},                                            // 154
+  std::string_view{"\005\217\216"},                                     // 155
+  std::string_view{"\002\005\235\240"},                                 // 156
+  std::string_view{"its \005\220\236\240"},                             // 157
+  std::string_view{"\241\242"},                                         // 158
+  std::string_view{"\005\217\216"},                                     // 159
+  std::string_view{"meat "},                                            // 160
+  std::string_view{"cutlet "},                                          // 161
+  std::string_view{"steak "},                                           // 162
+  std::string_view{"burgers "},                                         // 163
+  std::string_view{"soup "},                                            // 164
+  std::string_view{"ice "},                                             // 165
+  std::string_view{"mud "},                                             // 166
+  std::string_view{"zero-G "},                                          // 167
+  std::string_view{"vacuum "},                                          // 168
+  std::string_view{"\002ultra "},                                       // 169
+  std::string_view{"hockey "},                                          // 170
+  std::string_view{"cricket "},                                         // 171
+  std::string_view{"karate "},                                          // 172
+  std::string_view{"polo "},                                            // 173
+  std::string_view{"tennis "},                                          // 174
+  std::string_view{"wasp "},                                            // 175
+  std::string_view{"moth "},                                            // 176
+  std::string_view{"grub "},                                            // 177
+  std::string_view{"ant "},                                             // 178
+  std::string_view{"\003"},                                             // 179
+  std::string_view{"poet "},                                            // 180
+  std::string_view{"arts graduate "},                                   // 181
+  std::string_view{"yak "},                                             // 182
+  std::string_view{"snail "},                                           // 183
+  std::string_view{"slug "},                                            // 184
+  std::string_view{"dense "},                                           // 185
+  std::string_view{"lush "},                                            // 186
+  std::string_view{"rain "},                                            // 187
+  std::string_view{"bamboo "},                                          // 188
+  std::string_view{"deciduous "},                                       // 189
+  std::string_view{"green "},                                           // 190
+  std::string_view{"black "},                                           // 191
+  std::string_view{"yellow stripey "},                                  // 192
+  std::string_view{"pinky grey "},                                      // 193
+  std::string_view{"white "},                                           // 194
 };
 
-/// descriptionPhraseLists (DS:976F): for each phrase code from 80h, the five phrases it picks from, as
+/// descriptionPhraseLists: for each phrase code from 80h, the five phrases it picks from, as
 /// indexes into DESCRIPTION_PHRASES.
 inline constexpr std::array<std::array<std::uint8_t, 5>, 39> DESCRIPTION_PHRASE_LISTS = {{
-  {0, 1, 2, 3, 4},           // 80h DS:97BD
-  {5, 6, 7, 8, 9},           // 81h DS:97F3
-  {10, 11, 12, 13, 14},      // 82h DS:981E
-  {15, 16, 17, 18, 19},      // 83h DS:9846
-  {20, 21, 22, 23, 24},      // 84h DS:9881
-  {25, 26, 27, 28, 29},      // 85h DS:98AE
-  {30, 31, 32, 33, 34},      // 86h DS:98C7
-  {35, 36, 37, 38, 39},      // 87h DS:98EF
-  {40, 41, 42, 43, 44},      // 88h DS:9927
-  {45, 46, 47, 48, 49},      // 89h DS:9971
-  {50, 51, 52, 53, 54},      // 8Ah DS:99A6
-  {55, 56, 57, 58, 59},      // 8Bh DS:99DD
-  {60, 61, 62, 63, 64},      // 8Ch DS:9A12
-  {65, 66, 67, 68, 69},      // 8Dh DS:9A5B
-  {70, 71, 72, 73, 74},      // 8Eh DS:9A8C
-  {75, 76, 77, 78, 79},      // 8Fh DS:9AC3
-  {80, 81, 82, 83, 84},      // 90h DS:9ADB
-  {85, 86, 87, 88, 89},      // 91h DS:9B11
-  {90, 91, 92, 93, 94},      // 92h DS:9B46
-  {95, 96, 97, 98, 99},      // 93h DS:9B84
-  {100, 101, 102, 103, 104}, // 94h DS:9BBF
-  {105, 106, 107, 108, 109}, // 95h DS:9BFC
-  {110, 111, 112, 113, 114}, // 96h DS:9C31
-  {115, 116, 117, 118, 119}, // 97h DS:9C72
-  {120, 121, 122, 123, 124}, // 98h DS:9CA6
-  {125, 126, 127, 128, 129}, // 99h DS:9D07
-  {130, 131, 132, 133, 134}, // 9Ah DS:9DB7
-  {135, 136, 137, 138, 139}, // 9Bh DS:9E05
-  {140, 141, 142, 143, 144}, // 9Ch DS:9E31
-  {145, 146, 147, 148, 149}, // 9Dh DS:9E52
-  {150, 151, 152, 153, 154}, // 9Eh DS:9E7E
-  {155, 156, 157, 158, 159}, // 9Fh DS:9EAA
-  {160, 161, 162, 163, 164}, // A0h DS:9ECD
-  {165, 166, 167, 168, 169}, // A1h DS:9EFB
-  {170, 171, 172, 173, 174}, // A2h DS:9F27
-  {175, 176, 177, 178, 179}, // A3h DS:9F58
-  {180, 181, 182, 183, 184}, // A4h DS:9F7B
-  {185, 186, 187, 188, 189}, // A5h DS:9FAC
-  {190, 191, 192, 193, 194}, // A6h DS:9FDC
+  {0, 1, 2, 3, 4},           // 80h
+  {5, 6, 7, 8, 9},           // 81h
+  {10, 11, 12, 13, 14},      // 82h
+  {15, 16, 17, 18, 19},      // 83h
+  {20, 21, 22, 23, 24},      // 84h
+  {25, 26, 27, 28, 29},      // 85h
+  {30, 31, 32, 33, 34},      // 86h
+  {35, 36, 37, 38, 39},      // 87h
+  {40, 41, 42, 43, 44},      // 88h
+  {45, 46, 47, 48, 49},      // 89h
+  {50, 51, 52, 53, 54},      // 8Ah
+  {55, 56, 57, 58, 59},      // 8Bh
+  {60, 61, 62, 63, 64},      // 8Ch
+  {65, 66, 67, 68, 69},      // 8Dh
+  {70, 71, 72, 73, 74},      // 8Eh
+  {75, 76, 77, 78, 79},      // 8Fh
+  {80, 81, 82, 83, 84},      // 90h
+  {85, 86, 87, 88, 89},      // 91h
+  {90, 91, 92, 93, 94},      // 92h
+  {95, 96, 97, 98, 99},      // 93h
+  {100, 101, 102, 103, 104}, // 94h
+  {105, 106, 107, 108, 109}, // 95h
+  {110, 111, 112, 113, 114}, // 96h
+  {115, 116, 117, 118, 119}, // 97h
+  {120, 121, 122, 123, 124}, // 98h
+  {125, 126, 127, 128, 129}, // 99h
+  {130, 131, 132, 133, 134}, // 9Ah
+  {135, 136, 137, 138, 139}, // 9Bh
+  {140, 141, 142, 143, 144}, // 9Ch
+  {145, 146, 147, 148, 149}, // 9Dh
+  {150, 151, 152, 153, 154}, // 9Eh
+  {155, 156, 157, 158, 159}, // 9Fh
+  {160, 161, 162, 163, 164}, // A0h
+  {165, 166, 167, 168, 169}, // A1h
+  {170, 171, 172, 173, 174}, // A2h
+  {175, 176, 177, 178, 179}, // A3h
+  {180, 181, 182, 183, 184}, // A4h
+  {185, 186, 187, 188, 189}, // A5h
+  {190, 191, 192, 193, 194}, // A6h
 }};
 
-/// galaxySeeds (DS:2976 in 1987): 6-byte seed; system 0 of each galaxy; the first is 5A4A 0248 B753
+/// galaxySeeds: 6-byte seed; system 0 of each galaxy; the first is 5A4A 0248 B753
 constexpr std::array<std::array<std::uint8_t, 6>, 8> GALAXY_SEEDS = {{
-  {0x4A, 0x5A, 0x48, 0x02, 0x53, 0xB7}, // DS:2976
-  {0x94, 0xB4, 0x90, 0x04, 0xA6, 0x6F}, // DS:297C
-  {0x29, 0x69, 0x21, 0x08, 0x4D, 0xDE}, // DS:2982
-  {0x52, 0xD2, 0x42, 0x10, 0x9A, 0xBD}, // DS:2988
-  {0xA4, 0xA5, 0x84, 0x20, 0x35, 0x7B}, // DS:298E
-  {0x49, 0x4B, 0x09, 0x40, 0x6A, 0xF6}, // DS:2994
-  {0x92, 0x96, 0x12, 0x80, 0xD4, 0xED}, // DS:299A
-  {0x25, 0x2D, 0x24, 0x01, 0xA9, 0xDB}, // DS:29A0
+  {0x4A, 0x5A, 0x48, 0x02, 0x53, 0xB7}, // [0]
+  {0x94, 0xB4, 0x90, 0x04, 0xA6, 0x6F}, // [1]
+  {0x29, 0x69, 0x21, 0x08, 0x4D, 0xDE}, // [2]
+  {0x52, 0xD2, 0x42, 0x10, 0x9A, 0xBD}, // [3]
+  {0xA4, 0xA5, 0x84, 0x20, 0x35, 0x7B}, // [4]
+  {0x49, 0x4B, 0x09, 0x40, 0x6A, 0xF6}, // [5]
+  {0x92, 0x96, 0x12, 0x80, 0xD4, 0xED}, // [6]
+  {0x25, 0x2D, 0x24, 0x01, 0xA9, 0xDB}, // [7]
 }};
 
-/// blankChartLine (DS:29C8 in 1987): 27 spaces and a NUL; ClearChartTextLines prints it twice
+/// blankChartLine: 27 spaces and a NUL; ClearChartTextLines prints it twice
 constexpr std::string_view BLANK_CHART_LINE = "                           ";
 
-/// nameLinePadding (DS:29FB in 1987): 12 spaces printed after a system name
+/// nameLinePadding: 12 spaces printed after a system name
 constexpr std::string_view NAME_LINE_PADDING = "            ";
 
-/// findPrompt (DS:2A08 in 1987): 'FIND: Which System ?'
+/// findPrompt: 'FIND: Which System ?'
 constexpr std::string_view FIND_PROMPT = "FIND: Which System ?";
 
-/// systemNameDigrams (DS:2A1D in 1987): 2 characters; entry 0 is two spaces, which add nothing
+/// systemNameDigrams: 2 characters; entry 0 is two spaces, which add nothing
 constexpr std::array<std::array<std::uint8_t, 2>, 32> SYSTEM_NAME_DIGRAMS = {{
-  {0x20, 0x20}, // DS:2A1D
-  {0x4C, 0x45}, // DS:2A1F
-  {0x58, 0x45}, // DS:2A21
-  {0x47, 0x45}, // DS:2A23
-  {0x5A, 0x41}, // DS:2A25
-  {0x43, 0x45}, // DS:2A27
-  {0x42, 0x49}, // DS:2A29
-  {0x53, 0x4F}, // DS:2A2B
-  {0x55, 0x53}, // DS:2A2D
-  {0x45, 0x53}, // DS:2A2F
-  {0x41, 0x52}, // DS:2A31
-  {0x4D, 0x41}, // DS:2A33
-  {0x49, 0x4E}, // DS:2A35
-  {0x44, 0x49}, // DS:2A37
-  {0x52, 0x45}, // DS:2A39
-  {0x41, 0x20}, // DS:2A3B
-  {0x45, 0x52}, // DS:2A3D
-  {0x41, 0x54}, // DS:2A3F
-  {0x45, 0x4E}, // DS:2A41
-  {0x42, 0x45}, // DS:2A43
-  {0x52, 0x41}, // DS:2A45
-  {0x4C, 0x41}, // DS:2A47
-  {0x56, 0x45}, // DS:2A49
-  {0x54, 0x49}, // DS:2A4B
-  {0x45, 0x44}, // DS:2A4D
-  {0x4F, 0x52}, // DS:2A4F
-  {0x51, 0x55}, // DS:2A51
-  {0x41, 0x4E}, // DS:2A53
-  {0x54, 0x45}, // DS:2A55
-  {0x49, 0x53}, // DS:2A57
-  {0x52, 0x49}, // DS:2A59
-  {0x4F, 0x4E}, // DS:2A5B
+  {0x20, 0x20}, // [0]
+  {0x4C, 0x45}, // [1]
+  {0x58, 0x45}, // [2]
+  {0x47, 0x45}, // [3]
+  {0x5A, 0x41}, // [4]
+  {0x43, 0x45}, // [5]
+  {0x42, 0x49}, // [6]
+  {0x53, 0x4F}, // [7]
+  {0x55, 0x53}, // [8]
+  {0x45, 0x53}, // [9]
+  {0x41, 0x52}, // [10]
+  {0x4D, 0x41}, // [11]
+  {0x49, 0x4E}, // [12]
+  {0x44, 0x49}, // [13]
+  {0x52, 0x45}, // [14]
+  {0x41, 0x20}, // [15]
+  {0x45, 0x52}, // [16]
+  {0x41, 0x54}, // [17]
+  {0x45, 0x4E}, // [18]
+  {0x42, 0x45}, // [19]
+  {0x52, 0x41}, // [20]
+  {0x4C, 0x41}, // [21]
+  {0x56, 0x45}, // [22]
+  {0x54, 0x49}, // [23]
+  {0x45, 0x44}, // [24]
+  {0x4F, 0x52}, // [25]
+  {0x51, 0x55}, // [26]
+  {0x41, 0x4E}, // [27]
+  {0x54, 0x45}, // [28]
+  {0x49, 0x53}, // [29]
+  {0x52, 0x49}, // [30]
+  {0x4F, 0x4E}, // [31]
 }};
 
-/// shortRangeChartTitle (DS:2A5D in 1987): 'SHORT RANGE CHART'
+/// shortRangeChartTitle: 'SHORT RANGE CHART'
 constexpr std::string_view SHORT_RANGE_CHART_TITLE = "SHORT RANGE CHART";
 
-/// galacticChartTitle (DS:2A6F in 1987): 'GALACTIC CHART ' then galacticChartNumber
+/// galacticChartTitle: 'GALACTIC CHART ' then galacticChartNumber
 constexpr std::string_view GALACTIC_CHART_TITLE{"GALACTIC CHART ", 15};
 
-/// galacticChartTitleEnd (DS:2A7F in 1987): the space and the NUL that end the galactic chart's title after galacticChartNumber (change 3c
+/// galacticChartTitleEnd: the space and the NUL that end the galactic chart's title after galacticChartNumber (change 3c
 /// names it)
 constexpr std::string_view GALACTIC_CHART_TITLE_END = " ";
 
-/// findErrorPrefix (DS:2A81 in 1987): 'ERROR: '
+/// findErrorPrefix: 'ERROR: '
 constexpr std::string_view FIND_ERROR_PREFIX = "ERROR: ";
 
-/// findErrorSuffix (DS:2A89 in 1987): ' not on map!'
+/// findErrorSuffix: ' not on map!'
 constexpr std::string_view FIND_ERROR_SUFFIX = " not on map!";
 
-/// systemDataFrame (DS:7B89 in 1987): frame bytes, then "DATA ON "
+/// systemDataFrame: frame bytes, then "DATA ON "
 constexpr std::string_view SYSTEM_DATA_FRAME = "\033\037DATA ON ";
 
-/// radiusLabel (DS:7EAE in 1987): 'Radius (Av): ', which runs on into radiusDigits (change 3c names it)
+/// radiusLabel: 'Radius (Av): ', which runs on into radiusDigits (change 3c names it)
 constexpr std::string_view RADIUS_LABEL{"Radius (Av): ", 13};
 
-/// descriptionTemplate (DS:965A in 1987): code 6, phrase 0x92, "is ", phrase 0x93, code 4, "."
+/// descriptionTemplate: code 6, phrase 0x92, "is ", phrase 0x93, code 4, "."
 constexpr std::string_view DESCRIPTION_TEMPLATE = "\006\222is \223\004.";
 
-/// adjectiveSuffix (DS:A024 in 1987): ian
+/// adjectiveSuffix: ian
 constexpr std::array<std::uint8_t, 5> ADJECTIVE_SUFFIX = {
-  0x69, 0x61, 0x6E, 0x20, 0x00, // DS:A024
+  0x69, 0x61, 0x6E, 0x20, 0x00, // [0]
 };
 
 } // namespace

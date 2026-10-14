@@ -12,15 +12,15 @@ namespace Elite
 /// their order there; the GameState holds it in GameData.
 struct PlayerShipState
 {
-  /// set to 1 when an ECM goes off: NPC (0x566E) or the player's E key with ecmFitted (0x82AD); read and cleared at 0x257D, which picks...
+  /// set to 1 when an ECM goes off: NPC or the player's E key with ecmFitted; read and cleared, which picks...
   std::uint8_t ecmFired;
   /// the sun's apparent radius from DrawSunOrPlanet; CheckTemperatureWarning at >= 0xE1
   std::uint8_t cabinTemperature;
-  /// 2*min(127, 255 - planet radius) from DrawSunOrPlanet; 0xFF at launch (29D0); CheckAltitudeWarning below 0x32
+  /// 2*min(127, 255 - planet radius) from DrawSunOrPlanet; 0xFF at launch; CheckAltitudeWarning below 0x32
   std::uint8_t altitude;
-  /// drawn on the top dashboard bar (2614, cell 368Ch, the FORE-SHIELD row); ApplyEnemyLaserHit takes 15 off it
+  /// drawn on the top dashboard bar (cell 368Ch, the FORE-SHIELD row); ApplyEnemyLaserHit takes 15 off it
   std::uint8_t foreShield;
-  /// drawn on the AFT-SHIELD bar (2623, cell 37CCh)
+  /// drawn on the AFT-SHIELD bar (cell 37CCh)
   std::uint8_t aftShield;
   /// 0-3FFh; DrainEnergy, UseMaskingDevice and ApplyEnemyLaserHit take from it, below 0 sets playerDead; CheckEnergyWarning below 0x100;...
   std::uint16_t playerEnergy;
@@ -36,11 +36,11 @@ struct PlayerShipState
   std::uint16_t playerRollAngle;
   /// set by UpdateMissileAi; CheckMissileWarning clears it
   std::uint8_t incomingMissileAlert;
-  /// signed -23..+23: the input code adds to it with clamping (0x79F9) and the steering code stores it (0x84CC, 0x86DF and later); drawn...
+  /// signed -23..+23: the input code adds to it with clamping and the steering code stores it; drawn...
   std::uint16_t rollRate;
   /// set by ReadScanCode when D (20h) is released while inFlight; ProcessFlightKeys then toggles the docking computer if fitted; cleared...
   std::uint8_t dockingKeyReleased;
-  /// 80 when the capsule launches (2F14); TickEscapePod counts it down and ends RunFlight; also suppresses enemy fire; while non-zero Ki...
+  /// 80 when the capsule launches; TickEscapePod counts it down and ends RunFlight; also suppresses enemy fire; while non-zero Ki...
   std::uint8_t escapePodFrames;
   /// 1 while the docking computer flies the ship (UpdatePlayerMotion calls RunDockingComputer)
   std::uint8_t dockingComputerOn;

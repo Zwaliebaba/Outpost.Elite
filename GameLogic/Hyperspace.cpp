@@ -83,8 +83,8 @@ constexpr std::uint16_t COUNTDOWN_MESSAGE_FRAMES = 10;
   return _jumps == FIRST_MISSION_JUMPS ? FIRST_MISSION : _jumps == SECOND_MISSION_JUMPS ? SECOND_MISSION : THIRD_MISSION;
 }
 
-// NextRandom made an offset of 200h-3FFh, negated when the number's top bit is set (CS:2B69, CS:2B7C: mov dh,ah; shl dh,1
-// leaves that bit in CF). Nothing reads the DH it leaves: ArriveInSystem's CWD (CS:2B8E) loads DX next.
+// NextRandom made an offset of 200h-3FFh, negated when the number's top bit is set (mov dh,ah; shl dh,1
+// leaves that bit in CF). Nothing reads the DH it leaves: ArriveInSystem's CWD loads DX next.
 [[nodiscard]] std::uint16_t RandomArrivalOffset(GameState& _state)
 {
   const std::uint16_t random = NextRandom(_state);
@@ -92,7 +92,7 @@ constexpr std::uint16_t COUNTDOWN_MESSAGE_FRAMES = 10;
   return (random & 0x8000) != 0 ? Negate(offset) : offset;
 }
 
-// GalacticJump (0x485B), which CompleteHyperspaceJump jumps to and which jumps back to 0x4733: the next galaxy, the ninth now
+// GalacticJump, which CompleteHyperspaceJump jumps to and which jumps back to the shared tail: the next galaxy, the ninth now
 // and then after the eighth, and the system nearest a random point of its galactic chart selected (FindNearestSystem, then
 // SelectSystemAtCursor).
 void GalacticJump(GameState& _state)
@@ -244,7 +244,7 @@ MassLock IsMassLocked(GameState& _state)
   if (_state.Data().jump.galacticJumpPending == 1)
   {
     GalacticJump(_state);
-    // JMP 4733h, back into the shared tail below.
+    // Back into the shared tail below.
   }
   else
   {
@@ -258,7 +258,7 @@ MassLock IsMassLocked(GameState& _state)
     }
   }
 
-  // 0x4733: the destination becomes the current system, its whole record, which the original copies a byte at a time.
+  // the destination becomes the current system, its whole record, which the original copies a byte at a time.
   _state.Data().commander.selectedSystem.distanceTenthsLy = 0;
   const bool galactic = _state.Data().jump.galacticJumpPending == 1;
   _state.Data().commander.currentSystem = galactic ? _state.Data().commander.selectedSystem : _state.Data().hyperspace.hyperspaceTarget;

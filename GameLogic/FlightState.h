@@ -56,7 +56,7 @@ struct FlightState
   std::uint8_t laserTemperature;
   /// 1 green, 3 yellow, 2 red, 0 flashing red; written by UpdateConditionColor
   std::uint8_t conditionColor;
-  /// first of the 22 dashboard cache bytes DS:4222-4237 that InvalidateDashboard sets to 0x80
+  /// first of the 22 dashboard cache bytes that InvalidateDashboard sets to 0x80
   std::uint8_t missileCountShown;
   /// dashboard cache of missileState
   std::uint8_t missileLockShown;
@@ -88,11 +88,11 @@ struct FlightState
   std::uint8_t conditionColorShown;
   /// dashboard cache
   std::uint8_t speedShown;
-  /// 1 after a successful dock (0x2C4F), 0 at 0x2A11; ShowCommanderStatusScreen debriefs only when it is 1
+  /// 1 after a successful dock, 0; ShowCommanderStatusScreen debriefs only when it is 1
   std::uint8_t playerDocked;
   /// bit 0: inside the station's safe zone (UpdateSafeZone)
   std::uint8_t safeZoneFlags;
-  /// currentSystem.government on arrival (0x2B56), 0 in witch space (0x2A51); spawn limits and the station handler use it
+  /// currentSystem.government on arrival, 0 in witch space; spawn limits and the station handler use it
   std::uint8_t spawnGovernment;
   /// text of the active warning
   Message warningMessage;
@@ -104,7 +104,7 @@ struct FlightState
   std::uint8_t debrisSlotCount;
   /// UpdateCompass; TransformAndDrawObjects classifies the station only when 1
   std::uint8_t compassTargetIsStation;
-  /// selectedSystem.distanceTenthsLy*36/10 (at least 1), set when H starts the countdown; taken from fuel on arrival (4720)
+  /// selectedSystem.distanceTenthsLy*36/10 (at least 1), set when H starts the countdown; taken from fuel on arrival
   std::uint8_t hyperspaceFuelCost;
   /// negated new pitch angle while UpdatePlayerMotion re-derives the orientation
   std::uint16_t pitchAngleScratch;
@@ -114,7 +114,7 @@ struct FlightState
   std::uint8_t jumpDriveEngaged;
   /// slot the missile is locked on
   SlotIndex missileTarget;
-  /// laser type (0-3) for this view, from GetViewLaser; damage is type + 1; set at 0x8297 when fire is pressed; DrawLaserBeams picks its...
+  /// laser type (0-3) for this view, from GetViewLaser; damage is type + 1; set when fire is pressed; DrawLaserBeams picks its...
   std::uint8_t firingLaserType;
   /// toggled on each frame a type-0 laser is fired; that type fires only on alternate frames
   std::uint8_t laserAlternateFrame;
@@ -134,13 +134,13 @@ struct FlightState
   std::uint8_t reverseXAndY;
   /// pause option S, 'Sound Toggle', 1 in the file; TimerTick does nothing more when it is 0
   std::uint8_t soundEnabled;
-  /// toggled by 'L' (0x8379, 0x838C) when antiEcmEmulatorFitted; at 1 the station starts no ECM
+  /// toggled by 'L' when antiEcmEmulatorFitted; at 1 the station starts no ECM
   std::uint8_t antiEcmActive;
   /// TimerTick plays nothing while it is 1
   std::uint8_t gamePaused;
   /// 50 in the file, which is F7's choice, though the label in the file reads (F8) (40 ms); the shortest a frame may take
   std::uint8_t minimumFrameMs;
-  /// set on a 500/65536 chance at launch (Missile Jammed... Can't Launch!); M then fails until reset at 2A33
+  /// set on a 500/65536 chance at launch (Missile Jammed... Can't Launch!); M then fails until SetUpLocalSpace resets it
   std::uint8_t missileJammed;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.

@@ -29,7 +29,7 @@ constexpr std::string_view COMMANDER_FILE_EXTENSION = ".CDR"; // as the store ke
 
 // ---- The disc menu ----
 
-// ".CDR" and its NUL, which PromptCommanderFileName appends to a name: DS:8697 in 1987, a text no symbol starts and nothing
+// ".CDR" and its NUL, which PromptCommanderFileName appends to a name: a text no symbol starts and nothing
 // writes, whose bytes the 1987 image held there.
 constexpr std::array<std::uint8_t, 5> COMMANDER_EXTENSION = {'.', 'C', 'D', 'R', 0};
 
@@ -157,7 +157,7 @@ void ClampLoadedCommander(GameState& _state)
   commander.creditBalanceText[NUL] = 0;
 }
 
-// LoadCommanderFile (0x031A): only a file with no attributes, read whole into commanderBlock, and then held to what the game
+// LoadCommanderFile: only a file with no attributes, read whole into commanderBlock, and then held to what the game
 // writes (D43).
 void LoadCommanderFile(GameState& _state, FileStore& _files)
 {
@@ -181,7 +181,7 @@ void LoadCommanderFile(GameState& _state, FileStore& _files)
   ClampLoadedCommander(_state);
 }
 
-// SaveCommanderFile (0x0358): commanderBlock written to a new file, stamped _stamp, whose attributes are then cleared.
+// SaveCommanderFile: commanderBlock written to a new file, stamped _stamp, whose attributes are then cleared.
 void SaveCommanderFile(GameState& _state, FileStore& _files, const FileStamp& _stamp)
 {
   std::unique_ptr<OpenFile> file;
@@ -203,7 +203,7 @@ void SaveCommanderFile(GameState& _state, FileStore& _files, const FileStamp& _s
   }
 }
 
-// ListCommanderFiles (0x03A8): the names of up to 40 .CDR files with no attributes, without their extension, into
+// ListCommanderFiles: the names of up to 40 .CDR files with no attributes, without their extension, into
 // commanderFileList, in the order of their names.
 void ListCommanderFiles(GameState& _state, FileStore& _files)
 {
@@ -235,7 +235,7 @@ void ListCommanderFiles(GameState& _state, FileStore& _files)
   }
 }
 
-// DeleteCommanderFile (0x03F2).
+// DeleteCommanderFile.
 void DeleteCommanderFile(GameState& _state, FileStore& _files)
 {
   if (_files.Delete(CommanderFileName(_state)) != DosError::None)
@@ -279,14 +279,14 @@ std::uint16_t PrintAt(GameState& _state, std::string_view _text, std::uint16_t _
   }
 }
 
-// The two help rows blanked (CS:6664 and CS:671F).
+// The two help rows blanked.
 void BlankHelpRows(GameState& _state)
 {
   PrintAt(_state, BLANK_LINE_TEXT, HELP_POSITION);
   PrintAt(_state, BLANK_LINE_TEXT, SECOND_HELP_POSITION);
 }
 
-// LeaveGameLoopForDisk (CS:7E90): diskOperation=_operation, and resumeAtDiskMenu=1, so that the menu shows what Start's disk
+// LeaveGameLoopForDisk: diskOperation=_operation, and resumeAtDiskMenu=1, so that the menu shows what Start's disk
 // work came to when it runs again. The two POP AX between its writes, which drop the return address of the call it is in and the
 // one under it, so that its RET takes GameLoop's back to Start, are its callers' return (DiscMenuExit::leaves): they read the stack
 // and write no memory, so the writes keep the original's order.
@@ -303,7 +303,7 @@ DiscMenuExit LeaveGameLoopForDisk(GameState& _state, std::uint8_t _operation)
   return _state.Data().saveLoad.inputDevice == MOUSE_DEVICE ? MOUSE_DEVICE_NAME : KEYBOARD_DEVICE_NAME;
 }
 
-// ShowControlDevice (CS:6705): "DEVICE:" and the input device's name, and the help rows blanked.
+// ShowControlDevice: "DEVICE:" and the input device's name, and the help rows blanked.
 void ShowControlDevice(GameState& _state)
 {
   const std::uint16_t label = PrintAt(_state, DEVICE_TEXT, STATUS_POSITION);
@@ -311,13 +311,13 @@ void ShowControlDevice(GameState& _state)
   BlankHelpRows(_state);
 }
 
-// RejectFileName (CS:68AD), after a bad name: "FILENAME ERROR", and the jump back to the menu's keys.
+// RejectFileName, after a bad name: "FILENAME ERROR", and the jump back to the menu's keys.
 void RejectFileName(GameState& _state)
 {
   PrintAt(_state, FILE_NAME_ERROR_TEXT, STATUS_POSITION);
 }
 
-// The disc menu's keys: DiscControlKeyLoop (CS:665E), or ShowControlDevice before it when _showDevice; and everything they run
+// The disc menu's keys: DiscControlKeyLoop, or ShowControlDevice before it when _showDevice; and everything they run
 // until the menu is left.
 [[nodiscard]] Task<DiscMenuExit> RunDiscControlKeys(GameState& _state, Host& _host, bool _showDevice)
 {
@@ -390,7 +390,7 @@ void RejectFileName(GameState& _state)
   }
 }
 
-// What the disk operation Start did came to (CS:67E7): LOADED:, SAVED:, DELETED: and the name, or CATALOGUED and the catalogue;
+// What the disk operation Start did came to: LOADED:, SAVED:, DELETED: and the name, or CATALOGUED and the catalogue;
 // a loaded name becomes the default.
 void ShowDiskResult(GameState& _state)
 {

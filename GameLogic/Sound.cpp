@@ -21,7 +21,7 @@ constexpr std::uint8_t BEEP_TICKS = 70;
 constexpr std::uint8_t LOW_BEEP_TICKS = 70;
 constexpr std::uint8_t NOISE_BURST_TICKS = 100;
 
-// BeginSweep (CS:7ADD), the tail every sweep starter shares. Returns the step length it starts the step
+// BeginSweep, the tail every sweep starter shares. Returns the step length it starts the step
 // counter at, which the original leaves in AL.
 [[nodiscard]] std::uint8_t BeginSweep(GameState& _state)
 {
@@ -31,7 +31,7 @@ constexpr std::uint8_t NOISE_BURST_TICKS = 100;
   return stepLength;
 }
 
-// StartImpactSound and StartExplosionSound: the step length and its shrink, then BeginNoiseSweep (CS:7ACE). Entered
+// StartImpactSound and StartExplosionSound: the step length and its shrink, then BeginNoiseSweep. Entered
 // under CLI, which native code does not need: nothing interrupts it. Returns the step length, as BeginSweep does.
 std::uint8_t StartNoiseSweep(GameState& _state, std::uint8_t _stepLength, std::uint8_t _stepShrink)
 {

@@ -11,7 +11,7 @@ namespace Elite
 /// data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct SceneState
 {
-  /// written by DrawVisibleFaces (0x3B38) from faceFillPatterns, read by DrawStackedSpansFromRow (0x1CDD): low byte on even rows, high b...
+  /// written by DrawVisibleFaces from faceFillPatterns, read by DrawStackedSpansFromRow: low byte on even rows, high b...
   std::uint16_t triangleFillPattern;
   /// 42 vertices of three words, x, y and z, in view space, 34-41 the box's corners BuildBoxCornerVertices writes; ProjectVertices
   /// projects the first projectedVertexCount in place into points of two words, x and y
@@ -20,7 +20,7 @@ struct SceneState
   std::uint16_t projectedVertexCount;
   /// blueprint byte +2 (RunBlueprintHandler); 15 to 200; BuildDodoVertices ignores it
   std::uint16_t boxHalfWidth;
-  /// object +0x0A for the blueprint handler (0x3E5A)
+  /// object +0x0A for the blueprint handler
   std::uint16_t drawPitchAngle;
   /// object +0x0C
   std::uint16_t drawYawAngle;

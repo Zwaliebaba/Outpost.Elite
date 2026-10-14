@@ -68,7 +68,7 @@ constexpr std::uint16_t TUNNEL_EDGES = 4;
 constexpr std::uint8_t VIEW_CENTER_X = 0x80;
 constexpr std::uint8_t VIEW_CENTER_ROW = 0x40;
 constexpr std::uint16_t VIEW_ROW_BYTES = 0x40;
-constexpr std::uint16_t VIEW_BUFFER_BYTES = 0x2000; // the buffer at DS:0000, rows 0-127
+constexpr std::uint16_t VIEW_BUFFER_BYTES = 0x2000; // the buffer, rows 0-127
 constexpr std::uint16_t VIEW_LAST_WORD = VIEW_BUFFER_BYTES - 2;
 
 constexpr std::uint16_t HALF_TURN = 0x400; // in 2048ths
@@ -83,7 +83,7 @@ constexpr std::uint8_t SHIP_TYPE_MASK = 0x1F; // of the slot's first byte, shift
   return static_cast<std::uint16_t>((row << 8) | x);
 }
 
-// The space view's buffer at DS:0000, 128 rows of 64 bytes: the drawing buffer (DrawingBuffer).
+// The space view's buffer, 128 rows of 64 bytes: the drawing buffer (DrawingBuffer).
 static_assert(VIEW_BUFFER_BYTES == DRAWING_BUFFER_BYTES);
 [[nodiscard]] std::span<std::uint8_t> ViewBuffer(GameState& _state)
 {
@@ -123,7 +123,7 @@ std::uint16_t Store(GameState& _state, std::uint16_t _offset, std::uint16_t _cou
   return std::span<const std::uint8_t>(TUNNEL_RECTANGLES).subspan(_rectangle * TUNNEL_RECTANGLE_BYTES, TUNNEL_RECTANGLE_BYTES);
 }
 
-// _count of tunnelRectangles from _first, each by DrawTunnelRectangle in the tunnel's colour, in the LOOP at CS:2DA1 or CS:2DEE.
+// _count of tunnelRectangles from _first, each by DrawTunnelRectangle in the tunnel's colour, in the LOOP.
 void DrawTunnelRectangles(GameState& _state, std::size_t _first, std::uint16_t _count)
 {
   std::size_t next = _first;
@@ -206,7 +206,7 @@ void SlowDown(GameState& _state)
   return static_cast<std::int16_t>(Sar(static_cast<std::uint16_t>(_value), 2));
 }
 
-// States 1 and 5 (CS:8652, CS:8803): dockingTargetAngle, the roll that brings the target (the approach point, or the
+// States 1 and 5: dockingTargetAngle, the roll that brings the target (the approach point, or the
 // station) into the pitch plane, whichever of up or down is nearer; then on to state _next.
 void AimRoll(GameState& _state, bool _approach, std::uint8_t _next)
 {
@@ -252,7 +252,7 @@ void RollToTarget(GameState& _state, std::uint8_t _next)
   Steer(_state, Join(0, (turn & ANGLE_SIGN) != 0 ? Negate(ROLL_STEP) : ROLL_STEP));
 }
 
-// States 3 and 7 (CS:86E3, CS:8890): pitch towards the target by _step a frame, or by half the angle once within
+// States 3 and 7: pitch towards the target by _step a frame, or by half the angle once within
 // _tolerance; the second time that happens, on to state _next at speed 4, else back to state _again.
 void PitchToTarget(GameState& _state, bool _approach, std::uint16_t _tolerance, std::uint8_t _step, std::uint8_t _again, std::uint8_t _next)
 {
@@ -288,7 +288,7 @@ void PitchToTarget(GameState& _state, bool _approach, std::uint16_t _tolerance, 
   return DivideSignedWord(dividend, _frames).quotient;
 }
 
-// State 4 (CS:8762): fly straight to the approach point, faster while 350 or more away (SpeedUp, SlowDown), at the velocity
+// State 4: fly straight to the approach point, faster while 350 or more away (SpeedUp, SlowDown), at the velocity
 // that gets there in the frames left, the distance over the speed: XOR DX,DX / DIV playerSpeed, a speed of 0 dividing into the
 // game's trap. On the last frame there, the ship stops on it and goes on to state 5.
 // MoveObjectsByVelocity moves the world either way.
@@ -325,7 +325,7 @@ void FlyToApproachPoint(GameState& _state)
   MoveObjectsByVelocity(_state);
 }
 
-// State 8 (CS:8904): straight in along z, slowing within 1000, until within 650: then the front view, locked, and the spin is
+// State 8: straight in along z, slowing within 1000, until within 650: then the front view, locked, and the spin is
 // matched next.
 void CloseIn(GameState& _state)
 {
@@ -356,7 +356,7 @@ void CloseIn(GameState& _state)
   _state.Data().playerShip.velocityDirty = 1;
 }
 
-// The station's spin angle plus _turn, negated for a Dodo (IsStation's CF) (CS:8980, CS:89B9, CS:89EA).
+// The station's spin angle plus _turn, negated for a Dodo (IsStation's CF).
 [[nodiscard]] std::uint16_t LoadStationSpin(GameState& _state, std::uint16_t _turn)
 {
   const SpaceObject& station = _state.Slot(SlotIndex::Station);
@@ -364,7 +364,7 @@ void CloseIn(GameState& _state)
   return IsStation(station).dodo ? Negate(spin) : spin;
 }
 
-// State 9 (CS:8976): inside, matching the station's spin: MoveObjectsByVelocity, then to state 10 once the roll is within 11
+// State 9: inside, matching the station's spin: MoveObjectsByVelocity, then to state 10 once the roll is within 11
 // of the spin (AngleWithinTolerance), or to 11 once it is within 11 of it turned half round.
 void MatchSpin(GameState& _state)
 {
@@ -382,7 +382,7 @@ void MatchSpin(GameState& _state)
   }
 }
 
-// States 10 and 11 (CS:89AF, CS:89E0): MoveObjectsByVelocity, then the roll steered by half its difference from the station's
+// States 10 and 11: MoveObjectsByVelocity, then the roll steered by half its difference from the station's
 // spin plus _turn, negated as a byte: NEG AL / XOR AH,AH.
 void RollWithSpin(GameState& _state, std::uint16_t _turn)
 {
@@ -442,7 +442,7 @@ bool CheckDockingAlignment(const GameState& _state, const SpaceObject& _station,
 
 void MaskOutsideTunnel(GameState& _state, std::size_t _rectangle)
 {
-  // The margins: x/4 bytes either side, and the rows above and below the rectangle, in the space-view buffer at DS:0000,
+  // The margins: x/4 bytes either side, and the rows above and below the rectangle, in the space-view buffer,
   // through ES = DS.
   const std::span<const std::uint8_t> corner = TunnelRectangle(_rectangle);
   const auto sideBytes = static_cast<std::uint16_t>(static_cast<std::uint8_t>(corner[0] + VIEW_CENTER_X) >> 2);

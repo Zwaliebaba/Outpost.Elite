@@ -15,7 +15,7 @@ struct InputState
   std::uint8_t keyBuffer[16];
   /// next write address in keyBuffer
   std::uint16_t keyBufferWrite;
-  /// next read address in keyBuffer; GetKey advances it, ResetKeyboard resets it to DS:A0B0
+  /// next read address in keyBuffer; GetKey advances it, ResetKeyboard resets it
   std::uint16_t keyBufferRead;
   /// keys waiting in keyBuffer; ReadScanCode drops a key when it reaches 16
   std::uint8_t keyBufferCount;

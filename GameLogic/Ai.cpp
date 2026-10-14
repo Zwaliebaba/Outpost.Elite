@@ -179,7 +179,7 @@ struct SpawnLimit
   return FindFreeShipSlot(_state);
 }
 
-// SpawnByGovernment (4A86): spawnOddsOffset and spawnLimitOffset the government, where the original holds the offsets of its
+// SpawnByGovernment: spawnOddsOffset and spawnLimitOffset the government, where the original holds the offsets of its
 // rows, then a drifter, a trader, a hunter and a
 // wolf, each while its class is below the government's limit and a random word is below its odds, in a free slot; outside
 // anarchies a wolf needs a random word below 1C2h too. In witch space only a wolf, at no odds. A spawner that finds no free
@@ -267,7 +267,7 @@ std::optional<SlotIndex> SpawnMaskMissionShipInFreeSlot(GameState& _state, bool 
   return free.slot;
 }
 
-// SpawnMaskMissionShips (4B73): with no wolves about, the mask ship, its slot kept in maskShipSlot, and two escorts placed near
+// SpawnMaskMissionShips: with no wolves about, the mask ship, its slot kept in maskShipSlot, and two escorts placed near
 // it (PlaceEscortNear); with one or two, one more mission ship, which becomes the mask ship, an Asp, when none carries the
 // device. Nothing once the mask ship is destroyed, or with three wolves or more.
 void SpawnMaskMissionShips(GameState& _state)
@@ -313,7 +313,7 @@ void SpawnMaskMissionShips(GameState& _state)
   ship.type = ASP_ACTIVE;
 }
 
-// SpawnInvasionWave (4BF7): a Thargoid in a free slot while the player is in the safe zone and fewer than 8 wolves fly.
+// SpawnInvasionWave: a Thargoid in a free slot while the player is in the safe zone and fewer than 8 wolves fly.
 void SpawnInvasionWave(GameState& _state)
 {
   if (!InSafeZone(_state).inside || _state.Data().ai.behaviorClassCounts[WOLF_CLASS] >= MOST_INVADERS)
@@ -333,7 +333,7 @@ struct OffenderLaunch
   std::optional<Velocity> launched; // when a copy of the station went into a free slot, what ComputeVelocity gave it
 };
 
-// From 55A9: the station at _station, near, launches a police Viper, a shuttle or a trader at an offender out of the box it guards: a copy
+// The station at _station, near, launches a police Viper, a shuttle or a trader at an offender out of the box it guards: a copy
 // of itself (CopyObject) in a free slot, out along z, turned round, its roll reversed, and its velocity set. PUSH DI and POP DI keep the
 // station.
 OffenderLaunch LaunchAtOffender(GameState& _state, SpaceObject& _station)
@@ -378,8 +378,8 @@ OffenderLaunch LaunchAtOffender(GameState& _state, SpaceObject& _station)
   return launch;
 }
 
-// CheckMissilesAtStation (5611): a missile aimed at the station at _station, or at a police Viper in the safe zone, is a crime,
-// added to legalStatus up to FFh (the sum written, then FFh over it on a carry, 5650 and 5656), and starts the station's ECM
+// CheckMissilesAtStation: a missile aimed at the station at _station, or at a police Viper in the safe zone, is a crime,
+// added to legalStatus up to FFh (the sum written, then FFh over it on a carry), and starts the station's ECM
 // unless the player's anti-ECM is on; while npcEcmFrames runs, the ECM removes every missile, and an invasion stops it. Returns
 // the last pixel of the last scanner blip the ECM erased, if it erased one.
 std::optional<DashboardPixel> CheckMissilesAtStation(GameState& _state, const SpaceObject& _station)
@@ -429,7 +429,7 @@ std::optional<DashboardPixel> CheckMissilesAtStation(GameState& _state, const Sp
   return erased;
 }
 
-// UpdateWolfAi's state 3 (586D): turning away, a Thargoid launching Thargons, until beyond its range (WithinRange); then a pass is counted off. After the last it rests, calmed (aggression 9) and no
+// UpdateWolfAi's state 3: turning away, a Thargoid launching Thargons, until beyond its range (WithinRange); then a pass is counted off. After the last it rests, calmed (aggression 9) and no
 // longer hostile, and a Thargon drifts (state 0Ah); so does one whose mother is gone or is no Thargoid with a blip. Returns what
 // MoveObject did.
 MovedObject WolfTurnAway(GameState& _state, SpaceObject& _slot)
@@ -504,7 +504,7 @@ MovedObject WolfTurnAway(GameState& _state, SpaceObject& _slot)
   return Angles{Offset(Offset(toPlayer.first, HALF_TURN), _slot.jinkPitch), Offset(toPlayer.second, _slot.jinkYaw)};
 }
 
-// UpdateHunterAi's state 3 (5987): evading with random jinks, and a missile at odds of 5DCh in 65536, until beyond its range
+// UpdateHunterAi's state 3: evading with random jinks, and a missile at odds of 5DCh in 65536, until beyond its range
 // (WithinRange). Returns what MoveObject did.
 MovedObject HunterEvade(GameState& _state, SpaceObject& _slot)
 {
@@ -519,7 +519,7 @@ MovedObject HunterEvade(GameState& _state, SpaceObject& _slot)
   return MoveObject(_state, _slot);
 }
 
-// UpdateHunterAi's state 0 (58E4): flying at the player until it turns hostile, then picking how to hunt: with two or more
+// UpdateHunterAi's state 0: flying at the player until it turns hostile, then picking how to hunt: with two or more
 // pack mates on the scanner it attacks a fugitive, or at odds of 32h in 65536 anyone; with one it flies in formation with it.
 // Returns what MoveObject did.
 MovedObject HunterIdle(GameState& _state, SpaceObject& _slot)
@@ -555,7 +555,7 @@ MovedObject HunterIdle(GameState& _state, SpaceObject& _slot)
   return MoveObject(_state, _slot);
 }
 
-// UpdateTraderOrPoliceAi's state 1 (56CE): a police Viper attacks a player of legal status 5 or more; otherwise one the player
+// UpdateTraderOrPoliceAi's state 1: a police Viper attacks a player of legal status 5 or more; otherwise one the player
 // has hit flees, at odds of 53FCh in 65536, or attacks. Returns what MoveObject did.
 MovedObject TraderDecide(GameState& _state, SpaceObject& _slot)
 {
@@ -570,7 +570,7 @@ MovedObject TraderDecide(GameState& _state, SpaceObject& _slot)
   return MoveObject(_state, _slot);
 }
 
-// UpdateTraderOrPoliceAi's state 2 (56FC): at the player, firing, the police with missiles against an offender, until within
+// UpdateTraderOrPoliceAi's state 2: at the player, firing, the police with missiles against an offender, until within
 // 320h on every axis, or, for any but the police, until its energy is below 8. Returns what MoveObject did.
 MovedObject TraderAttack(GameState& _state, SpaceObject& _slot)
 {
@@ -595,7 +595,7 @@ MovedObject TraderAttack(GameState& _state, SpaceObject& _slot)
   return MoveObject(_state, _slot);
 }
 
-// UpdateTraderOrPoliceAi's state 3 (5750): fleeing from the player with random jinks, a missile when nearly dead, and now and
+// UpdateTraderOrPoliceAi's state 3: fleeing from the player with random jinks, a missile when nearly dead, and now and
 // then an ECM. Returns what MoveObject did.
 MovedObject TraderFlee(GameState& _state, SpaceObject& _slot)
 {
@@ -612,7 +612,7 @@ MovedObject TraderFlee(GameState& _state, SpaceObject& _slot)
   return MoveObject(_state, _slot);
 }
 
-// UpdateTraderOrPoliceAi's state 4 and above (57BC): flying on away until beyond its range, then attacking again; weak, any but
+// UpdateTraderOrPoliceAi's state 4 and above: flying on away until beyond its range, then attacking again; weak, any but
 // the police flee. Its range is measured by WithinRange. Returns what MoveObject did.
 MovedObject TraderBreakOff(GameState& _state, SpaceObject& _slot)
 {
@@ -631,7 +631,7 @@ MovedObject TraderBreakOff(GameState& _state, SpaceObject& _slot)
   return MoveObject(_state, _slot);
 }
 
-// CALL [BX+behaviorHandlers] (4A41): the handler of class _behavior for _slot. The table's eight words, which nothing writes, name
+// CALL [BX+behaviorHandlers]: the handler of class _behavior for _slot. The table's eight words, which nothing writes, name
 // these eight handlers; a class of 8 or more, which no template gives, would run data as code, and runs nothing.
 void RunBehaviorHandler(GameState& _state, SpaceObject& _slot, std::uint8_t _behavior)
 {
@@ -850,8 +850,8 @@ MovedObject UpdateTraderOrPoliceAi(GameState& _state, SpaceObject& _slot)
 {
   if (IsDebrisType(_slot))
   {
-    // A rock only spins. The split at 56B1 (LaunchShipFromObject with DL=5) never runs: 56A5 jumps past it when bit 0 of +1Eh is
-    // clear, and 56AB when it is set.
+    // A rock only spins. The split (LaunchShipFromObject with DL=5) never runs: one jump passes it when bit 0 of +1Eh is
+    // clear, and another when it is set.
     _slot.roll = Offset(_slot.roll, ROCK_SPIN);
     return MoveObject(_state, _slot);
   }

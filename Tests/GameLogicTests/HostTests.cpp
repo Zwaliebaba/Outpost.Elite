@@ -273,7 +273,7 @@ public:
     Assert::AreEqual(std::size_t{0}, rig.Host().QueuedKeys());
   }
 
-  // What the game's own test, IsMouseDriverInstalled (CS:02D4), finds: whether a mouse is attached.
+  // What the game's own test, IsMouseDriverInstalled, finds: whether a mouse is attached.
   TEST_METHOD(TheGamesMouseCheckSeesWhetherAMouseIsAttached)
   {
     HostRig none("HostNoMouse", false);

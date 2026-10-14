@@ -22,152 +22,141 @@ struct FrameCorner
   std::uint8_t character; ///< CP437
 };
 
-/// laserMountNames (DS:81F4): each pointer's text, up to its NUL.
+/// laserMountNames: each pointer's text, up to its NUL.
 constexpr std::array<std::string_view, 4> LASER_MOUNT_NAMES = {
-  std::string_view{"Fore,"},  // DS:81FC
-  std::string_view{"Aft,"},   // DS:8202
-  std::string_view{"Right,"}, // DS:8207
-  std::string_view{"Left,"},  // DS:820E
+  std::string_view{"Fore,"},  // [0]
+  std::string_view{"Aft,"},   // [1]
+  std::string_view{"Right,"}, // [2]
+  std::string_view{"Left,"},  // [3]
 };
 
-/// legalStatusNames (DS:842A): each pointer's text, up to its NUL.
+/// legalStatusNames: each pointer's text, up to its NUL.
 constexpr std::array<std::string_view, 3> LEGAL_STATUS_NAMES = {
-  std::string_view{"Clean"},    // DS:8430
-  std::string_view{"Offender"}, // DS:8436
-  std::string_view{"Fugitive"}, // DS:843F
+  std::string_view{"Clean"},    // [0]
+  std::string_view{"Offender"}, // [1]
+  std::string_view{"Fugitive"}, // [2]
 };
 
-/// ratingNames (DS:8460): each pointer's text, up to its NUL.
+/// ratingNames: each pointer's text, up to its NUL.
 constexpr std::array<std::string_view, 9> RATING_NAMES = {
-  std::string_view{"Harmless"},        // DS:8472
-  std::string_view{"Mostly Harmless"}, // DS:847B
-  std::string_view{"Poor"},            // DS:848B
-  std::string_view{"Average"},         // DS:8490
-  std::string_view{"Above Average"},   // DS:8498
-  std::string_view{"Competent"},       // DS:84A6
-  std::string_view{"Dangerous"},       // DS:84B0
-  std::string_view{"Deadly"},          // DS:84BA
-  std::string_view{"Elite"},           // DS:84C1
+  std::string_view{"Harmless"},        // [0]
+  std::string_view{"Mostly Harmless"}, // [1]
+  std::string_view{"Poor"},            // [2]
+  std::string_view{"Average"},         // [3]
+  std::string_view{"Above Average"},   // [4]
+  std::string_view{"Competent"},       // [5]
+  std::string_view{"Dangerous"},       // [6]
+  std::string_view{"Deadly"},          // [7]
+  std::string_view{"Elite"},           // [8]
 };
 
-/// equipmentNames (DS:84D2): each pointer's text, up to its NUL.
+/// equipmentNames: each pointer's text, up to its NUL.
 constexpr std::array<std::string_view, 13> EQUIPMENT_NAMES = {
-  std::string_view{},                      // DS:84EC, a buffer: the status screen writes the missiles' count at its '?' (missileCountDigit)
-  std::string_view{"Cargo Bay Extension"}, // DS:84F8
-  std::string_view{"ECM System"},          // DS:850C
-  std::string_view{"Pulse Laser"},         // DS:8517
-  std::string_view{"Beam Laser"},          // DS:8523
-  std::string_view{"Fuel Scoops"},         // DS:852E
-  std::string_view{"Escape Capsule"},      // DS:853A
-  std::string_view{"Energy Bomb"},         // DS:8549
-  std::string_view{"Extra Energy Unit"},   // DS:8555
-  std::string_view{"Docking Computers"},   // DS:8567
-  std::string_view{"Galactic Hyperdrive"}, // DS:8579
-  std::string_view{"Mining Laser"},        // DS:858D
-  std::string_view{"Military Laser"},      // DS:859A
+  std::string_view{},                      // a buffer: the status screen writes the missiles' count at its '?' (missileCountDigit)
+  std::string_view{"Cargo Bay Extension"}, // [1]
+  std::string_view{"ECM System"},          // [2]
+  std::string_view{"Pulse Laser"},         // [3]
+  std::string_view{"Beam Laser"},          // [4]
+  std::string_view{"Fuel Scoops"},         // [5]
+  std::string_view{"Escape Capsule"},      // [6]
+  std::string_view{"Energy Bomb"},         // [7]
+  std::string_view{"Extra Energy Unit"},   // [8]
+  std::string_view{"Docking Computers"},   // [9]
+  std::string_view{"Galactic Hyperdrive"}, // [10]
+  std::string_view{"Mining Laser"},        // [11]
+  std::string_view{"Military Laser"},      // [12]
 };
 
-/// DS:7BEC
 constexpr std::string_view TRADE_HEADER_TEXT = "PRODUCT    UNIT    PRICE    QTY";
 
-/// DS:8214
 constexpr std::string_view MOUNTS_OPEN_TEXT = " (";
 
-/// DS:8217
 constexpr std::string_view MOUNTS_CLOSE_TEXT = ")";
 
-/// DS:821B
 constexpr std::string_view NO_QUANTITY_TEXT = "     -";
 
-/// DS:83CB
 constexpr std::string_view SYSTEM_LABEL_TEXT = "System:       ";
 
-/// DS:83DA
 constexpr std::string_view HYPERSYSTEM_LABEL_TEXT = "Hypersystem:  ";
 
-/// DS:840C
 constexpr std::string_view CASH_LABEL_TEXT = "Cash:         ";
 
-/// DS:841B
 constexpr std::string_view LEGAL_STATUS_LABEL_TEXT = "Legal Status: ";
 
-/// DS:8448
 constexpr std::string_view RATING_LABEL_TEXT = "Rating:       ";
 
-/// DS:84C7
 constexpr std::string_view EQUIPMENT_HEADING_TEXT = "EQUIPMENT:";
 
-/// DS:8C25: 2 texts, each after the one before's NUL.
+/// 2 texts, each after the one before's NUL.
 constexpr std::array<std::string_view, 2> BUY_CARGO_HELP_LINES = {
-  std::string_view{"Use control keys or device to select"}, // DS:8C25
-  std::string_view{"item. Press 'B' to buy the item."},     // DS:8C4A
+  std::string_view{"Use control keys or device to select"}, // [0]
+  std::string_view{"item. Press 'B' to buy the item."},     // [1]
 };
 
-/// DS:8C6B: 2 texts, each after the one before's NUL.
+/// 2 texts, each after the one before's NUL.
 constexpr std::array<std::string_view, 2> SELL_CARGO_HELP_LINES = {
-  std::string_view{"Use control keys or device to select"}, // DS:8C6B
-  std::string_view{"item. Press 'S' to sell the item."},    // DS:8C90
+  std::string_view{"Use control keys or device to select"}, // [0]
+  std::string_view{"item. Press 'S' to sell the item."},    // [1]
 };
 
-/// DS:8E30
 constexpr std::string_view WITCH_SPACE_TEXT = "WITCH SPACE";
 
-/// DS:8EB1: 8 texts, each after the one before's NUL.
+/// 8 texts, each after the one before's NUL.
 constexpr std::array<std::string_view, 8> SUPERNOVA_REFUSED_LINES = {
-  std::string_view{"We hope you die a horribly long"}, // DS:8EB1
-  std::string_view{"lingering death at the hands of"}, // DS:8ED1
-  std::string_view{"a slimey green lobstoid or a"},    // DS:8EF1
-  std::string_view{"vicious furry goat-shrew from"},   // DS:8F0E
-  std::string_view{"Xafolif if you're not blown to"},  // DS:8F2C
-  std::string_view{"bits by our sun!"},                // DS:8F4B
-  std::string_view{" "},                               // DS:8F5C
-  std::string_view{"Press any key to continue!"},      // DS:8F5E
+  std::string_view{"We hope you die a horribly long"}, // [0]
+  std::string_view{"lingering death at the hands of"}, // [1]
+  std::string_view{"a slimey green lobstoid or a"},    // [2]
+  std::string_view{"vicious furry goat-shrew from"},   // [3]
+  std::string_view{"Xafolif if you're not blown to"},  // [4]
+  std::string_view{"bits by our sun!"},                // [5]
+  std::string_view{" "},                               // [6]
+  std::string_view{"Press any key to continue!"},      // [7]
 };
 
-/// DS:8F79: 8 texts, each after the one before's NUL.
+/// 8 texts, each after the one before's NUL.
 constexpr std::array<std::string_view, 8> SUPERNOVA_ACCEPTED_LINES = {
-  std::string_view{"Thank you!"},                      // DS:8F79
-  std::string_view{"I'm afraid that we've had to"},    // DS:8F84
-  std::string_view{"dump any cargo you had to get"},   // DS:8FA1
-  std::string_view{"all of us refugees in. If you"},   // DS:8FBF
-  std::string_view{"just drop us off at the nearest"}, // DS:8FDD
-  std::string_view{"system, that'll be fine!"},        // DS:8FFD
-  std::string_view{" "},                               // DS:9016
-  std::string_view{"Press any key to continue!"},      // DS:9018
+  std::string_view{"Thank you!"},                      // [0]
+  std::string_view{"I'm afraid that we've had to"},    // [1]
+  std::string_view{"dump any cargo you had to get"},   // [2]
+  std::string_view{"all of us refugees in. If you"},   // [3]
+  std::string_view{"just drop us off at the nearest"}, // [4]
+  std::string_view{"system, that'll be fine!"},        // [5]
+  std::string_view{" "},                               // [6]
+  std::string_view{"Press any key to continue!"},      // [7]
 };
 
-/// DS:91A8: 7 texts, each after the one before's NUL.
+/// 7 texts, each after the one before's NUL.
 constexpr std::array<std::string_view, 7> MASK_DESTROYED_LINES = {
-  std::string_view{"It was unfortunate that you could"}, // DS:91A8
-  std::string_view{"only destroy the masking ship and"}, // DS:91CA
-  std::string_view{"not actually retrieve the mask"},    // DS:91EC
-  std::string_view{"device. We shall never know any-"},  // DS:920B
-  std::string_view{"thing about it now!"},               // DS:922C
-  std::string_view{" "},                                 // DS:9240
-  std::string_view{"Press any key to continue!"},        // DS:9242
+  std::string_view{"It was unfortunate that you could"}, // [0]
+  std::string_view{"only destroy the masking ship and"}, // [1]
+  std::string_view{"not actually retrieve the mask"},    // [2]
+  std::string_view{"device. We shall never know any-"},  // [3]
+  std::string_view{"thing about it now!"},               // [4]
+  std::string_view{" "},                                 // [5]
+  std::string_view{"Press any key to continue!"},        // [6]
 };
 
-/// DS:925D: 4 texts, each after the one before's NUL.
+/// 4 texts, each after the one before's NUL.
 constexpr std::array<std::string_view, 4> MASK_FLED_LINES = {
-  std::string_view{"Running away from the mask ship"}, // DS:925D
-  std::string_view{"was probably a good idea!"},       // DS:927D
-  std::string_view{" "},                               // DS:9297
-  std::string_view{"Press any key to continue!"},      // DS:9299
+  std::string_view{"Running away from the mask ship"}, // [0]
+  std::string_view{"was probably a good idea!"},       // [1]
+  std::string_view{" "},                               // [2]
+  std::string_view{"Press any key to continue!"},      // [3]
 };
 
-/// DS:92B4: 8 texts, each after the one before's NUL.
+/// 8 texts, each after the one before's NUL.
 constexpr std::array<std::string_view, 8> MASK_RECOVERED_LINES = {
-  std::string_view{"This masking device looks very"},      // DS:92B4
-  std::string_view{"interesting. We will fit a modified"}, // DS:92D3
-  std::string_view{"version to your space craft as a"},    // DS:92F7
-  std::string_view{"reward! Press 'N' to activate it"},    // DS:9318
-  std::string_view{"but be careful as it uses a lot of"},  // DS:9339
-  std::string_view{"energy!"},                             // DS:935C
-  std::string_view{" "},                                   // DS:9364
-  std::string_view{"Press any key to continue!"},          // DS:9366
+  std::string_view{"This masking device looks very"},      // [0]
+  std::string_view{"interesting. We will fit a modified"}, // [1]
+  std::string_view{"version to your space craft as a"},    // [2]
+  std::string_view{"reward! Press 'N' to activate it"},    // [3]
+  std::string_view{"but be careful as it uses a lot of"},  // [4]
+  std::string_view{"energy!"},                             // [5]
+  std::string_view{" "},                                   // [6]
+  std::string_view{"Press any key to continue!"},          // [7]
 };
 
-/// frameCorners (DS:A7D3): the docked frame's corners and tees, each a cell of the 40-column text page,
+/// frameCorners: the docked frame's corners and tees, each a cell of the 40-column text page,
 /// as its row and column, and the CP437 character there.
 constexpr std::array<FrameCorner, 6> FRAME_CORNERS = {{
   {0, 0, 0xC9},   // cell 0000h
@@ -178,103 +167,103 @@ constexpr std::array<FrameCorner, 6> FRAME_CORNERS = {{
   {24, 39, 0xBC}, // cell 07CEh
 }};
 
-/// archangelTitle (DS:7883 in 1987): 'ARCHANGEL', ended by the forceMisjump byte
+/// archangelTitle: 'ARCHANGEL', ended by the forceMisjump byte
 constexpr std::array<std::uint8_t, 9> ARCHANGEL_TITLE = {
-  0x41, 0x52, 0x43, 0x48, 0x41, 0x4E, 0x47, 0x45, // DS:7883
-  0x4C,                                           // DS:788B
+  0x41, 0x52, 0x43, 0x48, 0x41, 0x4E, 0x47, 0x45, // [0]
+  0x4C,                                           // [8]
 };
 
-/// sellCargoFrame (DS:7B63 in 1987): frame bytes, then "SELL CARGO"
+/// sellCargoFrame: frame bytes, then "SELL CARGO"
 constexpr std::string_view SELL_CARGO_FRAME = "OOSELL CARGO";
 
-/// buyCargoFrame (DS:7B70 in 1987): frame bytes, then "BUY CARGO"
+/// buyCargoFrame: frame bytes, then "BUY CARGO"
 constexpr std::string_view BUY_CARGO_FRAME = "ONBUY CARGO";
 
-/// inventoryFrame (DS:7BB4 in 1987): frame bytes, then "INVENTORY"
+/// inventoryFrame: frame bytes, then "INVENTORY"
 constexpr std::string_view INVENTORY_FRAME = "pxINVENTORY";
 
-/// emergencyFrame (DS:7BC0 in 1987): frame bytes, then "EMERGENCY"
+/// emergencyFrame: frame bytes, then "EMERGENCY"
 constexpr std::string_view EMERGENCY_FRAME = "\017\017EMERGENCY";
 
-/// fuelTextPrefix (DS:83E9 in 1987): 'Fuel:' and its padding, which runs on into the fuel's units digit (change 3c names it)
+/// fuelTextPrefix: 'Fuel:' and its padding, which runs on into the fuel's units digit (change 3c names it)
 constexpr std::string_view FUEL_TEXT_PREFIX{"Fuel:         ", 14};
 
-/// fuelTextPoint (DS:83F8 in 1987): the fuel text's point, between its two digits (change 3c names it)
+/// fuelTextPoint: the fuel text's point, between its two digits (change 3c names it)
 constexpr std::string_view FUEL_TEXT_POINT{".", 1};
 
-/// fuelTextSuffix (DS:83FA in 1987): ' Light Years' and its NUL, after the fuel's tenths digit (change 3c names it)
+/// fuelTextSuffix: ' Light Years' and its NUL, after the fuel's tenths digit (change 3c names it)
 constexpr std::string_view FUEL_TEXT_SUFFIX = " Light Years";
 
-/// ratingThresholds (DS:8457 in 1987): byte; 2, 4, 9, 20, 35, 90, 155, 230, 255 against killCount
+/// ratingThresholds: byte; 2, 4, 9, 20, 35, 90, 155, 230, 255 against killCount
 constexpr std::array<std::uint8_t, 9> RATING_THRESHOLDS = {
-  0x02, 0x04, 0x09, 0x14, 0x23, 0x5A, 0x9B, 0xE6, // DS:8457
-  0xFF,                                           // DS:845F
+  0x02, 0x04, 0x09, 0x14, 0x23, 0x5A, 0x9B, 0xE6, // [0]
+  0xFF,                                           // [8]
 };
 
-/// missileNameOpen (DS:84EC in 1987): 'Missile (', which runs on into the missile count's digit (change 3c names it)
+/// missileNameOpen: 'Missile (', which runs on into the missile count's digit (change 3c names it)
 constexpr std::string_view MISSILE_NAME_OPEN{"Missile (", 9};
 
-/// missileNameClose (DS:84F6 in 1987): ')' and its NUL, after the missile count's digit (change 3c names it)
+/// missileNameClose: ')' and its NUL, after the missile count's digit (change 3c names it)
 constexpr std::string_view MISSILE_NAME_CLOSE = ")";
 
-/// supernovaBriefingText (DS:8E3C in 1987): 5 lines ending "Will you help us (Y/N)?"
+/// supernovaBriefingText: 5 lines ending "Will you help us (Y/N)?"
 constexpr std::array<std::string_view, 5> SUPERNOVA_BRIEFING_TEXT = {
-  std::string_view{"Our sun is going supernova!"},     // DS:8E3C
-  std::string_view{"You are advised to hyper-space"},  // DS:8E58
-  std::string_view{"out of this system immediately!"}, // DS:8E77
-  std::string_view{" "},                               // DS:8E97
-  std::string_view{"Will you help us (Y/N)?"},         // DS:8E99
+  std::string_view{"Our sun is going supernova!"},     // [0]
+  std::string_view{"You are advised to hyper-space"},  // [1]
+  std::string_view{"out of this system immediately!"}, // [2]
+  std::string_view{" "},                               // [3]
+  std::string_view{"Will you help us (Y/N)?"},         // [4]
 };
 
-/// taskCompleteFrame (DS:9033 in 1987): frame bytes, then "TASK COMPLETE - CONGRATULATIONS!"
+/// taskCompleteFrame: frame bytes, then "TASK COMPLETE - CONGRATULATIONS!"
 constexpr std::string_view TASK_COMPLETE_FRAME = "\017\017TASK COMPLETE - CONGRATULATIONS!";
 
-/// supernovaDebriefOpen (DS:9056 in 1987): 'Thank you for saving us.', then 'Please accept 1', which runs on into refugeeRewardDigit
+/// supernovaDebriefOpen: 'Thank you for saving us.', then 'Please accept 1', which runs on into refugeeRewardDigit
 /// (change 3c names it)
 constexpr std::string_view SUPERNOVA_DEBRIEF_OPEN{"Thank you for saving us.\000Please accept 1", 40};
 
-/// supernovaDebriefClose (DS:907F in 1987): '00 Credits!', a blank line and 'Press any key to continue!', after refugeeRewardDigit (change
+/// supernovaDebriefClose: '00 Credits!', a blank line and 'Press any key to continue!', after refugeeRewardDigit (change
 /// 3c names it)
 constexpr std::string_view SUPERNOVA_DEBRIEF_CLOSE{"00 Credits!\000 \000Press any key to continue!\000", 41};
 
-/// maskBriefingText (DS:90A8 in 1987): 9 lines on the invisible masking device
+/// maskBriefingText: 9 lines on the invisible masking device
 constexpr std::array<std::string_view, 9> MASK_BRIEFING_TEXT = {
-  std::string_view{"We're getting reports of a new"},      // DS:90A8
-  std::string_view{"invisible masking device in a"},       // DS:90C7
-  std::string_view{"system nearby, which allows space"},   // DS:90E5
-  std::string_view{"craft to become totally invisible."},  // DS:9107
-  std::string_view{"We would like you to go and find"},    // DS:912A
-  std::string_view{"out what's happening and if"},         // DS:914B
-  std::string_view{"possible, retrieve the mask device!"}, // DS:9167
-  std::string_view{" "},                                   // DS:918B
-  std::string_view{"Press any key to continue!"},          // DS:918D
+  std::string_view{"We're getting reports of a new"},      // [0]
+  std::string_view{"invisible masking device in a"},       // [1]
+  std::string_view{"system nearby, which allows space"},   // [2]
+  std::string_view{"craft to become totally invisible."},  // [3]
+  std::string_view{"We would like you to go and find"},    // [4]
+  std::string_view{"out what's happening and if"},         // [5]
+  std::string_view{"possible, retrieve the mask device!"}, // [6]
+  std::string_view{" "},                                   // [7]
+  std::string_view{"Press any key to continue!"},          // [8]
 };
 
-/// invasionBriefingText (DS:9381 in 1987): 12 lines on the Thargoid-invaded system
+/// invasionBriefingText: 12 lines on the Thargoid-invaded system
 constexpr std::array<std::string_view, 12> INVASION_BRIEFING_TEXT = {
-  std::string_view{"Intelligence reports that a near-"}, // DS:9381
-  std::string_view{"by system has been invaded by"},     // DS:93A3
-  std::string_view{"alien thargoid ships and that"},     // DS:93C1
-  std::string_view{"the coriolis orbiting space"},       // DS:93DF
-  std::string_view{"station is under attack. We"},       // DS:93FB
-  std::string_view{"suggest that you destroy the"},      // DS:9417
-  std::string_view{"space station and not try to dock"}, // DS:9434
-  std::string_view{"with it if you come across heavy"},  // DS:9456
-  std::string_view{"alien concentrations in that"},      // DS:9477
-  std::string_view{"system!"},                           // DS:9494
-  std::string_view{" "},                                 // DS:949C
-  std::string_view{"Press any key to continue!"},        // DS:949E
+  std::string_view{"Intelligence reports that a near-"}, // [0]
+  std::string_view{"by system has been invaded by"},     // [1]
+  std::string_view{"alien thargoid ships and that"},     // [2]
+  std::string_view{"the coriolis orbiting space"},       // [3]
+  std::string_view{"station is under attack. We"},       // [4]
+  std::string_view{"suggest that you destroy the"},      // [5]
+  std::string_view{"space station and not try to dock"}, // [6]
+  std::string_view{"with it if you come across heavy"},  // [7]
+  std::string_view{"alien concentrations in that"},      // [8]
+  std::string_view{"system!"},                           // [9]
+  std::string_view{" "},                                 // [10]
+  std::string_view{"Press any key to continue!"},        // [11]
 };
 
-/// pressAnyKeyText (DS:A966 in 1987): 'Press any key to start game' (title)
+/// pressAnyKeyText: 'Press any key to start game' (title)
 constexpr std::string_view PRESS_ANY_KEY_TEXT = "Press any key to start game";
 
-/// titleShipDistances (DS:ACB5 in 1987): word; title display distance per ship type
+/// titleShipDistances: word; title display distance per ship type
 constexpr std::array<std::uint16_t, 30> TITLE_SHIP_DISTANCES = {
-  0x0514, 0x0514, 0x0190, 0x0190, 0x0190, 0x0190, 0x0190, 0x0190, // DS:ACB5
-  0x0190, 0x0190, 0x0190, 0x0190, 0x0118, 0x0190, 0x0190, 0x0190, // DS:ACC5
-  0x0190, 0x0190, 0x0190, 0x0190, 0x0190, 0x0190, 0x0190, 0x0190, // DS:ACD5
-  0x0190, 0x0190, 0x01CC, 0x0190, 0x0190, 0x0190,                 // DS:ACE5
+  0x0514, 0x0514, 0x0190, 0x0190, 0x0190, 0x0190, 0x0190, 0x0190, // [0]
+  0x0190, 0x0190, 0x0190, 0x0190, 0x0118, 0x0190, 0x0190, 0x0190, // [8]
+  0x0190, 0x0190, 0x0190, 0x0190, 0x0190, 0x0190, 0x0190, 0x0190, // [16]
+  0x0190, 0x0190, 0x01CC, 0x0190, 0x0190, 0x0190,                 // [24]
 };
 
 } // namespace

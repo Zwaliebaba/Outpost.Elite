@@ -39,106 +39,106 @@ struct KillCredit
   std::optional<std::uint8_t> crime;       ///< what that kill added to legalStatus, when it was a crime
 };
 
-/// DrawLaserSights (CS:0630): the sights of the current view's laser, a 16x16 sprite of laserSights, ANDed and ORed into the
+/// DrawLaserSights: the sights of the current view's laser, a 16x16 sprite of laserSights, ANDed and ORed into the
 /// centre of the space view, a row of two words at a time. Nothing when the view's mount has no laser.
 void DrawLaserSights(GameState& _state);
 
-/// GetViewLaser (CS:066C): the laser type 0-3 of the current view's mount, or none when that mount has no laser. The mount is
+/// GetViewLaser: the laser type 0-3 of the current view's mount, or none when that mount has no laser. The mount is
 /// viewLaserMount's entry for the view; whether it is fitted, bit mount-1 of laserMountsFitted, which RCR reaches a bit at a
 /// time; its type, the 2-bit field mount-1 of laserMountTypes.
 [[nodiscard]] std::optional<std::uint8_t> GetViewLaser(const GameState& _state);
 
-/// DrawLaserBeams (CS:0A9A): the player's beams, DrawLine from the bottom row of the view to a random point within 3 pixels of
+/// DrawLaserBeams: the player's beams, DrawLine from the bottom row of the view to a random point within 3 pixels of
 /// (7Eh, 3Eh), in firingLaserType's pattern: with bit 0 clear, one side's pair a shot, the sides alternating by laserBeamSide
 /// and the colour counting down past 0 for type 0 and up for type 2; type 1 both outer beams, the colour counting up; type 3 all
 /// four, the inner pair in laserBeamColorToggle's colour and the outer in the other. Each beam is watched for the space view and
 /// noted for the frame's snapshot, which the renderer draws in its place (ADR-035).
 void DrawLaserBeams(GameState& _state, Host& _host);
 
-/// TakeDamage (CS:2C9B): _damage taken by the fore shield and what it cannot take by the energy: from 100h on, the shield takes all
+/// TakeDamage: _damage taken by the fore shield and what it cannot take by the energy: from 100h on, the shield takes all
 /// it holds; below, the low byte goes against the shield, written back, and 0 over it on a borrow. An energy that goes below 0
 /// kills the player (KillPlayer) and is then 0. Nothing while the escape pod flies.
 void TakeDamage(GameState& _state, std::uint16_t _damage);
 
-/// DetonateEnergyBomb (CS:2ED6): in the safe zone a crime, 28h added to legalStatus up to FFh (the sum written, then FFh over it on a
+/// DetonateEnergyBomb: in the safe zone a crime, 28h added to legalStatus up to FFh (the sum written, then FFh over it on a
 /// carry); then every active ship from firstShipSlot with its blip drawn has its cargo emptied and explodes (ExplodeObject).
 void DetonateEnergyBomb(GameState& _state);
 
-/// SpawnPlayerWreckage (CS:2FE3): the player's death: the drift, 40 along the nose (ComputeDeathDebrisVector), kept in
+/// SpawnPlayerWreckage: the player's death: the drift, 40 along the nose (ComputeDeathDebrisVector), kept in
 /// wreckDrift; the player stopped at speed 8 with the view locked; six splinters in debris slots drifting with it and a
 /// random -15..16 on each axis, each run for a frame (UpdateDebrisAi); and with cargo aboard, a barrel in a ship slot, free or
 /// reclaimed, four drifts ahead, drifting at a quarter of the drift and a little, turned along it and moved a random -31..32 on
 /// x and y.
 void SpawnPlayerWreckage(GameState& _state);
 
-/// KillPlayer (CS:3115): unless the escape pod flies, playerDead and StartPlayerDeathSound. Returns the step length that sound
+/// KillPlayer: unless the escape pod flies, playerDead and StartPlayerDeathSound. Returns the step length that sound
 /// starts at, when it starts.
 std::optional<std::uint8_t> KillPlayer(GameState& _state);
 
-/// InitMissile (CS:4C8C): _slot made a missile (spawnTemplates entry 0), class 2.
+/// InitMissile: _slot made a missile (spawnTemplates entry 0), class 2.
 void InitMissile(SpaceObject& _slot);
 
-/// RemoveAllMissiles (CS:4F9F): every active missile among objectSlotCount slots from shipSlots removed (RemoveObject). Returns
+/// RemoveAllMissiles: every active missile among objectSlotCount slots from shipSlots removed (RemoveObject). Returns
 /// the last pixel of the last scanner blip that erased, if it erased one.
 std::optional<DashboardPixel> RemoveAllMissiles(GameState& _state);
 
-/// ExplodeObject (CS:4FC1): _object removed (TallyMaskMissionKill first, then RemoveObject); when it was drawn this frame, the explosion's
+/// ExplodeObject: _object removed (TallyMaskMissionKill first, then RemoveObject); when it was drawn this frame, the explosion's
 /// sound, its fragments in debris slots (copied from it), and its cargo's barrels in free ship slots: one for a ship that carries the
 /// device, else a random byte / (255 / (cargo + 1) + 1).
 void ExplodeObject(GameState& _state, SpaceObject& _object);
 
-/// TallyMaskMissionKill (CS:50FE): while maskMissionShipsLeft is not 0, an Asp at _slot with the mission's bounty counts it down,
+/// TallyMaskMissionKill: while maskMissionShipsLeft is not 0, an Asp at _slot with the mission's bounty counts it down,
 /// and one that carries the device sets maskShipDestroyed.
 void TallyMaskMissionKill(GameState& _state, const SpaceObject& _slot);
 
-/// TryFireLaserAtPlayer (CS:518B): _slot fires at the player when it may: its blip drawn, a random byte below its aggression, not
+/// TryFireLaserAtPlayer: _slot fires at the player when it may: its blip drawn, a random byte below its aggression, not
 /// holding fire (CheckSafeZoneHoldFire) and nothing blocking it; each shot calms it by 5 down to 20. With _pitchError and
 /// _yawError, the magnitudes TurnTowardAngles leaves, within 200 the player is grazed by it, and within 70, the slot's camera-z
 /// high byte below 70 too, hit squarely.
 void TryFireLaserAtPlayer(GameState& _state, SpaceObject& _slot, std::uint16_t _pitchError, std::uint16_t _yawError);
 
-/// LaunchPlayerMissile (CS:5242): a ship slot, free or reclaimed, cleared and made a missile (InitMissile) 100 along the player's nose,
+/// LaunchPlayerMissile: a ship slot, free or reclaimed, cleared and made a missile (InitMissile) 100 along the player's nose,
 /// locked on missileTarget, aimed at where that is, its velocity set and moved twice. The original copied into it the 64 bytes wherever
 /// DI was left, a slot or the bytes past a buffer; the slot starts cleared instead (ADR-046).
 void LaunchPlayerMissile(GameState& _state);
 
-/// LaunchShipFromObject (CS:534E): a copy of _launcher (CopyObject) in a free ship slot, made what _kind names and moved clear of it: 14h a
+/// LaunchShipFromObject: a copy of _launcher (CopyObject) in a free ship slot, made what _kind names and moved clear of it: 14h a
 /// missile at the player, moved three times, and 7 a Thargon whose mother is _launcher, moved twice. Returns the slot, or nothing when no
 /// slot is free or _kind is neither. The original's 15h, an escape pod, and 5, a Krait, which no caller passes, went with InitEscapePod and
 /// InitKraitHunter (D22).
 std::optional<SlotIndex> LaunchShipFromObject(GameState& _state, const SpaceObject& _launcher, std::uint8_t _kind);
 
-/// TryLaunchMissileAtPlayer (CS:543A): _slot launches a missile at the player (LaunchShipFromObject) when it may: once the player has three
+/// TryLaunchMissileAtPlayer: _slot launches a missile at the player (LaunchShipFromObject) when it may: once the player has three
 /// kills, while it is hostile, does not hold its fire (CheckSafeZoneHoldFire), has missiles and nothing blocks firing, at odds of _odds in
 /// 65536; one launched is one missile fewer.
 void TryLaunchMissileAtPlayer(GameState& _state, SpaceObject& _slot, std::uint16_t _odds);
 
-/// TryLaunchThargon (CS:5471): a Thargoid at _slot with Thargons left launches one (LaunchShipFromObject), at odds of 300 in 65536; one
+/// TryLaunchThargon: a Thargoid at _slot with Thargons left launches one (LaunchShipFromObject), at odds of 300 in 65536; one
 /// launched is one Thargon fewer.
 void TryLaunchThargon(GameState& _state, SpaceObject& _slot);
 
-/// UpdateMissileAi (CS:54F2): class 2: the missile at _missile spins, and flies at its target, or at the player, raising the alert; when
+/// UpdateMissileAi: class 2: the missile at _missile spins, and flies at its target, or at the player, raising the alert; when
 /// its target is gone it explodes. Within C8h of it on every axis it explodes (ExplodeObject) on it: the player takes 320h damage
 /// (TakeDamage); a station is a crime of 5 on legalStatus, or in an invasion loses 10 of its energy and explodes at the last; a ship is
 /// credited (CreditKill) and explodes unless indestructible.
 void UpdateMissileAi(GameState& _state, SpaceObject& _missile);
 
-/// FindShipInCrosshairs (CS:8A46): the nearest of objectSlotCount - 2 slots from stationSlot that is active, drawn this frame,
+/// FindShipInCrosshairs: the nearest of objectSlotCount - 2 slots from stationSlot that is active, drawn this frame,
 /// not passed over (+1Eh bits 5 and 6 both set), and over the view's centre: |x| * 256 / z and |y| * 256 / z both below its
 /// type's shipTargetRadius * 256 / z, plus 2. The divides overflow into the game's trap for a near or off-axis object.
 [[nodiscard]] CrosshairTarget FindShipInCrosshairs(GameState& _state);
 
-/// ResolveLaserFire (CS:8AC2): while laserFiring, a shot of the player's laser: the ship in the crosshairs (FindShipInCrosshairs) is hit,
+/// ResolveLaserFire: while laserFiring, a shot of the player's laser: the ship in the crosshairs (FindShipInCrosshairs) is hit,
 /// marked hostile, and takes the laser's type + 1 in damage, added to its aggression up to FFh; a station's hit cancels the docking
 /// computer and is a crime of 28h, or in an invasion does half damage; a ship that runs out of energy is destroyed (CreditKill,
 /// CheckMissileTargetDestroyed, ExplodeObject) unless indestructible, where a station stays at 0 and falls only in an invasion. Then the
 /// beams (DrawLaserBeams), the laser's sound unless the target was destroyed, and laserFiring cleared.
 void ResolveLaserFire(GameState& _state, Host& _host);
 
-/// CheckMissileTargetDestroyed (CS:8B8B): when a missile is locked on the slot at _slot, its message and the missile unlocked.
+/// CheckMissileTargetDestroyed: when a missile is locked on the slot at _slot, its message and the missile unlocked.
 void CheckMissileTargetDestroyed(GameState& _state, const SpaceObject& _slot);
 
-/// CreditKill (CS:8BC6): the kill of _slot paid for, or held against the player's legal status. A bounty of 0 pays nothing;
+/// CreditKill: the kill of _slot paid for, or held against the player's legal status. A bounty of 0 pays nothing;
 /// any other counts a kill in killCount, the INC written and then FEh over FFh; FFh pays 500 for a Thargoid and otherwise is a
 /// crime, 4 for a police Viper and 2 for anything else inside the safe zone, added to legalStatus up to FFh, the sum written and
 /// then FFh over it on a carry. A bounty paid goes through ShowBountyMessage and AddCredits, and while a mis-jump's countdown
@@ -146,17 +146,17 @@ void CheckMissileTargetDestroyed(GameState& _state, const SpaceObject& _slot);
 /// announced.
 KillCredit CreditKill(GameState& _state, SpaceObject& _slot);
 
-/// Routine8C51 (CS:8C51): whether _slot is a Thargon or a Thargoid, and whether a Thargoid.
+/// Routine8C51: whether _slot is a Thargon or a Thargoid, and whether a Thargoid.
 [[nodiscard]] ThargoidTest Routine8C51(const SpaceObject& _slot);
 
-/// ApplyEnemyLaserHit (CS:8C8E): a pending hit on the player (playerHitPending): StartPlayerHitSound; when the attacker
+/// ApplyEnemyLaserHit: a pending hit on the player (playerHitPending): StartPlayerHitSound; when the attacker
 /// at playerHitBy was drawn this frame, its beam in colour 3 from where it is on screen (ProjectToScreen) to a random point on an
 /// edge of the view (DrawClippedLine); then 15 off the fore shield, or the aft while the attacker is behind (playerHitByDepth
 /// bit 7), written back and 0 over it on a borrow, and what it could not take off playerEnergy likewise, where a borrow sets
 /// playerDead.
 void ApplyEnemyLaserHit(GameState& _state, Host& _host);
 
-/// UseMaskingDevice (CS:8ECF): 12 off the energy, at least 0, the background blue, and for each of objectSlotCount slots from
+/// UseMaskingDevice: 12 off the energy, at least 0, the background blue, and for each of objectSlotCount slots from
 /// shipSlots, its state and hostility cleared and 2 off its aggression, at least 0.
 void UseMaskingDevice(GameState& _state);
 

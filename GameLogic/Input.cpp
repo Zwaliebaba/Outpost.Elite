@@ -51,7 +51,7 @@ constexpr std::uint8_t MOUSE_LEFT_AND_RIGHT = 0x03;
   return _input != 0 && _state.Data().flight.keyboardRecenter == 1 && _rate != 0;
 }
 
-// One axis of ApplyKeyboardRates (0x7543): a new key adds to the rate, within +-23, or with keyboardRecenter snaps
+// One axis of ApplyKeyboardRates: a new key adds to the rate, within +-23, or with keyboardRecenter snaps
 // an opposite rate to 0, which it stores at once; no key lets keyboardDamping take up to 3 off it.
 [[nodiscard]] std::uint8_t IntegrateRate(GameState& _state, std::uint8_t _input, std::uint8_t& _rate)
 {
@@ -87,7 +87,7 @@ constexpr std::uint8_t MOUSE_LEFT_AND_RIGHT = 0x03;
   return static_cast<std::uint8_t>(value);
 }
 
-// ApplyKeyboardRates (0x7543): the keys _keys integrated into keyboardRollRate and keyboardPitchRate, written as one
+// ApplyKeyboardRates: the keys _keys integrated into keyboardRollRate and keyboardPitchRate, written as one
 // word. Returns the rates.
 Steering ApplyKeyboardRates(GameState& _state, Steering _keys)
 {
@@ -160,7 +160,7 @@ bool IsMouseDriverInstalled(Host& _host)
 
 [[nodiscard]] Task<void> WaitForKeyPress(GameState& _state, Host& _host)
 {
-  // GetKey until a key comes, the JE back to the entry at 6DECh.
+  // GetKey until a key comes, the JE back to the entry.
   for (;;)
   {
     const KeyPress key = GetKey(_state);

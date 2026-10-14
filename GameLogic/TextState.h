@@ -11,9 +11,9 @@ namespace Elite
 /// data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct TextState
 {
-  /// 'BOUNTY:000000 Cr'; ShowBountyMessage writes the digits at DS:4B12
+  /// 'BOUNTY:000000 Cr'; ShowBountyMessage writes the digits
   std::uint8_t bountyText[17];
-  /// 'CLASS: 1234567 TYPE: 12345678901'; ShowShipIdentity fills the fields at DS:4B23 (7) and DS:4B31 (11)
+  /// 'CLASS: 1234567 TYPE: 12345678901'; ShowShipIdentity fills the fields of 7 and 11 characters
   std::uint8_t shipIdentityText[33];
   /// cursor glyph, a space and a zero: printed after the text by RedrawInputLine; ToggleInputCursor flips the first byte
   std::uint8_t inputCursorText[3];
