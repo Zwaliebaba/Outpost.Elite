@@ -14,8 +14,6 @@ namespace
 
 constexpr std::uint8_t KEYBOARD_ACKNOWLEDGE = 0x80; // port 61h bit 7, the XT's PB7
 
-constexpr std::uint16_t MOUSE_BUTTON_PRESSES = 0x0005;
-
 constexpr std::uint8_t CRTC_CURSOR_ADDRESS_HIGH = 0x0E;
 
 } // namespace
@@ -79,40 +77,9 @@ void Hardware::AcknowledgeKeyboard()
   m_platform.SetSystemControl(static_cast<std::uint8_t>(pulse & ~KEYBOARD_ACKNOWLEDGE));
 }
 
-// The mouse driver's calls: the driver's when a mouse is there; otherwise int 33h reaches what its vector names, the ROM's IRET,
-// and the registers come back as they went (Platform::CallAbsentMouse).
-
-void Hardware::ResetMouse()
+Mouse& Hardware::MouseDevice() noexcept
 {
-  Mouse& mouse = m_platform.MouseDriver();
-  if (!mouse.Present())
-  {
-    m_platform.CallAbsentMouse();
-    return;
-  }
-  mouse.Reset();
-}
-
-std::uint16_t Hardware::ReadMousePresses()
-{
-  const Mouse& mouse = m_platform.MouseDriver();
-  if (!mouse.Present())
-  {
-    m_platform.CallAbsentMouse();
-    return MOUSE_BUTTON_PRESSES;
-  }
-  return mouse.Buttons();
-}
-
-MouseMotion Hardware::ReadMouseMotion()
-{
-  Mouse& mouse = m_platform.MouseDriver();
-  if (!mouse.Present())
-  {
-    m_platform.CallAbsentMouse();
-    return MouseMotion{0, 0};
-  }
-  return mouse.Motion();
+  return m_platform.MouseDevice();
 }
 
 void Hardware::SetVideoMode(CgaMode _mode) noexcept
@@ -165,11 +132,6 @@ IrqHandler Hardware::Handler(Irq _irq) const noexcept
 void Hardware::SetHandler(Irq _irq, IrqHandler _handler) noexcept
 {
   m_platform.SetHandler(_irq, _handler);
-}
-
-bool Hardware::MouseDriverLoaded() const noexcept
-{
-  return m_platform.MouseDriverLoaded();
 }
 
 bool Hardware::CheatRequested() const noexcept

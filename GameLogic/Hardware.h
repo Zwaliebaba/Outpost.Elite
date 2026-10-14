@@ -63,15 +63,8 @@ public:
   /// OUT 61h with it clear.
   void AcknowledgeKeyboard();
 
-  /// Int 33h AX=0: the mouse driver reset. With no driver, int 33h is the ROM's IRET. The game reads nothing it answers.
-  void ResetMouse();
-
-  /// Int 33h AX=5, BX=1: AX, the buttons held, bit 0 the left and bit 1 the right. With no driver AX comes back as it went: 5.
-  /// The game reads nothing else of the answer.
-  [[nodiscard]] std::uint16_t ReadMousePresses();
-
-  /// Int 33h AX=0Bh: the mouse's motion since the last call. With no driver, CX and DX come back as 0.
-  [[nodiscard]] MouseMotion ReadMouseMotion();
+  /// The mouse (ADR-051): the game reads it directly, where the original called its driver through int 33h.
+  [[nodiscard]] Mouse& MouseDevice() noexcept;
 
   /// The CGA set to _mode (Cga::SetMode), where the original asked the BIOS's int 10h.
   void SetVideoMode(CgaMode _mode) noexcept;
@@ -164,9 +157,6 @@ public:
   /// _handler serves _irq from now on: how the game installs its own handlers and puts the BIOS's back, where the original
   /// writes the interrupt's vector (ADR-041).
   void SetHandler(Irq _irq, IrqHandler _handler) noexcept;
-
-  /// Whether a mouse driver is loaded (Platform::MouseDriverLoaded): what the game's test of int 33h's vector finds.
-  [[nodiscard]] bool MouseDriverLoaded() const noexcept;
 
   /// Whether the game was started with the cheat on (Platform::CheatRequested, D80).
   [[nodiscard]] bool CheatRequested() const noexcept;

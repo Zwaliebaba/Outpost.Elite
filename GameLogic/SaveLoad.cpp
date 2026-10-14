@@ -365,7 +365,7 @@ void RejectFileName(GameState& _state)
     }
     if (scan == SCAN_M)
     {
-      if (IsMouseDriverInstalled(_hardware).installed)
+      if (IsMouseDriverInstalled(_hardware))
       {
         _state.Data().saveLoad.inputDevice = MOUSE_DEVICE;
         showDevice = true;

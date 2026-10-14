@@ -27,7 +27,7 @@ void Mouse::Reset() noexcept
   m_motionY = 0;
 }
 
-std::uint16_t Mouse::Buttons() const noexcept
+std::uint8_t Mouse::Buttons() const noexcept
 {
   return m_held;
 }

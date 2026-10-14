@@ -56,7 +56,6 @@ Platform::Platform(GameState& _state, FileStore& _files, const Desc& _desc)
     m_mouse(_desc.mousePresent),
     m_files(_files),
     m_startMoment(_desc.startMoment),
-    m_mouseDriverLoaded(_desc.mousePresent),
     m_flags(ENTRY_FLAGS),
     m_cheat(_desc.cheat)
 {
@@ -199,20 +198,6 @@ void Platform::SetSystemControl(std::uint8_t _value)
     m_speaker.SetBits((_value & TONE_GATE) != 0, (_value & SPEAKER_DATA) != 0);
   }
   m_events.HoldKeyboard((_value & KEYBOARD_CLEAR) != 0);
-}
-
-void Platform::CallAbsentMouse()
-{
-  // INT 33h, as the 8088 runs it, to what its vector names, the interrupt's frame in place and IF cleared until its IRET.
-  ++m_stepsSinceIdle;
-  if (m_mouseDriverLoaded)
-  {
-    throw std::logic_error("Platform: an interrupt to code no native routine stands in for");
-  }
-  if (Stopped() != StopReason::Reached)
-  {
-    throw ProgramStopped{};
-  }
 }
 
 // As the 8088 enters a handler: IF cleared, the handler its vector names run, and its IRET putting the flags back as they were.

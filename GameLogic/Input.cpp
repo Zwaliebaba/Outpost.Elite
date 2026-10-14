@@ -37,7 +37,7 @@ constexpr std::int8_t MOST_RATE = 23;             // either way
 constexpr std::uint8_t MOST_NEGATIVE_RATE = 0xE9; // -23
 constexpr std::uint8_t RATE_DECAY_STEPS = 3;
 
-// The mouse's buttons in what int 33h AX=5 leaves in AL: ReadFireButton shifts out two, the left and then the right.
+// The mouse's buttons, either of which fires: the left and the right.
 constexpr std::uint8_t MOUSE_LEFT_AND_RIGHT = 0x03;
 
 // A key's keyDown byte, or two ORed, as SHR AL,1 tests it: bit 0, which the shift leaves in CF.
@@ -155,10 +155,9 @@ void KeyboardInterrupt(GameState& _state, Hardware& _hardware)
   ReadScanCode(_state, _hardware);
 }
 
-MouseDriver IsMouseDriverInstalled(Hardware& _hardware)
+bool IsMouseDriverInstalled(Hardware& _hardware)
 {
-  // The int 33h vector: installed when it is set and does not point at an IRET, as a loaded driver's does.
-  return MouseDriver{_hardware.MouseDriverLoaded()};
+  return _hardware.MouseDevice().Present();
 }
 
 [[nodiscard]] Task<void> WaitForKeyPress(GameState& _state, Hardware& _hardware)
@@ -274,8 +273,7 @@ bool ReadFireButton(const GameState& _state, Hardware& _hardware)
   {
     return Pressed(_state.Data().keyboard.keyDown[Keys::SPACE]);
   }
-  // SHR AL,1 twice: the left button, then the right.
-  return (Low(_hardware.ReadMousePresses()) & MOUSE_LEFT_AND_RIGHT) != 0;
+  return (_hardware.MouseDevice().Buttons() & MOUSE_LEFT_AND_RIGHT) != 0;
 }
 
 Steering ReadKeyboardSteering(GameState& _state)
@@ -306,11 +304,9 @@ Steering ReadKeyboardSteering(GameState& _state)
 
 Steering ReadMouseSteering(GameState& _state, Hardware& _hardware)
 {
-  const MouseMotion motion = _hardware.ReadMouseMotion();
+  const MouseMotion motion = _hardware.MouseDevice().Motion();
   const std::uint8_t rollStep = MouseAxis(motion.acrossMickeys);
   const std::uint8_t pitchStep = MouseAxis(motion.downMickeys);
-  // The presses, which the original keeps in mouseButtons and latches into fireLatch: nothing reads either (change 3c).
-  (void)_hardware.ReadMousePresses();
   // NEG AH / SAR AL,1 / SAR AH,1: half of each step, the pitch negated, added to the rates the last frame left.
   return Steering{MouseRate(rollStep, Low(_state.Data().playerShip.rollRate)),
                   MouseRate(Negate(pitchStep), High(_state.Data().playerShip.rollRate))};
@@ -322,8 +318,7 @@ void ResetMouseIfSelected(const GameState& _state, Hardware& _hardware)
   {
     return;
   }
-  // What the driver answers, whether it is installed and how many buttons it has, the game does not read.
-  _hardware.ResetMouse();
+  _hardware.MouseDevice().Reset();
 }
 
 Steering ApplyReverseControls(const GameState& _state, Steering _steering)

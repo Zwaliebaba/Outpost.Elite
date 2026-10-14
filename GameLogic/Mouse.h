@@ -6,20 +6,18 @@
 namespace Elite
 {
 
-/// What the mouse driver gives for int 33h AX=0Bh: the motion since the last call.
+/// The mouse's motion since the game last read it.
 struct MouseMotion
 {
-  std::uint16_t acrossMickeys; ///< CX, right positive
-  std::uint16_t downMickeys;   ///< DX, down positive
+  std::uint16_t acrossMickeys; ///< right positive, as a 16-bit count
+  std::uint16_t downMickeys;   ///< down positive
 };
 
-/// A two-button Microsoft-compatible mouse driver at the call level, for exactly the int 33h functions the reference calls
-/// (plan §1, Reference-Map.md "Input devices"). It is the emulated PC's model (Machine::Mouse until D33), its calls typed. The
-/// host sets the mouse's state between runs; the program reads it through the calls. Whether a driver is present is fixed
-/// at power-on: the platform points vector 33h at the driver's entry when it is, and at the ROM's IRET when it is not, as on a
-/// PC with no driver loaded (Platform).
+/// A two-button mouse as the game reads it (ADR-051): the host moves it and sets its buttons between runs, and the game reads
+/// the motion since its last read and the buttons held. Whether one is attached is the host's; the disc menu offers the mouse
+/// only when one is. A mouse that is not attached is never moved and holds no button.
 ///
-/// Counters are 16 bits and wrap, as the driver's do. Not thread-safe.
+/// Counters are 16 bits and wrap, as the driver's did. Not thread-safe.
 class Mouse
 {
 public:
@@ -35,21 +33,27 @@ public:
 
   // The host side.
 
+  /// A mouse attached, or taken away.
+  void SetPresent(bool _present) noexcept
+  {
+    m_present = _present;
+  }
+
   /// The mouse moved by this many mickeys, right and down positive.
   void Move(std::int32_t _mickeysX, std::int32_t _mickeysY) noexcept;
 
   /// The buttons now held: BUTTON_LEFT, BUTTON_RIGHT.
   void SetButtons(std::uint8_t _held) noexcept;
 
-  // The program side, int 33h by AX.
+  // The game's side.
 
-  /// 0000h, reset: the motion counters cleared. The game does not read the answer.
+  /// The motion so far forgotten, as the game does when flight starts with the mouse.
   void Reset() noexcept;
 
-  /// 0005h: the buttons held, AX. The game reads nothing else of the answer.
-  [[nodiscard]] std::uint16_t Buttons() const noexcept;
+  /// The buttons held: BUTTON_LEFT, BUTTON_RIGHT.
+  [[nodiscard]] std::uint8_t Buttons() const noexcept;
 
-  /// 000Bh, the motion: the mickeys moved across and down since the last call, which then start again.
+  /// The mickeys moved across and down since the last read, which then start again.
   [[nodiscard]] MouseMotion Motion() noexcept;
 
 private:

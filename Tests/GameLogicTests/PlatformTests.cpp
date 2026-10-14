@@ -291,30 +291,16 @@ public:
     Assert::IsTrue(rig.Native().Handler(Elite::Irq::Keyboard) == Elite::IrqHandler::Bios, L"the BIOS's keyboard handler");
   }
 
-  // What the game's own test, IsMouseDriverInstalled (CS:02D4), finds: whether a driver is loaded, as int 33h's vector says.
-  TEST_METHOD(TheGamesMouseCheckSeesWhetherADriverIsLoaded)
+  // What the game's own test, IsMouseDriverInstalled (CS:02D4), finds: whether a mouse is attached.
+  TEST_METHOD(TheGamesMouseCheckSeesWhetherAMouseIsAttached)
   {
     PlatformRig none("PlatformNoMouse", false);
-    Assert::IsFalse(none.Native().MouseDriverLoaded(), L"no driver");
-    Assert::IsFalse(Elite::IsMouseDriverInstalled(none.Native()).installed);
+    Assert::IsFalse(Elite::IsMouseDriverInstalled(none.Native()), L"no mouse");
 
-    PlatformRig loaded("PlatformMouse", true);
-    Assert::IsTrue(loaded.Native().MouseDriverLoaded(), L"a driver");
-    Assert::IsTrue(Elite::IsMouseDriverInstalled(loaded.Native()).installed);
-  }
-
-  // An interrupt nothing serves goes to the ROM's IRET, which returns at once: int 33h with no mouse driver, as the game makes
-  // it, ends the run where it would have.
-  TEST_METHOD(TheRomsIretServesAVectorNothingHooks)
-  {
-    PlatformRig rig("PlatformRomIret");
-    rig.Start(
-      [&rig]() -> Elite::Task<void>
-      {
-        (void)rig.Native().ReadMouseMotion();
-        co_return;
-      });
-    Assert::IsTrue(rig.Host().RunUntil(1'000) == Elite::StopReason::Terminated);
+    PlatformRig attached("PlatformMouse", true);
+    Assert::IsTrue(Elite::IsMouseDriverInstalled(attached.Native()), L"a mouse");
+    attached.Host().MouseDevice().SetPresent(false);
+    Assert::IsFalse(Elite::IsMouseDriverInstalled(attached.Native()), L"taken away");
   }
 
   // The BIOS's hardware handlers, native in the ROM's place, on each of the paths the ROM's code takes: the timer handler's

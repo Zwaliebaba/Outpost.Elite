@@ -19,15 +19,15 @@ constexpr std::uint8_t BREAK = 0x80;
 // inputDevice as the disc menu sets it.
 constexpr std::uint8_t MOUSE_DEVICE = 2;
 
-// The twin's mouse, through the machine's own driver (Elite::Mouse, a twin made with mousePresent): moved _acrossMickeys right
-// and _downMickeys down, which the next read of its motion (int 33h function 0Bh, once a frame) takes all at once, and with
+// The twin's mouse (Elite::Mouse, a twin made with mousePresent): moved _acrossMickeys right and _downMickeys down, which the
+// next read of its motion, once a frame, takes all at once, and with
 // _buttons held (Elite::Mouse::BUTTON_LEFT, BUTTON_RIGHT).
 void MoveTwinMouse(TwinRig& _rig, std::int32_t _acrossMickeys, std::int32_t _downMickeys, std::uint8_t _buttons = 0)
 {
   _rig.Both(
     [=](Elite::Platform& _platform, Elite::GameState&)
     {
-      Elite::Mouse& mouse = _platform.MouseDriver();
+      Elite::Mouse& mouse = _platform.MouseDevice();
       mouse.Move(_acrossMickeys, _downMickeys);
       mouse.SetButtons(_buttons);
     });

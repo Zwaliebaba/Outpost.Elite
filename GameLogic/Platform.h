@@ -74,7 +74,7 @@ public:
   struct Desc
   {
     DosDateTime startMoment;   ///< DOS's date and time at power-on; the BIOS's tick count starts at its time of day.
-    bool mousePresent = false; ///< Whether a mouse driver is loaded.
+    bool mousePresent = false; ///< Whether a mouse is attached (Mouse::Present).
     bool cheat = false;        ///< Whether the game starts with the cheat on: the shell's --cheat, where 1987 read ' cheat' (D80).
   };
 
@@ -210,7 +210,8 @@ public:
   /// Not noexcept: the speaker logs a change.
   void SetSystemControl(std::uint8_t _value);
 
-  [[nodiscard]] Mouse& MouseDriver() noexcept
+  /// The mouse, which the host moves and the game reads (ADR-051).
+  [[nodiscard]] Mouse& MouseDevice() noexcept
   {
     return m_mouse;
   }
@@ -366,23 +367,6 @@ public:
     m_handlers[static_cast<std::size_t>(_irq)] = _handler;
   }
 
-  /// Whether a mouse driver is loaded, which int 33h's vector says on the PC: set from Desc::mousePresent at power-on.
-  [[nodiscard]] bool MouseDriverLoaded() const noexcept
-  {
-    return m_mouseDriverLoaded;
-  }
-
-  /// A mouse driver loaded or not, whatever the mouse is: a test's driver with no mouse behind it, whose calls throw
-  /// std::logic_error, as a driver no routine stands in for did.
-  void SetMouseDriverLoaded(bool _loaded) noexcept
-  {
-    m_mouseDriverLoaded = _loaded;
-  }
-
-  /// Int 33h with no mouse behind it: the ROM's IRET, with its cycles, when no driver is loaded; a driver loaded with no mouse
-  /// behind it throws std::logic_error.
-  void CallAbsentMouse();
-
 private:
   [[nodiscard]] StopReason Stopped() const noexcept;
   void Interrupt(Irq _irq);
@@ -409,7 +393,6 @@ private:
   DosDateTime m_startMoment;
 
   std::array<IrqHandler, 2> m_handlers{IrqHandler::Bios, IrqHandler::Bios};
-  bool m_mouseDriverLoaded = false;
   std::uint16_t m_flags;
   bool m_cheat = false;
 

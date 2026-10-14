@@ -89,12 +89,11 @@ void PlayEveryDiscMenuPath(TwinRig& _rig)
 {
   _rig.Play("key space; wait 3.3\nkey Escape; wait 0.1\nkey c; wait 0.1\ndigest no-names");
   _rig.Play("key v; wait 0.05\nkey q; wait 0.05\nkey Next; wait 0.05\nkey m; wait 0.05\ndigest no-mouse");
-  // A mouse driver, loaded with no mouse behind it: what the game's test of int 33h's vector finds once a driver points it at its
-  // entry.
-  const bool mouse = _rig.Host().MouseDriverLoaded();
-  _rig.Both([](Elite::Platform& _platform, Elite::GameState&) { _platform.SetMouseDriverLoaded(true); });
+  // A mouse attached, which the menu then offers.
+  const bool mouse = _rig.Host().MouseDevice().Present();
+  _rig.Both([](Elite::Platform& _platform, Elite::GameState&) { _platform.MouseDevice().SetPresent(true); });
   _rig.Play("key m; wait 0.05\ndigest mouse\nkey k; wait 0.05");
-  _rig.Both([mouse](Elite::Platform& _platform, Elite::GameState&) { _platform.SetMouseDriverLoaded(mouse); });
+  _rig.Both([mouse](Elite::Platform& _platform, Elite::GameState&) { _platform.MouseDevice().SetPresent(mouse); });
   // J and the keys that answered the joystick's questions until D81, the IBM stick's and the Amstrad's, and the codes the
   // Amstrad's stick sent: each a key the menu ignores, as it ignores every other.
   _rig.Play("key j; wait 0.05; key q; wait 0.05; key i; wait 0.05; key space; wait 0.1\ndigest no-stick");
