@@ -117,7 +117,7 @@ void GalacticJump(GameState& _state)
   _state.Data().commander.chartCursorY = static_cast<std::uint8_t>((High(random) & 0x1F) + 0x30);
   _state.Data().commander.chartIsShortRange = 0;
   // The galactic chart holds every system, and none is far enough from that point for its distance to carry, so the search
-  // always finds one, and leaves BP its loop's count there, 100h less its index, for SelectSystemAtCursor's own search.
+  // always finds one, and moves the cursor onto it for SelectSystemAtCursor's own search.
   (void)FindNearestSystem(_state);
   SelectSystemAtCursor(_state);
 }

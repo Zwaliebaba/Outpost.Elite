@@ -36,7 +36,8 @@ void AwardArchangelTitle(GameState& _state);
 ScreenKey WaitForScreenExitKey(GameState& _state, Hardware& _hardware, std::uint8_t _ownKey);
 
 /// ShowSellCargoScreen (CS:5A30), F2, with PrintNameAndPrice, PrintUnit and EndTradeRow as one unit (ADR-012 item 14): the
-/// products with their sell prices and the units held, then RunCargoTradeMenu, which returns the key that closes it. Waits for keys as a rule (ADR-015).
+/// products with their sell prices and the units held, then RunCargoTradeMenu, which returns the key that closes it. Waits for
+/// keys as a rule (ADR-015).
 ScreenKey ShowSellCargoScreen(GameState& _state, Hardware& _hardware);
 
 /// ShowBuyCargoScreen (CS:5AE9), F3, as ShowSellCargoScreen: the products with their buy prices and the quantities on sale,

@@ -165,7 +165,7 @@ template <std::size_t Bytes> void CopyNameInto(const std::array<std::uint8_t, By
 }
 
 // The line ReadTextLine reads: the buffer it types into, which the original holds in SI, and where RedrawInputLine echoes it,
-// in ES:DI. None of them changes from one turn of its loop to the next.
+// in DI. Neither changes from one turn of its loop to the next.
 struct TypedLine
 {
   std::span<std::uint8_t> buffer;

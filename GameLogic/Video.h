@@ -55,10 +55,6 @@ void WriteScreenshotFile(GameState& _state, Hardware& _hardware);
 /// FinishSpaceViewFrame (CS:0570): DrawLaserSights, then PresentSpaceView and ClearDrawBuffer, both forwards. It waits.
 void FinishSpaceViewFrame(GameState& _state, Hardware& _hardware);
 
-/// What PresentSpaceView, and FinishSpaceViewFrame with it, leaves in BP: its MOV BP,20h, the words of a line it copies. Nothing
-/// reads it since BP went (ADR-046).
-inline constexpr std::uint16_t PRESENT_SPACE_VIEW_BP = 0x20;
-
 /// What PresentSpaceView, and FinishSpaceViewFrame with it, leaves in DX: its MOV DX,1FF0h, the copy's step from an odd line back
 /// to the next even line. The flight loop hands it to UpdateObjectsAndSpawn, whose first handler to measure its range reads DL.
 inline constexpr std::uint16_t PRESENT_SPACE_VIEW_DX = 0x1FF0;

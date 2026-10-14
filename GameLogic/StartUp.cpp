@@ -173,7 +173,7 @@ void Start(GameState& _state, Hardware& _hardware)
     // with the attributes RestoreTimerInterrupt leaves in CX.
     _state.Data().disk.diskError = 0;
     PerformDiskRequest(_state, _hardware, request, ClockLessADayHigh(clock));
-    // JMP RestartPlay: GameLoop reads BP before it writes it.
+    // JMP RestartPlay.
   }
 }
 
@@ -200,7 +200,7 @@ void GameLoop(GameState& _state, Hardware& _hardware)
     {
       _state.Data().flow.titleShown = 0;
     }
-    // JMP GameLoop: RunTitleAndDocked reads BP before it writes it.
+    // JMP GameLoop.
   }
 }
 

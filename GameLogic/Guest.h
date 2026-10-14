@@ -36,12 +36,6 @@ public:
     return m_hardware;
   }
 
-  /// BP as DOS leaves it for the program's start (Platform::ENTRY_BASE_POINTER).
-  [[nodiscard]] static constexpr std::uint16_t EntryBasePointer() noexcept
-  {
-    return Platform::ENTRY_BASE_POINTER;
-  }
-
 private:
   GameState& m_state;
   Hardware m_hardware;

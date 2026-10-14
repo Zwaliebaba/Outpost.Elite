@@ -88,9 +88,6 @@ public:
   /// The system control port at power-on (SystemControl).
   static constexpr std::uint8_t POWER_ON_SYSTEM_CONTROL = 0x4C;
 
-  /// What DOS leaves in BP for the program it starts, as MS-DOS does and DOSBox-X copies (ADR-006 item 4).
-  static constexpr std::uint16_t ENTRY_BASE_POINTER = 0x091C;
-
   /// Steps the default spin limit allows: far more than the longest stretch of work the game does between two waits, far
   /// fewer than a host would run before someone notices.
   static constexpr std::uint64_t DEFAULT_SPIN_LIMIT = 50'000'000;
