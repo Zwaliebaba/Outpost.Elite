@@ -286,7 +286,7 @@ public:
     data.playerShip.viewAngle = 0x400; // the rear view, with no laser
     Assert::AreEqual(Elite::FlightSnapshot::NO_SIGHT, Elite::TakeFlightSnapshot(*state).sight, L"none in the rear view");
     data.commander.galaxyNumber = 3;
-    data.commander.currentSystemIndex = 0x81;
+    data.commander.currentSystem.index = 0x81;
     const Elite::FlightSnapshot snapshot = Elite::TakeFlightSnapshot(*state);
     Assert::IsTrue(snapshot.galaxy == 3 && snapshot.system == 0x81, L"the system");
     const Elite::FlightSnapshot title = Elite::TakeTitleSnapshot(*state, "TITLE", Elite::SnapshotDisc{.shown = true});

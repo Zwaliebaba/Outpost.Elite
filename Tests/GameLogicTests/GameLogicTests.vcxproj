@@ -98,7 +98,7 @@
     <ClCompile Include="CorpusTests.cpp" />
     <ClCompile Include="EquipmentAnswerTests.cpp" />
     <ClCompile Include="EquipmentRulesTests.cpp" />
-    <ClCompile Include="FieldTests.cpp" />
+    <ClCompile Include="GameDataTests.cpp" />
     <ClCompile Include="DockedTests.cpp" />
     <ClCompile Include="DosFilesTests.cpp" />
     <ClCompile Include="EquipmentTests.cpp" />
@@ -106,7 +106,6 @@
     <ClCompile Include="FlightTests.cpp" />
     <ClCompile Include="GalaxyAnswerTests.cpp" />
     <ClCompile Include="GalaxyTests.cpp" />
-    <ClCompile Include="GamePortTests.cpp" />
     <ClCompile Include="GaugesTests.cpp" />
     <ClCompile Include="HyperspaceTests.cpp" />
     <ClCompile Include="InputTests.cpp" />
@@ -121,7 +120,6 @@
     </ClCompile>
     <ClCompile Include="PlanetLookTests.cpp" />
     <ClCompile Include="PlatformTests.cpp" />
-    <ClCompile Include="ReferenceImageTests.cpp" />
     <ClCompile Include="ReplayTests.cpp" />
     <ClCompile Include="SaveLoadTests.cpp" />
     <ClCompile Include="SchedulerTests.cpp" />
@@ -131,6 +129,7 @@
     <ClCompile Include="SpeakerTests.cpp" />
     <ClCompile Include="StartUpTests.cpp" />
     <ClCompile Include="StateDigestTests.cpp" />
+    <ClCompile Include="TableTests.cpp" />
     <ClCompile Include="TextTests.cpp" />
     <ClCompile Include="TimeOfDayTests.cpp" />
     <ClCompile Include="TwinRigTests.cpp" />

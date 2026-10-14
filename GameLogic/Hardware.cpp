@@ -81,11 +81,6 @@ void Hardware::AcknowledgeKeyboard()
   m_platform.SetSystemControl(static_cast<std::uint8_t>(pulse & ~KEYBOARD_ACKNOWLEDGE));
 }
 
-std::uint8_t Hardware::GamePortButtons()
-{
-  return m_platform.Joystick().Read();
-}
-
 // The mouse driver's calls: the driver's when a mouse is there; otherwise int 33h reaches what its vector names, the ROM's IRET,
 // and the registers come back as they went (Platform::CallAbsentMouse).
 
@@ -169,21 +164,6 @@ void Hardware::SelectPalette(std::uint8_t _palette)
   m_platform.Modes().SelectPalette(_palette);
 }
 
-void Hardware::FireGamePort()
-{
-  m_platform.Joystick().Fire();
-}
-
-std::uint8_t Hardware::GamePortOneShots()
-{
-  return m_platform.Joystick().Read();
-}
-
-void Hardware::CountInstructionCycles(Cycles _cycles) noexcept
-{
-  m_platform.CountInstructionCycles(_cycles);
-}
-
 ClockReading Hardware::ReadTimeOfDay()
 {
   return m_platform.Day().ReadClock();
@@ -192,7 +172,7 @@ ClockReading Hardware::ReadTimeOfDay()
 // DOS's file services, native (D27): the platform's DosFiles. A stamp is DOS's time at the platform's clock, as the emulated
 // DOS's was.
 
-void Hardware::SetDiskTransferArea(std::span<Field<std::uint8_t>> _area)
+void Hardware::SetDiskTransferArea(std::span<std::uint8_t> _area)
 {
   m_platform.Files().SetTransferArea(_area);
 }
@@ -217,7 +197,7 @@ DosAnswer Hardware::OpenFile(std::string_view _name, std::uint8_t _access)
   return m_platform.Files().Open(_name, _access);
 }
 
-DosAnswer Hardware::ReadFile(std::uint16_t _handle, std::span<Field<std::uint8_t>> _buffer)
+DosAnswer Hardware::ReadFile(std::uint16_t _handle, std::span<std::uint8_t> _buffer)
 {
   return m_platform.Files().Read(_handle, _buffer);
 }

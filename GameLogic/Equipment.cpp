@@ -56,11 +56,11 @@ constexpr std::uint8_t MOUNT_HIGHLIGHT_ATTRIBUTE = 0x70;
 
 // The equipment menu's messages, 19 characters each, and the mount menu's texts.
 
-constexpr std::size_t PRICE_SLOT_BYTES = 4;       // screenPrices' four bytes a row: the price, then the resale price, in tenths
 constexpr std::uint8_t RESALE_DIGITS_BLANKED = 3; // and those the equipment screen blanks in a resale price
+constexpr std::size_t TENTHS_DIGIT = 4;           // priceText's tenths digit, which moves right for the point
 
-// The equipment menu's rows, from 1 (EQUIPMENT_LIST_ROWS, Equipment.h). Row r's fitted count is the commander's byte r - 1 from
-// fuel: fuel's is row 1.
+// The equipment menu's rows, from 1 (EQUIPMENT_LIST_ROWS, Equipment.h). Row r's fitted count is the commander's equipment item
+// r - 1 (EQUIPMENT_ITEMS): fuel's is row 1.
 constexpr std::uint8_t FIRST_FITTED_ROW = 3;
 constexpr std::uint8_t FUEL_UNITS_PER_TENTH = 0x24;
 constexpr std::array<std::uint8_t, 4> LASER_ROWS = {0x05, 0x06, 0x0D, 0x0E}; // pulse, beam, mining, military
@@ -107,22 +107,16 @@ constexpr std::uint16_t PRODUCT_NAME_BYTES = 0x11;
 constexpr std::uint16_t SCOOPED_NAME_BYTES = 0x0D;
 constexpr std::uint8_t MINERALS_FROM = 0x28;
 
-// screenPrices: row r's price at 4r, and its resale price after it.
-[[nodiscard]] std::span<Field<std::uint8_t>> ScreenPrices(GameState& _state)
+// screenPrices' row _row: its price, and its resale price.
+[[nodiscard]] MenusState::ScreenPrice& RowPrices(GameState& _state, std::uint8_t _row)
 {
-  return BytesOf(_state.Data().menus.screenPrices);
-}
-
-// The index in screenPrices of row _row's price.
-[[nodiscard]] std::size_t PriceSlot(std::uint8_t _row) noexcept
-{
-  return std::size_t{_row} * PRICE_SLOT_BYTES;
+  return ElementWithin(std::span(_state.Data().menus.screenPrices), _row);
 }
 
 // Row _row's fitted count in the commander's block, from 1, fuel's.
-[[nodiscard]] Field<std::uint8_t>& Fitted(GameState& _state, std::uint8_t _row)
+[[nodiscard]] std::uint8_t& Fitted(GameState& _state, std::uint8_t _row)
 {
-  return BytesWithin(BytesOf(_state.Data().commander), COMMANDER_STATE_OFFSET(fuel), EQUIPMENT_LIST_ROWS)[std::size_t{_row} - 1];
+  return _state.Data().commander.*ElementWithin(std::span(EQUIPMENT_ITEMS), std::size_t{_row} - 1);
 }
 
 // The text in _table, a table of the reference's bytes, from its byte _at up to its NUL.
@@ -145,13 +139,13 @@ constexpr std::uint8_t MINERALS_FROM = 0x28;
 }
 
 // INC BYTE PTR [_byte].
-void IncrementByte(Field<std::uint8_t>& _byte)
+void IncrementByte(std::uint8_t& _byte)
 {
   _byte = static_cast<std::uint8_t>(_byte + 1);
 }
 
 // ADD [_field],_amount, held at 250 (FAh) from 251 up: gems, gold and platinum.
-void AddPrecious(Field<std::uint8_t>& _field, std::uint8_t _amount)
+void AddPrecious(std::uint8_t& _field, std::uint8_t _amount)
 {
   _field = static_cast<std::uint8_t>(_field + _amount);
   if (_field > PRECIOUS_HELD_MOST)
@@ -280,7 +274,7 @@ void ShowEquipMessage(GameState& _state, std::string_view _text, std::uint8_t _s
   {
     return RefusalText(EquipmentRefusal::NotEnoughCredits);
   }
-  Field<std::uint8_t>& fitted = Fitted(_state, row);
+  std::uint8_t& fitted = Fitted(_state, row);
   fitted = CountAfterFitting(row, fitted);
   if (row == FUEL_ROW)
   {
@@ -309,14 +303,14 @@ void ShowEquipMessage(GameState& _state, std::string_view _text, std::uint8_t _s
   {
     return RefusalText(refusal);
   }
-  Field<std::uint8_t>& fitted = Fitted(_state, row);
+  std::uint8_t& fitted = Fitted(_state, row);
   const auto left = static_cast<std::uint8_t>(fitted - 1);
   fitted = left;
   if (left == 0)
   {
     ClearEquipmentSellPrice(_state);
   }
-  AddCredits(_state, WordIn(ScreenPrices(_state), PriceSlot(row) + 2));
+  AddCredits(_state, RowPrices(_state, row).resale);
   if (row == MISSILE_ROW)
   {
     return MISSILE_SOLD_TEXT;
@@ -482,10 +476,9 @@ void LaunchEscapePod(GameState& _state)
     MoveObjectsByVelocity(_state);
   }
   // MOV [DI],CH, which is 0 throughout: the 17 amounts held emptied.
-  const std::span<Field<std::uint8_t>> hold = BytesOf(_state.Data().commander.cargoHold);
-  for (std::uint16_t kind = 0; kind < CARGO_KINDS; ++kind)
+  for (CommanderState::CargoHold::Lot& lot : _state.Data().commander.cargoHold.lots)
   {
-    hold[std::size_t{kind} * 2] = 0;
+    lot.held = 0;
   }
 }
 
@@ -525,12 +518,12 @@ void TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
       {
         product = PRODUCT_FURS;
       }
-      IncrementByte(BytesOf(_state.Data().commander.cargoHold)[std::size_t{product} * 2]);
+      IncrementByte(_state.Data().commander.cargoHold.lots[product].held);
       _state.Data().commander.cargoHold.cargoUsedTonnes = static_cast<std::uint8_t>(_state.Data().commander.cargoHold.cargoUsedTonnes + 1);
       // The product's name, its first 13 bytes, over the message's.
-      const std::span<const Field<std::uint8_t>> name = std::span<const Field<std::uint8_t>>(_state.Data().docked.productNames)
-                                                          .subspan(std::size_t{product} * PRODUCT_NAME_BYTES, SCOOPED_NAME_BYTES);
-      const std::span<Field<std::uint8_t>> scooped = BytesWithin(BytesOf(_state.Data().equipment.scoopedCargoText), 0, SCOOPED_NAME_BYTES);
+      const std::span<const std::uint8_t> name = std::span<const std::uint8_t>(_state.Data().docked.productNames)
+                                                   .subspan(std::size_t{product} * PRODUCT_NAME_BYTES, SCOOPED_NAME_BYTES);
+      const std::span<std::uint8_t> scooped = BytesWithin(std::span(_state.Data().equipment.scoopedCargoText), 0, SCOOPED_NAME_BYTES);
       for (std::size_t letter = 0; letter < SCOOPED_NAME_BYTES; ++letter)
       {
         scooped[letter] = std::uint8_t{name[letter]};
@@ -543,13 +536,14 @@ void TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
     // Gems, gold and platinum always; minerals or alloys too if there is room. Gold gets the gems' AL, as the original adds it.
     (void)RemoveObject(_state, _slot);
     const std::uint8_t gems = Low(NextRandom(_state)) & 7;
-    AddPrecious(_state.Data().commander.cargoHold.cargoGemStonesGrams, gems);
-    AddPrecious(_state.Data().commander.cargoHold.cargoGoldKg, gems);
-    AddPrecious(_state.Data().commander.cargoHold.cargoPlatinumKg, static_cast<std::uint8_t>((High(NextRandom(_state)) & 3) + 1));
+    AddPrecious(_state.Data().commander.cargoHold.lots[COMMODITY_GEM_STONES].held, gems);
+    AddPrecious(_state.Data().commander.cargoHold.lots[COMMODITY_GOLD].held, gems);
+    AddPrecious(_state.Data().commander.cargoHold.lots[COMMODITY_PLATINUM].held,
+                static_cast<std::uint8_t>((High(NextRandom(_state)) & 3) + 1));
     if (_state.Data().equipment.freeCargoTonnes != 0)
     {
       CommanderState::CargoHold& hold = _state.Data().commander.cargoHold;
-      IncrementByte(Low(NextRandom(_state)) >= MINERALS_FROM ? hold.cargoMineralsTonnes : hold.cargoAlloysTonnes);
+      IncrementByte(Low(NextRandom(_state)) >= MINERALS_FROM ? hold.lots[COMMODITY_MINERALS].held : hold.lots[COMMODITY_ALLOYS].held);
       _state.Data().commander.cargoHold.cargoUsedTonnes = static_cast<std::uint8_t>(_state.Data().commander.cargoHold.cargoUsedTonnes + 1);
     }
     message = Message::PreciousMetals;
@@ -564,9 +558,9 @@ void TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
     {
       (void)RemoveObject(_state, _slot);
       CommanderState::CargoHold& hold = _state.Data().commander.cargoHold;
-      Field<std::uint8_t>& held = type == TYPE_SPLINTER     ? hold.cargoAlloysTonnes
-                                  : type == TYPE_ESCAPE_POD ? hold.cargoSlavesTonnes
-                                                            : hold.cargoAlienItemsTonnes;
+      std::uint8_t& held = type == TYPE_SPLINTER     ? hold.lots[COMMODITY_ALLOYS].held
+                           : type == TYPE_ESCAPE_POD ? hold.lots[COMMODITY_SLAVES].held
+                                                     : hold.lots[COMMODITY_ALIEN_ITEMS].held;
       held = static_cast<std::uint8_t>(held + 1);
       _state.Data().commander.cargoHold.cargoUsedTonnes = static_cast<std::uint8_t>(_state.Data().commander.cargoHold.cargoUsedTonnes + 1);
       message = type == TYPE_SPLINTER ? Message::MetalAlloys : type == TYPE_ESCAPE_POD ? Message::EscapePodRetrieved : Message::AlienItems;
@@ -583,22 +577,21 @@ ScreenKey ShowEquipShipScreen(GameState& _state, Hardware& _hardware, bool _back
 
   // The rows on sale at the system's tech level (EquipmentRowsOnSale), each its name and its price (EquipmentPriceTenths), and a
   // resale price for an item fitted. menuRowCount counts them as they are listed.
-  const MarketPlace place{.economy = _state.Data().commander.currentEconomy,
-                          .government = _state.Data().commander.currentGovernment,
-                          .techLevel = _state.Data().commander.currentTechLevel};
+  const MarketPlace place{.economy = _state.Data().commander.currentSystem.economy,
+                          .government = _state.Data().commander.currentSystem.government,
+                          .techLevel = _state.Data().commander.currentSystem.techLevel};
   const std::uint8_t onSale = EquipmentRowsOnSale(place.techLevel);
   _state.Data().menus.menuRowCount = 0;
   std::uint16_t cell = FIRST_ITEM_OFFSET;
-  const std::span<Field<std::uint8_t>> prices = ScreenPrices(_state);
-  const std::span<Field<std::uint8_t>> priceText = BytesOf(_state.Data().menus.priceText);
+  const std::span<std::uint8_t> priceText(_state.Data().menus.priceText);
   for (std::uint8_t row = 1; row <= onSale; ++row)
   {
     _state.Data().menus.menuRowCount = row;
     const EquipmentItem item = EquipmentItemAt(row);
     PrintTextModeString(_state, item.name, cell);
     const std::uint16_t price = EquipmentPriceTenths(item, place);
-    SetWordIn(prices, PriceSlot(row), price);
-    SetWordIn(prices, PriceSlot(row) + 2, 0);
+    RowPrices(_state, row).price = price;
+    RowPrices(_state, row).resale = 0;
     // A resale price only for an item fitted, and never for fuel.
     const bool resold = row != FUEL_ROW && Fitted(_state, row) != 0;
     _state.Data().menus.resalePriceInput = resold ? price : std::uint16_t{0};
@@ -608,12 +601,12 @@ ScreenKey ShowEquipShipScreen(GameState& _state, Hardware& _hardware, bool _back
     std::string_view resaleText = NO_RESALE_TEXT;
     if (resale != 0)
     {
-      SetWordIn(prices, PriceSlot(_state.Data().menus.menuRowCount) + 2, resale);
+      RowPrices(_state, _state.Data().menus.menuRowCount).resale = resale;
       FormatDecimal5(resale, priceText);
       BlankLeadingZeros(priceText, RESALE_DIGITS_BLANKED);
       // Tenths: the last digit moved right one for the point.
-      _state.Data().menus.priceText.data8041 = std::uint8_t{_state.Data().menus.priceText.data8040};
-      _state.Data().menus.priceText.data8040 = '.';
+      priceText[TENTHS_DIGIT + 1] = std::uint8_t{priceText[TENTHS_DIGIT]};
+      priceText[TENTHS_DIGIT] = '.';
       resaleText = TextIn(priceText);
     }
     PrintTextModeString(_state, resaleText, Offset(cell, RESALE_COLUMN));
@@ -733,7 +726,7 @@ void PaintLaserMountBox(GameState& _state, std::uint16_t _box)
 bool PayForEquipmentItem(GameState& _state)
 {
   const std::uint8_t row = _state.Data().menus.menuSelectedRow;
-  const std::uint16_t price = WordIn(ScreenPrices(_state), PriceSlot(row));
+  const std::uint16_t price = RowPrices(_state, row).price;
   return SubtractCredits(_state, row == FUEL_ROW ? FuelPriceTenths(_state.Data().commander.fuel, price) : price);
 }
 
@@ -744,14 +737,14 @@ void ClearEquipmentSellPrice(GameState& _state)
 
 void ShowEquipmentSellPrice(GameState& _state)
 {
-  // The price's slot in screenPrices, and the resale price after it. The original keeps the slot in BX on the stack
+  // The row's prices in screenPrices, its price and the resale price after it. The original keeps the slot in BX on the stack
   // round ComputeResalePrice.
-  const std::size_t slot = PriceSlot(_state.Data().menus.menuSelectedRow);
-  _state.Data().menus.resalePriceInput = WordIn(ScreenPrices(_state), slot);
+  MenusState::ScreenPrice& prices = RowPrices(_state, _state.Data().menus.menuSelectedRow);
+  _state.Data().menus.resalePriceInput = std::uint16_t{prices.price};
   const std::uint16_t resale = ComputeResalePrice(_state);
-  SetWordIn(ScreenPrices(_state), slot + 2, resale);
+  prices.resale = resale;
   FormatTenths(_state, resale);
-  PrintEquipmentSellColumn(_state, TextWithin(BytesOf(_state.Data().menus.priceText), 0));
+  PrintEquipmentSellColumn(_state, TextWithin(_state.Data().menus.priceText, 0));
 }
 
 std::uint16_t MenuFirstRowCell(const GameState& _state) noexcept

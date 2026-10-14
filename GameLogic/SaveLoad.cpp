@@ -7,6 +7,7 @@
 #include "Input.h"
 #include "SaveLoadTables.h"
 #include "SharedTables.h"
+#include "StateWriter.h"
 #include "Text.h"
 
 #include <array>
@@ -31,7 +32,7 @@ constexpr std::uint8_t MOST_COMMANDER_FILES = 0x28;
 // ---- The disc menu ----
 
 // ".CDR" and its NUL, which PromptCommanderFileName appends to a name: DS:8697 in 1987, a text no symbol starts and nothing
-// writes, whose bytes the reference's image holds there.
+// writes, whose bytes the 1987 image held there.
 constexpr std::array<std::uint8_t, 5> COMMANDER_EXTENSION = {'.', 'C', 'D', 'R', 0};
 
 // Where it prints on the 40-column text page, 80 bytes a row.
@@ -47,11 +48,8 @@ constexpr std::uint16_t TEXT_ROW_BYTES = 0x50;
 // The keys it reads, as scan codes.
 constexpr std::uint8_t SCAN_E = 0x12;
 constexpr std::uint8_t SCAN_Y = 0x15;
-constexpr std::uint8_t SCAN_I = 0x17;
-constexpr std::uint8_t SCAN_A = 0x1E;
 constexpr std::uint8_t SCAN_S = 0x1F;
 constexpr std::uint8_t SCAN_D = 0x20;
-constexpr std::uint8_t SCAN_J = 0x24;
 constexpr std::uint8_t SCAN_K = 0x25;
 constexpr std::uint8_t SCAN_L = 0x26;
 constexpr std::uint8_t SCAN_C = 0x2E;
@@ -60,10 +58,6 @@ constexpr std::uint8_t SCAN_N = 0x31;
 constexpr std::uint8_t SCAN_M = 0x32;
 constexpr std::uint8_t SCAN_F1 = 0x3B;
 constexpr std::uint8_t SCAN_PAST_F10 = 0x45;
-// The Amstrad's joystick sends 77h-7Ch; a code below 54h ends the wait for it.
-constexpr std::uint8_t SCAN_PAST_KEYBOARD = 0x54;
-constexpr std::uint8_t SCAN_AMSTRAD_JOYSTICK = 0x77;
-constexpr std::uint8_t SCAN_PAST_AMSTRAD_JOYSTICK = 0x7D;
 
 // diskOperation, what Start does on the menu's behalf.
 constexpr std::uint8_t EXIT_TO_DOS = 0;
@@ -72,9 +66,8 @@ constexpr std::uint8_t SAVE_COMMANDER = 2;
 constexpr std::uint8_t DELETE_COMMANDER = 3;
 constexpr std::uint8_t CATALOGUE_COMMANDERS = 4;
 
-// inputDevice.
+// inputDevice: the keyboard or the mouse, as 1987 numbered them; its 1, the joystick, went with D81.
 constexpr std::uint8_t KEYBOARD_DEVICE = 0;
-constexpr std::uint8_t JOYSTICK_DEVICE = 1;
 constexpr std::uint8_t MOUSE_DEVICE = 2;
 
 constexpr std::uint8_t MOST_NAME_CHARACTERS = 8;
@@ -96,17 +89,30 @@ constexpr std::uint16_t ERROR_INK = 0xFFFF; // colour 3
   return TextIn(_state.Data().saveLoad.commanderFileName);
 }
 
-// commanderBlock's commanderFileBytes, the .cdr file's: the buffer DS:DX names to the read that loads a commander.
-[[nodiscard]] std::span<Field<std::uint8_t>> CommanderFile(GameState& _state)
+// The commander as the .cdr file holds it (D78): its members written in their order (StateWriter).
+[[nodiscard]] std::vector<std::uint8_t> CommanderFileBytes(const GameState& _state)
 {
-  return BytesOf(_state.Data().commander);
+  return StateBytes(_state.Data().commander);
 }
 
-// The same bytes as DOS writes them out: each Field byte is its stored byte (Field.h).
-[[nodiscard]] std::span<const std::uint8_t> CommanderFileBytes(const GameState& _state)
+// A commander file read over the commander (D78): the file's bytes in place of the commander's, as many as the read gave, and
+// the commander read back from them; what the read does not reach stays as it was.
+[[nodiscard]] DosAnswer ReadCommanderFile(GameState& _state, Hardware& _hardware)
 {
-  const std::span<const Field<std::uint8_t>> bytes = BytesOf(_state.Data().commander);
-  return std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size());
+  const std::vector<std::uint8_t> commander = CommanderFileBytes(_state);
+  std::array<std::uint8_t, COMMANDER_FILE_BYTES> file{};
+  for (std::size_t index = 0; index < file.size(); ++index)
+  {
+    file[index] = commander[index];
+  }
+  const DosAnswer read = _hardware.ReadFile(_state.Data().disk.fileHandle, file);
+  std::array<std::uint8_t, COMMANDER_FILE_BYTES> bytes{};
+  for (std::size_t index = 0; index < bytes.size(); ++index)
+  {
+    bytes[index] = file[index];
+  }
+  ReadStateBytes(_state.Data().commander, bytes);
+  return read;
 }
 
 // The common failure (0x039D): DOS's _error, which is no failure when it only ran out of files.
@@ -137,7 +143,7 @@ constexpr std::uint8_t MOST_KILLS = 0xFE;
 constexpr std::string_view CREDITS_UNIT_TEXT = " Credits";
 
 // _field held to _most.
-void HoldTo(Field<std::uint8_t>& _field, std::uint8_t _most) noexcept
+void HoldTo(std::uint8_t& _field, std::uint8_t _most) noexcept
 {
   if (_field > _most)
   {
@@ -157,20 +163,22 @@ void ClampLoadedCommander(GameState& _state)
   HoldTo(commander.chartCursorY, MOST_CHART_ROW);
   HoldTo(commander.shortRangeCursorY, MOST_CHART_ROW);
   HoldTo(commander.galacticCursorY, MOST_CHART_ROW);
-  HoldTo(commander.currentGovernment, MOST_ECONOMY_OR_GOVERNMENT);
-  HoldTo(commander.currentEconomy, MOST_ECONOMY_OR_GOVERNMENT);
-  HoldTo(commander.selectedGovernment, MOST_ECONOMY_OR_GOVERNMENT);
-  HoldTo(commander.selectedEconomy, MOST_ECONOMY_OR_GOVERNMENT);
+  HoldTo(commander.currentSystem.government, MOST_ECONOMY_OR_GOVERNMENT);
+  HoldTo(commander.currentSystem.economy, MOST_ECONOMY_OR_GOVERNMENT);
+  HoldTo(commander.selectedSystem.government, MOST_ECONOMY_OR_GOVERNMENT);
+  HoldTo(commander.selectedSystem.economy, MOST_ECONOMY_OR_GOVERNMENT);
   HoldTo(commander.missileCount, MOST_MISSILES);
   HoldTo(commander.killCount, MOST_KILLS);
   commander.defaultCommanderName[sizeof(commander.defaultCommanderName) - 1] = 0;
   FormatCredits(_state);
-  constexpr std::size_t UNIT = sizeof(commander.creditBalanceText) - CREDITS_UNIT_TEXT.size();
+  // The text's last characters, then its NUL.
+  constexpr std::size_t NUL = sizeof(commander.creditBalanceText) - 1;
+  constexpr std::size_t UNIT = NUL - CREDITS_UNIT_TEXT.size();
   for (std::size_t character = 0; character < CREDITS_UNIT_TEXT.size(); ++character)
   {
     commander.creditBalanceText[UNIT + character] = static_cast<std::uint8_t>(CREDITS_UNIT_TEXT[character]);
   }
-  commander.gap759A[0] = 0;
+  commander.creditBalanceText[NUL] = 0;
 }
 
 // LoadCommanderFile (0x031A): only a file with no attributes, read whole into commanderBlock, and then held to what the game
@@ -195,7 +203,7 @@ void LoadCommanderFile(GameState& _state, Hardware& _hardware)
     return;
   }
   _state.Data().disk.fileHandle = opened.value;
-  const DosAnswer read = _hardware.ReadFile(_state.Data().disk.fileHandle, CommanderFile(_state));
+  const DosAnswer read = ReadCommanderFile(_state, _hardware);
   if (read.failed)
   {
     CloseAndFail(_state, _hardware, read.value);
@@ -252,9 +260,9 @@ void ListCommanderFiles(GameState& _state, Hardware& _hardware, std::uint16_t _a
     if (_state.Data().saveLoad.diskTransferArea[FOUND_ATTRIBUTE] == 0)
     {
       // The name the search found, up to its '.', at the index in commanderFileList that commanderFileListNext holds.
-      const std::span<const Field<std::uint8_t>> foundName =
-        std::span<const Field<std::uint8_t>>(_state.Data().saveLoad.diskTransferArea).subspan(FOUND_NAME);
-      const std::span<Field<std::uint8_t>> list(_state.Data().saveLoad.commanderFileList);
+      const std::span<const std::uint8_t> foundName =
+        std::span<const std::uint8_t>(_state.Data().saveLoad.diskTransferArea).subspan(FOUND_NAME);
+      const std::span<std::uint8_t> list(_state.Data().saveLoad.commanderFileList);
       std::size_t to = _state.Data().saveLoad.commanderFileListNext;
       for (std::size_t from = 0; foundName[from] != '.'; ++from)
       {
@@ -338,10 +346,10 @@ DiscMenuExit LeaveGameLoopForDisk(GameState& _state, std::uint8_t _operation)
   return DiscMenuExit{true, 0, 0};
 }
 
-// The input device's name, which ShowControlDevice reads from inputDeviceNames: the disc menu sets inputDevice to 0, 1 or 2.
+// The input device's name, which ShowControlDevice reads from inputDeviceNames: the disc menu sets inputDevice to 0 or 2.
 [[nodiscard]] std::string_view InputDeviceName(const GameState& _state)
 {
-  return INPUT_DEVICE_NAMES[_state.Data().saveLoad.inputDevice];
+  return _state.Data().saveLoad.inputDevice == MOUSE_DEVICE ? MOUSE_DEVICE_NAME : KEYBOARD_DEVICE_NAME;
 }
 
 // ShowControlDevice (CS:6705): "DEVICE:" and the input device's name, and the help rows blanked.
@@ -350,62 +358,6 @@ void ShowControlDevice(GameState& _state)
   const std::uint16_t label = PrintAt(_state, DEVICE_TEXT, STATUS_POSITION);
   PrintTextModeString(_state, InputDeviceName(_state), label);
   BlankHelpRows(_state);
-}
-
-// The joystick could not be read (CS:67C4), or the Amstrad's never moved: the error, and the help's two lines, or only its
-// first for the Amstrad's.
-void ShowNoJoystick(GameState& _state)
-{
-  PrintAt(_state, NO_JOYSTICK_TEXT, STATUS_POSITION);
-  PrintAt(_state, JOYSTICK_HELP_LINES[0], HELP_POSITION);
-  if (_state.Data().saveLoad.joystickIsAmstrad == 1)
-  {
-    return;
-  }
-  // INC SI: the second line starts after the first's NUL.
-  PrintAt(_state, JOYSTICK_HELP_LINES[1], SECOND_HELP_POSITION);
-}
-
-// J (CS:6743): which joystick, then the Amstrad's moves or the IBM's centre. True when it is selected, and the menu goes on at
-// ShowControlDevice; false when it could not be read.
-[[nodiscard]] bool ChooseJoystick(GameState& _state, Hardware& _hardware)
-{
-  PrintAt(_state, JOYSTICK_TYPE_TEXT, STATUS_POSITION);
-  // I or A, then the title over the question: the original sets SI and DI for it before the wait.
-  const bool amstrad = WaitForEitherKey(_state, _hardware, SCAN_I, SCAN_A) == SCAN_A;
-  PrintAt(_state, JOYSTICK_TITLE_TEXT, STATUS_POSITION);
-  if (amstrad)
-  {
-    // The Amstrad's: a key from it, one of 77h-7Ch, until a key from the keyboard, below 54h, ends the wait.
-    _state.Data().saveLoad.joystickIsAmstrad = 1;
-    PrintAt(_state, MOVE_JOYSTICK_TEXT, HELP_POSITION);
-    _state.Data().saveLoad.amstradJoystickMoved = 0;
-    for (;;)
-    {
-      const std::uint8_t scan = WaitForKey(_state, _hardware).scanCode;
-      if (scan < SCAN_PAST_KEYBOARD)
-      {
-        break;
-      }
-      if (scan >= SCAN_AMSTRAD_JOYSTICK && scan < SCAN_PAST_AMSTRAD_JOYSTICK)
-      {
-        _state.Data().saveLoad.amstradJoystickMoved = 1;
-      }
-    }
-    return _state.Data().saveLoad.amstradJoystickMoved == 1;
-  }
-  // The IBM's: its centre read once a key says the stick is let go.
-  _state.Data().saveLoad.joystickIsAmstrad = 0;
-  PrintAt(_state, CENTER_JOYSTICK_TEXT, HELP_POSITION);
-  (void)WaitForKey(_state, _hardware);
-  const StickAxes center = ReadJoystickAxes(_hardware);
-  _state.Data().saveLoad.joystickCenterX = center.x;
-  _state.Data().saveLoad.joystickCenterY = center.y;
-  if (center.timedOut)
-  {
-    return false;
-  }
-  return true;
 }
 
 // RejectFileName (CS:68AD), after a bad name: "FILENAME ERROR", and the jump back to the menu's keys.
@@ -478,18 +430,6 @@ DiscMenuExit RunDiscControlKeys(GameState& _state, Hardware& _hardware, bool _sh
       al = 0;
       continue;
     }
-    if (scan == SCAN_J)
-    {
-      if (ChooseJoystick(_state, _hardware))
-      {
-        _state.Data().saveLoad.inputDevice = JOYSTICK_DEVICE;
-        showDevice = true;
-        continue;
-      }
-      ShowNoJoystick(_state);
-      al = 0;
-      continue;
-    }
     if (scan == SCAN_V)
     {
       PrintAt(_state, VERSION_STRING, HELP_POSITION);
@@ -521,7 +461,7 @@ std::uint8_t ShowDiskResult(GameState& _state)
     return 0;
   }
   // The name without its extension: a NUL over its '.', which the search, SI going up, looks for.
-  const std::span<Field<std::uint8_t>> name(_state.Data().saveLoad.commanderFileName);
+  const std::span<std::uint8_t> name(_state.Data().saveLoad.commanderFileName);
   std::size_t letter = 1;
   for (; name[letter] != '.'; ++letter)
   {
@@ -533,7 +473,7 @@ std::uint8_t ShowDiskResult(GameState& _state)
     return 0;
   }
   // Its eight bytes copied to defaultCommanderName by a LOOP.
-  const std::span<Field<std::uint8_t>> commander(_state.Data().commander.defaultCommanderName);
+  const std::span<std::uint8_t> commander(_state.Data().commander.defaultCommanderName);
   std::size_t from = 0;
   std::uint8_t copied = 0;
   for (std::uint16_t left = MOST_NAME_CHARACTERS;;)
@@ -579,14 +519,9 @@ void PerformDiskRequest(GameState& _state, Hardware& _hardware, std::uint8_t _re
 
 void SaveStartupCommander(GameState& _state)
 {
-  // REP MOVSB within the data segment, a byte at a time: commanderBlock's bytes into startupCommander's, upwards, as the direction flag is
-  // clear wherever the game calls it: the only STD, MaskOutsideTunnel's, has its CLD before the routine returns (change 3c).
-  const std::span<Field<std::uint8_t>> to(_state.Data().saveLoad.startupCommander);
-  const std::span<const Field<std::uint8_t>> from = BytesOf(std::as_const(_state).Data().commander);
-  for (std::size_t index = 0; index < COMMANDER_FILE_BYTES; ++index)
-  {
-    to[index] = std::uint8_t{from[index]};
-  }
+  // REP MOVSB within the data segment, a byte at a time: commanderBlock into startupCommander, the whole record, as the direction flag
+  // is clear wherever the game calls it: the only STD, MaskOutsideTunnel's, has its CLD before the routine returns (change 3c).
+  _state.Data().saveLoad.startupCommander = _state.Data().commander;
 }
 
 void ShowDiskError(GameState& _state)
@@ -633,7 +568,7 @@ DiscMenuExit ShowDiscControlScreen(GameState& _state, Hardware& _hardware, bool 
 bool PromptCommanderFileName(GameState& _state, Hardware& _hardware)
 {
   PrintAt(_state, FILE_NAME_PROMPT_TEXT, STATUS_POSITION);
-  const std::span<Field<std::uint8_t>> name(_state.Data().saveLoad.commanderFileName);
+  const std::span<std::uint8_t> name(_state.Data().saveLoad.commanderFileName);
   ReadTextLine(_state, _hardware, name, MOST_NAME_CHARACTERS, GameState::VIDEO_SEGMENT, NAME_POSITION);
   // A letter, then letters and digits, folded to upper case.
   std::size_t letter = 0;
@@ -683,7 +618,7 @@ void PrintCommanderCatalogue(GameState& _state)
   // Name n at row n mod 10, column n / 10, 9 cells apart: CBW and DIV DL by 10, which cannot overflow, as ListCommanderFiles
   // lists at most 40. Each name follows the one before's NUL in commanderFileList, which holds the 40 names of eight characters
   // at most and their NULs.
-  const std::span<const Field<std::uint8_t>> list(_state.Data().saveLoad.commanderFileList);
+  const std::span<const std::uint8_t> list(_state.Data().saveLoad.commanderFileList);
   std::size_t at = 0;
   const std::uint8_t count = _state.Data().saveLoad.commanderFileCount;
   for (std::uint8_t index = 0; index < count; ++index)

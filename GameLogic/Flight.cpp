@@ -21,6 +21,7 @@
 #include "Ships.h"
 #include "Sound.h"
 #include "StartUp.h"
+#include "StateWriter.h"
 #include "Text.h"
 #include "Video.h"
 
@@ -28,6 +29,7 @@
 #include <array>
 #include <span>
 #include <utility>
+#include <vector>
 
 namespace Elite
 {
@@ -53,15 +55,9 @@ namespace
 // screen's A, which clears the message line.
 constexpr std::uint16_t CLEARED_MESSAGE_LINE_BP = 0;
 
-// The stardust: 30 particles of 6 bytes, x and y words, a lifetime byte and a spare; stardustPrevious follows with the same
-// layout, its spare the new-particle flag.
+// The stardust: 30 particles, x and y, a lifetime and a spare; stardustPrevious holds their copies, its spare the respawned flag.
 constexpr std::uint16_t STARDUST_COUNT = 30;
 static_assert(STARDUST_COUNT == STARDUST_PARTICLES);
-constexpr std::uint16_t PARTICLE_BYTES = 6;
-constexpr std::size_t PARTICLE_X = 0;
-constexpr std::size_t PARTICLE_Y = 2;
-constexpr std::size_t PARTICLE_LIFETIME = 4;
-constexpr std::size_t PARTICLE_NEW = 5;
 // stardustShift: (34h - playerSpeed) / 12 + 4.
 constexpr std::uint16_t STARDUST_SHIFT_SPEED = 0x34;
 constexpr std::uint8_t STARDUST_SHIFT_STEP = 12;
@@ -129,10 +125,9 @@ constexpr std::uint16_t EQUIPMENT_LOSS_ODDS = 0x32; // in 65536 a frame, below o
 constexpr std::uint8_t EQUIPMENT_LOSS_DIVISOR = 0x14;
 constexpr std::uint16_t EQUIPMENT_LOSS_FRAMES = 0x1E;
 constexpr std::uint16_t DASHBOARD_ORIGIN = 0x1698;
-constexpr std::uint16_t NEXT_LINE_PAIR = 0x50;        // a line on, in the same bank
-constexpr std::uint16_t NEXT_ODD_LINE = 0xE050;       // from an even-bank line to the odd-bank line below it
-constexpr std::uint16_t DASHBOARD_CACHE_BYTES = 0x16; // missileCountShown to conditionColorShown
-constexpr std::uint8_t DASHBOARD_STALE = 0x80;        // a cached value no gauge shows
+constexpr std::uint16_t NEXT_LINE_PAIR = 0x50;  // a line on, in the same bank
+constexpr std::uint16_t NEXT_ODD_LINE = 0xE050; // from an even-bank line to the odd-bank line below it
+constexpr std::uint8_t DASHBOARD_STALE = 0x80;  // a cached value no gauge shows
 constexpr std::uint16_t MISSILE_LOCK_LINE = 0x1E15;
 constexpr std::uint16_t MISSILE_LOCK_LINE_PAIRS = 3;
 constexpr std::uint16_t CONDITION_LIGHT_LINE = 0x176C;
@@ -260,9 +255,9 @@ void SetMessage(GameState& _state, Message _message, std::uint16_t _frames)
 // The lifetime byte of particle _particle, its copy in stardustPrevious, and the copy marked new, for a respawned particle.
 void MarkDustRespawned(GameState& _state, std::size_t _particle, std::uint8_t _lifetime)
 {
-  _state.Data().flight.stardust[_particle][PARTICLE_LIFETIME] = _lifetime;
-  _state.Data().flight.stardustPrevious[_particle][PARTICLE_LIFETIME] = _lifetime;
-  _state.Data().flight.stardustPrevious[_particle][PARTICLE_NEW] = 1;
+  _state.Data().flight.stardust[_particle].lifetime = _lifetime;
+  _state.Data().flight.stardustPrevious[_particle].lifetime = _lifetime;
+  _state.Data().flight.stardustPrevious[_particle].respawned = 1;
 }
 
 [[nodiscard]] std::uint8_t RandomLifetime(std::uint16_t _random) noexcept
@@ -304,7 +299,7 @@ bool DrawDust(GameState& _state, std::size_t _particle, DustPosition _position)
     PlotPixel(_state, x, row);
     return false;
   }
-  if (_state.Data().flight.stardustPrevious[_particle][PARTICLE_NEW] != 0)
+  if (_state.Data().flight.stardustPrevious[_particle].respawned != 0)
   {
     return false;
   }
@@ -339,7 +334,7 @@ DustPosition MoveDust(GameState& _state, std::size_t _particle, DustPosition _po
     else if (!IsDustNearCenter(position))
     {
       // DEC BYTE [SI+4] / JE: the lifetime counted down, the particle born again at 0.
-      Field<std::uint8_t>& lifetime = _state.Data().flight.stardust[_particle][PARTICLE_LIFETIME];
+      std::uint8_t& lifetime = _state.Data().flight.stardust[_particle].lifetime;
       lifetime = static_cast<std::uint8_t>(lifetime - 1);
       if (lifetime != 0)
       {
@@ -493,8 +488,7 @@ void DrawBar(GameState& _state, const std::array<std::uint16_t, Lines>& _lines, 
 
 // MOV AL,[_value] / CMP AL,[_shown] / JE / (MOV [_shown],AL) / MOV DI,_line / CALL DrawThreeLineBar, with CH = 0 as the earlier
 // draws leave it (UpdateDashboard).
-void RedrawThreeLineBar(GameState& _state, const Field<std::uint8_t>& _value, Field<std::uint8_t>& _shown, std::uint16_t _line,
-                        bool _remember)
+void RedrawThreeLineBar(GameState& _state, const std::uint8_t& _value, std::uint8_t& _shown, std::uint16_t _line, bool _remember)
 {
   const std::uint8_t value = _value;
   if (value == _shown)
@@ -509,7 +503,7 @@ void RedrawThreeLineBar(GameState& _state, const Field<std::uint8_t>& _value, Fi
 }
 
 // SUB byte,_value / JAE / MOV byte,0 on _field: the difference written, and 0 over it on a borrow.
-void SubtractFloored(Field<std::uint8_t>& _field, std::uint8_t _value)
+void SubtractFloored(std::uint8_t& _field, std::uint8_t _value)
 {
   const std::uint8_t before = _field;
   _field = static_cast<std::uint8_t>(before - _value);
@@ -520,7 +514,7 @@ void SubtractFloored(Field<std::uint8_t>& _field, std::uint8_t _value)
 }
 
 // cmp [_shown], al; mov [_shown], al; je, with AL = _glyph: whether the glyph changed.
-[[nodiscard]] bool ExchangeShown(Field<std::uint8_t>& _shown, std::uint8_t _glyph)
+[[nodiscard]] bool ExchangeShown(std::uint8_t& _shown, std::uint8_t _glyph)
 {
   const bool changed = _shown != _glyph;
   _shown = _glyph;
@@ -716,10 +710,8 @@ struct LaunchDi
   {
     append(byte);
   }
-  for (const Field<std::uint8_t>& byte : BytesOf(_state.Data().combat.playerHitBy))
-  {
-    append(byte);
-  }
+  append(Low(Number(_state.Data().combat.playerHitBy)));
+  append(High(Number(_state.Data().combat.playerHitBy)));
   append(_state.Data().combat.playerHitPending);
   append(_state.Data().flight.playerDocked);
   for (std::size_t range = 0; at < bytes.size(); ++range)
@@ -730,12 +722,12 @@ struct LaunchDi
   return bytes;
 }
 
-// The 64 bytes after the stardust, where ResetStardust leaves DI: stardustPrevious's first (D38).
+// The 64 bytes after the stardust, where ResetStardust leaves DI: stardustPrevious's first, its members in order (D38).
 [[nodiscard]] std::array<std::uint8_t, SpaceObject::BYTES> BytesAfterStardust(const GameState& _state)
 {
   std::array<std::uint8_t, SpaceObject::BYTES> bytes{};
-  const std::span<const Field<std::uint8_t>> previous = BytesWithin(BytesOf(_state.Data().flight.stardustPrevious), 0, bytes.size());
-  std::ranges::copy(previous, bytes.begin());
+  const std::vector<std::uint8_t> previous = StateBytes(_state.Data().flight.stardustPrevious);
+  std::ranges::copy_n(previous.begin(), bytes.size(), bytes.begin());
   return bytes;
 }
 
@@ -795,11 +787,11 @@ KeyPress WaitForKey(GameState& _state, Hardware& _hardware)
 }
 
 // The pause screen's five options' flags, which R, D, Y, B and S toggle, in the order the original keeps them, each before its letter.
-[[nodiscard]] Field<std::uint8_t>& PauseOption(GameState& _state, std::size_t _index)
+[[nodiscard]] std::uint8_t& PauseOption(GameState& _state, std::size_t _index)
 {
   FlightState& flight = _state.Data().flight;
-  const std::array<Field<std::uint8_t>*, PAUSE_OPTIONS> flags = {&flight.keyboardRecenter, &flight.keyboardDamping, &flight.reverseYControl,
-                                                                 &flight.reverseXAndY, &flight.soundEnabled};
+  const std::array<std::uint8_t*, PAUSE_OPTIONS> flags = {&flight.keyboardRecenter, &flight.keyboardDamping, &flight.reverseYControl,
+                                                          &flight.reverseXAndY, &flight.soundEnabled};
   return *flags.at(_index);
 }
 
@@ -842,7 +834,7 @@ void ShowPauseOptions(GameState& _state)
   {
     if (KEYS[index] == _key)
     {
-      Field<std::uint8_t>& option = PauseOption(_state, index);
+      std::uint8_t& option = PauseOption(_state, index);
       option = static_cast<std::uint8_t>(option ^ 1);
       StartBeep(_state);
       return true;
@@ -893,15 +885,15 @@ void SetFrameTime(GameState& _state, std::uint8_t _key)
   const auto digit = static_cast<std::uint8_t>(choice + DIGIT_ONE);
   if (digit == DIGIT_NINE + 1)
   {
-    _state.Data().flight.frameRateKeyLabel.gapABFF[0] = DIGIT_ONE;
-    _state.Data().flight.frameRateKeyLabel.dataAC00 = DIGIT_ZERO;
-    _state.Data().flight.frameRateKeyLabel.dataAC01 = CLOSING_BRACKET;
+    _state.Data().flight.frameRateKeyLabel[0] = DIGIT_ONE;
+    _state.Data().flight.frameRateKeyLabel[1] = DIGIT_ZERO;
+    _state.Data().flight.frameRateKeyLabel[2] = CLOSING_BRACKET;
   }
   else
   {
-    _state.Data().flight.frameRateKeyLabel.gapABFF[0] = digit;
-    _state.Data().flight.frameRateKeyLabel.dataAC00 = CLOSING_BRACKET;
-    _state.Data().flight.frameRateKeyLabel.dataAC01 = SPACE;
+    _state.Data().flight.frameRateKeyLabel[0] = digit;
+    _state.Data().flight.frameRateKeyLabel[1] = CLOSING_BRACKET;
+    _state.Data().flight.frameRateKeyLabel[2] = SPACE;
   }
 }
 
@@ -929,7 +921,7 @@ PauseExit RunPauseOptions(GameState& _state, Hardware& _hardware, bool _backward
         ClearDrawBuffer(_state, _backward);
         _state.Data().flight.gamePaused = 0;
         _state.Data().drawing.textPaperPattern = 0;
-        _state.Data().keyboard.keyDown.keyDownSpace = 0;
+        _state.Data().keyboard.keyDown[Keys::SPACE] = 0;
         return PauseExit::Resume;
       }
       if (TogglePauseOption(_state, key))
@@ -1155,7 +1147,7 @@ void PostHyperspaceRefusal(GameState& _state, Message _message)
   }
   else
   {
-    const std::uint16_t distance = _state.Data().commander.selectedDistanceTenthsLy;
+    const std::uint16_t distance = _state.Data().commander.selectedSystem.distanceTenthsLy;
     if (distance == 0)
     {
       SetMessage(_state, Message::NoSystemSelected, 0x19);
@@ -1176,7 +1168,7 @@ void PostHyperspaceRefusal(GameState& _state, Message _message)
       PostHyperspaceRefusal(_state, Message::NotEnoughFuel);
       return false;
     }
-    const auto product = static_cast<std::uint16_t>(Low(_state.Data().commander.selectedDistanceTenthsLy) * FUEL_DIVISOR);
+    const auto product = static_cast<std::uint16_t>(Low(_state.Data().commander.selectedSystem.distanceTenthsLy) * FUEL_DIVISOR);
     const ByteQuotient cost = DivideByte(product, FUEL_FACTOR);
     _state.Data().flight.hyperspaceFuelCost = cost.quotient == 0 ? std::uint8_t{1} : cost.quotient;
   }
@@ -1196,7 +1188,7 @@ void PostHyperspaceRefusal(GameState& _state, Message _message)
 void HandleMissileKeys(GameState& _state, LaunchDi _di)
 {
   LaunchDi source = _di;
-  if (_state.Data().keyboard.keyDown.keyDownT == 1 && _state.Data().commander.missileCount != 0 &&
+  if (_state.Data().keyboard.keyDown[Keys::T] == 1 && _state.Data().commander.missileCount != 0 &&
       _state.Data().playerShip.missileState == 0 && _state.Data().jump.hyperspaceCountdown == 0 &&
       _state.Data().flight.shipIdRequested != 1)
   {
@@ -1226,14 +1218,14 @@ void HandleMissileKeys(GameState& _state, LaunchDi _di)
       SetMessage(_state, Message::MissileTargetDestroyed, 0x14);
     }
   }
-  if (_state.Data().keyboard.keyDown.keyDownU == 1 && _state.Data().playerShip.missileState != 0)
+  if (_state.Data().keyboard.keyDown[Keys::U] == 1 && _state.Data().playerShip.missileState != 0)
   {
     _state.Data().playerShip.missileState = 0;
     _state.Data().flight.shipIdRequested = 0;
     StartLowBeep(_state);
     SetMessage(_state, Message::MissileUnarmed, 0x0F);
   }
-  if (_state.Data().keyboard.keyDown.keyDownM == 1 && _state.Data().playerShip.missileState == 2 && _state.Data().flight.missileJammed != 1)
+  if (_state.Data().keyboard.keyDown[Keys::M] == 1 && _state.Data().playerShip.missileState == 2 && _state.Data().flight.missileJammed != 1)
   {
     if (NextRandom(_state) < MISSILE_JAM_ODDS)
     {
@@ -1285,7 +1277,7 @@ void HandleIdentifyKey(GameState& _state)
 {
   if (_state.Data().flight.shipIdRequested != 1)
   {
-    if (_state.Data().keyboard.keyDown.keyDownI != 1 || _state.Data().playerShip.missileState != 0 ||
+    if (_state.Data().keyboard.keyDown[Keys::I] != 1 || _state.Data().playerShip.missileState != 0 ||
         _state.Data().jump.hyperspaceCountdown != 0)
     {
       return;
@@ -1325,7 +1317,7 @@ void HandleIdentifyKey(GameState& _state)
 void HandleAntiEcmKey(GameState& _state)
 {
   _state.Data().flight.antiEcmActive = 0;
-  if (_state.Data().keyboard.keyDown.keyDownL != 1 || _state.Data().commander.antiEcmEmulatorFitted != 1)
+  if (_state.Data().keyboard.keyDown[Keys::L] != 1 || _state.Data().commander.antiEcmEmulatorFitted != 1)
   {
     return;
   }
@@ -1416,7 +1408,7 @@ void PlaceSunPlanetAndStation(GameState& _state)
   // 10-17 in its Thargons byte. While the Thargoids invade it has no missiles, Thargons or aggression, and is not
   // hostile. In the slot after the planet's.
   SpaceObject& station = _state.Slot(SlotIndex::Station);
-  const std::uint8_t stationType = _state.Data().commander.currentTechLevel >= 9 ? 0 : 1;
+  const std::uint8_t stationType = _state.Data().commander.currentSystem.techLevel >= 9 ? 0 : 1;
   station.type = static_cast<std::uint8_t>((stationType << 1) | SpaceObject::ACTIVE);
   station.yaw = STATION_YAW;
   station.roll = 0;
@@ -1442,7 +1434,7 @@ void PlaceSunPlanetAndStation(GameState& _state)
     station.fragments = 0x0A;
     station.flags = static_cast<std::uint8_t>(station.flags & 0xFE);
   }
-  _state.Data().flight.spawnGovernment = std::uint8_t{_state.Data().commander.currentGovernment};
+  _state.Data().flight.spawnGovernment = std::uint8_t{_state.Data().commander.currentSystem.government};
 }
 
 // sub word [si+_low], ax; sbb byte [si+_high], dl; sub word [si+_compass], ax, with DL:AX = _velocityHigh:_velocity:
@@ -1504,7 +1496,7 @@ std::optional<DrawnDust> DrawnStardust(const GameState& _state, std::size_t _par
   {
     return DrawnDust{at, std::nullopt};
   }
-  if (_state.Data().flight.stardustPrevious[_particle][PARTICLE_NEW] != 0)
+  if (_state.Data().flight.stardustPrevious[_particle].respawned != 0)
   {
     return std::nullopt;
   }
@@ -1523,8 +1515,8 @@ std::uint8_t StardustColor() noexcept
 
 std::optional<DustScreenPosition> GetPreviousDustScreenPosition(const GameState& _state, std::size_t _particle)
 {
-  const Field<std::uint8_t>(&copy)[PARTICLE_BYTES] = _state.Data().flight.stardustPrevious[_particle];
-  const DustPosition previous{Signed(WordIn(copy, PARTICLE_X)), Signed(WordIn(copy, PARTICLE_Y))};
+  const FlightState::DustParticle& copy = _state.Data().flight.stardustPrevious[_particle];
+  const DustPosition previous{Signed(std::uint16_t{copy.x}), Signed(std::uint16_t{copy.y})};
   if (!IsDustOnScreen(previous))
   {
     return std::nullopt;
@@ -1647,20 +1639,20 @@ DustStep ScaleDustStep(const GameState& _state, DustPosition _position)
 
 DustPosition LoadDustPosition(const GameState& _state, std::size_t _particle)
 {
-  const Field<std::uint8_t>(&particle)[PARTICLE_BYTES] = _state.Data().flight.stardust[_particle];
-  return DustPosition{Signed(WordIn(particle, PARTICLE_X)), Signed(WordIn(particle, PARTICLE_Y))};
+  const FlightState::DustParticle& particle = _state.Data().flight.stardust[_particle];
+  return DustPosition{Signed(std::uint16_t{particle.x}), Signed(std::uint16_t{particle.y})};
 }
 
 void StoreDustPosition(GameState& _state, std::size_t _particle, DustPosition _position)
 {
-  SetWordIn(_state.Data().flight.stardust[_particle], PARTICLE_X, Word(_position.x));
-  SetWordIn(_state.Data().flight.stardust[_particle], PARTICLE_Y, Word(_position.y));
+  _state.Data().flight.stardust[_particle].x = Word(_position.x);
+  _state.Data().flight.stardust[_particle].y = Word(_position.y);
 }
 
 void StorePreviousDustPosition(GameState& _state, std::size_t _particle, DustPosition _position)
 {
-  SetWordIn(_state.Data().flight.stardustPrevious[_particle], PARTICLE_X, Word(_position.x));
-  SetWordIn(_state.Data().flight.stardustPrevious[_particle], PARTICLE_Y, Word(_position.y));
+  _state.Data().flight.stardustPrevious[_particle].x = Word(_position.x);
+  _state.Data().flight.stardustPrevious[_particle].y = Word(_position.y);
 }
 
 DustScreenPosition DustToScreen(DustPosition _position)
@@ -1698,12 +1690,12 @@ std::uint16_t ResetStardust(GameState& _state)
     }
   };
   std::uint16_t lifetimeRandom = 0;
-  for (Field<std::uint8_t>(&particle)[PARTICLE_BYTES] : _state.Data().flight.stardust)
+  for (FlightState::DustParticle& particle : _state.Data().flight.stardust)
   {
-    SetWordIn(particle, PARTICLE_X, randomCoordinate());
-    SetWordIn(particle, PARTICLE_Y, randomCoordinate());
+    particle.x = randomCoordinate();
+    particle.y = randomCoordinate();
     lifetimeRandom = NextRandom(_state);
-    particle[PARTICLE_LIFETIME] = RandomLifetime(lifetimeRandom);
+    particle.lifetime = RandomLifetime(lifetimeRandom);
   }
   return lifetimeRandom;
 }
@@ -1714,10 +1706,7 @@ void SaveStardustPositions(GameState& _state)
   // cleared again at 2E5C, with no call between).
   for (std::size_t particle = 0; particle < STARDUST_COUNT; ++particle)
   {
-    for (std::size_t index = 0; index < PARTICLE_BYTES; ++index)
-    {
-      _state.Data().flight.stardustPrevious[particle][index] = std::uint8_t{_state.Data().flight.stardust[particle][index]};
-    }
+    _state.Data().flight.stardustPrevious[particle] = _state.Data().flight.stardust[particle];
   }
 }
 
@@ -1757,12 +1746,18 @@ ScreenChange RestoreFlightScreen(GameState& _state, Hardware& _hardware, bool _b
 
 void InvalidateDashboard(GameState& _state)
 {
-  // REP STOSB with ES = DS, upwards: DF is clear wherever the reference calls it, as for SaveStardustPositions.
-  static_assert(GAME_DATA_OFFSET(flight.speedShown) + 1 - GAME_DATA_OFFSET(flight.missileCountShown) == DASHBOARD_CACHE_BYTES,
-                "the dashboard's cache holds its members together, as in 1987");
-  for (Field<std::uint8_t>& shown : BytesThrough(_state.Data().flight.missileCountShown, _state.Data().flight.speedShown))
+  // REP STOSB with ES = DS, upwards over the dashboard's cache, missileCountShown to speedShown: every value a gauge shows, stale.
+  FlightState& flight = _state.Data().flight;
+  for (std::uint8_t* const shown : {&flight.missileCountShown,   &flight.missileLockShown,      &flight.energyBanksShown[0],
+                                    &flight.energyBanksShown[1], &flight.energyBanksShown[2],   &flight.energyBanksShown[3],
+                                    &flight.energyBankFill[0],   &flight.energyBankFill[1],     &flight.energyBankFill[2],
+                                    &flight.energyBankFill[3],   &flight.rollRateShown,         &flight.pitchRateShown,
+                                    &flight.altitudeShown,       &flight.cabinTemperatureShown, &flight.fuelShown,
+                                    &flight.ecmGlyphShown,       &flight.safeZoneGlyphShown,    &flight.laserTemperatureShown,
+                                    &flight.foreShieldShown,     &flight.aftShieldShown,        &flight.conditionColorShown,
+                                    &flight.speedShown})
   {
-    shown = DASHBOARD_STALE;
+    *shown = DASHBOARD_STALE;
   }
 }
 
@@ -1926,7 +1921,7 @@ void DrawEnergyBanks(GameState& _state)
   // banks below it are empty: the bank written is the last of those the count has left.
   const std::uint16_t energy = _state.Data().playerShip.playerEnergy;
   std::uint8_t wholeBanks = High(energy);
-  Field<std::uint8_t>(&fills)[ENERGY_BANKS] = _state.Data().flight.energyBankFill;
+  std::uint8_t(&fills)[ENERGY_BANKS] = _state.Data().flight.energyBankFill;
   std::uint16_t banks = ENERGY_BANKS;
   for (; banks != 0 && wholeBanks != 0; --banks, --wholeBanks)
   {
@@ -1943,7 +1938,7 @@ void DrawEnergyBanks(GameState& _state)
 
   // Each bank against its shown value, from the top bank's bar upwards, PUSH CX, DI and SI round each: the count left in CX, so
   // CH = 0 for the bar.
-  Field<std::uint8_t>(&shown)[ENERGY_BANKS] = _state.Data().flight.energyBanksShown;
+  std::uint8_t(&shown)[ENERGY_BANKS] = _state.Data().flight.energyBanksShown;
   std::uint16_t line = ENERGY_BANK_LINE;
   for (std::uint16_t count = ENERGY_BANKS; count != 0; --count)
   {
@@ -1991,7 +1986,7 @@ void UpdateEnergyAndLaserHeat(GameState& _state)
     return;
   }
   const auto lost = static_cast<std::size_t>(Low(NextRandom(_state)) / EQUIPMENT_LOSS_DIVISOR);
-  Field<std::uint8_t>& equipment = ByteWithin(BytesOf(_state.Data().commander), COMMANDER_STATE_OFFSET(missileCount) + lost);
+  std::uint8_t& equipment = _state.Data().commander.*EQUIPMENT_ITEMS[1 + lost];
   if (equipment == 0)
   {
     return;
@@ -2051,7 +2046,7 @@ void UpdateConditionColor(GameState& _state)
 
 ScreenChange SetUpLocalSpace(GameState& _state, Hardware& _hardware, bool _backward)
 {
-  LoadSystemSeeds(_state, _state.Data().commander.currentSystemIndex);
+  LoadSystemSeeds(_state, _state.Data().commander.currentSystem.index);
   InvalidateDashboard(_state);
   _state.Data().flight.objectSlotCount = 0x14;
   _state.Data().flight.debrisSlotCount = 0x10;
@@ -2539,14 +2534,14 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, SlotInd
   {
     di = LaunchDi{di.slot, PastBuffer::Stardust};
   }
-  if (_state.Data().keyboard.keyDown.keyDownG == 1 && _state.Data().commander.galacticHyperdriveFitted == 1 &&
+  if (_state.Data().keyboard.keyDown[Keys::G] == 1 && _state.Data().commander.galacticHyperdriveFitted == 1 &&
       _state.Data().jump.galacticDriveReadyFrames == 0 && _state.Data().jump.hyperspaceCountdown == 0)
   {
     StartBeep(_state);
     SetMessage(_state, Message::GalacticDriveReady, 0x28);
     _state.Data().jump.galacticDriveReadyFrames = 0x28;
   }
-  if (_state.Data().keyboard.keyDown.keyDownH == 1 && PressHyperspace(_state))
+  if (_state.Data().keyboard.keyDown[Keys::H] == 1 && PressHyperspace(_state))
   {
     return FlightKeysExit{false, backward};
   }
@@ -2564,17 +2559,17 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, SlotInd
       ToggleDockingComputer(_state, _hardware);
     }
   }
-  if (_state.Data().keyboard.keyDown.keyDownJ == 1)
+  if (_state.Data().keyboard.keyDown[Keys::J] == 1)
   {
     if (const JumpDriveRequest request = EngageJumpDrive(_state); request.lock)
     {
       di = DiAfterMassLock(*request.lock, di);
     }
   }
-  if (_state.Data().keyboard.keyDown.keyDownEsc == 1)
+  if (_state.Data().keyboard.keyDown[Keys::ESC] == 1)
   {
     _state.Data().flight.gamePaused = 1;
-    if (_state.Data().keyboard.keyDown.keyDownCtrl == 1)
+    if (_state.Data().keyboard.keyDown[Keys::CTRL] == 1)
     {
       // Ctrl+Esc freezes the game until a key, without the menu.
       ResetKeyboard(_state, _hardware);
@@ -2594,26 +2589,26 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, SlotInd
   }
   HandleMissileKeys(_state, di);
   HandleFireButton(_state, _hardware);
-  if (_state.Data().keyboard.keyDown.keyDownE == 1 && _state.Data().commander.ecmFitted == 1)
+  if (_state.Data().keyboard.keyDown[Keys::E] == 1 && _state.Data().commander.ecmFitted == 1)
   {
     _state.Data().playerShip.ecmFired = 1;
     SetMessage(_state, Message::EcmActive, 5);
     (void)RemoveAllMissiles(_state);
     DrainEnergy(_state, ECM_ENERGY);
   }
-  if (_state.Data().keyboard.keyDown.keyDownB == 1 && _state.Data().commander.energyBombFitted == 1)
+  if (_state.Data().keyboard.keyDown[Keys::B] == 1 && _state.Data().commander.energyBombFitted == 1)
   {
     _state.Data().commander.energyBombFitted = 0;
     DetonateEnergyBomb(_state, _hardware);
   }
-  if (_state.Data().keyboard.keyDown.keyDownC == 1 && _state.Data().commander.escapePodFitted == 1 &&
+  if (_state.Data().keyboard.keyDown[Keys::C] == 1 && _state.Data().commander.escapePodFitted == 1 &&
       _state.Data().playerShip.escapePodFrames == 0)
   {
     StartBeep(_state);
     LaunchEscapePod(_state);
   }
   HandleIdentifyKey(_state);
-  if (_state.Data().keyboard.keyDown.keyDownN == 1 && _state.Data().commander.maskingDeviceFitted == 1)
+  if (_state.Data().keyboard.keyDown[Keys::N] == 1 && _state.Data().commander.maskingDeviceFitted == 1)
   {
     UseMaskingDevice(_state);
   }
@@ -2684,7 +2679,7 @@ void UpdatePlayerMotion(GameState& _state, Hardware& _hardware)
   {
     // . and , change the speed's low byte by 4, within 4-48 unless it wraps, and the word is written back.
     std::uint16_t speed = _state.Data().playerShip.playerSpeed;
-    if (_state.Data().keyboard.keyDown.keyDownPeriod == 1)
+    if (_state.Data().keyboard.keyDown[Keys::PERIOD] == 1)
     {
       speed = WithLow(speed, static_cast<std::uint8_t>(Low(speed) + SPEED_KEY_STEP));
       _state.Data().playerShip.velocityDirty = 1;
@@ -2693,7 +2688,7 @@ void UpdatePlayerMotion(GameState& _state, Hardware& _hardware)
         speed = WithLow(speed, TOP_SPEED);
       }
     }
-    if (_state.Data().keyboard.keyDown.keyDownComma == 1)
+    if (_state.Data().keyboard.keyDown[Keys::COMMA] == 1)
     {
       speed = WithLow(speed, static_cast<std::uint8_t>(Low(speed) - SPEED_KEY_STEP));
       _state.Data().playerShip.velocityDirty = 1;

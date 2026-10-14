@@ -16,7 +16,7 @@ namespace Elite
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
-// Each is what the routine Symbols.tsv names computes, with no register in sight: its inputs are
+// Each is what the 1987 routine of its name computes, with no register in sight: its inputs are
 // parameters, its results come back, and every byte it writes is written as the original writes it,
 // in the same order, scratch words and the divide trap's saves in the code segment included. Signed
 // words are std::int16_t; angles, 2048 to a turn, are std::uint16_t.

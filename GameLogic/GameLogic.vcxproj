@@ -84,8 +84,6 @@
     <ClInclude Include="CombatState.h" />
     <ClInclude Include="CombatTables.h" />
     <ClInclude Include="CommanderState.h" />
-    <ClInclude Include="Field.h" />
-    <ClInclude Include="DataPlaces.h" />
     <ClInclude Include="DirectoryFileStore.h" />
     <ClInclude Include="DiskState.h" />
     <ClInclude Include="Docked.h" />
@@ -110,7 +108,6 @@
     <ClInclude Include="GalaxyTables.h" />
     <ClInclude Include="Game.h" />
     <ClInclude Include="GameData.h" />
-    <ClInclude Include="GamePort.h" />
     <ClInclude Include="GameState.h" />
     <ClInclude Include="Gauges.h" />
     <ClInclude Include="Guest.h" />
@@ -141,7 +138,6 @@
     <ClInclude Include="Platform.h" />
     <ClInclude Include="PlayerShipState.h" />
     <ClInclude Include="Reference.h" />
-    <ClInclude Include="ReferenceImage.h" />
     <ClInclude Include="Replay.h" />
     <ClInclude Include="SaveLoad.h" />
     <ClInclude Include="SaveLoadState.h" />
@@ -162,10 +158,12 @@
     <ClInclude Include="SpaceViewLayers.h" />
     <ClInclude Include="Speaker.h" />
     <ClInclude Include="SquareWave.h" />
+    <ClInclude Include="StartState.h" />
     <ClInclude Include="StartUp.h" />
     <ClInclude Include="StartUpState.h" />
     <ClInclude Include="StartUpTables.h" />
     <ClInclude Include="StateDigest.h" />
+    <ClInclude Include="StateWriter.h" />
     <ClInclude Include="Text.h" />
     <ClInclude Include="TextState.h" />
     <ClInclude Include="TextTables.h" />
@@ -195,7 +193,6 @@
     <ClCompile Include="FlightSnapshot.cpp" />
     <ClCompile Include="Galaxy.cpp" />
     <ClCompile Include="Game.cpp" />
-    <ClCompile Include="GamePort.cpp" />
     <ClCompile Include="GameState.cpp" />
     <ClCompile Include="Gauges.cpp" />
     <ClCompile Include="Hardware.cpp" />
@@ -212,7 +209,6 @@
     <ClCompile Include="PlanetLook.cpp" />
     <ClCompile Include="Platform.cpp" />
     <ClCompile Include="Reference.cpp" />
-    <ClCompile Include="ReferenceImage.cpp" />
     <ClCompile Include="Replay.cpp" />
     <ClCompile Include="SaveLoad.cpp" />
     <ClCompile Include="Scene.cpp" />
@@ -224,6 +220,7 @@
     <ClCompile Include="SpaceViewLayers.cpp" />
     <ClCompile Include="Speaker.cpp" />
     <ClCompile Include="SquareWave.cpp" />
+    <ClCompile Include="StartState.cpp" />
     <ClCompile Include="StartUp.cpp" />
     <ClCompile Include="StateDigest.cpp" />
     <ClCompile Include="Text.cpp" />

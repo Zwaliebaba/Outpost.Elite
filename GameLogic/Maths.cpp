@@ -152,9 +152,9 @@ SinCos SinCosOf(std::uint16_t _angle)
 SinCos SetSinCos(GameState& _state, std::size_t _pair, std::uint16_t _angle)
 {
   const SinCos pair = SinCosOf(_angle);
-  Field<std::uint8_t>(&stored)[4] = _state.Data().maths.rotationSinCos[_pair];
-  SetWordIn(stored, 0, Word(pair.sine));
-  SetWordIn(stored, 2, Word(pair.cosine));
+  MathsState::StoredSinCos& stored = _state.Data().maths.rotationSinCos[_pair];
+  stored.sine = Word(pair.sine);
+  stored.cosine = Word(pair.cosine);
   return pair;
 }
 
@@ -171,8 +171,8 @@ Pair RotateBySinCos(Pair _point, SinCos _by)
 
 Pair RotateByStoredSinCos(const GameState& _state, std::size_t _pair, Pair _point)
 {
-  const Field<std::uint8_t>(&stored)[4] = _state.Data().maths.rotationSinCos[_pair];
-  return RotateBySinCos(_point, SinCos{Signed(WordIn(stored, 0)), Signed(WordIn(stored, 2))});
+  const MathsState::StoredSinCos& stored = _state.Data().maths.rotationSinCos[_pair];
+  return RotateBySinCos(_point, SinCos{Signed(std::uint16_t{stored.sine}), Signed(std::uint16_t{stored.cosine})});
 }
 
 std::uint16_t ArcTangent2(std::int16_t _a, std::int16_t _b)

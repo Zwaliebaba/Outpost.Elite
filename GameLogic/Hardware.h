@@ -1,7 +1,6 @@
 // GameLogic/Hardware.h
 #pragma once
 
-#include "Field.h"
 #include "Pacing.h"
 #include "Platform.h"
 #include "Timing.h"
@@ -63,9 +62,6 @@ public:
   /// The XT's acknowledgement of a scan code, a pulse on bit 7 of port 61h: IN AL,61h, then OUT 61h with bit 7 set and
   /// OUT 61h with it clear.
   void AcknowledgeKeyboard();
-
-  /// IN AL,201h: the game port, the sticks' buttons in bits 4 to 7, each low while pressed.
-  [[nodiscard]] std::uint8_t GamePortButtons();
 
   /// Int 33h AX=0: the mouse driver reset. With no driver, int 33h is the ROM's IRET. The game reads nothing it answers.
   void ResetMouse();
@@ -156,17 +152,6 @@ public:
   /// Int 10h AH=0Bh, BH=1, BL=_palette: the BIOS selects mode 4's palette.
   void SelectPalette(std::uint8_t _palette);
 
-  /// OUT 201h,AL: fires the game port's one-shots, each high until its stick's resistance times it out. The port does not
-  /// read the byte written, so none is passed.
-  void FireGamePort();
-
-  /// IN AL,201h: the game port, its one-shots in bits 0 to 3, each high while it runs, and the buttons in bits 4 to 7.
-  [[nodiscard]] std::uint8_t GamePortOneShots();
-
-  /// The 8088's cycles over instructions that native code stands in for, counted for the devices the instructions executed
-  /// time (Platform::CountInstructionCycles): the game port's one-shots, which a stick read measures by counting polls.
-  void CountInstructionCycles(Cycles _cycles) noexcept;
-
   /// Int 1Ah AH=0: the time of day, its rollover flag cleared.
   [[nodiscard]] ClockReading ReadTimeOfDay();
 
@@ -175,7 +160,7 @@ public:
   // holds it (D38).
 
   /// Int 21h AH=1Ah: DOS's disk transfer area, where find-first and find-next leave what they find: _area, of the game's state.
-  void SetDiskTransferArea(std::span<Field<std::uint8_t>> _area);
+  void SetDiskTransferArea(std::span<std::uint8_t> _area);
 
   /// Int 21h AX=4300h: the attributes of the file _name names.
   [[nodiscard]] DosFileAttributes ReadFileAttributes(std::string_view _name);
@@ -191,7 +176,7 @@ public:
   [[nodiscard]] DosAnswer OpenFile(std::string_view _name, std::uint8_t _access);
 
   /// Int 21h AH=3Fh: up to all of _buffer's bytes, of the game's state, from the file _handle into it; AX the count read.
-  [[nodiscard]] DosAnswer ReadFile(std::uint16_t _handle, std::span<Field<std::uint8_t>> _buffer);
+  [[nodiscard]] DosAnswer ReadFile(std::uint16_t _handle, std::span<std::uint8_t> _buffer);
 
   /// Int 21h AH=40h: _buffer's bytes written to the file _handle, stamped with DOS's time at the platform's clock; AX the count
   /// written.
@@ -225,12 +210,6 @@ public:
 
   /// Whether a mouse driver is loaded (Platform::MouseDriverLoaded): what the game's test of int 33h's vector finds.
   [[nodiscard]] bool MouseDriverLoaded() const noexcept;
-
-  /// Whether the ROM is an Amstrad's, with its name at FC00:0016 where the game looks: never, as the platform is an IBM PC (D12).
-  [[nodiscard]] static constexpr bool AmstradRom() noexcept
-  {
-    return false;
-  }
 
   /// The command tail DOS gave the program, which its PSP held at 81h, its length at 80h: what the program was started with.
   [[nodiscard]] std::string_view CommandTail() const noexcept;

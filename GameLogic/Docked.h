@@ -17,7 +17,7 @@ namespace Elite
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
-// Each is what the routine Symbols.tsv names computes, with no register in sight: its inputs are
+// Each is what the 1987 routine of its name computes, with no register in sight: its inputs are
 // parameters, its results come back, and every byte it writes is written as the original writes it, in
 // the same order and at the same width.
 
@@ -86,8 +86,7 @@ void DrawDockedFrameAt(GameState& _state, Hardware& _hardware, std::uint8_t _scr
 /// DrawDockedFrame (CS:7C88): DrawDockedFrameAt from _descriptor, the bytes of GameData from where a frame's descriptor starts to the end
 /// of the member that holds it: the two attributes, then the title. The symbol table sizes a descriptor as it pleases, two bytes or the
 /// whole screen's text, so the caller passes the bytes its title is within. Returns the title.
-inline std::string_view DrawDockedFrame(GameState& _state, Hardware& _hardware, std::span<const Field<std::uint8_t>> _descriptor,
-                                        bool _backward)
+inline std::string_view DrawDockedFrame(GameState& _state, Hardware& _hardware, std::span<const std::uint8_t> _descriptor, bool _backward)
 {
   DrawDockedFrameAt(_state, _hardware, ByteWithin(_descriptor, 0), ByteWithin(_descriptor, 1), _backward);
   return TextWithin(_descriptor, 2);

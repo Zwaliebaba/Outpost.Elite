@@ -111,12 +111,6 @@
     <ClInclude Include="CommanderState.h">
       <Filter>State</Filter>
     </ClInclude>
-    <ClInclude Include="Field.h">
-      <Filter>State</Filter>
-    </ClInclude>
-    <ClInclude Include="DataPlaces.h">
-      <Filter>State</Filter>
-    </ClInclude>
     <ClInclude Include="DirectoryFileStore.h">
       <Filter>Platform</Filter>
     </ClInclude>
@@ -188,9 +182,6 @@
     </ClInclude>
     <ClInclude Include="GameData.h">
       <Filter>State</Filter>
-    </ClInclude>
-    <ClInclude Include="GamePort.h">
-      <Filter>Platform</Filter>
     </ClInclude>
     <ClInclude Include="GameState.h">
       <Filter>State</Filter>
@@ -282,9 +273,6 @@
     <ClInclude Include="Reference.h">
       <Filter>Reference</Filter>
     </ClInclude>
-    <ClInclude Include="ReferenceImage.h">
-      <Filter>Reference</Filter>
-    </ClInclude>
     <ClInclude Include="Replay.h">
       <Filter>Replay</Filter>
     </ClInclude>
@@ -345,6 +333,9 @@
     <ClInclude Include="SquareWave.h">
       <Filter>Platform</Filter>
     </ClInclude>
+    <ClInclude Include="StartState.h">
+      <Filter>State</Filter>
+    </ClInclude>
     <ClInclude Include="StartUp.h">
       <Filter>StartUp</Filter>
     </ClInclude>
@@ -356,6 +347,9 @@
     </ClInclude>
     <ClInclude Include="StateDigest.h">
       <Filter>Replay</Filter>
+    </ClInclude>
+    <ClInclude Include="StateWriter.h">
+      <Filter>State</Filter>
     </ClInclude>
     <ClInclude Include="Text.h">
       <Filter>Text</Filter>
@@ -440,9 +434,6 @@
     <ClCompile Include="Game.cpp">
       <Filter>Reference</Filter>
     </ClCompile>
-    <ClCompile Include="GamePort.cpp">
-      <Filter>Platform</Filter>
-    </ClCompile>
     <ClCompile Include="GameState.cpp">
       <Filter>State</Filter>
     </ClCompile>
@@ -485,9 +476,6 @@
     <ClCompile Include="Reference.cpp">
       <Filter>Reference</Filter>
     </ClCompile>
-    <ClCompile Include="ReferenceImage.cpp">
-      <Filter>Reference</Filter>
-    </ClCompile>
     <ClCompile Include="Replay.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
@@ -520,6 +508,9 @@
     </ClCompile>
     <ClCompile Include="SquareWave.cpp">
       <Filter>Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="StartState.cpp">
+      <Filter>State</Filter>
     </ClCompile>
     <ClCompile Include="StartUp.cpp">
       <Filter>StartUp</Filter>

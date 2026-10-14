@@ -2,6 +2,8 @@
 
 **Status:** written in Phase 1 (plan §5), and kept as the record of what the reference does (ADR-017; `MapReference.py` stays by D36). This is the written half of the map, and [`Symbols.tsv`](Symbols.tsv) is the named half. `python Tools/MapReference.py --listing <file>` regenerates the annotated disassembly from both, and every claim below names the addresses it rests on, so it can be checked against that listing. Under AGENTS.md's preamble the reference is the design. This document says what the reference does; it says what the port must do only where a ruling exists or a behaviour has to be kept.
 
+*Since Phase 7, step 5 (D79), the tree holds neither the reference's image nor `Symbols.tsv`, `DataPartition.tsv` and the tools that read them (`MapReference.py` among them); git history keeps them, and this map stays as the record of what the 1987 program does. A question it does not settle is measured against the owner's own `ELITES.EXE`.*
+
 ## Coverage
 
 This map describes `ELITES.EXE`, the reference since ADR-007; its addresses were translated from the map of `ELITEL.EXE`, the wireframe build of the same release, and the solid renderer was mapped afresh. `python Tools/MapReference.py --gaps` reaches 13,831 instructions and 35,580 of the code segment's 36,672 bytes, in 387 routines. It walks from the program entry, the four interrupt handlers, the three jump tables and the two blueprint handlers. It also finds 444 data-segment addresses that the code references by absolute address or as a table base.

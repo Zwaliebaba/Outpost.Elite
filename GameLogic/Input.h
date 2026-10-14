@@ -11,7 +11,7 @@
 namespace Elite
 {
 
-// The reference's input routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): the keyboard, the joystick and the mouse.
+// The reference's input routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): the keyboard and the mouse.
 // Each takes values and gives values back, on the GameState and, where it drives a device, the devices (ADR-014). The keyboard's interrupt
 // handler also has its entry, at the end, which int 9 reaches (ADR-010).
 
@@ -42,22 +42,8 @@ struct KeyPress
   bool screenshot;       ///< Alt and PrtSc were held, and it saved a screenshot
 };
 
-/// What ReadJoystickAxes counts: the polls of each of the IBM stick's axes before its one-shot drops.
-struct StickAxes
-{
-  bool timedOut;   ///< the stick did not answer or a count wrapped; interrupts are then left off
-  std::uint16_t x; ///< X's polls; on a time-out, the count as it stands, from 60000 (BX)
-  std::uint16_t y; ///< Y's polls, likewise (CX)
-};
-
 /// KeyboardInterrupt (CS:0201): int 9's handler, without the IRET: ReadScanCode.
 void KeyboardInterrupt(GameState& _state, Hardware& _hardware);
-
-/// ReadJoystickAxes (CS:777E): the IBM stick's two axes as counted polls, with interrupts off from the first firing of the one-shots
-/// (OUT 201h, whose byte the port does not read) to the last poll; then the port's byte into joystickPortByte, and
-/// fireLatch set while button 1 is down. Counts the 8088's cycles for its instructions, by which the port times its one-shots, and
-/// waits when X's one-shot drops before Y's, for Y's.
-[[nodiscard]] StickAxes ReadJoystickAxes(Hardware& _hardware);
 
 /// IsMouseDriverInstalled (CS:02D4): the int 33h vector in the interrupt table, and whether a driver is behind it: whether
 /// the code it names is not an IRET.
@@ -70,12 +56,12 @@ void ResetKeyboard(GameState& _state, Hardware& _hardware);
 /// interrupt.
 void ReadScanCode(GameState& _state, Hardware& _hardware);
 
-/// ReadFireButton (CS:74E0): whether fire is pressed on the selected device: the keyboard's space, the Amstrad stick's fire
-/// keys, the IBM stick's two buttons (IN 201h), or the mouse's buttons (int 33h AX=5) or the Amstrad mouse's keys.
+/// ReadFireButton (CS:74E0): whether fire is pressed on the selected device: the keyboard's space, or the mouse's buttons
+/// (int 33h AX=5). The joystick went with D81.
 [[nodiscard]] bool ReadFireButton(const GameState& _state, Hardware& _hardware);
 
 /// ReadMouseSteering (CS:797E): the roll and the pitch from the mouse's motion (int 33h AX=0Bh), added to the rates the last
-/// frame left, within -23..23, with -1 and 1 snapped to 0; the buttons (int 33h AX=5, or the Amstrad mouse's keys) into
+/// frame left, within -23..23, with -1 and 1 snapped to 0; the buttons (int 33h AX=5) into
 /// mouseButtons, and the left one into fireLatch.
 [[nodiscard]] Steering ReadMouseSteering(GameState& _state, Hardware& _hardware);
 
@@ -96,19 +82,12 @@ void WaitForKeyPress(GameState& _state, Hardware& _hardware);
 void AwaitNextKey(Hardware& _hardware, const KeyPress& _key);
 
 /// ReadSteering (CS:7536): the roll and the pitch from the selected device, within -23..23: the keyboard's (ReadKeyboardSteering)
-/// or the Amstrad stick's integrated into keyboardRollRate and keyboardPitchRate, the IBM stick's (ReadJoystickSteering), or the
-/// mouse's (ReadMouseSteering). Waits sometimes, in ReadJoystickAxes.
+/// integrated into keyboardRollRate and keyboardPitchRate, or the mouse's (ReadMouseSteering).
 [[nodiscard]] Steering ReadSteering(GameState& _state, Hardware& _hardware);
 
 /// GetKey (CS:7616): the next code from keyBuffer, taken with interrupts off; then interrupts on, and SaveScreenshot while Alt and
 /// PrtSc are held.
 [[nodiscard]] KeyPress GetKey(GameState& _state, Hardware& _hardware);
-
-/// ReadJoystickSteering (CS:77C1): the roll and the pitch from the joystick: the Amstrad's keys ramped, or the IBM stick's
-/// counts about joystickCenterX and joystickCenterY, each (count - centre) * 128 / centre by a divide that can trap, at most 127,
-/// over 8 less a dead zone of 4, the pitch negated, within -23..23; 0 and 0 when the IBM stick does not answer. Waits
-/// sometimes, in ReadJoystickAxes.
-[[nodiscard]] Steering ReadJoystickSteering(GameState& _state, Hardware& _hardware);
 
 /// PollScreenDumpKey (CS:7F3D): SaveScreenshot while Alt and PrtSc are held.
 void PollScreenDumpKey(GameState& _state, Hardware& _hardware);

@@ -271,20 +271,17 @@ public:
     Assert::IsTrue(taken == std::vector<Elite::Cycles>{FIRST_TICK, 2 * FIRST_TICK, 3 * FIRST_TICK}, L"at each edge");
     Assert::IsFalse(enabledInside, L"IF cleared in the handler");
     Assert::AreEqual(std::uint64_t{3}, rig.Host().InterruptsTaken());
-    Assert::AreEqual(3 * Elite::Platform::HARDWARE_INTERRUPT_CYCLES, rig.Host().InstructionCycles(), L"each entry's cycles");
     Assert::AreEqual(ticks, rig.Host().Day().Ticks(), L"the BIOS's handler did not run");
     Assert::IsFalse(rig.Host().Events().InService(Elite::Irq::Timer), L"every one ended");
     Assert::AreEqual(std::uint64_t{3}, rig.Host().GameHandler(Elite::Irq::Timer).calls);
   }
 
-  // The BIOS's handlers serve the timer's and the keyboard's interrupts at power-on, as its vectors leave them, and the ROM is
-  // an IBM PC's, with no Amstrad's name where Start looks for one.
+  // The BIOS's handlers serve the timer's and the keyboard's interrupts at power-on, as its vectors leave them.
   TEST_METHOD(TheBiosServesBothInterruptsAtPowerOn)
   {
     PlatformRig rig("PlatformVectors");
     Assert::IsTrue(rig.Native().Handler(Elite::Irq::Timer) == Elite::IrqHandler::Bios, L"the BIOS's timer handler");
     Assert::IsTrue(rig.Native().Handler(Elite::Irq::Keyboard) == Elite::IrqHandler::Bios, L"the BIOS's keyboard handler");
-    Assert::IsFalse(Elite::Hardware::AmstradRom(), L"FC00:0016 must not hold \"Amstrad\"");
   }
 
   // What the game's own test, IsMouseDriverInstalled (CS:02D4), finds: whether a driver is loaded, as int 33h's vector says.
@@ -299,21 +296,19 @@ public:
     Assert::IsTrue(Elite::IsMouseDriverInstalled(loaded.Native()).installed);
   }
 
-  // An interrupt nothing serves goes to the ROM's IRET, which returns at once and costs the 8088 its cycles: int 33h with no
-  // mouse driver, as the game makes it.
+  // An interrupt nothing serves goes to the ROM's IRET, which returns at once: int 33h with no mouse driver, as the game makes
+  // it, ends the run where it would have.
   TEST_METHOD(TheRomsIretServesAVectorNothingHooks)
   {
     PlatformRig rig("PlatformRomIret");
     rig.Start([&rig] { (void)rig.Native().ReadMouseMotion(); });
     Assert::IsTrue(rig.Host().RunUntil(1'000) == Elite::StopReason::Terminated);
-    Assert::AreEqual(IRET_CYCLES, rig.Host().InstructionCycles(), L"the IRET's cycles");
   }
 
   // The BIOS's hardware handlers, native in the ROM's place, on each of the paths the ROM's code takes: the timer handler's
   // four (a tick, a tick that carries into the high word, a tick in the hour the day ends in, and the day's last tick), and
-  // the keyboard handler's. What they leave and the instruction clock are what the ROM's code, interpreted from the same state,
-  // gave before D7 deleted the interpreter; its stack pushes are gone with the
-  // processor (D33).
+  // the keyboard handler's. What they leave is what the ROM's code, interpreted from the same state, gave before D7 deleted the
+  // interpreter; its stack pushes are gone with the processor (D33), and the instruction clock with the joystick (D81).
   TEST_METHOD(BiosHandlersDoWhatTheRomDid)
   {
     struct Case
@@ -321,25 +316,21 @@ public:
       std::uint32_t ticks;
       std::uint32_t ticksAfter;
       std::uint8_t rolledOver;
-      Elite::Cycles instructionCycles;
     };
     const std::array<Case, 4> cases = {{
-      {0x00051000, 0x00051001, 0, 299},
-      {0x0005FFFF, 0x00060000, 0, 316},
-      {0x00180100, 0x00180101, 0, 323},
-      {0x001800AF, 0x00000000, 1, 358},
+      {0x00051000, 0x00051001, 0},
+      {0x0005FFFF, 0x00060000, 0},
+      {0x00180100, 0x00180101, 0},
+      {0x001800AF, 0x00000000, 1},
     }};
     for (const Case& test : cases)
     {
       PlatformRig rig("PlatformBiosTimer");
       Elite::Platform& platform = rig.Host();
       platform.Day().SetClock(test.ticks);
-      const Elite::Cycles cycles = platform.InstructionCycles();
       platform.Events().Request(Elite::Irq::Timer);
       platform.TakeDueInterrupts();
       Assert::AreEqual(test.ticksAfter, platform.Day().Ticks(), L"the count");
-      Assert::AreEqual(Elite::Platform::HARDWARE_INTERRUPT_CYCLES + test.instructionCycles, platform.InstructionCycles() - cycles,
-                       L"the instruction clock: the entry, then the ROM's code to its IRET");
       Assert::IsFalse(platform.Events().InService(Elite::Irq::Timer) || platform.Events().InService(Elite::Irq::Keyboard), L"ended");
       Assert::AreEqual(std::uint32_t{test.rolledOver}, std::uint32_t{platform.Day().ReadClock().rolledOver}, L"TIMER_OFL");
     }
@@ -354,12 +345,10 @@ public:
       platform.Idle(Elite::NO_EVENT);
     }
     const std::string digest = Elite::GameStateDigest(rig.State(), platform.Video());
-    const Elite::Cycles cycles = platform.InstructionCycles();
     platform.TakeDueInterrupts();
     Assert::IsFalse(platform.Events().LatchFull(), L"acknowledged");
     Assert::AreEqual(0x4Cu, std::uint32_t{platform.SystemControl()}, L"bit 7 high, then low");
     Assert::IsTrue(Elite::GameStateDigest(rig.State(), platform.Video()) == digest, L"nothing buffered");
-    Assert::AreEqual(Elite::Platform::HARDWARE_INTERRUPT_CYCLES + 127, platform.InstructionCycles() - cycles);
     Assert::IsFalse(platform.Events().InService(Elite::Irq::Timer) || platform.Events().InService(Elite::Irq::Keyboard), L"ended");
   }
 

@@ -8,8 +8,8 @@ wait 0.5; key space; wait 3.5      # any key: the credits, then the status scree
 key Escape; wait 0.3               # the disc menu
 key l; wait 0.3                    # Load Commander: it asks for a file name
 key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
-digest loaded a486d67cfeb1284466ae4f6b2819e536dfe97a2c0e1c18ea27b55fe65aa3e8a0
-picture loaded 44fd17ae02fbc25fb600d728cb324d04ff3a9ca1e4d3c452baf2feb4e9d0a706
+digest loaded d185dc9e28539984a8d3b8a38f98aeda716837b61eacbb581ec38416006b5f8c
+picture loaded 361ad782e46b4fca68ba8e14bbac08966458c215f96b0ec2b628c924935fc8d5
 outcome loaded galaxy=0 system=55 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=300000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=0 laserMounts=1 laserTypes=0 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=1 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=48 fuel=126 shipSlotsInUse=1 cabinTemperature=12 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 key F4; wait 0.8                   # Equip Ship, its cursor on Fuel
 key b; wait 0.3                    # fuel: from 3.5 to 7.0 light years
@@ -17,7 +17,7 @@ key Down; wait 0.15
 key s; wait 0.3                    # a missile sold, and two bought: four
 key b; wait 0.3
 key b; wait 0.3
-digest missiles a4df9c7c45c100f373f8fa91a997c97c2e7bc05d427584b5efc54edc960a6a50
+digest missiles 40fc4b5fbd38b90903a58b88b474d45d06eda7a83ce30a71bc9270535b8a6d4d
 picture missiles 6ce016227b569631405f466c280e8e82ed1f9c769f6db8e77e493908d7f62998
 outcome missiles galaxy=0 system=55 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=299524 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=4 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=0 laserMounts=1 laserTypes=0 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=1 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=48 fuel=255 shipSlotsInUse=1 cabinTemperature=12 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 key Down; wait 0.15
@@ -34,7 +34,7 @@ key Down; wait 0.15
 key b; wait 0.3                    # the beam laser, aft
 key Right; wait 0.15
 key space; wait 0.3
-digest pulse-and-beam ba080418206d3cd0c1895da5bbcb6aa633deb7a0a82821860488b822c54e60ce
+digest pulse-and-beam bdb87aa9db0560c05fdf8f8b60c2dc71b5fb76aeb41f6f04426d543ecabec097
 picture pulse-and-beam e7991995c5f67aea7729be09cdc6d243bc9e81860acf5d9fc526db603661d2cf
 outcome pulse-and-beam galaxy=0 system=55 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=278949 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=4 largeCargoBay=1 ecm=1 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=1 miningLasers=0 militaryLasers=0 laserMounts=10 laserTypes=4 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=1 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=48 fuel=255 shipSlotsInUse=1 cabinTemperature=12 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 key Down; wait 0.15
@@ -56,10 +56,10 @@ key space; wait 0.3
 key Down; wait 0.15
 key b; wait 0.3                    # the military laser, fore
 key space; wait 0.3
-digest equipped 91e7ba43fd0c4459e70e0ffe3f52a0f0f958d9b52ee359f2d05a0053589cd1d7
+digest equipped 086553eeaefbe3f9c16490521111e662b5c7d67363ac3321497f8f92b3dc5dc3
 picture equipped 1684788347ba5d9653bc830abd0da2a1e641e9b73a4692260fd14cea78583975
 outcome equipped galaxy=0 system=55 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=106866 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=4 largeCargoBay=1 ecm=1 fuelScoops=1 escapePod=1 energyBomb=1 energyUnit=1 dockingComputer=1 galacticHyperdrive=1 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=1 miningLasers=1 militaryLasers=1 laserMounts=15 laserTypes=39 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=1 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=48 fuel=255 shipSlotsInUse=1 cabinTemperature=12 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 key F9; wait 0.8
-digest status bb64e33db3ba4f28baad7bf02b890285876837412d5e7489a9c8e5dbb0a30dcb
+digest status 8ce60b77af509f4f2199b2e2a463d308eb46d8ea4882f9065462c4fb6bf0c9dd
 picture status 9664f7fc36fe301e4f776a23e3d359ffcf789cd4f42f92d91025d897f5a3f80f
 outcome status galaxy=0 system=55 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=106866 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=4 largeCargoBay=1 ecm=1 fuelScoops=1 escapePod=1 energyBomb=1 energyUnit=1 dockingComputer=1 galacticHyperdrive=1 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=1 miningLasers=1 militaryLasers=1 laserMounts=15 laserTypes=39 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=1 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=48 fuel=255 shipSlotsInUse=1 cabinTemperature=12 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0

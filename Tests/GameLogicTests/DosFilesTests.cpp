@@ -5,6 +5,7 @@
 #include "GameData.h"
 #include "Platform.h"
 #include "ReferenceRig.h"
+#include "StateWriter.h"
 #include "Text.h"
 
 #include <array>
@@ -59,7 +60,7 @@ constexpr std::uint32_t START_TIME = 0x645C; // 12 << 11 | 34 << 5 | 56 / 2
 constexpr Elite::Cycles TWO_SECONDS = 9'545'454;
 constexpr std::uint32_t TWO_SECONDS_LATER_TIME = 0x645D;
 
-using Bytes = std::span<Elite::Field<std::uint8_t>>;
+using Bytes = std::span<std::uint8_t>;
 using Snapshot = std::vector<std::uint8_t>;
 
 [[nodiscard]] std::wstring Widen(std::string_view _text)
@@ -68,8 +69,8 @@ using Snapshot = std::vector<std::uint8_t>;
 }
 
 /// DOS's file services natively (DosFiles), on the platform of a Game loaded from the reference, called as the game calls
-/// them: on its own members of the game's state, a name up to its NUL in commanderFileName, its commander's bytes and its
-/// transfer area (D38). The bytes of the game's memory each call changes are counted (LastChanges), and AX is checked to be 0 where DOS
+/// them: on its own members of the game's state, a name up to its NUL in commanderFileName and its transfer area (D38), and a
+/// commander's bytes in a block of the rig's own, as the game reads and writes the commander's (SaveLoad.cpp). The bytes of the game's memory each call changes are counted (LastChanges), and AX is checked to be 0 where DOS
 /// left it as it went in; what a test expects of the answers, it states outright. Until D33 each call was also made on the
 /// emulated DOS it replaced (Machine::Dos), and checked to answer alike, to change the same bytes as many times and to leave all
 /// of memory and the store alike: what the test states outright is what both gave.
@@ -81,7 +82,7 @@ public:
   {
   }
 
-  /// The game's own places: the transfer area it sets, where it keeps a file's name, and its commander's bytes.
+  /// The game's own places: the transfer area it sets and where it keeps a file's name; and a block for a commander's bytes.
   [[nodiscard]] Bytes Area() noexcept
   {
     return m_rig.State().Data().saveLoad.diskTransferArea;
@@ -92,9 +93,9 @@ public:
     return m_rig.State().Data().saveLoad.commanderFileName;
   }
 
-  [[nodiscard]] Bytes Block()
+  [[nodiscard]] Bytes Block() noexcept
   {
-    return Elite::BytesWithin(Elite::BytesOf(m_rig.State().Data().commander), 0, BLOCK_BYTES);
+    return m_block;
   }
 
   /// A second transfer area, for a search that is not the game's.
@@ -129,7 +130,7 @@ public:
     return Elite::TextIn(NameBuffer());
   }
 
-  /// 130 'N's in the commander's bytes, with no NUL in DOS's 128: a name that never ends.
+  /// 130 'N's in the block, with no NUL in DOS's 128: a name that never ends.
   std::string_view LongName()
   {
     const Bytes bytes = Block().first(LONG_NAME_BYTES);
@@ -137,7 +138,7 @@ public:
     return Elite::TextIn(bytes);
   }
 
-  /// The commander's first _bytes as DOS writes them out.
+  /// The block's first _bytes as DOS writes them out.
   [[nodiscard]] std::span<const std::uint8_t> BlockBytes(std::size_t _bytes)
   {
     const Bytes block = Block();
@@ -314,12 +315,16 @@ public:
     return m_lastChanges;
   }
 
-  /// The game's memory now: GameData's bytes, then video memory's.
+  /// The game's memory now: GameData as its members write it, then video memory's bytes, then the block's.
   [[nodiscard]] Snapshot Memory() const
   {
     const Elite::GameState& state = m_rig.State();
-    Snapshot bytes(state.DataBytes().begin(), state.DataBytes().end());
+    Snapshot bytes = Elite::StateBytes(state.Data());
     bytes.insert(bytes.end(), state.VideoBytes().begin(), state.VideoBytes().end());
+    for (const std::uint8_t& byte : m_block)
+    {
+      bytes.push_back(byte);
+    }
     return bytes;
   }
 
@@ -352,6 +357,8 @@ private:
   }
 
   ReferenceRig m_rig;
+  /// A buffer of a commander's size, which the reads and writes go through.
+  std::array<std::uint8_t, BLOCK_BYTES> m_block{};
   std::uint64_t m_lastChanges = 0;
 };
 
@@ -635,10 +642,9 @@ public:
     Assert::IsFalse(twin.Close(answer.value).failed);
   }
 
-  // A read lands in the buffer it is given, of the game's state, and no further: a buffer shorter than the file takes its own
-  // bytes, and one that is not the game's state, where its writes would not count, is refused whole, as is a transfer area
-  // there or one too short for a search. The game reads and searches into its own members only.
-  TEST_METHOD(BuffersAreTheGameStates)
+  // A read lands in the buffer it is given and no further: a buffer shorter than the file takes its own bytes, and the next read
+  // goes on from there. A transfer area too short for a search is refused.
+  TEST_METHOD(AReadLandsInItsBufferAndNoFurther)
   {
     DosRig twin("DosFilesBuffers", START);
     std::string bytes;
@@ -654,19 +660,14 @@ public:
 
     DosRig::Put(twin.Block(), std::string(0x10, '\0'), false);
     Assert::IsFalse(twin.Open(twin.Name(), 0).failed);
-    std::array<Elite::Field<std::uint8_t>, Elite::DosFiles::TRANSFER_AREA_BYTES> outside{};
-    const Snapshot before = twin.Memory();
-    Assert::ExpectException<std::out_of_range>([&] { (void)twin.Files().Read(5, outside); }, L"a buffer outside the state is refused");
-    Assert::IsTrue(twin.Memory() == before, L"and nothing changed");
     const Elite::DosAnswer first = twin.Read(5, twin.Block().first(4));
     Assert::IsTrue(!first.failed && first.value == 4, L"a buffer of four takes four");
     Assert::IsTrue(DosRig::Text(twin.Block(), 0, 0x10) == std::string("ABCD") + std::string(0x0C, '\0'), L"and no more");
     const Elite::DosAnswer rest = twin.Read(5, twin.Block().subspan(4));
-    Assert::IsTrue(!rest.failed && rest.value == 0x0C, L"the other twelve: the refused read moved nothing");
+    Assert::IsTrue(!rest.failed && rest.value == 0x0C, L"the other twelve");
     Assert::IsTrue(DosRig::Text(twin.Block(), 0, 0x10) == bytes, L"every byte, once");
     Assert::IsFalse(twin.Close(5).failed);
 
-    Assert::ExpectException<std::out_of_range>([&] { twin.Files().SetTransferArea(outside); }, L"a transfer area outside the state");
     Assert::ExpectException<std::logic_error>([&] { twin.Files().SetTransferArea(twin.Area().first(0x2A)); },
                                               L"a transfer area too short for a search");
   }
@@ -676,7 +677,6 @@ public:
   {
     ScratchDirectory directory("DosFilesClock");
     Elite::DirectoryFileStore store(directory.Path());
-    Elite::GameState state;
     Elite::DosDateTime start;
     start.year = 1987;
     start.month = 12;
@@ -685,7 +685,7 @@ public:
     start.minute = 59;
     start.second = 59;
     start.hundredths = 99;
-    const Elite::DosFiles files(state, store, start);
+    const Elite::DosFiles files(store, start);
     const Elite::DosDateTime now = files.Now(95'456); // two hundredths
     Assert::AreEqual(1988u, std::uint32_t{now.year});
     Assert::AreEqual(1u, std::uint32_t{now.month});

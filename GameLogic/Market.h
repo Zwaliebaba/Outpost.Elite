@@ -17,7 +17,7 @@ namespace Elite
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
-// Each is what the routine Symbols.tsv names computes, with no register in sight: its inputs are
+// Each is what the 1987 routine of its name computes, with no register in sight: its inputs are
 // parameters, its results come back, and every byte it writes is written as the original writes it, in
 // the same order and at the same width.
 
@@ -74,7 +74,7 @@ void StartMarketRandom(GameState& _state);
 
 /// ParseQuantity (CS:6A99): the decimal number in _text, a buffer typed into, spaces around it allowed. The buffer holds a NUL
 /// after what was typed, where the reading stops.
-[[nodiscard]] Quantity ParseQuantity(std::span<const Field<std::uint8_t>> _text);
+[[nodiscard]] Quantity ParseQuantity(std::span<const std::uint8_t> _text);
 
 /// PrintCargoQuantity (CS:6AD9): _quantity, or "-" for 0, in the quantity column of menuSelectedRow's row, in its
 /// attribute, and textAttribute put back.
@@ -89,9 +89,6 @@ void AddContrabandPenalty(GameState& _state);
 // What the routines above decide, apart from what they draw and where the game keeps it (ADR-043). The routines call these, so
 // the corpus checks them while the 1987 screens stand; the screens of piece 5 call them in their place. Every sum is at the
 // width the original computes it at.
-
-/// The commodities, in the market's order: food first, alien items last.
-inline constexpr std::uint8_t COMMODITY_KINDS = 17;
 
 /// The hold's tonnes without the extension, and with it.
 inline constexpr std::uint8_t CARGO_BAY_TONNES = 20;

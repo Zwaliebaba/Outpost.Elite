@@ -2,7 +2,8 @@
 
 #include "GameState.h"
 
-#include <algorithm>
+#include "StartState.h"
+
 #include <stdexcept>
 
 namespace Elite
@@ -13,13 +14,12 @@ GameState::GameState()
 {
 }
 
-void GameState::Load(std::uint16_t _codeSegment, std::span<const std::uint8_t> _state) noexcept
+void GameState::Start(std::uint16_t _codeSegment)
 {
   m_codeSegment = _codeSegment;
   m_dataSegment = static_cast<std::uint16_t>(_codeSegment + DATA_SEGMENT_PARAGRAPH);
-  const std::span<std::uint8_t, sizeof(GameData)> data = DataStorage();
-  std::ranges::fill(data, std::uint8_t{0});
-  std::ranges::copy(_state.first(std::min<std::size_t>(_state.size(), data.size())), data.begin());
+  *m_data = GameData{};
+  SetStartState(*m_data);
 }
 
 void GameState::RefuseVideo()

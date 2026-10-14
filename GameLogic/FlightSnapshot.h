@@ -178,7 +178,7 @@ struct FlightSnapshot
   std::uint8_t sight = NO_SIGHT;  ///< the view's laser type, 0-3, whose sights FinishSpaceViewFrame draws, or NO_SIGHT for none
   std::uint8_t supernovaHeat = 0; ///< while a supernova burns (SupernovaHeat), the sun's radius in rows; else 0
   std::uint8_t galaxy = 0;        ///< the system the planet is: galaxyNumber
-  std::uint8_t system = 0;        ///< and currentSystemIndex
+  std::uint8_t system = 0;        ///< and currentSystem.index
   SnapshotDisc titlePlanet;       ///< the planet the title draws behind its ship (DrawTitlePlanet)
 };
 

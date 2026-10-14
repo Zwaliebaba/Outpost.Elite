@@ -13,9 +13,6 @@ namespace GameLogicTests
 namespace
 {
 
-// A product's cargoHold entry: the units held, then the units on sale.
-constexpr std::size_t HOLD_ENTRY_BYTES = 2;
-
 // The value OutcomeValue gives for _name, which must be one of OUTCOMES.
 [[nodiscard]] std::string Value(const Elite::GameState& _state, std::string_view _name)
 {
@@ -58,14 +55,13 @@ public:
   {
     ReferenceRig rig("OutcomeFields");
     Elite::GameState& state = rig.State();
-    Elite::SetWordIn(Elite::BytesOf(state.Data().commander.creditsTenths), 0, 0x2345);
-    state.Data().commander.creditsTenths.data75F5 = 0x0001;
+    state.Data().commander.creditsTenths = 0x00012345;
     Assert::AreEqual("74565", Value(state, "creditsTenths").c_str(), false, L"10000h + 2345h tenths");
 
-    const std::span<Elite::Field<std::uint8_t>> hold = Elite::BytesOf(state.Data().commander.cargoHold);
+    Elite::CommanderState::CargoHold::Lot(&lots)[17] = state.Data().commander.cargoHold.lots;
     for (std::size_t commodity = 0; commodity < 17; ++commodity)
-      hold[commodity * HOLD_ENTRY_BYTES] = static_cast<std::uint8_t>(commodity);
-    hold[2 * HOLD_ENTRY_BYTES + 1] = 99; // on sale, not held
+      lots[commodity].held = static_cast<std::uint8_t>(commodity);
+    lots[2].onSale = 99; // on sale, not held
     Assert::AreEqual("0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16", Value(state, "cargo").c_str());
 
     constexpr std::string_view TITLE = "ARCH ANG=";

@@ -74,7 +74,7 @@ constexpr std::size_t HYPERSPACE_TUNNEL_FRAMES = 50;
 // Pixel _x of view row _row set to _value in the drawing buffer, whose row 1 is the view's first line.
 void DrawPixel(Elite::GameState& _state, std::size_t _row, std::size_t _x, std::uint8_t _value)
 {
-  Elite::Field<std::uint8_t>& byte = Elite::DrawingBuffer(_state)[(_row + 1) * 64 + _x / 4];
+  std::uint8_t& byte = Elite::DrawingBuffer(_state)[(_row + 1) * 64 + _x / 4];
   const auto shift = static_cast<unsigned>(2 * (3 - _x % 4));
   byte = static_cast<std::uint8_t>((std::uint8_t{byte} & ~(3u << shift)) | (unsigned{_value} << shift));
 }

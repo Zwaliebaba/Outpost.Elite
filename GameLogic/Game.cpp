@@ -12,18 +12,11 @@ Game::Game(FileStore& _files, const Platform::Desc& _desc)
 {
 }
 
-bool Game::Load(std::uint16_t _pspSegment)
+void Game::Start(std::uint16_t _pspSegment)
 {
-  const auto loadSegment = static_cast<std::uint16_t>(_pspSegment + PSP_PARAGRAPHS);
-  const std::optional<std::vector<std::uint8_t>> image = ReferenceLoadImage();
-  if (!image)
-  {
-    return false;
-  }
-  m_state.Load(loadSegment, *image);
+  m_state.Start(static_cast<std::uint16_t>(_pspSegment + PSP_PARAGRAPHS));
   m_platform.StartProgram();
   InstallNativeRoutines(m_platform, m_state);
-  return true;
 }
 
 } // namespace Elite

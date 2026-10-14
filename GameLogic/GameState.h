@@ -2,7 +2,6 @@
 #pragma once
 
 #include "Cga.h"
-#include "Field.h"
 #include "GameData.h"
 #include "Reference.h"
 #include "SpaceObject.h"
@@ -22,7 +21,7 @@ class Game;
 /// The game's memory (ADR-012, D19, D38): the game's state as its struct (GameData), by member (Data()), and the CGA's video memory. It
 /// owns both, and it has no registers: a routine that takes a GameState takes its inputs as parameters and gives its results back.
 ///
-/// The host makes one for the whole run, inside a Game, which loads the reference's image into it (Game::Load). Since change 3c of D38
+/// The host makes one for the whole run, inside a Game, which starts it (Game::Start). Since change 3c of D38
 /// nothing reaches the state by the original's addresses: native code names a member, a run of members that followed one another in 1987
 /// (BytesThrough, Text.h), or a byte within either. The code segment and the PSP are not here, nor what the game
 /// used of the vector table and the BIOS's data area, which is the platform's (Platform, Hardware, ADR-041); the segments the game was
@@ -105,12 +104,6 @@ public:
     SetVideoByte(static_cast<std::uint16_t>(_offset + 1), static_cast<std::uint8_t>(_value >> 8));
   }
 
-  /// GameData's bytes, the game's state: what the state digest hashes (StateDigest.h).
-  [[nodiscard]] std::span<const std::uint8_t, sizeof(GameData)> DataBytes() const noexcept
-  {
-    return std::span<const std::uint8_t, sizeof(GameData)>(reinterpret_cast<const std::uint8_t*>(m_data.get()), sizeof(GameData));
-  }
-
   /// The CGA's 16 KiB of video memory.
   [[nodiscard]] Cga::VideoMemory VideoBytes() const noexcept
   {
@@ -118,18 +111,12 @@ public:
   }
 
 private:
-  // Only a Game loads a GameState.
+  // Only a Game starts a GameState.
   friend class Game;
 
-  /// Takes the game's state as DOS would have loaded the reference with its code segment at _codeSegment: _state,
-  /// GameData's bytes as ReferenceLoadImage lays them out, from the data segment's image. Video memory is left as it is. The
-  /// data segment is paragraph DATA_SEGMENT_PARAGRAPH on from _codeSegment.
-  void Load(std::uint16_t _codeSegment, std::span<const std::uint8_t> _state) noexcept;
-
-  [[nodiscard]] std::span<std::uint8_t, sizeof(GameData)> DataStorage() noexcept
-  {
-    return std::span<std::uint8_t, sizeof(GameData)>(reinterpret_cast<std::uint8_t*>(m_data.get()), sizeof(GameData));
-  }
+  /// Takes the game's state as the program starts (SetStartState), with its code segment at _codeSegment and its data segment
+  /// DATA_SEGMENT_PARAGRAPH paragraphs on. Video memory is left as it is.
+  void Start(std::uint16_t _codeSegment);
 
   /// _offset, when it is in video memory; otherwise throws std::out_of_range.
   [[nodiscard]] static std::uint16_t CheckedVideo(std::uint16_t _offset)
@@ -164,26 +151,20 @@ private:
 };
 
 /// The little-endian word at _bytes[_at] and _bytes[_at + 1].
-[[nodiscard]] inline std::uint16_t WordIn(std::span<const Field<std::uint8_t>> _bytes, std::size_t _at) noexcept
-{
-  return static_cast<std::uint16_t>(_bytes[_at] | (_bytes[_at + 1] << 8));
-}
-
-/// The little-endian word at _bytes[_at] and _bytes[_at + 1] of a constant's table (D38).
 [[nodiscard]] constexpr std::uint16_t WordIn(std::span<const std::uint8_t> _bytes, std::size_t _at) noexcept
 {
   return static_cast<std::uint16_t>(_bytes[_at] | (_bytes[_at + 1] << 8));
 }
 
 /// _value into _bytes[_at] and _bytes[_at + 1], low byte first, as GameState::SetVideoWord writes a word.
-inline void SetWordIn(std::span<Field<std::uint8_t>> _bytes, std::size_t _at, std::uint16_t _value) noexcept
+inline void SetWordIn(std::span<std::uint8_t> _bytes, std::size_t _at, std::uint16_t _value) noexcept
 {
   _bytes[_at] = static_cast<std::uint8_t>(_value & 0xFF);
   _bytes[_at + 1] = static_cast<std::uint8_t>(_value >> 8);
 }
 
 /// The text in _bytes up to its first NUL, or all of them when none is: a buffer's text as a text routine reads it.
-[[nodiscard]] inline std::string_view TextIn(std::span<const Field<std::uint8_t>> _bytes) noexcept
+[[nodiscard]] inline std::string_view TextIn(std::span<const std::uint8_t> _bytes) noexcept
 {
   const auto* const first = reinterpret_cast<const char*>(_bytes.data());
   const std::string_view all(first, _bytes.size());
@@ -192,7 +173,7 @@ inline void SetWordIn(std::span<Field<std::uint8_t>> _bytes, std::size_t _at, st
 
 /// ADD byte,_value / JAE / MOV byte,0FFh on _field: the sum written, and FFh over it on a carry. Those are two writes, as the
 /// original's ADD and MOV are.
-inline void AddSaturating(Field<std::uint8_t>& _field, std::uint8_t _value)
+inline void AddSaturating(std::uint8_t& _field, std::uint8_t _value)
 {
   const unsigned sum = _field + unsigned{_value};
   _field = static_cast<std::uint8_t>(sum);

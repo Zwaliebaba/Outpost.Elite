@@ -135,7 +135,7 @@ template <std::size_t Glyphs, std::size_t GlyphBytes>
 // segment after the buffer: the GameState refused the first byte there it did not hold (43 of the 2,304 short-range charts of
 // the nine galaxies stopped there, and none that went on had written past the buffer), and so does this, at the first byte
 // past it.
-[[nodiscard]] std::span<Field<std::uint8_t>> DrawingBufferWord(GameState& _state, std::uint16_t _at)
+[[nodiscard]] std::span<std::uint8_t> DrawingBufferWord(GameState& _state, std::uint16_t _at)
 {
   return BytesWithin(DrawingBuffer(_state), _at, 2);
 }
@@ -170,7 +170,7 @@ std::uint16_t StoreWords(GameState& _state, std::uint16_t _segment, std::uint16_
 // A loop of byte moves ShowShipIdentity makes (MOV AH,[BX] or MOV AL,[BX], INC BX, the byte to [DI], INC DI, LOOP): the
 // first _to.size() bytes of a name of shipTypeNames, as many as the loop's count, into _to. The name holds one more byte
 // than the field it is copied into, which the loop never moves.
-template <std::size_t Bytes> void CopyNameInto(const std::array<std::uint8_t, Bytes>& _name, std::span<Field<std::uint8_t>> _to)
+template <std::size_t Bytes> void CopyNameInto(const std::array<std::uint8_t, Bytes>& _name, std::span<std::uint8_t> _to)
 {
   static_assert(Bytes > 0);
   for (std::size_t moved = 0; moved < _to.size() && moved < Bytes; ++moved)
@@ -183,7 +183,7 @@ template <std::size_t Bytes> void CopyNameInto(const std::array<std::uint8_t, By
 // in ES:DI. None of them changes from one turn of its loop to the next.
 struct TypedLine
 {
-  std::span<Field<std::uint8_t>> buffer;
+  std::span<std::uint8_t> buffer;
   std::uint16_t segment;
   std::uint16_t cell;
 };
@@ -220,6 +220,7 @@ void ShowMessage(GameState& _state, bool _backwards)
 
 // The digits FormatDecimal5 writes and the point after them in a number's text, from its first digit.
 constexpr std::size_t NUMBER_BYTES = 6;
+constexpr std::size_t TENTHS_DIGIT = 4; // priceText's tenths digit, which moves right for the point
 
 } // namespace
 
@@ -228,9 +229,9 @@ void RefuseBytesPast(std::size_t _at, std::size_t _count, std::size_t _bytes)
   throw std::out_of_range(std::format("{} bytes from byte {} of a buffer of {}, past its end", _count, _at, _bytes));
 }
 
-std::string_view TextWithin(std::span<const Field<std::uint8_t>> _bytes, std::size_t _at)
+std::string_view TextWithin(std::span<const std::uint8_t> _bytes, std::size_t _at)
 {
-  const std::span<const Field<std::uint8_t>> rest = BytesWithin(_bytes, _at, _bytes.size() - std::min(_at, _bytes.size()));
+  const std::span<const std::uint8_t> rest = BytesWithin(_bytes, _at, _bytes.size() - std::min(_at, _bytes.size()));
   const std::string_view text = TextIn(rest);
   if (text.size() == rest.size())
   {
@@ -302,7 +303,7 @@ std::uint16_t DrawScreenString(GameState& _state, std::string_view _text, std::u
   return cell;
 }
 
-void FormatDecimal5(std::uint16_t _value, std::span<Field<std::uint8_t>> _digits)
+void FormatDecimal5(std::uint16_t _value, std::span<std::uint8_t> _digits)
 {
   std::uint16_t value = _value;
   std::size_t digit = 0;
@@ -321,7 +322,7 @@ void FormatDecimal5(std::uint16_t _value, std::span<Field<std::uint8_t>> _digits
   _digits[digit] = static_cast<std::uint8_t>(Low(value) + '0');
 }
 
-void BlankLeadingZeros(std::span<Field<std::uint8_t>> _text, std::uint8_t _most)
+void BlankLeadingZeros(std::span<std::uint8_t> _text, std::uint8_t _most)
 {
   std::size_t character = 0;
   std::uint16_t triesLeft = _most;
@@ -346,7 +347,7 @@ SmallViewPlace DrawSmallViewChar(GameState& _state, std::uint8_t _letter, std::u
     // The letter's pixels cleared from the buffer, then set in the ink: AND [DI],BP and OR [DI],AX, two word
     // writes (34C2, 34C4).
     const std::uint16_t pixels = SmallGlyphRow(letter, line, _place.shift);
-    const std::span<Field<std::uint8_t>> word = DrawingBufferWord(_state, address);
+    const std::span<std::uint8_t> word = DrawingBufferWord(_state, address);
     SetWordIn(word, 0, static_cast<std::uint16_t>(WordIn(word, 0) & ~pixels));
     SetWordIn(word, 0, static_cast<std::uint16_t>(WordIn(word, 0) | (pixels & _ink)));
     address = static_cast<std::uint16_t>(address + VIEW_ROW_BYTES);
@@ -369,9 +370,8 @@ void DrawSmallViewString(GameState& _state, std::string_view _text, std::uint16_
 void FormatCredits(GameState& _state)
 {
   CommanderState& commander = _state.Data().commander;
-  Field<std::uint8_t>(&text)[sizeof(commander.creditBalanceText)] = commander.creditBalanceText;
-  // The low word, the record's first two bytes, then the high word.
-  std::uint32_t value = WordIn(commander.creditsTenths.gap75F3, 0) | (std::uint32_t{commander.creditsTenths.data75F5} << 16);
+  std::uint8_t(&text)[sizeof(commander.creditBalanceText)] = commander.creditBalanceText;
+  std::uint32_t value = commander.creditsTenths;
   std::size_t digit = 0;
   for (const std::array<std::uint8_t, 4>& divisorBytes : DECIMAL_DIVISORS_32)
   {
@@ -461,8 +461,7 @@ void ClearMessageLine(GameState& _state, std::uint16_t _segment, bool _backwards
 
 void ShowBountyMessage(GameState& _state, std::uint16_t _tenths)
 {
-  const std::span<Field<std::uint8_t>> digits =
-    std::span<Field<std::uint8_t>>(_state.Data().text.bountyText).subspan(BOUNTY_DIGITS_OFFSET, NUMBER_BYTES);
+  const std::span<std::uint8_t> digits = std::span<std::uint8_t>(_state.Data().text.bountyText).subspan(BOUNTY_DIGITS_OFFSET, NUMBER_BYTES);
   FormatDecimal5(_tenths, digits);
   BlankLeadingZeros(digits, TENTHS_BLANKS);
   // The tenths digit moves right, and the point takes its place, as one word.
@@ -490,7 +489,7 @@ void ShowShipIdentity(GameState& _state, std::uint8_t _type, std::uint8_t _class
     shipClass = CLASS_POLICE;
   }
   // The class's name, then the type's, a byte at a time, the class's seven bytes of its eight.
-  const std::span<Field<std::uint8_t>> identity(_state.Data().text.shipIdentityText);
+  const std::span<std::uint8_t> identity(_state.Data().text.shipIdentityText);
   const std::array<std::uint8_t, 8>& className = SHIP_CLASS_NAMES[shipClass];
   for (std::size_t moved = 0; moved < CLASS_NAME_BYTES; ++moved)
   {
@@ -552,12 +551,13 @@ void PrintCountedTextLines(GameState& _state, std::span<const std::string_view> 
 
 void FormatTenths(GameState& _state, std::uint16_t _tenths)
 {
-  const std::span<Field<std::uint8_t>> digits = BytesOf(_state.Data().menus.priceText).first(NUMBER_BYTES);
+  std::uint8_t(&text)[7] = _state.Data().menus.priceText;
+  const std::span<std::uint8_t> digits = std::span(text).first(NUMBER_BYTES);
   FormatDecimal5(_tenths, digits);
   BlankLeadingZeros(digits, TENTHS_BLANKS);
   // The tenths digit moves right, and the point takes its place, a byte at a time.
-  _state.Data().menus.priceText.data8041 = std::uint8_t{_state.Data().menus.priceText.data8040};
-  _state.Data().menus.priceText.data8040 = '.';
+  text[TENTHS_DIGIT + 1] = std::uint8_t{text[TENTHS_DIGIT]};
+  text[TENTHS_DIGIT] = '.';
 }
 
 void PrintTextLines(GameState& _state, std::span<const std::string_view> _lines, std::uint16_t _cell)
@@ -588,8 +588,8 @@ void PrintTextLines(GameState& _state, std::string_view _texts, std::uint16_t _c
   }
 }
 
-void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<Field<std::uint8_t>> _buffer, std::uint8_t _most,
-                  std::uint16_t _segment, std::uint16_t _cell)
+void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<std::uint8_t> _buffer, std::uint8_t _most, std::uint16_t _segment,
+                  std::uint16_t _cell)
 {
   const TypedLine line{_buffer, _segment, _cell};
   ResetKeyboard(_state, _hardware);
@@ -665,13 +665,12 @@ void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<Field<std::u
 
 void ToggleInputCursor(GameState& _state)
 {
-  Field<std::uint8_t>& cursor = _state.Data().text.inputCursorText[0];
+  std::uint8_t& cursor = _state.Data().text.inputCursorText[0];
   const std::uint8_t toggle = _state.Data().drawing.screenLayout == TEXT_LAYOUT ? CURSOR_TEXT_TOGGLE : CURSOR_GRAPHICS_TOGGLE;
   cursor = static_cast<std::uint8_t>(cursor ^ toggle);
 }
 
-void RedrawInputLine(GameState& _state, std::span<Field<std::uint8_t>> _buffer, std::uint16_t _length, std::uint16_t _segment,
-                     std::uint16_t _cell)
+void RedrawInputLine(GameState& _state, std::span<std::uint8_t> _buffer, std::uint16_t _length, std::uint16_t _segment, std::uint16_t _cell)
 {
   _buffer[_length] = 0;
   const std::uint16_t next = PrintStringForLayout(_state, TextIn(_buffer), MESSAGE_INK, _segment, _cell);

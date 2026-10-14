@@ -6,14 +6,14 @@ wait 0.5; key space; wait 3.5      # any key: the credits, then the status scree
 key F1; wait 0.5                   # launch
 down Down; wait 1.7; up Down       # round to the station
 wait 1.5                           # the collision: GAME OVER and the wreckage
-digest game-over 95aeced7f7478ab459cccc0fea55d6ff5921cc74ab0d2b3b0f655cd408621df4
+digest game-over e3ff8bfc2a0030360a6ee9c101bdc52f21192c366f32f1df3500863197298c82
 picture game-over e41cea4cbc77c93048862a0bfb21dc2ec9f09f4823fd995f7ab2f41286581a00
 outcome game-over galaxy=0 system=7 witchSpace=0 docked=0 inFlight=1 dead=1 creditsTenths=1000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=0 laserMounts=1 laserTypes=0 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=0 foreShield=0 aftShield=255 speed=8 fuel=255 shipSlotsInUse=9 cabinTemperature=11 laserTemperature=0 altitude=254 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 wait 2.3
-digest title 7286d0cabae162be41117322348a571b97d2f848fdd9841e70e6e67249f24200
+digest title f86ca9feb5b8aad989e352dc73ba12ad0b641be94ff4256fab0afe6508e4d0e9
 picture title 3ef77cb8b27e4328c501368071c8195c8ab2ce0c8f6be69f745e0998a203a282
 outcome title galaxy=0 system=7 witchSpace=0 docked=0 inFlight=0 dead=1 creditsTenths=1000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=0 laserMounts=0 laserTypes=0 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=0 foreShield=0 aftShield=255 speed=8 fuel=255 shipSlotsInUse=1 cabinTemperature=11 laserTemperature=0 altitude=254 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 key space; wait 3.5                # a new game: the credits, then the status screen
-digest new-game ac5483f2a99d254c5afa2b1e6ba10e451e2effb2d43b947358e42063c1c8a653
+digest new-game 24ad3cacfe37ea2c3e7e20f30440cf8dc4e3a75c26e6e76cc7ac4a5cbaba930a
 picture new-game b7ee12a527ba7c2fc4299cc3a1c8065e786260b87cad506b70e2b515d759d4e5
 outcome new-game galaxy=0 system=7 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=1000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=0 laserMounts=1 laserTypes=0 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=8 fuel=255 shipSlotsInUse=1 cabinTemperature=12 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0

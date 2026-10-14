@@ -23,11 +23,9 @@ constexpr std::size_t ECONOMIES = 8;
 constexpr std::size_t GOVERNMENTS = 8;
 // The tech levels the prices are computed at: none, the first, the 9 that ComputeMarketPrices caps it at, and the most a
 // nibble holds. The galaxies give 0 to 11. In this build the tech level changes no price: every commodity's tech-level
-// factor in productTradeRecords is 0 (Symbols.tsv), so these four check that it still reads the level, and nothing more.
+// factor in productTradeRecords is 0 (MarketTables.h), so these four check that it still reads the level, and nothing more.
 constexpr auto TECH_LEVELS = std::to_array<std::uint8_t>({0, 1, 9, 15});
 constexpr std::size_t COMMODITIES = 17;
-// A commodity's entry in screenPrices: its price, then its resale price, a word each.
-constexpr std::size_t PRICE_ENTRY_BYTES = 4;
 // The random states the quantities are rolled from: the loaded commander's and the next 255 NextRandom makes, and three edges.
 constexpr std::size_t WALKED_RANDOM_STATES = 256;
 constexpr std::array<std::array<std::uint16_t, 3>, 3> EDGE_RANDOM_STATES = {
@@ -37,16 +35,15 @@ constexpr std::array<std::array<std::uint16_t, 3>, 3> EDGE_RANDOM_STATES = {
 // commodity's price and resale price, as screenPrices holds them, in tenths of a credit.
 [[nodiscard]] std::string Prices(Elite::GameState& _state, std::uint8_t _economy, std::uint8_t _government, std::uint8_t _techLevel)
 {
-  _state.Data().commander.currentEconomy = _economy;
-  _state.Data().commander.currentGovernment = _government;
-  _state.Data().commander.currentTechLevel = _techLevel;
+  _state.Data().commander.currentSystem.economy = _economy;
+  _state.Data().commander.currentSystem.government = _government;
+  _state.Data().commander.currentSystem.techLevel = _techLevel;
   Elite::ComputeMarketPrices(_state);
   std::string line = std::format("prices {} {} {}", _economy, _government, _techLevel);
-  const std::span<const Elite::Field<std::uint8_t>> prices = Elite::BytesOf(_state.Data().menus.screenPrices);
   for (std::size_t commodity = 0; commodity < COMMODITIES; ++commodity)
   {
-    const std::size_t at = commodity * PRICE_ENTRY_BYTES;
-    line += std::format(" {}/{}", Elite::WordIn(prices, at), Elite::WordIn(prices, at + 2));
+    const Elite::MenusState::ScreenPrice& prices = _state.Data().menus.screenPrices[commodity];
+    line += std::format(" {}/{}", std::uint16_t{prices.price}, std::uint16_t{prices.resale});
   }
   return line;
 }

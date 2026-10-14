@@ -20,11 +20,11 @@ inline constexpr std::size_t DRAWING_BUFFER_BYTES = 0x2000;
 
 /// The drawing buffer, DS:0000-1FFF in 1987, which the space view, the charts and their texts are drawn into before they are copied
 /// to the screen: drawing.drawingBuffer. A byte of it is numbered as the original addresses it, by its offset in the data segment.
-[[nodiscard]] std::span<Field<std::uint8_t>, DRAWING_BUFFER_BYTES> DrawingBuffer(GameState& _state) noexcept;
+[[nodiscard]] std::span<std::uint8_t, DRAWING_BUFFER_BYTES> DrawingBuffer(GameState& _state) noexcept;
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
-// Each is what the routine Symbols.tsv names computes, with no register in sight, and every byte it writes is written as the
+// Each is what the 1987 routine of its name computes, with no register in sight, and every byte it writes is written as the
 // original writes it, in the same order and at the same width. A string instruction's direction is the direction flag its
 // entry finds: _backward.
 

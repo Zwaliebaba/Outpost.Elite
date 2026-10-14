@@ -20,6 +20,8 @@
 
 #include <algorithm>
 #include <initializer_list>
+#include <span>
+#include <string>
 #include <utility>
 
 namespace Elite
@@ -82,9 +84,9 @@ constexpr std::uint16_t PRODUCT_NAME_END = 0x0C; // a product name's 12 characte
 constexpr std::uint16_t UNIT_AFTER_NAME = 0x0D;  // and then its unit
 constexpr std::uint16_t PRODUCT_NAME_BYTES = 0x11;
 constexpr std::uint16_t TRADE_ROWS = 0x11;
-constexpr std::uint16_t TRADE_PRICES_BYTES = 4; // a product's buy price, then its sell price, in screenPrices
-constexpr std::uint16_t BUY_PRICE = 0;
-constexpr std::uint16_t SELL_PRICE = 2;
+// A trade row's price in screenPrices: a product's buy price, then its sell price.
+constexpr std::uint16_t MenusState::ScreenPrice::*BUY_PRICE = &MenusState::ScreenPrice::price;
+constexpr std::uint16_t MenusState::ScreenPrice::*SELL_PRICE = &MenusState::ScreenPrice::resale;
 constexpr std::uint16_t INVENTORY_ROWS = 0x12; // the 17 products and the refugees
 constexpr std::uint16_t QUANTITY_DIGITS_BLANKED = 4;
 constexpr std::uint8_t LEGAL_STATUS_OFFENDER = 1;
@@ -151,28 +153,23 @@ KeyPress WaitForKey(GameState& _state, Hardware& _hardware)
   }
 }
 
-// The run of the cash's text, creditBalanceText and its NUL in gap759A: FormatCredits fills all 19 of creditBalanceText's bytes.
-static_assert(COMMANDER_STATE_OFFSET(gap759A) == COMMANDER_STATE_OFFSET(creditBalanceText) + sizeof(CommanderState::creditBalanceText),
-              "the cash's run holds its members together, as in 1987");
-[[nodiscard]] std::span<const Field<std::uint8_t>> CashRun(const GameState& _state)
+// The cash's text and its NUL: FormatCredits fills all but the last of creditBalanceText's bytes.
+[[nodiscard]] std::span<const std::uint8_t> CashRun(const GameState& _state)
 {
-  return BytesThrough(_state.Data().commander.creditBalanceText, _state.Data().commander.gap759A);
+  return _state.Data().commander.creditBalanceText;
 }
 
-// The run of the selected system's name, selectedSystemName and its NUL in gap75CC, where TerminateSelectedSystemName leaves it after an
-// eight-letter name.
-static_assert(COMMANDER_STATE_OFFSET(gap75CC) == COMMANDER_STATE_OFFSET(selectedSystemName) + sizeof(CommanderState::SelectedSystemName),
-              "the selected name's run holds its members together, as in 1987");
-[[nodiscard]] std::span<const Field<std::uint8_t>> SelectedNameRun(const GameState& _state)
+// The selected system's name and its NUL, where TerminateSelectedSystemName leaves it after an eight-letter name.
+[[nodiscard]] std::span<const std::uint8_t> SelectedNameRun(const GameState& _state)
 {
-  return BytesThrough(_state.Data().commander.selectedSystemName, _state.Data().commander.gap75CC);
+  return _state.Data().commander.selectedSystem.name;
 }
 
 // The cash without its leading spaces: INC SI from the byte before creditBalanceText while it is on a space. Returns the cash
 // from the first character that is not a space.
 std::string_view SkipCashSpaces(const GameState& _state)
 {
-  const Field<std::uint8_t>(&cash)[sizeof(CommanderState::creditBalanceText)] = _state.Data().commander.creditBalanceText;
+  const std::uint8_t(&cash)[sizeof(CommanderState::creditBalanceText)] = _state.Data().commander.creditBalanceText;
   for (std::size_t first = 0;; ++first)
   {
     if (cash[first] != SPACE)
@@ -183,23 +180,51 @@ std::string_view SkipCashSpaces(const GameState& _state)
 }
 
 // _quantity as five digits into _text, up to four of their leading zeros blanked.
-void FormatQuantity(std::uint16_t _quantity, std::span<Field<std::uint8_t>> _text)
+void FormatQuantity(std::uint16_t _quantity, std::span<std::uint8_t> _text)
 {
   FormatDecimal5(_quantity, _text);
   BlankLeadingZeros(_text, static_cast<std::uint8_t>(QUANTITY_DIGITS_BLANKED));
 }
 
-// cargoHold's entries: for each product, the units held, then the units on sale.
-[[nodiscard]] std::span<Field<std::uint8_t>> Hold(GameState& _state)
+// The status screen's title, which the original reads as a text from the rank on, up to a NUL: commanderRankText, then the
+// space and the NUL after it, which only a commander file writes; a NUL past them would be in the cash's text, which ends in one.
+[[nodiscard]] std::string CommanderTitleText(const GameState& _state)
 {
-  return BytesOf(_state.Data().commander.cargoHold);
+  const CommanderState& commander = _state.Data().commander;
+  std::string text;
+  for (const std::span<const std::uint8_t> piece :
+       {std::span<const std::uint8_t>(commander.commanderRankText), std::span<const std::uint8_t>(commander.rankTextEnd),
+        std::span<const std::uint8_t>(commander.creditBalanceText)})
+  {
+    const std::string_view part = TextIn(piece);
+    text += part;
+    if (part.size() < piece.size())
+    {
+      break;
+    }
+  }
+  return text;
+}
+
+// Product _product's lot in cargoHold: the units held, and the units on sale.
+[[nodiscard]] CommanderState::CargoHold::Lot& LotOf(GameState& _state, std::size_t _product)
+{
+  return ElementWithin(std::span(_state.Data().commander.cargoHold.lots), _product);
+}
+
+// The units of product _product held, the refugees' tonnes after the last commodity, as the inventory lists them.
+[[nodiscard]] std::uint8_t HeldOf(const GameState& _state, std::size_t _product)
+{
+  const CommanderState::CargoHold& hold = _state.Data().commander.cargoHold;
+  return _product == std::size(hold.lots) ? std::uint8_t{hold.refugeesTonnes}
+                                          : std::uint8_t{ElementWithin(std::span(hold.lots), _product).held};
 }
 
 // The fuel's 'n.n Light Years': its two digits, which FormatFuelLightYears writes, either side of its point.
 [[nodiscard]] std::string FuelLightYearsText(const GameState& _state)
 {
   const DockedState& docked = _state.Data().docked;
-  return JoinTexts({CharText(docked.data83F7), FUEL_TEXT_POINT, CharText(docked.data83F9), FUEL_TEXT_SUFFIX});
+  return JoinTexts({CharText(docked.fuelUnitsDigit), FUEL_TEXT_POINT, CharText(docked.fuelTenthsDigit), FUEL_TEXT_SUFFIX});
 }
 
 // Product _product's name and unit, up to its NUL.
@@ -237,14 +262,13 @@ struct TradeRow
 
 constexpr TradeRow FIRST_TRADE_ROW{TRADE_ROWS, 0, LINE_6};
 
-// A trade row's product name and price (PrintNameAndPrice): the price word _price bytes into the row's prices, four cells after
-// the name. Returns where the price's print stops.
-std::uint16_t PrintNameAndPrice(GameState& _state, const TradeRow& _row, std::uint16_t _price)
+// A trade row's product name and price (PrintNameAndPrice): the price _price of the row's prices, four cells after the name.
+// Returns where the price's print stops.
+std::uint16_t PrintNameAndPrice(GameState& _state, const TradeRow& _row, std::uint16_t MenusState::ScreenPrice::*_price)
 {
   const std::uint16_t named = PrintTextModeString(_state, ProductName(_state, _row.product), _row.cell);
-  const std::span<const Field<std::uint8_t>> prices = BytesOf(_state.Data().menus.screenPrices);
-  FormatTenths(_state, WordIn(prices, std::size_t{_row.product} * TRADE_PRICES_BYTES + _price));
-  return PrintTextModeString(_state, TextWithin(BytesOf(_state.Data().menus.priceText), 0), Offset(named, 4));
+  FormatTenths(_state, ElementWithin(std::span(_state.Data().menus.screenPrices), _row.product).*_price);
+  return PrintTextModeString(_state, TextWithin(_state.Data().menus.priceText, 0), Offset(named, 4));
 }
 
 // After a row's quantity, printed up to _cell (PrintUnit): the unit after the row's product name.
@@ -461,8 +485,8 @@ void FormatFuelLightYears(GameState& _state)
   DockedState& docked = _state.Data().docked;
   FormatDecimal5(static_cast<std::uint8_t>(tenths / FUEL_UNITS_PER_TENTH), docked.fuelDigits);
   // The units and the tenths, the last two of the five digits, into the text either side of its point.
-  docked.data83F7 = std::uint8_t{docked.fuelDigits[FUEL_UNITS_DIGIT]};
-  docked.data83F9 = std::uint8_t{docked.fuelDigits[FUEL_TENTHS_DIGIT]};
+  docked.fuelUnitsDigit = std::uint8_t{docked.fuelDigits[FUEL_UNITS_DIGIT]};
+  docked.fuelTenthsDigit = std::uint8_t{docked.fuelDigits[FUEL_TENTHS_DIGIT]};
 }
 
 void DrawDockedFrameAt(GameState& _state, Hardware& _hardware, std::uint8_t _screen, std::uint8_t _frame, bool _backward)
@@ -561,7 +585,7 @@ ScreenKey ShowSellCargoScreen(GameState& _state, Hardware& _hardware, bool _back
     const std::uint16_t price = PrintNameAndPrice(_state, row, SELL_PRICE);
     // The units held, from the cargoHold entry of the product cargoRowPointer numbers, which moves on to the next.
     const std::uint16_t product = _state.Data().docked.cargoRowPointer;
-    const std::uint8_t held = Hold(_state)[std::size_t{product} * 2];
+    const std::uint8_t held = LotOf(_state, product).held;
     _state.Data().docked.cargoRowPointer = static_cast<std::uint16_t>(product + 1);
     if (held != 0)
     {
@@ -600,7 +624,7 @@ ScreenKey ShowBuyCargoScreen(GameState& _state, Hardware& _hardware, bool _backw
     }
     else
     {
-      const std::uint8_t drawn = Hold(_state)[std::size_t{_state.Data().docked.cargoRowPointer} * 2 + 1];
+      const std::uint8_t drawn = LotOf(_state, _state.Data().docked.cargoRowPointer).onSale;
       if (drawn != 0)
       {
         onSale = drawn;
@@ -613,7 +637,7 @@ ScreenKey ShowBuyCargoScreen(GameState& _state, Hardware& _hardware, bool _backw
       const std::uint16_t quantity =
         PrintTextModeString(_state, TextWithin(BytesOf(_state.Data().menus.quantityText), 0), Offset(price, 2));
       const std::uint16_t product = _state.Data().docked.cargoRowPointer;
-      Hold(_state)[std::size_t{product} * 2 + 1] = *onSale;
+      LotOf(_state, product).onSale = *onSale;
       _state.Data().docked.cargoRowPointer = static_cast<std::uint16_t>(product + 1);
       PrintUnit(_state, row, quantity);
     }
@@ -621,7 +645,7 @@ ScreenKey ShowBuyCargoScreen(GameState& _state, Hardware& _hardware, bool _backw
     {
       PrintTextModeString(_state, NO_QUANTITY_TEXT, price);
       const std::uint16_t product = _state.Data().docked.cargoRowPointer;
-      Hold(_state)[std::size_t{product} * 2 + 1] = 0;
+      LotOf(_state, product).onSale = 0;
       _state.Data().docked.cargoRowPointer = static_cast<std::uint16_t>(product + 1);
       // The jump back into the row's end, with CX the count and BX the next prices.
     }
@@ -649,16 +673,15 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
       ShowMissionDebriefing(_state, _hardware, _backward);
     }
   }
-  const std::uint16_t title = PrintTextModeString(
-    _state,
-    DrawDockedFrame(_state, _hardware, BytesOf(std::as_const(_state).Data().commander).subspan(COMMANDER_STATE_OFFSET(commanderTitle)),
-                    _backward),
-    TITLE_CELL);
+  const CommanderState& commander = _state.Data().commander;
+  DrawDockedFrameAt(_state, _hardware, commander.commanderTitle[0], commander.commanderTitle[1], _backward);
+  const std::uint16_t title = PrintTextModeString(_state, CommanderTitleText(_state), TITLE_CELL);
   PrintTextModeString(_state, TextWithin(BytesOf(_state.Data().commander.defaultCommanderName), 0), title);
   _state.Data().drawing.textAttribute = STATUS_ATTRIBUTE;
   const bool inWitchSpace = _state.Data().commander.witchspaceCountdown != 0;
   std::uint16_t printed = PrintTextModeString(_state, SYSTEM_LABEL_TEXT, LINE_3);
-  PrintTextModeString(_state, inWitchSpace ? WITCH_SPACE_TEXT : TextWithin(BytesOf(_state.Data().commander.currentSystemName), 0), printed);
+  PrintTextModeString(_state, inWitchSpace ? WITCH_SPACE_TEXT : TextWithin(BytesOf(_state.Data().commander.currentSystem.name), 0),
+                      printed);
   printed = PrintTextModeString(_state, HYPERSYSTEM_LABEL_TEXT, LINE_4);
   PrintTextModeString(_state, inWitchSpace ? WITCH_SPACE_TEXT : TextWithin(SelectedNameRun(_state), 0), printed);
   FormatFuelLightYears(_state);
@@ -684,21 +707,21 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
   _state.Data().drawing.textAttribute = STATUS_ATTRIBUTE;
   // AL keeps the missiles' digit until a row prints, whose NUL then leaves 0 there.
   auto al = static_cast<std::uint8_t>(_state.Data().commander.missileCount + DIGIT_ZERO);
-  _state.Data().docked.data84F5 = al;
+  _state.Data().docked.missileCountDigit = al;
 
   // One row for each item fitted, and after a laser the mounts it is fitted to.
   std::uint16_t row = LINE_10;
-  const std::span<const Field<std::uint8_t>> fitted =
-    BytesWithin(BytesOf(std::as_const(_state).Data().commander), COMMANDER_STATE_OFFSET(missileCount), EQUIPMENT_ROWS);
+  // The equipment items from the missiles (EQUIPMENT_ITEMS), the fuel's after.
+  const std::span<std::uint8_t CommanderState::*const> fitted = std::span(EQUIPMENT_ITEMS).subspan(1, EQUIPMENT_ROWS);
   std::size_t item = 0;
   _state.Data().menus.menuSelectedRow = FIRST_EQUIPMENT_MENU_ROW;
   for (std::uint16_t left = EQUIPMENT_ROWS;;)
   {
-    if (fitted[item] != 0)
+    if (_state.Data().commander.*fitted[item] != 0)
     {
       // The missiles' name has their count's digit inside it, which the original writes into the text above; the rest are
       // constant.
-      const std::string missiles = JoinTexts({MISSILE_NAME_OPEN, CharText(_state.Data().docked.data84F5), MISSILE_NAME_CLOSE});
+      const std::string missiles = JoinTexts({MISSILE_NAME_OPEN, CharText(_state.Data().docked.missileCountDigit), MISSILE_NAME_CLOSE});
       const std::string_view name = item == 0 ? std::string_view(missiles) : EQUIPMENT_NAMES[item];
       const std::uint16_t named = PrintTextModeString(_state, name, row);
       al = 0;
@@ -751,17 +774,17 @@ ScreenKey ShowInventoryScreen(GameState& _state, Hardware& _hardware, bool _back
   PrintTextModeString(_state, SkipCashSpaces(_state), cashCell);
 
   // Every product held, and the refugees: name, quantity, unit, a row each; an empty row does not move the place on.
-  const std::span<Field<std::uint8_t>> quantityText =
-    std::span<Field<std::uint8_t>>(_state.Data().docked.productNames).subspan(INVENTORY_QUANTITY_IN_NAMES, QUANTITY_TEXT_BYTES);
+  const std::span<std::uint8_t> quantityText =
+    std::span<std::uint8_t>(_state.Data().docked.productNames).subspan(INVENTORY_QUANTITY_IN_NAMES, QUANTITY_TEXT_BYTES);
   std::uint16_t row = LINE_6;
   std::uint16_t product = 0;
   for (std::uint16_t left = INVENTORY_ROWS;;)
   {
-    const std::uint8_t amount = Hold(_state)[std::size_t{product} * 2];
+    const std::uint8_t amount = HeldOf(_state, product);
     if (amount != 0)
     {
       // The name cut at its twelfth character by a NUL, which becomes a space again before the unit after it.
-      const std::span<Field<std::uint8_t>> name =
+      const std::span<std::uint8_t> name =
         BytesOf(_state.Data().docked.productNames).subspan(std::size_t{product} * PRODUCT_NAME_BYTES, PRODUCT_NAME_BYTES);
       name[PRODUCT_NAME_END] = NUL;
       const std::string_view named = TextIn(name);
@@ -804,10 +827,9 @@ void ShowMissionBriefing(GameState& _state, Hardware& _hardware, bool _backward)
     if (answer == SCAN_Y)
     {
       // The hold emptied for the refugees: MOV [DI],CH, which is 0, at each of the 17 amounts.
-      const std::span<Field<std::uint8_t>> hold = Hold(_state);
       for (std::uint16_t product = 0, left = TRADE_ROWS;;)
       {
-        hold[std::size_t{product} * 2] = 0;
+        LotOf(_state, product).held = 0;
         ++product;
         if (--left == 0)
         {

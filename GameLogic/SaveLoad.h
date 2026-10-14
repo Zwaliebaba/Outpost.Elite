@@ -24,7 +24,7 @@ struct DiscMenuExit
   std::uint8_t al;       ///< and AL as its GetKey leaves it with the key in AH
 };
 
-/// ShowDiscControlScreen (CS:660B), with RunDiscControlKeys, ChooseJoystick, ShowDiskResult and PromptCommanderFileName, which
+/// ShowDiscControlScreen (CS:660B), with RunDiscControlKeys, ShowDiskResult and PromptCommanderFileName, which
 /// jumps into its key loop after a bad name, as one unit (ADR-012 item 14): the Disc/Control menu, or, back from Start's disk
 /// work, what it came to or the question whether to retry it; then its keys. _backward is the direction flag, which
 /// DrawDockedFrame goes by. Waits for keys as a rule (ADR-015).

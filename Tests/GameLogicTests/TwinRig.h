@@ -87,7 +87,7 @@ private:
 /// (`&Elite::PlayerShipState::playerDead`), of the commander (`&Elite::CommanderState::fuel`), or of the commander's cargo hold
 /// (`&Elite::CommanderState::CargoHold::cargoUsedTonnes`). GameData holds each of those structs once, so the pointer's class
 /// says where the byte is (DataByteIn).
-template <typename Struct> using DataByte = Elite::Field<std::uint8_t> Struct::*;
+template <typename Struct> using DataByte = std::uint8_t Struct::*;
 
 /// The struct of _data a twin's member pointers name members of (DataByte): the groups the twins set up, the commander and its
 /// cargo hold.
@@ -125,7 +125,7 @@ template <typename Struct> [[nodiscard]] Struct& StructIn(Elite::GameData& _data
 }
 
 /// The byte _member names in _state's data (DataByte).
-template <typename Struct> [[nodiscard]] Elite::Field<std::uint8_t>& DataByteIn(Elite::GameState& _state, DataByte<Struct> _member) noexcept
+template <typename Struct> [[nodiscard]] std::uint8_t& DataByteIn(Elite::GameState& _state, DataByte<Struct> _member) noexcept
 {
   return StructIn<Struct>(_state.Data()).*_member;
 }

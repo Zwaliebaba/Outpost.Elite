@@ -16,9 +16,6 @@ namespace
 
 using Commander = Elite::CommanderState;
 
-// A product's cargoHold entry: the units held, then the units on sale.
-constexpr std::size_t HOLD_ENTRY_BYTES = 2;
-
 // The byte _member names, set to _value on the twin.
 template <typename Struct> void SetByte(TwinRig& _rig, DataByte<Struct> _member, std::uint8_t _value)
 {
@@ -28,31 +25,31 @@ template <typename Struct> void SetByte(TwinRig& _rig, DataByte<Struct> _member,
 // The cash, in tenths of credits, on the twin.
 void SetCredits(TwinRig& _rig, std::uint32_t _tenths)
 {
-  _rig.Both(
-    [_tenths](Elite::Platform&, Elite::GameState& _state)
-    {
-      Commander::CreditsTenths& credits = _state.Data().commander.creditsTenths;
-      Elite::SetWordIn(Elite::BytesOf(credits), 0, static_cast<std::uint16_t>(_tenths));
-      credits.data75F5 = static_cast<std::uint16_t>(_tenths >> 16);
-    });
+  _rig.Both([_tenths](Elite::Platform&, Elite::GameState& _state) { _state.Data().commander.creditsTenths = _tenths; });
 }
 
-// The cargo menu row _row's cargoHold entry, as an index of the hold's bytes: the amount held, then (+1) the amount on sale.
-[[nodiscard]] std::size_t Held(std::uint8_t _row)
+// The amount held of the cargo menu row _row's commodity, or the amount on sale: a member of its lot in cargoHold.
+struct HoldByte
 {
-  return (std::size_t{_row} - 1) * HOLD_ENTRY_BYTES;
+  std::uint8_t row;
+  std::uint8_t Commander::CargoHold::Lot::*amount;
+};
+
+[[nodiscard]] HoldByte Held(std::uint8_t _row)
+{
+  return HoldByte{_row, &Commander::CargoHold::Lot::held};
 }
 
-[[nodiscard]] std::size_t OnSale(std::uint8_t _row)
+[[nodiscard]] HoldByte OnSale(std::uint8_t _row)
 {
-  return Held(_row) + 1;
+  return HoldByte{_row, &Commander::CargoHold::Lot::onSale};
 }
 
-// The byte _index of cargoHold's entries, set to _value on the twin.
-void SetHold(TwinRig& _rig, std::size_t _index, std::uint8_t _value)
+// The amount _byte names, set to _value on the twin.
+void SetHold(TwinRig& _rig, HoldByte _byte, std::uint8_t _value)
 {
-  _rig.Both([_index, _value](Elite::Platform&, Elite::GameState& _state)
-            { Elite::BytesOf(_state.Data().commander.cargoHold)[_index] = _value; });
+  _rig.Both([_byte, _value](Elite::Platform&, Elite::GameState& _state)
+            { _state.Data().commander.cargoHold.lots[std::size_t{_byte.row} - 1].*_byte.amount = _value; });
 }
 
 // B or S on the cargo menu, then the keys _typed names at "Quantity?", separated by spaces, and Return: Replay.h's
@@ -148,9 +145,10 @@ public:
       [](Elite::Platform&, Elite::GameState& _state)
       {
         constexpr std::string_view NAME = "LA VE";
-        for (std::size_t index = 0; index < std::size(_state.Data().commander.currentSystemName); ++index)
+        for (std::size_t index = 0; index < std::size(_state.Data().commander.currentSystem.name); ++index)
         {
-          _state.Data().commander.currentSystemName[index] = index < NAME.size() ? static_cast<std::uint8_t>(NAME[index]) : std::uint8_t{0};
+          _state.Data().commander.currentSystem.name[index] =
+            index < NAME.size() ? static_cast<std::uint8_t>(NAME[index]) : std::uint8_t{0};
         }
       });
     rig.Play("key F8; wait 1\nkey F8; wait 0.2\nkey x; wait 0.2\nkey Home; wait 0.2\ndigest prices\nkey F9; wait 0.5\ndigest left");

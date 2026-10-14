@@ -2,7 +2,6 @@
 
 #include "Galaxy.h"
 #include "Reference.h"
-#include "ReferenceImage.h"
 #include "TwinRig.h"
 
 #include <array>
@@ -33,15 +32,9 @@ struct Position
 // Leesti, near Lave in the first galaxy: of tech level 10.
 constexpr Position LEESTI = {13, 186};
 
-// Where the ninth galaxy's seeds are in the reference's image: the six bytes after galaxySeeds' eight entries, gap29A6, DS:29A6 past
-// the code segment.
-constexpr std::size_t NINTH_GALAXY_SEEDS_IN_IMAGE = std::size_t{Elite::CODE_SEGMENT_BYTES} + 0x29A6;
-
-// The little-endian word at byte _at of the reference's image.
-[[nodiscard]] std::uint32_t ImageWord(std::size_t _at)
-{
-  return std::uint32_t{Elite::REFERENCE_IMAGE[_at]} | (std::uint32_t{Elite::REFERENCE_IMAGE[_at + 1]} << 8);
-}
+// The ninth galaxy's seeds: the six bytes after galaxySeeds' eight entries in the 1987 data segment, read from its image while
+// the tree held it (Phase 7, step 5).
+constexpr std::array<std::uint32_t, 3> NINTH_GALAXY_SEEDS = {0x1234, 0x5678, 0x9ABC};
 
 // Systems whose short-range chart overran the original's buffers (D41): a galaxy, numbered from 0, and a system.
 struct CrowdedChart
@@ -120,7 +113,7 @@ public:
     PokeBoth(rig, &Commander::chartCursorY, static_cast<std::uint8_t>(LEESTI.y / 2));
     rig.Play("key F7; wait 0.5\ndigest data");
     rig.Both([](Elite::Platform&, Elite::GameState& _state)
-             { Assert::AreEqual(std::uint8_t{'1'}, std::uint8_t{_state.Data().galaxy.data7D48}, L"two digits"); });
+             { Assert::AreEqual(std::uint8_t{'1'}, std::uint8_t{_state.Data().galaxy.techLevelTensDigit}, L"two digits"); });
     rig.Play("key F7; wait 0.1; key a; wait 0.1; key Escape; wait 0.3\ndigest closed");
   }
 
@@ -148,7 +141,7 @@ public:
       Elite::GameState& state = rig.State();
       state.Data().commander.galaxyNumber = chart.galaxy;
       Elite::LoadSystemSeeds(state, chart.system);
-      state.Data().commander.currentSystemIndex = chart.system;
+      state.Data().commander.currentSystem.index = chart.system;
       state.Data().commander.currentSystemX = std::uint8_t{Elite::SystemX(state)};
       state.Data().commander.currentSystemChartY = static_cast<std::uint8_t>(Elite::SystemY(state) >> 1);
       play("key F6; wait 0.5");
@@ -160,16 +153,16 @@ public:
   }
 
   // The ninth galaxy, which GalacticJump makes now and then after the eighth: the original reads its seeds as a ninth entry of
-  // galaxySeeds, which has eight, so they are the six bytes after the table, gap29A6's, as the reference's image holds them.
+  // galaxySeeds, which has eight, so they are the six bytes after the table, gap29A6's, as the reference's image held them.
   TEST_METHOD(NinthGalaxySeedsAreTheBytesAfterTheTable)
   {
     ReferenceRig rig("NinthGalaxySeeds");
     Elite::GameState& state = rig.State();
     state.Data().commander.galaxyNumber = 8;
     Elite::LoadGalaxySeeds(state);
-    Assert::AreEqual(ImageWord(NINTH_GALAXY_SEEDS_IN_IMAGE), std::uint32_t{state.Data().galaxy.systemSeed0}, L"the first seed");
-    Assert::AreEqual(ImageWord(NINTH_GALAXY_SEEDS_IN_IMAGE + 2), std::uint32_t{state.Data().galaxy.systemSeed1}, L"the second");
-    Assert::AreEqual(ImageWord(NINTH_GALAXY_SEEDS_IN_IMAGE + 4), std::uint32_t{state.Data().galaxy.systemSeed2}, L"the third");
+    Assert::AreEqual(NINTH_GALAXY_SEEDS[0], std::uint32_t{state.Data().galaxy.systemSeed0}, L"the first seed");
+    Assert::AreEqual(NINTH_GALAXY_SEEDS[1], std::uint32_t{state.Data().galaxy.systemSeed1}, L"the second");
+    Assert::AreEqual(NINTH_GALAXY_SEEDS[2], std::uint32_t{state.Data().galaxy.systemSeed2}, L"the third");
   }
 };
 

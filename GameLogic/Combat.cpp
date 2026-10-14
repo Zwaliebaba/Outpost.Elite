@@ -11,6 +11,7 @@
 #include "Scene.h"
 #include "Ships.h"
 #include "Sound.h"
+#include "StateWriter.h"
 #include "Text.h"
 #include "Video.h"
 
@@ -467,7 +468,7 @@ void DrawLaserSights(GameState& _state)
     return;
   }
   // MOV AH,AL / XOR AL,AL / SHR AX,1: 128 bytes a laser type.
-  const std::span<Field<std::uint8_t>> view = BytesOf(_state.Data().drawing.drawingBuffer).subspan(VIEW_ROW_BYTES);
+  const std::span<std::uint8_t> view = BytesOf(_state.Data().drawing.drawingBuffer).subspan(VIEW_ROW_BYTES);
   std::size_t row = SIGHTS_OFFSET;
   const std::span<const std::uint8_t> sprites(LASER_SIGHTS);
   std::size_t sprite = std::size_t{*laser} << 7;
@@ -850,7 +851,7 @@ bool ApplyEnemyLaserHit(GameState& _state, Hardware& _hardware)
   _state.Data().combat.playerHitPending = 0;
   // Bit 7 of the attacker's depth byte: behind, so the aft shield takes it. SUB [shield],0Fh; on a borrow, MOV AL,[shield] and 0
   // written over it: what the shield could not take, NEG AL / CBW, comes off the energy, SUB and then 0 over it on a borrow.
-  Field<std::uint8_t>& shield =
+  std::uint8_t& shield =
     (_state.Data().combat.playerHitByDepth & 0x80) != 0 ? _state.Data().playerShip.aftShield : _state.Data().playerShip.foreShield;
   const std::uint8_t strength = shield;
   shield = static_cast<std::uint8_t>(strength - SHIELD_HIT);
@@ -972,8 +973,8 @@ void SpawnPlayerWreckage(GameState& _state)
   const SlotSearch free = FindFreeShipSlot(_state);
   SpaceObject& barrel = _state.Slot(free.found ? free.slot : ReclaimShipSlot(_state).slot);
   ClearObjectSlot(barrel);
-  constexpr std::array<Field<std::uint16_t> CombatState::*, 3> WRECK_DRIFT = {&CombatState::wreckDriftX, &CombatState::wreckDriftY,
-                                                                              &CombatState::wreckDriftZ};
+  constexpr std::array<std::uint16_t CombatState::*, 3> WRECK_DRIFT = {&CombatState::wreckDriftX, &CombatState::wreckDriftY,
+                                                                       &CombatState::wreckDriftZ};
   for (std::size_t axis = 0; axis < WRECK_DRIFT.size(); ++axis)
   {
     const std::uint16_t axisDrift = _state.Data().combat.*WRECK_DRIFT[axis];
@@ -1054,13 +1055,8 @@ void LaunchPlayerMissile(GameState& _state, const MissileSource& _source)
   }
   else if (_source.past)
   {
-    // REP MOVSW up from DI past a buffer, a word at a time: the bytes there, by name.
-    const std::span<Field<std::uint8_t>> to = BytesOf(missile);
-    const std::span<const std::uint8_t> from(*_source.past);
-    for (std::size_t word = 0; word < SpaceObject::BYTES; word += 2)
-    {
-      SetWordIn(to, word, WordIn(from, word));
-    }
+    // REP MOVSW up from DI past a buffer, a word at a time: the bytes there, by name, read as the record's members in their order.
+    (void)ReadStateBytes(missile, *_source.past);
   }
   else
   {

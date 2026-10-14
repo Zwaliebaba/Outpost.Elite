@@ -40,8 +40,7 @@ constexpr std::uint8_t QUANTITY_ATTRIBUTE = 0x7C;
 
 constexpr std::uint16_t RESALE_PRICE_CEILING = 100;
 constexpr std::uint16_t PRODUCT_NAME_BYTES = 0x11;
-constexpr std::size_t TRADE_PRICES_BYTES = 4; // a product's buy price and then its sell price, in screenPrices
-constexpr std::size_t LEGAL_PENALTY = 2;      // a trade record's third byte
+constexpr std::size_t LEGAL_PENALTY = 2; // a trade record's third byte
 // A price factor of 1.0, in 256ths.
 constexpr std::uint16_t UNIT_FACTOR = 0x100;
 // The price factor tables are by commodity, 16 bytes to a row.
@@ -69,22 +68,23 @@ constexpr std::uint8_t QUANTITY_BASE = 10; // ParseQuantity's decimal, which the
   return static_cast<std::uint16_t>((std::uint32_t{_value} * _factor) >> 8);
 }
 
-// cargoHold's entries: for each product, the amount held, then the amount the market has.
-[[nodiscard]] std::span<Field<std::uint8_t>> Hold(GameState& _state)
+// The row's lot in cargoHold, for each product the amount held and the amount the market has. MOV BL,[menuSelectedRow] /
+// XOR BH,BH / DEC BX / SHL BX,1 / ADD BX,cargoHold.
+[[nodiscard]] CommanderState::CargoHold::Lot& SelectedHoldLot(GameState& _state)
 {
-  return BytesOf(_state.Data().commander.cargoHold);
+  return ElementWithin(std::span(_state.Data().commander.cargoHold.lots), std::size_t{_state.Data().menus.menuSelectedRow} - 1);
 }
 
-// The index in cargoHold of the row's entry. MOV BL,[menuSelectedRow] / XOR BH,BH / DEC BX / SHL BX,1 / ADD BX,cargoHold.
-[[nodiscard]] std::size_t HoldEntry(const GameState& _state) noexcept
+// screenPrices: for each product its buy price and then its sell price, in tenths.
+[[nodiscard]] std::span<MenusState::ScreenPrice> ScreenPrices(GameState& _state)
 {
-  return static_cast<std::uint16_t>((_state.Data().menus.menuSelectedRow - 1) * 2);
+  return _state.Data().menus.screenPrices;
 }
 
-// screenPrices: for each product its buy price and then its sell price, in tenths, a word each.
-[[nodiscard]] std::span<Field<std::uint8_t>> ScreenPrices(GameState& _state)
+// The selected row's prices on the trade screens.
+[[nodiscard]] const MenusState::ScreenPrice& SelectedRowPrices(GameState& _state)
 {
-  return BytesOf(_state.Data().menus.screenPrices);
+  return ElementWithin(ScreenPrices(_state), std::size_t{_state.Data().menus.menuSelectedRow} - 1);
 }
 
 // Product _product's name and unit, up to its NUL.
@@ -122,27 +122,23 @@ void ShowCargoMessage(GameState& _state, std::string_view _text, std::uint8_t _s
 // The commander's credits, in tenths: the low word, then the high.
 [[nodiscard]] std::uint32_t Credits(const GameState& _state)
 {
-  const CommanderState::CreditsTenths& tenths = _state.Data().commander.creditsTenths;
-  return WordIn(BytesOf(tenths), 0) | (std::uint32_t{tenths.data75F5} << 16);
+  return _state.Data().commander.creditsTenths;
 }
 
 // The credits put at _tenths, the low word and then the high, and the balance reformatted (FormatCredits).
 void StoreCredits(GameState& _state, std::uint32_t _tenths)
 {
-  CommanderState::CreditsTenths& tenths = _state.Data().commander.creditsTenths;
-  SetWordIn(BytesOf(tenths), 0, static_cast<std::uint16_t>(_tenths));
-  tenths.data75F5 = static_cast<std::uint16_t>(_tenths >> 16);
+  _state.Data().commander.creditsTenths = _tenths;
   FormatCredits(_state);
 }
 
 // menuSelectedRow's commodity, as a trade in it finds it.
 [[nodiscard]] CargoLot SelectedLot(GameState& _state)
 {
-  const std::span<Field<std::uint8_t>> hold = Hold(_state);
-  const std::size_t entry = HoldEntry(_state);
+  const CommanderState::CargoHold::Lot& lot = SelectedHoldLot(_state);
   return CargoLot{.commodity = static_cast<std::uint8_t>(_state.Data().menus.menuSelectedRow - 1),
-                  .held = hold[entry],
-                  .onSale = hold[entry + 1],
+                  .held = lot.held,
+                  .onSale = lot.onSale,
                   .usedTonnes = _state.Data().commander.cargoHold.cargoUsedTonnes,
                   .legalStatus = _state.Data().commander.legalStatus,
                   .creditsTenths = Credits(_state)};
@@ -151,10 +147,9 @@ void StoreCredits(GameState& _state, std::uint32_t _tenths)
 // A trade's lot, stored where the game keeps it, the credits reformatted.
 void StoreLot(GameState& _state, const CargoLot& _lot)
 {
-  const std::span<Field<std::uint8_t>> hold = Hold(_state);
-  const std::size_t entry = HoldEntry(_state);
-  hold[entry] = _lot.held;
-  hold[entry + 1] = _lot.onSale;
+  CommanderState::CargoHold::Lot& lot = SelectedHoldLot(_state);
+  lot.held = _lot.held;
+  lot.onSale = _lot.onSale;
   _state.Data().commander.cargoHold.cargoUsedTonnes = _lot.usedTonnes;
   _state.Data().commander.legalStatus = _lot.legalStatus;
   StoreCredits(_state, _lot.creditsTenths);
@@ -208,8 +203,7 @@ void StoreLot(GameState& _state, const CargoLot& _lot)
     return NOTHING_SOLD_TEXT;
   }
   // The sell price, the word after the row's buy price.
-  const std::size_t price = (std::size_t{_state.Data().menus.menuSelectedRow} * 2 - 1) * 2;
-  const CargoTrade trade = CargoSold(SelectedLot(_state), Low(quantity.value), WordIn(ScreenPrices(_state), price));
+  const CargoTrade trade = CargoSold(SelectedLot(_state), Low(quantity.value), SelectedRowPrices(_state).resale);
   if (trade.refusal != CargoRefusal::None)
   {
     return RefusalText(trade.refusal);
@@ -239,8 +233,7 @@ void StoreLot(GameState& _state, const CargoLot& _lot)
   {
     return NOTHING_BOUGHT_TEXT;
   }
-  const std::size_t price = (std::size_t{_state.Data().menus.menuSelectedRow} - 1) * 4;
-  const CargoTrade trade = CargoBought(SelectedLot(_state), largeBay, Low(quantity.value), WordIn(ScreenPrices(_state), price));
+  const CargoTrade trade = CargoBought(SelectedLot(_state), largeBay, Low(quantity.value), SelectedRowPrices(_state).price);
   if (trade.refusal != CargoRefusal::None)
   {
     return RefusalText(trade.refusal);
@@ -256,7 +249,7 @@ ScreenKey ShowMarketPricesScreen(GameState& _state, Hardware& _hardware, bool _b
 {
   const std::string_view title = DrawDockedFrame(_state, _hardware, MARKET_PRICES_FRAME, _backward);
   // The system's name, cut for good at its first space after the first letter.
-  const std::span<Field<std::uint8_t>> name(_state.Data().commander.currentSystemName);
+  const std::span<std::uint8_t> name(_state.Data().commander.currentSystem.name);
   for (std::size_t letter = 1;; ++letter)
   {
     const std::uint8_t character = name[letter];
@@ -276,16 +269,15 @@ ScreenKey ShowMarketPricesScreen(GameState& _state, Hardware& _hardware, bool _b
   ComputeMarketPrices(_state);
 
   // Each commodity's name, buy price and sell price, the original holding the name, the row and the prices in SI, DI and BX.
-  const std::span<Field<std::uint8_t>> prices = ScreenPrices(_state);
+  const std::span<const MenusState::ScreenPrice> prices = ScreenPrices(_state);
   std::uint16_t row = FIRST_PRODUCT_OFFSET;
   for (std::uint16_t product = 0, left = COMMODITY_KINDS;;)
   {
     const std::uint16_t nameEnd = PrintTextModeString(_state, ProductName(_state, product), row);
-    FormatTenths(_state, WordIn(prices, product * TRADE_PRICES_BYTES));
-    const std::uint16_t buy =
-      PrintTextModeString(_state, TextWithin(BytesOf(_state.Data().menus.priceText), 0), Offset(nameEnd, BUY_PRICE_COLUMN));
-    FormatTenths(_state, WordIn(prices, product * TRADE_PRICES_BYTES + 2));
-    PrintTextModeString(_state, TextWithin(BytesOf(_state.Data().menus.priceText), 0), Offset(buy, SELL_PRICE_COLUMN));
+    FormatTenths(_state, prices[product].price);
+    const std::uint16_t buy = PrintTextModeString(_state, TextWithin(_state.Data().menus.priceText, 0), Offset(nameEnd, BUY_PRICE_COLUMN));
+    FormatTenths(_state, prices[product].resale);
+    PrintTextModeString(_state, TextWithin(_state.Data().menus.priceText, 0), Offset(buy, SELL_PRICE_COLUMN));
     row = Offset(row, ROW_BYTES);
     ++product;
     if (--left == 0)
@@ -325,45 +317,46 @@ std::uint16_t ComputeResalePrice(const GameState& _state)
 
 void ComputeMarketPrices(GameState& _state)
 {
-  const MarketPlace place{.economy = _state.Data().commander.currentEconomy,
-                          .government = _state.Data().commander.currentGovernment,
-                          .techLevel = _state.Data().commander.currentTechLevel};
-  // data8C10 and data8C12 walk the economy's and the government's column of the price factors, a row of eight words to a
-  // product, and data8C14 productTradeRecords, each holding the index of the word or the record it is on where the original
+  const MarketPlace place{.economy = _state.Data().commander.currentSystem.economy,
+                          .government = _state.Data().commander.currentSystem.government,
+                          .techLevel = _state.Data().commander.currentSystem.techLevel};
+  // economyFactorIndex and governmentFactorIndex walk the economy's and the government's column of the price factors, a row of eight words to a
+  // product, and tradeRecordIndex productTradeRecords, each holding the index of the word or the record it is on where the original
   // holds its address: they are left past the last commodity. marketTechLevel keeps the tech level the prices are by, and
   // resalePriceInput the last buy price, from which its resale price was computed.
-  _state.Data().market.data8C10 = static_cast<std::uint16_t>(place.economy + COMMODITY_KINDS * PRICE_FACTOR_ROW_WORDS);
-  _state.Data().market.data8C12 = static_cast<std::uint16_t>(place.government + COMMODITY_KINDS * PRICE_FACTOR_ROW_WORDS);
-  _state.Data().market.data8C14 = COMMODITY_KINDS;
+  _state.Data().market.economyFactorIndex = static_cast<std::uint16_t>(place.economy + COMMODITY_KINDS * PRICE_FACTOR_ROW_WORDS);
+  _state.Data().market.governmentFactorIndex = static_cast<std::uint16_t>(place.government + COMMODITY_KINDS * PRICE_FACTOR_ROW_WORDS);
+  _state.Data().market.tradeRecordIndex = COMMODITY_KINDS;
   _state.Data().market.marketTechLevel = MarketTechLevel(place.techLevel);
-  const std::span<Field<std::uint8_t>> prices = ScreenPrices(_state);
+  const std::span<MenusState::ScreenPrice> prices = ScreenPrices(_state);
   for (std::uint8_t commodity = 0; commodity < COMMODITY_KINDS; ++commodity)
   {
     const CommodityPrices price = PricesOf(commodity, place);
-    SetWordIn(prices, std::size_t{commodity} * TRADE_PRICES_BYTES, price.buyTenths);
-    SetWordIn(prices, std::size_t{commodity} * TRADE_PRICES_BYTES + 2, price.sellTenths);
+    prices[commodity].price = price.buyTenths;
+    prices[commodity].resale = price.sellTenths;
     _state.Data().menus.resalePriceInput = price.buyTenths;
   }
 }
 
 std::uint16_t NextMarketRandom(GameState& _state)
 {
-  const std::uint16_t a = WordIn(BytesOf(_state.Data().market.marketRandomState), 0);
-  const std::uint16_t b = _state.Data().market.marketRandomState.data8C20;
-  const std::uint16_t c = _state.Data().market.marketRandomState.data8C22;
+  std::uint16_t(&random)[3] = _state.Data().market.marketRandomState;
+  const std::uint16_t a = random[0];
+  const std::uint16_t b = random[1];
+  const std::uint16_t c = random[2];
   const auto sum = static_cast<std::uint16_t>(a + b);
   // In the order the original's two XCHGs and its ADD write them.
-  _state.Data().market.marketRandomState.data8C20 = c;
-  SetWordIn(BytesOf(_state.Data().market.marketRandomState), 0, b);
-  _state.Data().market.marketRandomState.data8C22 = static_cast<std::uint16_t>(c + sum);
+  random[1] = c;
+  random[0] = b;
+  random[2] = static_cast<std::uint16_t>(c + sum);
   return sum;
 }
 
 void StartMarketRandom(GameState& _state)
 {
-  SetWordIn(BytesOf(_state.Data().market.marketRandomState), 0, _state.Data().commander.randomState0);
-  _state.Data().market.marketRandomState.data8C20 = std::uint16_t{_state.Data().commander.randomState1};
-  _state.Data().market.marketRandomState.data8C22 = std::uint16_t{_state.Data().commander.randomState2};
+  _state.Data().market.marketRandomState[0] = std::uint16_t{_state.Data().commander.randomState0};
+  _state.Data().market.marketRandomState[1] = std::uint16_t{_state.Data().commander.randomState1};
+  _state.Data().market.marketRandomState[2] = std::uint16_t{_state.Data().commander.randomState2};
 }
 
 std::optional<std::uint8_t> RollQuantityOnSale(GameState& _state)
@@ -378,7 +371,7 @@ std::optional<std::uint8_t> RollQuantityOnSale(GameState& _state)
   return static_cast<std::uint8_t>((drawn - QUANTITY_RANDOM_BIAS) ^ (High(random) & QUANTITY_RANDOM_HIGH_MASK));
 }
 
-Quantity ParseQuantity(std::span<const Field<std::uint8_t>> _text)
+Quantity ParseQuantity(std::span<const std::uint8_t> _text)
 {
   Quantity quantity{.value = 0, .valid = false, .end = 0, .lastRead = 0};
   const auto next = [&_text, &quantity]()

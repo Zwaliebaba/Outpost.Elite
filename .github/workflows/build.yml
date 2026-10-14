@@ -143,20 +143,6 @@ jobs:
         shell: pwsh
         run: python Build\CheckProjectFiles.py
 
-      # GameLogic/GameData.h, the data segment's struct, is generated from Design/Symbols.tsv and never
-      # edited (D19): a symbol renamed or resized without regenerating it fails here, not in a native
-      # routine.
-      - name: Check the data segment's struct
-        shell: pwsh
-        run: python Tools\GenerateGameData.py --check
-
-      # Each subsystem's GameLogic/<Subsystem>Tables.h, and GameLogic/Message.h, are generated from the checked-in
-      # image, GameLogic/ReferenceImage.cpp, and Design/Symbols.tsv (D33, D38): the reference's tables of addresses as
-      # what they point at, each header read by its subsystem's .cpp alone.
-      - name: Check the reference's tables
-        shell: pwsh
-        run: python Tools\GenerateTables.py --check
-
       # /warnaserror covers MSBuild's own warnings; /WX for the compiler is set in the projects.
       - name: Build
         shell: pwsh

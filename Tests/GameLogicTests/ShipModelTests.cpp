@@ -22,7 +22,7 @@ namespace GameLogicTests
 namespace
 {
 
-constexpr std::size_t VERTEX_BYTES = 6;
+constexpr std::size_t VERTEX_WORDS = 3;       // a vertex of vertexBuffer: x, y and z
 constexpr std::uint16_t DODO_FRONT_FACE = 11; // the face with the slot, its last two triangles
 constexpr std::uint8_t SOLID_BLACK = 0;       // faceFillPatterns' first, colour 0
 
@@ -90,14 +90,14 @@ constexpr std::array<std::int16_t, 3> CENTER = {120, -75, 3000};
     Elite::BuildDodoVertices(*state);
   }
   Elite::RunVertexProgram(*state, _blueprint.vertexProgram, Elite::Vector{});
-  const std::span<const Elite::Field<std::uint8_t>> buffer = Elite::BytesOf(std::as_const(*state).Data().scene.vertexBuffer);
+  const std::span<const std::uint16_t> buffer(std::as_const(*state).Data().scene.vertexBuffer);
   std::vector<std::array<double, 3>> vertices;
   for (std::size_t vertex = 0; vertex < _blueprint.projectedVertices; ++vertex)
   {
     std::array<double, 3> at{};
     for (std::size_t axis = 0; axis < 3; ++axis)
     {
-      at[axis] = static_cast<std::int16_t>(Elite::WordIn(buffer, vertex * VERTEX_BYTES + 2 * axis));
+      at[axis] = static_cast<std::int16_t>(std::uint16_t{buffer[vertex * VERTEX_WORDS + axis]});
     }
     vertices.push_back(at);
   }

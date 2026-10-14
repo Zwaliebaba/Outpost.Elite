@@ -12,15 +12,8 @@
 namespace Elite
 {
 
-// ADR-001 and ADR-007: the reference binary, byte for byte, and the one byte the host changed in memory
-// (D5), the protection's "already shown" flag at DS:25E4, which since change 3c is not in the state: nothing reads it, as the
-// native game has no protection to show (ADR-030). Nothing reads the file (D3, D36), and since D28 it is not in the tree
-// (ADR-020): its load image is checked in (ReferenceImage.h), and ReferenceImageTests holds it to the hash measured from it.
-inline constexpr std::uint16_t D5_OFFSET = 0x25E4;
-
-// The image's layout: one code segment at paragraph 0 of the image, 0x8F40 bytes, and the data segment
-// at image paragraph 0x08F4 (Reverse-Engineering-Plan.md §1).
-inline constexpr std::uint16_t CODE_SEGMENT_BYTES = 0x8F40;
+// Where the 1987 program's data segment began, in paragraphs past its code segment's (Reverse-Engineering-Plan.md §1): the
+// segment values the game's state still carries until step 6 of Phase 7.
 inline constexpr std::uint16_t DATA_SEGMENT_PARAGRAPH = 0x08F4;
 
 // Where DOSBox-X puts the PSP (measured from its trace), which the host copied so the two boot traces
@@ -32,14 +25,6 @@ inline constexpr std::uint16_t PSP_PARAGRAPHS = 0x10;
 
 // The moment DOS's clock starts from: midnight on 1 January 1980, as on a PC/XT without a clock card.
 inline constexpr DosDateTime START_MOMENT = {1980, 1, 1, 0, 0, 0, 0};
-
-/// The game's state as DOS's EXEC leaves the reference's data segment, GameData's bytes: each member the state holds from its
-/// 1987 offset in the load image (ReferenceImage.h) past its code segment, zeros past the image's end, at its place in GameData
-/// (DATA_PLACES, D38); and the words the image holds as addresses where the game's state holds a message
-/// or an index loaded as what they mean (D33, piece 3). The code segment's relocations change only its own words, which the
-/// game's state does not hold. Nothing if the D5 byte did not hold 00, as the file's does, or one of those words did not hold
-/// its address.
-[[nodiscard]] std::optional<std::vector<std::uint8_t>> ReferenceLoadImage();
 
 /// The first of _name found walking up from the working directory, and then from the repository this
 /// file was compiled in; empty if there is none. How the tests and tools find Replays/ and the known answers.

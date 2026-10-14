@@ -2,39 +2,87 @@
 #pragma once
 
 #include "AnswerFile.h"
-#include "DataPlaces.h"
 #include "GameState.h"
-#include "ReferenceImage.h"
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <format>
 #include <fstream>
-#include <optional>
-#include <span>
+#include <map>
 #include <string>
 #include <string_view>
-#include <utility>
+#include <type_traits>
 #include <vector>
 
 namespace GameLogicTests
 {
 
+/// Every byte and word of a struct of the state, by its path from GameData (`commander.fuel`, `input.keyBuffer[3]`), and its value:
+/// the state as Visit lists it (D76), whatever the layout.
+class StateLeaves
+{
+public:
+  template <typename T> void operator()(std::string_view _name, const T& _member)
+  {
+    const std::string path = m_path.empty() ? std::string(_name) : m_path + "." + std::string(_name);
+    Leaf(path, _member);
+  }
+
+  [[nodiscard]] const std::vector<std::pair<std::string, std::uint32_t>>& Values() const noexcept
+  {
+    return m_values;
+  }
+
+private:
+  template <typename T> void Leaf(const std::string& _path, const T& _member)
+  {
+    if constexpr (std::is_array_v<T>)
+    {
+      for (std::size_t index = 0; index < std::extent_v<T>; ++index)
+      {
+        Leaf(std::format("{}[{}]", _path, index), _member[index]);
+      }
+    }
+    else if constexpr (requires { _member.Visit(*this); })
+    {
+      const std::string outer = m_path;
+      m_path = _path;
+      _member.Visit(*this);
+      m_path = outer;
+    }
+    else
+    {
+      m_values.emplace_back(_path, Bits(_member));
+    }
+  }
+
+  template <typename U> [[nodiscard]] static std::uint32_t Bits(const U& _field) noexcept
+  {
+    const U value = _field;
+    if constexpr (std::is_enum_v<U>)
+    {
+      return static_cast<std::underlying_type_t<U>>(value);
+    }
+    else
+    {
+      return value;
+    }
+  }
+
+  std::string m_path;
+  std::vector<std::pair<std::string, std::uint32_t>> m_values;
+};
+
 /// The environment variable that makes a run dump the game's state at every state digest it takes, into the directory it
-/// names, instead of checking the digests: one file of GameData's bytes for each digest step of each replay,
-/// DIR/replays/<replay>/<line>.bin, and for each known answer of each twin, DIR/twins/<twin>/<ordinal>.bin, and DIR/layout.tsv,
-/// where each top-level member of the 1987 data segment is in them (DATA_PLACES). The pictures and outcomes are checked as
-/// ever. Tools/CompareStateValues.py reads two such sets, or a set a tree before change 3 of D33's piece 3 wrote at the 1987
-/// layout, member by member: the proof a change that moves the state gives that no member's value moved (D38).
+/// names, instead of checking the digests: one file for each digest step of each replay, DIR/replays/<replay>/<line>.txt, and
+/// for each known answer of each twin, DIR/twins/<twin>/<ordinal>.txt, each byte and word of the state a line, its path and
+/// its value in hex (StateLeaves). The pictures and outcomes are checked as ever.
 inline constexpr const char* DUMP_STATE = "OUTPOST_ELITE_DUMP_STATE";
 
 /// The environment variable that makes a run re-base the state digests from the directory it names, which holds the dumps of
-/// the tree before the change, as DUMP_STATE writes them. At every digest it takes, every member of the state but the unused
-/// must hold the value the dump before the change gives it, byte by byte at its 1987 offset, wherever each tree lays it out
-/// (DATA_PLACES, and the 1987 offsets for a dump with no layout.tsv), or the image's where that tree held a constant there; every
-/// constant the dump's, its value in the reference's image; and the picture and
+/// the tree before the change, as DUMP_STATE writes them. At every digest it takes, every byte and word of the state must hold
+/// the value the dump before the change gives it, by its path, wherever each tree lays it out; and the picture and
 /// every outcome, timing outcomes too, the recorded ones exactly. Then the run writes its own digests: every replay's digest
 /// lines, and each twin's known answers in KnownAnswers.txt, only once all of the replay's or the twin's points have met that
 /// gate. It is run by hand, in one process, never in CI, once the subsystems' answers and the turn probe are known to hold; a
@@ -81,13 +129,17 @@ public:
   void Point(const Elite::GameState& _state, std::string_view _kind, std::string_view _name, std::size_t _point) const
   {
     using Microsoft::VisualStudio::CppUnitTestFramework::Assert;
-    const std::span<const std::uint8_t, sizeof(Elite::GameData)> data = _state.DataBytes();
-    const std::filesystem::path file = m_directory / _kind / _name / (std::to_string(_point) + ".bin");
+    StateLeaves leaves;
+    _state.Data().Visit(leaves);
+    const std::filesystem::path file = m_directory / _kind / _name / (std::to_string(_point) + ".txt");
     if (m_mode == DigestMode::Dump)
     {
       std::filesystem::create_directories(file.parent_path());
       std::ofstream stream(file, std::ios::binary | std::ios::trunc);
-      stream.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
+      for (const auto& [path, value] : leaves.Values())
+      {
+        stream << std::format("{} {:X}\n", path, value);
+      }
       stream.close();
       Assert::IsFalse(stream.fail(), AnswerFile::Widen(file.string() + " cannot be written").c_str());
       return;
@@ -96,36 +148,28 @@ public:
     {
       return;
     }
-    const std::vector<std::uint8_t> before = Elite::ReadWholeFile(file);
-    Assert::IsFalse(before.empty(), AnswerFile::Widen(file.string() + ": the dump before the change").c_str());
-    const std::span<const std::uint8_t> image = std::span<const std::uint8_t>(Elite::REFERENCE_IMAGE).subspan(Elite::CODE_SEGMENT_BYTES);
-    for (const Elite::DataPlace& place : Elite::DATA_PLACES)
+    std::ifstream stream(file, std::ios::binary);
+    Assert::IsTrue(static_cast<bool>(stream), AnswerFile::Widen(file.string() + ": the dump before the change").c_str());
+    std::map<std::string, std::uint32_t> before;
+    std::string path;
+    std::string value;
+    while (stream >> path >> value)
     {
-      if (place.fate == Elite::DataFate::Unused)
+      before[path] = static_cast<std::uint32_t>(std::stoul(value, nullptr, 16));
+    }
+    for (const auto& [where, now] : leaves.Values())
+    {
+      const auto was = before.find(where);
+      if (was == before.end() || was->second != now)
       {
-        continue;
-      }
-      for (std::size_t index = 0; index < place.bytes; ++index)
-      {
-        const std::size_t original = std::size_t{place.original} + index;
-        const std::optional<std::size_t> was = Before(original, before.size());
-        // A byte the tree before the change did not hold in its state is a constant's there: the image's, which nothing writes.
-        const std::uint8_t old = was.has_value() ? before[*was] : original < image.size() ? image[original] : 0;
-        const std::uint8_t now = place.place != Elite::NO_PLACE ? data[place.place + index] : original < image.size() ? image[original] : 0;
-        if (now != old)
-        {
-          Assert::Fail(AnswerFile::Widen(std::format("{} {} at {}: {}'s byte {} is {:02X}, and was {:02X}", _kind, _name, _point,
-                                                     place.name, index, now, old))
-                         .c_str());
-        }
+        Assert::Fail(AnswerFile::Widen(std::format("{} {} at {}: {} is {:X}, and was {}", _kind, _name, _point, where, now,
+                                                   was == before.end() ? std::string("not in the dump") : std::format("{:X}", was->second)))
+                       .c_str());
       }
     }
   }
 
 private:
-  /// The name of the file beside the dumps that says where each member is in them.
-  static constexpr const char* LAYOUT_FILE = "layout.tsv";
-
   StateDumps()
   {
     const std::string dump = EnvironmentVariable(DUMP_STATE);
@@ -139,99 +183,16 @@ private:
     {
       m_mode = DigestMode::Dump;
       m_directory = dump;
-      WriteLayout();
     }
     else if (!rebase.empty())
     {
       m_mode = DigestMode::Rebase;
       m_directory = rebase;
-      ReadLayout();
     }
   }
-
-  /// DIR/layout.tsv: `NAME ORIGINAL BYTES PLACE` a line, in hex, PLACE `-` for a constant the state does not hold, after a line
-  /// `#bytes SIZE`, GameData's size.
-  void WriteLayout()
-  {
-    std::filesystem::create_directories(m_directory);
-    std::ofstream stream(m_directory / LAYOUT_FILE, std::ios::binary | std::ios::trunc);
-    stream << std::format("#bytes\t{:X}\n", sizeof(Elite::GameData));
-    for (const Elite::DataPlace& place : Elite::DATA_PLACES)
-    {
-      const std::string where = place.place == Elite::NO_PLACE ? std::string("-") : std::format("{:X}", place.place);
-      stream << std::format("{}\t{:04X}\t{:X}\t{}\n", place.name, place.original, place.bytes, where);
-    }
-    stream.close();
-    if (stream.fail())
-    {
-      m_error = (m_directory / LAYOUT_FILE).string() + " cannot be written";
-    }
-  }
-
-  /// Where the dumps before the change hold each byte of the 1987 data segment, by its 1987 offset, from their layout.tsv: each
-  /// row's bytes at its place, a constant's nowhere. Members are matched byte by byte at their 1987 offsets, not by name, so a
-  /// change may rename, merge, split or drop members and still be held to the dump. With no layout.tsv, the dumps are of the
-  /// 1987 data segment, every byte at its 1987 offset.
-  void ReadLayout()
-  {
-    std::ifstream stream(m_directory / LAYOUT_FILE, std::ios::binary);
-    if (!stream)
-    {
-      return;
-    }
-    m_heldBefore = true;
-    m_beforePlaces.assign(BYTES_1987, std::nullopt);
-    std::string line;
-    while (std::getline(stream, line))
-    {
-      if (line.starts_with("#"))
-      {
-        continue;
-      }
-      std::vector<std::string> fields;
-      for (std::size_t start = 0;;)
-      {
-        const std::size_t tab = line.find('\t', start);
-        fields.push_back(line.substr(start, tab == std::string::npos ? std::string::npos : tab - start));
-        if (tab == std::string::npos)
-        {
-          break;
-        }
-        start = tab + 1;
-      }
-      if (fields.size() != 4 || fields[3] == "-")
-      {
-        continue;
-      }
-      const auto original = static_cast<std::size_t>(std::stoul(fields[1], nullptr, 16));
-      const auto bytes = static_cast<std::size_t>(std::stoul(fields[2], nullptr, 16));
-      const auto place = static_cast<std::size_t>(std::stoul(fields[3], nullptr, 16));
-      for (std::size_t index = 0; index < bytes && original + index < BYTES_1987; ++index)
-      {
-        m_beforePlaces[original + index] = place + index;
-      }
-    }
-  }
-
-  /// Where the dump before the change, of _size bytes, holds the byte at _original, the 1987 offset of a byte of the data segment:
-  /// its place there, or its 1987 offset in a dump of the 1987 data segment. Nothing if it does not hold it: a constant there.
-  [[nodiscard]] std::optional<std::size_t> Before(std::size_t _original, std::size_t _size) const
-  {
-    const std::optional<std::size_t> at = m_heldBefore ? m_beforePlaces[_original] : std::optional<std::size_t>(_original);
-    if (!at.has_value() || *at >= _size)
-    {
-      return std::nullopt;
-    }
-    return at;
-  }
-
-  /// The 1987 data segment's size: every byte a dump's layout can place.
-  static constexpr std::size_t BYTES_1987 = 0x10000;
 
   DigestMode m_mode = DigestMode::Check;
   std::filesystem::path m_directory;
-  bool m_heldBefore = false;
-  std::vector<std::optional<std::size_t>> m_beforePlaces;
   std::string m_error;
 };
 
