@@ -19,37 +19,9 @@ struct MarketState
   Field<std::uint16_t> data8C10;
   Field<std::uint16_t> data8C12;
   Field<std::uint16_t> data8C14;
-  /// marketRandomState's fields, DS:8C1E-8C23 in 1987, at their places there.
-  struct MarketRandomState
-  {
-    MarketRandomState() noexcept = default;
-    explicit MarketRandomState(const MarketRandomState&) noexcept = default;
-
-    Field<std::uint8_t> gap8C1E[2];
-    Field<std::uint16_t> data8C20;
-    Field<std::uint16_t> data8C22;
-
-    /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
-    template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
-    {
-      _visitor("gap8C1E", _self.gap8C1E);
-      _visitor("data8C20", _self.data8C20);
-      _visitor("data8C22", _self.data8C22);
-    }
-
-    template <typename Visitor> void Visit(Visitor& _visitor)
-    {
-      VisitMembers(*this, _visitor);
-    }
-
-    template <typename Visitor> void Visit(Visitor& _visitor) const
-    {
-      VisitMembers(*this, _visitor);
-    }
-  };
-  /// copy of randomState0 stepped by NextMarketRandom
-  MarketRandomState marketRandomState;
-  /// currentTechLevel clamped to 9
+  /// a copy of the commander's randomState0-2, three words stepped by NextMarketRandom
+  Field<std::uint16_t> marketRandomState[3];
+  /// currentSystem.techLevel clamped to 9
   Field<std::uint8_t> marketTechLevel;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.

@@ -36,18 +36,19 @@ constexpr std::size_t SYSTEMS = 256;
 
   std::string name;
   const std::span<const Elite::Field<std::uint8_t>> characters =
-    Elite::BytesOf(_state.Data().commander.selectedSystemName).first(_state.Data().commander.selectedSystemNameLength);
+    Elite::BytesOf(_state.Data().commander.selectedSystem.name).first(_state.Data().commander.selectedSystem.nameLength);
   for (const std::uint8_t character : characters)
   {
     name += static_cast<char>(character);
   }
   const Elite::CommanderState& commander = _state.Data().commander;
-  std::string answer = std::format("{} {} {} {} {} {} {} {} {} {} {}", _galaxy, _system, name, x, y,
-                                   std::uint8_t{commander.selectedEconomy}, std::uint8_t{commander.selectedGovernment},
-                                   std::uint8_t{commander.selectedTechLevel}, std::uint8_t{commander.selectedPopulationTenthsBillion},
-                                   std::uint16_t{commander.selectedProductivityMillionCredits}, std::uint16_t{commander.selectedRadiusKm});
+  std::string answer =
+    std::format("{} {} {} {} {} {} {} {} {} {} {}", _galaxy, _system, name, x, y, std::uint8_t{commander.selectedSystem.economy},
+                std::uint8_t{commander.selectedSystem.government}, std::uint8_t{commander.selectedSystem.techLevel},
+                std::uint8_t{commander.selectedSystem.populationTenthsBillion},
+                std::uint16_t{commander.selectedSystem.productivityMillionCredits}, std::uint16_t{commander.selectedSystem.radiusKm});
   (void)Elite::SelectSystemAtCursor(_state, 0);
-  return answer + std::format(" {}", std::uint8_t{commander.selectedSystemIndex});
+  return answer + std::format(" {}", std::uint8_t{commander.selectedSystem.index});
 }
 
 } // namespace

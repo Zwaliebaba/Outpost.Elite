@@ -171,20 +171,22 @@ void ClampLoadedCommander(GameState& _state)
   HoldTo(commander.chartCursorY, MOST_CHART_ROW);
   HoldTo(commander.shortRangeCursorY, MOST_CHART_ROW);
   HoldTo(commander.galacticCursorY, MOST_CHART_ROW);
-  HoldTo(commander.currentGovernment, MOST_ECONOMY_OR_GOVERNMENT);
-  HoldTo(commander.currentEconomy, MOST_ECONOMY_OR_GOVERNMENT);
-  HoldTo(commander.selectedGovernment, MOST_ECONOMY_OR_GOVERNMENT);
-  HoldTo(commander.selectedEconomy, MOST_ECONOMY_OR_GOVERNMENT);
+  HoldTo(commander.currentSystem.government, MOST_ECONOMY_OR_GOVERNMENT);
+  HoldTo(commander.currentSystem.economy, MOST_ECONOMY_OR_GOVERNMENT);
+  HoldTo(commander.selectedSystem.government, MOST_ECONOMY_OR_GOVERNMENT);
+  HoldTo(commander.selectedSystem.economy, MOST_ECONOMY_OR_GOVERNMENT);
   HoldTo(commander.missileCount, MOST_MISSILES);
   HoldTo(commander.killCount, MOST_KILLS);
   commander.defaultCommanderName[sizeof(commander.defaultCommanderName) - 1] = 0;
   FormatCredits(_state);
-  constexpr std::size_t UNIT = sizeof(commander.creditBalanceText) - CREDITS_UNIT_TEXT.size();
+  // The text's last characters, then its NUL.
+  constexpr std::size_t NUL = sizeof(commander.creditBalanceText) - 1;
+  constexpr std::size_t UNIT = NUL - CREDITS_UNIT_TEXT.size();
   for (std::size_t character = 0; character < CREDITS_UNIT_TEXT.size(); ++character)
   {
     commander.creditBalanceText[UNIT + character] = static_cast<std::uint8_t>(CREDITS_UNIT_TEXT[character]);
   }
-  commander.gap759A[0] = 0;
+  commander.creditBalanceText[NUL] = 0;
 }
 
 // LoadCommanderFile (0x031A): only a file with no attributes, read whole into commanderBlock, and then held to what the game
@@ -593,14 +595,9 @@ void PerformDiskRequest(GameState& _state, Hardware& _hardware, std::uint8_t _re
 
 void SaveStartupCommander(GameState& _state)
 {
-  // REP MOVSB within the data segment, a byte at a time: commanderBlock's bytes into startupCommander's, upwards, as the direction flag is
-  // clear wherever the game calls it: the only STD, MaskOutsideTunnel's, has its CLD before the routine returns (change 3c).
-  const std::span<Field<std::uint8_t>> to(_state.Data().saveLoad.startupCommander);
-  const std::span<const Field<std::uint8_t>> from = BytesOf(std::as_const(_state).Data().commander);
-  for (std::size_t index = 0; index < COMMANDER_FILE_BYTES; ++index)
-  {
-    to[index] = std::uint8_t{from[index]};
-  }
+  // REP MOVSB within the data segment, a byte at a time: commanderBlock into startupCommander, the whole record, as the direction flag
+  // is clear wherever the game calls it: the only STD, MaskOutsideTunnel's, has its CLD before the routine returns (change 3c).
+  CopyMembers(_state.Data().saveLoad.startupCommander, _state.Data().commander);
 }
 
 void ShowDiskError(GameState& _state)

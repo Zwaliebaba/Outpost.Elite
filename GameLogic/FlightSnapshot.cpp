@@ -256,7 +256,7 @@ FlightSnapshot TakeFlightSnapshot(const GameState& _state)
     snapshot.supernovaHeat = data.commander.supernovaHeat;
   }
   snapshot.galaxy = data.commander.galaxyNumber;
-  snapshot.system = data.commander.currentSystemIndex;
+  snapshot.system = data.commander.currentSystem.index;
   snapshot.stardust = true;
   snapshot.velocityX = static_cast<std::int16_t>(std::uint16_t{data.playerShip.playerVelocityX});
   snapshot.velocityY = static_cast<std::int16_t>(std::uint16_t{data.playerShip.playerVelocityY});

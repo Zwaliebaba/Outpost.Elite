@@ -18,7 +18,7 @@ namespace Elite
 namespace
 {
 
-constexpr std::size_t VERTEX_BYTES = 6; // a vertex of vertexBuffer: x, y and z words
+constexpr std::size_t VERTEX_WORDS = 3; // a vertex of vertexBuffer: x, y and z
 constexpr std::size_t POINT_BYTES = 4;  // a projected point: x and y words, where the face list's bytes point
 constexpr std::uint8_t FACE_TRIANGLE = 0x80;
 constexpr std::uint8_t ITEM_OFFSET_BITS = 0x7F;
@@ -80,11 +80,11 @@ void BuildVertices(const Blueprint& _blueprint, ShipModel& _model)
     BuildDodoVertices(*state);
   }
   RunVertexProgram(*state, _blueprint.vertexProgram, Vector{});
-  const std::span<const Field<std::uint8_t>> buffer = BytesOf(std::as_const(*state).Data().scene.vertexBuffer);
+  const std::span<const Field<std::uint16_t>> buffer(std::as_const(*state).Data().scene.vertexBuffer);
   for (std::size_t vertex = 0; vertex < _blueprint.projectedVertices; ++vertex)
   {
     const auto coordinate = [&buffer, vertex](std::size_t _axis)
-    { return static_cast<float>(static_cast<std::int16_t>(WordIn(buffer, vertex * VERTEX_BYTES + 2 * _axis))); };
+    { return static_cast<float>(static_cast<std::int16_t>(std::uint16_t{buffer[vertex * VERTEX_WORDS + _axis]})); };
     _model.vertices.push_back(ModelVertex{.x = coordinate(0), .y = coordinate(1), .z = coordinate(2)});
   }
 }

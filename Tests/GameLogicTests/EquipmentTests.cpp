@@ -31,13 +31,7 @@ template <typename Struct> void SetByte(TwinRig& _rig, DataByte<Struct> _member,
 // The cash, in tenths of credits, on the twin.
 void SetCredits(TwinRig& _rig, std::uint32_t _tenths)
 {
-  _rig.Both(
-    [_tenths](Elite::Platform&, Elite::GameState& _state)
-    {
-      Commander::CreditsTenths& credits = _state.Data().commander.creditsTenths;
-      Elite::SetWordIn(Elite::BytesOf(credits), 0, static_cast<std::uint16_t>(_tenths));
-      credits.data75F5 = static_cast<std::uint16_t>(_tenths >> 16);
-    });
+  _rig.Both([_tenths](Elite::Platform&, Elite::GameState& _state) { _state.Data().commander.creditsTenths = _tenths; });
 }
 
 // The byte _member names, as the twin holds it.
@@ -45,6 +39,15 @@ template <typename Struct> [[nodiscard]] std::uint8_t TwinByte(TwinRig& _rig, Da
 {
   std::uint8_t value = 0;
   _rig.Both([&value, _member](Elite::Platform&, Elite::GameState& _state) { value = DataByteIn(_state, _member); });
+  return value;
+}
+
+// The units of commodity _commodity held, as the twin holds them.
+[[nodiscard]] std::uint8_t TwinHeld(TwinRig& _rig, std::uint8_t _commodity)
+{
+  std::uint8_t value = 0;
+  _rig.Both([&value, _commodity](Elite::Platform&, Elite::GameState& _state)
+            { value = _state.Data().commander.cargoHold.lots[_commodity].held; });
   return value;
 }
 
@@ -187,7 +190,7 @@ public:
     TwinRig rig("TwinEquipmentMenu");
     rig.Play("key space; wait 4");
     SetCredits(rig, 1000000);
-    SetByte(rig, &Commander::currentTechLevel, 9); // all 14 items
+    rig.Both([](Elite::Platform&, Elite::GameState& _state) { _state.Data().commander.currentSystem.techLevel = 9; }); // all 14 items
     SetByte(rig, &Commander::fuel, 100);
     SetByte(rig, &Commander::missionNumber, 1);
     rig.Play("key F4; wait 1\nkey b; wait 0.2"); // no fuel in the first mission
@@ -265,11 +268,11 @@ public:
     Assert::IsTrue(TwinMessage(rig) == Elite::Message::MaskingDevice, L"Masking Device!");
     MakeBelowTheNose(rig, Scoopable::Thargon);
     rig.Play("wait 0.2\ndigest alien-items");
-    Assert::AreEqual(std::uint8_t{1}, TwinByte(rig, &Commander::CargoHold::cargoAlienItemsTonnes), L"a tonne of alien items");
+    Assert::AreEqual(std::uint8_t{1}, TwinHeld(rig, Elite::COMMODITY_ALIEN_ITEMS), L"a tonne of alien items");
     MakeBelowTheNose(rig, Scoopable::MineralSplinter);
     rig.Play("wait 0.2\ndigest minerals");
     Assert::IsTrue(TwinMessage(rig) == Elite::Message::PreciousMetals, L"precious metals");
-    Assert::AreEqual(std::uint8_t{1}, TwinByte(rig, &Commander::CargoHold::cargoMineralsTonnes), L"a tonne of minerals");
+    Assert::AreEqual(std::uint8_t{1}, TwinHeld(rig, Elite::COMMODITY_MINERALS), L"a tonne of minerals");
     Assert::AreEqual(std::uint8_t{20}, TwinByte(rig, &Commander::CargoHold::cargoUsedTonnes), L"the hold full");
     MakeBelowTheNose(rig, Scoopable::Barrel);
     rig.Play("wait 0.2\ndigest hold-full");

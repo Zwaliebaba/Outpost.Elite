@@ -27,7 +27,9 @@ static_assert(sizeof(DrawingState::drawingBuffer) == DRAWING_BUFFER_BYTES && Spa
 // The drawing buffer, as the game's state holds it now.
 [[nodiscard]] std::span<const std::uint8_t> BufferOf(const GameState& _state) noexcept
 {
-  return _state.DataBytes().subspan(GAME_DATA_OFFSET(drawing.drawingBuffer), DRAWING_BUFFER_BYTES);
+  // The buffer's bytes, each a Field of one byte.
+  return std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(&_state.Data().drawing.drawingBuffer[0]),
+                                       DRAWING_BUFFER_BYTES);
 }
 
 // Pixel _x of a row whose first byte is _row: the leftmost the byte's top two bits, as the CGA shows them.

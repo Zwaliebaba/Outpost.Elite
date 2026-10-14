@@ -7,22 +7,95 @@
 #include <cstdint>
 #include <type_traits>
 
-// A member's offset in CommanderState, as a constant expression wherever this header is read; under Clang the builtin, for
-// the reason GameData.h gives for GAME_DATA_OFFSET.
-#if defined(__clang__)
-#   define COMMANDER_STATE_OFFSET(member) __builtin_offsetof(::Elite::CommanderState, member)
-#else
-#   define COMMANDER_STATE_OFFSET(member) offsetof(::Elite::CommanderState, member)
-#endif
-
 namespace Elite
 {
 
 #pragma pack(push, 1)
 
-/// The commander (D38): commanderBlock, DS:756B-763A in 1987, kept whole at its 1987 layout, every member at its offset there. It is the
-/// .cdr file's format, 208 bytes, which SaveCommanderFile writes from it and LoadCommanderFile reads over it, and Replays/*.cdr are files
-/// of it (ADR-008 item 8). Several subsystems write it.
+/// A system's record: the selected (hyperspace target) system's, which SelectSystemAtCursor fills and every WaitForScreenExitKey
+/// rebuilds; the current system's, which an arrival copies from the target's; and the hyperspace countdown's copy of its target
+/// (HyperspaceState).
+struct SystemRecord
+{
+  SystemRecord() noexcept = default;
+  explicit SystemRecord(const SystemRecord&) noexcept = default;
+
+  /// the name, up to eight letters and its NUL; GenerateSystemName blanks characters 5 to 8 before it writes it
+  Field<std::uint8_t> name[9];
+  /// written by GenerateSystemName; TerminateSelectedSystemName puts the NUL here
+  Field<std::uint8_t> nameLength;
+  /// 0-255 in the galaxy; 7 (Lave) in the file's current system
+  Field<std::uint8_t> index;
+  /// printed as nnn.n Light Years; 0 = none selected (No System Selected), 47h or more = out of range; compared with fuel*10/36 by H
+  Field<std::uint16_t> distanceTenthsLy;
+  /// 0-7, index into DS:7CBD names (Anarchy ... Corporate State); the current system's prices equipment and the market, and picks
+  /// the ship spawn tables (0x4A86)
+  Field<std::uint8_t> government;
+  /// 0-7, index into DS:7C0C names (Poor Agricultural ... Rich Industrial); the current system's prices equipment and the market
+  Field<std::uint8_t> economy;
+  /// 0-based, shown +1; the current system's equipment for sale has tech byte < this+2, market prices use min(this,9), and 9+ makes
+  /// the station a Dodo (0x2ADE)
+  Field<std::uint8_t> techLevel;
+  /// tenths of a billion
+  Field<std::uint8_t> populationTenthsBillion;
+  /// 0xFF = Human Colonials; otherwise size adjective index (DS:7D9E)
+  Field<std::uint8_t> speciesAdjective1;
+  /// index into DS:7DC5
+  Field<std::uint8_t> speciesAdjective2;
+  /// index into DS:7E01
+  Field<std::uint8_t> speciesAdjective3;
+  /// index into DS:7E3D (Rodents ... Insects)
+  Field<std::uint8_t> speciesType;
+  /// millions of credits
+  Field<std::uint16_t> productivityMillionCredits;
+  /// shown in km
+  Field<std::uint16_t> radiusKm;
+
+  /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+  template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+  {
+    _visitor("name", _self.name);
+    _visitor("nameLength", _self.nameLength);
+    _visitor("index", _self.index);
+    _visitor("distanceTenthsLy", _self.distanceTenthsLy);
+    _visitor("government", _self.government);
+    _visitor("economy", _self.economy);
+    _visitor("techLevel", _self.techLevel);
+    _visitor("populationTenthsBillion", _self.populationTenthsBillion);
+    _visitor("speciesAdjective1", _self.speciesAdjective1);
+    _visitor("speciesAdjective2", _self.speciesAdjective2);
+    _visitor("speciesAdjective3", _self.speciesAdjective3);
+    _visitor("speciesType", _self.speciesType);
+    _visitor("productivityMillionCredits", _self.productivityMillionCredits);
+    _visitor("radiusKm", _self.radiusKm);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor)
+  {
+    VisitMembers(*this, _visitor);
+  }
+
+  template <typename Visitor> void Visit(Visitor& _visitor) const
+  {
+    VisitMembers(*this, _visitor);
+  }
+};
+
+/// The commodities, in the market's order: food first, alien items last.
+inline constexpr std::uint8_t COMMODITY_KINDS = 17;
+
+/// The commodities the game reaches by name, by their place in the market's order.
+inline constexpr std::uint8_t COMMODITY_SLAVES = 3;
+inline constexpr std::uint8_t COMMODITY_ALLOYS = 9;
+inline constexpr std::uint8_t COMMODITY_MINERALS = 12;
+inline constexpr std::uint8_t COMMODITY_GOLD = 13;
+inline constexpr std::uint8_t COMMODITY_PLATINUM = 14;
+inline constexpr std::uint8_t COMMODITY_GEM_STONES = 15;
+inline constexpr std::uint8_t COMMODITY_ALIEN_ITEMS = 16;
+
+/// The commander (D38): commanderBlock, DS:756B-763A in 1987, its members in their order there. Written by its members, it is the
+/// .cdr file's format, 208 bytes (D78), which SaveCommanderFile writes from it and LoadCommanderFile reads over it, and Replays/*.cdr are
+/// files of it (ADR-008 item 8). Several subsystems write it.
 struct CommanderState
 {
   CommanderState() noexcept = default;
@@ -34,9 +107,8 @@ struct CommanderState
   /// 'COMMANDER', the rank inside commanderTitle (DS:757A, frame bytes first); AwardArchangelTitle overwrites it
   Field<std::uint8_t> commanderRankText[9];
   Field<std::uint8_t> gap7585[2];
-  /// cash as text, " 100.0 Credits", written by FormatCredits
-  Field<std::uint8_t> creditBalanceText[19];
-  Field<std::uint8_t> gap759A[1];
+  /// cash as text, " 100.0 Credits", and its NUL; FormatCredits writes the first 19 characters
+  Field<std::uint8_t> creditBalanceText[20];
   /// with randomState1-2 three words stepped by NextRandom (a,b,c -> b,c,c+a+b); ShowBuyCargoScreen copies all three to marketRandomState
   Field<std::uint16_t> randomState0;
   Field<std::uint16_t> randomState1;
@@ -58,82 +130,10 @@ struct CommanderState
   Field<std::uint8_t> galacticCursorY;
   /// 0 galactic chart, 1 short-range
   Field<std::uint8_t> chartIsShortRange;
-  /// start of the current system's 25-byte record DS:75AB-71F3, laid out like the selected one from DS:75C4: name (9), name length (+9),...
-  Field<std::uint8_t> currentSystemName[9];
-  Field<std::uint8_t> gap75B4[1];
-  /// 7 (Lave) in the file; DS:75AB-71F3 is the current system's record, laid out as the selected one at DS:75C4
-  Field<std::uint8_t> currentSystemIndex;
-  Field<std::uint8_t> gap75B6[2];
-  /// 0-7, names DS:7CBD; equipment and market prices, ship spawn tables (0x4A86)
-  Field<std::uint8_t> currentGovernment;
-  /// 0-7, names DS:7C0C; equipment and market prices
-  Field<std::uint8_t> currentEconomy;
-  /// 0-based; equipment for sale has tech byte < this+2; market prices use min(this,9); 9+ makes the station a Dodo (0x2ADE)
-  Field<std::uint8_t> currentTechLevel;
-  Field<std::uint8_t> gap75BB[1];
-  Field<std::uint8_t> data75BC;
-  Field<std::uint8_t> gap75BD[2];
-  Field<std::uint8_t> data75BF;
-  Field<std::uint8_t> gap75C0[4];
-  /// selectedSystemName's fields, DS:75C4-75CB in 1987, at their places there.
-  struct SelectedSystemName
-  {
-    SelectedSystemName() noexcept = default;
-    explicit SelectedSystemName(const SelectedSystemName&) noexcept = default;
-
-    Field<std::uint8_t> gap75C4[4];
-    /// characters 5-6 of selectedSystemName; GenerateSystemName blanks them
-    Field<std::uint16_t> data75C8;
-    /// characters 7-8 of selectedSystemName; GenerateSystemName blanks them
-    Field<std::uint16_t> data75CA;
-
-    /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
-    template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
-    {
-      _visitor("gap75C4", _self.gap75C4);
-      _visitor("data75C8", _self.data75C8);
-      _visitor("data75CA", _self.data75CA);
-    }
-
-    template <typename Visitor> void Visit(Visitor& _visitor)
-    {
-      VisitMembers(*this, _visitor);
-    }
-
-    template <typename Visitor> void Visit(Visitor& _visitor) const
-    {
-      VisitMembers(*this, _visitor);
-    }
-  };
-  /// start of the selected (hyperspace target) system's record, filled by SelectSystemAtCursor and rebuilt at every WaitForScreenExitKey...
-  SelectedSystemName selectedSystemName;
-  Field<std::uint8_t> gap75CC[1];
-  /// written by GenerateSystemName; TerminateSelectedSystemName puts the NUL here
-  Field<std::uint8_t> selectedSystemNameLength;
-  /// 0-255 in the galaxy
-  Field<std::uint8_t> selectedSystemIndex;
-  /// printed as nnn.n Light Years; 0 = none selected (No System Selected), 47h or more = out of range; compared with fuel*10/36 by H
-  Field<std::uint16_t> selectedDistanceTenthsLy;
-  /// index into DS:7CBD names (Anarchy ... Corporate State)
-  Field<std::uint8_t> selectedGovernment;
-  /// index into DS:7C0C names (Poor Agricultural ... Rich Industrial)
-  Field<std::uint8_t> selectedEconomy;
-  /// shown +1
-  Field<std::uint8_t> selectedTechLevel;
-  /// tenths of a billion
-  Field<std::uint8_t> selectedPopulationTenthsBillion;
-  /// 0xFF = Human Colonials; otherwise size adjective index (DS:7D9E)
-  Field<std::uint8_t> selectedSpeciesAdjective1;
-  /// index into DS:7DC5
-  Field<std::uint8_t> selectedSpeciesAdjective2;
-  /// index into DS:7E01
-  Field<std::uint8_t> selectedSpeciesAdjective3;
-  /// index into DS:7E3D (Rodents ... Insects)
-  Field<std::uint8_t> selectedSpeciesType;
-  /// millions of credits
-  Field<std::uint16_t> selectedProductivityMillionCredits;
-  /// shown in km
-  Field<std::uint16_t> selectedRadiusKm;
+  /// the system the commander is at
+  SystemRecord currentSystem;
+  /// the system selected on a chart, the hyperspace target
+  SystemRecord selectedSystem;
   /// with descriptionSeed1 (DS:75DF) stepped by NextDescriptionRandom; set by SelectSystemAtCursor (0x1284)
   Field<std::uint16_t> descriptionSeed0;
   /// descriptionSeed0 XOR systemSeed2
@@ -173,68 +173,52 @@ struct CommanderState
   Field<std::uint8_t> laserMountsFitted;
   /// 2 bits per mount, mount 0 lowest: 0 pulse, 1 beam, 2 mining, 3 military
   Field<std::uint8_t> laserMountTypes;
-  /// creditsTenths's fields, DS:75F3-75F6 in 1987, at their places there.
-  struct CreditsTenths
-  {
-    CreditsTenths() noexcept = default;
-    explicit CreditsTenths(const CreditsTenths&) noexcept = default;
-
-    Field<std::uint8_t> gap75F3[2];
-    Field<std::uint16_t> data75F5;
-
-    /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
-    template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
-    {
-      _visitor("gap75F3", _self.gap75F3);
-      _visitor("data75F5", _self.data75F5);
-    }
-
-    template <typename Visitor> void Visit(Visitor& _visitor)
-    {
-      VisitMembers(*this, _visitor);
-    }
-
-    template <typename Visitor> void Visit(Visitor& _visitor) const
-    {
-      VisitMembers(*this, _visitor);
-    }
-  };
-  /// 32-bit cash in tenths of a credit, low word first
-  CreditsTenths creditsTenths;
+  /// cash in tenths of a credit
+  Field<std::uint32_t> creditsTenths;
   /// 0 clean, 1-39 offender, 40+ fugitive (DS:842A); saturates at 255; -5 per jump (0x4727)
   Field<std::uint8_t> legalStatus;
   /// incremented by CreditKill for kills with a bounty, saturates at 254; rating = first DS:8457 threshold above it; enemy missiles need...
   Field<std::uint8_t> killCount;
   /// JAMESON
   Field<std::uint8_t> defaultCommanderName[9];
-  /// cargoHold's fields, DS:7602-7625 in 1987, at their places there.
+  /// What the hold carries and what the market has: a lot per commodity, then the refugees and the tonnes in use.
   struct CargoHold
   {
     CargoHold() noexcept = default;
     explicit CargoHold(const CargoHold&) noexcept = default;
 
-    Field<std::uint8_t> gap7602[6];
-    /// product 3; escape pods
-    Field<std::uint8_t> cargoSlavesTonnes;
-    Field<std::uint8_t> gap7609[11];
-    /// product 9
-    Field<std::uint8_t> cargoAlloysTonnes;
-    Field<std::uint8_t> gap7615[5];
-    /// product 12
-    Field<std::uint8_t> cargoMineralsTonnes;
-    Field<std::uint8_t> gap761B[1];
-    /// product 13; capped at 0xFA when scooped
-    Field<std::uint8_t> cargoGoldKg;
-    Field<std::uint8_t> gap761D[1];
-    /// product 14
-    Field<std::uint8_t> cargoPlatinumKg;
-    Field<std::uint8_t> gap761F[1];
-    /// product 15
-    Field<std::uint8_t> cargoGemStonesGrams;
-    Field<std::uint8_t> gap7621[1];
-    /// product 16; Thargons
-    Field<std::uint8_t> cargoAlienItemsTonnes;
-    Field<std::uint8_t> gap7623[1];
+    /// A commodity's units in the hold and on sale here.
+    struct Lot
+    {
+      Lot() noexcept = default;
+      explicit Lot(const Lot&) noexcept = default;
+
+      /// in the commodity's unit: tonnes, or kilograms for gold and platinum, grams for gem stones; gold is capped at 0xFA when
+      /// scooped
+      Field<std::uint8_t> held;
+      /// the market's quantity, which ShowBuyCargoScreen rolls after an arrival
+      Field<std::uint8_t> onSale;
+
+      /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+      template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+      {
+        _visitor("held", _self.held);
+        _visitor("onSale", _self.onSale);
+      }
+
+      template <typename Visitor> void Visit(Visitor& _visitor)
+      {
+        VisitMembers(*this, _visitor);
+      }
+
+      template <typename Visitor> void Visit(Visitor& _visitor) const
+      {
+        VisitMembers(*this, _visitor);
+      }
+    };
+
+    /// per commodity, in the market's order; slaves are escape pods scooped, alien items Thargons
+    Lot lots[COMMODITY_KINDS];
     /// mission 1 refugees aboard (20 or 35), shown as "Refugees" by ShowInventoryScreen
     Field<std::uint8_t> refugeesTonnes;
     /// tonnes in the hold (gold, platinum and gems excluded); capacity 20, 35 with the extension
@@ -243,21 +227,7 @@ struct CommanderState
     /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
     template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
     {
-      _visitor("gap7602", _self.gap7602);
-      _visitor("cargoSlavesTonnes", _self.cargoSlavesTonnes);
-      _visitor("gap7609", _self.gap7609);
-      _visitor("cargoAlloysTonnes", _self.cargoAlloysTonnes);
-      _visitor("gap7615", _self.gap7615);
-      _visitor("cargoMineralsTonnes", _self.cargoMineralsTonnes);
-      _visitor("gap761B", _self.gap761B);
-      _visitor("cargoGoldKg", _self.cargoGoldKg);
-      _visitor("gap761D", _self.gap761D);
-      _visitor("cargoPlatinumKg", _self.cargoPlatinumKg);
-      _visitor("gap761F", _self.gap761F);
-      _visitor("cargoGemStonesGrams", _self.cargoGemStonesGrams);
-      _visitor("gap7621", _self.gap7621);
-      _visitor("cargoAlienItemsTonnes", _self.cargoAlienItemsTonnes);
-      _visitor("gap7623", _self.gap7623);
+      _visitor("lots", _self.lots);
       _visitor("refugeesTonnes", _self.refugeesTonnes);
       _visitor("cargoUsedTonnes", _self.cargoUsedTonnes);
     }
@@ -272,7 +242,6 @@ struct CommanderState
       VisitMembers(*this, _visitor);
     }
   };
-  /// byte pair; per commodity: units held, units on sale here; entry 17 is refugeesTonnes/cargoUsedTonnes
   CargoHold cargoHold;
   /// 0 after an arrival (0x4754); ShowBuyCargoScreen then rolls the quantities on sale and sets 1
   Field<std::uint8_t> marketQuantitiesSet;
@@ -322,7 +291,6 @@ struct CommanderState
     _visitor("commanderRankText", _self.commanderRankText);
     _visitor("gap7585", _self.gap7585);
     _visitor("creditBalanceText", _self.creditBalanceText);
-    _visitor("gap759A", _self.gap759A);
     _visitor("randomState0", _self.randomState0);
     _visitor("randomState1", _self.randomState1);
     _visitor("randomState2", _self.randomState2);
@@ -336,33 +304,8 @@ struct CommanderState
     _visitor("galacticCursorX", _self.galacticCursorX);
     _visitor("galacticCursorY", _self.galacticCursorY);
     _visitor("chartIsShortRange", _self.chartIsShortRange);
-    _visitor("currentSystemName", _self.currentSystemName);
-    _visitor("gap75B4", _self.gap75B4);
-    _visitor("currentSystemIndex", _self.currentSystemIndex);
-    _visitor("gap75B6", _self.gap75B6);
-    _visitor("currentGovernment", _self.currentGovernment);
-    _visitor("currentEconomy", _self.currentEconomy);
-    _visitor("currentTechLevel", _self.currentTechLevel);
-    _visitor("gap75BB", _self.gap75BB);
-    _visitor("data75BC", _self.data75BC);
-    _visitor("gap75BD", _self.gap75BD);
-    _visitor("data75BF", _self.data75BF);
-    _visitor("gap75C0", _self.gap75C0);
-    _visitor("selectedSystemName", _self.selectedSystemName);
-    _visitor("gap75CC", _self.gap75CC);
-    _visitor("selectedSystemNameLength", _self.selectedSystemNameLength);
-    _visitor("selectedSystemIndex", _self.selectedSystemIndex);
-    _visitor("selectedDistanceTenthsLy", _self.selectedDistanceTenthsLy);
-    _visitor("selectedGovernment", _self.selectedGovernment);
-    _visitor("selectedEconomy", _self.selectedEconomy);
-    _visitor("selectedTechLevel", _self.selectedTechLevel);
-    _visitor("selectedPopulationTenthsBillion", _self.selectedPopulationTenthsBillion);
-    _visitor("selectedSpeciesAdjective1", _self.selectedSpeciesAdjective1);
-    _visitor("selectedSpeciesAdjective2", _self.selectedSpeciesAdjective2);
-    _visitor("selectedSpeciesAdjective3", _self.selectedSpeciesAdjective3);
-    _visitor("selectedSpeciesType", _self.selectedSpeciesType);
-    _visitor("selectedProductivityMillionCredits", _self.selectedProductivityMillionCredits);
-    _visitor("selectedRadiusKm", _self.selectedRadiusKm);
+    _visitor("currentSystem", _self.currentSystem);
+    _visitor("selectedSystem", _self.selectedSystem);
     _visitor("descriptionSeed0", _self.descriptionSeed0);
     _visitor("descriptionSeed1", _self.descriptionSeed1);
     _visitor("gap75E1", _self.gap75E1);
@@ -423,124 +366,25 @@ struct CommanderState
 
 #pragma pack(pop)
 
-// Every member at its 1987 offset in the record, every struct at its size, and the record's.
-static_assert(COMMANDER_STATE_OFFSET(gap756B) == 0x00);
-static_assert(COMMANDER_STATE_OFFSET(commanderTitle) == 0x0F);
-static_assert(COMMANDER_STATE_OFFSET(commanderRankText) == 0x11);
-static_assert(COMMANDER_STATE_OFFSET(gap7585) == 0x1A);
-static_assert(COMMANDER_STATE_OFFSET(creditBalanceText) == 0x1C);
-static_assert(COMMANDER_STATE_OFFSET(gap759A) == 0x2F);
-static_assert(COMMANDER_STATE_OFFSET(randomState0) == 0x30);
-static_assert(COMMANDER_STATE_OFFSET(randomState1) == 0x32);
-static_assert(COMMANDER_STATE_OFFSET(randomState2) == 0x34);
-static_assert(COMMANDER_STATE_OFFSET(galaxyNumber) == 0x36);
-static_assert(COMMANDER_STATE_OFFSET(currentSystemX) == 0x37);
-static_assert(COMMANDER_STATE_OFFSET(currentSystemChartY) == 0x38);
-static_assert(COMMANDER_STATE_OFFSET(chartCursorX) == 0x39);
-static_assert(COMMANDER_STATE_OFFSET(chartCursorY) == 0x3A);
-static_assert(COMMANDER_STATE_OFFSET(shortRangeCursorX) == 0x3B);
-static_assert(COMMANDER_STATE_OFFSET(shortRangeCursorY) == 0x3C);
-static_assert(COMMANDER_STATE_OFFSET(galacticCursorX) == 0x3D);
-static_assert(COMMANDER_STATE_OFFSET(galacticCursorY) == 0x3E);
-static_assert(COMMANDER_STATE_OFFSET(chartIsShortRange) == 0x3F);
-static_assert(COMMANDER_STATE_OFFSET(currentSystemName) == 0x40);
-static_assert(COMMANDER_STATE_OFFSET(gap75B4) == 0x49);
-static_assert(COMMANDER_STATE_OFFSET(currentSystemIndex) == 0x4A);
-static_assert(COMMANDER_STATE_OFFSET(gap75B6) == 0x4B);
-static_assert(COMMANDER_STATE_OFFSET(currentGovernment) == 0x4D);
-static_assert(COMMANDER_STATE_OFFSET(currentEconomy) == 0x4E);
-static_assert(COMMANDER_STATE_OFFSET(currentTechLevel) == 0x4F);
-static_assert(COMMANDER_STATE_OFFSET(gap75BB) == 0x50);
-static_assert(COMMANDER_STATE_OFFSET(data75BC) == 0x51);
-static_assert(COMMANDER_STATE_OFFSET(gap75BD) == 0x52);
-static_assert(COMMANDER_STATE_OFFSET(data75BF) == 0x54);
-static_assert(COMMANDER_STATE_OFFSET(gap75C0) == 0x55);
-static_assert(COMMANDER_STATE_OFFSET(selectedSystemName) == 0x59);
-static_assert(COMMANDER_STATE_OFFSET(selectedSystemName.gap75C4) == 0x59);
-static_assert(COMMANDER_STATE_OFFSET(selectedSystemName.data75C8) == 0x5D);
-static_assert(COMMANDER_STATE_OFFSET(selectedSystemName.data75CA) == 0x5F);
-static_assert(COMMANDER_STATE_OFFSET(gap75CC) == 0x61);
-static_assert(COMMANDER_STATE_OFFSET(selectedSystemNameLength) == 0x62);
-static_assert(COMMANDER_STATE_OFFSET(selectedSystemIndex) == 0x63);
-static_assert(COMMANDER_STATE_OFFSET(selectedDistanceTenthsLy) == 0x64);
-static_assert(COMMANDER_STATE_OFFSET(selectedGovernment) == 0x66);
-static_assert(COMMANDER_STATE_OFFSET(selectedEconomy) == 0x67);
-static_assert(COMMANDER_STATE_OFFSET(selectedTechLevel) == 0x68);
-static_assert(COMMANDER_STATE_OFFSET(selectedPopulationTenthsBillion) == 0x69);
-static_assert(COMMANDER_STATE_OFFSET(selectedSpeciesAdjective1) == 0x6A);
-static_assert(COMMANDER_STATE_OFFSET(selectedSpeciesAdjective2) == 0x6B);
-static_assert(COMMANDER_STATE_OFFSET(selectedSpeciesAdjective3) == 0x6C);
-static_assert(COMMANDER_STATE_OFFSET(selectedSpeciesType) == 0x6D);
-static_assert(COMMANDER_STATE_OFFSET(selectedProductivityMillionCredits) == 0x6E);
-static_assert(COMMANDER_STATE_OFFSET(selectedRadiusKm) == 0x70);
-static_assert(COMMANDER_STATE_OFFSET(descriptionSeed0) == 0x72);
-static_assert(COMMANDER_STATE_OFFSET(descriptionSeed1) == 0x74);
-static_assert(COMMANDER_STATE_OFFSET(gap75E1) == 0x76);
-static_assert(COMMANDER_STATE_OFFSET(fuel) == 0x77);
-static_assert(COMMANDER_STATE_OFFSET(missileCount) == 0x78);
-static_assert(COMMANDER_STATE_OFFSET(largeCargoBayFitted) == 0x79);
-static_assert(COMMANDER_STATE_OFFSET(ecmFitted) == 0x7A);
-static_assert(COMMANDER_STATE_OFFSET(pulseLaserCount) == 0x7B);
-static_assert(COMMANDER_STATE_OFFSET(beamLaserCount) == 0x7C);
-static_assert(COMMANDER_STATE_OFFSET(fuelScoopsFitted) == 0x7D);
-static_assert(COMMANDER_STATE_OFFSET(escapePodFitted) == 0x7E);
-static_assert(COMMANDER_STATE_OFFSET(energyBombFitted) == 0x7F);
-static_assert(COMMANDER_STATE_OFFSET(energyUnitFitted) == 0x80);
-static_assert(COMMANDER_STATE_OFFSET(dockingComputerFitted) == 0x81);
-static_assert(COMMANDER_STATE_OFFSET(galacticHyperdriveFitted) == 0x82);
-static_assert(COMMANDER_STATE_OFFSET(miningLaserCount) == 0x83);
-static_assert(COMMANDER_STATE_OFFSET(militaryLaserCount) == 0x84);
-static_assert(COMMANDER_STATE_OFFSET(maskingDeviceFitted) == 0x85);
-static_assert(COMMANDER_STATE_OFFSET(laserMountsFitted) == 0x86);
-static_assert(COMMANDER_STATE_OFFSET(laserMountTypes) == 0x87);
-static_assert(COMMANDER_STATE_OFFSET(creditsTenths) == 0x88);
-static_assert(COMMANDER_STATE_OFFSET(creditsTenths.gap75F3) == 0x88);
-static_assert(COMMANDER_STATE_OFFSET(creditsTenths.data75F5) == 0x8A);
-static_assert(COMMANDER_STATE_OFFSET(legalStatus) == 0x8C);
-static_assert(COMMANDER_STATE_OFFSET(killCount) == 0x8D);
-static_assert(COMMANDER_STATE_OFFSET(defaultCommanderName) == 0x8E);
-static_assert(COMMANDER_STATE_OFFSET(cargoHold) == 0x97);
-static_assert(COMMANDER_STATE_OFFSET(cargoHold.gap7602) == 0x97);
-static_assert(COMMANDER_STATE_OFFSET(cargoHold.cargoSlavesTonnes) == 0x9D);
-static_assert(COMMANDER_STATE_OFFSET(cargoHold.gap7609) == 0x9E);
-static_assert(COMMANDER_STATE_OFFSET(cargoHold.cargoAlloysTonnes) == 0xA9);
-static_assert(COMMANDER_STATE_OFFSET(cargoHold.gap7615) == 0xAA);
-static_assert(COMMANDER_STATE_OFFSET(cargoHold.cargoMineralsTonnes) == 0xAF);
-static_assert(COMMANDER_STATE_OFFSET(cargoHold.gap761B) == 0xB0);
-static_assert(COMMANDER_STATE_OFFSET(cargoHold.cargoGoldKg) == 0xB1);
-static_assert(COMMANDER_STATE_OFFSET(cargoHold.gap761D) == 0xB2);
-static_assert(COMMANDER_STATE_OFFSET(cargoHold.cargoPlatinumKg) == 0xB3);
-static_assert(COMMANDER_STATE_OFFSET(cargoHold.gap761F) == 0xB4);
-static_assert(COMMANDER_STATE_OFFSET(cargoHold.cargoGemStonesGrams) == 0xB5);
-static_assert(COMMANDER_STATE_OFFSET(cargoHold.gap7621) == 0xB6);
-static_assert(COMMANDER_STATE_OFFSET(cargoHold.cargoAlienItemsTonnes) == 0xB7);
-static_assert(COMMANDER_STATE_OFFSET(cargoHold.gap7623) == 0xB8);
-static_assert(COMMANDER_STATE_OFFSET(cargoHold.refugeesTonnes) == 0xB9);
-static_assert(COMMANDER_STATE_OFFSET(cargoHold.cargoUsedTonnes) == 0xBA);
-static_assert(COMMANDER_STATE_OFFSET(marketQuantitiesSet) == 0xBB);
-static_assert(COMMANDER_STATE_OFFSET(missionJumpCount) == 0xBC);
-static_assert(COMMANDER_STATE_OFFSET(missionNumber) == 0xBD);
-static_assert(COMMANDER_STATE_OFFSET(data7629) == 0xBE);
-static_assert(COMMANDER_STATE_OFFSET(witchspaceCountdown) == 0xBF);
-static_assert(COMMANDER_STATE_OFFSET(fuelLeakDelayFrames) == 0xC0);
-static_assert(COMMANDER_STATE_OFFSET(fuelLeakFrames) == 0xC1);
-static_assert(COMMANDER_STATE_OFFSET(maskShipDestroyed) == 0xC2);
-static_assert(COMMANDER_STATE_OFFSET(maskingDeviceRecovered) == 0xC3);
-static_assert(COMMANDER_STATE_OFFSET(maskMissionShipsLeft) == 0xC4);
-static_assert(COMMANDER_STATE_OFFSET(thargoidInvasionActive) == 0xC5);
-static_assert(COMMANDER_STATE_OFFSET(invadedStationDestroyed) == 0xC6);
-static_assert(COMMANDER_STATE_OFFSET(antiEcmEmulatorFitted) == 0xC7);
-static_assert(COMMANDER_STATE_OFFSET(supernovaHeat) == 0xC8);
-static_assert(COMMANDER_STATE_OFFSET(supernovaFrames) == 0xC9);
-static_assert(COMMANDER_STATE_OFFSET(missionStage) == 0xCB);
-static_assert(COMMANDER_STATE_OFFSET(jumpedSinceBriefing) == 0xCC);
-static_assert(COMMANDER_STATE_OFFSET(fledMaskShip) == 0xCD);
-static_assert(COMMANDER_STATE_OFFSET(maskSystemJumps) == 0xCE);
-static_assert(COMMANDER_STATE_OFFSET(hyperspaceTargetIndex) == 0xCF);
-static_assert(sizeof(CommanderState::SelectedSystemName) == 8);
-static_assert(sizeof(CommanderState::CreditsTenths) == 4);
-static_assert(sizeof(CommanderState::CargoHold) == 36);
-static_assert(sizeof(CommanderState) == 208);
 static_assert(std::is_trivially_copyable_v<CommanderState> && std::is_standard_layout_v<CommanderState>);
+
+/// The commander's equipment, a member to an item, in the equipment list's order (DS:7EC4 and DS:84D2): the fuel first and the
+/// military laser last, as the shipyard's rows count them from 1 and the status screen's list from the missiles.
+inline constexpr Field<std::uint8_t> CommanderState::*const EQUIPMENT_ITEMS[] = {
+  &CommanderState::fuel,
+  &CommanderState::missileCount,
+  &CommanderState::largeCargoBayFitted,
+  &CommanderState::ecmFitted,
+  &CommanderState::pulseLaserCount,
+  &CommanderState::beamLaserCount,
+  &CommanderState::fuelScoopsFitted,
+  &CommanderState::escapePodFitted,
+  &CommanderState::energyBombFitted,
+  &CommanderState::energyUnitFitted,
+  &CommanderState::dockingComputerFitted,
+  &CommanderState::galacticHyperdriveFitted,
+  &CommanderState::miningLaserCount,
+  &CommanderState::militaryLaserCount,
+};
 
 } // namespace Elite

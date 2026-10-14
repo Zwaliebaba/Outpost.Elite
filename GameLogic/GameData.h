@@ -34,15 +34,6 @@
 #include <cstddef>
 #include <type_traits>
 
-// A member's offset in GameData, as a constant expression wherever this header is read. Clang reading the MSVC headers,
-// as clang-tidy does, gets vcruntime.h's offsetof, a reinterpret_cast that is not one, so under Clang it is the builtin
-// that offsetof is everywhere else.
-#if defined(__clang__)
-#   define GAME_DATA_OFFSET(member) __builtin_offsetof(::Elite::GameData, member)
-#else
-#   define GAME_DATA_OFFSET(member) offsetof(::Elite::GameData, member)
-#endif
-
 namespace Elite
 {
 

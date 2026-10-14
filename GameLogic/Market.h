@@ -90,9 +90,6 @@ void AddContrabandPenalty(GameState& _state);
 // the corpus checks them while the 1987 screens stand; the screens of piece 5 call them in their place. Every sum is at the
 // width the original computes it at.
 
-/// The commodities, in the market's order: food first, alien items last.
-inline constexpr std::uint8_t COMMODITY_KINDS = 17;
-
 /// The hold's tonnes without the extension, and with it.
 inline constexpr std::uint8_t CARGO_BAY_TONNES = 20;
 inline constexpr std::uint8_t LARGE_CARGO_BAY_TONNES = 35;

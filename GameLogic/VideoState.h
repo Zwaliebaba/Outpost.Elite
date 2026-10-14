@@ -16,68 +16,10 @@ struct VideoState
   VideoState() noexcept = default;
   explicit VideoState(const VideoState&) noexcept = default;
 
-  /// screenshotTextFileName's fields, DS:2273-227D in 1987, at their places there.
-  struct ScreenshotTextFileName
-  {
-    ScreenshotTextFileName() noexcept = default;
-    explicit ScreenshotTextFileName(const ScreenshotTextFileName&) noexcept = default;
-
-    Field<std::uint8_t> gap2273[5];
-    /// the two digits in screenshotTextFileName
-    Field<std::uint16_t> screenshotTextFileDigits;
-    Field<std::uint8_t> gap227A[4];
-
-    /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
-    template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
-    {
-      _visitor("gap2273", _self.gap2273);
-      _visitor("screenshotTextFileDigits", _self.screenshotTextFileDigits);
-      _visitor("gap227A", _self.gap227A);
-    }
-
-    template <typename Visitor> void Visit(Visitor& _visitor)
-    {
-      VisitMembers(*this, _visitor);
-    }
-
-    template <typename Visitor> void Visit(Visitor& _visitor) const
-    {
-      VisitMembers(*this, _visitor);
-    }
-  };
-  /// 'elite' + two digits + '.lo', for the text layout
-  ScreenshotTextFileName screenshotTextFileName;
-  /// screenshotGraphicsFileName's fields, DS:227E-2288 in 1987, at their places there.
-  struct ScreenshotGraphicsFileName
-  {
-    ScreenshotGraphicsFileName() noexcept = default;
-    explicit ScreenshotGraphicsFileName(const ScreenshotGraphicsFileName&) noexcept = default;
-
-    Field<std::uint8_t> gap227E[5];
-    /// the two digits in screenshotGraphicsFileName
-    Field<std::uint16_t> screenshotGraphicsFileDigits;
-    Field<std::uint8_t> gap2285[4];
-
-    /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
-    template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
-    {
-      _visitor("gap227E", _self.gap227E);
-      _visitor("screenshotGraphicsFileDigits", _self.screenshotGraphicsFileDigits);
-      _visitor("gap2285", _self.gap2285);
-    }
-
-    template <typename Visitor> void Visit(Visitor& _visitor)
-    {
-      VisitMembers(*this, _visitor);
-    }
-
-    template <typename Visitor> void Visit(Visitor& _visitor) const
-    {
-      VisitMembers(*this, _visitor);
-    }
-  };
-  /// 'elite' + two digits + '.hi', for the graphics layouts
-  ScreenshotGraphicsFileName screenshotGraphicsFileName;
+  /// 'elite' + two digits + '.lo' and its NUL, for the text layout
+  Field<std::uint8_t> screenshotTextFileName[11];
+  /// 'elite' + two digits + '.hi' and its NUL, for the graphics layouts
+  Field<std::uint8_t> screenshotGraphicsFileName[11];
   /// two ASCII digits, '00' in the file, incremented before each screenshot
   Field<std::uint16_t> screenshotNumber;
   /// colorFillBytes[drawColor], set by DrawDisc for FillSpan
@@ -96,22 +38,20 @@ struct VideoState
   Field<std::uint16_t> fringeRandomA;
   /// its high byte AND sunFringeMask is added to each half-width
   Field<std::uint16_t> fringeRandomB;
-  /// circlePoints's fields, DS:2EFC-2F7B in 1987, at their places there.
-  struct CirclePoints
+  /// A point of DrawCircle's chords.
+  struct CirclePoint
   {
-    CirclePoints() noexcept = default;
-    explicit CirclePoints(const CirclePoints&) noexcept = default;
+    CirclePoint() noexcept = default;
+    explicit CirclePoint(const CirclePoint&) noexcept = default;
 
-    Field<std::uint8_t> gap2EFC[2];
-    Field<std::uint16_t> data2EFE;
-    Field<std::uint8_t> gap2F00[124];
+    Field<std::uint16_t> x;
+    Field<std::uint16_t> row;
 
     /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
     template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
     {
-      _visitor("gap2EFC", _self.gap2EFC);
-      _visitor("data2EFE", _self.data2EFE);
-      _visitor("gap2F00", _self.gap2F00);
+      _visitor("x", _self.x);
+      _visitor("row", _self.row);
     }
 
     template <typename Visitor> void Visit(Visitor& _visitor)
@@ -124,8 +64,8 @@ struct VideoState
       VisitMembers(*this, _visitor);
     }
   };
-  /// 2 words: x, y; DrawCircle's polygon
-  CirclePoints circlePoints;
+  /// DrawCircle's polygon
+  CirclePoint circlePoints[32];
   /// FillTriangle: apex x (flat bottom), B.x (flat top) or top x (general)
   Field<std::uint8_t> triangleEdgeStartX;
   /// FillTriangle: apex x, C.x, or top x

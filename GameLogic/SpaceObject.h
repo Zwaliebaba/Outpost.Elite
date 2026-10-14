@@ -7,14 +7,6 @@
 #include <cstdint>
 #include <type_traits>
 
-// A member's offset in SpaceObject, as a constant expression wherever this header is read; under Clang the builtin, for the
-// reason GameData.h gives for GAME_DATA_OFFSET.
-#if defined(__clang__)
-#   define SPACE_OBJECT_OFFSET(member) __builtin_offsetof(::Elite::SpaceObject, member)
-#else
-#   define SPACE_OBJECT_OFFSET(member) offsetof(::Elite::SpaceObject, member)
-#endif
-
 namespace Elite
 {
 
@@ -53,8 +45,8 @@ enum class SlotIndex : std::uint16_t
 }
 
 /// One of the 36 records of 64 bytes in shipSlots (DS:6930) that hold the objects in space (ADR-012): slot 0 the sun, 1 the planet, 2 the
-/// station, 3-19 the ships and 20-35 the debris. Each field is at its 1987 offset, a byte or a word as the original reads it, and counts
-/// its own changes (Field). The GameState gives the record of a slot's number (GameState::Slot), and a record's number
+/// station, 3-19 the ships and 20-35 the debris. Its fields are in their 1987 order, the offsets below the original's, each a byte or a
+/// word as the original reads it (Field). The GameState gives the record of a slot's number (GameState::Slot), and a record's number
 /// (GameState::IndexOf), where the original holds the record's offset in SI or DI.
 ///
 /// Where the original reads one place by two names of one width, the record has one member and an accessor for the other name
@@ -75,7 +67,7 @@ struct SpaceObject
   SpaceObject() noexcept = default;
   explicit SpaceObject(const SpaceObject&) noexcept = default;
 
-  /// A record's size, and the step from one to the next.
+  /// A record's bytes as the state writer writes it, and the step from one to the next in the original's shipSlots.
   static constexpr std::uint16_t BYTES = 0x40;
 
   /// Bit 0 of the type byte: the slot is in use.
@@ -265,56 +257,7 @@ private:
 using ObjectByte = Field<std::uint8_t> SpaceObject::*;
 using ObjectWord = Field<std::uint16_t> SpaceObject::*;
 
-static_assert(sizeof(SpaceObject) == SpaceObject::BYTES);
 static_assert(std::is_trivially_copyable_v<SpaceObject> && std::is_standard_layout_v<SpaceObject>);
 static_assert(!std::is_convertible_v<const SpaceObject&, SpaceObject>, "a copy is only ever explicit");
-static_assert(SPACE_OBJECT_OFFSET(type) == 0x00);
-static_assert(SPACE_OBJECT_OFFSET(xHigh) == 0x01);
-static_assert(SPACE_OBJECT_OFFSET(yHigh) == 0x02);
-static_assert(SPACE_OBJECT_OFFSET(zHigh) == 0x03);
-static_assert(SPACE_OBJECT_OFFSET(x) == 0x04);
-static_assert(SPACE_OBJECT_OFFSET(y) == 0x06);
-static_assert(SPACE_OBJECT_OFFSET(z) == 0x08);
-static_assert(SPACE_OBJECT_OFFSET(pitch) == 0x0A);
-static_assert(SPACE_OBJECT_OFFSET(yaw) == 0x0C);
-static_assert(SPACE_OBJECT_OFFSET(roll) == 0x0E);
-static_assert(SPACE_OBJECT_OFFSET(viewX) == 0x10);
-static_assert(SPACE_OBJECT_OFFSET(viewY) == 0x12);
-static_assert(SPACE_OBJECT_OFFSET(viewZ) == 0x14);
-static_assert(SPACE_OBJECT_OFFSET(passes) == 0x16);
-static_assert(SPACE_OBJECT_OFFSET(aiState) == 0x17);
-static_assert(SPACE_OBJECT_OFFSET(speed) == 0x18);
-static_assert(SPACE_OBJECT_OFFSET(velocityX) == 0x19);
-static_assert(SPACE_OBJECT_OFFSET(velocityY) == 0x1A);
-static_assert(SPACE_OBJECT_OFFSET(velocityZ) == 0x1B);
-static_assert(SPACE_OBJECT_OFFSET(range) == 0x1C);
-static_assert(SPACE_OBJECT_OFFSET(turnRate) == 0x1D);
-static_assert(SPACE_OBJECT_OFFSET(flags) == 0x1E);
-static_assert(SPACE_OBJECT_OFFSET(thargons) == 0x1F);
-static_assert(SPACE_OBJECT_OFFSET(compassX) == 0x20);
-static_assert(SPACE_OBJECT_OFFSET(compassY) == 0x22);
-static_assert(SPACE_OBJECT_OFFSET(compassZ) == 0x24);
-static_assert(SPACE_OBJECT_OFFSET(blipX) == 0x26);
-static_assert(SPACE_OBJECT_OFFSET(blipY) == 0x27);
-static_assert(SPACE_OBJECT_OFFSET(blipZ) == 0x28);
-static_assert(SPACE_OBJECT_OFFSET(target) == 0x29);
-static_assert(SPACE_OBJECT_OFFSET(energy) == 0x2B);
-static_assert(SPACE_OBJECT_OFFSET(cargo) == 0x2C);
-static_assert(SPACE_OBJECT_OFFSET(fragments) == 0x2D);
-static_assert(SPACE_OBJECT_OFFSET(lifetime) == 0x2E);
-static_assert(SPACE_OBJECT_OFFSET(age) == 0x2F);
-static_assert(SPACE_OBJECT_OFFSET(aggression) == 0x30);
-static_assert(SPACE_OBJECT_OFFSET(bounty) == 0x31);
-static_assert(SPACE_OBJECT_OFFSET(missiles) == 0x32);
-static_assert(SPACE_OBJECT_OFFSET(behaviorClass) == 0x33);
-static_assert(SPACE_OBJECT_OFFSET(scanned) == 0x34);
-static_assert(SPACE_OBJECT_OFFSET(jinkFrames) == 0x35);
-static_assert(SPACE_OBJECT_OFFSET(jinkPitch) == 0x36);
-static_assert(SPACE_OBJECT_OFFSET(jinkYaw) == 0x38);
-static_assert(SPACE_OBJECT_OFFSET(owner) == 0x3A);
-static_assert(SPACE_OBJECT_OFFSET(cameraZHigh) == 0x3C);
-static_assert(SPACE_OBJECT_OFFSET(depth) == 0x3D);
-static_assert(SPACE_OBJECT_OFFSET(size) == 0x3E);
-static_assert(SPACE_OBJECT_OFFSET(detail) == 0x3F);
 
 } // namespace Elite

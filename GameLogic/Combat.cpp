@@ -11,6 +11,7 @@
 #include "Scene.h"
 #include "Ships.h"
 #include "Sound.h"
+#include "StateWriter.h"
 #include "Text.h"
 #include "Video.h"
 
@@ -1054,13 +1055,8 @@ void LaunchPlayerMissile(GameState& _state, const MissileSource& _source)
   }
   else if (_source.past)
   {
-    // REP MOVSW up from DI past a buffer, a word at a time: the bytes there, by name.
-    const std::span<Field<std::uint8_t>> to = BytesOf(missile);
-    const std::span<const std::uint8_t> from(*_source.past);
-    for (std::size_t word = 0; word < SpaceObject::BYTES; word += 2)
-    {
-      SetWordIn(to, word, WordIn(from, word));
-    }
+    // REP MOVSW up from DI past a buffer, a word at a time: the bytes there, by name, read as the record's members in their order.
+    (void)ReadStateBytes(missile, *_source.past);
   }
   else
   {

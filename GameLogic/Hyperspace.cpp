@@ -10,6 +10,7 @@
 #include "Maths.h"
 #include "Ships.h"
 #include "Sound.h"
+#include "StateWriter.h"
 #include "Text.h"
 #include "Video.h"
 
@@ -37,6 +38,8 @@ constexpr std::uint16_t MISJUMP_ODDS = 0xC8;       // in 65536
 constexpr std::uint16_t NINTH_GALAXY_ODDS = 0x12C; // in 65536, of staying there
 constexpr std::uint8_t NINTH_GALAXY = 8;
 constexpr std::uint8_t GALAXY_DIGIT_ONE = 0x31;
+constexpr std::size_t ARRIVAL_GALAXY_DIGIT = 24; // arrivalGalaxyText's digit, after 'Hyperspaced into galaxy '
+
 constexpr std::uint8_t WITCHSPACE_FRAMES = 0x64;
 constexpr std::uint8_t CHART_CENTER_X = 0x50;
 constexpr std::uint8_t CHART_CENTER_Y = 0x40;
@@ -107,7 +110,7 @@ void GalacticJump(GameState& _state, std::uint16_t _countIfNone)
       _state.Data().commander.galaxyNumber = 0;
     }
   }
-  _state.Data().hyperspace.arrivalGalaxyText.arrivalGalaxyDigit[0] =
+  _state.Data().hyperspace.arrivalGalaxyText[ARRIVAL_GALAXY_DIGIT] =
     static_cast<std::uint8_t>(_state.Data().commander.galaxyNumber + GALAXY_DIGIT_ONE);
   // AND AL,3Fh / ADD AL,60h, and AND AH,1Fh / ADD AH,30h: a random point about the middle of the chart.
   const std::uint16_t random = NextRandom(_state);
@@ -256,27 +259,14 @@ void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_
     }
   }
 
-  // 0x4733: the destination becomes the current system, a byte at a time, LOOP from CX = systemRecordBytes: a count of 0 copies
-  // 65,536.
-  _state.Data().commander.selectedDistanceTenthsLy = 0;
+  // 0x4733: the destination becomes the current system, its whole record, which the original copies a byte at a time.
+  _state.Data().commander.selectedSystem.distanceTenthsLy = 0;
   const bool galactic = _state.Data().jump.galacticJumpPending == 1;
-  const std::uint32_t bytes = LoopCount(SYSTEM_RECORD_BYTES);
-  const std::span<const Field<std::uint8_t>> from =
-    galactic ? BytesWithin(BytesOf(std::as_const(_state).Data().commander), COMMANDER_STATE_OFFSET(selectedSystemName), bytes)
-             : BytesWithin(BytesOf(_state.Data().hyperspace.hyperspaceTargetRecord), 0, bytes);
-  const std::span<Field<std::uint8_t>> to = BytesWithin(BytesOf(_state.Data().commander), COMMANDER_STATE_OFFSET(currentSystemName), bytes);
-  for (std::uint32_t copied = 0;;)
-  {
-    to[copied] = std::uint8_t{from[copied]};
-    ++copied;
-    if (copied == bytes)
-    {
-      break;
-    }
-  }
+  CopyMembers(_state.Data().commander.currentSystem,
+              galactic ? _state.Data().commander.selectedSystem : _state.Data().hyperspace.hyperspaceTarget);
   _state.Data().commander.marketQuantitiesSet = 0;
   CommanderState& commander = _state.Data().commander;
-  LoadSystemSeeds(_state, galactic ? commander.selectedSystemIndex : commander.hyperspaceTargetIndex);
+  LoadSystemSeeds(_state, galactic ? commander.selectedSystem.index : commander.hyperspaceTargetIndex);
 
   // A mis-jump into witch space: 200 in 65536 outside the missions, or when forceMisjump asks.
   bool misjump = false;
@@ -432,16 +422,9 @@ void UpdateMissionSchedule(GameState& _state)
 
 void LatchHyperspaceTarget(GameState& _state)
 {
-  _state.Data().commander.hyperspaceTargetIndex = std::uint8_t{_state.Data().commander.selectedSystemIndex};
-  // LOOP: a count of 0 copies 65536 bytes.
-  const std::uint32_t bytes = LoopCount(SYSTEM_RECORD_BYTES);
-  const std::span<const Field<std::uint8_t>> from =
-    BytesWithin(BytesOf(std::as_const(_state).Data().commander), COMMANDER_STATE_OFFSET(selectedSystemName), bytes);
-  const std::span<Field<std::uint8_t>> to = BytesWithin(BytesOf(_state.Data().hyperspace.hyperspaceTargetRecord), 0, bytes);
-  for (std::uint32_t copied = 0; copied < bytes; ++copied)
-  {
-    to[copied] = std::uint8_t{from[copied]};
-  }
+  _state.Data().commander.hyperspaceTargetIndex = std::uint8_t{_state.Data().commander.selectedSystem.index};
+  // The selected system's record, which the original copies a byte at a time.
+  CopyMembers(_state.Data().hyperspace.hyperspaceTarget, _state.Data().commander.selectedSystem);
 }
 
 bool TickHyperspaceCountdown(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward)
@@ -475,8 +458,9 @@ void ShowHyperspaceCountdown(GameState& _state)
   StartBeep(_state);
   const std::uint8_t countdown = _state.Data().jump.hyperspaceCountdown;
   // Two characters: "10", or a space and the digit.
-  _state.Data().hyperspace.hyperspaceCountdownDigits =
-    countdown == COUNTDOWN_TEN ? MakeWord('1', '0') : MakeWord(' ', static_cast<std::uint8_t>(countdown + '0'));
+  Field<std::uint8_t>(&digits)[2] = _state.Data().hyperspace.hyperspaceCountdownDigits;
+  digits[0] = countdown == COUNTDOWN_TEN ? '1' : ' ';
+  digits[1] = countdown == COUNTDOWN_TEN ? '0' : static_cast<std::uint8_t>(countdown + '0');
   _state.Data().messages.messagePointer = Message::HyperspaceCountdown;
   _state.Data().messages.messageFrames = COUNTDOWN_MESSAGE_FRAMES;
   _state.Data().messages.messageShown = Message::None;

@@ -1,6 +1,7 @@
 // GameLogic/HyperspaceState.h
 #pragma once
 
+#include "CommanderState.h"
 #include "Field.h"
 
 #include <cstdint>
@@ -16,50 +17,21 @@ struct HyperspaceState
   HyperspaceState() noexcept = default;
   explicit HyperspaceState(const HyperspaceState&) noexcept = default;
 
-  /// arrivalGalaxyText's fields, DS:7513-752C in 1987, at their places there.
-  struct ArrivalGalaxyText
-  {
-    ArrivalGalaxyText() noexcept = default;
-    explicit ArrivalGalaxyText(const ArrivalGalaxyText&) noexcept = default;
-
-    Field<std::uint8_t> gap7513[24];
-    /// galaxyNumber + '1', written by GalacticJump into arrivalGalaxyText
-    Field<std::uint8_t> arrivalGalaxyDigit[1];
-    Field<std::uint8_t> gap752C[1];
-
-    /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
-    template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
-    {
-      _visitor("gap7513", _self.gap7513);
-      _visitor("arrivalGalaxyDigit", _self.arrivalGalaxyDigit);
-      _visitor("gap752C", _self.gap752C);
-    }
-
-    template <typename Visitor> void Visit(Visitor& _visitor)
-    {
-      VisitMembers(*this, _visitor);
-    }
-
-    template <typename Visitor> void Visit(Visitor& _visitor) const
-    {
-      VisitMembers(*this, _visitor);
-    }
-  };
-  /// 'Hyperspaced into galaxy ' and a digit at DS:752B
-  ArrivalGalaxyText arrivalGalaxyText;
+  /// 'Hyperspaced into galaxy ', the digit GalacticJump writes, galaxyNumber + '1', and the NUL
+  Field<std::uint8_t> arrivalGalaxyText[26];
   /// 3 bytes; working copy animated by DrawHyperspaceRings
   Field<std::uint8_t> hyperspaceRings[10][3];
-  /// selectedSystemName latched when the countdown starts
-  Field<std::uint8_t> hyperspaceTargetRecord[25];
+  /// the selected system's record, latched when the countdown starts
+  SystemRecord hyperspaceTarget;
   /// two ASCII digits at the end of hyperspaceCountdownMessage, written by ShowHyperspaceCountdown
-  Field<std::uint16_t> hyperspaceCountdownDigits;
+  Field<std::uint8_t> hyperspaceCountdownDigits[2];
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
   {
     _visitor("arrivalGalaxyText", _self.arrivalGalaxyText);
     _visitor("hyperspaceRings", _self.hyperspaceRings);
-    _visitor("hyperspaceTargetRecord", _self.hyperspaceTargetRecord);
+    _visitor("hyperspaceTarget", _self.hyperspaceTarget);
     _visitor("hyperspaceCountdownDigits", _self.hyperspaceCountdownDigits);
   }
 

@@ -62,7 +62,7 @@ constexpr std::size_t VERTEX_BYTES = 6;
 constexpr std::uint16_t VERTEX_Z = 4;
 // What a vertex program reaches: vertexBuffer's 42 vertices. Its six bits of vertex could name 64, past the buffer into the bytes
 // after it, which the state no longer holds beside it (D38); TableTests checks that no blueprint's does.
-constexpr std::size_t VERTEX_REACH = sizeof(SceneState::VertexBuffer);
+constexpr std::size_t VERTEX_REACH = sizeof(SceneState::vertexBuffer);
 constexpr std::uint8_t VERTEX_INDEX_BITS = 0x3F;
 constexpr std::uint8_t VERTEX_OP_BITS = 0xC0;
 constexpr std::uint8_t VERTEX_OP_LOAD = 0x00;
@@ -119,6 +119,7 @@ constexpr std::uint16_t DODO_SLOT_OPPOSITE = 0x0C; // the slot's corner two vert
 constexpr std::size_t DODO_REFLECTED = 14 * VERTEX_BYTES;
 constexpr std::uint16_t BOX_CORNERS_ROTATED = 3;
 constexpr std::uint16_t BOX_FOURTH_CORNER = 0x12;
+constexpr std::size_t BOX_FIRST_CORNER = 34 * VERTEX_BYTES;
 constexpr std::size_t BOX_SECOND_CORNER = 35 * VERTEX_BYTES;
 constexpr std::size_t BOX_FIFTH_CORNER = 38 * VERTEX_BYTES;
 constexpr std::size_t BOX_SEVENTH_CORNER = 40 * VERTEX_BYTES;
@@ -126,12 +127,25 @@ constexpr std::size_t BOX_EIGHTH_CORNER = 41 * VERTEX_BYTES;
 constexpr std::size_t BOX_REFLECTION_STEP = 0x18; // four vertices
 constexpr std::size_t BOX_REFLECTION_SKIP = 0x12; // three vertices
 
-// The vertices from vertexBuffer's first byte, as far as a vertex program reaches (VERTEX_REACH): a vertex is six bytes, x, y and
-// z words, and ProjectVertices makes the first ones points of four, x and y, in place. Each routine holds a vertex as the byte it
-// starts at, where the original holds its address.
-[[nodiscard]] std::span<Field<std::uint8_t>> Vertices(GameState& _state)
+// The vertices of vertexBuffer, as far as a vertex program reaches (VERTEX_REACH): a vertex is three words, x, y and z, and
+// ProjectVertices makes the first ones points of two, x and y, in place. Each routine holds a vertex as the byte it starts at,
+// where the original holds its address, as the blueprints do.
+[[nodiscard]] std::span<Field<std::uint16_t>> Vertices(GameState& _state)
 {
-  return BytesOf(_state.Data().scene.vertexBuffer);
+  return _state.Data().scene.vertexBuffer;
+}
+
+// The word of the vertices that starts at their byte _byte, which is even: every byte a blueprint holds of them is
+// (TableTests), and every byte the routines step to.
+[[nodiscard]] std::uint16_t VertexWord(std::span<const Field<std::uint16_t>> _words, std::size_t _byte) noexcept
+{
+  return _words[_byte / 2];
+}
+
+// _value into the word of the vertices that starts at their byte _byte, which is even.
+void SetVertexWord(std::span<Field<std::uint16_t>> _words, std::size_t _byte, std::uint16_t _value) noexcept
+{
+  _words[_byte / 2] = _value;
 }
 
 // The high byte of sineTable's word at byte _angle, which is even: a signed byte.
@@ -185,16 +199,16 @@ void SetDrawAngles(GameState& _state)
 // leaves in the registers: SI past the vertices, CX = 0, AX and BX the last vertex's.
 void RotateVertices(GameState& _state, std::size_t _first, std::uint16_t _count, std::uint16_t _a, std::uint16_t _b, std::size_t _pair)
 {
-  const std::span<Field<std::uint8_t>> vertices = Vertices(_state);
+  const std::span<Field<std::uint16_t>> vertices = Vertices(_state);
   std::size_t vertex = _first;
   for (std::uint16_t left = _count; left != 0; --left)
   {
     const std::size_t first = vertex + _a;
     const std::size_t second = vertex + _b;
     const Pair rotated = RotateByStoredSinCos(
-      _state, _pair, Pair{static_cast<std::int16_t>(WordIn(vertices, first)), static_cast<std::int16_t>(WordIn(vertices, second))});
-    SetWordIn(vertices, first, static_cast<std::uint16_t>(rotated.first));
-    SetWordIn(vertices, second, static_cast<std::uint16_t>(rotated.second));
+      _state, _pair, Pair{static_cast<std::int16_t>(VertexWord(vertices, first)), static_cast<std::int16_t>(VertexWord(vertices, second))});
+    SetVertexWord(vertices, first, static_cast<std::uint16_t>(rotated.first));
+    SetVertexWord(vertices, second, static_cast<std::uint16_t>(rotated.second));
     vertex += VERTEX_BYTES;
   }
 }
@@ -265,11 +279,11 @@ constexpr std::uint16_t TRIANGLE_VERTEX_BYTES = 3;
 // original keeps it there.
 [[nodiscard]] Triangle LoadTriangle(GameState& _state, std::span<const std::uint8_t> _list, std::uint16_t _indices, std::uint8_t _shift)
 {
-  const std::span<const Field<std::uint8_t>> points = Vertices(_state);
+  const std::span<const Field<std::uint16_t>> points = Vertices(_state);
   const auto vertex = [_list, _indices, _shift](std::uint16_t _which)
   { return std::size_t{static_cast<std::uint8_t>(_list[Offset(_indices, _which)] << _shift)}; };
   const auto coordinate = [points](std::size_t _vertex, std::size_t _bytes)
-  { return static_cast<std::int16_t>(WordIn(points, _vertex + _bytes)); };
+  { return static_cast<std::int16_t>(VertexWord(points, _vertex + _bytes)); };
   const std::size_t first = vertex(0);
   const ScreenPoint firstPoint{coordinate(first, 0), coordinate(first, 2)};
   const std::size_t second = vertex(1);
@@ -305,16 +319,16 @@ struct WindingProducts
   const std::uint16_t edge = Join(_blueprint.faceEdges[_item + 1u], _blueprint.faceEdges[_item]);
   _state.Data().drawing.drawColor = static_cast<std::uint8_t>(High(edge) & EDGE_COLOR_BITS);
   const auto vertices = static_cast<std::uint16_t>(edge & EDGE_VERTEX_BITS);
-  const std::span<const Field<std::uint8_t>> points = Vertices(_state);
+  const std::span<const Field<std::uint16_t>> points = Vertices(_state);
   const std::size_t to = Low(vertices);
   const std::size_t from = High(vertices);
-  const std::uint16_t toX = WordIn(points, to);
-  const std::uint16_t fromX = WordIn(points, from);
+  const std::uint16_t toX = VertexWord(points, to);
+  const std::uint16_t fromX = VertexWord(points, from);
   if (toX == OFF_SCREEN || fromX == OFF_SCREEN)
   {
     return false;
   }
-  return DrawClippedLine(_state, fromX, WordIn(points, from + 2), toX, WordIn(points, to + 2));
+  return DrawClippedLine(_state, fromX, VertexWord(points, from + 2), toX, VertexWord(points, to + 2));
 }
 
 // A triangle item (CS:3B30): _item, the offset of its pattern in faceFillPatterns, into triangleFillPattern, then the three
@@ -859,22 +873,22 @@ void ProjectVertices(GameState& _state)
   // points they become, in place; PUSH SI / POP SI keep the caller's.
   // The count is a blueprint's (RenderBlueprint), at most 37 of vertexBuffer's 42 vertices (MostProjectedVertices).
   const std::uint16_t count = _state.Data().scene.projectedVertexCount;
-  const std::span<Field<std::uint8_t>> vertices = BytesWithin(Vertices(_state), 0, std::size_t{count} * VERTEX_BYTES);
+  const std::span<Field<std::uint16_t>> vertices = BytesWithin(Vertices(_state), 0, std::size_t{count} * VERTEX_BYTES / 2);
   std::size_t vertex = 0;
   std::size_t point = 0;
   for (std::uint16_t left = count; left != 0; --left)
   {
     const std::size_t z = vertex + VERTEX_Z;
-    if (static_cast<std::int16_t>(WordIn(vertices, z)) < static_cast<std::int16_t>(NEAR_PLANE_Z))
+    if (static_cast<std::int16_t>(VertexWord(vertices, z)) < static_cast<std::int16_t>(NEAR_PLANE_Z))
     {
-      SetWordIn(vertices, point, NEAR_VERTEX_X);
+      SetVertexWord(vertices, point, NEAR_VERTEX_X);
     }
     else
     {
-      const std::uint16_t x = ProjectVertexCoordinate(WordIn(vertices, vertex), WordIn(vertices, z));
-      SetWordIn(vertices, point, Offset(x, SCREEN_CENTER_X));
-      const std::uint16_t y = ProjectVertexCoordinate(WordIn(vertices, vertex + 2), WordIn(vertices, z));
-      SetWordIn(vertices, point + 2, Offset(y, SCREEN_CENTER_Y));
+      const std::uint16_t x = ProjectVertexCoordinate(VertexWord(vertices, vertex), VertexWord(vertices, z));
+      SetVertexWord(vertices, point, Offset(x, SCREEN_CENTER_X));
+      const std::uint16_t y = ProjectVertexCoordinate(VertexWord(vertices, vertex + 2), VertexWord(vertices, z));
+      SetVertexWord(vertices, point + 2, Offset(y, SCREEN_CENTER_Y));
     }
     point += POINT_BYTES;
     vertex += VERTEX_BYTES;
@@ -883,7 +897,7 @@ void ProjectVertices(GameState& _state)
 
 void ReflectVertexAboutCenter(GameState& _state, std::size_t _vertex, std::size_t _reflection)
 {
-  const std::span<Field<std::uint8_t>> vertices = Vertices(_state);
+  const std::span<Field<std::uint16_t>> vertices = Vertices(_state);
   std::array<std::uint16_t, 3> center{};
   constexpr std::array<Field<std::uint16_t> SceneState::*, 3> CENTER = {&SceneState::drawCenterX, &SceneState::drawCenterY,
                                                                         &SceneState::drawCenterZ};
@@ -891,20 +905,20 @@ void ReflectVertexAboutCenter(GameState& _state, std::size_t _vertex, std::size_
   {
     const std::size_t bytes = 2 * axis;
     center[axis] = _state.Data().scene.*CENTER[axis];
-    SetWordIn(vertices, _reflection + bytes, static_cast<std::uint16_t>(center[axis] - WordIn(vertices, _vertex + bytes)));
-    SetWordIn(vertices, _vertex + bytes, Offset(WordIn(vertices, _vertex + bytes), center[axis]));
+    SetVertexWord(vertices, _reflection + bytes, static_cast<std::uint16_t>(center[axis] - VertexWord(vertices, _vertex + bytes)));
+    SetVertexWord(vertices, _vertex + bytes, Offset(VertexWord(vertices, _vertex + bytes), center[axis]));
   }
 }
 
 void OffsetVertexByCenter(GameState& _state, std::size_t _vertex)
 {
-  const std::span<Field<std::uint8_t>> vertices = Vertices(_state);
+  const std::span<Field<std::uint16_t>> vertices = Vertices(_state);
   constexpr std::array<Field<std::uint16_t> SceneState::*, 3> CENTER = {&SceneState::drawCenterX, &SceneState::drawCenterY,
                                                                         &SceneState::drawCenterZ};
   for (std::size_t axis = 0; axis < CENTER.size(); ++axis)
   {
     const std::size_t bytes = 2 * axis;
-    SetWordIn(vertices, _vertex + bytes, Offset(WordIn(vertices, _vertex + bytes), _state.Data().scene.*CENTER[axis]));
+    SetVertexWord(vertices, _vertex + bytes, Offset(VertexWord(vertices, _vertex + bytes), _state.Data().scene.*CENTER[axis]));
   }
 }
 
@@ -916,24 +930,22 @@ void BuildBoxCornerVertices(GameState& _state, std::uint16_t _extents)
   const std::uint16_t height = Low(extents);
   const std::uint16_t length = Negate(std::uint16_t{High(extents)});
   // boxCornerVertices, vertex 34 on, the box's corners.
-  const std::span<Field<std::uint8_t>> vertices = Vertices(_state);
-  static_assert(GAME_DATA_OFFSET(scene.vertexBuffer.boxCornerVertices) ==
-                GAME_DATA_OFFSET(scene.vertexBuffer) + sizeof(SceneState::VertexBuffer::gap7230));
-  const std::size_t corners = sizeof(SceneState::VertexBuffer::gap7230);
-  SetWordIn(vertices, corners + VERTEX_Z, length);
-  SetWordIn(vertices, corners + VERTEX_BYTES + VERTEX_Z, length);
-  SetWordIn(vertices, corners + 2 * VERTEX_BYTES + VERTEX_Z, length);
+  const std::span<Field<std::uint16_t>> vertices = Vertices(_state);
+  const std::size_t corners = BOX_FIRST_CORNER;
+  SetVertexWord(vertices, corners + VERTEX_Z, length);
+  SetVertexWord(vertices, corners + VERTEX_BYTES + VERTEX_Z, length);
+  SetVertexWord(vertices, corners + 2 * VERTEX_BYTES + VERTEX_Z, length);
   // (p, q) by -roll, and its opposite, (-p, -q); then (p, -q).
   const Pair upper =
     RotateByStoredSinCos(_state, 3, Pair{static_cast<std::int16_t>(_state.Data().scene.boxHalfWidth), static_cast<std::int16_t>(height)});
-  SetWordIn(vertices, corners, static_cast<std::uint16_t>(upper.first));
-  SetWordIn(vertices, corners + 2, static_cast<std::uint16_t>(upper.second));
-  SetWordIn(vertices, corners + 2 * VERTEX_BYTES, Negate(static_cast<std::uint16_t>(upper.first)));
-  SetWordIn(vertices, corners + 2 * VERTEX_BYTES + 2, Negate(static_cast<std::uint16_t>(upper.second)));
+  SetVertexWord(vertices, corners, static_cast<std::uint16_t>(upper.first));
+  SetVertexWord(vertices, corners + 2, static_cast<std::uint16_t>(upper.second));
+  SetVertexWord(vertices, corners + 2 * VERTEX_BYTES, Negate(static_cast<std::uint16_t>(upper.first)));
+  SetVertexWord(vertices, corners + 2 * VERTEX_BYTES + 2, Negate(static_cast<std::uint16_t>(upper.second)));
   const Pair lower = RotateByStoredSinCos(
     _state, 3, Pair{static_cast<std::int16_t>(_state.Data().scene.boxHalfWidth), static_cast<std::int16_t>(Negate(height))});
-  SetWordIn(vertices, corners + VERTEX_BYTES, static_cast<std::uint16_t>(lower.first));
-  SetWordIn(vertices, corners + VERTEX_BYTES + 2, static_cast<std::uint16_t>(lower.second));
+  SetVertexWord(vertices, corners + VERTEX_BYTES, static_cast<std::uint16_t>(lower.first));
+  SetVertexWord(vertices, corners + VERTEX_BYTES + 2, static_cast<std::uint16_t>(lower.second));
   RotateVertices(_state, corners, BOX_CORNERS_ROTATED, 0, VERTEX_Z, 4);
   RotateVertices(_state, corners, BOX_CORNERS_ROTATED, 2, VERTEX_Z, 5);
   RotateVertices(_state, corners, BOX_CORNERS_ROTATED, 0, VERTEX_Z, 1);
@@ -944,16 +956,16 @@ void BuildBoxCornerVertices(GameState& _state, std::uint16_t _extents)
   // again, and four reflections through the centre make the far face.
   for (std::size_t word = corners; word != corners + std::size_t{2} * BOX_CORNERS_ROTATED; word += 2)
   {
-    SetWordIn(vertices, word + BOX_FOURTH_CORNER,
-              static_cast<std::uint16_t>(WordIn(vertices, word + 2 * VERTEX_BYTES) - WordIn(vertices, word + VERTEX_BYTES) +
-                                         WordIn(vertices, word)));
+    SetVertexWord(vertices, word + BOX_FOURTH_CORNER,
+                  static_cast<std::uint16_t>(VertexWord(vertices, word + 2 * VERTEX_BYTES) - VertexWord(vertices, word + VERTEX_BYTES) +
+                                             VertexWord(vertices, word)));
   }
   std::size_t source = BOX_SECOND_CORNER;
   for (const std::size_t copy : {BOX_FIFTH_CORNER, BOX_EIGHTH_CORNER})
   {
     for (std::size_t word = 0; word != std::size_t{2} * BOX_CORNERS_ROTATED; word += 2)
     {
-      SetWordIn(vertices, copy + word, WordIn(vertices, source));
+      SetVertexWord(vertices, copy + word, VertexWord(vertices, source));
       source += 2;
     }
   }
@@ -978,19 +990,19 @@ void BuildDodoVertices(GameState& _state)
   // The angle a byte offset into sineTable, always even.
   const auto ringRadii = [](std::uint16_t _angle) { return ScaleDodoRadii(static_cast<std::int8_t>(SineHigh(_angle))); };
   auto angle = static_cast<std::uint16_t>((_state.Data().scene.drawRollAngle & ANGLE_BITS) << 1);
-  const std::span<Field<std::uint8_t>> vertices = Vertices(_state);
+  const std::span<Field<std::uint16_t>> vertices = Vertices(_state);
   std::size_t vertex = 0;
   for (std::uint16_t left = DODO_RING_VERTICES; left != 0; --left)
   {
     const DodoRadii sine = ringRadii(angle);
-    SetWordIn(vertices, vertex, static_cast<std::uint16_t>(sine.inner));
-    SetWordIn(vertices, vertex + DODO_OUTER_RING, static_cast<std::uint16_t>(sine.outer));
-    SetWordIn(vertices, vertex + VERTEX_Z, DODO_NEAR_RING_Z);
-    SetWordIn(vertices, vertex + DODO_OUTER_RING + VERTEX_Z, DODO_FAR_RING_Z);
+    SetVertexWord(vertices, vertex, static_cast<std::uint16_t>(sine.inner));
+    SetVertexWord(vertices, vertex + DODO_OUTER_RING, static_cast<std::uint16_t>(sine.outer));
+    SetVertexWord(vertices, vertex + VERTEX_Z, DODO_NEAR_RING_Z);
+    SetVertexWord(vertices, vertex + DODO_OUTER_RING + VERTEX_Z, DODO_FAR_RING_Z);
     angle = static_cast<std::uint16_t>((angle - QUARTER_TURN_BYTES) & SINE_BYTE_BITS);
     const DodoRadii cosine = ringRadii(angle);
-    SetWordIn(vertices, vertex + 2, static_cast<std::uint16_t>(cosine.inner));
-    SetWordIn(vertices, vertex + DODO_OUTER_RING + 2, static_cast<std::uint16_t>(cosine.outer));
+    SetVertexWord(vertices, vertex + 2, static_cast<std::uint16_t>(cosine.inner));
+    SetVertexWord(vertices, vertex + DODO_OUTER_RING + 2, static_cast<std::uint16_t>(cosine.outer));
     angle = static_cast<std::uint16_t>((angle + DODO_RING_STEP_BYTES) & SINE_BYTE_BITS);
     vertex += VERTEX_BYTES;
   }
@@ -1001,14 +1013,14 @@ void BuildDodoVertices(GameState& _state)
   for (std::uint16_t left = DODO_SLOT_VERTICES; left != 0; --left)
   {
     const std::uint16_t x = slotHalf(angle);
-    SetWordIn(vertices, vertex, x);
-    SetWordIn(vertices, vertex + DODO_SLOT_OPPOSITE, Negate(x));
-    SetWordIn(vertices, vertex + VERTEX_Z, DODO_SLOT_Z);
-    SetWordIn(vertices, vertex + DODO_SLOT_OPPOSITE + VERTEX_Z, DODO_SLOT_Z);
+    SetVertexWord(vertices, vertex, x);
+    SetVertexWord(vertices, vertex + DODO_SLOT_OPPOSITE, Negate(x));
+    SetVertexWord(vertices, vertex + VERTEX_Z, DODO_SLOT_Z);
+    SetVertexWord(vertices, vertex + DODO_SLOT_OPPOSITE + VERTEX_Z, DODO_SLOT_Z);
     angle = static_cast<std::uint16_t>((angle - QUARTER_TURN_BYTES) & SINE_BYTE_BITS);
     const std::uint16_t y = slotHalf(angle);
-    SetWordIn(vertices, vertex + 2, y);
-    SetWordIn(vertices, vertex + DODO_SLOT_OPPOSITE + 2, Negate(y));
+    SetVertexWord(vertices, vertex + 2, y);
+    SetVertexWord(vertices, vertex + DODO_SLOT_OPPOSITE + 2, Negate(y));
     angle = static_cast<std::uint16_t>((angle + HALF_TURN_BYTES) & SINE_BYTE_BITS);
     vertex += VERTEX_BYTES;
   }
@@ -1060,13 +1072,13 @@ void RunVertexProgram(GameState& _state, std::span<const std::uint8_t> _program,
   auto x = static_cast<std::uint16_t>(_accumulator.x);
   auto y = static_cast<std::uint16_t>(_accumulator.y);
   auto z = static_cast<std::uint16_t>(_accumulator.z);
-  const std::span<Field<std::uint8_t>> vertices = Vertices(_state);
+  const std::span<Field<std::uint16_t>> vertices = Vertices(_state);
   for (const std::uint8_t op : _program)
   {
     const std::size_t vertex = std::size_t{static_cast<std::uint8_t>(op & VERTEX_INDEX_BITS)} * VERTEX_BYTES;
-    const std::uint16_t vertexX = WordIn(vertices, vertex);
-    const std::uint16_t vertexY = WordIn(vertices, vertex + 2);
-    const std::uint16_t vertexZ = WordIn(vertices, vertex + 4);
+    const std::uint16_t vertexX = VertexWord(vertices, vertex);
+    const std::uint16_t vertexY = VertexWord(vertices, vertex + 2);
+    const std::uint16_t vertexZ = VertexWord(vertices, vertex + 4);
     switch (static_cast<std::uint8_t>(op & VERTEX_OP_BITS))
     {
     case VERTEX_OP_LOAD:
@@ -1075,9 +1087,9 @@ void RunVertexProgram(GameState& _state, std::span<const std::uint8_t> _program,
       z = vertexZ;
       break;
     case VERTEX_OP_STORE:
-      SetWordIn(vertices, vertex, x);
-      SetWordIn(vertices, vertex + 2, y);
-      SetWordIn(vertices, vertex + 4, z);
+      SetVertexWord(vertices, vertex, x);
+      SetVertexWord(vertices, vertex + 2, y);
+      SetVertexWord(vertices, vertex + 4, z);
       break;
     case VERTEX_OP_AVERAGE:
     {

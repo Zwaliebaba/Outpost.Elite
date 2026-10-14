@@ -21,7 +21,7 @@ constexpr std::array<std::uint8_t, 32> SPAWN_LIMITS_BY_GOVERNMENT = {
   0x01, 0x07, 0x02, 0x01, 0x01, 0x09, 0x01, 0x00, // DS:7AF7
 };
 
-/// spawnOddsByGovernment (DS:7B09 in 1987): 4 words; spawn chance per frame out of 65536 for class 3, 4, 6, 5, indexed by currentGovernment
+/// spawnOddsByGovernment (DS:7B09 in 1987): 4 words; spawn chance per frame out of 65536 for class 3, 4, 6, 5, indexed by currentSystem.government
 /// x 8
 constexpr std::array<std::uint8_t, 64> SPAWN_ODDS_BY_GOVERNMENT = {
   0x32, 0x00, 0x05, 0x00, 0x46, 0x00, 0xC8, 0x00, // DS:7B09

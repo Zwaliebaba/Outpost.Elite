@@ -13,9 +13,6 @@ namespace
 
 using Commander = Elite::CommanderState;
 
-// A product's cargoHold entry: the units held, then the units on sale.
-constexpr std::size_t HOLD_ENTRY_BYTES = 2;
-
 // From the title: the credits, then the status screen.
 constexpr std::string_view TO_THE_DOCK = "key space; wait 3.2";
 
@@ -28,11 +25,11 @@ template <typename Struct> void SetBoth(TwinRig& _rig, DataByte<Struct> _member,
   _rig.Both([_member, _value](Elite::Platform&, Elite::GameState& _state) { DataByteIn(_state, _member) = _value; });
 }
 
-// Sets the units of product _product held, the first byte of its cargoHold entry, to _value on the twin.
+// Sets the units of product _product held, its lot in cargoHold, to _value on the twin.
 void SetHeld(TwinRig& _rig, std::size_t _product, std::uint8_t _value)
 {
   _rig.Both([_product, _value](Elite::Platform&, Elite::GameState& _state)
-            { Elite::BytesOf(_state.Data().commander.cargoHold)[_product * HOLD_ENTRY_BYTES] = _value; });
+            { _state.Data().commander.cargoHold.lots[_product].held = _value; });
 }
 
 // The status screen again, then _steps.
@@ -60,12 +57,7 @@ void LoadCommander(TwinRig& _rig, std::string_view _source)
 [[nodiscard]] std::uint32_t TwinCreditsTenths(TwinRig& _rig)
 {
   std::uint32_t tenths = 0;
-  _rig.Both(
-    [&tenths](Elite::Platform&, Elite::GameState& _state)
-    {
-      const Commander::CreditsTenths& credits = _state.Data().commander.creditsTenths;
-      tenths = Elite::WordIn(Elite::BytesOf(credits), 0) | (std::uint32_t{credits.data75F5} << 16);
-    });
+  _rig.Both([&tenths](Elite::Platform&, Elite::GameState& _state) { tenths = _state.Data().commander.creditsTenths; });
   return tenths;
 }
 

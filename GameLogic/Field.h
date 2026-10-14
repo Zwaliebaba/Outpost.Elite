@@ -9,8 +9,8 @@
 namespace Elite
 {
 
-/// Whether T is what a Field holds: a byte, a word, or an enumeration whose values are one, as the game's stored indexes and
-/// messages are where the original stored an address (D33, piece 3).
+/// Whether T is what a Field holds: a byte, a word, a double word, as the commander's credits are, or an enumeration whose values
+/// are a byte or a word, as the game's stored indexes and messages are where the original stored an address (D33, piece 3).
 template <typename T> [[nodiscard]] consteval bool IsFieldValue() noexcept
 {
   if constexpr (std::is_enum_v<T>)
@@ -19,7 +19,7 @@ template <typename T> [[nodiscard]] consteval bool IsFieldValue() noexcept
   }
   else
   {
-    return std::is_same_v<T, std::uint8_t> || std::is_same_v<T, std::uint16_t>;
+    return std::is_same_v<T, std::uint8_t> || std::is_same_v<T, std::uint16_t> || std::is_same_v<T, std::uint32_t>;
   }
 }
 
@@ -39,7 +39,7 @@ template <typename T> [[nodiscard]] consteval bool IsFieldValue() noexcept
 /// parameter and a return by value do not compile. Read a value as `T x = member`.
 template <typename T> class Field
 {
-  static_assert(IsFieldValue<T>(), "a byte or a word of the 8088's memory");
+  static_assert(IsFieldValue<T>(), "a byte, a word or a double word");
   static_assert(std::endian::native == std::endian::little, "the reference's words are little-endian, and are copied as they are");
 
 public:

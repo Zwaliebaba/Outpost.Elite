@@ -70,6 +70,10 @@ constexpr std::uint8_t PHRASE_CODE = 0x80;
     {
       return "a face's point";
     }
+    if (std::any_of(list.begin() + at, list.begin() + at + 3, [](std::uint8_t _byte) { return _byte % 2 != 0; }))
+    {
+      return "a face's point between two of vertexBuffer's words";
+    }
     int left = list[at + 3];
     at += 4;
     while (left > 0)
@@ -138,7 +142,8 @@ TEST_CLASS(TableTests)
 {
 public:
   // Every blueprint's vertex program, edges and faces index within vertexBuffer, faceFillPatterns and the blueprint's own edges,
-  // and every face ends where its count says, the last where the face list does (Scene.cpp relies on it).
+  // a face's points at the start of one of vertexBuffer's words, and every face ends where its count says, the last where the face
+  // list does (Scene.cpp relies on it).
   TEST_METHOD(EveryBlueprintStaysWithinWhatItIndexes)
   {
     for (std::size_t kind = 0; kind < SHIP_TYPES; ++kind)

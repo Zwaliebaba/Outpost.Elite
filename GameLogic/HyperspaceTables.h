@@ -13,9 +13,6 @@ namespace Elite
 namespace
 {
 
-/// systemRecordBytes (DS:7569 in 1987): 25 in the file; length of a system record copy
-constexpr std::uint16_t SYSTEM_RECORD_BYTES = 0x0019;
-
 /// hyperspaceRingStart (DS:783C in 1987): 3 bytes; delay frames, radius, colour per ring; copied to hyperspaceRings by ResetHyperspaceRings
 constexpr std::array<std::array<std::uint8_t, 3>, 10> HYPERSPACE_RING_START = {{
   {0x01, 0x14, 0x02}, // DS:783C

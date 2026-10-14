@@ -9,6 +9,87 @@
 namespace Elite
 {
 
+/// The keys the game reads in keyDown, by their scan codes: what each does.
+namespace Keys
+{
+
+/// pauses the game in flight (ProcessFlightKeys 813D)
+inline constexpr std::uint8_t ESC = 0x01;
+/// pitch -1 (ReadKeyboardSteering)
+inline constexpr std::uint8_t Q = 0x10;
+/// ECM (ProcessFlightKeys 829F)
+inline constexpr std::uint8_t E = 0x12;
+/// primes a missile (8171)
+inline constexpr std::uint8_t T = 0x14;
+/// unarms the missile (81FB)
+inline constexpr std::uint8_t U = 0x16;
+/// ID indicator: identifies the ship in the sights (82FE)
+inline constexpr std::uint8_t I = 0x17;
+/// roll -1 (ReadKeyboardSteering)
+inline constexpr std::uint8_t O = 0x18;
+/// roll +1 (ReadKeyboardSteering)
+inline constexpr std::uint8_t P = 0x19;
+/// with Esc, a freeze without the pause menu (8149)
+inline constexpr std::uint8_t CTRL = 0x1D;
+/// pitch +1 (ReadKeyboardSteering)
+inline constexpr std::uint8_t A = 0x1E;
+/// arms the galactic hyperdrive (802E)
+inline constexpr std::uint8_t G = 0x22;
+/// hyperspace (805E)
+inline constexpr std::uint8_t H = 0x23;
+/// jump drive (8133)
+inline constexpr std::uint8_t J = 0x24;
+/// anti-ECM emulator while held (837E)
+inline constexpr std::uint8_t L = 0x26;
+/// makes ReadScanCode OR 80h into the buffered code
+inline constexpr std::uint8_t LEFT_SHIFT = 0x2A;
+/// launches the escape capsule (82DC)
+inline constexpr std::uint8_t C = 0x2E;
+/// energy bomb (82C6)
+inline constexpr std::uint8_t B = 0x30;
+/// masking device while held (8368)
+inline constexpr std::uint8_t N = 0x31;
+/// launches a locked missile (8222)
+inline constexpr std::uint8_t M = 0x32;
+/// playerSpeed -4 (84B2)
+inline constexpr std::uint8_t COMMA = 0x33;
+/// playerSpeed +4 (849E)
+inline constexpr std::uint8_t PERIOD = 0x34;
+/// makes ReadScanCode OR 80h into the buffered code
+inline constexpr std::uint8_t RIGHT_SHIFT = 0x36;
+/// with Alt, the screen dump (GetKey, PollScreenDumpKey); scan code 37h is */PrtSc
+inline constexpr std::uint8_t PRINT_SCREEN = 0x37;
+/// with PrtSc the screen dump; with W the mis-jump latch
+inline constexpr std::uint8_t ALT = 0x38;
+/// fire on the keyboard (ReadFireButton); the pause screen clears it on resume
+inline constexpr std::uint8_t SPACE = 0x39;
+/// pitch -1 (ReadKeyboardSteering)
+inline constexpr std::uint8_t UP = 0x48;
+/// roll -1 (ReadKeyboardSteering)
+inline constexpr std::uint8_t LEFT = 0x4B;
+/// roll +1 (ReadKeyboardSteering)
+inline constexpr std::uint8_t RIGHT = 0x4D;
+/// pitch +1 (ReadKeyboardSteering)
+inline constexpr std::uint8_t DOWN = 0x50;
+/// Amstrad joystick fire, key code 77h (ReadFireButton)
+inline constexpr std::uint8_t AMSTRAD_FIRE_1 = 0x77;
+/// Amstrad joystick fire, key code 78h (ReadFireButton)
+inline constexpr std::uint8_t AMSTRAD_FIRE_2 = 0x78;
+/// Amstrad joystick, key code 79h: roll +1 (ReadJoystickSteering)
+inline constexpr std::uint8_t AMSTRAD_RIGHT = 0x79;
+/// Amstrad joystick, key code 7Ah: roll -1
+inline constexpr std::uint8_t AMSTRAD_LEFT = 0x7A;
+/// Amstrad joystick, key code 7Bh: pitch +1
+inline constexpr std::uint8_t AMSTRAD_DOWN = 0x7B;
+/// Amstrad joystick, key code 7Ch: pitch -1
+inline constexpr std::uint8_t AMSTRAD_UP = 0x7C;
+/// Amstrad mouse button, key code 7Dh (bit 1 of mouseButtons)
+inline constexpr std::uint8_t AMSTRAD_MOUSE_RIGHT = 0x7D;
+/// Amstrad mouse button, key code 7Eh (bit 0 of mouseButtons, the fire latch)
+inline constexpr std::uint8_t AMSTRAD_MOUSE_LEFT = 0x7E;
+
+} // namespace Keys
+
 /// The keys held, which the keyboard's handler writes and flight clears. Its members are the 1987 data segment's, by their names, in their
 /// order there; the GameState holds it in GameData.
 struct KeyboardState
@@ -16,177 +97,9 @@ struct KeyboardState
   KeyboardState() noexcept = default;
   explicit KeyboardState(const KeyboardState&) noexcept = default;
 
-  /// keyDown's fields, DS:A030-A0AF in 1987, at their places there.
-  struct KeyDown
-  {
-    KeyDown() noexcept = default;
-    explicit KeyDown(const KeyDown&) noexcept = default;
-
-    Field<std::uint8_t> gapA030[1];
-    /// keyDown entry for scan code 01h: pauses the game in flight (ProcessFlightKeys 813D)
-    Field<std::uint8_t> keyDownEsc;
-    Field<std::uint8_t> gapA032[14];
-    /// keyDown entry for scan code 10h: pitch -1 (ReadKeyboardSteering)
-    Field<std::uint8_t> keyDownQ;
-    Field<std::uint8_t> gapA041[1];
-    /// keyDown entry for scan code 12h: ECM (ProcessFlightKeys 829F)
-    Field<std::uint8_t> keyDownE;
-    Field<std::uint8_t> gapA043[1];
-    /// keyDown entry for scan code 14h: primes a missile (8171)
-    Field<std::uint8_t> keyDownT;
-    Field<std::uint8_t> gapA045[1];
-    /// keyDown entry for scan code 16h: unarms the missile (81FB)
-    Field<std::uint8_t> keyDownU;
-    /// keyDown entry for scan code 17h: ID indicator: identifies the ship in the sights (82FE)
-    Field<std::uint8_t> keyDownI;
-    /// keyDown entry for scan code 18h: roll -1 (ReadKeyboardSteering)
-    Field<std::uint8_t> keyDownO;
-    /// keyDown entry for scan code 19h: roll +1 (ReadKeyboardSteering)
-    Field<std::uint8_t> keyDownP;
-    Field<std::uint8_t> gapA04A[3];
-    /// keyDown entry for scan code 1Dh: with Esc, a freeze without the pause menu (8149)
-    Field<std::uint8_t> keyDownCtrl;
-    /// keyDown entry for scan code 1Eh: pitch +1 (ReadKeyboardSteering)
-    Field<std::uint8_t> keyDownA;
-    Field<std::uint8_t> gapA04F[3];
-    /// keyDown entry for scan code 22h: arms the galactic hyperdrive (802E)
-    Field<std::uint8_t> keyDownG;
-    /// keyDown entry for scan code 23h: hyperspace (805E)
-    Field<std::uint8_t> keyDownH;
-    /// keyDown entry for scan code 24h: jump drive (8133)
-    Field<std::uint8_t> keyDownJ;
-    Field<std::uint8_t> gapA055[1];
-    /// keyDown entry for scan code 26h: anti-ECM emulator while held (837E)
-    Field<std::uint8_t> keyDownL;
-    Field<std::uint8_t> gapA057[3];
-    /// keyDown entry for scan code 2Ah: makes ReadScanCode OR 80h into the buffered code
-    Field<std::uint8_t> keyDownLeftShift;
-    Field<std::uint8_t> gapA05B[3];
-    /// keyDown entry for scan code 2Eh: launches the escape capsule (82DC)
-    Field<std::uint8_t> keyDownC;
-    Field<std::uint8_t> gapA05F[1];
-    /// keyDown entry for scan code 30h: energy bomb (82C6)
-    Field<std::uint8_t> keyDownB;
-    /// keyDown entry for scan code 31h: masking device while held (8368)
-    Field<std::uint8_t> keyDownN;
-    /// keyDown entry for scan code 32h: launches a locked missile (8222)
-    Field<std::uint8_t> keyDownM;
-    /// keyDown entry for scan code 33h: playerSpeed -4 (84B2)
-    Field<std::uint8_t> keyDownComma;
-    /// keyDown entry for scan code 34h: playerSpeed +4 (849E)
-    Field<std::uint8_t> keyDownPeriod;
-    Field<std::uint8_t> gapA065[1];
-    /// keyDown entry for scan code 36h: makes ReadScanCode OR 80h into the buffered code
-    Field<std::uint8_t> keyDownRightShift;
-    /// keyDown entry for scan code 37h: with Alt, the screen dump (GetKey, PollScreenDumpKey); scan code 37h is */PrtSc
-    Field<std::uint8_t> keyDownPrintScreen;
-    /// keyDown entry for scan code 38h: with PrtSc the screen dump; with W the mis-jump latch
-    Field<std::uint8_t> keyDownAlt;
-    /// keyDown entry for scan code 39h: fire on the keyboard (ReadFireButton); the pause screen clears it on resume
-    Field<std::uint8_t> keyDownSpace;
-    Field<std::uint8_t> gapA06A[14];
-    /// keyDown entry for scan code 48h: pitch -1 (ReadKeyboardSteering)
-    Field<std::uint8_t> keyDownUp;
-    Field<std::uint8_t> gapA079[2];
-    /// keyDown entry for scan code 4Bh: roll -1 (ReadKeyboardSteering)
-    Field<std::uint8_t> keyDownLeft;
-    Field<std::uint8_t> gapA07C[1];
-    /// keyDown entry for scan code 4Dh: roll +1 (ReadKeyboardSteering)
-    Field<std::uint8_t> keyDownRight;
-    Field<std::uint8_t> gapA07E[2];
-    /// keyDown entry for scan code 50h: pitch +1 (ReadKeyboardSteering)
-    Field<std::uint8_t> keyDownDown;
-    Field<std::uint8_t> gapA081[38];
-    /// keyDown entry for scan code 77h: Amstrad joystick fire, key code 77h (ReadFireButton)
-    Field<std::uint8_t> keyDownAmstradFire1;
-    /// keyDown entry for scan code 78h: Amstrad joystick fire, key code 78h (ReadFireButton)
-    Field<std::uint8_t> keyDownAmstradFire2;
-    /// keyDown entry for scan code 79h: Amstrad joystick, key code 79h: roll +1 (ReadJoystickSteering)
-    Field<std::uint8_t> keyDownAmstradRight;
-    /// keyDown entry for scan code 7Ah: Amstrad joystick, key code 7Ah: roll -1
-    Field<std::uint8_t> keyDownAmstradLeft;
-    /// keyDown entry for scan code 7Bh: Amstrad joystick, key code 7Bh: pitch +1
-    Field<std::uint8_t> keyDownAmstradDown;
-    /// keyDown entry for scan code 7Ch: Amstrad joystick, key code 7Ch: pitch -1
-    Field<std::uint8_t> keyDownAmstradUp;
-    /// keyDown entry for scan code 7Dh: Amstrad mouse button, key code 7Dh (bit 1 of mouseButtons)
-    Field<std::uint8_t> keyDownAmstradMouseRight;
-    /// keyDown entry for scan code 7Eh: Amstrad mouse button, key code 7Eh (bit 0 of mouseButtons, the fire latch)
-    Field<std::uint8_t> keyDownAmstradMouseLeft;
-    Field<std::uint8_t> gapA0AF[1];
-
-    /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
-    template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
-    {
-      _visitor("gapA030", _self.gapA030);
-      _visitor("keyDownEsc", _self.keyDownEsc);
-      _visitor("gapA032", _self.gapA032);
-      _visitor("keyDownQ", _self.keyDownQ);
-      _visitor("gapA041", _self.gapA041);
-      _visitor("keyDownE", _self.keyDownE);
-      _visitor("gapA043", _self.gapA043);
-      _visitor("keyDownT", _self.keyDownT);
-      _visitor("gapA045", _self.gapA045);
-      _visitor("keyDownU", _self.keyDownU);
-      _visitor("keyDownI", _self.keyDownI);
-      _visitor("keyDownO", _self.keyDownO);
-      _visitor("keyDownP", _self.keyDownP);
-      _visitor("gapA04A", _self.gapA04A);
-      _visitor("keyDownCtrl", _self.keyDownCtrl);
-      _visitor("keyDownA", _self.keyDownA);
-      _visitor("gapA04F", _self.gapA04F);
-      _visitor("keyDownG", _self.keyDownG);
-      _visitor("keyDownH", _self.keyDownH);
-      _visitor("keyDownJ", _self.keyDownJ);
-      _visitor("gapA055", _self.gapA055);
-      _visitor("keyDownL", _self.keyDownL);
-      _visitor("gapA057", _self.gapA057);
-      _visitor("keyDownLeftShift", _self.keyDownLeftShift);
-      _visitor("gapA05B", _self.gapA05B);
-      _visitor("keyDownC", _self.keyDownC);
-      _visitor("gapA05F", _self.gapA05F);
-      _visitor("keyDownB", _self.keyDownB);
-      _visitor("keyDownN", _self.keyDownN);
-      _visitor("keyDownM", _self.keyDownM);
-      _visitor("keyDownComma", _self.keyDownComma);
-      _visitor("keyDownPeriod", _self.keyDownPeriod);
-      _visitor("gapA065", _self.gapA065);
-      _visitor("keyDownRightShift", _self.keyDownRightShift);
-      _visitor("keyDownPrintScreen", _self.keyDownPrintScreen);
-      _visitor("keyDownAlt", _self.keyDownAlt);
-      _visitor("keyDownSpace", _self.keyDownSpace);
-      _visitor("gapA06A", _self.gapA06A);
-      _visitor("keyDownUp", _self.keyDownUp);
-      _visitor("gapA079", _self.gapA079);
-      _visitor("keyDownLeft", _self.keyDownLeft);
-      _visitor("gapA07C", _self.gapA07C);
-      _visitor("keyDownRight", _self.keyDownRight);
-      _visitor("gapA07E", _self.gapA07E);
-      _visitor("keyDownDown", _self.keyDownDown);
-      _visitor("gapA081", _self.gapA081);
-      _visitor("keyDownAmstradFire1", _self.keyDownAmstradFire1);
-      _visitor("keyDownAmstradFire2", _self.keyDownAmstradFire2);
-      _visitor("keyDownAmstradRight", _self.keyDownAmstradRight);
-      _visitor("keyDownAmstradLeft", _self.keyDownAmstradLeft);
-      _visitor("keyDownAmstradDown", _self.keyDownAmstradDown);
-      _visitor("keyDownAmstradUp", _self.keyDownAmstradUp);
-      _visitor("keyDownAmstradMouseRight", _self.keyDownAmstradMouseRight);
-      _visitor("keyDownAmstradMouseLeft", _self.keyDownAmstradMouseLeft);
-      _visitor("gapA0AF", _self.gapA0AF);
-    }
-
-    template <typename Visitor> void Visit(Visitor& _visitor)
-    {
-      VisitMembers(*this, _visitor);
-    }
-
-    template <typename Visitor> void Visit(Visitor& _visitor) const
-    {
-      VisitMembers(*this, _visitor);
-    }
-  };
-  /// 1 while the key is held, indexed by the scan code itself (entry 0 unused; the map's 'scan code - 1' misses the inc ah at 7452); wri...
-  KeyDown keyDown;
+  /// 1 while the key is held, indexed by the scan code itself (Keys; entry 0 unused; the map's 'scan code - 1' misses the inc ah at
+  /// 7452); written by ReadScanCode
+  Field<std::uint8_t> keyDown[128];
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)

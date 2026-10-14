@@ -3,8 +3,8 @@
 #include "GameState.h"
 
 #include "StartState.h"
+#include "StateWriter.h"
 
-#include <algorithm>
 #include <stdexcept>
 
 namespace Elite
@@ -15,11 +15,11 @@ GameState::GameState()
 {
 }
 
-void GameState::Start(std::uint16_t _codeSegment) noexcept
+void GameState::Start(std::uint16_t _codeSegment)
 {
   m_codeSegment = _codeSegment;
   m_dataSegment = static_cast<std::uint16_t>(_codeSegment + DATA_SEGMENT_PARAGRAPH);
-  std::ranges::fill(DataStorage(), std::uint8_t{0});
+  ZeroMembers(*m_data);
   SetStartState(*m_data);
 }
 

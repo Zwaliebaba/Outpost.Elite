@@ -82,7 +82,6 @@ constexpr std::uint16_t CLOSING_MISSILE_ODDS = 0x9C4;
 constexpr std::uint16_t JINK_FRAMES = 10;
 constexpr std::uint16_t HALF_TURN = 0x400;
 
-constexpr std::uint16_t ESCORT_BYTES_COPIED = 0x10;  // the type, position and heading
 constexpr std::uint16_t ESCORT_SCATTER_MASK = 0x7FF; // a random -1024..1023 on each axis
 constexpr std::uint16_t ESCORT_SCATTER_CENTER = 0x400;
 
@@ -187,7 +186,7 @@ struct SpawnLimit
 // slot ends it.
 void SpawnByGovernment(GameState& _state)
 {
-  _state.Data().ai.spawnOddsOffset = std::uint16_t{_state.Data().commander.currentGovernment};
+  _state.Data().ai.spawnOddsOffset = std::uint16_t{_state.Data().commander.currentSystem.government};
   _state.Data().ai.spawnLimitOffset = std::uint16_t{_state.Data().flight.spawnGovernment};
   if (_state.Data().commander.witchspaceCountdown == 0)
   {
@@ -198,7 +197,7 @@ void SpawnByGovernment(GameState& _state)
     {
       drifters = static_cast<std::uint8_t>(drifters + 1);
     }
-    if (_state.Data().ai.behaviorClassCounts.drifterCount < drifters && SpawnOddsMet(_state, DRIFTER_COLUMN).met)
+    if (_state.Data().ai.behaviorClassCounts[DRIFTING_CLASS] < drifters && SpawnOddsMet(_state, DRIFTER_COLUMN).met)
     {
       const SlotSearch free = TakeFreeShipSlot(_state);
       if (!free.found)
@@ -207,7 +206,7 @@ void SpawnByGovernment(GameState& _state)
       }
       SpawnRandomDrifter(_state, _state.Slot(free.slot));
     }
-    if (BelowSpawnLimit(_state, TRADER_COLUMN, _state.Data().ai.behaviorClassCounts.traderCount).below &&
+    if (BelowSpawnLimit(_state, TRADER_COLUMN, _state.Data().ai.behaviorClassCounts[TRADER_CLASS]).below &&
         SpawnOddsMet(_state, TRADER_COLUMN).met)
     {
       const SlotSearch free = TakeFreeShipSlot(_state);
@@ -217,7 +216,7 @@ void SpawnByGovernment(GameState& _state)
       }
       (void)SpawnRandomTrader(_state, _state.Slot(free.slot));
     }
-    if (BelowSpawnLimit(_state, HUNTER_COLUMN, _state.Data().ai.behaviorClassCounts.hunterCount).below &&
+    if (BelowSpawnLimit(_state, HUNTER_COLUMN, _state.Data().ai.behaviorClassCounts[HUNTER_CLASS]).below &&
         SpawnOddsMet(_state, HUNTER_COLUMN).met)
     {
       const SlotSearch free = TakeFreeShipSlot(_state);
@@ -228,7 +227,7 @@ void SpawnByGovernment(GameState& _state)
       SpawnRandomHunter(_state, _state.Slot(free.slot));
     }
   }
-  if (!BelowSpawnLimit(_state, WOLF_COLUMN, _state.Data().ai.behaviorClassCounts.wolfCount).below)
+  if (!BelowSpawnLimit(_state, WOLF_COLUMN, _state.Data().ai.behaviorClassCounts[WOLF_CLASS]).below)
   {
     return;
   }
@@ -277,7 +276,7 @@ void SpawnMaskMissionShips(GameState& _state)
   {
     return;
   }
-  const std::uint8_t wolves = _state.Data().ai.behaviorClassCounts.wolfCount;
+  const std::uint8_t wolves = _state.Data().ai.behaviorClassCounts[WOLF_CLASS];
   if (wolves != 0 && wolves >= MOST_WOLVES_WITH_MASK_SHIP)
   {
     return;
@@ -317,7 +316,7 @@ void SpawnMaskMissionShips(GameState& _state)
 // SpawnInvasionWave (4BF7): a Thargoid in a free slot while the player is in the safe zone and fewer than 8 wolves fly.
 void SpawnInvasionWave(GameState& _state)
 {
-  if (!InSafeZone(_state).inside || _state.Data().ai.behaviorClassCounts.wolfCount >= MOST_INVADERS)
+  if (!InSafeZone(_state).inside || _state.Data().ai.behaviorClassCounts[WOLF_CLASS] >= MOST_INVADERS)
   {
     return;
   }
@@ -669,7 +668,7 @@ std::uint16_t RunBehaviorHandler(GameState& _state, Hardware& _hardware, SpaceOb
 // behaviorClassCounts' eight bytes, a count for each behaviour class.
 [[nodiscard]] std::span<Field<std::uint8_t>> ClassCounts(GameState& _state)
 {
-  return BytesOf(_state.Data().ai.behaviorClassCounts);
+  return _state.Data().ai.behaviorClassCounts;
 }
 
 } // namespace
@@ -756,13 +755,17 @@ SlotSearch IsMaskShipPresent(GameState& _state)
 
 void PlaceEscortNear(GameState& _state, SpaceObject& _escort, const SpaceObject& _leader)
 {
-  // The leader's first 16 bytes, byte by byte: its type too.
-  const std::span<Field<std::uint8_t>> escort = BytesWithin(BytesOf(_escort), 0, ESCORT_BYTES_COPIED);
-  const std::span<const Field<std::uint8_t>> leader = BytesWithin(BytesOf(_leader), 0, ESCORT_BYTES_COPIED);
-  for (std::size_t index = 0; index < ESCORT_BYTES_COPIED; ++index)
-  {
-    escort[index] = std::uint8_t{leader[index]};
-  }
+  // The leader's type, position and heading, the record's first 16 bytes, which the original copies a byte at a time.
+  _escort.type = std::uint8_t{_leader.type};
+  _escort.xHigh = std::uint8_t{_leader.xHigh};
+  _escort.yHigh = std::uint8_t{_leader.yHigh};
+  _escort.zHigh = std::uint8_t{_leader.zHigh};
+  _escort.x = std::uint16_t{_leader.x};
+  _escort.y = std::uint16_t{_leader.y};
+  _escort.z = std::uint16_t{_leader.z};
+  _escort.pitch = std::uint16_t{_leader.pitch};
+  _escort.yaw = std::uint16_t{_leader.yaw};
+  _escort.roll = std::uint16_t{_leader.roll};
   for (int axis = 0; axis < 3; ++axis)
   {
     const auto scatter = static_cast<std::uint16_t>((NextRandom(_state) & ESCORT_SCATTER_MASK) - ESCORT_SCATTER_CENTER);

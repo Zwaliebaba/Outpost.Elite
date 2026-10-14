@@ -48,12 +48,11 @@ constexpr std::uint8_t W_CODE = 0x11;
 constexpr std::uint8_t D_CODE = 0x20;
 constexpr std::uint8_t KEY_BUFFER_CODES = 0x10;
 constexpr std::uint16_t KEY_BUFFER_WRAP = 0x0F; // keyBuffer is a ring of 16: an index past its last is its first
-constexpr std::size_t KEY_DOWN_WORDS = 0x40;
 
 // keyDown's 128 bytes, a byte a scan code: 1 while its key is held.
 [[nodiscard]] std::span<Field<std::uint8_t>> KeyDown(GameState& _state)
 {
-  return BytesOf(_state.Data().keyboard.keyDown);
+  return _state.Data().keyboard.keyDown;
 }
 
 constexpr std::uint8_t KEYBOARD_DEVICE = 0;
@@ -79,7 +78,7 @@ constexpr std::uint8_t MOUSE_LEFT_AND_RIGHT = 0x03;
 // register but ES around the call, so that a screenshot leaves only ES, on the CGA's memory.
 bool SaveScreenshotIfAsked(GameState& _state, Hardware& _hardware)
 {
-  if (_state.Data().keyboard.keyDown.keyDownPrintScreen != 1 || _state.Data().keyboard.keyDown.keyDownAlt != 1)
+  if (_state.Data().keyboard.keyDown[Keys::PRINT_SCREEN] != 1 || _state.Data().keyboard.keyDown[Keys::ALT] != 1)
   {
     return false;
   }
@@ -166,19 +165,19 @@ Steering ReadAmstradStick(GameState& _state)
 {
   std::uint8_t roll = 0;
   std::uint8_t pitch = 0;
-  if (_state.Data().keyboard.keyDown.keyDownAmstradUp == 1)
+  if (_state.Data().keyboard.keyDown[Keys::AMSTRAD_UP] == 1)
   {
     --pitch;
   }
-  if (_state.Data().keyboard.keyDown.keyDownAmstradDown == 1)
+  if (_state.Data().keyboard.keyDown[Keys::AMSTRAD_DOWN] == 1)
   {
     ++pitch;
   }
-  if (_state.Data().keyboard.keyDown.keyDownAmstradLeft == 1)
+  if (_state.Data().keyboard.keyDown[Keys::AMSTRAD_LEFT] == 1)
   {
     --roll;
   }
-  if (_state.Data().keyboard.keyDown.keyDownAmstradRight == 1)
+  if (_state.Data().keyboard.keyDown[Keys::AMSTRAD_RIGHT] == 1)
   {
     ++roll;
   }
@@ -323,9 +322,10 @@ KeyPress GetKey(GameState& _state, Hardware& _hardware)
 void ResetKeyboard(GameState& _state, Hardware& _hardware)
 {
   _hardware.DisableInterrupts();
-  for (std::size_t word = 0; word < KEY_DOWN_WORDS; ++word)
+  // REP STOSW: every key released, two at a time.
+  for (Field<std::uint8_t>& key : KeyDown(_state))
   {
-    SetWordIn(KeyDown(_state), word * 2, 0);
+    key = 0;
   }
   _state.Data().input.keyBufferCount = 0;
   _state.Data().input.keyBufferWrite = 0;
@@ -351,13 +351,13 @@ void ReadScanCode(GameState& _state, Hardware& _hardware)
     }
     else
     {
-      if (scan == W_CODE && _state.Data().keyboard.keyDown.keyDownAlt == 1)
+      if (scan == W_CODE && _state.Data().keyboard.keyDown[Keys::ALT] == 1)
       {
         _state.Data().jump.forceMisjump = 1;
       }
       KeyDown(_state)[scan] = 1;
       std::uint8_t code = scan;
-      if (_state.Data().keyboard.keyDown.keyDownLeftShift == 1 || _state.Data().keyboard.keyDown.keyDownRightShift == 1)
+      if (_state.Data().keyboard.keyDown[Keys::LEFT_SHIFT] == 1 || _state.Data().keyboard.keyDown[Keys::RIGHT_SHIFT] == 1)
       {
         code |= SHIFT_BIT;
       }
@@ -379,14 +379,14 @@ bool ReadFireButton(const GameState& _state, Hardware& _hardware)
   const std::uint8_t device = _state.Data().saveLoad.inputDevice;
   if (device == KEYBOARD_DEVICE)
   {
-    return Pressed(_state.Data().keyboard.keyDown.keyDownSpace);
+    return Pressed(_state.Data().keyboard.keyDown[Keys::SPACE]);
   }
   if (device == JOYSTICK_DEVICE)
   {
     if (_state.Data().saveLoad.joystickIsAmstrad == 1)
     {
-      return Pressed(
-        static_cast<std::uint8_t>(_state.Data().keyboard.keyDown.keyDownAmstradFire1 | _state.Data().keyboard.keyDown.keyDownAmstradFire2));
+      return Pressed(static_cast<std::uint8_t>(_state.Data().keyboard.keyDown[Keys::AMSTRAD_FIRE_1] |
+                                               _state.Data().keyboard.keyDown[Keys::AMSTRAD_FIRE_2]));
     }
     // Each button shifted left into CF and inverted, bit 5 and then bit 4: pressed reads 0.
     const std::uint8_t buttons = _hardware.GamePortButtons();
@@ -522,19 +522,19 @@ Steering ReadKeyboardSteering(GameState& _state)
   std::uint8_t roll = 0;
   std::uint8_t pitch = 0;
   const auto held = [](const Field<std::uint8_t>& _first, const Field<std::uint8_t>& _second) { return (_first | _second) != 0; };
-  if (held(_state.Data().keyboard.keyDown.keyDownUp, _state.Data().keyboard.keyDown.keyDownQ))
+  if (held(_state.Data().keyboard.keyDown[Keys::UP], _state.Data().keyboard.keyDown[Keys::Q]))
   {
     --pitch;
   }
-  if (held(_state.Data().keyboard.keyDown.keyDownDown, _state.Data().keyboard.keyDown.keyDownA))
+  if (held(_state.Data().keyboard.keyDown[Keys::DOWN], _state.Data().keyboard.keyDown[Keys::A]))
   {
     ++pitch;
   }
-  if (held(_state.Data().keyboard.keyDown.keyDownLeft, _state.Data().keyboard.keyDown.keyDownO))
+  if (held(_state.Data().keyboard.keyDown[Keys::LEFT], _state.Data().keyboard.keyDown[Keys::O]))
   {
     --roll;
   }
-  if (held(_state.Data().keyboard.keyDown.keyDownRight, _state.Data().keyboard.keyDown.keyDownP))
+  if (held(_state.Data().keyboard.keyDown[Keys::RIGHT], _state.Data().keyboard.keyDown[Keys::P]))
   {
     ++roll;
   }

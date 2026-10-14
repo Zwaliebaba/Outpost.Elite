@@ -1,5 +1,6 @@
 #include "pch.h"
 
+#include "Arithmetic.h"
 #include "Text.h"
 #include "TwinRig.h"
 
@@ -60,7 +61,7 @@ void SteerTheChartWithTheStick(TwinRig& _rig)
   {
     std::uint16_t position = 0;
     _rig.Both([&](Elite::Platform&, Elite::GameState& _state)
-              { position = Elite::WordIn(Elite::BytesOf(_state.Data().commander), COMMANDER_STATE_OFFSET(chartCursorX)); });
+              { position = Elite::Join(_state.Data().commander.chartCursorY, _state.Data().commander.chartCursorX); });
     return position;
   };
   attach(50'000, 50'000);

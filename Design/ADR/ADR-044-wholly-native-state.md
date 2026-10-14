@@ -1,6 +1,6 @@
 # ADR-044 — Wholly native, the state: written by name, then free of the 1987 layout
 
-**Status:** accepted 2026-10-14, with the change that implements it, step 1 of Phase 7 ([Reverse-Engineering-Plan.md §5, Phase 7](../Reverse-Engineering-Plan.md#phase-7--wholly-native)), under the owner's rulings D76 and D78. Each later step of 2 to 5 amends it as it lands. **Amended 2026-10-14, step 4:** the start state is set in C++, and nothing loads the 1987 image. **Step 5:** the tables and the state's headers are source, and the image, the symbol table, the partition and the tools that read them go. The steps land in the order 1, 4, 5, 2, 3: once the digest no longer depends on the layout, the generators can go before the layout changes, and steps 2 and 3 are then edits of plain source.
+**Status:** accepted 2026-10-14, with the change that implements it, step 1 of Phase 7 ([Reverse-Engineering-Plan.md §5, Phase 7](../Reverse-Engineering-Plan.md#phase-7--wholly-native)), under the owner's rulings D76 and D78. Each later step of 2 to 5 amends it as it lands. **Amended 2026-10-14, step 4:** the start state is set in C++, and nothing loads the 1987 image. **Step 5:** the tables and the state's headers are source, and the image, the symbol table, the partition and the tools that read them go. **Step 2:** no struct of the state, and no run of its members, is read or written as bytes. The steps land in the order 1, 4, 5, 2, 3: once the digest no longer depends on the layout, the generators can go before the layout changes, and steps 2 and 3 are then edits of plain source.
 
 ## Context
 
@@ -51,6 +51,23 @@ While the structs lay their members out as the 1987 data segment did, the state 
 |---|---|
 | The suite | `GameLogicTests` passes under g++, 186 tests, the corpus's digests among them, with no re-base |
 | What is left of the image | no file of `GameLogic`, `Tests`, `Outpost`, `Engine`, `Tools` or `Build` names the image, the symbol table, the partition or a tool that read them; the checkers are clean |
+
+## Decision, step 2: no bytes of the state
+
+1. **Every struct the 1987 layout cut into gaps and fields is a record or an array** of what it holds, its members in the same order: one `SystemRecord` for the current, the selected and the hyperspace target's system, which an arrival and the countdown copy whole; the hold as 17 lots of held and on sale, then the refugees and the tonnes in use; the credits one double word (`Field<std::uint32_t>`); the screen prices, the chart items, the stardust, the stored sines and cosines and the circle's points records of words; the vertex buffer 126 words; the behaviour classes' counts, the keys held, the market's random state, the distance digits and the texts arrays. The keys are named by scan code (`Keys`).
+2. **No run of members is read as one**: the cash's text holds its NUL, the selected name its ninth byte; the equipment items are a table of member pointers (`EQUIPMENT_ITEMS`), which the shipyard's rows, the status screen and the equipment loss index; the dashboard's cache is set member by member; the status screen's title is read from the rank on, member by member, to its NUL.
+3. **Whole records are copied and cleared by their members** (`CopyMembers`, `ZeroMembers`, `StateWriter.h`): the slots, the system records, the commander and its startup copy; a missile launched past a buffer is read from the bytes there as a record's members.
+4. **What remains bytes is bytes**: texts and buffers are arrays of bytes, `BytesOf` takes nothing else, and `BytesThrough`, the offset macros, their static_asserts and `GameState::DataBytes` go. The vertex buffer is still reached at the blueprints' byte offsets, which are even (`TableTests`); the drawing buffer and video memory stay CGA's (D76); the DOS transfer area goes with `DosFiles` at step 7; the constant tables read as words are not the state, and stay for a later step.
+
+The members keep their order and their widths, so the state written by its members, every digest and the commander file are what they were.
+
+### Measured 2026-10-14, step 2
+
+| Check | Result |
+|---|---|
+| The suite | `GameLogicTests` passes under g++, 186 tests, the corpus's digests, pictures, outcomes and answers among them and the start hash, with no re-base |
+| What is left | no `BytesOf` of anything but a byte array, no `BytesThrough`, no `GAME_DATA_OFFSET`, `COMMANDER_STATE_OFFSET` or `SPACE_OBJECT_OFFSET`; the checkers are clean |
+| Not run here | the MSVC build and the game: CI builds and runs the tests |
 
 ## What this forecloses
 

@@ -16,8 +16,34 @@ struct MathsState
   MathsState() noexcept = default;
   explicit MathsState(const MathsState&) noexcept = default;
 
-  /// word sin, word cos; filled by the entries 2421/2426/242B/2430/2435/243B/2441/244D/2447 (one each), used by the rotations 2453..249D...
-  Field<std::uint8_t> rotationSinCos[9][4];
+  /// A rotation's sine and cosine.
+  struct StoredSinCos
+  {
+    StoredSinCos() noexcept = default;
+    explicit StoredSinCos(const StoredSinCos&) noexcept = default;
+
+    Field<std::uint16_t> sine;
+    Field<std::uint16_t> cosine;
+
+    /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+    template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+    {
+      _visitor("sine", _self.sine);
+      _visitor("cosine", _self.cosine);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor)
+    {
+      VisitMembers(*this, _visitor);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor) const
+    {
+      VisitMembers(*this, _visitor);
+    }
+  };
+  /// filled by the entries 2421/2426/242B/2430/2435/243B/2441/244D/2447 (one each), used by the rotations 2453..249D...
+  StoredSinCos rotationSinCos[9];
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)

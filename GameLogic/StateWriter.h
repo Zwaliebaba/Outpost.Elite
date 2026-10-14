@@ -132,21 +132,35 @@ private:
   std::size_t m_at = 0;
 };
 
-/// _value, a struct of the state or a SpaceObject, written member by member.
+/// _value, a struct of the state, a SpaceObject, an array of them or a member, written member by member.
 template <typename T> [[nodiscard]] std::vector<std::uint8_t> StateBytes(const T& _value)
 {
   StateWriter writer;
-  _value.Visit(writer);
+  writer({}, _value);
   return {writer.Bytes().begin(), writer.Bytes().end()};
 }
 
-/// _value, a struct of the state or a SpaceObject, read member by member from _bytes, which must hold at least as many as it
-/// writes. Returns how many it read.
+/// _value, a struct of the state, a SpaceObject, an array of them or a member, read member by member from _bytes, which must hold
+/// at least as many as it writes. Returns how many it read.
 template <typename T> std::size_t ReadStateBytes(T& _value, std::span<const std::uint8_t> _bytes)
 {
   StateReader reader(_bytes);
-  _value.Visit(reader);
+  reader({}, _value);
   return reader.Count();
+}
+
+/// _to's members set to _from's, a struct of the state, a SpaceObject or an array of them: a copy by the members, whatever their
+/// layout. Field's rules make every copy of the state explicit, and this is the explicit copy of a whole struct.
+template <typename T> void CopyMembers(T& _to, const T& _from)
+{
+  (void)ReadStateBytes(_to, StateBytes(_from));
+}
+
+/// _value's members each set to 0, a struct of the state, a SpaceObject or an array of them.
+template <typename T> void ZeroMembers(T& _value)
+{
+  const std::vector<std::uint8_t> zeros(StateBytes(_value).size());
+  (void)ReadStateBytes(_value, zeros);
 }
 
 } // namespace Elite

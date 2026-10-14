@@ -10,6 +10,7 @@
 #include "SaveLoad.h"
 #include "SharedTables.h"
 #include "StartUpTables.h"
+#include "StateWriter.h"
 #include "Text.h"
 #include "Timer.h"
 #include "Video.h"
@@ -113,14 +114,9 @@ void CheckCheatArgument(GameState& _state, const Hardware& _hardware)
 
 void StartNewGame(GameState& _state)
 {
-  // REP MOVSB from DS to ES = DS, a byte at a time: startupCommander's bytes into commanderBlock's, upwards, as the direction flag is clear
-  // wherever the game calls it: the only STD, MaskOutsideTunnel's, has its CLD before the routine returns (change 3c).
-  const std::span<Field<std::uint8_t>> to = BytesOf(_state.Data().commander);
-  const std::span<const Field<std::uint8_t>> from(std::as_const(_state).Data().saveLoad.startupCommander);
-  for (std::size_t index = 0; index < COMMANDER_FILE_BYTES; ++index)
-  {
-    to[index] = std::uint8_t{from[index]};
-  }
+  // REP MOVSB from DS to ES = DS, a byte at a time: startupCommander into commanderBlock, the whole record, as the direction flag is
+  // clear wherever the game calls it: the only STD, MaskOutsideTunnel's, has its CLD before the routine returns (change 3c).
+  CopyMembers(_state.Data().commander, _state.Data().saveLoad.startupCommander);
   _state.Data().commander.witchspaceCountdown = 0;
   _state.Data().playerShip.playerEnergy = NEW_GAME_ENERGY;
   _state.Data().playerShip.foreShield = FULL_SHIELD;

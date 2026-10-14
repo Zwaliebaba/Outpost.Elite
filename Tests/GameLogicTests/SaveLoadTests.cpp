@@ -223,18 +223,17 @@ public:
         commander.chartCursorY = 0xC0;
         commander.shortRangeCursorY = 0x90;
         commander.galacticCursorY = 0xFF;
-        commander.currentGovernment = 9;
-        commander.currentEconomy = 0xFF;
-        commander.selectedGovernment = 8;
-        commander.selectedEconomy = 0x80;
+        commander.currentSystem.government = 9;
+        commander.currentSystem.economy = 0xFF;
+        commander.selectedSystem.government = 8;
+        commander.selectedSystem.economy = 0x80;
         commander.missileCount = 9;
         commander.killCount = 0xFF;
         for (Elite::Field<std::uint8_t>& letter : commander.defaultCommanderName)
           letter = 'A';
-        Elite::SetWordIn(Elite::BytesOf(commander.creditsTenths), 0, 1234);
+        commander.creditsTenths = 1234;
         for (Elite::Field<std::uint8_t>& character : commander.creditBalanceText)
           character = 'X';
-        commander.gap759A[0] = 'Y';
         Elite::PerformDiskRequest(state, rig.Native(), SAVE_COMMANDER, 0);
         Elite::PerformDiskRequest(state, rig.Native(), LOAD_COMMANDER, 0);
       });
@@ -247,16 +246,16 @@ public:
     Assert::AreEqual(0x7Fu, std::uint32_t{commander.chartCursorY});
     Assert::AreEqual(0x7Fu, std::uint32_t{commander.shortRangeCursorY});
     Assert::AreEqual(0x7Fu, std::uint32_t{commander.galacticCursorY});
-    Assert::AreEqual(7u, std::uint32_t{commander.currentGovernment}, L"the eighth government at most");
-    Assert::AreEqual(7u, std::uint32_t{commander.currentEconomy}, L"the eighth economy at most");
-    Assert::AreEqual(7u, std::uint32_t{commander.selectedGovernment});
-    Assert::AreEqual(7u, std::uint32_t{commander.selectedEconomy});
+    Assert::AreEqual(7u, std::uint32_t{commander.currentSystem.government}, L"the eighth government at most");
+    Assert::AreEqual(7u, std::uint32_t{commander.currentSystem.economy}, L"the eighth economy at most");
+    Assert::AreEqual(7u, std::uint32_t{commander.selectedSystem.government});
+    Assert::AreEqual(7u, std::uint32_t{commander.selectedSystem.economy});
     Assert::AreEqual(4u, std::uint32_t{commander.missileCount}, L"four missiles at most");
     Assert::AreEqual(0xFEu, std::uint32_t{commander.killCount}, L"the kills CreditKill stops at");
     Assert::AreEqual(std::uint32_t{'A'}, std::uint32_t{commander.defaultCommanderName[7]}, L"the name's eight letters kept");
     Assert::AreEqual(0u, std::uint32_t{commander.defaultCommanderName[8]}, L"and its NUL after them");
-    Assert::AreEqual(0u, std::uint32_t{commander.gap759A[0]}, L"the cash's text's NUL");
-    const std::string_view cash = Elite::TextWithin(Elite::BytesThrough(commander.creditBalanceText, commander.gap759A), 0);
+    Assert::AreEqual(0u, std::uint32_t{commander.creditBalanceText[19]}, L"the cash's text's NUL");
+    const std::string_view cash = Elite::TextWithin(commander.creditBalanceText, 0);
     Assert::IsTrue(cash == "      123.4 Credits", L"the cash's text is the cash's");
   }
 };

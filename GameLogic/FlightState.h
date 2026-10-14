@@ -18,10 +18,43 @@ struct FlightState
   FlightState() noexcept = default;
   explicit FlightState(const FlightState&) noexcept = default;
 
-  /// 6-byte particle; +0 x, +2 y (signed words, on screen while the high bytes are -0x20..0x1F and -0x10..0x0F), +4 byte 0x28-0x47 (the...
-  Field<std::uint8_t> stardust[30][6];
-  /// 6-byte particle; stardust+0xB4: start-of-frame copy for streaks; +5 is 1 for a particle respawned this frame
-  Field<std::uint8_t> stardustPrevious[30][6];
+  /// A particle of stardust.
+  struct DustParticle
+  {
+    DustParticle() noexcept = default;
+    explicit DustParticle(const DustParticle&) noexcept = default;
+
+    /// signed words, on screen while the high bytes are -0x20..0x1F and -0x10..0x0F
+    Field<std::uint16_t> x;
+    Field<std::uint16_t> y;
+    /// 0x28-0x47, frames left
+    Field<std::uint8_t> lifetime;
+    /// in stardustPrevious, 1 for a particle respawned this frame
+    Field<std::uint8_t> respawned;
+
+    /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
+    template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
+    {
+      _visitor("x", _self.x);
+      _visitor("y", _self.y);
+      _visitor("lifetime", _self.lifetime);
+      _visitor("respawned", _self.respawned);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor)
+    {
+      VisitMembers(*this, _visitor);
+    }
+
+    template <typename Visitor> void Visit(Visitor& _visitor) const
+    {
+      VisitMembers(*this, _visitor);
+    }
+  };
+  /// the stardust's particles
+  DustParticle stardust[30];
+  /// their start-of-frame copy, for the streaks
+  DustParticle stardustPrevious[30];
   /// written by ComputeStardustShift; 4 at full playerSpeed
   Field<std::uint8_t> stardustShift;
   /// HandleFlightFunctionKeys: a screen replaced the cockpit, so it must be restored
@@ -66,7 +99,7 @@ struct FlightState
   Field<std::uint8_t> playerDocked;
   /// bit 0: inside the station's safe zone (UpdateSafeZone)
   Field<std::uint8_t> safeZoneFlags;
-  /// currentGovernment on arrival (0x2B56), 0 in witch space (0x2A51); spawn limits and the station handler use it
+  /// currentSystem.government on arrival (0x2B56), 0 in witch space (0x2A51); spawn limits and the station handler use it
   Field<std::uint8_t> spawnGovernment;
   /// text of the active warning
   Field<Message> warningMessage;
@@ -78,7 +111,7 @@ struct FlightState
   Field<std::uint8_t> debrisSlotCount;
   /// UpdateCompass; TransformAndDrawObjects classifies the station only when 1
   Field<std::uint8_t> compassTargetIsStation;
-  /// selectedDistanceTenthsLy*36/10 (at least 1), set when H starts the countdown; taken from fuel on arrival (4720)
+  /// selectedSystem.distanceTenthsLy*36/10 (at least 1), set when H starts the countdown; taken from fuel on arrival (4720)
   Field<std::uint8_t> hyperspaceFuelCost;
   /// negated new pitch angle while UpdatePlayerMotion re-derives the orientation
   Field<std::uint16_t> pitchAngleScratch;
@@ -96,36 +129,8 @@ struct FlightState
   Field<std::uint8_t> shipIdRequested;
   /// 40 at death; RunFlight keeps running frames until it reaches 0
   Field<std::uint8_t> gameOverFrames;
-  /// frameRateKeyLabel's fields, DS:ABFF-AC01 in 1987, at their places there.
-  struct FrameRateKeyLabel
-  {
-    FrameRateKeyLabel() noexcept = default;
-    explicit FrameRateKeyLabel(const FrameRateKeyLabel&) noexcept = default;
-
-    Field<std::uint8_t> gapABFF[1];
-    Field<std::uint8_t> dataAC00;
-    Field<std::uint8_t> dataAC01;
-
-    /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
-    template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
-    {
-      _visitor("gapABFF", _self.gapABFF);
-      _visitor("dataAC00", _self.dataAC00);
-      _visitor("dataAC01", _self.dataAC01);
-    }
-
-    template <typename Visitor> void Visit(Visitor& _visitor)
-    {
-      VisitMembers(*this, _visitor);
-    }
-
-    template <typename Visitor> void Visit(Visitor& _visitor) const
-    {
-      VisitMembers(*this, _visitor);
-    }
-  };
   /// the '8) ' of '(F8) ' at the end of the pause menu's frame-rate line; rewritten by F1-F10
-  FrameRateKeyLabel frameRateKeyLabel;
+  Field<std::uint8_t> frameRateKeyLabel[3];
   /// pause option R, 'Keyboard Recentre', 1 in the file: a key against the current rate zeroes it first. First of five (value, letter) r...
   Field<std::uint8_t> keyboardRecenter;
   /// pause option D, 'Keyboard Damping', 1 in the file: an idle axis decays 3 a frame toward 0

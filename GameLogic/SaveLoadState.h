@@ -1,6 +1,7 @@
 // GameLogic/SaveLoadState.h
 #pragma once
 
+#include "CommanderState.h"
 #include "Field.h"
 
 #include <cstdint>
@@ -27,7 +28,7 @@ struct SaveLoadState
   /// write pointer into commanderFileList
   Field<std::uint16_t> commanderFileListNext;
   /// copy of commanderBlock taken by SaveStartupCommander
-  Field<std::uint8_t> startupCommander[208];
+  CommanderState startupCommander;
   /// '12345678.CDR' template; load, save and delete use it
   Field<std::uint8_t> commanderFileName[13];
   /// 1 after Esc, J, A: the Amstrad joystick, whose moves arrive as scan codes 0x77-0x7C; ReadSteering tests it at 0x7607

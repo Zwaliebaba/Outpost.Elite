@@ -129,13 +129,13 @@ std::uint16_t SelectSystemAtCursor(GameState& _state, std::uint16_t _countIfNone
 void DescribeSystem(GameState& _state);
 
 /// FindNearestSystem (CS:1292): the system nearest the chart cursor, by dx^2 + (dy/2)^2 in chart units, of those on the
-/// current chart: its index into selectedSystemIndex, its seeds into systemSeed0-2, and the cursor onto it. A distance whose
+/// current chart: its index into selectedSystem.index, its seeds into systemSeed0-2, and the cursor onto it. A distance whose
 /// sum carries is passed over. The index is 100h less the count the original's loop had left at the system, or, when no system
 /// is on the chart, less _countIfNone, what the original finds in BP. Returns the index.
 std::uint8_t FindNearestSystem(GameState& _state, std::uint16_t _countIfNone);
 
 /// ComputeDistanceToSystem (CS:12F9): the distance from the current system to the one in systemSeeds, in
-/// tenths of a light year: four times the root of dx^2 + (dy/2)^2. It writes selectedDistanceTenthsLy.
+/// tenths of a light year: four times the root of dx^2 + (dy/2)^2. It writes selectedSystem.distanceTenthsLy.
 void ComputeDistanceToSystem(GameState& _state);
 
 /// ShowNearestSystemDistance (CS:1341): the system nearest the chart cursor selected (FindNearestSystem, with
@@ -149,7 +149,7 @@ void LoadSystemSeeds(GameState& _state, std::uint8_t _system);
 /// AdvanceToNextSystem (CS:13B4): four TwistSystemSeeds, the seeds of the next system.
 void AdvanceToNextSystem(GameState& _state);
 
-/// GenerateSystemName (CS:13C1): selectedSystemName and its length from systemSeed0-2, leaving the seeds on the next
+/// GenerateSystemName (CS:13C1): selectedSystem.name and its length from systemSeed0-2, leaving the seeds on the next
 /// system. Returns the length.
 std::uint8_t GenerateSystemName(GameState& _state);
 
@@ -197,7 +197,7 @@ void AddChartLabel(GameState& _state, ChartSpan _x, ChartSpan _rows);
 /// ClearChartTextLines (CS:15BC): blankChartLine drawn in _ink at _segment over the two text lines under a chart.
 void ClearChartTextLines(GameState& _state, std::uint16_t _ink, std::uint16_t _segment);
 
-/// TerminateSelectedSystemName (CS:60EB): a NUL after selectedSystemName.
+/// TerminateSelectedSystemName (CS:60EB): a NUL after selectedSystem.name.
 void TerminateSelectedSystemName(GameState& _state);
 
 /// FormatSelectedSystemDistance (CS:60F7): the distance digits with a decimal point, copied into selectedDistanceText, ending at
@@ -225,7 +225,7 @@ std::uint16_t InsertSystemName(GameState& _state, std::uint16_t _output);
 std::uint16_t InsertSystemAdjective(GameState& _state, std::uint16_t _output);
 
 /// InsertRandomName (CS:70C1): control code 3, a name GenerateSystemName makes from descriptionSeed0-1, expanded into
-/// descriptionBuffer from its byte _output; selectedSystemName's eight bytes are kept in invasionDebriefText meanwhile (at DS:9650
+/// descriptionBuffer from its byte _output; selectedSystem.name's eight bytes are kept in invasionDebriefText meanwhile (at DS:9650
 /// in 1987) and put back, its length not. Returns the place past the last character written.
 std::uint16_t InsertRandomName(GameState& _state, std::uint16_t _output);
 
@@ -241,7 +241,7 @@ void StopCapitalizing(GameState& _state);
 /// NextDescriptionRandom (CS:7115): the Fibonacci step on descriptionSeed0-1, (a, b) to (b, a+b), and a+b.
 std::uint16_t NextDescriptionRandom(GameState& _state);
 
-/// CopySelectedNameLower (CS:7124): selectedSystemName, terminated, into descriptionNameBuffer, all but its first
+/// CopySelectedNameLower (CS:7124): selectedSystem.name, terminated, into descriptionNameBuffer, all but its first
 /// letter lower-cased, then a space and a NUL. Returns the index of the space in descriptionNameBuffer.
 std::size_t CopySelectedNameLower(GameState& _state);
 

@@ -15,8 +15,6 @@ namespace Elite
 namespace
 {
 
-// The commodities of cargoHold: entry 17, the last, holds refugeesTonnes and cargoUsedTonnes instead.
-constexpr std::size_t COMMODITIES = 17;
 // The slots of shipSlots: the sun and planet, the station, the ships and the debris.
 constexpr auto SHIP_SLOTS = static_cast<std::size_t>(SlotIndex::End);
 constexpr char FIRST_PRINTABLE = '!';
@@ -31,10 +29,9 @@ constexpr char LAST_PRINTABLE = '~';
 [[nodiscard]] std::string Cargo(const GameState& _state)
 {
   std::string cargo;
-  for (std::size_t commodity = 0; commodity < COMMODITIES; ++commodity)
+  for (const CommanderState::CargoHold::Lot& lot : _state.Data().commander.cargoHold.lots)
   {
-    cargo +=
-      (commodity == 0 ? "" : ",") + Number(BytesWithin(BytesOf(_state.Data().commander.cargoHold), 0, COMMODITIES * 2)[commodity * 2]);
+    cargo += (cargo.empty() ? "" : ",") + Number(lot.held);
   }
   return cargo;
 }
@@ -135,17 +132,12 @@ std::optional<std::string> OutcomeValue(const GameState& _state, std::string_vie
   };
   static constexpr auto SOURCES = std::to_array<Source>({
     {"galaxy", [](const GameState& _game) { return Number(_game.Data().commander.galaxyNumber); }},
-    {"system", [](const GameState& _game) { return Number(_game.Data().commander.currentSystemIndex); }},
+    {"system", [](const GameState& _game) { return Number(_game.Data().commander.currentSystem.index); }},
     {"witchSpace", [](const GameState& _game) { return Number(_game.Data().commander.witchspaceCountdown); }},
     {"docked", [](const GameState& _game) { return Number(_game.Data().flight.playerDocked); }},
     {"inFlight", [](const GameState& _game) { return Number(_game.Data().flow.inFlight); }},
     {"dead", [](const GameState& _game) { return Number(_game.Data().playerShip.playerDead); }},
-    {"creditsTenths",
-     [](const GameState& _game)
-     {
-       const CommanderState& commander = _game.Data().commander;
-       return Number(WordIn(BytesOf(commander.creditsTenths), 0) | (std::uint32_t{commander.creditsTenths.data75F5} << 16));
-     }},
+    {"creditsTenths", [](const GameState& _game) { return Number(_game.Data().commander.creditsTenths); }},
     {"legalStatus", [](const GameState& _game) { return Number(_game.Data().commander.legalStatus); }},
     {"kills", [](const GameState& _game) { return Number(_game.Data().commander.killCount); }},
     {"title", &Title},

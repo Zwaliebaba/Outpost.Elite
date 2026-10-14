@@ -105,12 +105,6 @@ public:
     SetVideoByte(static_cast<std::uint16_t>(_offset + 1), static_cast<std::uint8_t>(_value >> 8));
   }
 
-  /// GameData's bytes, the game's state: what the state digest hashes (StateDigest.h).
-  [[nodiscard]] std::span<const std::uint8_t, sizeof(GameData)> DataBytes() const noexcept
-  {
-    return std::span<const std::uint8_t, sizeof(GameData)>(reinterpret_cast<const std::uint8_t*>(m_data.get()), sizeof(GameData));
-  }
-
   /// The CGA's 16 KiB of video memory.
   [[nodiscard]] Cga::VideoMemory VideoBytes() const noexcept
   {
@@ -123,12 +117,7 @@ private:
 
   /// Takes the game's state as the program starts (SetStartState), with its code segment at _codeSegment and its data segment
   /// DATA_SEGMENT_PARAGRAPH paragraphs on. Video memory is left as it is.
-  void Start(std::uint16_t _codeSegment) noexcept;
-
-  [[nodiscard]] std::span<std::uint8_t, sizeof(GameData)> DataStorage() noexcept
-  {
-    return std::span<std::uint8_t, sizeof(GameData)>(reinterpret_cast<std::uint8_t*>(m_data.get()), sizeof(GameData));
-  }
+  void Start(std::uint16_t _codeSegment);
 
   /// _offset, when it is in video memory; otherwise throws std::out_of_range.
   [[nodiscard]] static std::uint16_t CheckedVideo(std::uint16_t _offset)

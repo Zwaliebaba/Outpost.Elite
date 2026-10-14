@@ -141,7 +141,7 @@ public:
       Elite::GameState& state = rig.State();
       state.Data().commander.galaxyNumber = chart.galaxy;
       Elite::LoadSystemSeeds(state, chart.system);
-      state.Data().commander.currentSystemIndex = chart.system;
+      state.Data().commander.currentSystem.index = chart.system;
       state.Data().commander.currentSystemX = std::uint8_t{Elite::SystemX(state)};
       state.Data().commander.currentSystemChartY = static_cast<std::uint8_t>(Elite::SystemY(state) >> 1);
       play("key F6; wait 0.5");

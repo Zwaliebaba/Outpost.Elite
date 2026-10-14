@@ -18,35 +18,9 @@ struct SceneState
 
   /// written by DrawVisibleFaces (0x3B38) from faceFillPatterns, read by DrawStackedSpansFromRow (0x1CDD): low byte on even rows, high b...
   Field<std::uint16_t> triangleFillPattern;
-  /// vertexBuffer's fields, DS:7230-732B in 1987, at their places there.
-  struct VertexBuffer
-  {
-    VertexBuffer() noexcept = default;
-    explicit VertexBuffer(const VertexBuffer&) noexcept = default;
-
-    Field<std::uint8_t> gap7230[204];
-    /// vertices 34-41 inside vertexBuffer, written by BuildBoxCornerVertices
-    Field<std::uint8_t> boxCornerVertices[48];
-
-    /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
-    template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
-    {
-      _visitor("gap7230", _self.gap7230);
-      _visitor("boxCornerVertices", _self.boxCornerVertices);
-    }
-
-    template <typename Visitor> void Visit(Visitor& _visitor)
-    {
-      VisitMembers(*this, _visitor);
-    }
-
-    template <typename Visitor> void Visit(Visitor& _visitor) const
-    {
-      VisitMembers(*this, _visitor);
-    }
-  };
-  /// 6-byte x,y,z words; model vertices 0-41 in view space; ProjectVertices projects the first projectedVertexCount in place into 4-byte...
-  VertexBuffer vertexBuffer;
+  /// 42 vertices of three words, x, y and z, in view space, 34-41 the box's corners BuildBoxCornerVertices writes; ProjectVertices
+  /// projects the first projectedVertexCount in place into points of two words, x and y
+  Field<std::uint16_t> vertexBuffer[126];
   /// read by ProjectVertices
   Field<std::uint16_t> projectedVertexCount;
   /// blueprint byte +2 (RunBlueprintHandler); 15 to 200; BuildDodoVertices ignores it

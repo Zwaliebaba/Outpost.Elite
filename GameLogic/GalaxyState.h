@@ -24,26 +24,47 @@ struct GalaxyState
   Field<std::uint16_t> systemSeed2;
   /// 'Distance: 100.0 Light Years'; ShowNearestSystemDistance patches the digits at +0x0A-0x0C and +0x0E
   Field<std::uint8_t> distanceText[28];
-  /// distanceDigits's fields, DS:29E4-29E8 in 1987, at their places there.
-  struct DistanceDigits
+  /// FormatDecimal5's five ASCII digits of selectedSystem.distanceTenthsLy: the first blank, then the hundreds, tens, units and
+  /// tenths
+  Field<std::uint8_t> distanceDigits[5];
+  /// FindSystemByName's typed name, 8 characters and a terminator
+  Field<std::uint8_t> findInput[9];
+  /// the name as typed, for the error message
+  Field<std::uint8_t> findInputEcho[9];
+  /// '1' + galaxyNumber
+  Field<std::uint8_t> galacticChartNumber;
+  /// items in chartItems: stars first, then labels added by AddChartLabel
+  Field<std::uint8_t> chartItemCount;
+  /// the next free item of chartItems
+  Field<std::uint16_t> chartItemEnd;
+  /// An item of the short-range chart: an occupied rectangle, a disc or a label, which PlaceChartLabels keeps labels off.
+  struct ChartItem
   {
-    DistanceDigits() noexcept = default;
-    explicit DistanceDigits(const DistanceDigits&) noexcept = default;
+    ChartItem() noexcept = default;
+    explicit ChartItem(const ChartItem&) noexcept = default;
 
-    Field<std::uint8_t> gap29E4[1];
-    Field<std::uint8_t> distanceHundredsDigit;
-    Field<std::uint8_t> distanceTensDigit;
-    Field<std::uint8_t> distanceUnitsDigit;
-    Field<std::uint8_t> distanceTenthsDigit;
+    /// its x range and its rows, each first then last
+    Field<std::uint8_t> xFirst;
+    Field<std::uint8_t> xLast;
+    Field<std::uint8_t> rowsFirst;
+    Field<std::uint8_t> rowsLast;
+    /// a disc's centre, its x then its row; a label's text, its place in pendingChartLabels
+    Field<std::uint16_t> text;
+    /// a disc's radius, which a label leaves as it was
+    Field<std::uint8_t> radius;
+    /// 1 for a label, 0 for a disc
+    Field<std::uint8_t> isLabel;
 
     /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
     template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
     {
-      _visitor("gap29E4", _self.gap29E4);
-      _visitor("distanceHundredsDigit", _self.distanceHundredsDigit);
-      _visitor("distanceTensDigit", _self.distanceTensDigit);
-      _visitor("distanceUnitsDigit", _self.distanceUnitsDigit);
-      _visitor("distanceTenthsDigit", _self.distanceTenthsDigit);
+      _visitor("xFirst", _self.xFirst);
+      _visitor("xLast", _self.xLast);
+      _visitor("rowsFirst", _self.rowsFirst);
+      _visitor("rowsLast", _self.rowsLast);
+      _visitor("text", _self.text);
+      _visitor("radius", _self.radius);
+      _visitor("isLabel", _self.isLabel);
     }
 
     template <typename Visitor> void Visit(Visitor& _visitor)
@@ -56,23 +77,11 @@ struct GalaxyState
       VisitMembers(*this, _visitor);
     }
   };
-  /// FormatDecimal5's five ASCII digits of selectedDistanceTenthsLy
-  DistanceDigits distanceDigits;
-  /// FindSystemByName's typed name, 8 characters and a terminator
-  Field<std::uint8_t> findInput[9];
-  /// the name as typed, for the error message
-  Field<std::uint8_t> findInputEcho[9];
-  /// '1' + galaxyNumber
-  Field<std::uint8_t> galacticChartNumber;
-  /// items in chartItems: stars first, then labels added by AddChartLabel
-  Field<std::uint8_t> chartItemCount;
-  /// address of the next free 8-byte item in chartItems
-  Field<std::uint16_t> chartItemEnd;
-  /// 8 bytes: x min, x max, row min, row max, word centre or text, byte size, byte is-label; the short-range chart's occupied rectangles...
-  Field<std::uint8_t> chartItems[32][8];
+  /// the short-range chart's items: stars first, then labels added by AddChartLabel
+  ChartItem chartItems[32];
   /// next pending label in pendingChartLabels; AddChartLabel moves it past the name
   Field<std::uint16_t> chartLabelCursor;
-  /// records of word x range, word row range, NUL-terminated system name, written by ShowShortRangeChart
+  /// records of an x range and a row range, each first then last, then a NUL-terminated system name, written by ShowShortRangeChart
   Field<std::uint8_t> pendingChartLabels[256];
   /// tries so far for the current label; NudgeChartLabel gives up at 35
   Field<std::uint8_t> labelNudgeCount;

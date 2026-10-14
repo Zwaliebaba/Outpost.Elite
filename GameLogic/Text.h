@@ -12,6 +12,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <type_traits>
 
 namespace Elite
 {
@@ -22,38 +23,23 @@ namespace Elite
 // ── Texts and buffers of the game's state, by member (D38) ──
 //
 // The text and number routines read and write texts and buffers that the original reaches by address. Native code reaches them by
-// member: a member's bytes, the bytes of members that follow one another in their group's struct as they did in the 1987 data
-// segment, where a text or a buffer runs across them, and bytes taken within them, never past their end.
+// member: a text or a buffer is an array of bytes, and bytes are taken within it, never past its end. No struct of the state, and
+// no run of its members, is read or written as bytes (Phase 7, step 2).
 
-/// _member's bytes, a member of GameData at any depth, a record, a word or an array of them, as bytes that count their own changes.
-template <typename Member> [[nodiscard]] std::span<Field<std::uint8_t>, sizeof(Member)> BytesOf(Member& _member) noexcept
+/// _member's bytes, a text or a buffer of the state: an array of bytes.
+template <typename Member>
+  requires (std::rank_v<Member> == 1 && std::is_same_v<std::remove_extent_t<Member>, Field<std::uint8_t>>)
+[[nodiscard]] std::span<Field<std::uint8_t>, sizeof(Member)> BytesOf(Member& _member) noexcept
 {
-  return std::span<Field<std::uint8_t>, sizeof(Member)>(reinterpret_cast<Field<std::uint8_t>*>(&_member), sizeof(Member));
+  return std::span<Field<std::uint8_t>, sizeof(Member)>(&_member[0], sizeof(Member));
 }
 
 /// BytesOf, to read.
-template <typename Member> [[nodiscard]] std::span<const Field<std::uint8_t>, sizeof(Member)> BytesOf(const Member& _member) noexcept
+template <typename Member>
+  requires (std::rank_v<Member> == 1 && std::is_same_v<std::remove_extent_t<Member>, Field<std::uint8_t>>)
+[[nodiscard]] std::span<const Field<std::uint8_t>, sizeof(Member)> BytesOf(const Member& _member) noexcept
 {
-  return std::span<const Field<std::uint8_t>, sizeof(Member)>(reinterpret_cast<const Field<std::uint8_t>*>(&_member), sizeof(Member));
-}
-
-/// The bytes from _first's first to _last's last: members of one of GameData's structs that follow one another there, as they followed
-/// one another in the 1987 data segment, where a text or a buffer the original reaches runs across them. Each use holds them together
-/// with a static_assert on their places in GameData (GAME_DATA_OFFSET).
-template <typename First, typename Last> [[nodiscard]] std::span<Field<std::uint8_t>> BytesThrough(First& _first, Last& _last) noexcept
-{
-  auto* const first = reinterpret_cast<Field<std::uint8_t>*>(&_first);
-  auto* const end = reinterpret_cast<Field<std::uint8_t>*>(&_last) + sizeof(Last);
-  return std::span<Field<std::uint8_t>>(first, static_cast<std::size_t>(end - first));
-}
-
-/// BytesThrough, to read.
-template <typename First, typename Last>
-[[nodiscard]] std::span<const Field<std::uint8_t>> BytesThrough(const First& _first, const Last& _last) noexcept
-{
-  const auto* const first = reinterpret_cast<const Field<std::uint8_t>*>(&_first);
-  const auto* const end = reinterpret_cast<const Field<std::uint8_t>*>(&_last) + sizeof(Last);
-  return std::span<const Field<std::uint8_t>>(first, static_cast<std::size_t>(end - first));
+  return std::span<const Field<std::uint8_t>, sizeof(Member)>(&_member[0], sizeof(Member));
 }
 
 /// Throws the std::out_of_range of _count bytes from _at of a buffer of _bytes: what the original would reach past the buffer's end,
@@ -76,6 +62,13 @@ template <typename Byte, std::size_t Extent>
 template <typename Byte, std::size_t Extent> [[nodiscard]] Byte& ByteWithin(std::span<Byte, Extent> _bytes, std::size_t _at)
 {
   return BytesWithin(_bytes, _at, 1)[0];
+}
+
+/// The element _at of _elements, an array of the state's records, as BytesWithin takes bytes: one past their end throws
+/// std::out_of_range.
+template <typename T, std::size_t Extent> [[nodiscard]] T& ElementWithin(std::span<T, Extent> _elements, std::size_t _at)
+{
+  return BytesWithin(_elements, _at, 1)[0];
 }
 
 /// The text in _bytes from its _at up to its NUL, which must be within them: a NUL past their end throws std::out_of_range, as

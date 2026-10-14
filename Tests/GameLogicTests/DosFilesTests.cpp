@@ -5,6 +5,7 @@
 #include "GameData.h"
 #include "Platform.h"
 #include "ReferenceRig.h"
+#include "StateWriter.h"
 #include "Text.h"
 
 #include <array>
@@ -68,8 +69,8 @@ using Snapshot = std::vector<std::uint8_t>;
 }
 
 /// DOS's file services natively (DosFiles), on the platform of a Game loaded from the reference, called as the game calls
-/// them: on its own members of the game's state, a name up to its NUL in commanderFileName, its commander's bytes and its
-/// transfer area (D38). The bytes of the game's memory each call changes are counted (LastChanges), and AX is checked to be 0 where DOS
+/// them: on its own members of the game's state, a name up to its NUL in commanderFileName and its transfer area (D38), and a
+/// commander's bytes in a block of the rig's own, as the game reads and writes the commander's (SaveLoad.cpp). The bytes of the game's memory each call changes are counted (LastChanges), and AX is checked to be 0 where DOS
 /// left it as it went in; what a test expects of the answers, it states outright. Until D33 each call was also made on the
 /// emulated DOS it replaced (Machine::Dos), and checked to answer alike, to change the same bytes as many times and to leave all
 /// of memory and the store alike: what the test states outright is what both gave.
@@ -81,7 +82,7 @@ public:
   {
   }
 
-  /// The game's own places: the transfer area it sets, where it keeps a file's name, and its commander's bytes.
+  /// The game's own places: the transfer area it sets and where it keeps a file's name; and a block for a commander's bytes.
   [[nodiscard]] Bytes Area() noexcept
   {
     return m_rig.State().Data().saveLoad.diskTransferArea;
@@ -92,9 +93,9 @@ public:
     return m_rig.State().Data().saveLoad.commanderFileName;
   }
 
-  [[nodiscard]] Bytes Block()
+  [[nodiscard]] Bytes Block() noexcept
   {
-    return Elite::BytesWithin(Elite::BytesOf(m_rig.State().Data().commander), 0, BLOCK_BYTES);
+    return m_block;
   }
 
   /// A second transfer area, for a search that is not the game's.
@@ -129,7 +130,7 @@ public:
     return Elite::TextIn(NameBuffer());
   }
 
-  /// 130 'N's in the commander's bytes, with no NUL in DOS's 128: a name that never ends.
+  /// 130 'N's in the block, with no NUL in DOS's 128: a name that never ends.
   std::string_view LongName()
   {
     const Bytes bytes = Block().first(LONG_NAME_BYTES);
@@ -137,7 +138,7 @@ public:
     return Elite::TextIn(bytes);
   }
 
-  /// The commander's first _bytes as DOS writes them out.
+  /// The block's first _bytes as DOS writes them out.
   [[nodiscard]] std::span<const std::uint8_t> BlockBytes(std::size_t _bytes)
   {
     const Bytes block = Block();
@@ -314,12 +315,16 @@ public:
     return m_lastChanges;
   }
 
-  /// The game's memory now: GameData's bytes, then video memory's.
+  /// The game's memory now: GameData as its members write it, then video memory's bytes, then the block's.
   [[nodiscard]] Snapshot Memory() const
   {
     const Elite::GameState& state = m_rig.State();
-    Snapshot bytes(state.DataBytes().begin(), state.DataBytes().end());
+    Snapshot bytes = Elite::StateBytes(state.Data());
     bytes.insert(bytes.end(), state.VideoBytes().begin(), state.VideoBytes().end());
+    for (const Elite::Field<std::uint8_t>& byte : m_block)
+    {
+      bytes.push_back(byte);
+    }
     return bytes;
   }
 
@@ -352,6 +357,8 @@ private:
   }
 
   ReferenceRig m_rig;
+  /// A buffer of a commander's size, which the reads and writes go through.
+  std::array<Elite::Field<std::uint8_t>, BLOCK_BYTES> m_block{};
   std::uint64_t m_lastChanges = 0;
 };
 

@@ -220,6 +220,7 @@ void ShowMessage(GameState& _state, bool _backwards)
 
 // The digits FormatDecimal5 writes and the point after them in a number's text, from its first digit.
 constexpr std::size_t NUMBER_BYTES = 6;
+constexpr std::size_t TENTHS_DIGIT = 4; // priceText's tenths digit, which moves right for the point
 
 } // namespace
 
@@ -370,8 +371,7 @@ void FormatCredits(GameState& _state)
 {
   CommanderState& commander = _state.Data().commander;
   Field<std::uint8_t>(&text)[sizeof(commander.creditBalanceText)] = commander.creditBalanceText;
-  // The low word, the record's first two bytes, then the high word.
-  std::uint32_t value = WordIn(commander.creditsTenths.gap75F3, 0) | (std::uint32_t{commander.creditsTenths.data75F5} << 16);
+  std::uint32_t value = commander.creditsTenths;
   std::size_t digit = 0;
   for (const std::array<std::uint8_t, 4>& divisorBytes : DECIMAL_DIVISORS_32)
   {
@@ -552,12 +552,13 @@ void PrintCountedTextLines(GameState& _state, std::span<const std::string_view> 
 
 void FormatTenths(GameState& _state, std::uint16_t _tenths)
 {
-  const std::span<Field<std::uint8_t>> digits = BytesOf(_state.Data().menus.priceText).first(NUMBER_BYTES);
+  Field<std::uint8_t>(&text)[7] = _state.Data().menus.priceText;
+  const std::span<Field<std::uint8_t>> digits = std::span(text).first(NUMBER_BYTES);
   FormatDecimal5(_tenths, digits);
   BlankLeadingZeros(digits, TENTHS_BLANKS);
   // The tenths digit moves right, and the point takes its place, a byte at a time.
-  _state.Data().menus.priceText.data8041 = std::uint8_t{_state.Data().menus.priceText.data8040};
-  _state.Data().menus.priceText.data8040 = '.';
+  text[TENTHS_DIGIT + 1] = std::uint8_t{text[TENTHS_DIGIT]};
+  text[TENTHS_DIGIT] = '.';
 }
 
 void PrintTextLines(GameState& _state, std::span<const std::string_view> _lines, std::uint16_t _cell)

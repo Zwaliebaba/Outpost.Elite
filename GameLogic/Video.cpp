@@ -80,6 +80,7 @@ constexpr std::uint8_t CHART_LINE_PAIRS = 0x40;
 
 constexpr std::uint8_t FIRST_DIGIT = '0';
 constexpr std::uint8_t PAST_DIGITS = ':';               // the character after '9'
+constexpr std::size_t SCREENSHOT_NAME_DIGITS = 5;       // a screenshot's name's digits, after its 'elite'
 constexpr std::uint16_t TEXT_PAGE_BYTES = 0x07D0;       // 40x25 cells of character and attribute
 constexpr std::uint16_t GRAPHICS_SCREEN_BYTES = 0x3F40; // both of mode 4's banks, the gap between them included
 
@@ -88,8 +89,7 @@ constexpr std::uint16_t SMALL_DISC_ROWS = 4;
 constexpr std::uint8_t CLIP_SPRITE_LEFT = 0x55;  // only the sprite's right byte is drawn
 constexpr std::uint8_t CLIP_SPRITE_RIGHT = 0xAA; // only its left byte is drawn
 constexpr std::uint16_t CIRCLE_CHORDS = 32;
-constexpr std::size_t CIRCLE_POINT_BYTES = 4;
-static_assert(sizeof(VideoState::CirclePoints) == std::size_t{CIRCLE_CHORDS} * CIRCLE_POINT_BYTES, "circlePoints holds the 32 points");
+static_assert(std::size(VideoState{}.circlePoints) == CIRCLE_CHORDS, "circlePoints holds the 32 points");
 
 // The drawing buffer, DS:0000-1FFF as in 1987: a row, the space view's 126, and a row.
 static_assert(sizeof(DrawingState::drawingBuffer) == DRAWING_BUFFER_BYTES);
@@ -1341,13 +1341,19 @@ void WriteScreenshotFile(GameState& _state, Hardware& _hardware)
     }
   }
   _state.Data().video.screenshotNumber = digits;
-  _state.Data().video.screenshotTextFileName.screenshotTextFileDigits = digits;
-  _state.Data().video.screenshotGraphicsFileName.screenshotGraphicsFileDigits = digits;
+  // The two digits into both names, after their 'elite'.
+  const auto writeDigits = [digits](Field<std::uint8_t>(&_name)[11])
+  {
+    _name[SCREENSHOT_NAME_DIGITS] = Low(digits);
+    _name[SCREENSHOT_NAME_DIGITS + 1] = High(digits);
+  };
+  writeDigits(_state.Data().video.screenshotTextFileName);
+  writeDigits(_state.Data().video.screenshotGraphicsFileName);
   // eliteNN.lo for the text page, eliteNN.hi for the graphics screen: DS:DX the name, up to the NUL each ends with, which
   // nothing writes.
   const std::string_view name = (_state.Data().drawing.screenLayout & TEXT_LAYOUT_BIT) != 0
-                                  ? TextIn(BytesOf(_state.Data().video.screenshotTextFileName))
-                                  : TextIn(BytesOf(_state.Data().video.screenshotGraphicsFileName));
+                                  ? TextIn(_state.Data().video.screenshotTextFileName)
+                                  : TextIn(_state.Data().video.screenshotGraphicsFileName);
   const DosAnswer created = _hardware.CreateFile(name, 0);
   if (created.failed)
   {
@@ -1667,65 +1673,46 @@ void FillSpan(GameState& _state, std::uint8_t _left, std::uint8_t _right, std::u
 
 void DrawCircle(GameState& _state, std::uint8_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow)
 {
-  // circlePoints: 32 points of four bytes, x and row words; each loop holds a point as the byte it starts at.
-  const std::span<Field<std::uint8_t>> points = BytesOf(_state.Data().video.circlePoints);
+  // circlePoints: 32 points, x and row.
+  const std::span<VideoState::CirclePoint> points(_state.Data().video.circlePoints);
   // PUSH CX / PUSH DX keep the centre. The first octant, circleOctant's eight bytes scaled by the radius / 128 (MUL BL / SHL AX,1 /
-  // MOV AL,AH), a byte of 0 staying 0, as four points of words.
+  // MOV AL,AH), a byte of 0 staying 0, as four points, x then row.
   const std::span<const std::uint8_t> octant(CIRCLE_OCTANT);
-  std::size_t point = 0;
   for (std::size_t octantByte = 0; octantByte != 8; ++octantByte)
   {
     const std::uint8_t unit = octant[octantByte];
     const std::uint8_t scaled = unit == 0 ? std::uint8_t{0} : High(static_cast<std::uint16_t>((unit * _radius) << 1));
-    SetWordIn(points, point, scaled);
-    point += 2;
+    VideoState::CirclePoint& point = points[octantByte / 2];
+    (octantByte % 2 == 0 ? point.x : point.row) = scaled;
   }
   // The second octant mirrors the first across the diagonal, from its last point back.
-  std::size_t from = 0;
-  std::size_t to = 7 * CIRCLE_POINT_BYTES;
-  for (std::uint16_t left = 4; left != 0; --left)
+  for (std::size_t from = 0, to = 7; from != 4; ++from, --to)
   {
-    SetWordIn(points, to + 2, WordIn(points, from));
-    SetWordIn(points, to, WordIn(points, from + 2));
-    from += CIRCLE_POINT_BYTES;
-    to -= CIRCLE_POINT_BYTES;
+    points[to].row = std::uint16_t{points[from].x};
+    points[to].x = std::uint16_t{points[from].row};
   }
   // The next quarter turns the first by 90 degrees, and the half after that by 180.
-  from = 0;
-  to = 8 * CIRCLE_POINT_BYTES;
-  for (std::uint16_t left = 8; left != 0; --left)
+  for (std::size_t from = 0; from != 8; ++from)
   {
-    SetWordIn(points, to + 2, WordIn(points, from));
-    SetWordIn(points, to, Negate(WordIn(points, from + 2)));
-    from += CIRCLE_POINT_BYTES;
-    to += CIRCLE_POINT_BYTES;
+    points[from + 8].row = std::uint16_t{points[from].x};
+    points[from + 8].x = Negate(std::uint16_t{points[from].row});
   }
-  from = 0;
-  to = 16 * CIRCLE_POINT_BYTES;
-  for (std::uint16_t left = 16; left != 0; --left)
+  for (std::size_t from = 0; from != 16; ++from)
   {
-    SetWordIn(points, to, Negate(WordIn(points, from)));
-    SetWordIn(points, to + 2, Negate(WordIn(points, from + 2)));
-    from += CIRCLE_POINT_BYTES;
-    to += CIRCLE_POINT_BYTES;
+    points[from + 16].x = Negate(std::uint16_t{points[from].x});
+    points[from + 16].row = Negate(std::uint16_t{points[from].row});
   }
   // POP BX / POP AX: every point moved to the centre.
-  point = 0;
-  for (std::uint16_t left = CIRCLE_CHORDS; left != 0; --left)
+  for (VideoState::CirclePoint& point : points)
   {
-    SetWordIn(points, point, Offset(WordIn(points, point), _centerX));
-    SetWordIn(points, point + 2, Offset(WordIn(points, point + 2), _centerRow));
-    point += CIRCLE_POINT_BYTES;
+    point.x = Offset(std::uint16_t{point.x}, _centerX);
+    point.row = Offset(std::uint16_t{point.row}, _centerRow);
   }
   // The chord from the last point to the first, then each to the next, x and row each.
-  const std::size_t last = (CIRCLE_CHORDS - 1) * CIRCLE_POINT_BYTES;
-  (void)DrawClippedLine(_state, WordIn(points, last), WordIn(points, last + 2), WordIn(points, 0),
-                        _state.Data().video.circlePoints.data2EFE);
-  point = 0;
-  for (std::uint16_t chords = CIRCLE_CHORDS - 1; chords != 0; --chords)
+  (void)DrawClippedLine(_state, points[CIRCLE_CHORDS - 1].x, points[CIRCLE_CHORDS - 1].row, points[0].x, points[0].row);
+  for (std::size_t chord = 0; chord + 1 != CIRCLE_CHORDS; ++chord)
   {
-    (void)DrawClippedLine(_state, WordIn(points, point + 4), WordIn(points, point + 6), WordIn(points, point), WordIn(points, point + 2));
-    point += CIRCLE_POINT_BYTES;
+    (void)DrawClippedLine(_state, points[chord + 1].x, points[chord + 1].row, points[chord].x, points[chord].row);
   }
 }
 
