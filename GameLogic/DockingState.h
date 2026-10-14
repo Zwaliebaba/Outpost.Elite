@@ -3,7 +3,7 @@
 // them and run the tool again (D38).
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 
 #include <cstdint>
 #include <type_traits>
@@ -12,21 +12,20 @@ namespace Elite
 {
 
 /// What Docking.cpp, alone, writes of the game's state (D38), and its own: read elsewhere at most, never written. Its members are the 1987
-/// data segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData, in its counted
-/// block.
+/// data segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData.
 struct DockingState
 {
   DockingState() noexcept = default;
   explicit DockingState(const DockingState&) noexcept = default;
 
   /// RunDockingComputer's steering, AL=roll, AH=pitch
-  Counted<std::uint16_t> dockingComputerSteering;
+  Field<std::uint16_t> dockingComputerSteering;
   /// RunDockingComputer's state, 0-11
-  Counted<std::uint8_t> dockingComputerState;
+  Field<std::uint8_t> dockingComputerState;
   /// angle RunDockingComputer is turning to
-  Counted<std::uint16_t> dockingTargetAngle;
+  Field<std::uint16_t> dockingTargetAngle;
   /// each alignment phase of RunDockingComputer runs twice
-  Counted<std::uint8_t> dockingAlignPasses;
+  Field<std::uint8_t> dockingAlignPasses;
 };
 
 static_assert(std::is_trivially_copyable_v<DockingState> && std::is_standard_layout_v<DockingState>);

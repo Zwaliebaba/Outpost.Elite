@@ -20,7 +20,7 @@ inline constexpr std::size_t DRAWING_BUFFER_BYTES = 0x2000;
 
 /// The drawing buffer, DS:0000-1FFF in 1987, which the space view, the charts and their texts are drawn into before they are copied
 /// to the screen: drawing.drawingBuffer. A byte of it is numbered as the original addresses it, by its offset in the data segment.
-[[nodiscard]] std::span<Counted<std::uint8_t>, DRAWING_BUFFER_BYTES> DrawingBuffer(GameState& _state) noexcept;
+[[nodiscard]] std::span<Field<std::uint8_t>, DRAWING_BUFFER_BYTES> DrawingBuffer(GameState& _state) noexcept;
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //

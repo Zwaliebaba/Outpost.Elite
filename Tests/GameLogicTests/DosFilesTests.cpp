@@ -59,7 +59,8 @@ constexpr std::uint32_t START_TIME = 0x645C; // 12 << 11 | 34 << 5 | 56 / 2
 constexpr Elite::Cycles TWO_SECONDS = 9'545'454;
 constexpr std::uint32_t TWO_SECONDS_LATER_TIME = 0x645D;
 
-using Bytes = std::span<Elite::Counted<std::uint8_t>>;
+using Bytes = std::span<Elite::Field<std::uint8_t>>;
+using Snapshot = std::vector<std::uint8_t>;
 
 [[nodiscard]] std::wstring Widen(std::string_view _text)
 {
@@ -68,7 +69,7 @@ using Bytes = std::span<Elite::Counted<std::uint8_t>>;
 
 /// DOS's file services natively (DosFiles), on the platform of a Game loaded from the reference, called as the game calls
 /// them: on its own members of the game's state, a name up to its NUL in commanderFileName, its commander's bytes and its
-/// transfer area (D38). Each call's changes to the game's memory are counted (LastChanges), and AX is checked to be 0 where DOS
+/// transfer area (D38). The bytes of the game's memory each call changes are counted (LastChanges), and AX is checked to be 0 where DOS
 /// left it as it went in; what a test expects of the answers, it states outright. Until D33 each call was also made on the
 /// emulated DOS it replaced (Machine::Dos), and checked to answer alike, to change the same bytes as many times and to leave all
 /// of memory and the store alike: what the test states outright is what both gave.
@@ -146,13 +147,13 @@ public:
   /// The clock moved on to _clock, from device event to device event, as a wait moves it.
   void AdvanceClock(Elite::Cycles _clock)
   {
-    const std::uint64_t changes = Changes();
+    const Snapshot before = Memory();
     while (m_rig.Host().Clock() < _clock)
     {
       m_rig.Host().Idle(_clock);
     }
     Assert::IsTrue(m_rig.Host().Clock() == _clock, L"the clock where it was sent");
-    Assert::IsTrue(Changes() == changes, L"moving the clock changes no memory");
+    Assert::IsTrue(Memory() == before, L"moving the clock changes no memory");
   }
 
   /// A directory in the store's directory, which the store does not show.
@@ -163,17 +164,17 @@ public:
 
   void SetArea(Bytes _area)
   {
-    const std::uint64_t changes = Changes();
+    const Snapshot before = Memory();
     Files().SetTransferArea(_area);
-    Done(changes);
+    Done(before);
     Assert::AreEqual(std::uint64_t{0}, m_lastChanges, L"setting the transfer area changes no memory");
   }
 
   Elite::DosFileAttributes ReadAttributes(std::string_view _name)
   {
-    const std::uint64_t changes = Changes();
+    const Snapshot before = Memory();
     const Elite::DosFileAttributes answer = Files().ReadAttributes(_name);
-    Done(changes);
+    Done(before);
     if (!answer.answer.failed)
     {
       Assert::AreEqual(std::uint32_t{answer.answer.value}, std::uint32_t{answer.attributes}, L"read attributes: AX = CX");
@@ -187,67 +188,67 @@ public:
 
   Elite::DosAnswer SetAttributes(std::string_view _name, std::uint16_t _attributes)
   {
-    const std::uint64_t changes = Changes();
-    return LeftOnSuccess(Files().SetAttributes(_name, _attributes), changes, L"set attributes");
+    const Snapshot before = Memory();
+    return LeftOnSuccess(Files().SetAttributes(_name, _attributes), before, L"set attributes");
   }
 
   Elite::DosAnswer Create(std::string_view _name, std::uint16_t _attributes)
   {
-    const std::uint64_t changes = Changes();
+    const Snapshot before = Memory();
     const Elite::DosAnswer answer = Files().Create(_name, _attributes, m_rig.Host().Clock());
-    Done(changes);
+    Done(before);
     return answer;
   }
 
   Elite::DosAnswer Open(std::string_view _name, std::uint8_t _access)
   {
-    const std::uint64_t changes = Changes();
+    const Snapshot before = Memory();
     const Elite::DosAnswer answer = Files().Open(_name, _access);
-    Done(changes);
+    Done(before);
     return answer;
   }
 
   Elite::DosAnswer Read(std::uint16_t _handle, Bytes _buffer)
   {
-    const std::uint64_t changes = Changes();
+    const Snapshot before = Memory();
     const Elite::DosAnswer answer = Files().Read(_handle, _buffer);
-    Done(changes);
+    Done(before);
     return answer;
   }
 
   Elite::DosAnswer Write(std::uint16_t _handle, std::span<const std::uint8_t> _buffer)
   {
-    const std::uint64_t changes = Changes();
+    const Snapshot before = Memory();
     const Elite::DosAnswer answer = Files().Write(_handle, _buffer, m_rig.Host().Clock());
-    Done(changes);
+    Done(before);
     return answer;
   }
 
   Elite::DosAnswer Close(std::uint16_t _handle)
   {
-    const std::uint64_t changes = Changes();
-    return LeftOnSuccess(Files().Close(_handle), changes, L"close");
+    const Snapshot before = Memory();
+    return LeftOnSuccess(Files().Close(_handle), before, L"close");
   }
 
   Elite::DosAnswer Delete(std::string_view _name)
   {
-    const std::uint64_t changes = Changes();
-    return LeftOnSuccess(Files().Delete(_name), changes, L"delete");
+    const Snapshot before = Memory();
+    return LeftOnSuccess(Files().Delete(_name), before, L"delete");
   }
 
   Elite::DosAnswer FindFirst(std::string_view _pattern, std::uint16_t _attributes)
   {
-    const std::uint64_t changes = Changes();
+    const Snapshot before = Memory();
     const Elite::DosAnswer answer = Files().FindFirst(_pattern, _attributes);
-    Done(changes);
+    Done(before);
     return answer;
   }
 
   Elite::DosAnswer FindNext()
   {
-    const std::uint64_t changes = Changes();
+    const Snapshot before = Memory();
     const Elite::DosAnswer answer = Files().FindNext();
-    Done(changes);
+    Done(before);
     return answer;
   }
 
@@ -255,7 +256,7 @@ public:
   /// changing nothing: the native service throws std::logic_error and changes nothing.
   void Refused(std::uint8_t _function, std::uint16_t _handle, std::uint16_t _bytes)
   {
-    const std::uint64_t changes = Changes();
+    const Snapshot before = Memory();
     Elite::DosFiles& files = Files();
     const Bytes block = Block().first(_bytes);
     const std::span<const std::uint8_t> written = BlockBytes(_bytes);
@@ -276,7 +277,7 @@ public:
         }
       },
       L"the native service refuses it");
-    Assert::IsTrue(Changes() == changes, L"the native service changes nothing");
+    Assert::IsTrue(Memory() == before, L"the native service changes nothing");
   }
 
   /// The store's files.
@@ -313,10 +314,13 @@ public:
     return m_lastChanges;
   }
 
-  /// The bytes of the game's memory changed since power-on.
-  [[nodiscard]] std::uint64_t Changes() const noexcept
+  /// The game's memory now: GameData's bytes, then video memory's.
+  [[nodiscard]] Snapshot Memory() const
   {
-    return m_rig.State().ChangeCount();
+    const Elite::GameState& state = m_rig.State();
+    Snapshot bytes(state.DataBytes().begin(), state.DataBytes().end());
+    bytes.insert(bytes.end(), state.VideoBytes().begin(), state.VideoBytes().end());
+    return bytes;
   }
 
   [[nodiscard]] Elite::DosFiles& Files() noexcept
@@ -325,15 +329,21 @@ public:
   }
 
 private:
-  void Done(std::uint64_t _changesBefore) noexcept
+  void Done(const Snapshot& _before)
   {
-    m_lastChanges = Changes() - _changesBefore;
+    const Snapshot after = Memory();
+    std::uint64_t changed = 0;
+    for (std::size_t at = 0; at < after.size(); ++at)
+    {
+      changed += after[at] != _before[at] ? 1 : 0;
+    }
+    m_lastChanges = changed;
   }
 
   // A service that succeeds leaves AX as it went in on DOS, and 0 natively: no caller reads it.
-  Elite::DosAnswer LeftOnSuccess(const Elite::DosAnswer& _answer, std::uint64_t _changesBefore, const wchar_t* _call)
+  Elite::DosAnswer LeftOnSuccess(const Elite::DosAnswer& _answer, const Snapshot& _before, const wchar_t* _call)
   {
-    Done(_changesBefore);
+    Done(_before);
     if (!_answer.failed)
     {
       Assert::AreEqual(0u, std::uint32_t{_answer.value}, (std::wstring(_call) + L": AX 0, where DOS left it as it went in").c_str());
@@ -418,7 +428,7 @@ public:
     Assert::AreEqual(0u, std::uint32_t{twin.ReadAttributes(twin.Name()).attributes});
 
     // Loaded over the commander it was saved from, as the game loads one over another: a byte that is already what the file
-    // holds is no change, so nothing changes, and every byte is written once.
+    // holds is no change, so nothing changes.
     Assert::IsFalse(twin.Open(twin.Name(), 0).failed);
     Assert::AreEqual(std::uint32_t{BLOCK_BYTES}, std::uint32_t{twin.Read(5, twin.Block()).value}, L"read over itself");
     Assert::AreEqual(std::uint64_t{0}, twin.LastChanges(), L"a byte read over the same byte is no change");
@@ -430,7 +440,7 @@ public:
     Assert::IsTrue(!opened.failed && opened.value == 5, L"opened as handle 5");
     const Elite::DosAnswer read = twin.Read(5, twin.Block());
     Assert::IsTrue(!read.failed && read.value == BLOCK_BYTES, L"every byte read");
-    Assert::AreEqual(std::uint64_t{BLOCK_BYTES}, twin.LastChanges(), L"each byte of the block changed once");
+    Assert::AreEqual(std::uint64_t{BLOCK_BYTES}, twin.LastChanges(), L"each byte of the block changed");
     Assert::IsTrue(DosRig::Text(twin.Block(), 0, BLOCK_BYTES) == commander, L"the commander's bytes, back in the block");
     const Elite::DosAnswer end = twin.Read(5, twin.Block());
     Assert::IsTrue(!end.failed && end.value == 0, L"0 at the end of the file");
@@ -525,12 +535,11 @@ public:
     DosRig twin("DosFilesPspArea", START);
     DosRig::Put(twin.Block(), "x", false);
     MakeFile(twin, "ONLY.CDR", 1);
-    const std::uint64_t changes = twin.Changes();
     const std::string_view pattern = twin.Name("*.CDR");
-    const std::uint64_t named = twin.Changes();
+    const Snapshot named = twin.Memory();
     Assert::ExpectException<std::logic_error>([&twin, pattern] { (void)twin.Files().FindFirst(pattern, 0); }, L"find first");
     Assert::ExpectException<std::logic_error>([&twin] { (void)twin.Files().FindNext(); }, L"find next");
-    Assert::IsTrue(twin.Changes() == named && named >= changes, L"and nothing changed");
+    Assert::IsTrue(twin.Memory() == named, L"and nothing changed");
     twin.SetArea(twin.Area());
     Assert::IsFalse(twin.FindFirst(pattern, 0).failed, L"found once there is a transfer area");
     CheckFound(twin.Area(), 0, START_TIME, START_DATE, 1, "ONLY.CDR");
@@ -645,10 +654,10 @@ public:
 
     DosRig::Put(twin.Block(), std::string(0x10, '\0'), false);
     Assert::IsFalse(twin.Open(twin.Name(), 0).failed);
-    std::array<Elite::Counted<std::uint8_t>, Elite::DosFiles::TRANSFER_AREA_BYTES> outside{};
-    const std::uint64_t changes = twin.Changes();
+    std::array<Elite::Field<std::uint8_t>, Elite::DosFiles::TRANSFER_AREA_BYTES> outside{};
+    const Snapshot before = twin.Memory();
     Assert::ExpectException<std::out_of_range>([&] { (void)twin.Files().Read(5, outside); }, L"a buffer outside the state is refused");
-    Assert::IsTrue(twin.Changes() == changes, L"and nothing changed");
+    Assert::IsTrue(twin.Memory() == before, L"and nothing changed");
     const Elite::DosAnswer first = twin.Read(5, twin.Block().first(4));
     Assert::IsTrue(!first.failed && first.value == 4, L"a buffer of four takes four");
     Assert::IsTrue(DosRig::Text(twin.Block(), 0, 0x10) == std::string("ABCD") + std::string(0x0C, '\0'), L"and no more");

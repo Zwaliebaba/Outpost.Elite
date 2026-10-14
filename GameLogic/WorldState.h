@@ -3,7 +3,7 @@
 // them and run the tool again (D38).
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 #include "SpaceObject.h"
 
 #include <cstdint>
@@ -13,14 +13,14 @@ namespace Elite
 {
 
 /// The objects in space: the 36 ship slots (SpaceObject), and how many of them are in use. Its members are the 1987 data segment's, by
-/// their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData, in its counted block.
+/// their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData.
 struct WorldState
 {
   WorldState() noexcept = default;
   explicit WorldState(const WorldState&) noexcept = default;
 
   /// 36 (0x24) from SetUpLocalSpace: object slots then debris slots
-  Counted<std::uint8_t> shipSlotCount;
+  Field<std::uint8_t> shipSlotCount;
   /// 36 64-byte records: slot 0 sun, 1 planet (planetSlot), 2 station (stationSlot), 3-19 ships (firstShipSlot), 20-35 debris (debrisSlots)
   SpaceObject shipSlots[36];
 };

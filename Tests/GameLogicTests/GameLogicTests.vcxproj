@@ -93,11 +93,10 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AiTests.cpp" />
-    <ClCompile Include="BiosTests.cpp" />
     <ClCompile Include="CgaFontTests.cpp" />
     <ClCompile Include="CgaTests.cpp" />
     <ClCompile Include="CorpusTests.cpp" />
-    <ClCompile Include="CountedTests.cpp" />
+    <ClCompile Include="FieldTests.cpp" />
     <ClCompile Include="DockedTests.cpp" />
     <ClCompile Include="DosFilesTests.cpp" />
     <ClCompile Include="EquipmentTests.cpp" />
@@ -109,9 +108,6 @@
     <ClCompile Include="GaugesTests.cpp" />
     <ClCompile Include="HyperspaceTests.cpp" />
     <ClCompile Include="InputTests.cpp" />
-    <ClCompile Include="InterruptControllerTests.cpp" />
-    <ClCompile Include="IntervalTimerTests.cpp" />
-    <ClCompile Include="KeyboardTests.cpp" />
     <ClCompile Include="MarketAnswerTests.cpp" />
     <ClCompile Include="MarketTests.cpp" />
     <ClCompile Include="MathsAnswerTests.cpp" />
@@ -125,6 +121,7 @@
     <ClCompile Include="ReferenceImageTests.cpp" />
     <ClCompile Include="ReplayTests.cpp" />
     <ClCompile Include="SaveLoadTests.cpp" />
+    <ClCompile Include="SchedulerTests.cpp" />
     <ClCompile Include="Sha256Tests.cpp" />
     <ClCompile Include="ShipModelTests.cpp" />
     <ClCompile Include="SpaceViewLayersTests.cpp" />
@@ -132,7 +129,9 @@
     <ClCompile Include="StartUpTests.cpp" />
     <ClCompile Include="StateDigestTests.cpp" />
     <ClCompile Include="TextTests.cpp" />
+    <ClCompile Include="TimeOfDayTests.cpp" />
     <ClCompile Include="TwinRigTests.cpp" />
+    <ClCompile Include="VideoModesTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="GalaxyAnswers.txt" />

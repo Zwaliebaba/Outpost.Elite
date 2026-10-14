@@ -49,10 +49,9 @@ namespace Elite
 {
 
 /// The game's state (D19, D38): the reference's data segment distributed, a struct of its groups' structs, each what one subsystem writes
-/// or what several share (Design/DataPartition.tsv), which the GameState holds in its counted block. Every byte and word is a Counted, of
-/// alignment 1, which counts its own changes in its GameState's change count: native code reads and writes members
-/// (`_state.Data().commander.fuel = fuel`), and passes one by reference to a helper that writes it. DATA_PLACES (DataPlaces.h) says where
-/// each member of the 1987 data segment is now.
+/// or what several share (Design/DataPartition.tsv), which the GameState holds. Every byte and word is a Field, of alignment 1: native code
+/// reads and writes members (`_state.Data().commander.fuel = fuel`), and passes one by reference to a helper that writes it. DATA_PLACES
+/// (DataPlaces.h) says where each member of the 1987 data segment is now.
 struct GameData
 {
   GameData() noexcept = default;

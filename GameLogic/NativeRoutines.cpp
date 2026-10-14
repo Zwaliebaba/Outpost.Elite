@@ -22,7 +22,6 @@ constexpr std::array<EntryList, 3> SUBSYSTEMS = {&InputEntries, &StartUpEntries,
 
 void InstallNativeRoutines(Platform& _platform, GameState& _state)
 {
-  const std::uint16_t code = _state.CodeSegment();
   GameState* const state = &_state;
   Platform* const platform = &_platform;
   for (const EntryList entries : SUBSYSTEMS)
@@ -35,13 +34,16 @@ void InstallNativeRoutines(Platform& _platform, GameState& _state)
         Guest guest(*platform, *state);
         body(guest);
       };
-      switch (entry.exit)
+      switch (entry.kind)
       {
-      case EntryReturn::Far:
+      case EntryKind::Start:
         _platform.SetEntry(routine);
         break;
-      case EntryReturn::Interrupt:
-        _platform.Hook(FarAddress{code, entry.offset}, routine);
+      case EntryKind::TimerHandler:
+        _platform.SetGameHandler(Irq::Timer, routine);
+        break;
+      case EntryKind::KeyboardHandler:
+        _platform.SetGameHandler(Irq::Keyboard, routine);
         break;
       }
     }

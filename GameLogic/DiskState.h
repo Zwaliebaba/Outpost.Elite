@@ -3,7 +3,7 @@
 // them and run the tool again (D38).
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 
 #include <cstdint>
 #include <type_traits>
@@ -12,16 +12,16 @@ namespace Elite
 {
 
 /// The disk operation's error and its file, which saving and loading, the start-up and the screenshot share. Its members are the 1987 data
-/// segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData, in its counted block.
+/// segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData.
 struct DiskState
 {
   DiskState() noexcept = default;
   explicit DiskState(const DiskState&) noexcept = default;
 
   /// set by CriticalErrorInterrupt (0x02F6) and PerformDiskRequest's error path (0x03A2), cleared by Start (0x0078) before each operation
-  Counted<std::uint8_t> diskError;
+  Field<std::uint8_t> diskError;
   /// DOS handle of the open commander or screenshot file
-  Counted<std::uint16_t> fileHandle;
+  Field<std::uint16_t> fileHandle;
 };
 
 static_assert(std::is_trivially_copyable_v<DiskState> && std::is_standard_layout_v<DiskState>);

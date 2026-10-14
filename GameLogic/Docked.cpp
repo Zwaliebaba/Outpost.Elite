@@ -49,11 +49,6 @@ constexpr std::uint16_t FRAME_SIDE_ROWS = 0x17;
 constexpr std::uint16_t FRAME_RIGHT_SIDE = 0x4E; // column 39
 constexpr std::uint16_t TEXT_ROW_BYTES = 0x50;
 
-// Where the original jumps back (Hardware::LoopTurn, ADR-015).
-constexpr std::uint16_t DOCKED_KEY_DISPATCH = 0x0B40;
-constexpr std::uint16_t WAIT_FOR_SCREEN_EXIT_KEY = 0x60B4;
-constexpr std::uint16_t SUPERNOVA_ANSWER = 0x6E23;
-
 // Scan codes.
 constexpr std::uint8_t SCAN_ESCAPE = 0x01;
 constexpr std::uint8_t SCAN_Y = 0x15;
@@ -142,9 +137,8 @@ constexpr std::uint16_t TITLE_YAW_STEP = 0x14;
 constexpr std::uint16_t TITLE_ROLL_STEP = 0x1E;
 constexpr std::uint8_t TITLE_SHIP_FLAGS = 2;
 
-// CALL GetKey; JE _loop, de-assembled: GetKey until a key comes, each empty turn ending at the jump back (ADR-015). The turns
-// carry nothing, as WaitForKeyPress's do. Returns the key.
-KeyPress WaitForKey(GameState& _state, Hardware& _hardware, std::uint16_t _loop)
+// CALL GetKey; JE back to it, de-assembled: GetKey until a key comes (ADR-039). Returns the key.
+KeyPress WaitForKey(GameState& _state, Hardware& _hardware)
 {
   for (;;)
   {
@@ -153,14 +147,14 @@ KeyPress WaitForKey(GameState& _state, Hardware& _hardware, std::uint16_t _loop)
     {
       return key;
     }
-    _hardware.LoopTurn(_loop, {});
+    AwaitNextKey(_hardware, key);
   }
 }
 
 // The run of the cash's text, creditBalanceText and its NUL in gap759A: FormatCredits fills all 19 of creditBalanceText's bytes.
 static_assert(COMMANDER_STATE_OFFSET(gap759A) == COMMANDER_STATE_OFFSET(creditBalanceText) + sizeof(CommanderState::creditBalanceText),
               "the cash's run holds its members together, as in 1987");
-[[nodiscard]] std::span<const Counted<std::uint8_t>> CashRun(const GameState& _state)
+[[nodiscard]] std::span<const Field<std::uint8_t>> CashRun(const GameState& _state)
 {
   return BytesThrough(_state.Data().commander.creditBalanceText, _state.Data().commander.gap759A);
 }
@@ -169,7 +163,7 @@ static_assert(COMMANDER_STATE_OFFSET(gap759A) == COMMANDER_STATE_OFFSET(creditBa
 // eight-letter name.
 static_assert(COMMANDER_STATE_OFFSET(gap75CC) == COMMANDER_STATE_OFFSET(selectedSystemName) + sizeof(CommanderState::SelectedSystemName),
               "the selected name's run holds its members together, as in 1987");
-[[nodiscard]] std::span<const Counted<std::uint8_t>> SelectedNameRun(const GameState& _state)
+[[nodiscard]] std::span<const Field<std::uint8_t>> SelectedNameRun(const GameState& _state)
 {
   return BytesThrough(_state.Data().commander.selectedSystemName, _state.Data().commander.gap75CC);
 }
@@ -178,7 +172,7 @@ static_assert(COMMANDER_STATE_OFFSET(gap75CC) == COMMANDER_STATE_OFFSET(selected
 // from the first character that is not a space.
 std::string_view SkipCashSpaces(const GameState& _state)
 {
-  const Counted<std::uint8_t>(&cash)[sizeof(CommanderState::creditBalanceText)] = _state.Data().commander.creditBalanceText;
+  const Field<std::uint8_t>(&cash)[sizeof(CommanderState::creditBalanceText)] = _state.Data().commander.creditBalanceText;
   for (std::size_t first = 0;; ++first)
   {
     if (cash[first] != SPACE)
@@ -189,14 +183,14 @@ std::string_view SkipCashSpaces(const GameState& _state)
 }
 
 // _quantity as five digits into _text, up to four of their leading zeros blanked.
-void FormatQuantity(std::uint16_t _quantity, std::span<Counted<std::uint8_t>> _text)
+void FormatQuantity(std::uint16_t _quantity, std::span<Field<std::uint8_t>> _text)
 {
   FormatDecimal5(_quantity, _text);
   BlankLeadingZeros(_text, static_cast<std::uint8_t>(QUANTITY_DIGITS_BLANKED));
 }
 
 // cargoHold's entries: for each product, the units held, then the units on sale.
-[[nodiscard]] std::span<Counted<std::uint8_t>> Hold(GameState& _state)
+[[nodiscard]] std::span<Field<std::uint8_t>> Hold(GameState& _state)
 {
   return BytesOf(_state.Data().commander.cargoHold);
 }
@@ -248,7 +242,7 @@ constexpr TradeRow FIRST_TRADE_ROW{TRADE_ROWS, 0, LINE_6};
 std::uint16_t PrintNameAndPrice(GameState& _state, const TradeRow& _row, std::uint16_t _price)
 {
   const std::uint16_t named = PrintTextModeString(_state, ProductName(_state, _row.product), _row.cell);
-  const std::span<const Counted<std::uint8_t>> prices = BytesOf(_state.Data().menus.screenPrices);
+  const std::span<const Field<std::uint8_t>> prices = BytesOf(_state.Data().menus.screenPrices);
   FormatTenths(_state, WordIn(prices, std::size_t{_row.product} * TRADE_PRICES_BYTES + _price));
   return PrintTextModeString(_state, TextWithin(BytesOf(_state.Data().menus.priceText), 0), Offset(named, 4));
 }
@@ -444,7 +438,8 @@ DockedExit DispatchDockedKeys(GameState& _state, Hardware& _hardware, std::uint8
         screenKey = SCAN_ESCAPE;
         break;
       }
-      const KeyPress next = WaitForKey(_state, _hardware, DOCKED_KEY_DISPATCH);
+      // Back to the GetKey at 0B40h.
+      const KeyPress next = WaitForKey(_state, _hardware);
       key = ScreenKey{next.scanCode, AlAfterKey(key.al, next), std::nullopt};
     }
   }
@@ -533,8 +528,7 @@ std::uint8_t AlAfterKey(std::uint8_t _al, const KeyPress& _key) noexcept
 
 ScreenKey WaitForScreenExitKey(GameState& _state, Hardware& _hardware, std::uint8_t _ownKey, std::uint8_t _al, std::uint16_t _countIfNone)
 {
-  // GetKey until Esc or another screen's F-key, every other turn ending at the jump back to 60B4. The turns carry nothing, as
-  // WaitForKeyPress's do: GetKey writes AH before it reads it, and reads AL only when it takes a code, which changes keyBuffer.
+  // GetKey until Esc or another screen's F-key, every other key and an empty poll going back to 60B4h.
   std::uint8_t al = _al;
   for (;;)
   {
@@ -546,7 +540,7 @@ ScreenKey WaitForScreenExitKey(GameState& _state, Hardware& _hardware, std::uint
       const std::uint16_t countLeft = SelectSystemAtCursor(_state, _countIfNone);
       return ScreenKey{scanCode, al, countLeft};
     }
-    _hardware.LoopTurn(WAIT_FOR_SCREEN_EXIT_KEY, {});
+    AwaitNextKey(_hardware, key);
   }
 }
 
@@ -694,7 +688,7 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
 
   // One row for each item fitted, and after a laser the mounts it is fitted to.
   std::uint16_t row = LINE_10;
-  const std::span<const Counted<std::uint8_t>> fitted =
+  const std::span<const Field<std::uint8_t>> fitted =
     BytesWithin(BytesOf(std::as_const(_state).Data().commander), COMMANDER_STATE_OFFSET(missileCount), EQUIPMENT_ROWS);
   std::size_t item = 0;
   _state.Data().menus.menuSelectedRow = FIRST_EQUIPMENT_MENU_ROW;
@@ -757,8 +751,8 @@ ScreenKey ShowInventoryScreen(GameState& _state, Hardware& _hardware, bool _back
   PrintTextModeString(_state, SkipCashSpaces(_state), cashCell);
 
   // Every product held, and the refugees: name, quantity, unit, a row each; an empty row does not move the place on.
-  const std::span<Counted<std::uint8_t>> quantityText =
-    std::span<Counted<std::uint8_t>>(_state.Data().docked.productNames).subspan(INVENTORY_QUANTITY_IN_NAMES, QUANTITY_TEXT_BYTES);
+  const std::span<Field<std::uint8_t>> quantityText =
+    std::span<Field<std::uint8_t>>(_state.Data().docked.productNames).subspan(INVENTORY_QUANTITY_IN_NAMES, QUANTITY_TEXT_BYTES);
   std::uint16_t row = LINE_6;
   std::uint16_t product = 0;
   for (std::uint16_t left = INVENTORY_ROWS;;)
@@ -767,7 +761,7 @@ ScreenKey ShowInventoryScreen(GameState& _state, Hardware& _hardware, bool _back
     if (amount != 0)
     {
       // The name cut at its twelfth character by a NUL, which becomes a space again before the unit after it.
-      const std::span<Counted<std::uint8_t>> name =
+      const std::span<Field<std::uint8_t>> name =
         BytesOf(_state.Data().docked.productNames).subspan(std::size_t{product} * PRODUCT_NAME_BYTES, PRODUCT_NAME_BYTES);
       name[PRODUCT_NAME_END] = NUL;
       const std::string_view named = TextIn(name);
@@ -800,7 +794,7 @@ void ShowMissionBriefing(GameState& _state, Hardware& _hardware, bool _backward)
     std::uint8_t answer = 0;
     for (;;)
     {
-      answer = WaitForKey(_state, _hardware, SUPERNOVA_ANSWER).scanCode;
+      answer = WaitForKey(_state, _hardware).scanCode;
       if (answer == SCAN_Y || answer == SCAN_N)
       {
         break;
@@ -810,7 +804,7 @@ void ShowMissionBriefing(GameState& _state, Hardware& _hardware, bool _backward)
     if (answer == SCAN_Y)
     {
       // The hold emptied for the refugees: MOV [DI],CH, which is 0, at each of the 17 amounts.
-      const std::span<Counted<std::uint8_t>> hold = Hold(_state);
+      const std::span<Field<std::uint8_t>> hold = Hold(_state);
       for (std::uint16_t product = 0, left = TRADE_ROWS;;)
       {
         hold[std::size_t{product} * 2] = 0;

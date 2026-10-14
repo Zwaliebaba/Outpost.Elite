@@ -93,9 +93,6 @@
     <ClInclude Include="AudioState.h">
       <Filter>State</Filter>
     </ClInclude>
-    <ClInclude Include="Bios.h">
-      <Filter>Platform</Filter>
-    </ClInclude>
     <ClInclude Include="Cga.h">
       <Filter>Platform</Filter>
     </ClInclude>
@@ -114,7 +111,7 @@
     <ClInclude Include="CommanderState.h">
       <Filter>State</Filter>
     </ClInclude>
-    <ClInclude Include="Counted.h">
+    <ClInclude Include="Field.h">
       <Filter>State</Filter>
     </ClInclude>
     <ClInclude Include="DataPlaces.h">
@@ -222,17 +219,8 @@
     <ClInclude Include="InputState.h">
       <Filter>Input</Filter>
     </ClInclude>
-    <ClInclude Include="InterruptController.h">
-      <Filter>Platform</Filter>
-    </ClInclude>
-    <ClInclude Include="IntervalTimer.h">
-      <Filter>Platform</Filter>
-    </ClInclude>
     <ClInclude Include="JumpState.h">
       <Filter>State</Filter>
-    </ClInclude>
-    <ClInclude Include="Keyboard.h">
-      <Filter>Platform</Filter>
     </ClInclude>
     <ClInclude Include="KeyboardState.h">
       <Filter>State</Filter>
@@ -318,6 +306,9 @@
     <ClInclude Include="SceneTables.h">
       <Filter>Scene</Filter>
     </ClInclude>
+    <ClInclude Include="Scheduler.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
     <ClInclude Include="Sha256.h">
       <Filter>Replay</Filter>
     </ClInclude>
@@ -351,6 +342,9 @@
     <ClInclude Include="Speaker.h">
       <Filter>Platform</Filter>
     </ClInclude>
+    <ClInclude Include="SquareWave.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
     <ClInclude Include="StartUp.h">
       <Filter>StartUp</Filter>
     </ClInclude>
@@ -372,6 +366,9 @@
     <ClInclude Include="TextTables.h">
       <Filter>Text</Filter>
     </ClInclude>
+    <ClInclude Include="TimeOfDay.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
     <ClInclude Include="Timer.h">
       <Filter>Timer</Filter>
     </ClInclude>
@@ -387,6 +384,9 @@
     <ClInclude Include="Video.h">
       <Filter>Video</Filter>
     </ClInclude>
+    <ClInclude Include="VideoModes.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
     <ClInclude Include="VideoState.h">
       <Filter>Video</Filter>
     </ClInclude>
@@ -400,9 +400,6 @@
   <ItemGroup>
     <ClCompile Include="Ai.cpp">
       <Filter>Ai</Filter>
-    </ClCompile>
-    <ClCompile Include="Bios.cpp">
-      <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="Cga.cpp">
       <Filter>Platform</Filter>
@@ -461,15 +458,6 @@
     <ClCompile Include="Input.cpp">
       <Filter>Input</Filter>
     </ClCompile>
-    <ClCompile Include="InterruptController.cpp">
-      <Filter>Platform</Filter>
-    </ClCompile>
-    <ClCompile Include="IntervalTimer.cpp">
-      <Filter>Platform</Filter>
-    </ClCompile>
-    <ClCompile Include="Keyboard.cpp">
-      <Filter>Platform</Filter>
-    </ClCompile>
     <ClCompile Include="Market.cpp">
       <Filter>Market</Filter>
     </ClCompile>
@@ -509,6 +497,9 @@
     <ClCompile Include="Scene.cpp">
       <Filter>Scene</Filter>
     </ClCompile>
+    <ClCompile Include="Scheduler.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
     <ClCompile Include="Sha256.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
@@ -527,6 +518,9 @@
     <ClCompile Include="Speaker.cpp">
       <Filter>Platform</Filter>
     </ClCompile>
+    <ClCompile Include="SquareWave.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
     <ClCompile Include="StartUp.cpp">
       <Filter>StartUp</Filter>
     </ClCompile>
@@ -536,11 +530,17 @@
     <ClCompile Include="Text.cpp">
       <Filter>Text</Filter>
     </ClCompile>
+    <ClCompile Include="TimeOfDay.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
     <ClCompile Include="Timer.cpp">
       <Filter>Timer</Filter>
     </ClCompile>
     <ClCompile Include="Video.cpp">
       <Filter>Video</Filter>
+    </ClCompile>
+    <ClCompile Include="VideoModes.cpp">
+      <Filter>Platform</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

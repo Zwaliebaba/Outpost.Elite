@@ -20,28 +20,6 @@ constexpr std::uint16_t FLAG_INTERRUPT = 0x0200;
 // DOS starts a program with FLAGS F202h: interrupts on and the direction flag clear (ADR-006 item 4).
 constexpr std::uint16_t ENTRY_FLAGS = 0xF202;
 
-// The vector table as the BIOS leaves it (ADR-006 item 3): every vector at its own IRET in the ROM, F000:FD00 + n, but the
-// timer's and the keyboard's, which name the BIOS's handlers, DOS's terminate address, which names the ROM's halt, and the
-// mouse's, which names the driver's entry when one is loaded.
-constexpr std::uint16_t ROM_SEGMENT = 0xF000;
-constexpr std::uint16_t TIMER_HANDLER_OFFSET = 0xE000;
-constexpr std::uint16_t KEYBOARD_HANDLER_OFFSET = 0xE040;
-constexpr std::uint16_t MOUSE_DRIVER_OFFSET = 0xE060;
-constexpr std::uint16_t HALT_OFFSET = 0xE070;
-constexpr std::uint16_t IRET_STUBS_OFFSET = 0xFD00;
-constexpr std::uint16_t IRET_STUBS_END = 0xFE00;
-constexpr std::uint16_t MODEL_OFFSET = 0xFFFE;
-constexpr std::uint8_t MODEL_IBM_PC = 0xFF;
-constexpr std::uint8_t OPCODE_NOP = 0x90;
-constexpr std::uint8_t OPCODE_IRET = 0xCF;
-constexpr std::uint32_t ROM_LINEAR = static_cast<std::uint32_t>(ROM_SEGMENT) << 4;
-constexpr std::uint32_t ADDRESS_MASK = 0xFFFFF;
-
-constexpr std::uint8_t VECTOR_TIMER = 0x08;
-constexpr std::uint8_t VECTOR_KEYBOARD = 0x09;
-constexpr std::uint8_t VECTOR_TERMINATE = 0x22;
-constexpr std::uint8_t VECTOR_MOUSE = 0x33;
-
 // What the 8088 takes over the ROM's IRET, as the interpreter charged it until D7: Intel's 8086 figure and three words popped
 // over the 8-bit bus.
 constexpr Cycles IRET_CYCLES = 24 + 3 * 4;
@@ -65,7 +43,11 @@ constexpr Cycles PORT_ACCESS = 10;    // IN AL,imm8 and OUT imm8,AL
 constexpr Cycles LOGIC_IMMEDIATE = 4; // OR AL,imm8 and AND AL,imm8
 constexpr Cycles POP_REGISTER = 12;   // POP AX and POP DS
 
-// The system control port's bit 7, which the XT's keyboard is acknowledged by.
+// The system control port: bit 0 the tone's gate, bit 1 the speaker's data, and bit 7, which the XT's keyboard is
+// acknowledged by, its hold.
+constexpr std::uint8_t TONE_GATE = 0x01;
+constexpr std::uint8_t SPEAKER_DATA = 0x02;
+constexpr std::uint8_t SPEAKER_BITS = 0x03;
 constexpr std::uint8_t KEYBOARD_CLEAR = 0x80;
 
 // DOS's print string: its end.
@@ -83,17 +65,12 @@ struct NativeAbandoned
 {
 };
 
-[[nodiscard]] constexpr std::uint32_t Linear(FarAddress _address) noexcept
-{
-  return ((static_cast<std::uint32_t>(_address.segment) << 4) + _address.offset) & ADDRESS_MASK;
-}
-
 // The BIOS's tick count for DOS's time of day.
 [[nodiscard]] std::uint32_t TimerTicksAt(const DosDateTime& _moment) noexcept
 {
   const std::uint32_t centiseconds = (std::uint32_t{_moment.hour} * 60u + _moment.minute) * CENTISECONDS_PER_MINUTE +
                                      std::uint32_t{_moment.second} * 100u + _moment.hundredths;
-  return Bios::TimerTicksAt(centiseconds);
+  return TimeOfDay::TicksAt(centiseconds);
 }
 
 } // namespace
@@ -101,32 +78,17 @@ struct NativeAbandoned
 Platform::Platform(GameState& _state, FileStore& _files, const Desc& _desc)
   : m_state(_state),
     m_speaker(m_clock),
-    m_timer(m_clock, m_controller, m_speaker),
-    m_keyboard(m_clock, m_controller, m_timer, m_speaker),
+    m_events(m_clock),
     m_gamePort(m_instructionCycles),
     m_cga(m_clock),
-    m_bios(_state, m_cga, TimerTicksAt(_desc.startMoment)),
+    m_day(TimerTicksAt(_desc.startMoment)),
+    m_modes(_state, m_cga),
     m_mouse(_desc.mousePresent),
     m_files(_state, _files, _desc.startMoment),
+    m_mouseDriverLoaded(_desc.mousePresent),
     m_flags(ENTRY_FLAGS),
     m_commandTail(_desc.commandTail)
 {
-  for (std::size_t vector = 0; vector < m_vectors.size(); ++vector)
-  {
-    m_vectors[vector] = FarAddress{ROM_SEGMENT, static_cast<std::uint16_t>(IRET_STUBS_OFFSET + vector)};
-  }
-  m_vectors[VECTOR_TIMER] = FarAddress{ROM_SEGMENT, TIMER_HANDLER_OFFSET};
-  m_vectors[VECTOR_KEYBOARD] = FarAddress{ROM_SEGMENT, KEYBOARD_HANDLER_OFFSET};
-  m_vectors[VECTOR_TERMINATE] = FarAddress{ROM_SEGMENT, HALT_OFFSET};
-  if (_desc.mousePresent)
-  {
-    m_vectors[VECTOR_MOUSE] = FarAddress{ROM_SEGMENT, MOUSE_DRIVER_OFFSET};
-  }
-  m_powerOnVectors = m_vectors;
-  // The BIOS's two hardware handlers are native, and run whenever the program has put the BIOS's vectors back and an
-  // interrupt falls due (ADR-011 item 3).
-  Hook(FarAddress{ROM_SEGMENT, TIMER_HANDLER_OFFSET}, [this] { RunBiosTimerHandler(); });
-  Hook(FarAddress{ROM_SEGMENT, KEYBOARD_HANDLER_OFFSET}, [this] { RunBiosKeyboardHandler(); });
 }
 
 Platform::~Platform()
@@ -161,15 +123,14 @@ void Platform::SetEntry(NativeRoutine _routine)
   m_entry.routine = std::move(_routine);
 }
 
-void Platform::Hook(FarAddress _address, NativeRoutine _routine)
+void Platform::SetGameHandler(Irq _irq, NativeRoutine _routine)
 {
-  // Made in place, in a node the map never moves.
-  const auto [found, added] = m_hooks.try_emplace(Linear(_address));
-  if (!added)
+  HookedRoutine& handler = m_gameHandlers[static_cast<std::size_t>(_irq)];
+  if (handler.routine)
   {
     throw std::logic_error("Platform: two native routines at one entry");
   }
-  found->second.routine = std::move(_routine);
+  handler.routine = std::move(_routine);
 }
 
 // ── Running ──
@@ -310,14 +271,14 @@ bool Platform::InterruptsEnabled() const noexcept
 
 void Platform::TakeDueInterrupts()
 {
-  while (InterruptsEnabled() && m_controller.InterruptPending())
+  while (InterruptsEnabled() && m_events.InterruptPending())
   {
     // The acknowledge cycle, then the entry the 8088 makes, which the instruction clock counts.
-    const std::uint8_t vector = m_controller.Acknowledge();
+    const Irq irq = m_events.Take();
     m_instructionCycles += HARDWARE_INTERRUPT_CYCLES;
     ++m_stepsSinceIdle;
     ++m_interruptsTaken;
-    Interrupt(vector);
+    Interrupt(irq);
     if (Stopped() != StopReason::Reached)
     {
       throw ProgramStopped{};
@@ -325,89 +286,65 @@ void Platform::TakeDueInterrupts()
   }
 }
 
-void Platform::SoftwareInterrupt(std::uint8_t _vector)
+void Platform::SetSystemControl(std::uint8_t _value)
 {
-  CallHandler(m_vectors[_vector]);
+  const auto changed = static_cast<std::uint8_t>(m_systemControl ^ _value);
+  m_systemControl = _value;
+  if ((changed & SPEAKER_BITS) != 0)
+  {
+    m_speaker.SetBits((_value & TONE_GATE) != 0, (_value & SPEAKER_DATA) != 0);
+  }
+  m_events.HoldKeyboard((_value & KEYBOARD_CLEAR) != 0);
 }
 
-void Platform::CallHandler(FarAddress _handler)
+void Platform::CallAbsentMouse()
 {
+  // INT 33h, as the 8088 runs it, to what its vector names, the interrupt's frame in place and IF cleared until its IRET.
   ++m_stepsSinceIdle;
-  const std::uint16_t flags = m_flags;
-  m_flags = static_cast<std::uint16_t>(m_flags & ~FLAG_INTERRUPT);
-  RunHandler(_handler);
-  m_flags = flags;
+  if (m_mouseDriverLoaded)
+  {
+    throw std::logic_error("Platform: an interrupt to code no native routine stands in for");
+  }
+  m_instructionCycles += IRET_CYCLES; // the ROM's IRET, which int 33h names with no driver loaded
   if (Stopped() != StopReason::Reached)
   {
     throw ProgramStopped{};
   }
 }
 
-// As the 8088 enters a handler: IF cleared, the handler run, and its IRET putting the flags back as they were.
-void Platform::Interrupt(std::uint8_t _vector)
+// As the 8088 enters a handler: IF cleared, the handler its vector names run, and its IRET putting the flags back as they were.
+void Platform::Interrupt(Irq _irq)
 {
+  const Irq irq = _irq;
   const std::uint16_t flags = m_flags;
   m_flags = static_cast<std::uint16_t>(m_flags & ~FLAG_INTERRUPT);
-  RunHandler(m_vectors[_vector]);
+  switch (Handler(irq))
+  {
+  case IrqHandler::Bios:
+    if (irq == Irq::Timer)
+    {
+      RunBiosTimerHandler();
+    }
+    else
+    {
+      RunBiosKeyboardHandler();
+    }
+    break;
+  case IrqHandler::Game:
+  {
+    HookedRoutine& handler = m_gameHandlers[static_cast<std::size_t>(irq)];
+    if (!handler.routine)
+    {
+      throw std::logic_error("Platform: an interrupt to code no native routine stands in for");
+    }
+    ++handler.calls;
+    handler.routine();
+    break;
+  }
+  case IrqHandler::Stray:
+    throw std::logic_error("Platform: an interrupt to code no native routine stands in for");
+  }
   m_flags = flags;
-}
-
-void Platform::RunHandler(FarAddress _handler)
-{
-  const auto found = m_hooks.find(Linear(_handler));
-  if (found != m_hooks.end())
-  {
-    ++found->second.calls;
-    found->second.routine();
-    return;
-  }
-  if (_handler.segment == ROM_SEGMENT && RomByte(_handler) == OPCODE_IRET)
-  {
-    m_instructionCycles += IRET_CYCLES; // the ROM's IRET, which the stubs nothing serves point to
-    return;
-  }
-  throw std::logic_error("Platform: an interrupt to code no native routine stands in for");
-}
-
-void Platform::SetInterruptVector(std::uint8_t _vector, FarAddress _handler) noexcept
-{
-  const FarAddress old = m_vectors[_vector];
-  const auto changed = [](std::uint16_t _from, std::uint16_t _to)
-  { return static_cast<std::uint64_t>(((_from ^ _to) & 0x00FF) != 0) + static_cast<std::uint64_t>(((_from ^ _to) & 0xFF00) != 0); };
-  m_vectorChanges += changed(old.offset, _handler.offset) + changed(old.segment, _handler.segment);
-  m_vectors[_vector] = _handler;
-}
-
-std::uint8_t Platform::RomByte(FarAddress _address) const
-{
-  const std::uint32_t linear = Linear(_address);
-  if (linear < ROM_LINEAR)
-  {
-    throw std::out_of_range("Platform::RomByte: an address outside the BIOS's ROM");
-  }
-  const auto offset = static_cast<std::uint16_t>(linear - ROM_LINEAR);
-  if (offset >= IRET_STUBS_OFFSET && offset < IRET_STUBS_END)
-  {
-    return OPCODE_IRET;
-  }
-  if (offset == MOUSE_DRIVER_OFFSET)
-  {
-    return OPCODE_NOP; // anything but an IRET: IsMouseDriverInstalled takes it as a driver
-  }
-  if (offset == MOUSE_DRIVER_OFFSET + 1)
-  {
-    return OPCODE_IRET;
-  }
-  if (offset == MODEL_OFFSET)
-  {
-    return MODEL_IBM_PC;
-  }
-  return 0;
-}
-
-std::uint8_t Platform::HandlerOpcode(FarAddress _handler) const
-{
-  return RomByte(_handler);
 }
 
 // ── The BIOS's hardware interrupt handlers (ADR-011 item 3) ──
@@ -419,7 +356,7 @@ void Platform::RunBiosTimerHandler()
 {
   m_flags = static_cast<std::uint16_t>(m_flags | FLAG_INTERRUPT);
   Cycles cycles = STI + PUSH_SEGMENT + PUSH_REGISTER + MOVE_IMMEDIATE + MOVE_TO_SEGMENT + INCREMENT_MEMORY;
-  const Bios::Tick tick = m_bios.CountTick();
+  const TimeOfDay::Tick tick = m_day.CountTick();
   cycles += tick.carried ? JUMP_NOT_TAKEN + INCREMENT_MEMORY : JUMP_TAKEN;
   cycles += COMPARE_MEMORY;
   if (!tick.dayCheck)
@@ -435,8 +372,7 @@ void Platform::RunBiosTimerHandler()
   // INT 1Ch: the ROM's IRET, as the program leaves the vector.
   m_instructionCycles += SOFTWARE_INTERRUPT + INTERRUPT_RETURN;
   // OUT 20h,20h.
-  m_controller.EndOfInterrupt();
-  ++m_portWrites;
+  m_events.EndOfInterrupt();
   m_instructionCycles += MOVE_IMMEDIATE + PORT_ACCESS + 2 * POP_REGISTER + INTERRUPT_RETURN;
 }
 
@@ -444,12 +380,11 @@ void Platform::RunBiosTimerHandler()
 void Platform::RunBiosKeyboardHandler()
 {
   m_flags = static_cast<std::uint16_t>(m_flags | FLAG_INTERRUPT);
-  (void)m_keyboard.Data();
-  const auto cleared = static_cast<std::uint8_t>(m_keyboard.SystemControl() | KEYBOARD_CLEAR);
-  m_keyboard.SetSystemControl(cleared);
-  m_keyboard.SetSystemControl(static_cast<std::uint8_t>(cleared & ~KEYBOARD_CLEAR));
-  m_controller.EndOfInterrupt();
-  m_portWrites += 3;
+  (void)m_events.ScanCode();
+  const auto cleared = static_cast<std::uint8_t>(m_systemControl | KEYBOARD_CLEAR);
+  SetSystemControl(cleared);
+  SetSystemControl(static_cast<std::uint8_t>(cleared & ~KEYBOARD_CLEAR));
+  m_events.EndOfInterrupt();
   m_instructionCycles += STI + PUSH_REGISTER + 2 * PORT_ACCESS + LOGIC_IMMEDIATE + PORT_ACCESS + LOGIC_IMMEDIATE + PORT_ACCESS +
                          MOVE_IMMEDIATE + PORT_ACCESS + POP_REGISTER + INTERRUPT_RETURN;
 }
@@ -458,50 +393,29 @@ void Platform::RunBiosKeyboardHandler()
 
 void Platform::Idle(Cycles _limit)
 {
-  Cycles next = std::min({m_timer.NextInterruptAt(), m_keyboard.NextDeliveryAt(), m_cga.NextStatusChangeAt(), _limit});
+  Cycles next = std::min({m_events.NextEventAt(), m_cga.NextStatusChangeAt(), _limit});
   if (next <= m_clock)
   {
     next = m_clock + 1;
   }
   m_clock = next;
   m_stepsSinceIdle = 0;
-  m_timer.Advance();
-  m_keyboard.Advance();
+  m_events.Advance();
 }
 
-void Platform::LoopTurn(std::span<const std::uint16_t> _signature)
+void Platform::Wait()
 {
-  if (_signature.size() > MOST_TURN_WORDS)
-  {
-    throw std::logic_error("Platform::LoopTurn: a turn signature of more than MOST_TURN_WORDS words");
-  }
-  ++m_stepsSinceIdle;
-  Turn turn;
-  std::ranges::copy(_signature, turn.signature.begin());
-  turn.signatureWords = _signature.size();
-  turn.memoryChanges = MemoryChanges();
-  turn.portWrites = PortWrites();
-  turn.valid = true;
-  NoteTurn(turn);
+  Idle(m_runLimit);
   EndTurn();
 }
 
-// A turn that changed nothing since the last idles: no byte, no port, and the same signature.
-void Platform::NoteTurn(const Turn& _turn)
+void Platform::Spin()
 {
-  const bool same = _turn.signatureWords == m_lastTurn.signatureWords &&
-                    std::equal(_turn.signature.begin(), _turn.signature.begin() + static_cast<std::ptrdiff_t>(_turn.signatureWords),
-                               m_lastTurn.signature.begin());
-  const bool idle =
-    m_lastTurn.valid && same && _turn.memoryChanges == m_lastTurn.memoryChanges && _turn.portWrites == m_lastTurn.portWrites;
-  m_lastTurn = _turn;
-  if (idle)
-  {
-    Idle(m_runLimit);
-  }
+  ++m_stepsSinceIdle;
+  EndTurn();
 }
 
-// After a turn is noted: the run's end if the clock reached it, and the interrupts now due.
+// After a wait or a spin: the run's end if the clock reached it, and the interrupts now due.
 void Platform::EndTurn()
 {
   if (m_clock >= m_runLimit)
@@ -527,16 +441,6 @@ void Platform::Spend(Cycles _cycles)
     }
     TakeDueInterrupts();
   }
-}
-
-std::uint64_t Platform::MemoryChanges() const noexcept
-{
-  return m_state.ChangeCount() + m_bios.ChangeCount() + m_vectorChanges;
-}
-
-std::uint64_t Platform::PortWrites() const noexcept
-{
-  return m_portWrites + m_bios.PortWrites();
 }
 
 // ── The picture ──

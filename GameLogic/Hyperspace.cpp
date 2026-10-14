@@ -151,7 +151,7 @@ void PostArrival(GameState& _state)
 
 // add [_low], low byte of _value; adc [_high], high byte: _value added to the top 16 bits of a coordinate, _low's high byte
 // and _high.
-void AddCarried(Counted<std::uint16_t>& _low, Counted<std::uint8_t>& _high, std::uint16_t _value)
+void AddCarried(Field<std::uint16_t>& _low, Field<std::uint8_t>& _high, std::uint16_t _value)
 {
   const auto sum = static_cast<unsigned>(High(_low) + Low(_value));
   _low = WithHigh(_low, static_cast<std::uint8_t>(sum));
@@ -261,11 +261,10 @@ void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_
   _state.Data().commander.selectedDistanceTenthsLy = 0;
   const bool galactic = _state.Data().jump.galacticJumpPending == 1;
   const std::uint32_t bytes = LoopCount(SYSTEM_RECORD_BYTES);
-  const std::span<const Counted<std::uint8_t>> from =
+  const std::span<const Field<std::uint8_t>> from =
     galactic ? BytesWithin(BytesOf(std::as_const(_state).Data().commander), COMMANDER_STATE_OFFSET(selectedSystemName), bytes)
              : BytesWithin(BytesOf(_state.Data().hyperspace.hyperspaceTargetRecord), 0, bytes);
-  const std::span<Counted<std::uint8_t>> to =
-    BytesWithin(BytesOf(_state.Data().commander), COMMANDER_STATE_OFFSET(currentSystemName), bytes);
+  const std::span<Field<std::uint8_t>> to = BytesWithin(BytesOf(_state.Data().commander), COMMANDER_STATE_OFFSET(currentSystemName), bytes);
   for (std::uint32_t copied = 0;;)
   {
     to[copied] = std::uint8_t{from[copied]};
@@ -328,7 +327,7 @@ void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_
 void ResetHyperspaceRings(GameState& _state)
 {
   // REP MOVSW within the data segment, a word at a time, SI and DI from the tables' starts: hyperspaceRingStart's bytes into
-  // hyperspaceRings, each counted when it changes, upwards, as the direction flag is clear wherever the game calls it: the only STD,
+  // hyperspaceRings, upwards, as the direction flag is clear wherever the game calls it: the only STD,
   // MaskOutsideTunnel's, has its CLD before the routine returns (change 3c).
   static_assert(sizeof(HyperspaceState::hyperspaceRings) == std::size_t{HYPERSPACE_RING_WORDS} * 2);
   for (std::size_t ring = 0; ring < HYPERSPACE_RING_START.size(); ++ring)
@@ -344,7 +343,7 @@ void DrawHyperspaceRings(GameState& _state)
 {
   // LOOP over the ten rings, three bytes each: the delay, the radius and the colour. PUSH CX and PUSH SI keep the count and
   // the ring round DrawCircle.
-  for (Counted<std::uint8_t>(&ring)[HYPERSPACE_RING_BYTES] : _state.Data().hyperspace.hyperspaceRings)
+  for (Field<std::uint8_t>(&ring)[HYPERSPACE_RING_BYTES] : _state.Data().hyperspace.hyperspaceRings)
   {
     const std::uint8_t delay = ring[0];
     if (delay != 0)
@@ -436,9 +435,9 @@ void LatchHyperspaceTarget(GameState& _state)
   _state.Data().commander.hyperspaceTargetIndex = std::uint8_t{_state.Data().commander.selectedSystemIndex};
   // LOOP: a count of 0 copies 65536 bytes.
   const std::uint32_t bytes = LoopCount(SYSTEM_RECORD_BYTES);
-  const std::span<const Counted<std::uint8_t>> from =
+  const std::span<const Field<std::uint8_t>> from =
     BytesWithin(BytesOf(std::as_const(_state).Data().commander), COMMANDER_STATE_OFFSET(selectedSystemName), bytes);
-  const std::span<Counted<std::uint8_t>> to = BytesWithin(BytesOf(_state.Data().hyperspace.hyperspaceTargetRecord), 0, bytes);
+  const std::span<Field<std::uint8_t>> to = BytesWithin(BytesOf(_state.Data().hyperspace.hyperspaceTargetRecord), 0, bytes);
   for (std::uint32_t copied = 0; copied < bytes; ++copied)
   {
     to[copied] = std::uint8_t{from[copied]};

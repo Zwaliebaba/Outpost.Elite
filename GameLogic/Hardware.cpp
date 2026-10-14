@@ -2,8 +2,6 @@
 
 #include "Hardware.h"
 
-#include <algorithm>
-#include <array>
 #include <span>
 #include <stdexcept>
 #include <string_view>
@@ -14,10 +12,8 @@ namespace Elite
 namespace
 {
 
-constexpr std::uint8_t TIMER_CHANNEL_2_SQUARE_WAVE = 0xB6; // channel 2, low then high byte, mode 3
-constexpr std::uint8_t KEYBOARD_ACKNOWLEDGE = 0x80;        // port 61h bit 7, the XT's PB7
+constexpr std::uint8_t KEYBOARD_ACKNOWLEDGE = 0x80; // port 61h bit 7, the XT's PB7
 
-constexpr std::uint8_t MOUSE_VECTOR = 0x33;
 constexpr std::uint16_t MOUSE_BUTTON_PRESSES = 0x0005;
 
 constexpr std::uint8_t CRTC_CURSOR_ADDRESS_HIGH = 0x0E;
@@ -28,32 +24,28 @@ constexpr char DOS_STRING_TERMINATOR = '$'; // int 21h AH=09h's
 
 std::uint8_t Hardware::SystemControl()
 {
-  return m_platform.KeyboardController().SystemControl();
+  return m_platform.SystemControl();
 }
 
 void Hardware::SetSystemControl(std::uint8_t _value)
 {
-  m_platform.NotePortWrites(1);
-  m_platform.KeyboardController().SetSystemControl(_value);
+  m_platform.SetSystemControl(_value);
 }
 
 void Hardware::SetToneDivisor(std::uint16_t _divisor)
 {
-  m_platform.NotePortWrites(3);
-  m_platform.Timer().Program(TIMER_CHANNEL_2_SQUARE_WAVE, _divisor);
+  m_platform.Sound().SetTone(_divisor);
 }
 
-void Hardware::SetTickDivisor(std::uint8_t _mode, std::uint16_t _divisor)
+void Hardware::SetTickDivisor(std::uint16_t _divisor)
 {
-  m_platform.NotePortWrites(3);
-  m_platform.Timer().Program(_mode, _divisor);
+  m_platform.Events().SetTickDivisor(_divisor);
   m_platform.TakeDueInterrupts();
 }
 
 void Hardware::EndOfInterrupt()
 {
-  m_platform.NotePortWrites(1);
-  m_platform.Interrupts().EndOfInterrupt();
+  m_platform.Events().EndOfInterrupt();
   m_platform.TakeDueInterrupts();
 }
 
@@ -67,30 +59,26 @@ void Hardware::DisableInterrupts() noexcept
   m_platform.DisableInterrupts();
 }
 
-void Hardware::LoopTurn(std::uint16_t _loop, std::initializer_list<std::uint16_t> _carried)
+void Hardware::Wait()
 {
-  std::array<std::uint16_t, Platform::MOST_TURN_WORDS> signature{};
-  if (_carried.size() >= signature.size())
-  {
-    throw std::logic_error("Hardware::LoopTurn: more carried values than a turn signature holds");
-  }
-  signature[0] = _loop;
-  std::ranges::copy(_carried, signature.begin() + 1);
-  m_platform.LoopTurn(std::span<const std::uint16_t>(signature.data(), _carried.size() + 1));
+  m_platform.Wait();
+}
+
+void Hardware::Spin()
+{
+  m_platform.Spin();
 }
 
 std::uint8_t Hardware::KeyboardData()
 {
-  return m_platform.KeyboardController().Data();
+  return m_platform.Events().ScanCode();
 }
 
 void Hardware::AcknowledgeKeyboard()
 {
-  Keyboard& keyboard = m_platform.KeyboardController();
-  const auto pulse = static_cast<std::uint8_t>(keyboard.SystemControl() | KEYBOARD_ACKNOWLEDGE);
-  keyboard.SetSystemControl(pulse);
-  keyboard.SetSystemControl(static_cast<std::uint8_t>(pulse & ~KEYBOARD_ACKNOWLEDGE));
-  m_platform.NotePortWrites(2);
+  const auto pulse = static_cast<std::uint8_t>(m_platform.SystemControl() | KEYBOARD_ACKNOWLEDGE);
+  m_platform.SetSystemControl(pulse);
+  m_platform.SetSystemControl(static_cast<std::uint8_t>(pulse & ~KEYBOARD_ACKNOWLEDGE));
 }
 
 std::uint8_t Hardware::GamePortButtons()
@@ -98,15 +86,15 @@ std::uint8_t Hardware::GamePortButtons()
   return m_platform.Joystick().Read();
 }
 
-// The mouse driver's calls: the driver's when one is loaded; otherwise int 33h reaches what its vector names, the ROM's IRET,
-// and the registers come back as they went.
+// The mouse driver's calls: the driver's when a mouse is there; otherwise int 33h reaches what its vector names, the ROM's IRET,
+// and the registers come back as they went (Platform::CallAbsentMouse).
 
 void Hardware::ResetMouse()
 {
   Mouse& mouse = m_platform.MouseDriver();
   if (!mouse.Present())
   {
-    m_platform.SoftwareInterrupt(MOUSE_VECTOR);
+    m_platform.CallAbsentMouse();
     return;
   }
   mouse.Reset();
@@ -117,7 +105,7 @@ std::uint16_t Hardware::ReadMousePresses()
   const Mouse& mouse = m_platform.MouseDriver();
   if (!mouse.Present())
   {
-    m_platform.SoftwareInterrupt(MOUSE_VECTOR);
+    m_platform.CallAbsentMouse();
     return MOUSE_BUTTON_PRESSES;
   }
   return mouse.Buttons();
@@ -128,7 +116,7 @@ MouseMotion Hardware::ReadMouseMotion()
   Mouse& mouse = m_platform.MouseDriver();
   if (!mouse.Present())
   {
-    m_platform.SoftwareInterrupt(MOUSE_VECTOR);
+    m_platform.CallAbsentMouse();
     return MouseMotion{0, 0};
   }
   return mouse.Motion();
@@ -136,7 +124,7 @@ MouseMotion Hardware::ReadMouseMotion()
 
 void Hardware::SetVideoMode(std::uint8_t _mode)
 {
-  if (!m_platform.BiosServices().SetMode(_mode))
+  if (!m_platform.Modes().SetMode(_mode))
   {
     throw std::logic_error("Hardware::SetVideoMode: a mode the game never sets");
   }
@@ -152,7 +140,7 @@ void Hardware::PrintDosString(std::string_view _text)
   }
   for (const char character : _text.substr(0, end))
   {
-    m_platform.BiosServices().WriteTeletype(static_cast<std::uint8_t>(character));
+    m_platform.Modes().WriteTeletype(static_cast<std::uint8_t>(character));
   }
 }
 
@@ -163,30 +151,26 @@ std::uint8_t Hardware::CgaStatus()
 
 void Hardware::SetColorSelect(std::uint8_t _value)
 {
-  m_platform.NotePortWrites(1);
   m_platform.Video().SetColorSelect(_value);
 }
 
 void Hardware::SetCursorAddressHigh(std::uint8_t _value)
 {
-  m_platform.NotePortWrites(2);
   m_platform.Video().WriteCrtc(CRTC_CURSOR_ADDRESS_HIGH, _value);
 }
 
 void Hardware::SetModeControl(std::uint8_t _value)
 {
-  m_platform.NotePortWrites(1);
   m_platform.Video().SetModeControl(_value);
 }
 
 void Hardware::SelectPalette(std::uint8_t _palette)
 {
-  m_platform.BiosServices().SelectPalette(_palette);
+  m_platform.Modes().SelectPalette(_palette);
 }
 
 void Hardware::FireGamePort()
 {
-  m_platform.NotePortWrites(1);
   m_platform.Joystick().Fire();
 }
 
@@ -200,15 +184,15 @@ void Hardware::CountInstructionCycles(Cycles _cycles) noexcept
   m_platform.CountInstructionCycles(_cycles);
 }
 
-BiosClock Hardware::ReadBiosClock()
+ClockReading Hardware::ReadTimeOfDay()
 {
-  return m_platform.BiosServices().ReadClock();
+  return m_platform.Day().ReadClock();
 }
 
 // DOS's file services, native (D27): the platform's DosFiles. A stamp is DOS's time at the platform's clock, as the emulated
 // DOS's was.
 
-void Hardware::SetDiskTransferArea(std::span<Counted<std::uint8_t>> _area)
+void Hardware::SetDiskTransferArea(std::span<Field<std::uint8_t>> _area)
 {
   m_platform.Files().SetTransferArea(_area);
 }
@@ -233,7 +217,7 @@ DosAnswer Hardware::OpenFile(std::string_view _name, std::uint8_t _access)
   return m_platform.Files().Open(_name, _access);
 }
 
-DosAnswer Hardware::ReadFile(std::uint16_t _handle, std::span<Counted<std::uint8_t>> _buffer)
+DosAnswer Hardware::ReadFile(std::uint16_t _handle, std::span<Field<std::uint8_t>> _buffer)
 {
   return m_platform.Files().Read(_handle, _buffer);
 }
@@ -270,29 +254,19 @@ void Hardware::Spend(const PacingPoint& _point)
 
 // ── What the emulated PC kept in memory, outside the game's (D33) ──
 
-FarAddress Hardware::InterruptVector(std::uint8_t _vector)
+IrqHandler Hardware::Handler(Irq _irq) const noexcept
 {
-  return m_platform.InterruptVector(_vector);
+  return m_platform.Handler(_irq);
 }
 
-void Hardware::SetInterruptVector(std::uint8_t _vector, FarAddress _handler)
+void Hardware::SetHandler(Irq _irq, IrqHandler _handler) noexcept
 {
-  m_platform.SetInterruptVector(_vector, _handler);
+  m_platform.SetHandler(_irq, _handler);
 }
 
-FarAddress Hardware::BiosInterruptVector(std::uint8_t _vector) const noexcept
+bool Hardware::MouseDriverLoaded() const noexcept
 {
-  return m_platform.PowerOnInterruptVector(_vector);
-}
-
-std::uint8_t Hardware::RomByte(std::uint16_t _segment, std::uint16_t _offset)
-{
-  return m_platform.RomByte(FarAddress{_segment, _offset});
-}
-
-std::uint8_t Hardware::HandlerOpcode(FarAddress _handler)
-{
-  return m_platform.HandlerOpcode(_handler);
+  return m_platform.MouseDriverLoaded();
 }
 
 std::string_view Hardware::CommandTail() const noexcept

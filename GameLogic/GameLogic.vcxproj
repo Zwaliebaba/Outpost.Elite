@@ -78,14 +78,13 @@
     <ClInclude Include="AiTables.h" />
     <ClInclude Include="Arithmetic.h" />
     <ClInclude Include="AudioState.h" />
-    <ClInclude Include="Bios.h" />
     <ClInclude Include="Cga.h" />
     <ClInclude Include="CgaFont.h" />
     <ClInclude Include="Combat.h" />
     <ClInclude Include="CombatState.h" />
     <ClInclude Include="CombatTables.h" />
     <ClInclude Include="CommanderState.h" />
-    <ClInclude Include="Counted.h" />
+    <ClInclude Include="Field.h" />
     <ClInclude Include="DataPlaces.h" />
     <ClInclude Include="DirectoryFileStore.h" />
     <ClInclude Include="DiskState.h" />
@@ -121,10 +120,7 @@
     <ClInclude Include="HyperspaceTables.h" />
     <ClInclude Include="Input.h" />
     <ClInclude Include="InputState.h" />
-    <ClInclude Include="InterruptController.h" />
-    <ClInclude Include="IntervalTimer.h" />
     <ClInclude Include="JumpState.h" />
-    <ClInclude Include="Keyboard.h" />
     <ClInclude Include="KeyboardState.h" />
     <ClInclude Include="Market.h" />
     <ClInclude Include="MarketState.h" />
@@ -153,6 +149,7 @@
     <ClInclude Include="Scene.h" />
     <ClInclude Include="SceneState.h" />
     <ClInclude Include="SceneTables.h" />
+    <ClInclude Include="Scheduler.h" />
     <ClInclude Include="Sha256.h" />
     <ClInclude Include="SharedTables.h" />
     <ClInclude Include="ShipModel.h" />
@@ -164,6 +161,7 @@
     <ClInclude Include="SpaceObject.h" />
     <ClInclude Include="SpaceViewLayers.h" />
     <ClInclude Include="Speaker.h" />
+    <ClInclude Include="SquareWave.h" />
     <ClInclude Include="StartUp.h" />
     <ClInclude Include="StartUpState.h" />
     <ClInclude Include="StartUpTables.h" />
@@ -171,18 +169,19 @@
     <ClInclude Include="Text.h" />
     <ClInclude Include="TextState.h" />
     <ClInclude Include="TextTables.h" />
+    <ClInclude Include="TimeOfDay.h" />
     <ClInclude Include="Timer.h" />
     <ClInclude Include="TimerState.h" />
     <ClInclude Include="TimerTables.h" />
     <ClInclude Include="Timing.h" />
     <ClInclude Include="Video.h" />
+    <ClInclude Include="VideoModes.h" />
     <ClInclude Include="VideoState.h" />
     <ClInclude Include="VideoTables.h" />
     <ClInclude Include="WorldState.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Ai.cpp" />
-    <ClCompile Include="Bios.cpp" />
     <ClCompile Include="Cga.cpp" />
     <ClCompile Include="CgaFont.cpp" />
     <ClCompile Include="Combat.cpp" />
@@ -202,9 +201,6 @@
     <ClCompile Include="Hardware.cpp" />
     <ClCompile Include="Hyperspace.cpp" />
     <ClCompile Include="Input.cpp" />
-    <ClCompile Include="InterruptController.cpp" />
-    <ClCompile Include="IntervalTimer.cpp" />
-    <ClCompile Include="Keyboard.cpp" />
     <ClCompile Include="Market.cpp" />
     <ClCompile Include="Maths.cpp" />
     <ClCompile Include="Mouse.cpp" />
@@ -220,17 +216,21 @@
     <ClCompile Include="Replay.cpp" />
     <ClCompile Include="SaveLoad.cpp" />
     <ClCompile Include="Scene.cpp" />
+    <ClCompile Include="Scheduler.cpp" />
     <ClCompile Include="Sha256.cpp" />
     <ClCompile Include="ShipModel.cpp" />
     <ClCompile Include="Ships.cpp" />
     <ClCompile Include="Sound.cpp" />
     <ClCompile Include="SpaceViewLayers.cpp" />
     <ClCompile Include="Speaker.cpp" />
+    <ClCompile Include="SquareWave.cpp" />
     <ClCompile Include="StartUp.cpp" />
     <ClCompile Include="StateDigest.cpp" />
     <ClCompile Include="Text.cpp" />
+    <ClCompile Include="TimeOfDay.cpp" />
     <ClCompile Include="Timer.cpp" />
     <ClCompile Include="Video.cpp" />
+    <ClCompile Include="VideoModes.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

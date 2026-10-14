@@ -12,12 +12,7 @@ namespace Elite
 namespace
 {
 
-constexpr std::uint16_t TIMER_INTERRUPT = 0x0215;
-
-constexpr std::uint8_t TIMER_VECTOR = 0x08;
-
-constexpr std::uint8_t PIT_CHANNEL0_SQUARE_WAVE = 0x36; // channel 0, both bytes, mode 3
-constexpr std::uint16_t TICK_DIVISOR = 0x04A9;          // about 1000.15 Hz
+constexpr std::uint16_t TICK_DIVISOR = 0x04A9; // channel 0 in mode 3: about 1000.15 Hz
 constexpr std::uint32_t TICKS_PER_DAY = 0x1800B0;
 constexpr std::uint8_t SPEAKER_BITS = 0x03; // gate and data, cleared at start-up
 constexpr std::uint8_t SPEAKER_DATA = 0x02;
@@ -30,11 +25,8 @@ constexpr std::uint8_t NOTE_TICKS_PER_BEAT = 0x24;
 constexpr std::uint8_t NOTE_BASE = 0x0C;    // notePeriods starts an octave up
 constexpr std::uint16_t REST_PERIOD = 0x32; // inaudible
 
-// Where WaitForTimerTick's loop jumps back to: the compare.
-constexpr std::uint16_t TIMER_TICK_COMPARE = 0x7776;
-
 // The byte at _field less one, stored back: DEC BYTE PTR. Returns what it leaves.
-std::uint8_t Decrement(Counted<std::uint8_t>& _field)
+std::uint8_t Decrement(Field<std::uint8_t>& _field)
 {
   const auto value = static_cast<std::uint8_t>(_field - 1);
   _field = value;
@@ -125,7 +117,7 @@ using SweepSample = std::uint8_t (*)(GameState&, Hardware&);
 
 // The noise and tone sweeps (0x7215, 0x7289): every sweepPeriodTicks ticks one sample, by _sample; every
 // sweepStepLength samples a longer period and a shorter step, until the period reaches 7.
-void TickSweep(GameState& _state, Hardware& _hardware, SweepSample _sample, Counted<std::uint8_t>& _active)
+void TickSweep(GameState& _state, Hardware& _hardware, SweepSample _sample, Field<std::uint8_t>& _active)
 {
   if (Decrement(_state.Data().audio.sweepTickCounter) != 0)
   {
@@ -180,30 +172,30 @@ void TickSoundEffects(GameState& _state, Hardware& _hardware)
 
 void InstallTimerInterrupt(GameState& _state, Hardware& _hardware)
 {
-  _hardware.SetTickDivisor(PIT_CHANNEL0_SQUARE_WAVE, TICK_DIVISOR);
+  _hardware.SetTickDivisor(TICK_DIVISOR);
   const std::uint8_t speaker = _hardware.SystemControl();
   _state.Data().timer.savedSpeakerPort = speaker;
   const auto image = static_cast<std::uint8_t>(speaker & ~SPEAKER_BITS);
   _state.Data().audio.speakerPortImage = image;
   _hardware.SetSystemControl(image);
-  // The game's own handler installed in place of the BIOS's, which the original keeps in savedTimerVector and native code takes
-  // from the BIOS (RestoreTimerInterrupt).
-  _hardware.SetInterruptVector(TIMER_VECTOR, FarAddress{_state.CodeSegment(), TIMER_INTERRUPT});
+  // The game's own handler, at CS:0215, installed in place of the BIOS's, which the original keeps in savedTimerVector and
+  // native code puts back by name (RestoreTimerInterrupt).
+  _hardware.SetHandler(Irq::Timer, IrqHandler::Game);
   _hardware.EnableInterrupts();
 }
 
-BiosClock RestoreTimerInterrupt(GameState& _state, Hardware& _hardware)
+ClockReading RestoreTimerInterrupt(GameState& _state, Hardware& _hardware)
 {
   _hardware.DisableInterrupts();
   // The BIOS's handler put back, as InstallTimerInterrupt found it.
-  _hardware.SetInterruptVector(TIMER_VECTOR, _hardware.BiosInterruptVector(TIMER_VECTOR));
+  _hardware.SetHandler(Irq::Timer, IrqHandler::Bios);
   _hardware.SetSystemControl(_state.Data().timer.savedSpeakerPort);
-  _hardware.SetTickDivisor(PIT_CHANNEL0_SQUARE_WAVE, 0);
+  _hardware.SetTickDivisor(0);
   _hardware.EnableInterrupts();
-  return _hardware.ReadBiosClock();
+  return _hardware.ReadTimeOfDay();
 }
 
-std::uint16_t ClockLessADayHigh(const BiosClock& _clock) noexcept
+std::uint16_t ClockLessADayHigh(const ClockReading& _clock) noexcept
 {
   return static_cast<std::uint16_t>((_clock.ticks - TICKS_PER_DAY) >> 16);
 }
@@ -237,12 +229,12 @@ void TimerTick(GameState& _state, Hardware& _hardware)
 
 void WaitForTimerTick(GameState& _state, Hardware& _hardware)
 {
-  // PUSH AX, MOV AX,[timerTicks], then the compare at 7776 and JE back to it, and POP AX: the loop carries in AX the
-  // tick it started at. The stack the PUSH used is not state the game reads, nor the digest (ADR-008 item 5).
+  // PUSH AX, MOV AX,[timerTicks], then the compare at 7776 and JE back to it, and POP AX: AX holds the tick it started at. The
+  // stack the PUSH used is not state the game reads, nor the digest (ADR-008 item 5).
   const std::uint16_t ticks = _state.Data().timer.timerTicks;
   while (ticks == _state.Data().timer.timerTicks)
   {
-    _hardware.LoopTurn(TIMER_TICK_COMPARE, {ticks});
+    _hardware.Wait();
   }
 }
 
@@ -258,7 +250,7 @@ namespace
 {
 
 constexpr std::array ENTRIES = {
-  NativeEntry{TIMER_INTERRUPT, &TimerInterruptEntry, EntryReturn::Interrupt},
+  NativeEntry{EntryKind::TimerHandler, &TimerInterruptEntry}, // CS:0215
 };
 
 } // namespace

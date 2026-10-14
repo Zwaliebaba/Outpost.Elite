@@ -1,8 +1,9 @@
 #include "pch.h"
 
-#include "Bios.h"
+#include "TimeOfDay.h"
 #include "Cga.h"
 #include "Hardware.h"
+#include "Input.h"
 #include "Platform.h"
 #include "PlatformRig.h"
 #include "StateDigest.h"
@@ -25,34 +26,28 @@ namespace
 // The first IRQ 0 after power-on, at the BIOS's 18.2 Hz.
 constexpr Elite::Cycles FIRST_TICK = 65536 * Elite::CYCLES_PER_PIT_TICK; // 262,144
 
-// A loop's address, for its turn signature (ADR-015).
-constexpr std::uint16_t WAIT_LOOP = 0x0100;
-
-// A handler's address in the program's code, which a vector can name and a native routine stand in for.
-constexpr Elite::FarAddress HANDLER{0x2000, 0x0010};
-
 // What the 8088 takes over the ROM's IRET: Intel's 8086 figure and three words popped over the 8-bit bus.
 constexpr Elite::Cycles IRET_CYCLES = 24 + 3 * 4;
 
-// sti; then wait for ever, a turn at the loop's backward jump, carrying nothing: what the program's idle loop does.
+// sti; then wait for ever, each poll finding nothing: what the program's idle loop does.
 void WaitForEver(Elite::Hardware& _hardware)
 {
   _hardware.EnableInterrupts();
   for (;;)
   {
-    _hardware.LoopTurn(WAIT_LOOP, {});
+    _hardware.Wait();
   }
 }
 
-// Waits for the BIOS's tick count to change, with interrupts on, a turn at a time carrying the count it started from: sti;
-// mov bx,es:[6Ch]; wait: cmp bx,es:[6Ch]; je wait.
+// Waits for the BIOS's tick count to change, with interrupts on, a poll at a time: sti; mov bx,es:[6Ch]; wait: cmp bx,es:[6Ch];
+// je wait.
 void WaitForTick(PlatformRig& _rig)
 {
   _rig.Native().EnableInterrupts();
-  const std::uint32_t ticks = _rig.Host().BiosServices().Ticks();
-  while (_rig.Host().BiosServices().Ticks() == ticks)
+  const std::uint32_t ticks = _rig.Host().Day().Ticks();
+  while (_rig.Host().Day().Ticks() == ticks)
   {
-    _rig.Native().LoopTurn(WAIT_LOOP, {static_cast<std::uint16_t>(ticks & 0xFFFF)});
+    _rig.Native().Wait();
   }
 }
 
@@ -92,12 +87,12 @@ public:
   {
     PlatformRig rig("PlatformTimerTick");
     rig.Start([&rig] { WaitForEver(rig.Native()); });
-    const std::uint32_t ticks = rig.Host().BiosServices().Ticks();
+    const std::uint32_t ticks = rig.Host().Day().Ticks();
 
     Assert::IsTrue(rig.Host().RunUntil(262'000) == Elite::StopReason::Reached);
-    Assert::AreEqual(ticks, rig.Host().BiosServices().Ticks(), L"not yet");
+    Assert::AreEqual(ticks, rig.Host().Day().Ticks(), L"not yet");
     Assert::IsTrue(rig.Host().RunUntil(2 * FIRST_TICK + 1'000) == Elite::StopReason::Reached);
-    Assert::AreEqual(ticks + 2, rig.Host().BiosServices().Ticks(), L"two ticks, so the first was ended");
+    Assert::AreEqual(ticks + 2, rig.Host().Day().Ticks(), L"two ticks, so the first was ended");
     Assert::AreEqual(std::uint64_t{2}, rig.Host().InterruptsTaken());
   }
 
@@ -112,8 +107,8 @@ public:
     Assert::IsTrue(rig.Host().RunUntil(2'000'000) == Elite::StopReason::Terminated, L"and stays ended");
   }
 
-  // Paced time (ADR-008): a loop that counts is work, and work takes no time: a turn whose signature changed never idles.
-  // mov cx,1000; loop $, a turn at each LOOP carrying CX.
+  // Paced time (ADR-008): a loop that counts is work, and work takes no time: a turn that waits for nothing never idles.
+  // mov cx,1000; loop $, each LOOP a spin.
   TEST_METHOD(PacedWorkTakesNoTime)
   {
     PlatformRig rig("PlatformPacedWork");
@@ -123,15 +118,15 @@ public:
         for (std::uint16_t count = 1000; count != 0;)
         {
           --count;
-          rig.Native().LoopTurn(WAIT_LOOP, {count});
+          rig.Native().Spin();
         }
       });
     Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Elite::StopReason::Terminated);
     Assert::AreEqual(std::uint64_t{0}, rig.Host().Clock(), L"no time passed");
   }
 
-  // A loop that waits for the BIOS's tick count to change changes nothing on its turns, so the clock moves from event to
-  // event until the first IRQ 0, at cycle 262,144, and the loop ends right there.
+  // A loop that waits for the BIOS's tick count to change finds nothing at each poll, so the clock moves from event to event
+  // until the first IRQ 0, at cycle 262,144, and the loop ends right there.
   TEST_METHOD(PacedWaitEndsAtTheEventItWaitsFor)
   {
     PlatformRig rig("PlatformPacedWait");
@@ -150,14 +145,14 @@ public:
         rig.Native().DisableInterrupts();
         for (;;)
         {
-          rig.Native().LoopTurn(WAIT_LOOP, {});
+          rig.Native().Wait();
         }
       });
     Assert::IsTrue(rig.Host().RunUntil(500'000) == Elite::StopReason::Reached);
     Assert::AreEqual(std::uint64_t{500'000}, rig.Host().Clock());
   }
 
-  // A loop whose turns never repeat never waits, so paced time would stand still for ever: the run stops as Spinning.
+  // A loop that never waits would hold paced time still for ever: the run stops as Spinning.
   TEST_METHOD(PacedSpinIsStopped)
   {
     PlatformRig rig("PlatformPacedSpin");
@@ -165,9 +160,9 @@ public:
       [&rig]
       {
         rig.Native().EnableInterrupts();
-        for (std::uint16_t turn = 0;; ++turn)
+        for (;;)
         {
-          rig.Native().LoopTurn(WAIT_LOOP, {turn});
+          rig.Native().Spin();
         }
       });
     rig.Host().SetSpinLimit(10'000);
@@ -175,14 +170,11 @@ public:
     Assert::AreEqual(std::uint64_t{0}, rig.Host().Clock());
   }
 
-  // Two runs of the same program to the same cycle end in the same state: the same interrupts taken, the same counts, the
-  // same game state.
+  // Two runs of the same program to the same cycle end in the same state: the same interrupts taken and the same game state.
   TEST_METHOD(RunsAreIdenticalToTheCycle)
   {
     std::array<std::uint64_t, 2> clocks{};
     std::array<std::uint64_t, 2> interrupts{};
-    std::array<std::uint64_t, 2> changes{};
-    std::array<std::uint64_t, 2> writes{};
     std::array<std::string, 2> digests;
     for (std::size_t run = 0; run < 2; ++run)
     {
@@ -191,15 +183,11 @@ public:
       Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Elite::StopReason::Reached);
       clocks[run] = rig.Host().Clock();
       interrupts[run] = rig.Host().InterruptsTaken();
-      changes[run] = rig.Host().MemoryChanges();
-      writes[run] = rig.Host().PortWrites();
       digests[run] = Elite::GameStateDigest(rig.State(), rig.Host().Video());
     }
     Assert::AreEqual(clocks[0], clocks[1]);
     Assert::AreEqual(std::uint64_t{3}, interrupts[0], L"three ticks in a million cycles");
     Assert::AreEqual(interrupts[0], interrupts[1]);
-    Assert::AreEqual(changes[0], changes[1]);
-    Assert::AreEqual(writes[0], writes[1]);
     Assert::IsTrue(digests[0] == digests[1], L"the same game state");
   }
 
@@ -237,36 +225,24 @@ public:
   TEST_METHOD(TwoRoutinesAtOneEntryAreRefused)
   {
     PlatformRig rig("PlatformTwice");
-    rig.Host().Hook(HANDLER, [] {});
-    Assert::ExpectException<std::logic_error>([&rig] { rig.Host().Hook(HANDLER, [] {}); }, L"a handler");
+    rig.Host().SetGameHandler(Elite::Irq::Timer, [] {});
+    Assert::ExpectException<std::logic_error>([&rig] { rig.Host().SetGameHandler(Elite::Irq::Timer, [] {}); }, L"a handler");
     rig.Start([] {});
     Assert::ExpectException<std::logic_error>([&rig] { rig.Start([] {}); }, L"the program's start");
   }
 
-  // An INT goes to the handler its vector names, natively, with IF and TF cleared, and returns as IRET does, the flags as
-  // they were. Setting the vector counts the bytes of the table it changes.
-  TEST_METHOD(AnInterruptRunsTheHandlerItsVectorNames)
+  // A vector that names code no routine stands in for, as int 8 does once the game writes its segment again while the BIOS's
+  // handler is there: the first interrupt taken there is refused.
+  TEST_METHOD(AStrayHandlerIsRefused)
   {
-    PlatformRig rig("PlatformInterrupts");
-    bool enabledInside = true;
-    bool enabledAfter = false;
-    rig.Host().Hook(HANDLER, [&rig, &enabledInside] { enabledInside = rig.Host().InterruptsEnabled(); });
-    const std::uint64_t changes = rig.Host().MemoryChanges();
-    rig.Native().SetInterruptVector(0x60, HANDLER);
-    Assert::AreEqual(changes + 3, rig.Host().MemoryChanges(), L"F000:FD60 to 2000:0010: three bytes changed");
-    Assert::IsTrue(rig.Native().InterruptVector(0x60) == HANDLER);
-
+    PlatformRig rig("PlatformStray");
     rig.Start(
-      [&rig, &enabledAfter]
+      [&rig]
       {
-        rig.Native().EnableInterrupts();
-        rig.Host().SoftwareInterrupt(0x60);
-        enabledAfter = rig.Host().InterruptsEnabled();
+        rig.Native().SetHandler(Elite::Irq::Timer, Elite::IrqHandler::Stray);
+        WaitForEver(rig.Native());
       });
-    Assert::IsTrue(rig.Host().RunUntil(1'000) == Elite::StopReason::Terminated);
-    Assert::IsFalse(enabledInside, L"IF cleared in the handler");
-    Assert::IsTrue(enabledAfter, L"and back after its IRET");
-    Assert::AreEqual(std::uint64_t{1}, rig.Host().Hooks().at(0x20010).calls);
+    Assert::ExpectException<std::logic_error>([&rig] { (void)rig.Host().RunUntil(1'000'000); }, L"at the first IRQ 0");
   }
 
   // The game's own timer handler in vector 8: IRQ 0 is taken as the 8088 takes one, at each rising edge of channel 0 while
@@ -277,18 +253,18 @@ public:
     PlatformRig rig("PlatformIrq");
     std::vector<Elite::Cycles> taken;
     bool enabledInside = false;
-    rig.Host().Hook(HANDLER,
-                    [&rig, &taken, &enabledInside]
-                    {
-                      taken.push_back(rig.Host().Clock());
-                      enabledInside = enabledInside || rig.Host().InterruptsEnabled();
-                      rig.Native().EndOfInterrupt();
-                    });
-    const std::uint32_t ticks = rig.Host().BiosServices().Ticks();
+    rig.Host().SetGameHandler(Elite::Irq::Timer,
+                              [&rig, &taken, &enabledInside]
+                              {
+                                taken.push_back(rig.Host().Clock());
+                                enabledInside = enabledInside || rig.Host().InterruptsEnabled();
+                                rig.Native().EndOfInterrupt();
+                              });
+    const std::uint32_t ticks = rig.Host().Day().Ticks();
     rig.Start(
       [&rig]
       {
-        rig.Native().SetInterruptVector(0x08, HANDLER);
+        rig.Native().SetHandler(Elite::Irq::Timer, Elite::IrqHandler::Game);
         WaitForEver(rig.Native());
       });
     Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Elite::StopReason::Reached);
@@ -296,57 +272,31 @@ public:
     Assert::IsFalse(enabledInside, L"IF cleared in the handler");
     Assert::AreEqual(std::uint64_t{3}, rig.Host().InterruptsTaken());
     Assert::AreEqual(3 * Elite::Platform::HARDWARE_INTERRUPT_CYCLES, rig.Host().InstructionCycles(), L"each entry's cycles");
-    Assert::AreEqual(ticks, rig.Host().BiosServices().Ticks(), L"the BIOS's handler did not run");
-    Assert::AreEqual(0u, std::uint32_t{rig.Host().Interrupts().InServiceRegister()}, L"every one ended");
+    Assert::AreEqual(ticks, rig.Host().Day().Ticks(), L"the BIOS's handler did not run");
+    Assert::IsFalse(rig.Host().Events().InService(Elite::Irq::Timer), L"every one ended");
+    Assert::AreEqual(std::uint64_t{3}, rig.Host().GameHandler(Elite::Irq::Timer).calls);
   }
 
-  // Every vector as the BIOS leaves it: each at its own IRET in the ROM, F000:FD00 + n, but the timer's and the keyboard's,
-  // which name the BIOS's handlers, and DOS's terminate address. The ROM is an IBM PC's, with no Amstrad's name where Start
-  // looks for one.
-  TEST_METHOD(TheVectorTableIsAsTheBiosLeavesIt)
+  // The BIOS's handlers serve the timer's and the keyboard's interrupts at power-on, as its vectors leave them, and the ROM is
+  // an IBM PC's, with no Amstrad's name where Start looks for one.
+  TEST_METHOD(TheBiosServesBothInterruptsAtPowerOn)
   {
     PlatformRig rig("PlatformVectors");
-    Elite::Hardware& hardware = rig.Native();
-    for (std::uint32_t vector = 0; vector < 256; ++vector)
-    {
-      const Elite::FarAddress handler = hardware.InterruptVector(static_cast<std::uint8_t>(vector));
-      Assert::AreEqual(0xF000u, std::uint32_t{handler.segment});
-      if (vector == 0x08 || vector == 0x09 || vector == 0x22)
-      {
-        continue;
-      }
-      Assert::AreEqual(0xFD00u + vector, std::uint32_t{handler.offset});
-      Assert::AreEqual(0xCFu, std::uint32_t{hardware.HandlerOpcode(handler)}, L"an IRET");
-    }
-    Assert::AreEqual(0xE000u, std::uint32_t{hardware.InterruptVector(0x08).offset}, L"the BIOS's timer handler");
-    Assert::AreEqual(0xE040u, std::uint32_t{hardware.InterruptVector(0x09).offset}, L"the BIOS's keyboard handler");
-    Assert::AreEqual(0xE070u, std::uint32_t{hardware.InterruptVector(0x22).offset}, L"the terminate address");
-
-    Assert::AreEqual(0xFFu, std::uint32_t{hardware.RomByte(0xF000, 0xFFFE)}, L"the model byte: an IBM PC");
-    // Start's check: repe cmpsb of "Amstrad" against FC00:0016.
-    constexpr std::string_view AMSTRAD = "Amstrad";
-    bool same = true;
-    for (std::size_t index = 0; index < AMSTRAD.size(); ++index)
-    {
-      same = same && hardware.RomByte(0xFC00, static_cast<std::uint16_t>(0x16 + index)) == static_cast<std::uint8_t>(AMSTRAD[index]);
-    }
-    Assert::IsFalse(same, L"FC00:0016 must not hold \"Amstrad\"");
-    Assert::ExpectException<std::out_of_range>([&hardware] { (void)hardware.RomByte(0x1000, 0); }, L"the ROM is F000:0000 on");
+    Assert::IsTrue(rig.Native().Handler(Elite::Irq::Timer) == Elite::IrqHandler::Bios, L"the BIOS's timer handler");
+    Assert::IsTrue(rig.Native().Handler(Elite::Irq::Keyboard) == Elite::IrqHandler::Bios, L"the BIOS's keyboard handler");
+    Assert::IsFalse(Elite::Hardware::AmstradRom(), L"FC00:0016 must not hold \"Amstrad\"");
   }
 
-  // What the game's own test, IsMouseDriverInstalled (CS:02D4), reads: the int 33h vector, and the first byte of the code it
-  // names, an IRET when no driver is loaded.
+  // What the game's own test, IsMouseDriverInstalled (CS:02D4), finds: whether a driver is loaded, as int 33h's vector says.
   TEST_METHOD(TheGamesMouseCheckSeesWhetherADriverIsLoaded)
   {
     PlatformRig none("PlatformNoMouse", false);
-    const Elite::FarAddress absent = none.Native().InterruptVector(0x33);
-    Assert::IsTrue(absent == Elite::FarAddress{0xF000, 0xFD33});
-    Assert::AreEqual(0xCFu, std::uint32_t{none.Native().HandlerOpcode(absent)}, L"no driver");
+    Assert::IsFalse(none.Native().MouseDriverLoaded(), L"no driver");
+    Assert::IsFalse(Elite::IsMouseDriverInstalled(none.Native()).installed);
 
     PlatformRig loaded("PlatformMouse", true);
-    const Elite::FarAddress present = loaded.Native().InterruptVector(0x33);
-    Assert::IsTrue(present == Elite::FarAddress{0xF000, 0xE060});
-    Assert::IsTrue(loaded.Native().HandlerOpcode(present) != 0xCF, L"the driver's entry is not an IRET");
+    Assert::IsTrue(loaded.Native().MouseDriverLoaded(), L"a driver");
+    Assert::IsTrue(Elite::IsMouseDriverInstalled(loaded.Native()).installed);
   }
 
   // An interrupt nothing serves goes to the ROM's IRET, which returns at once and costs the 8088 its cycles: int 33h with no
@@ -361,8 +311,8 @@ public:
 
   // The BIOS's hardware handlers, native in the ROM's place, on each of the paths the ROM's code takes: the timer handler's
   // four (a tick, a tick that carries into the high word, a tick in the hour the day ends in, and the day's last tick), and
-  // the keyboard handler's. The bytes of the data area they change, their port writes and the instruction clock are what the
-  // ROM's code, interpreted from the same state, gave before D7 deleted the interpreter; its stack pushes are gone with the
+  // the keyboard handler's. What they leave and the instruction clock are what the ROM's code, interpreted from the same state,
+  // gave before D7 deleted the interpreter; its stack pushes are gone with the
   // processor (D33).
   TEST_METHOD(BiosHandlersDoWhatTheRomDid)
   {
@@ -370,54 +320,75 @@ public:
     {
       std::uint32_t ticks;
       std::uint32_t ticksAfter;
-      std::uint64_t changes;
       std::uint8_t rolledOver;
       Elite::Cycles instructionCycles;
     };
     const std::array<Case, 4> cases = {{
-      {0x00051000, 0x00051001, 1, 0, 299},
-      {0x0005FFFF, 0x00060000, 3, 0, 316},
-      {0x00180100, 0x00180101, 1, 0, 323},
-      {0x001800AF, 0x00000000, 4, 1, 358},
+      {0x00051000, 0x00051001, 0, 299},
+      {0x0005FFFF, 0x00060000, 0, 316},
+      {0x00180100, 0x00180101, 0, 323},
+      {0x001800AF, 0x00000000, 1, 358},
     }};
     for (const Case& test : cases)
     {
       PlatformRig rig("PlatformBiosTimer");
       Elite::Platform& platform = rig.Host();
-      platform.BiosServices().SetClock(test.ticks);
-      const std::uint64_t changes = platform.MemoryChanges();
-      const std::uint64_t writes = platform.PortWrites();
+      platform.Day().SetClock(test.ticks);
       const Elite::Cycles cycles = platform.InstructionCycles();
-      platform.Interrupts().RaiseIrq(0);
+      platform.Events().Request(Elite::Irq::Timer);
       platform.TakeDueInterrupts();
-      Assert::AreEqual(test.ticksAfter, platform.BiosServices().Ticks(), L"the count");
-      Assert::AreEqual(test.changes, platform.MemoryChanges() - changes, L"every byte of the data area it changed");
-      Assert::AreEqual(std::uint64_t{1}, platform.PortWrites() - writes, L"one OUT: the end of interrupt");
+      Assert::AreEqual(test.ticksAfter, platform.Day().Ticks(), L"the count");
       Assert::AreEqual(Elite::Platform::HARDWARE_INTERRUPT_CYCLES + test.instructionCycles, platform.InstructionCycles() - cycles,
                        L"the instruction clock: the entry, then the ROM's code to its IRET");
-      Assert::AreEqual(0u, std::uint32_t{platform.Interrupts().InServiceRegister()}, L"ended");
-      Assert::AreEqual(std::uint32_t{test.rolledOver}, std::uint32_t{platform.BiosServices().ReadClock().rolledOver}, L"TIMER_OFL");
+      Assert::IsFalse(platform.Events().InService(Elite::Irq::Timer) || platform.Events().InService(Elite::Irq::Keyboard), L"ended");
+      Assert::AreEqual(std::uint32_t{test.rolledOver}, std::uint32_t{platform.Day().ReadClock().rolledOver}, L"TIMER_OFL");
     }
 
-    // The keyboard handler, with a key latched in the 8255: the scan code read, the key acknowledged on the system control
+    // The keyboard handler, with a key latched: the scan code read, the key acknowledged on the system control
     // port, and the interrupt ended; the key is not buffered.
     PlatformRig rig("PlatformBiosKeyboard");
     Elite::Platform& platform = rig.Host();
-    platform.KeyboardController().Inject(0x1E);
-    while (!platform.KeyboardController().LatchFull())
+    platform.Events().Inject(0x1E);
+    while (!platform.Events().LatchFull())
     {
       platform.Idle(Elite::NO_EVENT);
     }
-    const std::uint64_t changes = platform.MemoryChanges();
-    const std::uint64_t writes = platform.PortWrites();
+    const std::string digest = Elite::GameStateDigest(rig.State(), platform.Video());
     const Elite::Cycles cycles = platform.InstructionCycles();
     platform.TakeDueInterrupts();
-    Assert::IsFalse(platform.KeyboardController().LatchFull(), L"acknowledged");
-    Assert::AreEqual(0x4Cu, std::uint32_t{platform.KeyboardController().SystemControl()}, L"bit 7 high, then low");
-    Assert::AreEqual(std::uint64_t{3}, platform.PortWrites() - writes, L"61h twice, then the end of interrupt");
-    Assert::AreEqual(std::uint64_t{0}, platform.MemoryChanges() - changes, L"nothing buffered");
+    Assert::IsFalse(platform.Events().LatchFull(), L"acknowledged");
+    Assert::AreEqual(0x4Cu, std::uint32_t{platform.SystemControl()}, L"bit 7 high, then low");
+    Assert::IsTrue(Elite::GameStateDigest(rig.State(), platform.Video()) == digest, L"nothing buffered");
     Assert::AreEqual(Elite::Platform::HARDWARE_INTERRUPT_CYCLES + 127, platform.InstructionCycles() - cycles);
-    Assert::AreEqual(0u, std::uint32_t{platform.Interrupts().InServiceRegister()}, L"ended");
+    Assert::IsFalse(platform.Events().InService(Elite::Irq::Timer) || platform.Events().InService(Elite::Irq::Keyboard), L"ended");
+  }
+
+  // The system control port reads back what was written; bits 0-1 reach the speaker, the tone's gate and its data, and bit 7
+  // holds the keyboard without touching either.
+  TEST_METHOD(SystemControlReadsBackAndDrivesGateAndSpeaker)
+  {
+    PlatformRig rig("PlatformSystemControl");
+    Elite::Platform& platform = rig.Host();
+    Assert::AreEqual(0x4Cu, std::uint32_t{platform.SystemControl()}, L"power-on value");
+    const std::size_t events = platform.Sound().Events().size();
+
+    platform.Idle(1000);
+    platform.SetSystemControl(0x4F);
+    Assert::AreEqual(0x4Fu, std::uint32_t{platform.SystemControl()});
+    Assert::IsTrue(platform.Sound().Now().tone.gate);
+    const Elite::Speaker::Event& on = platform.Sound().Events().back();
+    Assert::AreEqual(platform.Clock(), on.at);
+    Assert::IsTrue(on.gate && on.data);
+    Assert::AreEqual(events + 1, platform.Sound().Events().size(), L"the gate and the bits at one cycle are one event");
+
+    platform.Idle(2000);
+    platform.SetSystemControl(0xCF);
+    platform.SetSystemControl(0x4F);
+    Assert::AreEqual(events + 1, platform.Sound().Events().size(), L"the acknowledge pulse leaves the speaker alone");
+
+    platform.SetSystemControl(0x4D);
+    Assert::IsTrue(platform.Sound().Now().tone.gate);
+    Assert::IsFalse(platform.Sound().Events().back().data);
   }
 
   // ExitToDos (CS:00AD) prints the exit message in mode 2 through DOS's int 21h AH=09h, which writes through the BIOS's

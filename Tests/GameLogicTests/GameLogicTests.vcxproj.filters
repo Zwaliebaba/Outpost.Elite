@@ -80,9 +80,6 @@
     <ClCompile Include="AiTests.cpp">
       <Filter>Ai</Filter>
     </ClCompile>
-    <ClCompile Include="BiosTests.cpp">
-      <Filter>Platform</Filter>
-    </ClCompile>
     <ClCompile Include="CgaFontTests.cpp">
       <Filter>Platform</Filter>
     </ClCompile>
@@ -92,7 +89,7 @@
     <ClCompile Include="CorpusTests.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
-    <ClCompile Include="CountedTests.cpp">
+    <ClCompile Include="FieldTests.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
     <ClCompile Include="DockedTests.cpp">
@@ -128,15 +125,6 @@
     <ClCompile Include="InputTests.cpp">
       <Filter>Input</Filter>
     </ClCompile>
-    <ClCompile Include="InterruptControllerTests.cpp">
-      <Filter>Platform</Filter>
-    </ClCompile>
-    <ClCompile Include="IntervalTimerTests.cpp">
-      <Filter>Platform</Filter>
-    </ClCompile>
-    <ClCompile Include="KeyboardTests.cpp">
-      <Filter>Platform</Filter>
-    </ClCompile>
     <ClCompile Include="MarketAnswerTests.cpp">
       <Filter>Market</Filter>
     </ClCompile>
@@ -170,6 +158,9 @@
     <ClCompile Include="SaveLoadTests.cpp">
       <Filter>SaveLoad</Filter>
     </ClCompile>
+    <ClCompile Include="SchedulerTests.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
     <ClCompile Include="Sha256Tests.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
@@ -191,8 +182,14 @@
     <ClCompile Include="TextTests.cpp">
       <Filter>Text</Filter>
     </ClCompile>
+    <ClCompile Include="TimeOfDayTests.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
     <ClCompile Include="TwinRigTests.cpp">
       <Filter>Rigs</Filter>
+    </ClCompile>
+    <ClCompile Include="VideoModesTests.cpp">
+      <Filter>Platform</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

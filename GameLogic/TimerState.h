@@ -3,7 +3,7 @@
 // them and run the tool again (D38).
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 
 #include <cstdint>
 #include <type_traits>
@@ -12,19 +12,18 @@ namespace Elite
 {
 
 /// What Timer.cpp, alone, writes of the game's state (D38), and its own: read elsewhere at most, never written. Its members are the 1987
-/// data segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData, in its counted
-/// block.
+/// data segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData.
 struct TimerState
 {
   TimerState() noexcept = default;
   explicit TimerState(const TimerState&) noexcept = default;
 
   /// port 0x61 at start-up, restored on exit
-  Counted<std::uint8_t> savedSpeakerPort;
+  Field<std::uint8_t> savedSpeakerPort;
   /// incremented by TimerTick; reset by RateLimit
-  Counted<std::uint16_t> timerTicks;
+  Field<std::uint16_t> timerTicks;
   /// incremented every tick; bit 9 drives a blink at 0x2914
-  Counted<std::uint16_t> millisecondCounter;
+  Field<std::uint16_t> millisecondCounter;
 };
 
 static_assert(std::is_trivially_copyable_v<TimerState> && std::is_standard_layout_v<TimerState>);

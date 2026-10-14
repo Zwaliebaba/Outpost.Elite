@@ -3,7 +3,7 @@
 // them and run the tool again (D38).
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 
 #include <cstdint>
 #include <type_traits>
@@ -12,21 +12,20 @@ namespace Elite
 {
 
 /// What Equipment.cpp, alone, writes of the game's state (D38), and its own: read elsewhere at most, never written. Its members are the
-/// 1987 data segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData, in its counted
-/// block.
+/// 1987 data segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData.
 struct EquipmentState
 {
   EquipmentState() noexcept = default;
   explicit EquipmentState(const EquipmentState&) noexcept = default;
 
   /// 'cargo item...', overwritten by the scooped product's name
-  Counted<std::uint8_t> scoopedCargoText[14];
+  Field<std::uint8_t> scoopedCargoText[14];
   /// TryScoopObject
-  Counted<std::uint8_t> freeCargoTonnes;
+  Field<std::uint8_t> freeCargoTonnes;
   /// 0 fore, 1 aft, 2 right, 3 left
-  Counted<std::uint8_t> selectedLaserMount;
+  Field<std::uint8_t> selectedLaserMount;
   /// 0 pulse, 1 beam, 2 mining, 3 military
-  Counted<std::uint8_t> selectedLaserType;
+  Field<std::uint8_t> selectedLaserType;
 };
 
 static_assert(std::is_trivially_copyable_v<EquipmentState> && std::is_standard_layout_v<EquipmentState>);

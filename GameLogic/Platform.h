@@ -1,28 +1,25 @@
 // GameLogic/Platform.h
 #pragma once
 
-#include "Bios.h"
 #include "Cga.h"
 #include "DosFiles.h"
 #include "FileStore.h"
 #include "FlightSnapshot.h"
 #include "GamePort.h"
-#include "InterruptController.h"
-#include "IntervalTimer.h"
-#include "Keyboard.h"
 #include "Mouse.h"
+#include "Scheduler.h"
 #include "SpaceViewLayers.h"
 #include "Speaker.h"
+#include "TimeOfDay.h"
 #include "Timing.h"
+#include "VideoModes.h"
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <functional>
-#include <map>
 #include <semaphore>
-#include <span>
 #include <string>
 #include <thread>
 
@@ -39,40 +36,29 @@ enum class StopReason : std::uint8_t
   Spinning    ///< The program ran SpinLimit() turns without waiting once.
 };
 
-/// A far address, segment and offset: what an interrupt vector holds. A plain record (R8).
-struct FarAddress
-{
-  std::uint16_t segment = 0;
-  std::uint16_t offset = 0;
-
-  [[nodiscard]] bool operator==(const FarAddress&) const noexcept = default;
-};
-
-/// A routine in C++ that stands in for the program's own code (ADR-010): its start, or an interrupt handler a vector names.
+/// A routine in C++ that stands in for the program's own code (ADR-010): its start, or one of its interrupt handlers.
 using NativeRoutine = std::function<void()>;
 
 /// The native platform the game runs on (D23, D27, D33): the IBM PC's devices and the services of its ROM and DOS, as the
 /// game uses them, with no processor and no memory map. A de-assembled routine reaches it only through Hardware, which takes
 /// the platform (ADR-014); the game's memory is the GameState's.
 ///
-/// It holds, each the emulated PC's model moved here without its port bus, its registers or its interrupt-vector plumbing:
-/// the clock and its scheduler; the 8259 and the 8253 (InterruptController, IntervalTimer); the keyboard and the system control
-/// port (Keyboard); the speaker (Speaker); the game port (GamePort); the mouse driver (Mouse); the CGA (Cga); the BIOS's video
-/// and clock services and its data area (Bios), and its two hardware interrupt handlers; DOS's file services (DosFiles) and its
-/// print-string; the interrupt vector table; and the ROM bytes the game reads.
+/// It holds, each what the game uses of the PC, without its port bus, its registers or its vector table (ADR-041): the clock and
+/// the events it waits for, with the two interrupts they request (Scheduler: the tick, the keys and their requests); the timer's
+/// the system control port; the sound, the tone and its bits (Speaker); the game port (GamePort); the mouse driver (Mouse);
+/// the CGA (Cga); the BIOS's video services (VideoModes), its time of day (TimeOfDay) and its two hardware interrupt handlers;
+/// and DOS's file services (DosFiles) and its print-string.
 ///
 /// Time is the 8088's cycle count, a third of the crystal (Timing.h), and it is paced (ADR-008): the game's work takes no
 /// time. The clock moves only while the game waits, and then straight to the next thing a device will do: the timer's next
 /// interrupt, the keyboard's next delivery or the CGA's next change of status, or the end of the run. So interrupts land only
 /// inside the game's waits, at the same points however long its work took.
 ///
-/// Waiting is recognised, not declared (ADR-015). Every loop of the game that can wait tells the platform where each of its
-/// turns ends, with a signature of the values it carries (LoopTurn). A turn with the same signature as the last that changed
-/// no byte and wrote no port idles: the clock moves to the next device event. The bytes changed are the GameState's, the
-/// BIOS's data area's and the vector table's, each counted where it is written; the ports written are the OUTs the original
-/// made, each device operation counting its own.
+/// Waiting is declared (ADR-039). Each wait of the game polls for what it waits for, and when a poll finds nothing it says
+/// so (Wait): the clock moves to the next device event. A poll that took something it does not want, and a loop that never
+/// ends, say that instead (Spin), and the clock stands still.
 ///
-/// Interrupts are taken where they fall due, as the 8088 takes them: at the end of a loop's turn and of a wait, and when
+/// Interrupts are taken where they fall due, as the 8088 takes them: at the end of a wait's poll and of a spin, and when
 /// native code lets them in (EnableInterrupts), ends one (Hardware::EndOfInterrupt) or reprograms the timer
 /// (Hardware::SetTickDivisor). The interrupt controller's rules hold: in service, end of interrupt, masking. The handler is
 /// the one the vector table names: the game's own, the BIOS's, or the ROM's IRET.
@@ -104,15 +90,15 @@ public:
     std::uint64_t calls = 0;
   };
 
+  /// The system control port at power-on (SystemControl).
+  static constexpr std::uint8_t POWER_ON_SYSTEM_CONTROL = 0x4C;
+
   /// What DOS leaves in BP for the program it starts, as MS-DOS does and DOSBox-X copies (ADR-006 item 4).
   static constexpr std::uint16_t ENTRY_BASE_POINTER = 0x091C;
 
   /// Steps the default spin limit allows: far more than the longest stretch of work the game does between two waits, far
   /// fewer than a host would run before someone notices.
   static constexpr std::uint64_t DEFAULT_SPIN_LIMIT = 50'000'000;
-
-  /// The most words a loop's turn signature holds (LoopTurn).
-  static constexpr std::size_t MOST_TURN_WORDS = 16;
 
   /// What a hardware interrupt's entry costs the 8088, on the instruction clock: Intel's 8086 figure plus five word transfers
   /// over the 8-bit bus (three pushes, two vector reads).
@@ -143,9 +129,9 @@ public:
   /// ended. Throws std::logic_error if the program has one already.
   void SetEntry(NativeRoutine _routine);
 
-  /// From now on an interrupt whose vector names _address runs _routine, which stands in for the program's code there, and
-  /// returns from it as IRET does. Throws std::logic_error if a routine is there already.
-  void Hook(FarAddress _address, NativeRoutine _routine);
+  /// _routine is the game's own handler of _irq, which runs whenever it is the handler there (SetHandler) and the interrupt is
+  /// taken, and returns from it as IRET does. Throws std::logic_error if the game has one there already.
+  void SetGameHandler(Irq _irq, NativeRoutine _routine);
 
   /// The program's start routine, and how often it ran.
   [[nodiscard]] const HookedRoutine& Entry() const noexcept
@@ -153,10 +139,10 @@ public:
     return m_entry;
   }
 
-  /// Every interrupt handler, by the 20-bit address of its entry.
-  [[nodiscard]] const std::map<std::uint32_t, HookedRoutine>& Hooks() const noexcept
+  /// The game's own handler of _irq, and how often it ran.
+  [[nodiscard]] const HookedRoutine& GameHandler(Irq _irq) const noexcept
   {
-    return m_hooks;
+    return m_gameHandlers[static_cast<std::size_t>(_irq)];
   }
 
   // ── Running ──
@@ -164,8 +150,9 @@ public:
   /// Runs until the clock reaches _cycle, or until the program can go no further.
   [[nodiscard]] StopReason RunUntil(Cycles _cycle);
 
-  /// The number of turns the program may run without waiting before RunUntil stops with StopReason::Spinning. A loop that
-  /// waits for time without ever completing an idle turn would otherwise run for ever with the clock standing still.
+  /// The number of steps the program may run without waiting before RunUntil stops with StopReason::Spinning: its spins
+  /// (Spin), and the interrupts and handlers it runs. A loop that spins for ever would otherwise run with the clock standing
+  /// still.
   void SetSpinLimit(std::uint64_t _turns) noexcept
   {
     m_spinLimit = _turns;
@@ -197,10 +184,23 @@ public:
 
   // ── The devices, for the hosts: the keys, the stick, the mouse, the picture and the sound ──
 
-  [[nodiscard]] Keyboard& KeyboardController() noexcept
+  /// The tick, the keys and the two interrupts' requests: where a host injects the keyboard's codes (Scheduler::Inject).
+  [[nodiscard]] Scheduler& Events() noexcept
   {
-    return m_keyboard;
+    return m_events;
   }
+
+  /// IN AL,61h: the system control port, as last written: bit 0 is the tone's gate, bit 1 the speaker's data, and bit 7
+  /// high holds the keyboard clear. At power-on it holds 4Ch, what the XT BIOS's keyboard reset writes last (keyboard enabled,
+  /// clock not held, speaker and gate off).
+  [[nodiscard]] std::uint8_t SystemControl() const noexcept
+  {
+    return m_systemControl;
+  }
+
+  /// OUT 61h,_value: the speaker takes bits 0 and 1, the tone's gate and its data, and bit 7 holds the keyboard (Scheduler::HoldKeyboard).
+  /// Not noexcept: the speaker logs a change.
+  void SetSystemControl(std::uint8_t _value);
 
   [[nodiscard]] GamePort& Joystick() noexcept
   {
@@ -303,20 +303,16 @@ public:
     return m_cga.GraphicsColors();
   }
 
-  [[nodiscard]] IntervalTimer& Timer() noexcept
+  /// The time of day, which the BIOS's timer handler counts and int 1Ah reads.
+  [[nodiscard]] TimeOfDay& Day() noexcept
   {
-    return m_timer;
+    return m_day;
   }
 
-  [[nodiscard]] InterruptController& Interrupts() noexcept
+  /// Int 10h's video modes, palette and teletype.
+  [[nodiscard]] VideoModes& Modes() noexcept
   {
-    return m_controller;
-  }
-
-  /// The BIOS's services and its data area.
-  [[nodiscard]] Bios& BiosServices() noexcept
-  {
-    return m_bios;
+    return m_modes;
   }
 
   /// DOS's file services.
@@ -335,12 +331,14 @@ public:
 
   [[nodiscard]] bool InterruptsEnabled() const noexcept;
 
-  /// One turn of a loop that can wait, ending where the original's backward jump is (ADR-015). _signature stands for the
-  /// original's registers there: the loop's address and the values it carries from one turn to the next. A turn with the same
-  /// signature as the last that changed no byte and wrote no port idles to the next device event. Then the run ends there if
-  /// that is its end, and any interrupt now due is taken. A loop that never idles stops the run as Spinning, as the original's
-  /// would. At most MOST_TURN_WORDS words; more throws std::logic_error.
-  void LoopTurn(std::span<const std::uint16_t> _signature);
+  /// A wait's poll that found nothing (ADR-039): the clock moves to the next device event, the run ends there if that is its
+  /// end, and the interrupts now due are taken.
+  void Wait();
+
+  /// A turn of a loop that waits for nothing: a wait's poll that took something it does not want, or a loop that never ends.
+  /// The clock stands still. Past SpinLimit() such steps with no wait between, the run stops as Spinning, as the original's
+  /// would never end.
+  void Spin();
 
   /// _cycles pass as they pass in a wait, a step at a time to each device event, the run ending there if that is its end and
   /// the interrupts that fall due taken: paced time's charge for work the 8088 took time over where the program sets no pace
@@ -362,65 +360,38 @@ public:
     m_instructionCycles += _cycles;
   }
 
-  /// _count port writes the original made, for paced time's turn.
-  void NotePortWrites(std::uint32_t _count) noexcept
+  /// What serves _irq now. At power-on the BIOS's handlers serve both.
+  [[nodiscard]] IrqHandler Handler(Irq _irq) const noexcept
   {
-    m_portWrites += _count;
+    return m_handlers[static_cast<std::size_t>(_irq)];
   }
 
-  /// The bytes of memory that writes changed since power-on: the GameState's, the BIOS's data area's and the vector table's.
-  [[nodiscard]] std::uint64_t MemoryChanges() const noexcept;
-
-  /// The port writes the original made since power-on.
-  [[nodiscard]] std::uint64_t PortWrites() const noexcept;
-
-  /// Interrupt _vector's entry in the vector table.
-  [[nodiscard]] FarAddress InterruptVector(std::uint8_t _vector) const noexcept
+  /// _handler serves _irq from now on: how the game installs its own handlers and puts the BIOS's back.
+  void SetHandler(Irq _irq, IrqHandler _handler) noexcept
   {
-    return m_vectors[_vector];
+    m_handlers[static_cast<std::size_t>(_irq)] = _handler;
   }
 
-  /// Interrupt _vector's entry set to _handler, each byte that changes counted.
-  void SetInterruptVector(std::uint8_t _vector, FarAddress _handler) noexcept;
-
-  /// Interrupt _vector's entry as the BIOS and DOS set it at power-on, whatever it holds now: the handler a program that
-  /// installs its own puts back when it is done.
-  [[nodiscard]] FarAddress PowerOnInterruptVector(std::uint8_t _vector) const noexcept
+  /// Whether a mouse driver is loaded, which int 33h's vector says on the PC: set from Desc::mousePresent at power-on.
+  [[nodiscard]] bool MouseDriverLoaded() const noexcept
   {
-    return m_powerOnVectors[_vector];
+    return m_mouseDriverLoaded;
   }
 
-  /// The byte of the BIOS's ROM, F000:0000-FFFF, at _address: the IRET at F000:FD00 + n that each vector the BIOS does not
-  /// serve names, the mouse driver's entry at F000:E060 (a NOP and an IRET), the model byte FFh at F000:FFFE, and zero
-  /// everywhere else, FC00:0016 included, where an Amstrad's ROM has its name (D12). The BIOS's handlers are native, so their
-  /// code is not there. Throws std::out_of_range for an address outside the ROM.
-  [[nodiscard]] std::uint8_t RomByte(FarAddress _address) const;
+  /// A mouse driver loaded or not, whatever the mouse is: a test's driver with no mouse behind it, whose calls throw
+  /// std::logic_error, as a driver no routine stands in for did.
+  void SetMouseDriverLoaded(bool _loaded) noexcept
+  {
+    m_mouseDriverLoaded = _loaded;
+  }
 
-  /// The first byte of the code at _handler, which a vector names: the ROM's (RomByte). The game asks only of int 33h's vector, which
-  /// nothing points into its own code (change 3c). Throws std::out_of_range for an address outside the ROM.
-  [[nodiscard]] std::uint8_t HandlerOpcode(FarAddress _handler) const;
-
-  /// INT _vector, to the handler its vector names, which runs to its IRET: a native routine (Hook), or the ROM's IRET.
-  void SoftwareInterrupt(std::uint8_t _vector);
-
-  /// The handler at _handler, run to its IRET as INT runs one, with the interrupt's frame in place.
-  void CallHandler(FarAddress _handler);
+  /// Int 33h with no mouse behind it: the ROM's IRET, with its cycles, when no driver is loaded; a driver loaded with no mouse
+  /// behind it throws std::logic_error.
+  void CallAbsentMouse();
 
 private:
-  // The state at a loop's turn, kept to tell whether the next turn changed anything.
-  struct Turn
-  {
-    std::array<std::uint16_t, MOST_TURN_WORDS> signature{};
-    std::size_t signatureWords = 0;
-    std::uint64_t memoryChanges = 0;
-    std::uint64_t portWrites = 0;
-    bool valid = false;
-  };
-
   [[nodiscard]] StopReason Stopped() const noexcept;
-  void Interrupt(std::uint8_t _vector);
-  void RunHandler(FarAddress _handler);
-  void NoteTurn(const Turn& _turn);
+  void Interrupt(Irq _irq);
   void EndTurn();
   void StartNative();
   void ResumeNative();
@@ -435,35 +406,32 @@ private:
   // Declared in the order they are built: each device holds references to the ones above it.
   Cycles m_clock = 0;
   Cycles m_instructionCycles = 0;
-  InterruptController m_controller;
   Speaker m_speaker;
-  IntervalTimer m_timer;
-  Keyboard m_keyboard;
+  Scheduler m_events;
+  std::uint8_t m_systemControl = POWER_ON_SYSTEM_CONTROL;
   GamePort m_gamePort;
   Cga m_cga;
   std::array<FlightSnapshot, 2> m_flightSnapshots{}; // the previous and the latest
   SpaceViewLayers m_spaceView;
   std::array<SnapshotBeam, FlightSnapshot::MOST_BEAMS> m_beams{}; // the frame's beams, since BeginSpaceViewFrame
   std::size_t m_beamCount = 0;
-  Bios m_bios;
+  TimeOfDay m_day;
+  VideoModes m_modes;
   Mouse m_mouse;
   DosFiles m_files;
 
-  std::array<FarAddress, 256> m_vectors{};
-  std::array<FarAddress, 256> m_powerOnVectors{};
-  std::uint64_t m_vectorChanges = 0;
-  std::uint64_t m_portWrites = 0;
+  std::array<IrqHandler, 2> m_handlers{IrqHandler::Bios, IrqHandler::Bios};
+  bool m_mouseDriverLoaded = false;
   std::uint16_t m_flags;
   std::string m_commandTail;
 
   HookedRoutine m_entry;
-  std::map<std::uint32_t, HookedRoutine> m_hooks;
+  std::array<HookedRoutine, 2> m_gameHandlers{};
   std::uint64_t m_interruptsTaken = 0;
 
   std::uint64_t m_spinLimit = DEFAULT_SPIN_LIMIT;
   std::uint64_t m_stepsSinceIdle = 0;
   Cycles m_runLimit = NO_EVENT;
-  Turn m_lastTurn{};
 
   bool m_started = false;    // the program's start routine has been begun
   bool m_terminated = false; // and it has returned

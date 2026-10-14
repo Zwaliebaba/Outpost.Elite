@@ -141,7 +141,7 @@ struct SnapshotDisc
 
 /// What one frame of flight drew (ADR-032, D49): the camera and every active object, taken where RunFlight's frame is finished,
 /// so that a renderer can draw between the last two. It is the game's, in the game's units; the space view (Phase 6, piece 3)
-/// makes the engine's scene of it. It is taken outside the game's counted state, and changes nothing the digests or turns see.
+/// makes the engine's scene of it. It is taken outside the game's state, and changes nothing the digests see.
 struct FlightSnapshot
 {
   static constexpr std::size_t MOST_OBJECTS = 36; ///< shipSlots' slots

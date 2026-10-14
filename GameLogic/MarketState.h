@@ -3,7 +3,7 @@
 // them and run the tool again (D38).
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 
 #include <cstdint>
 #include <type_traits>
@@ -12,30 +12,29 @@ namespace Elite
 {
 
 /// What Market.cpp, alone, writes of the game's state (D38), and its own: read elsewhere at most, never written. Its members are the 1987
-/// data segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData, in its counted
-/// block.
+/// data segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData.
 struct MarketState
 {
   MarketState() noexcept = default;
   explicit MarketState(const MarketState&) noexcept = default;
 
-  Counted<std::uint16_t> data8C10;
-  Counted<std::uint16_t> data8C12;
-  Counted<std::uint16_t> data8C14;
+  Field<std::uint16_t> data8C10;
+  Field<std::uint16_t> data8C12;
+  Field<std::uint16_t> data8C14;
   /// marketRandomState's fields, DS:8C1E-8C23 in 1987, at their places there.
   struct MarketRandomState
   {
     MarketRandomState() noexcept = default;
     explicit MarketRandomState(const MarketRandomState&) noexcept = default;
 
-    Counted<std::uint8_t> gap8C1E[2];
-    Counted<std::uint16_t> data8C20;
-    Counted<std::uint16_t> data8C22;
+    Field<std::uint8_t> gap8C1E[2];
+    Field<std::uint16_t> data8C20;
+    Field<std::uint16_t> data8C22;
   };
   /// copy of randomState0 stepped by NextMarketRandom
   MarketRandomState marketRandomState;
   /// currentTechLevel clamped to 9
-  Counted<std::uint8_t> marketTechLevel;
+  Field<std::uint8_t> marketTechLevel;
 };
 
 static_assert(std::is_trivially_copyable_v<MarketState> && std::is_standard_layout_v<MarketState>);

@@ -3,7 +3,7 @@
 // them and run the tool again (D38).
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 
 #include <cstdint>
 #include <type_traits>
@@ -12,19 +12,18 @@ namespace Elite
 {
 
 /// What Sound.cpp, alone, writes of the game's state (D38), and its own: read elsewhere at most, never written. Its members are the 1987
-/// data segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData, in its counted
-/// block.
+/// data segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData.
 struct SoundState
 {
   SoundState() noexcept = default;
   explicit SoundState(const SoundState&) noexcept = default;
 
   /// 2-8 by effect
-  Counted<std::uint8_t> sweepStepShrink;
+  Field<std::uint8_t> sweepStepShrink;
   /// 0-0x3FF into noiseSource, advanced by EmitNoiseSample
-  Counted<std::uint16_t> noiseSourceIndex;
+  Field<std::uint16_t> noiseSourceIndex;
   /// when 1, TimerTick plays the tune at musicPointer on PIT channel 2
-  Counted<std::uint8_t> musicPlaying;
+  Field<std::uint8_t> musicPlaying;
 };
 
 static_assert(std::is_trivially_copyable_v<SoundState> && std::is_standard_layout_v<SoundState>);

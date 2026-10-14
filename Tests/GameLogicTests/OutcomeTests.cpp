@@ -62,7 +62,7 @@ public:
     state.Data().commander.creditsTenths.data75F5 = 0x0001;
     Assert::AreEqual("74565", Value(state, "creditsTenths").c_str(), false, L"10000h + 2345h tenths");
 
-    const std::span<Elite::Counted<std::uint8_t>> hold = Elite::BytesOf(state.Data().commander.cargoHold);
+    const std::span<Elite::Field<std::uint8_t>> hold = Elite::BytesOf(state.Data().commander.cargoHold);
     for (std::size_t commodity = 0; commodity < 17; ++commodity)
       hold[commodity * HOLD_ENTRY_BYTES] = static_cast<std::uint8_t>(commodity);
     hold[2 * HOLD_ENTRY_BYTES + 1] = 99; // on sale, not held

@@ -1,7 +1,7 @@
 // GameLogic/SpaceObject.h
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -54,7 +54,7 @@ enum class SlotIndex : std::uint16_t
 
 /// One of the 36 records of 64 bytes in shipSlots (DS:6930) that hold the objects in space (ADR-012): slot 0 the sun, 1 the planet, 2 the
 /// station, 3-19 the ships and 20-35 the debris. Each field is at its 1987 offset, a byte or a word as the original reads it, and counts
-/// its own changes (Counted). The GameState gives the record of a slot's number (GameState::Slot), and a record's number
+/// its own changes (Field). The GameState gives the record of a slot's number (GameState::Slot), and a record's number
 /// (GameState::IndexOf), where the original holds the record's offset in SI or DI.
 ///
 /// Where the original reads one place by two names of one width, the record has one member and an accessor for the other name
@@ -71,7 +71,7 @@ enum class SlotIndex : std::uint16_t
 /// - cargo and fragments as one word (+2C), and aggression and bounty (+30).
 struct SpaceObject
 {
-  // Trivial, so GameData stays trivially copyable, and the copy explicit, as GameData's structs are (Counted.h).
+  // Trivial, so GameData stays trivially copyable, and the copy explicit, as GameData's structs are (Field.h).
   SpaceObject() noexcept = default;
   explicit SpaceObject(const SpaceObject&) noexcept = default;
 
@@ -81,54 +81,54 @@ struct SpaceObject
   /// Bit 0 of the type byte: the slot is in use.
   static constexpr std::uint8_t ACTIVE = 0x01;
 
-  Counted<std::uint8_t> type;  ///< +00: bit 0 active, bits 1-5 the type, bit 7 drawn this frame
-  Counted<std::uint8_t> xHigh; ///< +01: the high bytes of the 24-bit position
-  Counted<std::uint8_t> yHigh;
-  Counted<std::uint8_t> zHigh;
-  Counted<std::uint16_t> x; ///< +04: the low words of the 24-bit position
-  Counted<std::uint16_t> y;
-  Counted<std::uint16_t> z;
-  Counted<std::uint16_t> pitch; ///< +0A: the heading, as ConvertVectorToAngles gives it
-  Counted<std::uint16_t> yaw;
-  Counted<std::uint16_t> roll;
-  Counted<std::uint16_t> viewX; ///< +10: the position in the camera's frame
-  Counted<std::uint16_t> viewY;
-  Counted<std::uint16_t> viewZ;
-  Counted<std::uint8_t> passes;  ///< +16: attack passes left
-  Counted<std::uint8_t> aiState; ///< +17: the AI state
-  Counted<std::uint8_t> speed;
-  Counted<std::uint8_t> velocityX; ///< +19: signed bytes: x, y, z
-  Counted<std::uint8_t> velocityY;
-  Counted<std::uint8_t> velocityZ;
-  Counted<std::uint8_t> range; ///< +1C: the high byte of the range a ship turns back at
-  Counted<std::uint8_t> turnRate;
-  Counted<std::uint8_t> flags;     ///< +1E: bit 0 hostile, 1 blip drawn, 2 indestructible, 5 carries the device
-  Counted<std::uint8_t> thargons;  ///< +1F: Thargons a Thargoid has left to launch
-  Counted<std::uint16_t> compassX; ///< +20: the station's direction for the compass
-  Counted<std::uint16_t> compassY;
-  Counted<std::uint16_t> compassZ;
-  Counted<std::uint8_t> blipX; ///< +26: the scanner blip, or the station's compass dot: x, y, z; a fragment's spin (SpinRoll)
-  Counted<std::uint8_t> blipY; ///< +27: and a fragment's (SpinPitch)
-  Counted<std::uint8_t> blipZ;
-  Counted<SlotIndex> target; ///< +29: a missile's target, a hunter's pack mate; SlotIndex::Player for the player
-  Counted<std::uint8_t> energy;
-  Counted<std::uint8_t> cargo; ///< +2C; for a ship that carries the device, its flash's frames (FlashFrames)
-  Counted<std::uint8_t> fragments;
-  Counted<std::uint8_t> lifetime; ///< +2E: frames a fragment has left
-  Counted<std::uint8_t> age;
-  Counted<std::uint8_t> aggression;
-  Counted<std::uint8_t> bounty;
-  Counted<std::uint8_t> missiles;
-  Counted<std::uint8_t> behaviorClass; ///< +33: the behaviour class, behaviorHandlers' index
-  Counted<std::uint8_t> scanned;       ///< +34; from its 1, the frames an object spends off the scanner (FramesAway)
-  Counted<std::uint8_t> jinkFrames;    ///< +35: frames to the next evasive jink
-  Counted<std::uint16_t> jinkPitch;    ///< +36: the jink added to the wanted heading
-  Counted<std::uint16_t> jinkYaw;
-  Counted<SlotIndex> owner;          ///< +3A: a Thargon's mother; SlotIndex::Police for a police Viper, SlotIndex::None for neither
-  Counted<std::uint8_t> cameraZHigh; ///< +3C: the high byte of the camera-frame z: bit 7 set behind
-  Counted<std::uint8_t> depth;       ///< +3D: the drawing order; for the sun and planet, their scale shift again
-  Counted<std::uint8_t> size;
-  Counted<std::uint8_t> detail; ///< +3F: the level-of-detail threshold, from the template
+  Field<std::uint8_t> type;  ///< +00: bit 0 active, bits 1-5 the type, bit 7 drawn this frame
+  Field<std::uint8_t> xHigh; ///< +01: the high bytes of the 24-bit position
+  Field<std::uint8_t> yHigh;
+  Field<std::uint8_t> zHigh;
+  Field<std::uint16_t> x; ///< +04: the low words of the 24-bit position
+  Field<std::uint16_t> y;
+  Field<std::uint16_t> z;
+  Field<std::uint16_t> pitch; ///< +0A: the heading, as ConvertVectorToAngles gives it
+  Field<std::uint16_t> yaw;
+  Field<std::uint16_t> roll;
+  Field<std::uint16_t> viewX; ///< +10: the position in the camera's frame
+  Field<std::uint16_t> viewY;
+  Field<std::uint16_t> viewZ;
+  Field<std::uint8_t> passes;  ///< +16: attack passes left
+  Field<std::uint8_t> aiState; ///< +17: the AI state
+  Field<std::uint8_t> speed;
+  Field<std::uint8_t> velocityX; ///< +19: signed bytes: x, y, z
+  Field<std::uint8_t> velocityY;
+  Field<std::uint8_t> velocityZ;
+  Field<std::uint8_t> range; ///< +1C: the high byte of the range a ship turns back at
+  Field<std::uint8_t> turnRate;
+  Field<std::uint8_t> flags;     ///< +1E: bit 0 hostile, 1 blip drawn, 2 indestructible, 5 carries the device
+  Field<std::uint8_t> thargons;  ///< +1F: Thargons a Thargoid has left to launch
+  Field<std::uint16_t> compassX; ///< +20: the station's direction for the compass
+  Field<std::uint16_t> compassY;
+  Field<std::uint16_t> compassZ;
+  Field<std::uint8_t> blipX; ///< +26: the scanner blip, or the station's compass dot: x, y, z; a fragment's spin (SpinRoll)
+  Field<std::uint8_t> blipY; ///< +27: and a fragment's (SpinPitch)
+  Field<std::uint8_t> blipZ;
+  Field<SlotIndex> target; ///< +29: a missile's target, a hunter's pack mate; SlotIndex::Player for the player
+  Field<std::uint8_t> energy;
+  Field<std::uint8_t> cargo; ///< +2C; for a ship that carries the device, its flash's frames (FlashFrames)
+  Field<std::uint8_t> fragments;
+  Field<std::uint8_t> lifetime; ///< +2E: frames a fragment has left
+  Field<std::uint8_t> age;
+  Field<std::uint8_t> aggression;
+  Field<std::uint8_t> bounty;
+  Field<std::uint8_t> missiles;
+  Field<std::uint8_t> behaviorClass; ///< +33: the behaviour class, behaviorHandlers' index
+  Field<std::uint8_t> scanned;       ///< +34; from its 1, the frames an object spends off the scanner (FramesAway)
+  Field<std::uint8_t> jinkFrames;    ///< +35: frames to the next evasive jink
+  Field<std::uint16_t> jinkPitch;    ///< +36: the jink added to the wanted heading
+  Field<std::uint16_t> jinkYaw;
+  Field<SlotIndex> owner;          ///< +3A: a Thargon's mother; SlotIndex::Police for a police Viper, SlotIndex::None for neither
+  Field<std::uint8_t> cameraZHigh; ///< +3C: the high byte of the camera-frame z: bit 7 set behind
+  Field<std::uint8_t> depth;       ///< +3D: the drawing order; for the sun and planet, their scale shift again
+  Field<std::uint8_t> size;
+  Field<std::uint8_t> detail; ///< +3F: the level-of-detail threshold, from the template
 
   /// x, y and z of the position relative to the player, 24 bits each: the high byte and the low word. The value is the 24-bit
   /// two's complement number, held in the low 24 bits.
@@ -149,44 +149,44 @@ struct SpaceObject
 
   /// +26 and +27 read as a fragment's spin, added to the roll and the pitch each frame: blipX's and blipY's bytes, which a
   /// fragment, having no blip, uses for it.
-  [[nodiscard]] Counted<std::uint8_t>& SpinRoll() noexcept
+  [[nodiscard]] Field<std::uint8_t>& SpinRoll() noexcept
   {
     return blipX;
   }
 
-  [[nodiscard]] const Counted<std::uint8_t>& SpinRoll() const noexcept
+  [[nodiscard]] const Field<std::uint8_t>& SpinRoll() const noexcept
   {
     return blipX;
   }
 
-  [[nodiscard]] Counted<std::uint8_t>& SpinPitch() noexcept
+  [[nodiscard]] Field<std::uint8_t>& SpinPitch() noexcept
   {
     return blipY;
   }
 
-  [[nodiscard]] const Counted<std::uint8_t>& SpinPitch() const noexcept
+  [[nodiscard]] const Field<std::uint8_t>& SpinPitch() const noexcept
   {
     return blipY;
   }
 
   /// +2C read for a ship that carries the device (flags bit 5): frames to its next flash on or off, cargo's byte.
-  [[nodiscard]] Counted<std::uint8_t>& FlashFrames() noexcept
+  [[nodiscard]] Field<std::uint8_t>& FlashFrames() noexcept
   {
     return cargo;
   }
 
-  [[nodiscard]] const Counted<std::uint8_t>& FlashFrames() const noexcept
+  [[nodiscard]] const Field<std::uint8_t>& FlashFrames() const noexcept
   {
     return cargo;
   }
 
   /// +34 read, from scanned's 1, as the frames an object spends off the scanner: scanned's byte.
-  [[nodiscard]] Counted<std::uint8_t>& FramesAway() noexcept
+  [[nodiscard]] Field<std::uint8_t>& FramesAway() noexcept
   {
     return scanned;
   }
 
-  [[nodiscard]] const Counted<std::uint8_t>& FramesAway() const noexcept
+  [[nodiscard]] const Field<std::uint8_t>& FramesAway() const noexcept
   {
     return scanned;
   }
@@ -199,8 +199,8 @@ private:
 };
 
 /// A byte field of the record, or a word field, for a routine that takes the field it works on: `_slot.*_field`.
-using ObjectByte = Counted<std::uint8_t> SpaceObject::*;
-using ObjectWord = Counted<std::uint16_t> SpaceObject::*;
+using ObjectByte = Field<std::uint8_t> SpaceObject::*;
+using ObjectWord = Field<std::uint16_t> SpaceObject::*;
 
 static_assert(sizeof(SpaceObject) == SpaceObject::BYTES);
 static_assert(std::is_trivially_copyable_v<SpaceObject> && std::is_standard_layout_v<SpaceObject>);

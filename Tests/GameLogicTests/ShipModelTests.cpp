@@ -90,7 +90,7 @@ constexpr std::array<std::int16_t, 3> CENTER = {120, -75, 3000};
     Elite::BuildDodoVertices(*state);
   }
   Elite::RunVertexProgram(*state, _blueprint.vertexProgram, Elite::Vector{});
-  const std::span<const Elite::Counted<std::uint8_t>> buffer = Elite::BytesOf(std::as_const(*state).Data().scene.vertexBuffer);
+  const std::span<const Elite::Field<std::uint8_t>> buffer = Elite::BytesOf(std::as_const(*state).Data().scene.vertexBuffer);
   std::vector<std::array<double, 3>> vertices;
   for (std::size_t vertex = 0; vertex < _blueprint.projectedVertices; ++vertex)
   {

@@ -1,13 +1,12 @@
 // GameLogic/Hardware.h
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 #include "Pacing.h"
 #include "Platform.h"
 #include "Timing.h"
 
 #include <cstdint>
-#include <initializer_list>
 #include <span>
 #include <string_view>
 
@@ -18,10 +17,7 @@ namespace Elite
 /// interrupt controller, the keyboard, the game port, the mouse, the CGA, the BIOS and DOS, named for what it does rather than
 /// by port or vector. Since D33 every operation is the native Platform's (ADR-021), and the routines did not change.
 ///
-/// What paced time sees is kept: each operation counts the port writes the original's own sequence of port accesses made, in
-/// the BIOS's and DOS's services as in the game's own OUTs, and every byte of memory a service changes is counted where it
-/// lies, so a loop's turn idles exactly where it did (ADR-015). Each service operation returns what the service gives as a
-/// small typed result. Hardware holds no state of its own: a device's state is the platform's.
+/// Each service operation returns what the service gives as a small typed result. Hardware holds no state of its own: a device's state is the platform's.
 class Hardware
 {
 public:
@@ -39,9 +35,9 @@ public:
   /// The speaker's tone: OUT 43h,B6h, then _divisor's low and high bytes to the timer's channel 2 at 42h.
   void SetToneDivisor(std::uint16_t _divisor);
 
-  /// The timer's tick: OUT 43h,_mode, then _divisor's low and high bytes to the timer's channel 0 at 40h. A control word can
+  /// The timer's tick: OUT 43h,36h, then _divisor's low and high bytes to the timer's channel 0 at 40h. The control word can
   /// raise IRQ 0 at once: with interrupts on, it is taken here, as the CPU takes it at the next instruction.
-  void SetTickDivisor(std::uint8_t _mode, std::uint16_t _divisor);
+  void SetTickDivisor(std::uint16_t _divisor);
 
   /// OUT 20h,20h: the end of an interrupt, to the interrupt controller. With interrupts on, one it held back is taken here.
   void EndOfInterrupt();
@@ -53,12 +49,13 @@ public:
   /// CLI.
   void DisableInterrupts() noexcept;
 
-  /// One turn of a loop that can wait, where the original jumps back to CS:_loop (ADR-015). _carried are values the
-  /// original holds in registers there: every one the next turn reads before it writes it, and every one the turn read
-  /// from a device; one that cannot change between turns may be left out. A turn that changed no byte and no port, with
-  /// the same values as the last, idles to the next device event, as the original's would; then the interrupts that fall
-  /// due are taken.
-  void LoopTurn(std::uint16_t _loop, std::initializer_list<std::uint16_t> _carried);
+  /// A wait's poll that found what it waits for missing (ADR-039): the clock moves to the next device event, as the original's
+  /// loop idles there; then the interrupts that fall due are taken.
+  void Wait();
+
+  /// A turn of a loop that waits for nothing at that turn: a poll that took something it does not want, or a loop the original
+  /// never leaves. The clock stands still, and a run that does nothing else stops as Spinning (Platform::Spin).
+  void Spin();
 
   /// IN AL,60h: the scan code the keyboard sent.
   [[nodiscard]] std::uint8_t KeyboardData();
@@ -170,15 +167,15 @@ public:
   /// time (Platform::CountInstructionCycles): the game port's one-shots, which a stick read measures by counting polls.
   void CountInstructionCycles(Cycles _cycles) noexcept;
 
-  /// Int 1Ah AH=0: the BIOS's clock, its rollover flag cleared.
-  [[nodiscard]] BiosClock ReadBiosClock();
+  /// Int 1Ah AH=0: the time of day, its rollover flag cleared.
+  [[nodiscard]] ClockReading ReadTimeOfDay();
 
   // DOS's file services, int 21h: native, on the platform's DosFiles, which answers as the emulated DOS did. Where the original
   // hands DOS an address in DS:DX, a call takes the name there, up to its NUL, or the buffer there, a span of the member that
   // holds it (D38).
 
   /// Int 21h AH=1Ah: DOS's disk transfer area, where find-first and find-next leave what they find: _area, of the game's state.
-  void SetDiskTransferArea(std::span<Counted<std::uint8_t>> _area);
+  void SetDiskTransferArea(std::span<Field<std::uint8_t>> _area);
 
   /// Int 21h AX=4300h: the attributes of the file _name names.
   [[nodiscard]] DosFileAttributes ReadFileAttributes(std::string_view _name);
@@ -194,7 +191,7 @@ public:
   [[nodiscard]] DosAnswer OpenFile(std::string_view _name, std::uint8_t _access);
 
   /// Int 21h AH=3Fh: up to all of _buffer's bytes, of the game's state, from the file _handle into it; AX the count read.
-  [[nodiscard]] DosAnswer ReadFile(std::uint16_t _handle, std::span<Counted<std::uint8_t>> _buffer);
+  [[nodiscard]] DosAnswer ReadFile(std::uint16_t _handle, std::span<Field<std::uint8_t>> _buffer);
 
   /// Int 21h AH=40h: _buffer's bytes written to the file _handle, stamped with DOS's time at the platform's clock; AX the count
   /// written.
@@ -219,25 +216,21 @@ public:
 
   // ── What the emulated PC kept in memory, outside the game's (D33) ──
 
-  /// Interrupt _vector's entry in the vector table, at 0000:_vector*4 on the PC: the handler an INT or an IRQ reaches.
-  [[nodiscard]] FarAddress InterruptVector(std::uint8_t _vector);
+  /// What serves _irq now (Platform::Handler): the BIOS's handler, the game's own, or a stray vector.
+  [[nodiscard]] IrqHandler Handler(Irq _irq) const noexcept;
 
-  /// Interrupt _vector's entry set to _handler: how the game installs its own handlers and puts the BIOS's back.
-  void SetInterruptVector(std::uint8_t _vector, FarAddress _handler);
+  /// _handler serves _irq from now on: how the game installs its own handlers and puts the BIOS's back, where the original
+  /// writes the interrupt's vector (ADR-041).
+  void SetHandler(Irq _irq, IrqHandler _handler) noexcept;
 
-  /// Interrupt _vector's entry as the BIOS set it at power-on (Platform::PowerOnInterruptVector): the handler the game puts
-  /// back when it leaves, where the original puts back the entry it kept in its own memory before it installed its own (D33,
-  /// piece 3). The game's handlers are the only ones it replaces, and it puts each back before it installs it again, so the
-  /// entry it kept was always this one.
-  [[nodiscard]] FarAddress BiosInterruptVector(std::uint8_t _vector) const noexcept;
+  /// Whether a mouse driver is loaded (Platform::MouseDriverLoaded): what the game's test of int 33h's vector finds.
+  [[nodiscard]] bool MouseDriverLoaded() const noexcept;
 
-  /// The byte of the BIOS's ROM at _segment:_offset (Platform::RomByte): where the game looks for an Amstrad's name, and
-  /// where a vector the BIOS serves points.
-  [[nodiscard]] std::uint8_t RomByte(std::uint16_t _segment, std::uint16_t _offset);
-
-  /// The first byte of the code a vector names (Platform::HandlerOpcode): whether a driver is behind int 33h, or the ROM's
-  /// IRET.
-  [[nodiscard]] std::uint8_t HandlerOpcode(FarAddress _handler);
+  /// Whether the ROM is an Amstrad's, with its name at FC00:0016 where the game looks: never, as the platform is an IBM PC (D12).
+  [[nodiscard]] static constexpr bool AmstradRom() noexcept
+  {
+    return false;
+  }
 
   /// The command tail DOS gave the program, which its PSP held at 81h, its length at 80h: what the program was started with.
   [[nodiscard]] std::string_view CommandTail() const noexcept;

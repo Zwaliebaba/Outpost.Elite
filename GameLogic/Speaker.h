@@ -1,7 +1,7 @@
 // GameLogic/Speaker.h
 #pragma once
 
-#include "IntervalTimer.h"
+#include "SquareWave.h"
 #include "Timing.h"
 
 #include <cstddef>
@@ -12,17 +12,18 @@
 namespace Elite
 {
 
-/// The PC speaker: what drives the cone, logged as it changes, and turned into PCM on demand.
+/// The game's sound (ADR-042): the tone and the two bits its sound routines set, logged as they change, and synthesised into PCM
+/// on demand. The game's music and effects run from its own state at the 1 kHz tick (TickMusic, TickSoundEffects) and set the
+/// tone and the bits; this is what turns those into sound, the PC speaker as its circuit wired them.
 ///
-/// The circuit. Port 0x61 bit 1 (speaker data) is ANDed with PIT channel 2's output, whose gate is
-/// port 0x61 bit 0. So with the gate set the level is bit 1 AND channel 2's wave, and with it clear
-/// channel 2's output sits high and the level is bit 1 alone. The game uses both (Reference-Map.md,
-/// "What the interrupt handlers share"): music is channel 2 programmed to a note's divisor with both
-/// bits set, and effects toggle bit 1 by hand at the 1 kHz timer tick.
+/// The circuit. The data bit (port 61h bit 1) is ANDed with the tone, the interval timer's channel 2 in mode 3 (SquareWave),
+/// whose gate is the gate bit (port 61h bit 0). So with the gate set the level is the data bit AND the tone's wave, and with it
+/// clear the tone sits high and the level is the data bit alone. The game uses both (Reference-Map.md, "What the interrupt
+/// handlers share"): music is the tone at a note's divisor with both bits set, and effects toggle the data bit by hand at the
+/// 1 kHz tick. A rising gate reloads the tone on the next timer tick.
 ///
-/// The log. Every change of the two bits (SetSystemControl, from the keyboard's 8255) or of channel 2's
-/// programming (SetChannel2, from the interval timer) appends an event stamped with the platform's clock and carrying the
-/// whole state, so the level at any cycle is a function of the last event at or before it. Changes
+/// The log. Every change of the two bits (SetBits) or of the tone (SetTone) appends an event stamped with the platform's clock
+/// and carrying the whole state, so the level at any cycle is a function of the last event at or before it. Changes
 /// within one cycle collapse into one event. The log only grows; the host renders from it and then
 /// drops what it no longer needs with DiscardBefore.
 ///
@@ -31,8 +32,8 @@ namespace Elite
 /// drifts. Each sample is the mean level over its interval (a box filter), not the level at one
 /// instant, so a wave far above the output's Nyquist frequency averages out rather than aliasing.
 /// A box filter does not average out a wave just above or below Nyquist, though: the game's rests,
-/// channel 2 at divisor 0x32 (about 23.9 kHz), would come out of a 44.1 or 48 kHz stream as a loud
-/// tone near 20-24 kHz. So a channel 2 square wave whose fundamental is above AUDIBLE_LIMIT_HZ or
+/// the tone at divisor 0x32 (about 23.9 kHz), would come out of a 44.1 or 48 kHz stream as a loud
+/// tone near 20-24 kHz. So a tone whose fundamental is above AUDIBLE_LIMIT_HZ or
 /// above Nyquist, which no listener could hear from the real speaker, contributes its mean level
 /// instead of its shape. A rest is therefore a steady level, and silent.
 ///
@@ -50,18 +51,32 @@ public:
     Cycles at = 0;
     bool gate = false; // port 0x61 bit 0
     bool data = false; // port 0x61 bit 1
-    IntervalTimer::Channel channel2;
+    SquareWave tone;   // the timer's channel 2
   };
 
-  /// Starts with both bits clear and a default channel 2, which the interval timer replaces when it is built.
-  /// Not noexcept: the log allocates.
+  /// Starts as the BIOS leaves the PC: both bits clear, and the tone at divisor 0533h, the BIOS beep's 896 Hz, in mode 3,
+  /// loaded at tick 0, its gate low. Not noexcept: the log allocates.
   explicit Speaker(const Cycles& _clock);
 
-  /// The system control port (61h) as written; bits 0 and 1 are the ones that matter here.
-  void SetSystemControl(std::uint8_t _value);
+  /// The gate and data bits, port 61h's bits 0 and 1 as written: a rising gate reloads the tone from its count on the next
+  /// timer tick.
+  void SetBits(bool _gate, bool _data);
 
-  /// Channel 2's state after a change. The interval timer calls this.
-  void SetChannel2(const IntervalTimer::Channel& _channel);
+  /// OUT 43h,B6h, then _divisor's low and high bytes: the tone, the timer's channel 2 in mode 3, as the game's music and effects
+  /// set it, loaded on the next timer tick.
+  void SetTone(std::uint16_t _divisor);
+
+  /// The tone's output during the timer tick containing _cycle. Valid from the last change on.
+  [[nodiscard]] bool ToneOutputAt(Cycles _cycle) const noexcept
+  {
+    return m_events.back().tone.OutputHigh(SquareWave::TickAt(_cycle));
+  }
+
+  /// The state now: the last event's.
+  [[nodiscard]] const Event& Now() const noexcept
+  {
+    return m_events.back();
+  }
 
   /// The number of samples RenderSamples produces for the same arguments: those whose interval
   /// ends in (_from, _to].

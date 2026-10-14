@@ -85,7 +85,7 @@ constexpr std::uint8_t SHIP_TYPE_MASK = 0x1F; // of the slot's first byte, shift
 
 // The space view's buffer at DS:0000, 128 rows of 64 bytes: the drawing buffer (DrawingBuffer).
 static_assert(VIEW_BUFFER_BYTES == DRAWING_BUFFER_BYTES);
-[[nodiscard]] std::span<Counted<std::uint8_t>> ViewBuffer(GameState& _state)
+[[nodiscard]] std::span<Field<std::uint8_t>> ViewBuffer(GameState& _state)
 {
   return DrawingBuffer(_state);
 }
@@ -97,12 +97,12 @@ static_assert(VIEW_BUFFER_BYTES == DRAWING_BUFFER_BYTES);
 std::uint16_t Store(GameState& _state, std::uint16_t _offset, std::uint16_t _count, std::uint16_t _value, std::uint16_t _bytes,
                     bool _backward)
 {
-  const std::span<Counted<std::uint8_t>> buffer = ViewBuffer(_state);
+  const std::span<Field<std::uint8_t>> buffer = ViewBuffer(_state);
   const auto step = static_cast<std::uint16_t>(_backward ? 0u - _bytes : _bytes);
   std::uint16_t at = _offset;
   for (std::uint16_t left = _count; left != 0; --left)
   {
-    const std::span<Counted<std::uint8_t>> stored = BytesWithin(buffer, at, _bytes);
+    const std::span<Field<std::uint8_t>> stored = BytesWithin(buffer, at, _bytes);
     if (_bytes == 2)
     {
       SetWordIn(stored, 0, _value);

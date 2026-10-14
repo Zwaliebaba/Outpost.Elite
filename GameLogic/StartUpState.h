@@ -3,7 +3,7 @@
 // them and run the tool again (D38).
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 
 #include <cstdint>
 #include <type_traits>
@@ -12,17 +12,16 @@ namespace Elite
 {
 
 /// What StartUp.cpp, alone, writes of the game's state (D38), and its own: read elsewhere at most, never written. Its members are the 1987
-/// data segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData, in its counted
-/// block.
+/// data segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData.
 struct StartUpState
 {
   StartUpState() noexcept = default;
   explicit StartUpState(const StartUpState&) noexcept = default;
 
   /// 1 in the file; cleared at start-up unless the ROM at FC00:0016 reads Amstrad
-  Counted<std::uint8_t> amstradPresent;
+  Field<std::uint8_t> amstradPresent;
   /// 1 when the command tail is exactly ' cheat' (CheckCheatArgument compares PSP:80h with DS:2063 XOR AAh); RunFlight then ignores the...
-  Counted<std::uint8_t> cheatEnabled;
+  Field<std::uint8_t> cheatEnabled;
 };
 
 static_assert(std::is_trivially_copyable_v<StartUpState> && std::is_standard_layout_v<StartUpState>);

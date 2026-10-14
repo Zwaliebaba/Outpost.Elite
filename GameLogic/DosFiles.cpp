@@ -175,13 +175,13 @@ void DosFiles::StartProgram() noexcept
   }
 }
 
-void DosFiles::SetTransferArea(std::span<Counted<std::uint8_t>> _area)
+void DosFiles::SetTransferArea(std::span<Field<std::uint8_t>> _area)
 {
   if (_area.size() < TRANSFER_AREA_BYTES)
   {
     throw std::logic_error("DosFiles: a transfer area shorter than the 43 bytes a search fills");
   }
-  const std::span<Counted<std::uint8_t>> area = _area.first(TRANSFER_AREA_BYTES);
+  const std::span<Field<std::uint8_t>> area = _area.first(TRANSFER_AREA_BYTES);
   RefuseOutsideState(area);
   m_transferArea = area;
 }
@@ -263,7 +263,7 @@ DosAnswer DosFiles::Open(std::string_view _name, std::uint8_t _access)
   return Succeed(static_cast<std::uint16_t>(handle));
 }
 
-DosAnswer DosFiles::Read(std::uint16_t _handle, std::span<Counted<std::uint8_t>> _buffer)
+DosAnswer DosFiles::Read(std::uint16_t _handle, std::span<Field<std::uint8_t>> _buffer)
 {
   RefuseStandardHandle(_handle, "a read");
   OpenFile* const file = HandleFile(_handle);
@@ -284,7 +284,7 @@ DosAnswer DosFiles::Read(std::uint16_t _handle, std::span<Counted<std::uint8_t>>
   {
     return Fail(error);
   }
-  // As the emulated DOS laid them down: a byte at a time, from the buffer's first, each counted when it changes.
+  // As the emulated DOS laid them down: a byte at a time, from the buffer's first.
   for (std::uint32_t index = 0; index < count; ++index)
   {
     _buffer[index] = buffer[index];
@@ -357,7 +357,7 @@ DosAnswer DosFiles::FindFirst(std::string_view _pattern, std::uint16_t _attribut
 DosAnswer DosFiles::FindNext()
 {
   RefuseNoTransferArea();
-  const std::span<const Counted<std::uint8_t>> area = m_transferArea;
+  const std::span<const Field<std::uint8_t>> area = m_transferArea;
   if (area[AREA_DRIVE] != CURRENT_DRIVE)
   {
     return Fail(DosError::NoMoreFiles);
@@ -425,7 +425,7 @@ DosError DosFiles::Find(const Template& _pattern, std::uint8_t _attribute, std::
   }
 
   // The search's state, in the order the emulated DOS wrote it, each byte once.
-  const std::span<Counted<std::uint8_t>> area = m_transferArea;
+  const std::span<Field<std::uint8_t>> area = m_transferArea;
   area[AREA_DRIVE] = CURRENT_DRIVE;
   for (std::size_t offset = 0; offset < TEMPLATE_BYTES; ++offset)
   {
@@ -486,7 +486,7 @@ void DosFiles::RefuseNoTransferArea() const
   }
 }
 
-void DosFiles::RefuseOutsideState(std::span<const Counted<std::uint8_t>> _bytes) const
+void DosFiles::RefuseOutsideState(std::span<const Field<std::uint8_t>> _bytes) const
 {
   const std::span<const std::uint8_t> state = m_state.DataBytes();
   const auto into = reinterpret_cast<std::uintptr_t>(_bytes.data()) - reinterpret_cast<std::uintptr_t>(state.data());

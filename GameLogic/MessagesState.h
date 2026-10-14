@@ -3,7 +3,7 @@
 // them and run the tool again (D38).
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 #include "Message.h"
 
 #include <cstdint>
@@ -13,21 +13,20 @@ namespace Elite
 {
 
 /// The message line, which several subsystems post to: what it shows and for how many frames, and the warning's frames. Its members are the
-/// 1987 data segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData, in its counted
-/// block.
+/// 1987 data segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData.
 struct MessagesState
 {
   MessagesState() noexcept = default;
   explicit MessagesState(const MessagesState&) noexcept = default;
 
   /// pointer of the text on the message line now; UpdateMessageLine redraws only when messagePointer differs
-  Counted<Message> messageShown;
+  Field<Message> messageShown;
   /// text the message line should show; written with messageFrames by about 18 routines
-  Counted<Message> messagePointer;
+  Field<Message> messagePointer;
   /// frames left; posters write it as a word, which also zeroes messageDrawn
-  Counted<std::uint16_t> messageFrames;
+  Field<std::uint16_t> messageFrames;
   /// 20 when a warning is raised; counts down
-  Counted<std::uint8_t> warningFrames;
+  Field<std::uint8_t> warningFrames;
 };
 
 static_assert(std::is_trivially_copyable_v<MessagesState> && std::is_standard_layout_v<MessagesState>);

@@ -3,7 +3,7 @@
 // them and run the tool again (D38).
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 
 #include <cstdint>
 #include <type_traits>
@@ -12,15 +12,14 @@ namespace Elite
 {
 
 /// What Maths.cpp, alone, writes of the game's state (D38), and its own: read elsewhere at most, never written. Its members are the 1987
-/// data segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData, in its counted
-/// block.
+/// data segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData.
 struct MathsState
 {
   MathsState() noexcept = default;
   explicit MathsState(const MathsState&) noexcept = default;
 
   /// word sin, word cos; filled by the entries 2421/2426/242B/2430/2435/243B/2441/244D/2447 (one each), used by the rotations 2453..249D...
-  Counted<std::uint8_t> rotationSinCos[9][4];
+  Field<std::uint8_t> rotationSinCos[9][4];
 };
 
 static_assert(std::is_trivially_copyable_v<MathsState> && std::is_standard_layout_v<MathsState>);

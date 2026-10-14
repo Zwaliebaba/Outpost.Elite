@@ -21,10 +21,6 @@ namespace GameLogicTests
 namespace
 {
 
-// Int 33h, the mouse driver's vector.
-constexpr std::uint8_t MOUSE_VECTOR = 0x33;
-constexpr std::uint16_t MOUSE_DRIVER_ENTRY = 0xE060; // in the ROM's segment, F000h, where the platform's driver starts
-
 // PerformDiskRequest's requests.
 constexpr std::uint8_t LOAD_COMMANDER = 1;
 constexpr std::uint8_t SAVE_COMMANDER = 2;
@@ -107,13 +103,12 @@ void PlayEveryDiscMenuPath(TwinRig& _rig)
 {
   _rig.Play("key space; wait 3.3\nkey Escape; wait 0.1\nkey c; wait 0.1\ndigest no-names");
   _rig.Play("key v; wait 0.05\nkey q; wait 0.05\nkey Next; wait 0.05\nkey m; wait 0.05\ndigest no-mouse");
-  // A mouse driver: int 33h pointing at the ROM's driver entry, whose first byte is not an IRET, as a loaded driver's would be. Nothing
-  // reaches the game's state by address since change 3c, so the vector no longer points into it.
-  const Elite::FarAddress mouse = _rig.Host().InterruptVector(MOUSE_VECTOR);
-  _rig.Both([](Elite::Platform& _platform, Elite::GameState&)
-            { _platform.SetInterruptVector(MOUSE_VECTOR, Elite::FarAddress{0xF000, MOUSE_DRIVER_ENTRY}); });
+  // A mouse driver, loaded with no mouse behind it: what the game's test of int 33h's vector finds once a driver points it at its
+  // entry.
+  const bool mouse = _rig.Host().MouseDriverLoaded();
+  _rig.Both([](Elite::Platform& _platform, Elite::GameState&) { _platform.SetMouseDriverLoaded(true); });
   _rig.Play("key m; wait 0.05\ndigest mouse\nkey k; wait 0.05");
-  _rig.Both([mouse](Elite::Platform& _platform, Elite::GameState&) { _platform.SetInterruptVector(MOUSE_VECTOR, mouse); });
+  _rig.Both([mouse](Elite::Platform& _platform, Elite::GameState&) { _platform.SetMouseDriverLoaded(mouse); });
   // The IBM stick, with nothing in the port and then with a stick in it.
   _rig.Play("key j; wait 0.05; key q; wait 0.05; key i; wait 0.05; key space; wait 0.1\ndigest no-stick");
   constexpr std::array<std::size_t, 2> AXES = {0, 1};
@@ -234,10 +229,10 @@ public:
         commander.selectedEconomy = 0x80;
         commander.missileCount = 9;
         commander.killCount = 0xFF;
-        for (Elite::Counted<std::uint8_t>& letter : commander.defaultCommanderName)
+        for (Elite::Field<std::uint8_t>& letter : commander.defaultCommanderName)
           letter = 'A';
         Elite::SetWordIn(Elite::BytesOf(commander.creditsTenths), 0, 1234);
-        for (Elite::Counted<std::uint8_t>& character : commander.creditBalanceText)
+        for (Elite::Field<std::uint8_t>& character : commander.creditBalanceText)
           character = 'X';
         commander.gap759A[0] = 'Y';
         Elite::PerformDiskRequest(state, rig.Native(), SAVE_COMMANDER, 0);

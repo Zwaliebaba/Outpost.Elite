@@ -13,11 +13,6 @@ namespace Elite
 namespace
 {
 
-// WaitForKeyPress's loop: GetKey, and JE back to it while there is no key (Hardware::LoopTurn).
-constexpr std::uint16_t WAIT_FOR_KEY_PRESS = 0x6DEC;
-
-constexpr std::uint8_t MOUSE_VECTOR = 0x33;
-constexpr std::uint8_t IRET_OPCODE = 0xCF;
 constexpr std::uint8_t MOST_MOUSE_STEP = 0x3F; // mickeys / 8, either way
 constexpr std::uint16_t MOUSE_STEP_LIMIT = 0x40;
 
@@ -29,9 +24,6 @@ constexpr std::uint8_t BOTH_AXES = X_AXIS | Y_AXIS;
 constexpr std::uint16_t STICK_STEP_LIMIT = 0x80; // (count - centre) * 128 / centre saturates at 127
 constexpr std::uint8_t MOST_STICK_STEP = 0x7F;
 constexpr std::uint8_t STICK_DEAD_ZONE = 4; // after the step's division by 8
-
-// ReadJoystickAxes's wait for both bits, where it jumps back (Hardware::LoopTurn).
-constexpr std::uint16_t BOTH_DOWN_TURN = 0x7797;
 
 // The cycles the 8088 model (the interpreter, until D7) charged for ReadJoystickAxes's instructions: the game port times its one-shots by
 // them, and the stick is read by counting turns of the polling loops, so native code counts them where the original runs them.
@@ -59,7 +51,7 @@ constexpr std::uint16_t KEY_BUFFER_WRAP = 0x0F; // keyBuffer is a ring of 16: an
 constexpr std::size_t KEY_DOWN_WORDS = 0x40;
 
 // keyDown's 128 bytes, a byte a scan code: 1 while its key is held.
-[[nodiscard]] std::span<Counted<std::uint8_t>> KeyDown(GameState& _state)
+[[nodiscard]] std::span<Field<std::uint8_t>> KeyDown(GameState& _state)
 {
   return BytesOf(_state.Data().keyboard.keyDown);
 }
@@ -97,14 +89,14 @@ bool SaveScreenshotIfAsked(GameState& _state, Hardware& _hardware)
 
 // Whether IntegrateRate tests _input against the rate at _rate for a reversal: XOR BL,[rate], which leaves BL the key
 // XOR the rate.
-[[nodiscard]] bool TestsReversal(const GameState& _state, std::uint8_t _input, const Counted<std::uint8_t>& _rate)
+[[nodiscard]] bool TestsReversal(const GameState& _state, std::uint8_t _input, const Field<std::uint8_t>& _rate)
 {
   return _input != 0 && _state.Data().flight.keyboardRecenter == 1 && _rate != 0;
 }
 
 // One axis of ApplyKeyboardRates (0x7543): a new key adds to the rate, within +-23, or with keyboardRecenter snaps
 // an opposite rate to 0, which it stores at once; no key lets keyboardDamping take up to 3 off it.
-[[nodiscard]] std::uint8_t IntegrateRate(GameState& _state, std::uint8_t _input, Counted<std::uint8_t>& _rate)
+[[nodiscard]] std::uint8_t IntegrateRate(GameState& _state, std::uint8_t _input, Field<std::uint8_t>& _rate)
 {
   const std::uint8_t rate = _rate;
   if (_input == 0)
@@ -151,7 +143,7 @@ Steering ApplyKeyboardRates(GameState& _state, Steering _keys)
 }
 
 // One axis of ReadKeyboardSteering: the ramp grows while the same key is held, inside +-23, and restarts on a change.
-void RampAxis(std::uint8_t _key, Counted<std::uint8_t>& _lastKey, Counted<std::uint8_t>& _ramp)
+void RampAxis(std::uint8_t _key, Field<std::uint8_t>& _lastKey, Field<std::uint8_t>& _ramp)
 {
   const bool held = _key == _lastKey;
   _lastKey = _key;
@@ -197,7 +189,7 @@ Steering ReadAmstradStick(GameState& _state)
 
 // One axis of ReadJoystickSteering: (_count - centre) * 256 / centre by a DIV that can overflow into the game's trap; halved and
 // saturated at 127, over 8, less a dead zone of 4, with the sign put back.
-[[nodiscard]] std::uint8_t StickAxis(std::uint16_t _count, const Counted<std::uint16_t>& _center)
+[[nodiscard]] std::uint8_t StickAxis(std::uint16_t _count, const Field<std::uint16_t>& _center)
 {
   auto difference = static_cast<std::uint16_t>(_count - _center);
   const bool negative = (difference & 0x8000) != 0;
@@ -267,24 +259,32 @@ void KeyboardInterrupt(GameState& _state, Hardware& _hardware)
 
 MouseDriver IsMouseDriverInstalled(Hardware& _hardware)
 {
-  // The int 33h vector: installed when it is set and does not point at an IRET.
-  const FarAddress vector = _hardware.InterruptVector(MOUSE_VECTOR);
-  const bool set = (vector.offset | vector.segment) != 0;
-  return MouseDriver{set && _hardware.HandlerOpcode(vector) != IRET_OPCODE};
+  // The int 33h vector: installed when it is set and does not point at an IRET, as a loaded driver's does.
+  return MouseDriver{_hardware.MouseDriverLoaded()};
 }
 
 void WaitForKeyPress(GameState& _state, Hardware& _hardware)
 {
-  // GetKey until a key comes: each empty turn ends at the original's JE back to the entry. The turn carries nothing: GetKey
-  // writes AH before it reads it and keeps BX, and it reads AL only when it takes a code, which changes keyBuffer's count.
+  // GetKey until a key comes, the JE back to the entry at 6DECh.
   for (;;)
   {
-    if (GetKey(_state, _hardware).scanCode != 0)
+    const KeyPress key = GetKey(_state, _hardware);
+    if (key.scanCode != 0)
     {
       return;
     }
-    _hardware.LoopTurn(WAIT_FOR_KEY_PRESS, {});
+    AwaitNextKey(_hardware, key);
   }
+}
+
+void AwaitNextKey(Hardware& _hardware, const KeyPress& _key)
+{
+  if (_key.taken || _key.screenshot)
+  {
+    _hardware.Spin();
+    return;
+  }
+  _hardware.Wait();
 }
 
 Steering ReadSteering(GameState& _state, Hardware& _hardware)
@@ -400,7 +400,8 @@ StickAxes ReadJoystickAxes(Hardware& _hardware)
 {
   // With interrupts off, the one-shots fired, and each axis's polls counted until its bit drops. The game port times its one-shots
   // by the instructions executed, so each of the original's is counted (CountInstructionCycles) before the port access after it.
-  // The wait for both bits, which reads no register before it writes it but DX, the port, idles as the original's does.
+  // The wait for both bits at 7797h idles as the original's does: from its second poll, as its first follows the last change, the
+  // port written to fire the one-shots.
   _hardware.DisableInterrupts();
   std::uint16_t x = AXIS_COUNT_START;
   std::uint16_t y = x;
@@ -439,6 +440,7 @@ StickAxes ReadJoystickAxes(Hardware& _hardware)
   }
   _hardware.CountInstructionCycles(NOT_TAKEN_CYCLES);
   // Both bits down before the one-shots fire again: a wait when X's drops first.
+  bool polled = false;
   for (;;)
   {
     bits = static_cast<std::uint8_t>(_hardware.GamePortOneShots() & BOTH_AXES);
@@ -448,7 +450,15 @@ StickAxes ReadJoystickAxes(Hardware& _hardware)
       break;
     }
     _hardware.CountInstructionCycles(TAKEN_CYCLES);
-    _hardware.LoopTurn(BOTH_DOWN_TURN, {bits});
+    if (polled)
+    {
+      _hardware.Wait();
+    }
+    else
+    {
+      _hardware.Spin();
+      polled = true;
+    }
   }
   _hardware.CountInstructionCycles(NOT_TAKEN_CYCLES);
   _hardware.FireGamePort();
@@ -511,7 +521,7 @@ Steering ReadKeyboardSteering(GameState& _state)
 {
   std::uint8_t roll = 0;
   std::uint8_t pitch = 0;
-  const auto held = [](const Counted<std::uint8_t>& _first, const Counted<std::uint8_t>& _second) { return (_first | _second) != 0; };
+  const auto held = [](const Field<std::uint8_t>& _first, const Field<std::uint8_t>& _second) { return (_first | _second) != 0; };
   if (held(_state.Data().keyboard.keyDown.keyDownUp, _state.Data().keyboard.keyDown.keyDownQ))
   {
     --pitch;
@@ -587,7 +597,7 @@ namespace
 {
 
 constexpr std::array ENTRIES = {
-  NativeEntry{0x0201, &KeyboardInterruptEntry, EntryReturn::Interrupt},
+  NativeEntry{EntryKind::KeyboardHandler, &KeyboardInterruptEntry}, // CS:0201
 };
 
 } // namespace

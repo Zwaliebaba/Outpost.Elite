@@ -3,7 +3,7 @@
 // them and run the tool again (D38).
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 #include "Message.h"
 #include "SpaceObject.h"
 
@@ -14,121 +14,120 @@ namespace Elite
 {
 
 /// What Flight.cpp, alone, writes of the game's state (D38), and its own: read elsewhere at most, never written. Its members are the 1987
-/// data segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData, in its counted
-/// block.
+/// data segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData.
 struct FlightState
 {
   FlightState() noexcept = default;
   explicit FlightState(const FlightState&) noexcept = default;
 
   /// 6-byte particle; +0 x, +2 y (signed words, on screen while the high bytes are -0x20..0x1F and -0x10..0x0F), +4 byte 0x28-0x47 (the...
-  Counted<std::uint8_t> stardust[30][6];
+  Field<std::uint8_t> stardust[30][6];
   /// 6-byte particle; stardust+0xB4: start-of-frame copy for streaks; +5 is 1 for a particle respawned this frame
-  Counted<std::uint8_t> stardustPrevious[30][6];
+  Field<std::uint8_t> stardustPrevious[30][6];
   /// written by ComputeStardustShift; 4 at full playerSpeed
-  Counted<std::uint8_t> stardustShift;
+  Field<std::uint8_t> stardustShift;
   /// HandleFlightFunctionKeys: a screen replaced the cockpit, so it must be restored
-  Counted<std::uint8_t> flightScreenShown;
+  Field<std::uint8_t> flightScreenShown;
   /// +5 per shot, saturating at FFh; the fire button does nothing at F0h or above
-  Counted<std::uint8_t> laserTemperature;
+  Field<std::uint8_t> laserTemperature;
   /// 1 green, 3 yellow, 2 red, 0 flashing red; written by UpdateConditionColor
-  Counted<std::uint8_t> conditionColor;
+  Field<std::uint8_t> conditionColor;
   /// first of the 22 dashboard cache bytes DS:4222-4237 that InvalidateDashboard sets to 0x80
-  Counted<std::uint8_t> missileCountShown;
+  Field<std::uint8_t> missileCountShown;
   /// dashboard cache of missileState
-  Counted<std::uint8_t> missileLockShown;
+  Field<std::uint8_t> missileLockShown;
   /// byte; dashboard cache of energyBankFill
-  Counted<std::uint8_t> energyBanksShown[4];
+  Field<std::uint8_t> energyBanksShown[4];
   /// byte; per-bank fill computed by DrawEnergyBanks from playerEnergy, bottom bank last
-  Counted<std::uint8_t> energyBankFill[4];
+  Field<std::uint8_t> energyBankFill[4];
   /// dashboard cache
-  Counted<std::uint8_t> rollRateShown;
+  Field<std::uint8_t> rollRateShown;
   /// dashboard cache
-  Counted<std::uint8_t> pitchRateShown;
+  Field<std::uint8_t> pitchRateShown;
   /// dashboard cache
-  Counted<std::uint8_t> altitudeShown;
+  Field<std::uint8_t> altitudeShown;
   /// dashboard cache
-  Counted<std::uint8_t> cabinTemperatureShown;
+  Field<std::uint8_t> cabinTemperatureShown;
   /// dashboard cache
-  Counted<std::uint8_t> fuelShown;
+  Field<std::uint8_t> fuelShown;
   /// dashboard cache: 0x20 or 0x81
-  Counted<std::uint8_t> ecmGlyphShown;
+  Field<std::uint8_t> ecmGlyphShown;
   /// dashboard cache: 0x20 or 0x82
-  Counted<std::uint8_t> safeZoneGlyphShown;
+  Field<std::uint8_t> safeZoneGlyphShown;
   /// dashboard cache
-  Counted<std::uint8_t> laserTemperatureShown;
+  Field<std::uint8_t> laserTemperatureShown;
   /// compared but never written by UpdateDashboard, so the fore shield bar is redrawn every frame unless the shield is 0x80
-  Counted<std::uint8_t> foreShieldShown;
+  Field<std::uint8_t> foreShieldShown;
   /// compared but never written, as foreShieldShown
-  Counted<std::uint8_t> aftShieldShown;
+  Field<std::uint8_t> aftShieldShown;
   /// dashboard cache
-  Counted<std::uint8_t> conditionColorShown;
+  Field<std::uint8_t> conditionColorShown;
   /// dashboard cache
-  Counted<std::uint8_t> speedShown;
+  Field<std::uint8_t> speedShown;
   /// 1 after a successful dock (0x2C4F), 0 at 0x2A11; ShowCommanderStatusScreen debriefs only when it is 1
-  Counted<std::uint8_t> playerDocked;
+  Field<std::uint8_t> playerDocked;
   /// bit 0: inside the station's safe zone (UpdateSafeZone)
-  Counted<std::uint8_t> safeZoneFlags;
+  Field<std::uint8_t> safeZoneFlags;
   /// currentGovernment on arrival (0x2B56), 0 in witch space (0x2A51); spawn limits and the station handler use it
-  Counted<std::uint8_t> spawnGovernment;
+  Field<std::uint8_t> spawnGovernment;
   /// text of the active warning
-  Counted<Message> warningMessage;
+  Field<Message> warningMessage;
   /// last warning raised; the next search starts after it
-  Counted<std::uint8_t> warningIndex;
+  Field<std::uint8_t> warningIndex;
   /// slots before the debris: 20 (SetUpLocalSpace), 1 in the file
-  Counted<std::uint8_t> objectSlotCount;
+  Field<std::uint8_t> objectSlotCount;
   /// 16
-  Counted<std::uint8_t> debrisSlotCount;
+  Field<std::uint8_t> debrisSlotCount;
   /// UpdateCompass; TransformAndDrawObjects classifies the station only when 1
-  Counted<std::uint8_t> compassTargetIsStation;
+  Field<std::uint8_t> compassTargetIsStation;
   /// selectedDistanceTenthsLy*36/10 (at least 1), set when H starts the countdown; taken from fuel on arrival (4720)
-  Counted<std::uint8_t> hyperspaceFuelCost;
+  Field<std::uint8_t> hyperspaceFuelCost;
   /// negated new pitch angle while UpdatePlayerMotion re-derives the orientation
-  Counted<std::uint16_t> pitchAngleScratch;
+  Field<std::uint16_t> pitchAngleScratch;
   /// negated new yaw angle, as pitchAngleScratch
-  Counted<std::uint16_t> yawAngleScratch;
+  Field<std::uint16_t> yawAngleScratch;
   /// 1 for one frame after J: UpdatePlayerVelocity multiplies the playerSpeed by 32
-  Counted<std::uint8_t> jumpDriveEngaged;
+  Field<std::uint8_t> jumpDriveEngaged;
   /// slot the missile is locked on
-  Counted<SlotIndex> missileTarget;
+  Field<SlotIndex> missileTarget;
   /// laser type (0-3) for this view, from GetViewLaser; damage is type + 1; set at 0x8297 when fire is pressed; DrawLaserBeams picks its...
-  Counted<std::uint8_t> firingLaserType;
+  Field<std::uint8_t> firingLaserType;
   /// toggled on each frame a type-0 laser is fired; that type fires only on alternate frames
-  Counted<std::uint8_t> laserAlternateFrame;
+  Field<std::uint8_t> laserAlternateFrame;
   /// 1 after I until the ship in the sights is identified
-  Counted<std::uint8_t> shipIdRequested;
+  Field<std::uint8_t> shipIdRequested;
   /// 40 at death; RunFlight keeps running frames until it reaches 0
-  Counted<std::uint8_t> gameOverFrames;
+  Field<std::uint8_t> gameOverFrames;
   /// frameRateKeyLabel's fields, DS:ABFF-AC01 in 1987, at their places there.
   struct FrameRateKeyLabel
   {
     FrameRateKeyLabel() noexcept = default;
     explicit FrameRateKeyLabel(const FrameRateKeyLabel&) noexcept = default;
 
-    Counted<std::uint8_t> gapABFF[1];
-    Counted<std::uint8_t> dataAC00;
-    Counted<std::uint8_t> dataAC01;
+    Field<std::uint8_t> gapABFF[1];
+    Field<std::uint8_t> dataAC00;
+    Field<std::uint8_t> dataAC01;
   };
   /// the '8) ' of '(F8) ' at the end of the pause menu's frame-rate line; rewritten by F1-F10
   FrameRateKeyLabel frameRateKeyLabel;
   /// pause option R, 'Keyboard Recentre', 1 in the file: a key against the current rate zeroes it first. First of five (value, letter) r...
-  Counted<std::uint8_t> keyboardRecenter;
+  Field<std::uint8_t> keyboardRecenter;
   /// pause option D, 'Keyboard Damping', 1 in the file: an idle axis decays 3 a frame toward 0
-  Counted<std::uint8_t> keyboardDamping;
+  Field<std::uint8_t> keyboardDamping;
   /// pause option Y, 'Reverse Y control', 0 in the file: negates pitch (ApplyReverseControls)
-  Counted<std::uint8_t> reverseYControl;
+  Field<std::uint8_t> reverseYControl;
   /// pause option B, 'Reverse X and Y', 0 in the file: negates roll and pitch
-  Counted<std::uint8_t> reverseXAndY;
+  Field<std::uint8_t> reverseXAndY;
   /// pause option S, 'Sound Toggle', 1 in the file; TimerTick does nothing more when it is 0
-  Counted<std::uint8_t> soundEnabled;
+  Field<std::uint8_t> soundEnabled;
   /// toggled by 'L' (0x8379, 0x838C) when antiEcmEmulatorFitted; at 1 the station starts no ECM
-  Counted<std::uint8_t> antiEcmActive;
+  Field<std::uint8_t> antiEcmActive;
   /// TimerTick plays nothing while it is 1
-  Counted<std::uint8_t> gamePaused;
+  Field<std::uint8_t> gamePaused;
   /// 50 in the file, which is F7's choice, though the label in the file reads (F8) (40 ms); the shortest a frame may take
-  Counted<std::uint8_t> minimumFrameMs;
+  Field<std::uint8_t> minimumFrameMs;
   /// set on a 500/65536 chance at launch (Missile Jammed... Can't Launch!); M then fails until reset at 2A33
-  Counted<std::uint8_t> missileJammed;
+  Field<std::uint8_t> missileJammed;
 };
 
 static_assert(std::is_trivially_copyable_v<FlightState> && std::is_standard_layout_v<FlightState>);

@@ -1,7 +1,5 @@
 #include "pch.h"
 
-#include "InterruptController.h"
-#include "IntervalTimer.h"
 #include "Speaker.h"
 #include "Timing.h"
 
@@ -21,14 +19,13 @@ constexpr std::uint8_t DATA_ONLY = 0x4E;     // bit 1: the cone driven directly
 constexpr std::uint8_t GATE_AND_DATA = 0x4F; // bits 0 and 1: channel 2's wave
 constexpr std::int32_t FULL = Elite::Speaker::FULL_LEVEL;
 
-// The speaker as it is wired: channel 2 through the timer, and the system control port as the keyboard's 8255 passes it on
-// (bit 0 to channel 2's gate, the byte to the speaker), which KeyboardTests checks.
+// The speaker as the game drives it: the tone, and the system control port's two bits as the platform passes them on, which
+// PlatformTests checks.
 class SpeakerRig
 {
 public:
   SpeakerRig()
-    : m_speaker(m_clock),
-      m_timer(m_clock, m_controller, m_speaker)
+    : m_speaker(m_clock)
   {
   }
 
@@ -40,15 +37,14 @@ public:
   void SetSystemControl(Elite::Cycles _cycle, std::uint8_t _value)
   {
     m_clock = _cycle;
-    m_timer.SetChannel2Gate((_value & 0x01) != 0);
-    m_speaker.SetSystemControl(_value);
+    m_speaker.SetBits((_value & 0x01) != 0, (_value & 0x02) != 0);
   }
 
   // What the game's music does for a note: channel 2, both bytes, mode 3 (0x7372).
   void PlayTone(Elite::Cycles _cycle, std::uint16_t _divisor)
   {
     m_clock = _cycle;
-    m_timer.Program(0xB6, _divisor);
+    m_speaker.SetTone(_divisor);
   }
 
   [[nodiscard]] std::vector<std::int16_t> Render(Elite::Cycles _from, Elite::Cycles _to, std::uint32_t _sampleRate) const
@@ -61,9 +57,7 @@ public:
 
 private:
   Elite::Cycles m_clock = 0;
-  Elite::InterruptController m_controller;
   Elite::Speaker m_speaker;
-  Elite::IntervalTimer m_timer;
 };
 
 [[nodiscard]] std::int32_t Spread(const std::vector<std::int16_t>& _samples, std::size_t _skip)
@@ -218,6 +212,31 @@ public:
     rig.Sound().DiscardBefore(Elite::Speaker::FirstSampleStart(50'000, 48'000));
     Assert::IsTrue(rig.Sound().Events().size() < events);
     Assert::IsTrue(before == rig.Render(50'000, 100'000, 48'000));
+  }
+
+  // The tone is gated by the gate bit: low, its output is high; rising, it reloads on the next timer tick. Its every change
+  // reaches the log.
+  TEST_METHOD(GateRestartsTheToneAndTheLogHearsIt)
+  {
+    SpeakerRig rig;
+    constexpr Elite::Cycles TICK = Elite::CYCLES_PER_PIT_TICK;
+    Assert::IsFalse(rig.Sound().Now().tone.gate, L"gate low at power-on");
+    Assert::IsTrue(rig.Sound().ToneOutputAt(0));
+
+    rig.PlayTone(0, 0x32);                         // the game's music: channel 2, both bytes, mode 3
+    rig.SetSystemControl(400, SPEAKER_OFF | 0x01); // reloaded on tick 101: high 101-125, low 126-150
+    Assert::IsTrue(rig.Sound().ToneOutputAt(125 * TICK + 3));
+    Assert::IsFalse(rig.Sound().ToneOutputAt(126 * TICK));
+    Assert::IsFalse(rig.Sound().ToneOutputAt(150 * TICK + 3));
+    Assert::IsTrue(rig.Sound().ToneOutputAt(151 * TICK));
+
+    rig.SetSystemControl(130 * TICK, SPEAKER_OFF);
+    Assert::IsTrue(rig.Sound().ToneOutputAt(130 * TICK), L"a low gate forces the output high");
+
+    const Elite::Speaker::Event& last = rig.Sound().Events().back();
+    Assert::AreEqual(130 * TICK, last.at);
+    Assert::IsFalse(last.tone.gate);
+    Assert::AreEqual(0x32u, last.tone.reload);
   }
 };
 

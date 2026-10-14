@@ -74,7 +74,7 @@ constexpr std::uint8_t QUANTITY_BASE = 10; // ParseQuantity's decimal, which the
 }
 
 // cargoHold's entries: for each product, the amount held, then the amount the market has.
-[[nodiscard]] std::span<Counted<std::uint8_t>> Hold(GameState& _state)
+[[nodiscard]] std::span<Field<std::uint8_t>> Hold(GameState& _state)
 {
   return BytesOf(_state.Data().commander.cargoHold);
 }
@@ -86,7 +86,7 @@ constexpr std::uint8_t QUANTITY_BASE = 10; // ParseQuantity's decimal, which the
 }
 
 // screenPrices: for each product its buy price and then its sell price, in tenths, a word each.
-[[nodiscard]] std::span<Counted<std::uint8_t>> ScreenPrices(GameState& _state)
+[[nodiscard]] std::span<Field<std::uint8_t>> ScreenPrices(GameState& _state)
 {
   return BytesOf(_state.Data().menus.screenPrices);
 }
@@ -140,8 +140,8 @@ void ShowCargoMessage(GameState& _state, std::string_view _text, std::uint8_t _s
   {
     return NOTHING_SOLD_TEXT;
   }
-  Counted<std::uint8_t>& held = Hold(_state)[HoldEntry(_state)];
-  Counted<std::uint8_t>& market = Hold(_state)[HoldEntry(_state) + 1];
+  Field<std::uint8_t>& held = Hold(_state)[HoldEntry(_state)];
+  Field<std::uint8_t>& market = Hold(_state)[HoldEntry(_state) + 1];
   const std::uint8_t amount = Low(quantity.value);
   if (held < amount)
   {
@@ -203,8 +203,8 @@ void ShowCargoMessage(GameState& _state, std::string_view _text, std::uint8_t _s
   {
     return NOTHING_BOUGHT_TEXT;
   }
-  Counted<std::uint8_t>& held = Hold(_state)[HoldEntry(_state)];
-  Counted<std::uint8_t>& market = Hold(_state)[HoldEntry(_state) + 1];
+  Field<std::uint8_t>& held = Hold(_state)[HoldEntry(_state)];
+  Field<std::uint8_t>& market = Hold(_state)[HoldEntry(_state) + 1];
   const std::uint8_t amount = Low(quantity.value);
   if (market < amount)
   {
@@ -254,7 +254,7 @@ ScreenKey ShowMarketPricesScreen(GameState& _state, Hardware& _hardware, bool _b
 {
   const std::string_view title = DrawDockedFrame(_state, _hardware, MARKET_PRICES_FRAME, _backward);
   // The system's name, cut for good at its first space after the first letter.
-  const std::span<Counted<std::uint8_t>> name(_state.Data().commander.currentSystemName);
+  const std::span<Field<std::uint8_t>> name(_state.Data().commander.currentSystemName);
   for (std::size_t letter = 1;; ++letter)
   {
     const std::uint8_t character = name[letter];
@@ -274,7 +274,7 @@ ScreenKey ShowMarketPricesScreen(GameState& _state, Hardware& _hardware, bool _b
   ComputeMarketPrices(_state);
 
   // Each commodity's name, buy price and sell price, the original holding the name, the row and the prices in SI, DI and BX.
-  const std::span<Counted<std::uint8_t>> prices = ScreenPrices(_state);
+  const std::span<Field<std::uint8_t>> prices = ScreenPrices(_state);
   std::uint16_t row = FIRST_PRODUCT_OFFSET;
   for (std::uint16_t product = 0, left = COMMODITY_COUNT;;)
   {
@@ -359,7 +359,7 @@ void ComputeMarketPrices(GameState& _state)
   }
   _state.Data().market.marketTechLevel = techLevel;
   _state.Data().market.data8C14 = 0;
-  const std::span<Counted<std::uint8_t>> prices = ScreenPrices(_state);
+  const std::span<Field<std::uint8_t>> prices = ScreenPrices(_state);
   for (std::uint16_t commodity = 0; commodity < COMMODITY_COUNT; ++commodity)
   {
     const std::uint16_t economyFactor = _state.Data().market.data8C10;
@@ -420,7 +420,7 @@ std::optional<std::uint8_t> RollQuantityOnSale(GameState& _state)
   return static_cast<std::uint8_t>((drawn - QUANTITY_RANDOM_BIAS) ^ (High(random) & QUANTITY_RANDOM_HIGH_MASK));
 }
 
-Quantity ParseQuantity(std::span<const Counted<std::uint8_t>> _text)
+Quantity ParseQuantity(std::span<const Field<std::uint8_t>> _text)
 {
   Quantity quantity{.value = 0, .valid = false, .end = 0, .lastRead = 0};
   const auto next = [&_text, &quantity]()

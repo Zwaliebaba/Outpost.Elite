@@ -114,7 +114,7 @@ void SendTwinCodes(TwinRig& _rig, std::initializer_list<std::uint8_t> _codes)
     [_codes](Elite::Platform& _platform, Elite::GameState&)
     {
       for (const std::uint8_t code : _codes)
-        _platform.KeyboardController().Inject(code);
+        _platform.Events().Inject(code);
     });
 }
 

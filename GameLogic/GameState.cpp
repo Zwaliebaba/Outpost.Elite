@@ -3,21 +3,14 @@
 #include "GameState.h"
 
 #include <algorithm>
-#include <new>
 #include <stdexcept>
 
 namespace Elite
 {
 
 GameState::GameState()
-  : m_block(new (::operator new(sizeof(Block), std::align_val_t{COUNTED_BLOCK_ALIGNMENT})) Block{})
+  : m_data(std::make_unique<GameData>())
 {
-}
-
-void GameState::FreeBlock::operator()(Block* _block) const noexcept
-{
-  _block->~Block();
-  ::operator delete(_block, std::align_val_t{COUNTED_BLOCK_ALIGNMENT});
 }
 
 void GameState::Load(std::uint16_t _codeSegment, std::span<const std::uint8_t> _state) noexcept
@@ -32,11 +25,6 @@ void GameState::Load(std::uint16_t _codeSegment, std::span<const std::uint8_t> _
 void GameState::RefuseVideo()
 {
   throw std::out_of_range("GameState: an offset past the CGA's 16 KiB of video memory");
-}
-
-void GameState::RefusePlace()
-{
-  throw std::out_of_range("GameState: a place outside GameData");
 }
 
 void GameState::RefuseSlot()

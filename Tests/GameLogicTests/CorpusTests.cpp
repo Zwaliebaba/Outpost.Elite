@@ -168,9 +168,8 @@ public:
     PlayEveryReplay(recording, report, checkpoints,
                     [](const std::wstring& _name, Elite::Platform& _platform)
                     {
-                      std::uint64_t calls = _platform.Entry().calls;
-                      for (const auto& [linear, hook] : _platform.Hooks())
-                        calls += hook.calls;
+                      const std::uint64_t calls = _platform.Entry().calls + _platform.GameHandler(Elite::Irq::Timer).calls +
+                                                  _platform.GameHandler(Elite::Irq::Keyboard).calls;
                       Assert::IsTrue(calls > 0, (_name + L": no native routine ran").c_str());
                     });
     if (recording)

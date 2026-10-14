@@ -129,7 +129,7 @@ constexpr std::size_t BOX_REFLECTION_SKIP = 0x12; // three vertices
 // The vertices from vertexBuffer's first byte, as far as a vertex program reaches (VERTEX_REACH): a vertex is six bytes, x, y and
 // z words, and ProjectVertices makes the first ones points of four, x and y, in place. Each routine holds a vertex as the byte it
 // starts at, where the original holds its address.
-[[nodiscard]] std::span<Counted<std::uint8_t>> Vertices(GameState& _state)
+[[nodiscard]] std::span<Field<std::uint8_t>> Vertices(GameState& _state)
 {
   return BytesOf(_state.Data().scene.vertexBuffer);
 }
@@ -185,7 +185,7 @@ void SetDrawAngles(GameState& _state)
 // leaves in the registers: SI past the vertices, CX = 0, AX and BX the last vertex's.
 void RotateVertices(GameState& _state, std::size_t _first, std::uint16_t _count, std::uint16_t _a, std::uint16_t _b, std::size_t _pair)
 {
-  const std::span<Counted<std::uint8_t>> vertices = Vertices(_state);
+  const std::span<Field<std::uint8_t>> vertices = Vertices(_state);
   std::size_t vertex = _first;
   for (std::uint16_t left = _count; left != 0; --left)
   {
@@ -265,7 +265,7 @@ constexpr std::uint16_t TRIANGLE_VERTEX_BYTES = 3;
 // original keeps it there.
 [[nodiscard]] Triangle LoadTriangle(GameState& _state, std::span<const std::uint8_t> _list, std::uint16_t _indices, std::uint8_t _shift)
 {
-  const std::span<const Counted<std::uint8_t>> points = Vertices(_state);
+  const std::span<const Field<std::uint8_t>> points = Vertices(_state);
   const auto vertex = [_list, _indices, _shift](std::uint16_t _which)
   { return std::size_t{static_cast<std::uint8_t>(_list[Offset(_indices, _which)] << _shift)}; };
   const auto coordinate = [points](std::size_t _vertex, std::size_t _bytes)
@@ -305,7 +305,7 @@ struct WindingProducts
   const std::uint16_t edge = Join(_blueprint.faceEdges[_item + 1u], _blueprint.faceEdges[_item]);
   _state.Data().drawing.drawColor = static_cast<std::uint8_t>(High(edge) & EDGE_COLOR_BITS);
   const auto vertices = static_cast<std::uint16_t>(edge & EDGE_VERTEX_BITS);
-  const std::span<const Counted<std::uint8_t>> points = Vertices(_state);
+  const std::span<const Field<std::uint8_t>> points = Vertices(_state);
   const std::size_t to = Low(vertices);
   const std::size_t from = High(vertices);
   const std::uint16_t toX = WordIn(points, to);
@@ -859,7 +859,7 @@ void ProjectVertices(GameState& _state)
   // points they become, in place; PUSH SI / POP SI keep the caller's.
   // The count is a blueprint's (RenderBlueprint), at most 37 of vertexBuffer's 42 vertices (MostProjectedVertices).
   const std::uint16_t count = _state.Data().scene.projectedVertexCount;
-  const std::span<Counted<std::uint8_t>> vertices = BytesWithin(Vertices(_state), 0, std::size_t{count} * VERTEX_BYTES);
+  const std::span<Field<std::uint8_t>> vertices = BytesWithin(Vertices(_state), 0, std::size_t{count} * VERTEX_BYTES);
   std::size_t vertex = 0;
   std::size_t point = 0;
   for (std::uint16_t left = count; left != 0; --left)
@@ -883,10 +883,10 @@ void ProjectVertices(GameState& _state)
 
 void ReflectVertexAboutCenter(GameState& _state, std::size_t _vertex, std::size_t _reflection)
 {
-  const std::span<Counted<std::uint8_t>> vertices = Vertices(_state);
+  const std::span<Field<std::uint8_t>> vertices = Vertices(_state);
   std::array<std::uint16_t, 3> center{};
-  constexpr std::array<Counted<std::uint16_t> SceneState::*, 3> CENTER = {&SceneState::drawCenterX, &SceneState::drawCenterY,
-                                                                          &SceneState::drawCenterZ};
+  constexpr std::array<Field<std::uint16_t> SceneState::*, 3> CENTER = {&SceneState::drawCenterX, &SceneState::drawCenterY,
+                                                                        &SceneState::drawCenterZ};
   for (std::size_t axis = 0; axis < CENTER.size(); ++axis)
   {
     const std::size_t bytes = 2 * axis;
@@ -898,9 +898,9 @@ void ReflectVertexAboutCenter(GameState& _state, std::size_t _vertex, std::size_
 
 void OffsetVertexByCenter(GameState& _state, std::size_t _vertex)
 {
-  const std::span<Counted<std::uint8_t>> vertices = Vertices(_state);
-  constexpr std::array<Counted<std::uint16_t> SceneState::*, 3> CENTER = {&SceneState::drawCenterX, &SceneState::drawCenterY,
-                                                                          &SceneState::drawCenterZ};
+  const std::span<Field<std::uint8_t>> vertices = Vertices(_state);
+  constexpr std::array<Field<std::uint16_t> SceneState::*, 3> CENTER = {&SceneState::drawCenterX, &SceneState::drawCenterY,
+                                                                        &SceneState::drawCenterZ};
   for (std::size_t axis = 0; axis < CENTER.size(); ++axis)
   {
     const std::size_t bytes = 2 * axis;
@@ -916,7 +916,7 @@ void BuildBoxCornerVertices(GameState& _state, std::uint16_t _extents)
   const std::uint16_t height = Low(extents);
   const std::uint16_t length = Negate(std::uint16_t{High(extents)});
   // boxCornerVertices, vertex 34 on, the box's corners.
-  const std::span<Counted<std::uint8_t>> vertices = Vertices(_state);
+  const std::span<Field<std::uint8_t>> vertices = Vertices(_state);
   static_assert(GAME_DATA_OFFSET(scene.vertexBuffer.boxCornerVertices) ==
                 GAME_DATA_OFFSET(scene.vertexBuffer) + sizeof(SceneState::VertexBuffer::gap7230));
   const std::size_t corners = sizeof(SceneState::VertexBuffer::gap7230);
@@ -978,7 +978,7 @@ void BuildDodoVertices(GameState& _state)
   // The angle a byte offset into sineTable, always even.
   const auto ringRadii = [](std::uint16_t _angle) { return ScaleDodoRadii(static_cast<std::int8_t>(SineHigh(_angle))); };
   auto angle = static_cast<std::uint16_t>((_state.Data().scene.drawRollAngle & ANGLE_BITS) << 1);
-  const std::span<Counted<std::uint8_t>> vertices = Vertices(_state);
+  const std::span<Field<std::uint8_t>> vertices = Vertices(_state);
   std::size_t vertex = 0;
   for (std::uint16_t left = DODO_RING_VERTICES; left != 0; --left)
   {
@@ -1060,7 +1060,7 @@ void RunVertexProgram(GameState& _state, std::span<const std::uint8_t> _program,
   auto x = static_cast<std::uint16_t>(_accumulator.x);
   auto y = static_cast<std::uint16_t>(_accumulator.y);
   auto z = static_cast<std::uint16_t>(_accumulator.z);
-  const std::span<Counted<std::uint8_t>> vertices = Vertices(_state);
+  const std::span<Field<std::uint8_t>> vertices = Vertices(_state);
   for (const std::uint8_t op : _program)
   {
     const std::size_t vertex = std::size_t{static_cast<std::uint8_t>(op & VERTEX_INDEX_BITS)} * VERTEX_BYTES;

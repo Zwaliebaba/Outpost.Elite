@@ -3,7 +3,7 @@
 // them and run the tool again (D38).
 #pragma once
 
-#include "Counted.h"
+#include "Field.h"
 
 #include <cstdint>
 #include <type_traits>
@@ -12,8 +12,7 @@ namespace Elite
 {
 
 /// What Hyperspace.cpp, alone, writes of the game's state (D38), and its own: read elsewhere at most, never written. Its members are the
-/// 1987 data segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData, in its counted
-/// block.
+/// 1987 data segment's, by their names, in their order there (Design/DataPartition.tsv); the GameState holds it in GameData.
 struct HyperspaceState
 {
   HyperspaceState() noexcept = default;
@@ -25,19 +24,19 @@ struct HyperspaceState
     ArrivalGalaxyText() noexcept = default;
     explicit ArrivalGalaxyText(const ArrivalGalaxyText&) noexcept = default;
 
-    Counted<std::uint8_t> gap7513[24];
+    Field<std::uint8_t> gap7513[24];
     /// galaxyNumber + '1', written by GalacticJump into arrivalGalaxyText
-    Counted<std::uint8_t> arrivalGalaxyDigit[1];
-    Counted<std::uint8_t> gap752C[1];
+    Field<std::uint8_t> arrivalGalaxyDigit[1];
+    Field<std::uint8_t> gap752C[1];
   };
   /// 'Hyperspaced into galaxy ' and a digit at DS:752B
   ArrivalGalaxyText arrivalGalaxyText;
   /// 3 bytes; working copy animated by DrawHyperspaceRings
-  Counted<std::uint8_t> hyperspaceRings[10][3];
+  Field<std::uint8_t> hyperspaceRings[10][3];
   /// selectedSystemName latched when the countdown starts
-  Counted<std::uint8_t> hyperspaceTargetRecord[25];
+  Field<std::uint8_t> hyperspaceTargetRecord[25];
   /// two ASCII digits at the end of hyperspaceCountdownMessage, written by ShowHyperspaceCountdown
-  Counted<std::uint16_t> hyperspaceCountdownDigits;
+  Field<std::uint16_t> hyperspaceCountdownDigits;
 };
 
 static_assert(std::is_trivially_copyable_v<HyperspaceState> && std::is_standard_layout_v<HyperspaceState>);

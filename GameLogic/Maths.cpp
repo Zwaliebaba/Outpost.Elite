@@ -152,7 +152,7 @@ SinCos SinCosOf(std::uint16_t _angle)
 SinCos SetSinCos(GameState& _state, std::size_t _pair, std::uint16_t _angle)
 {
   const SinCos pair = SinCosOf(_angle);
-  Counted<std::uint8_t>(&stored)[4] = _state.Data().maths.rotationSinCos[_pair];
+  Field<std::uint8_t>(&stored)[4] = _state.Data().maths.rotationSinCos[_pair];
   SetWordIn(stored, 0, Word(pair.sine));
   SetWordIn(stored, 2, Word(pair.cosine));
   return pair;
@@ -171,7 +171,7 @@ Pair RotateBySinCos(Pair _point, SinCos _by)
 
 Pair RotateByStoredSinCos(const GameState& _state, std::size_t _pair, Pair _point)
 {
-  const Counted<std::uint8_t>(&stored)[4] = _state.Data().maths.rotationSinCos[_pair];
+  const Field<std::uint8_t>(&stored)[4] = _state.Data().maths.rotationSinCos[_pair];
   return RotateBySinCos(_point, SinCos{Signed(WordIn(stored, 0)), Signed(WordIn(stored, 2))});
 }
 
