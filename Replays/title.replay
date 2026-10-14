@@ -2,29 +2,29 @@
 # through the ship types. Paced time, so every frame is the game's own 50 ms.
 wait 3
 shot title
-digest title-start fe89d9d311b846fd5299afa1e118e83f5dafb545abab8929f3e034478200769b
+digest title-start 61b841f036c9411ef95a7ebfaa5d91f12de38b3e639af3807334a993d29c293f
 picture title-start af1a147c53eb9319dc3bd4efb8c6cd7e791ab4e9ead23de57716d56c794f1ae4
 outcome title-start galaxy=0 system=7 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=1000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=0 laserMounts=0 laserTypes=0 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=0 aftShield=0 speed=48 fuel=255 shipSlotsInUse=1 cabinTemperature=0 laserTemperature=0 altitude=0 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 wait 5
-digest title-turned 9b40de8ea4bde332dc5cf933971099648d1e156274799b03a69d10a1500f8304
+digest title-turned 306eec8d6f1d78d0bb88642154a055e9bf2079887359b3cf4b2d789e4ad2c3dc
 picture title-turned 7d2d7646618ff6d0842ee559f4e2c6611d265c3508b2f92d28f62fb4dd7f9232
 outcome title-turned galaxy=0 system=7 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=1000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=0 laserMounts=0 laserTypes=0 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=0 aftShield=0 speed=48 fuel=255 shipSlotsInUse=1 cabinTemperature=0 laserTemperature=0 altitude=0 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 key F10; wait 2
-digest ship-type-27 6f9f068a79c7cc269921424bebd18c8c7f51ce0849311e00818ab03133b9a2b2
+digest ship-type-27 8e9f7443d0c1225c516e9e0d41ede35fc8a639ef922c60a8a13fd788129df71c
 picture ship-type-27 8e478fb7462e7ee51a1056a3d00fe8fceeeab4c3630a6dc5348060cf6072c6e3
 outcome ship-type-27 galaxy=0 system=7 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=1000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=0 laserMounts=0 laserTypes=0 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=0 aftShield=0 speed=48 fuel=255 shipSlotsInUse=1 cabinTemperature=0 laserTemperature=0 altitude=0 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 key F10; wait 2
 key F10; wait 2
 key F10; wait 2
-digest ship-type-2 0a660091849936abb9b45560220472d527cda724719037802262b305753197d3
+digest ship-type-2 67f4d0d4f5802cad2c31140c268bbfaeca0eaf2349bf403dc1735f9549c60818
 picture ship-type-2 cc58253bfadd84785125db552751add61dfab771ced91bb0a11fbbced7663724
 outcome ship-type-2 galaxy=0 system=7 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=1000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=0 laserMounts=0 laserTypes=0 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=0 aftShield=0 speed=48 fuel=255 shipSlotsInUse=1 cabinTemperature=0 laserTemperature=0 altitude=0 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 key F9; wait 2
 key F9; wait 2
-digest ship-type-29 4915d5e08ff48a0ca5962a577588520210e47d28a4724fb2e2efbfde08971131
+digest ship-type-29 9586e4fccae754dbca7fbe21265d32466e89f34e31de10c332f85c95e75e0ee7
 picture ship-type-29 5cd9546ab99804df3ef98a6d1c65f851b4dec97d1f86c882b6fa4a209e612f42
 outcome ship-type-29 galaxy=0 system=7 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=1000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=0 laserMounts=0 laserTypes=0 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=0 aftShield=0 speed=48 fuel=255 shipSlotsInUse=1 cabinTemperature=0 laserTemperature=0 altitude=0 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 wait 4
-digest title-end 187d2010f6494c1205c39b1395bb07c2ff986136c2bea05f46bf50a5107050c2
+digest title-end dbbfbc4362e72a0d3e0589ffc345bea147dc3ed45c6fbaff69e9b381844a0954
 picture title-end 2441ceb818bff824a200f67606d40299a601605504791ba2c74b0f8692167af6
 outcome title-end galaxy=0 system=7 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=1000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=0 laserMounts=0 laserTypes=0 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=0 aftShield=0 speed=48 fuel=255 shipSlotsInUse=1 cabinTemperature=0 laserTemperature=0 altitude=0 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0

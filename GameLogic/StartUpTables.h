@@ -13,6 +13,10 @@ namespace Elite
 namespace
 {
 
+/// amstradPresent (DS:2000 in 1987) as Start leaves it on an IBM PC (D12), where it compared the ROM at FC00:0016 with
+/// amstradSignature: 0, not an Amstrad. Only the missile launch past the drawing buffer reads it (BytesAfterDrawBuffer).
+constexpr std::uint8_t AMSTRAD_PRESENT = 0;
+
 /// amstradSignature (DS:2001 in 1987): Amstrad
 constexpr std::array<std::uint8_t, 7> AMSTRAD_SIGNATURE = {
   0x41, 0x6D, 0x73, 0x74, 0x72, 0x61, 0x64, // DS:2001

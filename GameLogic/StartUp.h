@@ -22,7 +22,7 @@ namespace Elite
 
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState and the devices (ADR-014) ──
 
-/// Start (CS:0000), the program's entry from DOS: the start-up commander kept (SaveStartupCommander), the Amstrad's ROM looked for; then
+/// Start (CS:0000), the program's entry from DOS: the start-up commander kept (SaveStartupCommander); then
 /// from RestartPlay the timer, int 0 and int 9, the cheat argument and GameLoop, which comes back only for a disk request
 /// (HandleDiskRequest): the interrupts put back, and the request made with the game's own critical-error handler on int 24h, after which it
 /// starts again. _countIfNone is BP as DOS left it, which GameLoop takes. Returns when the program ends, once a request to leave has wiped
@@ -65,7 +65,7 @@ void WipeProgram(Hardware& _hardware);
 void StartNewGame(GameState& _state);
 
 /// The 64 bytes after the space view's buffer, DS:2000-203F in 1987, where ClearDrawBuffer leaves DI once it has filled the buffer
-/// going up, and which M's launch then copies its missile from (LaunchPlayerMissile): amstradPresent, amstradSignature,
+/// going up, and which M's launch then copies its missile from (LaunchPlayerMissile): amstradPresent as Start left it, amstradSignature,
 /// speakerPortImage, diskOperation, exitMessage and dosVersionMessage's first seven, by name (D38).
 [[nodiscard]] std::array<std::uint8_t, SpaceObject::BYTES> BytesAfterDrawBuffer(const GameState& _state);
 

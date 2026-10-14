@@ -148,7 +148,6 @@ void SetStartState(GameData& _data) noexcept
   FillText(_data.saveLoad.commanderFileName, "12345678.CDR");
   _data.scene.triangleFillPattern = 0xFFFF;
   _data.sound.musicPlaying = 0x01;
-  _data.startUp.amstradPresent = 0x01;
   FillText(_data.text.bountyText, "BOUNTY:000000 Cr");
   FillText(_data.text.shipIdentityText, "CLASS: 1234567 TYPE: 12345678901");
   Fill(_data.text.inputCursorText, {0x20, 0x20});

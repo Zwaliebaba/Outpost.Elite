@@ -211,12 +211,6 @@ public:
   /// Whether a mouse driver is loaded (Platform::MouseDriverLoaded): what the game's test of int 33h's vector finds.
   [[nodiscard]] bool MouseDriverLoaded() const noexcept;
 
-  /// Whether the ROM is an Amstrad's, with its name at FC00:0016 where the game looks: never, as the platform is an IBM PC (D12).
-  [[nodiscard]] static constexpr bool AmstradRom() noexcept
-  {
-    return false;
-  }
-
   /// The command tail DOS gave the program, which its PSP held at 81h, its length at 80h: what the program was started with.
   [[nodiscard]] std::string_view CommandTail() const noexcept;
 

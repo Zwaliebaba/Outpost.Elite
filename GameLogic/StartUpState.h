@@ -11,15 +11,12 @@ namespace Elite
 /// data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct StartUpState
 {
-  /// 1 in the file; cleared at start-up unless the ROM at FC00:0016 reads Amstrad
-  std::uint8_t amstradPresent;
   /// 1 when the command tail is exactly ' cheat' (CheckCheatArgument compares PSP:80h with DS:2063 XOR AAh); RunFlight then ignores the...
   std::uint8_t cheatEnabled;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
   {
-    _visitor("amstradPresent", _self.amstradPresent);
     _visitor("cheatEnabled", _self.cheatEnabled);
   }
 

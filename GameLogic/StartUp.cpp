@@ -150,13 +150,6 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
   // (ADR-006 item 3): the platform gives the tail (CheckCheatArgument), and DOS 1's refusal never comes.
   SaveStartupCommander(_state);
 
-  // CLD / REPE CMPSB of amstradSignature against the ROM at FC00:0016: not an Amstrad if a byte before the last differs, as one
-  // does on the platform's IBM PC (Hardware::AmstradRom).
-  if (!Hardware::AmstradRom())
-  {
-    _state.Data().startUp.amstradPresent = 0;
-  }
-
   // From here on the direction flag is as the CLD left it, and as GameLoop leaves it; BP as DOS left it, and as GameLoop leaves it.
   std::uint16_t countIfNone = _countIfNone;
   bool backward = false;
@@ -264,7 +257,7 @@ std::array<std::uint8_t, SpaceObject::BYTES> BytesAfterDrawBuffer(const GameStat
   std::array<std::uint8_t, SpaceObject::BYTES> bytes{};
   std::size_t at = 0;
   const auto append = [&bytes, &at](std::uint8_t _byte) { bytes.at(at++) = _byte; };
-  append(_state.Data().startUp.amstradPresent);
+  append(AMSTRAD_PRESENT); // amstradPresent, which Start cleared on an IBM PC
   for (const std::uint8_t byte : AMSTRAD_SIGNATURE)
   {
     append(byte);

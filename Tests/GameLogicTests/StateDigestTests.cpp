@@ -20,8 +20,8 @@ namespace
 
 // The .cdr file's size: the commander's bytes (D78).
 constexpr std::size_t COMMANDER_FILE_BYTES = 208;
-// The state's bytes as its members write them: what the 1987 data segment's members took, less the joystick's ten (D81).
-constexpr std::size_t STATE_BYTES = 14'410;
+// The state's bytes as its members write them: what the 1987 data segment's members took, less the joystick's ten (D81) and the Amstrad's flag (D12).
+constexpr std::size_t STATE_BYTES = 14'409;
 
 // A byte unlike its neighbours for every place in a struct of _bytes bytes: what fills one before it is written by its members.
 [[nodiscard]] std::vector<std::uint8_t> Pattern(std::size_t _bytes)
@@ -39,7 +39,7 @@ constexpr std::size_t STATE_BYTES = 14'410;
 TEST_CLASS(StateDigestTests)
 {
 public:
-  // The state written by its members (StateWriter, D76) is 14,410 bytes, every member once, in its order, at its width,
+  // The state written by its members (StateWriter, D76) is 14,409 bytes, every member once, in its order, at its width,
   // whatever the structs' layout. Read back from bytes and written again, the state gives the same bytes.
   TEST_METHOD(TheStateWrittenByItsMembersIsItsBytes)
   {
@@ -93,10 +93,10 @@ public:
     Assert::AreEqual(std::uint32_t{state.CodeSegment()} + Elite::DATA_SEGMENT_PARAGRAPH, std::uint32_t{state.DataSegment()},
                      L"the data segment");
 
-    // The state as the 1987 image loaded it, less the joystick's members (D81), and video memory as mode 3 leaves it.
+    // The state as the 1987 image loaded it, less the joystick's members (D81) and the Amstrad's flag (D12), and video memory as mode 3 leaves it.
     Elite::Sha256 start;
     start.Update(Elite::StateBytes(std::as_const(state).Data()));
-    Assert::AreEqual("6386d30de108ffc08f26352fb6e6b15a10c4d69fc1e7bf7a23ff1d50de2bf8ed", Elite::Sha256::ToHex(start.Finish()).c_str(),
+    Assert::AreEqual("6bfcf1f36320d5defb257644790e1cc99811930710e67eaff1f0d3faaaf4eaad", Elite::Sha256::ToHex(start.Finish()).c_str(),
                      L"the start state, as the image loaded it");
     for (std::uint16_t offset = 0; offset < Elite::Cga::VIDEO_MEMORY_BYTES; offset += 2)
     {

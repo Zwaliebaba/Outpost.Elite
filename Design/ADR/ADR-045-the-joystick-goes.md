@@ -1,6 +1,6 @@
 # ADR-045 — The joystick goes: the keyboard and the mouse fly the game
 
-**Status:** accepted 2026-10-14, with the change that implements it, step 8 of Phase 7 ([Reverse-Engineering-Plan.md §5, Phase 7](../Reverse-Engineering-Plan.md#phase-7--wholly-native)), under the owner's ruling D81. It comes before steps 6 and 7, which it makes smaller.
+**Status:** accepted 2026-10-14, with the change that implements it, step 8 of Phase 7 ([Reverse-Engineering-Plan.md §5, Phase 7](../Reverse-Engineering-Plan.md#phase-7--wholly-native)), under the owner's ruling D81. It comes before steps 6 and 7, which it makes smaller. **Amended 2026-10-14:** at the owner's request, `amstradPresent` goes too (item 6).
 
 ## Context
 
@@ -13,6 +13,8 @@ The 1987 game reads three input devices: the keyboard, the mouse and a joystick.
 3. **The disc menu offers the keyboard and the mouse.** J, its joystick choice and calibration, and their texts go; J is a key the menu ignores, as it ignores every other, and the menu's line reads `D...Delete Commander` alone. `inputDevice` keeps 1987's numbers, 0 the keyboard and 2 the mouse.
 4. **The state loses the joystick's ten bytes**: the Amstrad stick's four ramps and the calibration, the stick's type and the Amstrad's detection flag. The state is 14,410 bytes written by its members. `amstradPresent` stays: it is the Amstrad machine's (D12), not its stick's, and the missile launch past the drawing buffer reads it (`BytesAfterDrawBuffer`). The Amstrad keys' scan codes leave `Keys`.
 5. **The stick's tests go**: `GamePortTests`, and the twins `TwinStickNative`, `TwinStickFlight` and `TwinAmstradFlight`, with their 39 answers, pictures and outcomes. `TwinDiscMenu` keeps its keys, J's among them, which it now plays as ignored keys.
+
+6. **`amstradPresent` goes**, with the ROM test that set it (`Hardware::AmstradRom`). The game runs as on an IBM PC (D12), where Start cleared it, and nothing but the missile launch past the drawing buffer read it after Start, which now reads the 0 Start left (`AMSTRAD_PRESENT`). The state is 14,409 bytes, and its start hash `6bfcf1f3…eaad`.
 
 ## What moved, and how it was measured
 
@@ -30,6 +32,8 @@ Every digest moved, as the state is ten bytes shorter, and the start state's has
 
 | Not run here | the MSVC build and the game: CI builds and runs the tests, and the owner plays it |
 |---|---|
+
+For item 6, the re-base was run against the dump of the tree with the joystick gone, with every gate on: every member at every point of the 26 replays and the 33 twins as it was, and every picture and outcome as recorded. Only the digests moved.
 
 ## What this forecloses
 

@@ -276,14 +276,12 @@ public:
     Assert::AreEqual(std::uint64_t{3}, rig.Host().GameHandler(Elite::Irq::Timer).calls);
   }
 
-  // The BIOS's handlers serve the timer's and the keyboard's interrupts at power-on, as its vectors leave them, and the ROM is
-  // an IBM PC's, with no Amstrad's name where Start looks for one.
+  // The BIOS's handlers serve the timer's and the keyboard's interrupts at power-on, as its vectors leave them.
   TEST_METHOD(TheBiosServesBothInterruptsAtPowerOn)
   {
     PlatformRig rig("PlatformVectors");
     Assert::IsTrue(rig.Native().Handler(Elite::Irq::Timer) == Elite::IrqHandler::Bios, L"the BIOS's timer handler");
     Assert::IsTrue(rig.Native().Handler(Elite::Irq::Keyboard) == Elite::IrqHandler::Bios, L"the BIOS's keyboard handler");
-    Assert::IsFalse(Elite::Hardware::AmstradRom(), L"FC00:0016 must not hold \"Amstrad\"");
   }
 
   // What the game's own test, IsMouseDriverInstalled (CS:02D4), finds: whether a driver is loaded, as int 33h's vector says.
