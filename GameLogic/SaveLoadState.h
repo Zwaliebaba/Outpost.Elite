@@ -15,8 +15,6 @@ struct SaveLoadState
 {
   /// what ShowDiscControlScreen asks Start to do, written at 0x7E90: 0 Exit to DOS (Start calls WipeProgram at 0x0072, then exits), 1 lo...
   std::uint8_t diskOperation;
-  /// int 21h AH=1Ah buffer; find-first/next put the attribute at DS:2084 and the name at DS:208D
-  std::uint8_t diskTransferArea[43];
   /// file names without extension, NUL-terminated, written by PerformDiskRequest's catalogue
   std::uint8_t commanderFileList[370];
   /// names in commanderFileList, capped at 40 (0x03E3)
@@ -36,7 +34,6 @@ struct SaveLoadState
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
   {
     _visitor("diskOperation", _self.diskOperation);
-    _visitor("diskTransferArea", _self.diskTransferArea);
     _visitor("commanderFileList", _self.commanderFileList);
     _visitor("commanderFileCount", _self.commanderFileCount);
     _visitor("commanderFileListNext", _self.commanderFileListNext);

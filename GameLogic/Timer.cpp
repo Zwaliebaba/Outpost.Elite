@@ -13,8 +13,7 @@ namespace
 {
 
 constexpr std::uint16_t TICK_DIVISOR = 0x04A9; // channel 0 in mode 3: about 1000.15 Hz
-constexpr std::uint32_t TICKS_PER_DAY = 0x1800B0;
-constexpr std::uint8_t SPEAKER_BITS = 0x03; // gate and data, cleared at start-up
+constexpr std::uint8_t SPEAKER_BITS = 0x03;    // gate and data, cleared at start-up
 constexpr std::uint8_t SPEAKER_DATA = 0x02;
 
 constexpr std::uint8_t SWEEP_LAST_PERIOD = 7;
@@ -184,7 +183,7 @@ void InstallTimerInterrupt(GameState& _state, Hardware& _hardware)
   _hardware.EnableInterrupts();
 }
 
-ClockReading RestoreTimerInterrupt(GameState& _state, Hardware& _hardware)
+void RestoreTimerInterrupt(GameState& _state, Hardware& _hardware)
 {
   _hardware.DisableInterrupts();
   // The BIOS's handler put back, as InstallTimerInterrupt found it.
@@ -192,12 +191,6 @@ ClockReading RestoreTimerInterrupt(GameState& _state, Hardware& _hardware)
   _hardware.SetSystemControl(_state.Data().timer.savedSpeakerPort);
   _hardware.SetTickDivisor(0);
   _hardware.EnableInterrupts();
-  return _hardware.ReadTimeOfDay();
-}
-
-std::uint16_t ClockLessADayHigh(const ClockReading& _clock) noexcept
-{
-  return static_cast<std::uint16_t>((_clock.ticks - TICKS_PER_DAY) >> 16);
 }
 
 void TimerInterrupt(GameState& _state, Hardware& _hardware)

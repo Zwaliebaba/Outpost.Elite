@@ -55,7 +55,8 @@ Platform::Platform(GameState& _state, FileStore& _files, const Desc& _desc)
     m_day(TimerTicksAt(_desc.startMoment)),
     m_modes(_state, m_cga),
     m_mouse(_desc.mousePresent),
-    m_files(_files, _desc.startMoment),
+    m_files(_files),
+    m_startMoment(_desc.startMoment),
     m_mouseDriverLoaded(_desc.mousePresent),
     m_flags(ENTRY_FLAGS),
     m_cheat(_desc.cheat)
@@ -65,11 +66,6 @@ Platform::Platform(GameState& _state, FileStore& _files, const Desc& _desc)
 Platform::~Platform() = default;
 
 // ── The program ──
-
-void Platform::StartProgram() noexcept
-{
-  m_files.StartProgram();
-}
 
 void Platform::SetEntry(ProgramRoutine _routine)
 {
@@ -328,6 +324,11 @@ Task<void> Platform::Spend(Cycles _cycles)
     }
     TakeDueInterrupts();
   }
+}
+
+FileStamp Platform::FileStampNow() const
+{
+  return StampOf(MomentAfter(m_startMoment, m_clock * 100u * CPU_CLOCK_DIVISOR / CRYSTAL_HZ));
 }
 
 // ── The picture ──

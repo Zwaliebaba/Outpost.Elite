@@ -2,7 +2,6 @@
 #pragma once
 
 #include "Cga.h"
-#include "DosFiles.h"
 #include "FileStore.h"
 #include "FlightSnapshot.h"
 #include "Mouse.h"
@@ -49,7 +48,7 @@ using ProgramRoutine = std::function<Task<void>()>;
 /// the events it waits for, with the two interrupts they request (Scheduler: the tick, the keys and their requests); the timer's
 /// the system control port; the sound, the tone and its bits (Speaker); the mouse driver (Mouse);
 /// the CGA (Cga); the BIOS's video services (VideoModes), its time of day (TimeOfDay) and its two hardware interrupt handlers;
-/// and DOS's file services (DosFiles) and its print-string.
+/// and the file store that holds the commander files (FileStore, D78).
 ///
 /// Time is the 8088's cycle count, a third of the crystal (Timing.h), and it is paced (ADR-008): the game's work takes no
 /// time. The clock moves only while the game waits, and then straight to the next thing a device will do: the timer's next
@@ -135,10 +134,6 @@ public:
   ~Platform();
 
   // ── The program ──
-
-  /// DOS starts the program: its files closed, and its start routine (SetEntry) run from the next RunUntil. The PSP is not
-  /// memory any more.
-  void StartProgram() noexcept;
 
   /// Whether the game was started with the cheat on (Desc::cheat).
   [[nodiscard]] bool CheatRequested() const noexcept
@@ -324,11 +319,14 @@ public:
     return m_modes;
   }
 
-  /// DOS's file services.
-  [[nodiscard]] DosFiles& Files() noexcept
+  /// Where the commander files are (D78): the game reads and writes them directly.
+  [[nodiscard]] FileStore& Files() noexcept
   {
     return m_files;
   }
+
+  /// The stamp a file written now takes: DOS's date and time at the clock, from the start moment (Desc::startMoment).
+  [[nodiscard]] FileStamp FileStampNow() const;
 
   // ── For native code, through Hardware ──
 
@@ -415,7 +413,8 @@ private:
   TimeOfDay m_day;
   VideoModes m_modes;
   Mouse m_mouse;
-  DosFiles m_files;
+  FileStore& m_files;
+  DosDateTime m_startMoment;
 
   std::array<IrqHandler, 2> m_handlers{IrqHandler::Bios, IrqHandler::Bios};
   bool m_mouseDriverLoaded = false;

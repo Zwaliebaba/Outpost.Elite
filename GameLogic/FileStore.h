@@ -31,6 +31,24 @@ struct FileStamp
   std::uint16_t time = 0;      ///< hour << 11 | minute << 5 | second / 2
 };
 
+/// A moment on DOS's calendar, to the hundredth of a second. A plain record (R8). The year must be 1980 to 2099.
+struct DosDateTime
+{
+  std::uint16_t year = 1987;
+  std::uint8_t month = 10;
+  std::uint8_t day = 1;
+  std::uint8_t hour = 12;
+  std::uint8_t minute = 0;
+  std::uint8_t second = 0;
+  std::uint8_t hundredths = 0;
+};
+
+/// The moment _centiseconds after _start, on DOS's calendar.
+[[nodiscard]] DosDateTime MomentAfter(const DosDateTime& _start, std::uint64_t _centiseconds);
+
+/// _moment as a file's stamp, its year held to the stamp's 1980 to 2107.
+[[nodiscard]] FileStamp StampOf(const DosDateTime& _moment) noexcept;
+
 /// One file as DOS's find functions report it. A plain record (R8).
 struct FileEntry
 {

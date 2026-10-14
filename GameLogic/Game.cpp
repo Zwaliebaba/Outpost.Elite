@@ -15,7 +15,6 @@ Game::Game(FileStore& _files, const Platform::Desc& _desc)
 void Game::Start(std::uint16_t _pspSegment)
 {
   m_state.Start(static_cast<std::uint16_t>(_pspSegment + PSP_PARAGRAPHS));
-  m_platform.StartProgram();
   InstallNativeRoutines(m_platform, m_state);
 }
 

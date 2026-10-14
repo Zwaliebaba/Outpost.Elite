@@ -33,11 +33,10 @@ struct DiscMenuExit
 /// and reading the menu's keys on in its place (RejectFileName). Waits for keys as a rule (ADR-015).
 [[nodiscard]] Task<bool> PromptCommanderFileName(GameState& _state, Hardware& _hardware);
 
-/// PerformDiskRequest (CS:02FF): DOS's disk transfer area set to diskTransferArea, then _request 1 loads commanderFileName
-/// into commanderBlock, 2 saves it, 3 deletes it, and anything else lists the *.cdr files with no attribute beyond
-/// _attributes' hidden, system and directory bits into commanderFileList. diskError=1 on a failure, but for DOS's having
-/// no more files.
-void PerformDiskRequest(GameState& _state, Hardware& _hardware, std::uint8_t _request, std::uint16_t _attributes);
+/// PerformDiskRequest (CS:02FF): _request 1 loads commanderFileName into commanderBlock, 2 saves it, 3 deletes it, and anything
+/// else lists the .CDR files with no attribute into commanderFileList, each through the platform's FileStore (D78).
+/// diskError=1 on a failure.
+void PerformDiskRequest(GameState& _state, Hardware& _hardware, std::uint8_t _request);
 
 /// PrintCommanderCatalogue (CS:68CE): ten text rows blanked, and commanderFileList's commanderFileCount names printed in
 /// columns of ten.

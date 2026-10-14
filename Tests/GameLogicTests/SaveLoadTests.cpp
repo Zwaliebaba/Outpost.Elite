@@ -185,8 +185,8 @@ public:
         commander.creditsTenths = 1234;
         for (std::uint8_t& character : commander.creditBalanceText)
           character = 'X';
-        Elite::PerformDiskRequest(state, rig.Native(), SAVE_COMMANDER, 0);
-        Elite::PerformDiskRequest(state, rig.Native(), LOAD_COMMANDER, 0);
+        Elite::PerformDiskRequest(state, rig.Native(), SAVE_COMMANDER);
+        Elite::PerformDiskRequest(state, rig.Native(), LOAD_COMMANDER);
         co_return;
       });
     Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Elite::StopReason::Terminated);

@@ -135,9 +135,6 @@
     <ClInclude Include="DockingTables.h">
       <Filter>Docking</Filter>
     </ClInclude>
-    <ClInclude Include="DosFiles.h">
-      <Filter>Platform</Filter>
-    </ClInclude>
     <ClInclude Include="DrawingState.h">
       <Filter>State</Filter>
     </ClInclude>
@@ -415,9 +412,6 @@
     </ClCompile>
     <ClCompile Include="Docking.cpp">
       <Filter>Docking</Filter>
-    </ClCompile>
-    <ClCompile Include="DosFiles.cpp">
-      <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="Equipment.cpp">
       <Filter>Equipment</Filter>

@@ -22,7 +22,7 @@ namespace
 constexpr std::size_t COMMANDER_FILE_BYTES = 208;
 // The state's bytes as its members write them: what the 1987 data segment's members took, less the joystick's ten (D81), the Amstrad's flag (D12) and the
 // screenshots' 24 (D86).
-constexpr std::size_t STATE_BYTES = 14'385;
+constexpr std::size_t STATE_BYTES = 14'340;
 
 // A byte unlike its neighbours for every place in a struct of _bytes bytes: what fills one before it is written by its members.
 [[nodiscard]] std::vector<std::uint8_t> Pattern(std::size_t _bytes)
@@ -97,7 +97,7 @@ public:
     // The state as the 1987 image loaded it, less the joystick's members (D81), the Amstrad's flag (D12) and the screenshots' (D86), and video memory as mode 3 leaves it.
     Elite::Sha256 start;
     start.Update(Elite::StateBytes(std::as_const(state).Data()));
-    Assert::AreEqual("411a7a23daea63c29599ba29821a0685a2729ac17dde53ebbd3dca0c44fc595f", Elite::Sha256::ToHex(start.Finish()).c_str(),
+    Assert::AreEqual("2cd124d640cc79dfd6d6c65508f90b0e5c05646aa308ef7651cf45ebc767877d", Elite::Sha256::ToHex(start.Finish()).c_str(),
                      L"the start state, as the image loaded it");
     for (std::uint16_t offset = 0; offset < Elite::Cga::VIDEO_MEMORY_BYTES; offset += 2)
     {

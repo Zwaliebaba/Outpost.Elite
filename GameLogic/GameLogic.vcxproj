@@ -92,7 +92,6 @@
     <ClInclude Include="Docking.h" />
     <ClInclude Include="DockingState.h" />
     <ClInclude Include="DockingTables.h" />
-    <ClInclude Include="DosFiles.h" />
     <ClInclude Include="DrawingState.h" />
     <ClInclude Include="Equipment.h" />
     <ClInclude Include="EquipmentState.h" />
@@ -187,7 +186,6 @@
     <ClCompile Include="DirectoryFileStore.cpp" />
     <ClCompile Include="Docked.cpp" />
     <ClCompile Include="Docking.cpp" />
-    <ClCompile Include="DosFiles.cpp" />
     <ClCompile Include="Equipment.cpp" />
     <ClCompile Include="FileStore.cpp" />
     <ClCompile Include="Flight.cpp" />

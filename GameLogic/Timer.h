@@ -29,14 +29,10 @@ void TimerInterrupt(GameState& _state, Hardware& _hardware);
 void InstallTimerInterrupt(GameState& _state, Hardware& _hardware);
 
 /// RestoreTimerInterrupt (CS:016B): with interrupts off, the BIOS's handler put back on int 8, port 61h as
-/// InstallTimerInterrupt found it, and the PIT's tick as the BIOS has it; then interrupts on. Returns the clock as int 1Ah gave
-/// it. The original's Amstrad rate is not taken (D12), and its setting back of a clock past a day
-/// never is: the BIOS's tick count starts again from 0 at a day.
-ClockReading RestoreTimerInterrupt(GameState& _state, Hardware& _hardware);
-
-/// What RestoreTimerInterrupt leaves in CX: the high word of its SUB DX / SBB CX, _clock less a day, whether or not it set the
-/// clock back. Start hands it to PerformDiskRequest, whose catalogue searches with it as the attributes (ADR-012 item 14).
-[[nodiscard]] std::uint16_t ClockLessADayHigh(const ClockReading& _clock) noexcept;
+/// InstallTimerInterrupt found it, and the PIT's tick as the BIOS has it; then interrupts on. The original's Amstrad rate is not
+/// taken (D12); its reading of the clock by int 1Ah, which only its catalogue's search attributes took (ADR-012 item 14), went
+/// with the files' DOS (ADR-049).
+void RestoreTimerInterrupt(GameState& _state, Hardware& _hardware);
 
 /// WaitForTimerTick (CS:7772): until timerTicks changes, at most one tick. Waits as a rule (ADR-015).
 [[nodiscard]] Task<void> WaitForTimerTick(GameState& _state, Hardware& _hardware);

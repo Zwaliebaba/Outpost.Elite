@@ -131,7 +131,7 @@ void StartNewGame(GameState& _state)
 
     // HandleDiskRequest (CS:0065): GameLoop comes back only for diskOperation, 0 to leave.
     RestoreDivideAndKeyboardInterrupts(_hardware);
-    const ClockReading clock = RestoreTimerInterrupt(_state, _hardware);
+    RestoreTimerInterrupt(_state, _hardware);
     const std::uint8_t request = _state.Data().saveLoad.diskOperation;
     if (request == 0)
     {
@@ -139,11 +139,10 @@ void StartNewGame(GameState& _state)
       WipeProgram(_hardware);
       co_return;
     }
-    // The request, which the original makes with its own critical-error handler, CS:02F0, on int 24h, and the handler that was
-    // there put back after it. Nothing raises int 24h: DOS answers a failed call with CF set and an error. A listing searches
-    // with the attributes RestoreTimerInterrupt leaves in CX.
+    // The request, through the platform's file store (D78), where the original went through DOS with its own critical-error
+    // handler on int 24h.
     _state.Data().disk.diskError = 0;
-    PerformDiskRequest(_state, _hardware, request, ClockLessADayHigh(clock));
+    PerformDiskRequest(_state, _hardware, request);
     // JMP RestartPlay.
   }
 }

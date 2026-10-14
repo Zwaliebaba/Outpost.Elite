@@ -148,67 +148,14 @@ void Hardware::SelectPalette(std::uint8_t _palette)
   m_platform.Modes().SelectPalette(_palette);
 }
 
-ClockReading Hardware::ReadTimeOfDay()
+FileStore& Hardware::Files() noexcept
 {
-  return m_platform.Day().ReadClock();
+  return m_platform.Files();
 }
 
-// DOS's file services, native (D27): the platform's DosFiles. A stamp is DOS's time at the platform's clock, as the emulated
-// DOS's was.
-
-void Hardware::SetDiskTransferArea(std::span<std::uint8_t> _area)
+FileStamp Hardware::FileStampNow() const
 {
-  m_platform.Files().SetTransferArea(_area);
-}
-
-DosFileAttributes Hardware::ReadFileAttributes(std::string_view _name)
-{
-  return m_platform.Files().ReadAttributes(_name);
-}
-
-DosAnswer Hardware::SetFileAttributes(std::string_view _name, std::uint16_t _attributes)
-{
-  return m_platform.Files().SetAttributes(_name, _attributes);
-}
-
-DosAnswer Hardware::CreateFile(std::string_view _name, std::uint16_t _attributes)
-{
-  return m_platform.Files().Create(_name, _attributes, m_platform.Clock());
-}
-
-DosAnswer Hardware::OpenFile(std::string_view _name, std::uint8_t _access)
-{
-  return m_platform.Files().Open(_name, _access);
-}
-
-DosAnswer Hardware::ReadFile(std::uint16_t _handle, std::span<std::uint8_t> _buffer)
-{
-  return m_platform.Files().Read(_handle, _buffer);
-}
-
-DosAnswer Hardware::WriteFile(std::uint16_t _handle, std::span<const std::uint8_t> _buffer)
-{
-  return m_platform.Files().Write(_handle, _buffer, m_platform.Clock());
-}
-
-DosAnswer Hardware::CloseFile(std::uint16_t _handle)
-{
-  return m_platform.Files().Close(_handle);
-}
-
-DosAnswer Hardware::DeleteFile(std::string_view _name)
-{
-  return m_platform.Files().Delete(_name);
-}
-
-DosAnswer Hardware::FindFirstFile(std::string_view _pattern, std::uint16_t _attributes)
-{
-  return m_platform.Files().FindFirst(_pattern, _attributes);
-}
-
-DosAnswer Hardware::FindNextFile()
-{
-  return m_platform.Files().FindNext();
+  return m_platform.FileStampNow();
 }
 
 Task<void> Hardware::Spend(const PacingPoint& _point)

@@ -148,48 +148,12 @@ public:
   /// Int 10h AH=0Bh, BH=1, BL=_palette: the BIOS selects mode 4's palette.
   void SelectPalette(std::uint8_t _palette);
 
-  /// Int 1Ah AH=0: the time of day, its rollover flag cleared.
-  [[nodiscard]] ClockReading ReadTimeOfDay();
+  /// The platform's file store, where the commander files are (D78): the game reads and writes it directly, where the original
+  /// went through DOS's int 21h.
+  [[nodiscard]] FileStore& Files() noexcept;
 
-  // DOS's file services, int 21h: native, on the platform's DosFiles, which answers as the emulated DOS did. Where the original
-  // hands DOS an address in DS:DX, a call takes the name there, up to its NUL, or the buffer there, a span of the member that
-  // holds it (D38).
-
-  /// Int 21h AH=1Ah: DOS's disk transfer area, where find-first and find-next leave what they find: _area, of the game's state.
-  void SetDiskTransferArea(std::span<std::uint8_t> _area);
-
-  /// Int 21h AX=4300h: the attributes of the file _name names.
-  [[nodiscard]] DosFileAttributes ReadFileAttributes(std::string_view _name);
-
-  /// Int 21h AX=4301h, CX=_attributes: the attributes of the file _name names set.
-  DosAnswer SetFileAttributes(std::string_view _name, std::uint16_t _attributes);
-
-  /// Int 21h AH=3Ch, CX=_attributes: the file _name names created, or emptied, and stamped with DOS's time at the platform's
-  /// clock; AX its handle.
-  [[nodiscard]] DosAnswer CreateFile(std::string_view _name, std::uint16_t _attributes);
-
-  /// Int 21h AH=3Dh, AL=_access: the file _name names opened, 0 to read, 1 to write, 2 both; AX its handle.
-  [[nodiscard]] DosAnswer OpenFile(std::string_view _name, std::uint8_t _access);
-
-  /// Int 21h AH=3Fh: up to all of _buffer's bytes, of the game's state, from the file _handle into it; AX the count read.
-  [[nodiscard]] DosAnswer ReadFile(std::uint16_t _handle, std::span<std::uint8_t> _buffer);
-
-  /// Int 21h AH=40h: _buffer's bytes written to the file _handle, stamped with DOS's time at the platform's clock; AX the count
-  /// written.
-  [[nodiscard]] DosAnswer WriteFile(std::uint16_t _handle, std::span<const std::uint8_t> _buffer);
-
-  /// Int 21h AH=3Eh: the file _handle closed.
-  DosAnswer CloseFile(std::uint16_t _handle);
-
-  /// Int 21h AH=41h: the file _name names deleted.
-  DosAnswer DeleteFile(std::string_view _name);
-
-  /// Int 21h AH=4Eh, CX=_attributes: the first file matching _pattern, with no attribute beyond _attributes' hidden, system
-  /// and directory bits, into the disk transfer area.
-  [[nodiscard]] DosAnswer FindFirstFile(std::string_view _pattern, std::uint16_t _attributes);
-
-  /// Int 21h AH=4Fh: the next file of the search the disk transfer area holds, into it.
-  [[nodiscard]] DosAnswer FindNextFile();
+  /// The stamp a file written now takes: DOS's date and time at the platform's clock (Platform::FileStampNow).
+  [[nodiscard]] FileStamp FileStampNow() const;
 
   /// _point's cycles pass as they pass in a wait (Platform::Spend): the time the IBM PC spent on work the reference sets no
   /// pace for, paid where an interpreted run paid it (ADR-013).

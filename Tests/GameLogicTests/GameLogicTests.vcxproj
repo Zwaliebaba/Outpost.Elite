@@ -100,7 +100,6 @@
     <ClCompile Include="EquipmentRulesTests.cpp" />
     <ClCompile Include="GameDataTests.cpp" />
     <ClCompile Include="DockedTests.cpp" />
-    <ClCompile Include="DosFilesTests.cpp" />
     <ClCompile Include="EquipmentTests.cpp" />
     <ClCompile Include="FlightSnapshotTests.cpp" />
     <ClCompile Include="FlightTests.cpp" />

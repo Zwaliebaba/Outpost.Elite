@@ -59,11 +59,6 @@ constexpr std::string_view BLANK_LINE_TEXT = "                                  
 /// DS:884E
 constexpr std::string_view FILE_NAME_ERROR_TEXT = "FILENAME ERROR      ";
 
-/// commanderFilePattern (DS:20EF in 1987): *.cdr
-constexpr std::array<std::uint8_t, 6> COMMANDER_FILE_PATTERN = {
-  0x2A, 0x2E, 0x63, 0x64, 0x72, 0x00, // DS:20EF
-};
-
 /// versionString (DS:7B50 in 1987): Release:1? 1-10-87
 constexpr std::string_view VERSION_STRING = "Release:1? 1-10-87";
 
