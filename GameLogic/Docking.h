@@ -21,7 +21,7 @@ namespace Elite
 /// 20 timer ticks. Leaving, the world moves on behind the tunnel (TransformAndDrawObjects, MoveObjectsByVelocity,
 /// UpdateStardust), masked outside it (MaskOutsideTunnel); docking, each frame waits for the timer first. _backward is the
 /// direction flag; it leaves it clear. Waits as a rule (ADR-015).
-void PlayStationTunnel(GameState& _state, Hardware& _hardware, bool _backward);
+void PlayStationTunnel(GameState& _state, Hardware& _hardware);
 
 /// RunDockingComputer (CS:8622): one frame of the docking computer's flight, by dockingComputerState: 0 slow to a stop; 1 to 3
 /// roll and then pitch towards the approach point, 2000 out from the slot, twice; 4 fly to it; 5 to 7 the same towards the
@@ -31,7 +31,7 @@ void RunDockingComputer(GameState& _state);
 
 /// DrawTunnelRectangle (CS:1AA0): the four edges between the five points of rectangle _rectangle of tunnelRectangles, x and y
 /// signed bytes about the view's centre, by DrawLine in drawColor. Returns whether any DrawLine filled bytes with REP STOSB.
-bool DrawTunnelRectangle(GameState& _state, std::size_t _rectangle);
+void DrawTunnelRectangle(GameState& _state, std::size_t _rectangle);
 
 /// CheckDockingAlignment (CS:2D0F): whether the player's angles are within _tolerance of those that dock with the
 /// station in _station: pitch near 0 with yaw near a half turn, or the other way round, and roll near the station's

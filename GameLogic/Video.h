@@ -70,15 +70,15 @@ void PresentChartFrame(GameState& _state, Hardware& _hardware);
 
 /// PresentSpaceView (CS:0599): waits until msSinceFrame reaches minimumFrameMs and clears it, WaitRetraceThenDelay, then copies
 /// spaceViewBuffer's 63 line pairs to the screen at B800:01E8. Its loops turn through _hardware.
-void PresentSpaceView(GameState& _state, Hardware& _hardware, bool _backward);
+void PresentSpaceView(GameState& _state, Hardware& _hardware);
 
 /// CopyChartBufferToScreen (CS:05CC): waits for a vertical retrace and a delay, then copies 64 - 4 * _bandsSkipped line pairs, as
 /// a byte, of the drawing buffer from its byte _bandsSkipped * 512 to the chart's place on the screen, at B800:0648. Its loops turn
 /// through _hardware.
-void CopyChartBufferToScreen(GameState& _state, Hardware& _hardware, std::uint8_t _bandsSkipped, bool _backward);
+void CopyChartBufferToScreen(GameState& _state, Hardware& _hardware, std::uint8_t _bandsSkipped);
 
 /// ClearDrawBuffer (CS:060D): the drawing buffer (DrawingBuffer) zeroed a word at a time as REP STOSW does.
-void ClearDrawBuffer(GameState& _state, bool _backward);
+void ClearDrawBuffer(GameState& _state);
 
 /// PlotPixel (CS:15E0): the pixel at _x, _row of the drawing buffer set to colorFillBytes[drawColor].
 void PlotPixel(GameState& _state, std::uint8_t _x, std::uint8_t _row);
@@ -86,7 +86,7 @@ void PlotPixel(GameState& _state, std::uint8_t _x, std::uint8_t _row);
 /// DrawClippedLine (CS:1603): the line from (_fromX, _fromRow) to (_toX, _toRow), signed words, clipped to the 256x128 buffer and
 /// drawn (DrawLine). Returns what DrawLine returns: whether it filled a horizontal line's bytes, for which the original sets ES to
 /// DS and clears the direction flag.
-bool DrawClippedLine(GameState& _state, std::uint16_t _fromX, std::uint16_t _fromRow, std::uint16_t _toX, std::uint16_t _toRow);
+void DrawClippedLine(GameState& _state, std::uint16_t _fromX, std::uint16_t _fromRow, std::uint16_t _toX, std::uint16_t _toRow);
 
 /// A line as DrawClippedLine's clip routines hold it: its ends (CX, AX) and (DX, BX), the first coordinate of each the one an edge
 /// cuts and the second the one along it, and BP, the count of ends still outside 0-255.
@@ -123,32 +123,32 @@ void DrawCircle(GameState& _state, std::uint8_t _radius, std::uint16_t _centerX,
 /// DrawLine (CS:16D1): Bresenham from (_fromX, _fromRow) to (_toX, _toRow) into the drawing buffer in colorFillBytes[drawColor].
 /// Returns whether it filled whole bytes of a horizontal line with REP STOSB, for which the original sets ES to DS and clears
 /// the direction flag first.
-bool DrawLine(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromRow, std::uint8_t _toX, std::uint8_t _toRow);
+void DrawLine(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromRow, std::uint8_t _toX, std::uint8_t _toRow);
 
 /// DrawDisc (CS:1826): a disc of radius _radius filled at (_centerX, _centerRow), signed words, in colorFillBytes[drawColor & 3],
 /// which it keeps as discFillByte. Below radius 5, a sprite from smallDiscSprites clipped to the buffer; from 5, the rows of
 /// circleProfile scaled to the radius, each FillSpan, with a ragged edge while sunFringeMask is set.
-void DrawDisc(GameState& _state, std::uint16_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow, bool _backward);
+void DrawDisc(GameState& _state, std::uint16_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow);
 
 /// FillSpan (CS:1A07): row _doubledRow / 2 of the drawing buffer filled with discFillByte from x = _left to x = _right, the
 /// end bytes through spanLeftMasks and spanRightMasks and the bytes between them by STOSB and REP STOSW into ES = DS.
-void FillSpan(GameState& _state, std::uint8_t _left, std::uint8_t _right, std::uint8_t _doubledRow, bool _backward);
+void FillSpan(GameState& _state, std::uint8_t _left, std::uint8_t _right, std::uint8_t _doubledRow);
 
 /// FillTriangleSpan (CS:1B7A): x = _left to _right, _left first, of the drawing buffer's row at its byte _row filled with _fill: the
 /// end bytes through triangleEdgeMasks, which the original reads through BP from SS:0000, DS:AD60, and the bytes between
 /// them by STOSB and REP STOSW into ES = DS.
-void FillTriangleSpan(GameState& _state, std::uint16_t _row, std::uint8_t _left, std::uint8_t _right, std::uint8_t _fill, bool _backward);
+void FillTriangleSpan(GameState& _state, std::uint16_t _row, std::uint8_t _left, std::uint8_t _right, std::uint8_t _fill);
 
 /// FillTriangle (CS:1BFB): _triangle filled with triangleFillPattern, its low byte on even rows and its high on odd ones. Wholly
 /// on the drawing buffer, the rows' spans are walked down from the top on 8.8 edges into a container, as the original pushes
 /// them, and drawn from the bottom up, as it pops them (DrawStackedSpansFromRow, FillTriangleSpan); otherwise FillClippedTriangle.
 /// The edges' steps are the instructions it patches into its code, ADD or SUB, which it writes as the original does.
-void FillTriangle(GameState& _state, Triangle _triangle, bool _backward);
+void FillTriangle(GameState& _state, Triangle _triangle);
 
 /// FillClippedTriangle (CS:1E6E): FillTriangle's path for a triangle not wholly on the buffer, _doubled's rows twice the rows: one
 /// wholly left, above, right or below the buffer is not drawn; otherwise its rows are walked on 16.16 edges, only those on the
 /// buffer kept and each span held to 0-255.
-void FillClippedTriangle(GameState& _state, Triangle _doubled, bool _backward);
+void FillClippedTriangle(GameState& _state, Triangle _doubled);
 
 /// WaitRetraceThenDelay (CS:45FF): waits for a vertical retrace on the CGA's status port, then spins 2000 turns, a delay the
 /// 8088's speed made. Its loops turn through _hardware.
@@ -164,18 +164,18 @@ enum class ScreenChange : std::uint8_t
 
 /// ShowCockpitScreen (CS:7BC0): unless the cockpit shows already (screenLayout 0), graphics mode from text or a clear screen from
 /// graphics, screenLayout 0, and cockpitImage copied into both banks of the screen with the direction flag clear.
-ScreenChange ShowCockpitScreen(GameState& _state, Hardware& _hardware, bool _backward);
+ScreenChange ShowCockpitScreen(GameState& _state, Hardware& _hardware);
 
 /// ClearCgaScreen (CS:7BFB): both banks of CGA memory, B800:0000-1F3F and B800:2000-3F3F, zeroed a word at a time.
-void ClearCgaScreen(GameState& _state, bool _backward);
+void ClearCgaScreen(GameState& _state);
 
 /// ClearTextScreen (CS:7C12): the 40x25 text page filled with spaces in textAttribute, a cell at a time.
-void ClearTextScreen(GameState& _state, bool _backward);
+void ClearTextScreen(GameState& _state);
 
 /// DrawChartFrame (CS:7C25): unless the chart frame shows already (screenLayout 1), graphics mode from text or a clear screen from
 /// graphics, screenLayout 1, and the frame's box in colour 3: four horizontal lines by REP STOSW in the direction it finds, then
 /// the two verticals a byte at a time.
-ScreenChange DrawChartFrame(GameState& _state, Hardware& _hardware, bool _backward);
+ScreenChange DrawChartFrame(GameState& _state, Hardware& _hardware);
 
 /// SetGraphicsMode (CS:7CFE): BIOS mode 4, palette 0, and the colour select register bright on black.
 void SetGraphicsMode(Hardware& _hardware);
@@ -185,6 +185,6 @@ void SetGraphicsMode(Hardware& _hardware);
 void SetTextMode(Hardware& _hardware);
 
 /// DrawTitlePlanet (CS:7D4E): DrawDisc with sunFringeMask 1, then sunFringeMask 0.
-void DrawTitlePlanet(GameState& _state, std::uint16_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow, bool _backward);
+void DrawTitlePlanet(GameState& _state, std::uint16_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow);
 
 } // namespace Elite

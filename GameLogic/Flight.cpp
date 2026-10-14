@@ -288,8 +288,8 @@ void MarkDustRespawned(GameState& _state, std::size_t _particle, std::uint8_t _l
 }
 
 // Particle _particle, at _position, as a point, or while the jump drive is engaged a streak from where it was last
-// frame, unless it has just respawned. Returns whether DrawLine filled bytes with REP STOSB.
-bool DrawDust(GameState& _state, std::size_t _particle, DustPosition _position)
+// frame, unless it has just respawned.
+void DrawDust(GameState& _state, std::size_t _particle, DustPosition _position)
 {
   const DustScreenPosition screen = DustToScreen(_position);
   const std::uint8_t x = Low(Word(screen.x));
@@ -297,14 +297,17 @@ bool DrawDust(GameState& _state, std::size_t _particle, DustPosition _position)
   if (_state.Data().flight.jumpDriveEngaged == 0)
   {
     PlotPixel(_state, x, row);
-    return false;
+    return;
   }
   if (_state.Data().flight.stardustPrevious[_particle].respawned != 0)
   {
-    return false;
+    return;
   }
   const std::optional<DustScreenPosition> previous = GetPreviousDustScreenPosition(_state, _particle);
-  return previous && DrawLine(_state, x, row, Low(Word(previous->x)), Low(Word(previous->row)));
+  if (previous)
+  {
+    DrawLine(_state, x, row, Low(Word(previous->x)), Low(Word(previous->row)));
+  }
 }
 
 // Particle _particle, which LoadDustPosition found on screen at _position, moved by _step (ScaleDustStep's), outwards
@@ -348,8 +351,8 @@ DustPosition MoveDust(GameState& _state, std::size_t _particle, DustPosition _po
 
 // UpdateFrontStardust (0x06C0) and UpdateRearStardust (0x0742), which UpdateStardust jumps to: the pitch shifts the dust
 // vertically and the roll rolls it, _rear reversing both; then each of the 30 particles on screen moves (MoveDust) and is drawn
-// (DrawDust), PUSH CX and POP CX keeping the count round each. Returns whether a DrawLine filled bytes with REP STOSB.
-bool UpdateFrontOrRearStardust(GameState& _state, bool _rear)
+// (DrawDust), PUSH CX and POP CX keeping the count round each.
+void UpdateFrontOrRearStardust(GameState& _state, bool _rear)
 {
   // MOV DX,rollRate / ApplyReverseControlsToDx / AND DH,DH / XOR DL,DL / NEG DX for the front view / SAR DX,1.
   const std::uint16_t pitchRate = _state.Data().playerShip.rollRate;
@@ -368,37 +371,32 @@ bool UpdateFrontOrRearStardust(GameState& _state, bool _rear)
     RollStardust(_state);
   }
   ComputeStardustShift(_state);
-  bool filled = false;
   for (std::size_t particle = 0; particle < STARDUST_COUNT; ++particle)
   {
     if (const DustPosition position = LoadDustPosition(_state, particle); IsDustOnScreen(position))
     {
-      filled = DrawDust(_state, particle, MoveDust(_state, particle, position, _rear)) || filled;
+      DrawDust(_state, particle, MoveDust(_state, particle, position, _rear));
     }
   }
-  return filled;
 }
 
 // 0x084D: the side views only draw; ShiftStardustSideways has moved the dust. Each particle on screen is drawn (DrawDust),
-// PUSH CX and PUSH SI keeping the count and the particle round it. Returns whether a DrawLine filled bytes with REP STOSB.
-bool DrawSideStardust(GameState& _state)
+// PUSH CX and PUSH SI keeping the count and the particle round it.
+void DrawSideStardust(GameState& _state)
 {
-  bool filled = false;
   for (std::size_t particle = 0; particle < STARDUST_COUNT; ++particle)
   {
     const DustPosition position = LoadDustPosition(_state, particle);
     if (IsDustOnScreen(position))
     {
-      filled = DrawDust(_state, particle, position) || filled;
+      DrawDust(_state, particle, position);
     }
   }
-  return filled;
 }
 
 // UpdateLeftStardust (0x07C5) and UpdateRightStardust (0x0809), which UpdateStardust jumps to: pitch rolls the dust and speed
-// moves it sideways, _left mirroring both, and then they draw it (DrawSideStardust). Returns whether a DrawLine filled bytes
-// with REP STOSB.
-bool UpdateSideStardust(GameState& _state, bool _left)
+// moves it sideways, _left mirroring both, and then they draw it (DrawSideStardust).
+void UpdateSideStardust(GameState& _state, bool _left)
 {
   // MOV DX,rollRate / ApplyReverseControlsToDx / MOV DH,DL: the reversed roll byte, as DX = roll:00, negated for the right view
   // and halved, shifts the dust vertically.
@@ -425,7 +423,7 @@ bool UpdateSideStardust(GameState& _state, bool _left)
     (void)SetSinCos(_state, 7, _left ? Negate(angle) : angle);
     RollStardust(_state);
   }
-  return DrawSideStardust(_state);
+  DrawSideStardust(_state);
 }
 
 // ---- The dashboard --------------------------------------------------------------------------------
@@ -768,18 +766,14 @@ struct LaunchDi
 }
 
 // CALL GetKey / JE back to it, de-assembled: GetKey until a key comes (ADR-039), the waits at 0x0BF3 (FlightScreenDispatch),
-// 0x8153 (ProcessFlightKeys' Ctrl+Esc) and 0x8DC7 (RunPauseScreen). Returns the key, with screenshot set if any of its GetKeys
-// saved one, which leaves ES on the video segment.
+// 0x8153 (ProcessFlightKeys' Ctrl+Esc) and 0x8DC7 (RunPauseScreen). Returns the key.
 KeyPress WaitForKey(GameState& _state, Hardware& _hardware)
 {
-  bool screenshot = false;
   for (;;)
   {
-    KeyPress key = GetKey(_state, _hardware);
-    screenshot = screenshot || key.screenshot;
+    const KeyPress key = GetKey(_state, _hardware);
     if (key.scanCode != 0)
     {
-      key.screenshot = screenshot;
       return key;
     }
     AwaitNextKey(_hardware, key);
@@ -854,9 +848,9 @@ enum class PauseExit : std::uint8_t
 // 0x8D6D-0x8D8C: the drawing buffer cleared and the menu's eight lines drawn into it, in every colour on a paper of 0: each line of
 // pauseMenuText its place in the space view, a word, then its text, the last line's ending in frameRateKeyLabel, which the original
 // writes into it. The loop at 0x8D7C pushes and pops CX round each line, and SI walks the lines' places and texts.
-void DrawPauseMenu(GameState& _state, bool _backward)
+void DrawPauseMenu(GameState& _state)
 {
-  ClearDrawBuffer(_state, _backward);
+  ClearDrawBuffer(_state);
   _state.Data().drawing.textPaperPattern = 0;
   const std::string menu =
     JoinTexts({PAUSE_MENU_TEXT, TextsOf(BytesOf(std::as_const(_state).Data().flight.frameRateKeyLabel)), std::string_view("\0", 1)});
@@ -898,16 +892,16 @@ void SetFrameTime(GameState& _state, std::uint8_t _key)
 }
 
 // The pause screen from PauseShowOptions (0x8D8F): the options, presented (PresentSpaceView, after MOV AX,0B800h / MOV ES,AX),
-// then its keys, waited for at 0x8DC7, until one ends it. _backward is the direction flag, which nothing here changes. The jumps
+// then its keys, waited for at 0x8DC7, until one ends it. The jumps
 // back to PauseShowOptions and to the wait load or write every register they read, and carry nothing.
-PauseExit RunPauseOptions(GameState& _state, Hardware& _hardware, bool _backward)
+PauseExit RunPauseOptions(GameState& _state, Hardware& _hardware)
 {
   for (;;)
   {
     // The space view's layers watch the frame (ADR-033), on the menu DrawPauseMenu drew: only the game's words (D66).
     _hardware.BeginSpaceViewFrame();
     ShowPauseOptions(_state);
-    PresentSpaceView(_state, _hardware, _backward);
+    PresentSpaceView(_state, _hardware);
     // The frame as it was drawn, for a renderer that draws it in the cockpit, the dashboard live as it was left.
     _hardware.PublishFlightSnapshot(WithoutScene(TakeFlightSnapshot(_state)), false);
     for (;;)
@@ -918,7 +912,7 @@ PauseExit RunPauseOptions(GameState& _state, Hardware& _hardware, bool _backward
         // Resume, with the space that did it not fired.
         StartBeep(_state);
         ResetKeyboard(_state, _hardware);
-        ClearDrawBuffer(_state, _backward);
+        ClearDrawBuffer(_state);
         _state.Data().flight.gamePaused = 0;
         _state.Data().drawing.textPaperPattern = 0;
         _state.Data().keyboard.keyDown[Keys::SPACE] = 0;
@@ -932,8 +926,8 @@ PauseExit RunPauseOptions(GameState& _state, Hardware& _hardware, bool _backward
       {
         // Abort to the title: StopSoundEffects' CLI round its writes, which nothing interrupts in native code, then its STI.
         ResetKeyboard(_state, _hardware);
-        ClearMessageLine(_state, GameState::VIDEO_SEGMENT, _backward);
-        ClearDrawBuffer(_state, _backward);
+        ClearMessageLine(_state);
+        ClearDrawBuffer(_state);
         StopSoundEffects(_state);
         _hardware.EnableInterrupts();
         _state.Data().flight.gamePaused = 0;
@@ -954,12 +948,12 @@ PauseExit RunPauseOptions(GameState& _state, Hardware& _hardware, bool _backward
 // FlightScreenDispatch (0x0BDE): leaving the function keys: the cockpit back (RestoreFlightScreen, then ResetKeyboard) if a
 // screen was shown, then inFlight set. Returns what RestoreFlightScreen did, when it ran; _backward is the direction flag it
 // runs by.
-std::optional<ScreenChange> LeaveFlightScreens(GameState& _state, Hardware& _hardware, bool _backward)
+std::optional<ScreenChange> LeaveFlightScreens(GameState& _state, Hardware& _hardware)
 {
   std::optional<ScreenChange> change;
   if (_state.Data().flight.flightScreenShown != 0)
   {
-    change = RestoreFlightScreen(_state, _hardware, _backward);
+    change = RestoreFlightScreen(_state, _hardware);
     ResetKeyboard(_state, _hardware);
   }
   _state.Data().flow.inFlight = 1;
@@ -978,47 +972,33 @@ bool EraseForFlightScreen(GameState& _state)
 // navigation computer's error leaves (0x0BDE). _countIfNone, _segment and _backward are BP, ES and the direction flag as the
 // dispatch finds them, which the screens and their waits read and leave: the jumps back to the tests at 0x0BF8 carry the key, the
 // AL the last screen left, and BP, which the next screen reads.
-FlightScreens DispatchFlightScreens(GameState& _state, Hardware& _hardware, std::uint8_t _key, std::uint16_t _countIfNone,
-                                    std::uint16_t _segment, bool _backward)
+FlightScreens DispatchFlightScreens(GameState& _state, Hardware& _hardware, std::uint8_t _key, std::uint16_t _countIfNone)
 {
-  FlightScreens screens{0, std::nullopt, _backward};
+  FlightScreens screens{0, std::nullopt};
   std::uint8_t key = _key;
   std::uint16_t countLeft = _countIfNone;
-  std::uint16_t segment = _segment;
   // 0x0C13, 0x0C72 and 0x0CA0: flightScreenShown set and the compass and the blips erased (EraseForFlightScreen). Of what
-  // EraseCompassAndBlips leaves, the screens read BP, the compass dot's in-front byte CBW'd once it erases the dot, and the charts
-  // ES, the video segment once it erases anything.
-  const auto erase = [&_state, &countLeft, &segment]
+  // EraseCompassAndBlips leaves, the screens read BP, the compass dot's in-front byte CBW'd once it erases the dot.
+  const auto erase = [&_state, &countLeft]
   {
     const SpaceObject& station = _state.Slot(SlotIndex::Station);
     if ((station.flags & FLAG_BLIP_DRAWN) != 0)
     {
       countLeft = SignExtend(station.blipZ);
     }
-    if (EraseForFlightScreen(_state))
-    {
-      segment = GameState::VIDEO_SEGMENT;
-    }
+    (void)EraseForFlightScreen(_state);
   };
-  // A screen shown, and the key that closed it, with AL as it leaves it: every screen leaves ES on B800h, the charts clear the
-  // direction flag (PresentChartFrame), and the screens that select the system at the cursor as they close leave BP its count.
-  // Then JMP FlightScreenDispatch.
-  const auto shown = [&screens, &key, &countLeft, &segment](const ScreenKey& _closed, bool _chart)
+  // A screen shown, and the key that closed it, with AL as it leaves it: the screens that select the system at the cursor as they
+  // close leave BP its count. Then JMP FlightScreenDispatch.
+  const auto shown = [&key, &countLeft](const ScreenKey& _closed)
   {
     key = _closed.scanCode;
     countLeft = _closed.countLeft.value_or(countLeft);
-    segment = GameState::VIDEO_SEGMENT;
-    screens.backward = screens.backward && !_chart;
   };
-  // 0x0BDE, jumped back to: the cockpit back if a screen was shown (LeaveFlightScreens), whose CLD, once it draws, clears the
-  // direction flag.
+  // 0x0BDE, jumped back to: the cockpit back if a screen was shown (LeaveFlightScreens).
   const auto leave = [&_state, &_hardware, &screens]
   {
-    screens.restored = LeaveFlightScreens(_state, _hardware, screens.backward);
-    if (screens.restored && *screens.restored != ScreenChange::None)
-    {
-      screens.backward = false;
-    }
+    screens.restored = LeaveFlightScreens(_state, _hardware);
     return screens;
   };
   for (;;)
@@ -1033,22 +1013,22 @@ FlightScreens DispatchFlightScreens(GameState& _state, Hardware& _hardware, std:
       erase();
       if (key == SCAN_F5)
       {
-        shown(ShowGalacticChart(_state, _hardware, screens.backward, segment), true);
+        shown(ShowGalacticChart(_state, _hardware));
         continue;
       }
       if (key == SCAN_F6)
       {
-        shown(ShowShortRangeChart(_state, _hardware, screens.backward, segment), true);
+        shown(ShowShortRangeChart(_state, _hardware));
         continue;
       }
       if (key == SCAN_F7)
       {
-        shown(ShowSystemDataScreen(_state, _hardware, screens.backward, countLeft), false);
+        shown(ShowSystemDataScreen(_state, _hardware, countLeft));
         continue;
       }
       if (key == SCAN_F8)
       {
-        shown(ShowMarketPricesScreen(_state, _hardware, screens.backward, countLeft), false);
+        shown(ShowMarketPricesScreen(_state, _hardware, countLeft));
         continue;
       }
     }
@@ -1061,7 +1041,7 @@ FlightScreens DispatchFlightScreens(GameState& _state, Hardware& _hardware, std:
         if (_state.Data().commander.witchspaceCountdown == 1)
         {
           erase();
-          shown(ShowShortRangeChart(_state, _hardware, screens.backward, segment), true);
+          shown(ShowShortRangeChart(_state, _hardware));
           continue;
         }
       }
@@ -1082,23 +1062,18 @@ FlightScreens DispatchFlightScreens(GameState& _state, Hardware& _hardware, std:
     {
       ResetKeyboard(_state, _hardware);
       _state.Data().flow.inFlight = 1;
-      const ScreenKey closed = ShowCommanderStatusScreen(_state, _hardware, screens.backward, countLeft);
+      const ScreenKey closed = ShowCommanderStatusScreen(_state, _hardware, countLeft);
       _state.Data().flow.inFlight = 0;
-      shown(closed, false);
+      shown(closed);
       continue;
     }
     if (key == SCAN_F10)
     {
-      shown(ShowInventoryScreen(_state, _hardware, screens.backward, countLeft), false);
+      shown(ShowInventoryScreen(_state, _hardware, countLeft));
       continue;
     }
-    // JMP 0BF3h, and GetKey until a key comes: a screenshot taken there leaves ES on the video segment (SaveScreenshot).
-    const KeyPress next = WaitForKey(_state, _hardware);
-    key = next.scanCode;
-    if (next.screenshot)
-    {
-      segment = GameState::VIDEO_SEGMENT;
-    }
+    // JMP 0BF3h, and GetKey until a key comes.
+    key = WaitForKey(_state, _hardware).scanCode;
   }
 }
 
@@ -1452,7 +1427,7 @@ void SubtractVelocity(SpaceObject& _slot, ObjectByte _high, ObjectWord _low, Obj
 
 } // namespace
 
-bool UpdateStardust(GameState& _state)
+void UpdateStardust(GameState& _state)
 {
   if (_state.Data().flight.jumpDriveEngaged != 0)
   {
@@ -1463,11 +1438,14 @@ bool UpdateStardust(GameState& _state)
   {
   case RIGHT_VIEW:
   case LEFT_VIEW:
-    return UpdateSideStardust(_state, _state.Data().playerShip.viewAngle == LEFT_VIEW);
+    UpdateSideStardust(_state, _state.Data().playerShip.viewAngle == LEFT_VIEW);
+    return;
   case REAR_VIEW:
-    return UpdateFrontOrRearStardust(_state, true);
+    UpdateFrontOrRearStardust(_state, true);
+    return;
   default:
-    return UpdateFrontOrRearStardust(_state, false);
+    UpdateFrontOrRearStardust(_state, false);
+    return;
   }
 }
 
@@ -1710,8 +1688,7 @@ void SaveStardustPositions(GameState& _state)
   }
 }
 
-FlightScreens HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, std::uint16_t _segment,
-                                       bool _backward)
+FlightScreens HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
 {
   _state.Data().flow.inFlight = 0;
   // F1-F10 in keyDown, BX the scan code and LOOP counting CX down from 10.
@@ -1723,7 +1700,7 @@ FlightScreens HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware, s
       // MOV AH,BL, and PUSH AX / CALL ResetKeyboard / POP AX keep it.
       ResetKeyboard(_state, _hardware);
       _state.Data().flight.flightScreenShown = 0;
-      return DispatchFlightScreens(_state, _hardware, Low(scan), _countIfNone, _segment, _backward);
+      return DispatchFlightScreens(_state, _hardware, Low(scan), _countIfNone);
     }
     ++scan;
     if (--keys == 0)
@@ -1732,12 +1709,12 @@ FlightScreens HandleFlightFunctionKeys(GameState& _state, Hardware& _hardware, s
     }
   }
   _state.Data().flow.inFlight = 1;
-  return FlightScreens{0, std::nullopt, _backward};
+  return FlightScreens{0, std::nullopt};
 }
 
-ScreenChange RestoreFlightScreen(GameState& _state, Hardware& _hardware, bool _backward)
+ScreenChange RestoreFlightScreen(GameState& _state, Hardware& _hardware)
 {
-  const ScreenChange change = ShowCockpitScreen(_state, _hardware, _backward);
+  const ScreenChange change = ShowCockpitScreen(_state, _hardware);
   InvalidateDashboard(_state);
   StartBeep(_state);
   _state.Data().messages.messageShown = Message::None;
@@ -1773,7 +1750,7 @@ void UpdateDashboard(GameState& _state)
   const std::uint8_t safeZoneGlyph = InSafeZone(_state).inside ? SAFE_ZONE_GLYPH : SPACE;
   if (ExchangeShown(_state.Data().flight.safeZoneGlyphShown, safeZoneGlyph))
   {
-    (void)DrawScreenChar(_state, safeZoneGlyph, ALL_COLORS, GameState::VIDEO_SEGMENT, SAFE_ZONE_GLYPH_CELL);
+    (void)DrawScreenChar(_state, safeZoneGlyph, ALL_COLORS, SAFE_ZONE_GLYPH_CELL);
   }
   std::uint8_t ecmGlyph = SPACE;
   if (_state.Data().playerShip.ecmFired == 1)
@@ -1783,7 +1760,7 @@ void UpdateDashboard(GameState& _state)
   }
   if (ExchangeShown(_state.Data().flight.ecmGlyphShown, ecmGlyph))
   {
-    (void)DrawScreenChar(_state, ecmGlyph, ALL_COLORS, GameState::VIDEO_SEGMENT, ECM_GLYPH_CELL);
+    (void)DrawScreenChar(_state, ecmGlyph, ALL_COLORS, ECM_GLYPH_CELL);
   }
 
   DrawEnergyBanks(_state);
@@ -2044,7 +2021,7 @@ void UpdateConditionColor(GameState& _state)
   _state.Data().flight.conditionColor = color;
 }
 
-ScreenChange SetUpLocalSpace(GameState& _state, Hardware& _hardware, bool _backward)
+ScreenChange SetUpLocalSpace(GameState& _state, Hardware& _hardware)
 {
   LoadSystemSeeds(_state, _state.Data().commander.currentSystem.index);
   InvalidateDashboard(_state);
@@ -2052,7 +2029,7 @@ ScreenChange SetUpLocalSpace(GameState& _state, Hardware& _hardware, bool _backw
   _state.Data().flight.debrisSlotCount = 0x10;
   _state.Data().world.shipSlotCount = 0x24;
   ClearAllObjects(_state);
-  const ScreenChange change = ShowCockpitScreen(_state, _hardware, _backward);
+  const ScreenChange change = ShowCockpitScreen(_state, _hardware);
   (void)ResetStardust(_state);
   _state.Data().jump.hyperspaceCountdown = 0;
   _state.Data().playerShip.dockingComputerOn = 0;
@@ -2404,49 +2381,34 @@ void UpdateFuelLeak(GameState& _state, Hardware& _hardware)
   _hardware.SetColorSelect(static_cast<std::uint8_t>(border | BRIGHT_PALETTE));
 }
 
-FlightExit RunFlight(GameState& _state, Hardware& _hardware, bool _backward)
+FlightExit RunFlight(GameState& _state, Hardware& _hardware)
 {
   ResetMouseIfSelected(_state, _hardware);
-  // ShowCockpitScreen's CLD, once it drew.
-  const ScreenChange cockpit = SetUpLocalSpace(_state, _hardware, _backward);
-  bool backward = _backward && cockpit == ScreenChange::None;
-  PlayStationTunnel(_state, _hardware, backward);
-  // The tunnel's last FinishSpaceViewFrame: its CLD, and PresentSpaceView's MOV BP,20h.
-  backward = false;
+  (void)SetUpLocalSpace(_state, _hardware);
+  PlayStationTunnel(_state, _hardware);
+  // The tunnel's last FinishSpaceViewFrame: PresentSpaceView's MOV BP,20h.
   std::uint16_t countLeft = PRESENT_SPACE_VIEW_BP;
   bool firstFrame = true;
   for (;;)
   {
-    // FlightFrameLoop: one frame. The direction flag goes as each routine leaves it: TransformAndDrawObjects', and the CLD of a
-    // DrawLine that fills a horizontal line's bytes, a beam's or a streak's.
+    // FlightFrameLoop: one frame.
     UpdateDashboard(_state);
     _hardware.BeginSpaceViewFrame(); // the space view's layers watch the frame's drawing from here (ADR-033)
-    backward = TransformAndDrawObjects(_state, _hardware, backward);
-    if (ApplyEnemyLaserHit(_state, _hardware))
-    {
-      backward = false;
-    }
-    if (ResolveLaserFire(_state, _hardware))
-    {
-      backward = false;
-    }
+    TransformAndDrawObjects(_state, _hardware);
+    ApplyEnemyLaserHit(_state, _hardware);
+    ResolveLaserFire(_state, _hardware);
     // The stardust, watched for the space view, which the renderer draws in its place (ADR-035).
     _hardware.BeginSpaceViewObject();
-    const bool dustStreaked = UpdateStardust(_state);
+    UpdateStardust(_state);
     _hardware.EndSpaceViewRendered();
-    if (dustStreaked)
-    {
-      backward = false;
-    }
     UpdateFuelLeak(_state, _hardware);
-    UpdateMessageLine(_state, backward);
+    UpdateMessageLine(_state);
     PollScreenDumpKey(_state, _hardware);
     FinishSpaceViewFrame(_state, _hardware);
     // The frame as it was drawn, for a renderer that draws between frames (ADR-032); the first continues nothing before it.
     _hardware.PublishFlightSnapshot(TakeFlightSnapshot(_state), !firstFrame);
     firstFrame = false;
-    // Its CLD, and PresentSpaceView's MOV BP,20h and MOV DX,1FF0h, which UpdateObjectsAndSpawn hands to its first handler.
-    backward = false;
+    // PresentSpaceView's MOV BP,20h and MOV DX,1FF0h, which UpdateObjectsAndSpawn hands to its first handler.
     countLeft = PRESENT_SPACE_VIEW_BP;
     UpdateObjectsAndSpawn(_state, _hardware, PRESENT_SPACE_VIEW_DX);
     UpdatePlayerMotion(_state, _hardware);
@@ -2454,27 +2416,22 @@ FlightExit RunFlight(GameState& _state, Hardware& _hardware, bool _backward)
     const SlotIndex slotsEnd = CheckCollisions(_state, _hardware);
     if (_state.Data().flight.playerDocked == 1)
     {
-      PlayStationTunnel(_state, _hardware, backward);
+      PlayStationTunnel(_state, _hardware);
       ResetKeyboard(_state, _hardware);
       StopSoundEffects(_state);
       StopAllSound(_state, _hardware);
-      // The tunnel's last frame's CLD and BP of 20h, which the docked status screen goes on with.
-      return FlightExit{PRESENT_SPACE_VIEW_BP, false};
+      // The tunnel's last frame's BP of 20h, which the docked status screen goes on with.
+      return FlightExit{PRESENT_SPACE_VIEW_BP};
     }
-    const FlightKeysExit keys = ProcessFlightKeys(_state, _hardware, slotsEnd, countLeft, _state.DataSegment(), backward);
-    backward = keys.backward;
+    const FlightKeysExit keys = ProcessFlightKeys(_state, _hardware, slotsEnd, countLeft);
     if (keys.aborted)
     {
-      return FlightExit{CLEARED_MESSAGE_LINE_BP, backward};
+      return FlightExit{CLEARED_MESSAGE_LINE_BP};
     }
-    // CompleteHyperspaceJump's tunnel ends with a CLD.
-    if (TickHyperspaceCountdown(_state, _hardware, countLeft, backward))
-    {
-      backward = false;
-    }
+    TickHyperspaceCountdown(_state, _hardware, countLeft);
     if (TickEscapePod(_state))
     {
-      return FlightExit{countLeft, backward};
+      return FlightExit{countLeft};
     }
     if (_state.Data().playerShip.playerDead != 1 || _state.Data().startUp.cheatEnabled == 1)
     {
@@ -2496,10 +2453,10 @@ FlightExit RunFlight(GameState& _state, Hardware& _hardware, bool _backward)
     }
     ResetKeyboard(_state, _hardware);
     // MOV AX,0B800h / MOV ES,AX for the message line and the title.
-    ClearMessageLine(_state, GameState::VIDEO_SEGMENT, backward);
+    ClearMessageLine(_state);
     _state.Data().drawing.textPaperPattern = 0;
-    (void)DrawScreenString(_state, ELITE_TITLE_TEXT, ALL_COLORS, GameState::VIDEO_SEGMENT, TITLE_TEXT_POSITION);
-    return FlightExit{CLEARED_MESSAGE_LINE_BP, backward};
+    (void)DrawScreenString(_state, ELITE_TITLE_TEXT, ALL_COLORS, TITLE_TEXT_POSITION);
+    return FlightExit{CLEARED_MESSAGE_LINE_BP};
   }
 }
 
@@ -2513,20 +2470,18 @@ bool TickEscapePod(GameState& _state)
   return _state.Data().playerShip.escapePodFrames == 0;
 }
 
-FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, SlotIndex _diSlot, std::uint16_t _countIfNone,
-                                 std::uint16_t _segment, bool _backward)
+FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, SlotIndex _diSlot, std::uint16_t _countIfNone)
 {
   if (_state.Data().flight.gameOverFrames != 0)
   {
-    return FlightKeysExit{false, _backward};
+    return FlightKeysExit{false};
   }
   if (_state.Data().playerShip.escapePodFrames != 0)
   {
     // JNE back to the RET above.
-    return FlightKeysExit{false, _backward};
+    return FlightKeysExit{false};
   }
-  const FlightScreens screens = HandleFlightFunctionKeys(_state, _hardware, _countIfNone, _segment, _backward);
-  const bool backward = screens.backward;
+  const FlightScreens screens = HandleFlightFunctionKeys(_state, _hardware, _countIfNone);
   // DI, from which M's launch copies the missile, as the routines before it leave it: InvalidateDashboard once the cockpit came
   // back, ResetStardust once the view changed, IsMassLocked once J asked it, and ClearDrawBuffer once the pause screen resumed.
   LaunchDi di = screens.restored ? LaunchDi{_diSlot, PastBuffer::DashboardCache} : LaunchDi{_diSlot, PastBuffer::None};
@@ -2543,7 +2498,7 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, SlotInd
   }
   if (_state.Data().keyboard.keyDown[Keys::H] == 1 && PressHyperspace(_state))
   {
-    return FlightKeysExit{false, backward};
+    return FlightKeysExit{false};
   }
   // D, released, toggles the docking computer: not in mission 3 until the invaded station is destroyed.
   if ((_state.Data().commander.missionNumber != 3 || _state.Data().commander.invadedStationDestroyed == 1) &&
@@ -2578,10 +2533,10 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, SlotInd
     else
     {
       SetMessage(_state, Message::GamePaused, 1);
-      UpdateMessageLine(_state, backward);
-      if (RunPauseScreen(_state, _hardware, backward))
+      UpdateMessageLine(_state);
+      if (RunPauseScreen(_state, _hardware))
       {
-        return FlightKeysExit{true, backward};
+        return FlightKeysExit{true};
       }
       di = LaunchDi{di.slot, PastBuffer::DrawBuffer};
     }
@@ -2613,7 +2568,7 @@ FlightKeysExit ProcessFlightKeys(GameState& _state, Hardware& _hardware, SlotInd
     UseMaskingDevice(_state);
   }
   HandleAntiEcmKey(_state);
-  return FlightKeysExit{false, backward};
+  return FlightKeysExit{false};
 }
 
 void DrainEnergy(GameState& _state, std::int8_t _amount)
@@ -2765,14 +2720,14 @@ void MoveObjectsByVelocity(GameState& _state)
   }
 }
 
-bool RunPauseScreen(GameState& _state, Hardware& _hardware, bool _backward)
+bool RunPauseScreen(GameState& _state, Hardware& _hardware)
 {
   SilenceSpeakerTimer(_hardware);
   for (;;)
   {
-    DrawPauseMenu(_state, _backward);
+    DrawPauseMenu(_state);
     ResetKeyboard(_state, _hardware);
-    const PauseExit exit = RunPauseOptions(_state, _hardware, _backward);
+    const PauseExit exit = RunPauseOptions(_state, _hardware);
     if (exit != PauseExit::NewFrameRate)
     {
       return exit == PauseExit::Abort;

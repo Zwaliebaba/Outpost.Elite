@@ -46,7 +46,7 @@ void LaunchEscapePod(GameState& _state);
 /// ShowEquipShipScreen (CS:5BF2): the F4 screen, each item up to the system's tech level with its price into screenPrices and
 /// its resale price, then RunEquipShipMenu from the first item's row, which returns the key that closes it. _backward is the
 /// direction flag, which DrawDockedFrame goes by. Waits for keys as a rule (ADR-015).
-ScreenKey ShowEquipShipScreen(GameState& _state, Hardware& _hardware, bool _backward);
+ScreenKey ShowEquipShipScreen(GameState& _state, Hardware& _hardware);
 
 /// RunEquipShipMenu (CS:6111), with OpenEquipMessage, ShowEquipMessage, ReportNotEnoughCredits and the buying and selling it
 /// runs into as one unit (ADR-012 item 14): the equipment menu from row _firstRow of the text page (menuFirstRowAttr), the

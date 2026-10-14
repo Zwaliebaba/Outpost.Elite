@@ -150,18 +150,16 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
   // (ADR-006 item 3): the platform gives the tail (CheckCheatArgument), and DOS 1's refusal never comes.
   SaveStartupCommander(_state);
 
-  // From here on the direction flag is as the CLD left it, and as GameLoop leaves it; BP as DOS left it, and as GameLoop leaves it.
+  // From here on BP is as DOS left it, and as GameLoop leaves it.
   std::uint16_t countIfNone = _countIfNone;
-  bool backward = false;
   for (;;)
   {
     InstallTimerInterrupt(_state, _hardware);
     // CopyProtection (CS:04A3) came here: it does nothing once protectionShown is set, as the D5 byte sets it (ADR-001).
     InstallDivideAndKeyboardInterrupts(_state, _hardware);
     CheckCheatArgument(_state, _hardware);
-    const GameLoopExit loopExit = GameLoop(_state, _hardware, countIfNone, backward);
+    const GameLoopExit loopExit = GameLoop(_state, _hardware, countIfNone);
     countIfNone = loopExit.countLeft;
-    backward = loopExit.backward;
 
     // HandleDiskRequest (CS:0065): GameLoop comes back only for diskOperation, 0 to leave.
     RestoreDivideAndKeyboardInterrupts(_hardware);
@@ -187,25 +185,23 @@ void WipeProgram(Hardware& _hardware)
   _hardware.DisableInterrupts();
 }
 
-GameLoopExit GameLoop(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward)
+GameLoopExit GameLoop(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
 {
-  // BP and the direction flag go round: RunTitleAndDocked's screens read them, and RunFlight leaves them.
+  // BP goes round: RunTitleAndDocked's screens read it, and RunFlight leaves it.
   std::uint16_t countIfNone = _countIfNone;
-  bool backward = _backward;
   for (;;)
   {
     _state.Data().flow.inFlight = 0;
-    const DockedExit docked = RunTitleAndDocked(_state, _hardware, countIfNone, backward);
+    const DockedExit docked = RunTitleAndDocked(_state, _hardware, countIfNone);
     if (docked.leaves)
     {
       // LeaveGameLoopForDisk: the original drops the disc menu's return address and RunTitleAndDocked's, so that its RET returns
       // into Start.
-      return GameLoopExit{docked.countLeft, docked.backward};
+      return GameLoopExit{docked.countLeft};
     }
     _state.Data().flow.inFlight = 1;
-    const FlightExit flight = RunFlight(_state, _hardware, docked.backward);
+    const FlightExit flight = RunFlight(_state, _hardware);
     countIfNone = flight.countLeft;
-    backward = flight.backward;
     // After a death the title runs again.
     if (_state.Data().playerShip.playerDead == 1)
     {
@@ -215,11 +211,11 @@ GameLoopExit GameLoop(GameState& _state, Hardware& _hardware, std::uint16_t _cou
   }
 }
 
-void ShowCredits(GameState& _state, Hardware& _hardware, bool _backward)
+void ShowCredits(GameState& _state, Hardware& _hardware)
 {
   // The space view's layers watch the frame (ADR-033), which holds only the credits' words (D66).
   _hardware.BeginSpaceViewFrame();
-  ClearDrawBuffer(_state, _backward);
+  ClearDrawBuffer(_state);
   // Each line from SI, one past the last line's NUL, at DI, a row of characters below the last line's start. The original pushes
   // and pops the count and the place round the print.
   std::size_t line = 0;

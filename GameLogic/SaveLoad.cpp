@@ -529,7 +529,7 @@ void ShowDiskError(GameState& _state)
   _state.Data().disk.diskError = 0;
   if ((_state.Data().drawing.screenLayout & TEXT_LAYOUT_BIT) == 0)
   {
-    DrawScreenString(_state, DISK_ERROR_TEXT, ERROR_INK, GameState::VIDEO_SEGMENT, GRAPHICS_ERROR_POSITION);
+    DrawScreenString(_state, DISK_ERROR_TEXT, ERROR_INK, GRAPHICS_ERROR_POSITION);
     return;
   }
   // The characters alone, over the text page's attributes.
@@ -542,11 +542,11 @@ void ShowDiskError(GameState& _state)
   }
 }
 
-DiscMenuExit ShowDiscControlScreen(GameState& _state, Hardware& _hardware, bool _backward)
+DiscMenuExit ShowDiscControlScreen(GameState& _state, Hardware& _hardware)
 {
   if (_state.Data().saveLoad.resumeAtDiskMenu == 0)
   {
-    PrintAt(_state, DrawDockedFrame(_state, _hardware, DISC_CONTROL_FRAME, _backward), TITLE_POSITION);
+    PrintAt(_state, DrawDockedFrame(_state, _hardware, DISC_CONTROL_FRAME), TITLE_POSITION);
     PrintCountedTextLines(_state, DISC_MENU_TEXT, MENU_POSITION);
     return RunDiscControlKeys(_state, _hardware, true, 0);
   }
@@ -569,7 +569,7 @@ bool PromptCommanderFileName(GameState& _state, Hardware& _hardware)
 {
   PrintAt(_state, FILE_NAME_PROMPT_TEXT, STATUS_POSITION);
   const std::span<std::uint8_t> name(_state.Data().saveLoad.commanderFileName);
-  ReadTextLine(_state, _hardware, name, MOST_NAME_CHARACTERS, GameState::VIDEO_SEGMENT, NAME_POSITION);
+  ReadTextLine(_state, _hardware, name, MOST_NAME_CHARACTERS, NAME_POSITION);
   // A letter, then letters and digits, folded to upper case.
   std::size_t letter = 0;
   auto character = static_cast<std::uint8_t>(name[letter] & LOWER_CASE_BIT_CLEAR);

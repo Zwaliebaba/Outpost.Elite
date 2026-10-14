@@ -26,9 +26,8 @@ struct DiscMenuExit
 
 /// ShowDiscControlScreen (CS:660B), with RunDiscControlKeys, ShowDiskResult and PromptCommanderFileName, which
 /// jumps into its key loop after a bad name, as one unit (ADR-012 item 14): the Disc/Control menu, or, back from Start's disk
-/// work, what it came to or the question whether to retry it; then its keys. _backward is the direction flag, which
-/// DrawDockedFrame goes by. Waits for keys as a rule (ADR-015).
-DiscMenuExit ShowDiscControlScreen(GameState& _state, Hardware& _hardware, bool _backward);
+/// work, what it came to or the question whether to retry it; then its keys. Waits for keys as a rule (ADR-015).
+DiscMenuExit ShowDiscControlScreen(GameState& _state, Hardware& _hardware);
 
 /// PromptCommanderFileName (CS:6862): FILENAME? and up to 8 characters through ReadTextLine into commanderFileName, folded to
 /// upper case, and ".CDR" after them. Returns false for a bad name, which the original answers by dropping its return address

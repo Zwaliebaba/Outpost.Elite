@@ -111,11 +111,11 @@ void DrawViewString(GameState& _state, std::string_view _text, std::uint16_t _in
 /// of the CGA's memory. _segment, ES, is the CGA's video segment; another throws std::out_of_range, where the original would
 /// draw through the data segment (CheckScreenSegment in Text.cpp says why the game does not). Returns the place of the next
 /// character, two bytes on.
-std::uint16_t DrawScreenChar(GameState& _state, std::uint8_t _character, std::uint16_t _ink, std::uint16_t _segment, std::uint16_t _cell);
+std::uint16_t DrawScreenChar(GameState& _state, std::uint8_t _character, std::uint16_t _ink, std::uint16_t _cell);
 
 /// DrawScreenString (CS:32D8): DrawScreenChar for each character of _text, from _segment:_cell. Returns the place after the
 /// last.
-std::uint16_t DrawScreenString(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _segment, std::uint16_t _cell);
+std::uint16_t DrawScreenString(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _cell);
 
 /// FormatDecimal5 (CS:3407): _value as five ASCII digits into the first five of _digits, a buffer of the data segment.
 void FormatDecimal5(std::uint16_t _value, std::span<std::uint8_t> _digits);
@@ -143,12 +143,12 @@ void FormatCredits(GameState& _state);
 
 /// UpdateMessageLine (CS:35A3): the message line's work for a frame: UpdateWarnings; then while the message drawn has frames
 /// left, one fewer; else, once they run out, the view's name as the message, and the message shown, the line cleared a row at a
-/// time forwards or, _backwards, down, unless it is shown already.
-void UpdateMessageLine(GameState& _state, bool _backwards);
+/// time, unless it is shown already.
+void UpdateMessageLine(GameState& _state);
 
 /// ClearMessageLine (CS:3609): zeroes the message line's eight rows of 32 words from _segment:0058, each row forwards
 /// or, _backwards, down (REP STOSW with the direction flag set). _segment is the CGA's video segment, as DrawScreenChar's.
-void ClearMessageLine(GameState& _state, std::uint16_t _segment, bool _backwards);
+void ClearMessageLine(GameState& _state);
 
 /// ShowBountyMessage (CS:3626): _tenths of a credit into bountyText as "nnnn.n", shown for 20 frames.
 void ShowBountyMessage(GameState& _state, std::uint16_t _tenths);
@@ -163,11 +163,11 @@ std::uint16_t PrintTextModeString(GameState& _state, std::string_view _text, std
 
 /// ToggleMenuRowHighlight (CS:6328): SwapTextAttributeNibbles, and the attribute that makes into the 36 attribute bytes
 /// of a menu row at _segment:_row. _segment is the CGA's video segment, as DrawScreenChar's.
-void ToggleMenuRowHighlight(GameState& _state, std::uint16_t _segment, std::uint16_t _row);
+void ToggleMenuRowHighlight(GameState& _state, std::uint16_t _row);
 
 /// ClearDockedMessageLine (CS:6553): 19 spaces from text offset 78h at _segment, characters only. _segment is the CGA's video
 /// segment, as DrawScreenChar's.
-void ClearDockedMessageLine(GameState& _state, std::uint16_t _segment);
+void ClearDockedMessageLine(GameState& _state);
 
 /// SwapTextAttributeNibbles (CS:6580): textAttribute's nibbles exchanged, and the attribute that makes.
 std::uint8_t SwapTextAttributeNibbles(GameState& _state);
@@ -198,20 +198,17 @@ void PrintTextLines(GameState& _state, std::string_view _texts, std::uint16_t _c
 /// characters, after ResetKeyboard and with textPaperPattern cleared; echoed by RedrawInputLine at _segment:_cell, with a
 /// cursor that blinks every 300 timer ticks. Enter ends it, Backspace deletes, a key with no character does nothing, and
 /// letters are lower case unless Shift is held. The buffer holds a NUL after it. Waits for keys as a rule (ADR-015).
-void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<std::uint8_t> _buffer, std::uint8_t _most, std::uint16_t _segment,
-                  std::uint16_t _cell);
+void ReadTextLine(GameState& _state, Hardware& _hardware, std::span<std::uint8_t> _buffer, std::uint8_t _most, std::uint16_t _cell);
 
 /// ToggleInputCursor (CS:7727): the input cursor's character flips between blank and block.
 void ToggleInputCursor(GameState& _state);
 
 /// RedrawInputLine (CS:773A): a NUL after the _length characters typed into _buffer, then they and inputCursorText after
 /// them, each by PrintStringForLayout from _segment:_cell in the ink FFFFh.
-void RedrawInputLine(GameState& _state, std::span<std::uint8_t> _buffer, std::uint16_t _length, std::uint16_t _segment,
-                     std::uint16_t _cell);
+void RedrawInputLine(GameState& _state, std::span<std::uint8_t> _buffer, std::uint16_t _length, std::uint16_t _cell);
 
 /// PrintStringForLayout (CS:7750): _text by PrintTextModeString at B800:_cell in the text layout, and by DrawScreenString in
 /// _ink at _segment:_cell otherwise. Returns the place after its last character.
-std::uint16_t PrintStringForLayout(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _segment,
-                                   std::uint16_t _cell);
+std::uint16_t PrintStringForLayout(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _cell);
 
 } // namespace Elite

@@ -76,7 +76,7 @@ void DrawLaserSights(GameState& _state);
 /// four, the inner pair in laserBeamColorToggle's colour and the outer in the other. Returns whether a beam was a horizontal
 /// line, which DrawLine fills by REP STOSB. Each beam is watched for the space view and noted for the frame's snapshot, which the
 /// renderer draws in its place (ADR-035).
-bool DrawLaserBeams(GameState& _state, Hardware& _hardware);
+void DrawLaserBeams(GameState& _state, Hardware& _hardware);
 
 /// TakeDamage (CS:2C9B): _damage taken by the fore shield and what it cannot take by the energy: from 100h on, the shield takes all
 /// it holds; below, the low byte goes against the shield, written back, and 0 over it on a borrow. An energy that goes below 0
@@ -170,7 +170,7 @@ MissileFlight UpdateMissileAi(GameState& _state, Hardware& _hardware, SpaceObjec
 /// CheckMissileTargetDestroyed, ExplodeObject) unless indestructible, where a station stays at 0 and falls only in an invasion. Then the
 /// beams (DrawLaserBeams), the laser's sound unless the target was destroyed, and laserFiring cleared. Returns whether a beam was a
 /// horizontal line, which DrawLine fills by REP STOSB.
-bool ResolveLaserFire(GameState& _state, Hardware& _hardware);
+void ResolveLaserFire(GameState& _state, Hardware& _hardware);
 
 /// CheckMissileTargetDestroyed (CS:8B8B): when a missile is locked on the slot at _slot, its message and the missile unlocked.
 void CheckMissileTargetDestroyed(GameState& _state, const SpaceObject& _slot);
@@ -191,7 +191,7 @@ KillCredit CreditKill(GameState& _state, SpaceObject& _slot);
 /// edge of the view (DrawClippedLine); then 15 off the fore shield, or the aft while the attacker is behind (playerHitByDepth
 /// bit 7), written back and 0 over it on a borrow, and what it could not take off playerEnergy likewise, where a borrow sets
 /// playerDead. Returns whether the beam was a horizontal line, which DrawLine fills by REP STOSB.
-bool ApplyEnemyLaserHit(GameState& _state, Hardware& _hardware);
+void ApplyEnemyLaserHit(GameState& _state, Hardware& _hardware);
 
 /// UseMaskingDevice (CS:8ECF): 12 off the energy, at least 0, the background blue, and for each of objectSlotCount slots from
 /// shipSlots, its state and hostility cleared and 2 off its aggression, at least 0.

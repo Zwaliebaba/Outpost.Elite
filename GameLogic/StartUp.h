@@ -34,14 +34,13 @@ void Start(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone);
 struct GameLoopExit
 {
   std::uint16_t countLeft; ///< BP
-  bool backward;           ///< the direction flag
 };
 
 /// GameLoop (CS:7D30): RunTitleAndDocked, then RunFlight, and the title again after a death; for ever, but that the disc menu
 /// leaves it for the disk (LeaveGameLoopForDisk), whose return addresses the original drops so that a RET returns into Start.
 /// _countIfNone and _backward are BP and the direction flag it is called with, which RunTitleAndDocked takes, and RunFlight
 /// leaves for it the next time round. Waits as a rule (ADR-015).
-GameLoopExit GameLoop(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward);
+GameLoopExit GameLoop(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone);
 
 /// InstallDivideAndKeyboardInterrupts (CS:0105): with interrupts off, the game's int 0 and int 9 handlers installed in the
 /// BIOS's place, int 8's segment rewritten; then interrupts on, and ResetKeyboard. The original first keeps the BIOS's two
@@ -69,9 +68,9 @@ void StartNewGame(GameState& _state);
 /// speakerPortImage, diskOperation, exitMessage and dosVersionMessage's first seven, by name (D38).
 [[nodiscard]] std::array<std::uint8_t, SpaceObject::BYTES> BytesAfterDrawBuffer(const GameState& _state);
 
-/// ShowCredits (CS:8F02): the space view's buffer cleared (ClearDrawBuffer, which goes by _backward, the direction flag), the
+/// ShowCredits (CS:8F02): the space view's buffer cleared (ClearDrawBuffer), the
 /// nine lines of creditsScreenText drawn in it, presented (FinishSpaceViewFrame), then 3000 timer ticks, about 3 s. Waits.
-void ShowCredits(GameState& _state, Hardware& _hardware, bool _backward);
+void ShowCredits(GameState& _state, Hardware& _hardware);
 
 // ── The entry of the program ──
 

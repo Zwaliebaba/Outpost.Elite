@@ -64,17 +64,17 @@ void LatchHyperspaceTarget(GameState& _state);
 /// digits, "10" or a space and the digit, written into hyperspaceCountdownMessage.
 void ShowHyperspaceCountdown(GameState& _state);
 
-/// ArriveInSystem (CS:2B5A): SetUpLocalSpace (its copies backwards when _backward), then, out of witch space, the sun, the planet
+/// ArriveInSystem (CS:2B5A): SetUpLocalSpace, then, out of witch space, the sun, the planet
 /// and the station moved by one random offset, 200h-3FFh either way in the top 16 bits of x and y and a random word in z's low
 /// word, and the player turned to the station (ComputeAnglesToObject) with a random roll.
-void ArriveInSystem(GameState& _state, Hardware& _hardware, bool _backward);
+void ArriveInSystem(GameState& _state, Hardware& _hardware);
 
 /// CompleteHyperspaceJump (CS:4707): the jump, galactic when galacticJumpPending (GalacticJump, whose search takes _countIfNone, the
 /// BP it is called with): the compass and the blips erased, 'Hyperspace Motors Engaged', the fuel spent and 5 off legalStatus,
 /// the destination made current, its seeds loaded; witch space on a mis-jump, else the charts' cursors on it; then the tunnel
 /// (PlayHyperspaceTunnel, its first message line by _backward, the direction flag), the arrival (ArriveInSystem), the missions'
 /// schedule and the arrival's message. Waits, in the tunnel's frames.
-void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward);
+void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone);
 
 /// DrawHyperspaceRings (CS:48C0): one frame of the hyperspace rings: each counts its delay down, then grows by an eighth, at
 /// least 1, below 150, and from 20 on is drawn (DrawCircle) in its colour about the space view's centre.
@@ -82,11 +82,11 @@ void DrawHyperspaceRings(GameState& _state);
 
 /// PlayHyperspaceTunnel (CS:4906): fifty frames of the hyperspace rings: UpdateMessageLine (the first by _backward, the
 /// direction flag), DrawHyperspaceRings and FinishSpaceViewFrame. Waits, a turn of its loop for each frame after the first.
-void PlayHyperspaceTunnel(GameState& _state, Hardware& _hardware, bool _backward);
+void PlayHyperspaceTunnel(GameState& _state, Hardware& _hardware);
 
 /// TickHyperspaceCountdown (CS:7F79): the galactic drive's ready frames, and the hyperspace countdown, a step every ten frames
 /// (ShowHyperspaceCountdown), which jumps (CompleteHyperspaceJump, with _countIfNone and _backward) when it runs out. Returns
 /// whether it jumped. Waits then.
-bool TickHyperspaceCountdown(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward);
+bool TickHyperspaceCountdown(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone);
 
 } // namespace Elite

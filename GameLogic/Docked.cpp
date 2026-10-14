@@ -237,10 +237,9 @@ void FormatQuantity(std::uint16_t _quantity, std::span<std::uint8_t> _text)
 // header in its attribute, the rows' attribute, and the prices; cargoRowPointer on the first product, 0. _backward is the
 // direction flag, which DrawDockedFrame goes by.
 template <typename Frame>
-void DrawTradeScreenHeader(GameState& _state, Hardware& _hardware, const Frame& _frame, std::span<const std::string_view> _help,
-                           bool _backward)
+void DrawTradeScreenHeader(GameState& _state, Hardware& _hardware, const Frame& _frame, std::span<const std::string_view> _help)
 {
-  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, _frame, _backward), TITLE_CELL);
+  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, _frame), TITLE_CELL);
   PrintTextModeString(_state, _help[0], LINE_3);
   PrintTextModeString(_state, _help[1], LINE_4); // INC SI: the second line, after the first's NUL
   _state.Data().drawing.textAttribute = HEADER_ATTRIBUTE;
@@ -286,14 +285,14 @@ void PrintUnit(GameState& _state, const TradeRow& _row, std::uint16_t _cell)
                   Offset(_row.cell, TEXT_ROW_BYTES)};
 }
 
-// RunTitle (CS:7D8B), the title: the ship slots cleared (ClearAllObjects, by _backward, the direction flag), the music on, the
+// RunTitle (CS:7D8B), the title: the ship slots cleared (ClearAllObjects), the music on, the
 // player's angles, the view and the lasers zeroed, the cockpit shown (screenLayout 2, which ShowCockpitScreen copies over with the
 // direction flag clear), the message line cleared and ---- E L I T E ---- on it; then the planet and the turning ship of type
 // titleShipType, in stationSlot at its titleShipDistances, until a key: F9 and F10 step the type through 2-29, any other ends it
 // with the music off, the credits and a new game. ES is B800h throughout, from its MOV ES,AX. TitleFrameLoop (CS:7DF1) is one
 // frame. Returns what it leaves in BP, PresentSpaceView's 20h from the credits; the direction flag is clear, from their
 // FinishSpaceViewFrame.
-std::uint16_t RunTitle(GameState& _state, Hardware& _hardware, bool _backward)
+std::uint16_t RunTitle(GameState& _state, Hardware& _hardware)
 {
   ClearAllObjects(_state);
   StartMusic(_state, _hardware);
@@ -303,11 +302,10 @@ std::uint16_t RunTitle(GameState& _state, Hardware& _hardware, bool _backward)
   _state.Data().playerShip.playerRollAngle = 0;
   _state.Data().playerShip.viewAngle = 0;
   _state.Data().drawing.screenLayout = TITLE_LAYOUT;
-  (void)ShowCockpitScreen(_state, _hardware, _backward);
-  bool backward = false;
-  ClearMessageLine(_state, GameState::VIDEO_SEGMENT, backward);
+  (void)ShowCockpitScreen(_state, _hardware);
+  ClearMessageLine(_state);
   _state.Data().drawing.textPaperPattern = 0;
-  (void)DrawScreenString(_state, ELITE_TITLE_TEXT, WHITE_MASK, GameState::VIDEO_SEGMENT, TITLE_TEXT_CELL);
+  (void)DrawScreenString(_state, ELITE_TITLE_TEXT, WHITE_MASK, TITLE_TEXT_CELL);
   SpaceObject& ship = _state.Slot(SlotIndex::Station);
   _state.Data().world.shipSlotCount = TITLE_SHIP_SLOTS;
   // XOR AX,AX, then the yaw, the roll, the low words of x and y, the high bytes of x and y as a word, and z's high byte.
@@ -325,7 +323,7 @@ std::uint16_t RunTitle(GameState& _state, Hardware& _hardware, bool _backward)
     _hardware.BeginSpaceViewFrame();
     _hardware.BeginSpaceViewObject();
     _state.Data().drawing.drawColor = TITLE_PLANET_COLOR;
-    DrawTitlePlanet(_state, TITLE_PLANET_RADIUS, TITLE_PLANET_X, TITLE_PLANET_Y, backward);
+    DrawTitlePlanet(_state, TITLE_PLANET_RADIUS, TITLE_PLANET_X, TITLE_PLANET_Y);
     _hardware.EndSpaceViewRendered();
     ship.flags = TITLE_SHIP_FLAGS;
     // MOV BL,titleShipType / SHL BL,1 / XOR BH,BH: the type doubled indexes titleShipDistances, and INC BL makes it the type byte,
@@ -339,7 +337,7 @@ std::uint16_t RunTitle(GameState& _state, Hardware& _hardware, bool _backward)
     ship.pitch = Offset(ship.pitch, TITLE_PITCH_STEP);
     _state.Data().drawing.textPaperPattern = 0;
     DrawViewString(_state, PRESS_ANY_KEY_TEXT, PRESS_ANY_KEY_MASK, PRESS_ANY_KEY_PLACE);
-    (void)TransformAndDrawObjects(_state, _hardware, backward);
+    (void)TransformAndDrawObjects(_state, _hardware);
     FinishSpaceViewFrame(_state, _hardware);
     // The frame as it was drawn, the title's, for a renderer that draws its ship and its planet (ADR-033, ADR-035), with the
     // dashboard the title shows: the cockpit's picture, nothing on it live (D64). DrawDisc's radius is twice the disc's rows.
@@ -349,7 +347,6 @@ std::uint16_t RunTitle(GameState& _state, Hardware& _hardware, bool _backward)
                               .rows = static_cast<std::uint16_t>(TITLE_PLANET_RADIUS >> 1)};
     _hardware.PublishFlightSnapshot(TakeTitleSnapshot(_state, ELITE_TITLE_TEXT, planet), !firstFrame);
     firstFrame = false;
-    backward = false;
     if (const KeyPress key = GetKey(_state, _hardware); key.scanCode != 0)
     {
       if (key.scanCode == SCAN_F9)
@@ -375,7 +372,7 @@ std::uint16_t RunTitle(GameState& _state, Hardware& _hardware, bool _backward)
     }
   }
   StopAllSound(_state, _hardware);
-  ShowCredits(_state, _hardware, backward);
+  ShowCredits(_state, _hardware);
   StartNewGame(_state);
   _state.Data().flow.titleShown = 1;
   // The credits' FinishSpaceViewFrame leaves BP, which StartNewGame keeps.
@@ -383,73 +380,64 @@ std::uint16_t RunTitle(GameState& _state, Hardware& _hardware, bool _backward)
 }
 
 // The screen each F-key shows in DockedKeyDispatch (CS:0B45), in the order it tests them, called as the dispatch calls it: with
-// the direction flag and BP, which the screens that select the system at the cursor take as the count when no system is on the
+// BP, which the screens that select the system at the cursor take as the count when no system is on the
 // chart. The status screen's arm (CS:0B96) resets the keyboard first. Every screen leaves ES on B800h, the text page or the
 // graphics screen, so a chart shown after another finds it there.
 struct DockedScreen
 {
   std::uint8_t key;
-  ScreenKey (*show)(GameState&, Hardware&, bool, std::uint16_t);
-  bool clearsDirection; // a chart: PresentChartFrame clears the direction flag, which no other screen changes
+  ScreenKey (*show)(GameState&, Hardware&, std::uint16_t);
 };
 
 constexpr std::array<DockedScreen, 9> DOCKED_SCREENS = {{
-  {SCAN_F2, [](GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t /*_countIfNone*/)
-   { return ShowSellCargoScreen(_state, _hardware, _backward); }, false},
-  {SCAN_F3, [](GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t /*_countIfNone*/)
-   { return ShowBuyCargoScreen(_state, _hardware, _backward); }, false},
-  {SCAN_F4, [](GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t /*_countIfNone*/)
-   { return ShowEquipShipScreen(_state, _hardware, _backward); }, false},
-  {SCAN_F5, [](GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t /*_countIfNone*/)
-   { return ShowGalacticChart(_state, _hardware, _backward, GameState::VIDEO_SEGMENT); }, true},
-  {SCAN_F6, [](GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t /*_countIfNone*/)
-   { return ShowShortRangeChart(_state, _hardware, _backward, GameState::VIDEO_SEGMENT); }, true},
-  {SCAN_F7, &ShowSystemDataScreen, false},
-  {SCAN_F8, &ShowMarketPricesScreen, false},
+  {SCAN_F2, [](GameState& _state, Hardware& _hardware, std::uint16_t /*_countIfNone*/) { return ShowSellCargoScreen(_state, _hardware); }},
+  {SCAN_F3, [](GameState& _state, Hardware& _hardware, std::uint16_t /*_countIfNone*/) { return ShowBuyCargoScreen(_state, _hardware); }},
+  {SCAN_F4, [](GameState& _state, Hardware& _hardware, std::uint16_t /*_countIfNone*/) { return ShowEquipShipScreen(_state, _hardware); }},
+  {SCAN_F5, [](GameState& _state, Hardware& _hardware, std::uint16_t /*_countIfNone*/) { return ShowGalacticChart(_state, _hardware); }},
+  {SCAN_F6, [](GameState& _state, Hardware& _hardware, std::uint16_t /*_countIfNone*/) { return ShowShortRangeChart(_state, _hardware); }},
+  {SCAN_F7, &ShowSystemDataScreen},
+  {SCAN_F8, &ShowMarketPricesScreen},
   {SCAN_F9,
-   [](GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _countIfNone)
+   [](GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
    {
      ResetKeyboard(_state, _hardware);
-     return ShowCommanderStatusScreen(_state, _hardware, _backward, _countIfNone);
-   },
-   false},
-  {SCAN_F10, &ShowInventoryScreen, false},
+     return ShowCommanderStatusScreen(_state, _hardware, _countIfNone);
+   }},
+  {SCAN_F10, &ShowInventoryScreen},
 }};
 
 // DockedKeyDispatch (CS:0B40), from the arm that shows the screen for _screenKey: F9's status screen (CS:0B96), or Esc's disc menu
 // (CS:0BAC). Each screen returns the key that closed it, which picks the next screen, until F1 leaves; Esc is the disc menu, and
-// any other key waits for one (CS:0B40). _countIfNone is BP and _backward the direction flag as RunTitleAndDocked leaves them,
+// any other key waits for one (CS:0B40). _countIfNone is BP as RunTitleAndDocked leaves it,
 // carried from screen to screen as the original's registers carry them, with the key and BP, which the next screen reads; the
 // wait's turns carry nothing, as WaitForKey's do.
-DockedExit DispatchDockedKeys(GameState& _state, Hardware& _hardware, std::uint8_t _screenKey, std::uint16_t _countIfNone, bool _backward)
+DockedExit DispatchDockedKeys(GameState& _state, Hardware& _hardware, std::uint8_t _screenKey, std::uint16_t _countIfNone)
 {
   std::uint8_t screenKey = _screenKey;
   std::uint16_t countLeft = _countIfNone;
-  bool backward = _backward;
   for (;;)
   {
     ScreenKey key{};
     if (screenKey == SCAN_ESCAPE)
     {
-      const DiscMenuExit exit = ShowDiscControlScreen(_state, _hardware, backward);
+      const DiscMenuExit exit = ShowDiscControlScreen(_state, _hardware);
       if (exit.leaves)
       {
-        return DockedExit{true, countLeft, backward};
+        return DockedExit{true, countLeft};
       }
       key = ScreenKey{exit.scanCode, exit.al, std::nullopt};
     }
     else
     {
       const auto screen = std::ranges::find(DOCKED_SCREENS, screenKey, &DockedScreen::key);
-      key = screen->show(_state, _hardware, backward, countLeft);
-      backward = backward && !screen->clearsDirection;
+      key = screen->show(_state, _hardware, countLeft);
     }
     countLeft = key.countLeft.value_or(countLeft);
     for (;;)
     {
       if (key.scanCode == SCAN_F1)
       {
-        return DockedExit{false, countLeft, backward};
+        return DockedExit{false, countLeft};
       }
       if (std::ranges::find(DOCKED_SCREENS, key.scanCode, &DockedScreen::key) != DOCKED_SCREENS.end())
       {
@@ -489,7 +477,7 @@ void FormatFuelLightYears(GameState& _state)
   docked.fuelTenthsDigit = std::uint8_t{docked.fuelDigits[FUEL_TENTHS_DIGIT]};
 }
 
-void DrawDockedFrameAt(GameState& _state, Hardware& _hardware, std::uint8_t _screen, std::uint8_t _frame, bool _backward)
+void DrawDockedFrameAt(GameState& _state, Hardware& _hardware, std::uint8_t _screen, std::uint8_t _frame)
 {
   if ((_state.Data().drawing.screenLayout & TEXT_LAYOUT) == 0)
   {
@@ -500,12 +488,12 @@ void DrawDockedFrameAt(GameState& _state, Hardware& _hardware, std::uint8_t _scr
   const auto attribute = static_cast<std::uint8_t>(_screen & ATTRIBUTE_MASK);
   _state.Data().drawing.textAttribute = attribute;
   _hardware.SetColorSelect(static_cast<std::uint8_t>(attribute >> 4));
-  ClearTextScreen(_state, _backward);
+  ClearTextScreen(_state);
 
   const std::uint8_t frame = _frame;
   for (const std::uint16_t row : {FRAME_TOP_ROW, FRAME_TITLE_ROW, FRAME_BOTTOM_ROW})
   {
-    DrawFrameRow(_state, row, Join(frame, FRAME_ROW_CHARACTER), _backward);
+    DrawFrameRow(_state, row, Join(frame, FRAME_ROW_CHARACTER));
   }
   DrawFrameSides(_state, FRAME_SIDES, FRAME_SIDE_ROWS, frame);
   for (const FrameCorner& corner : FRAME_CORNERS)
@@ -515,9 +503,9 @@ void DrawDockedFrameAt(GameState& _state, Hardware& _hardware, std::uint8_t _scr
   }
 }
 
-std::string_view DrawDockedFrame(GameState& _state, Hardware& _hardware, std::string_view _descriptor, bool _backward)
+std::string_view DrawDockedFrame(GameState& _state, Hardware& _hardware, std::string_view _descriptor)
 {
-  DrawDockedFrameAt(_state, _hardware, static_cast<std::uint8_t>(_descriptor[0]), static_cast<std::uint8_t>(_descriptor[1]), _backward);
+  DrawDockedFrameAt(_state, _hardware, static_cast<std::uint8_t>(_descriptor[0]), static_cast<std::uint8_t>(_descriptor[1]));
   return _descriptor.substr(2);
 }
 
@@ -533,14 +521,13 @@ void DrawFrameSides(GameState& _state, std::uint16_t _cell, std::uint16_t _rows,
   }
 }
 
-void DrawFrameRow(GameState& _state, std::uint16_t _cell, std::uint16_t _value, bool _backwards)
+void DrawFrameRow(GameState& _state, std::uint16_t _cell, std::uint16_t _value)
 {
-  const auto step = static_cast<std::uint16_t>(_backwards ? 0xFFFE : 2);
   std::uint16_t cell = _cell;
   for (std::uint16_t left = FRAME_ROW_CELLS; left != 0; --left)
   {
     _state.SetVideoWord(cell, _value);
-    cell = Offset(cell, step);
+    cell = Offset(cell, 2);
   }
 }
 
@@ -576,9 +563,9 @@ void AwardArchangelTitle(GameState& _state)
   }
 }
 
-ScreenKey ShowSellCargoScreen(GameState& _state, Hardware& _hardware, bool _backward)
+ScreenKey ShowSellCargoScreen(GameState& _state, Hardware& _hardware)
 {
-  DrawTradeScreenHeader(_state, _hardware, SELL_CARGO_FRAME, SELL_CARGO_HELP_LINES, _backward);
+  DrawTradeScreenHeader(_state, _hardware, SELL_CARGO_FRAME, SELL_CARGO_HELP_LINES);
   TradeRow row = FIRST_TRADE_ROW;
   for (;;)
   {
@@ -608,10 +595,10 @@ ScreenKey ShowSellCargoScreen(GameState& _state, Hardware& _hardware, bool _back
   return RunCargoTradeMenu(_state, _hardware);
 }
 
-ScreenKey ShowBuyCargoScreen(GameState& _state, Hardware& _hardware, bool _backward)
+ScreenKey ShowBuyCargoScreen(GameState& _state, Hardware& _hardware)
 {
   StartMarketRandom(_state);
-  DrawTradeScreenHeader(_state, _hardware, BUY_CARGO_FRAME, BUY_CARGO_HELP_LINES, _backward);
+  DrawTradeScreenHeader(_state, _hardware, BUY_CARGO_FRAME, BUY_CARGO_HELP_LINES);
   TradeRow row = FIRST_TRADE_ROW;
   for (;;)
   {
@@ -660,21 +647,21 @@ ScreenKey ShowBuyCargoScreen(GameState& _state, Hardware& _hardware, bool _backw
   return RunCargoTradeMenu(_state, _hardware);
 }
 
-ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _countIfNone)
+ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
 {
   if (_state.Data().flow.inFlight != 1 && _state.Data().commander.missionNumber != 0)
   {
     if (_state.Data().commander.missionStage == 0)
     {
-      ShowMissionBriefing(_state, _hardware, _backward);
+      ShowMissionBriefing(_state, _hardware);
     }
     else if (_state.Data().commander.missionStage == STAGE_BRIEFED && _state.Data().flight.playerDocked == 1)
     {
-      ShowMissionDebriefing(_state, _hardware, _backward);
+      ShowMissionDebriefing(_state, _hardware);
     }
   }
   const CommanderState& commander = _state.Data().commander;
-  DrawDockedFrameAt(_state, _hardware, commander.commanderTitle[0], commander.commanderTitle[1], _backward);
+  DrawDockedFrameAt(_state, _hardware, commander.commanderTitle[0], commander.commanderTitle[1]);
   const std::uint16_t title = PrintTextModeString(_state, CommanderTitleText(_state), TITLE_CELL);
   PrintTextModeString(_state, TextWithin(BytesOf(_state.Data().commander.defaultCommanderName), 0), title);
   _state.Data().drawing.textAttribute = STATUS_ATTRIBUTE;
@@ -761,9 +748,9 @@ ScreenKey ShowCommanderStatusScreen(GameState& _state, Hardware& _hardware, bool
   return WaitForScreenExitKey(_state, _hardware, SCAN_F9, al, _countIfNone);
 }
 
-ScreenKey ShowInventoryScreen(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _countIfNone)
+ScreenKey ShowInventoryScreen(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
 {
-  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, INVENTORY_FRAME, _backward), TITLE_CELL);
+  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, INVENTORY_FRAME), TITLE_CELL);
   // The fuel text without the padding the status screen has: 'Fuel: ', which the original cuts from the text by a NUL that
   // becomes a space again, then 'n.n Light Years'.
   FormatFuelLightYears(_state);
@@ -805,10 +792,10 @@ ScreenKey ShowInventoryScreen(GameState& _state, Hardware& _hardware, bool _back
   return WaitForScreenExitKey(_state, _hardware, SCAN_F10, 0, _countIfNone);
 }
 
-void ShowMissionBriefing(GameState& _state, Hardware& _hardware, bool _backward)
+void ShowMissionBriefing(GameState& _state, Hardware& _hardware)
 {
   _state.Data().commander.missionStage = STAGE_BRIEFED;
-  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, EMERGENCY_FRAME, _backward), TITLE_CELL);
+  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, EMERGENCY_FRAME), TITLE_CELL);
   const std::uint8_t mission = _state.Data().commander.missionNumber;
   if (mission == MISSION_SUPERNOVA)
   {
@@ -864,7 +851,7 @@ void ShowMissionBriefing(GameState& _state, Hardware& _hardware, bool _backward)
   _state.Data().commander.jumpedSinceBriefing = 0;
 }
 
-void ShowMissionDebriefing(GameState& _state, Hardware& _hardware, bool _backward)
+void ShowMissionDebriefing(GameState& _state, Hardware& _hardware)
 {
   // Not yet: the mask ship is still about, or the supernova's refugees have not been taken away.
   if (_state.Data().commander.missionNumber == MISSION_MASK_SHIP
@@ -873,7 +860,7 @@ void ShowMissionDebriefing(GameState& _state, Hardware& _hardware, bool _backwar
   {
     return;
   }
-  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, TASK_COMPLETE_FRAME, _backward), TITLE_CELL);
+  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, TASK_COMPLETE_FRAME), TITLE_CELL);
   _state.Data().commander.missionStage = STAGE_DEBRIEFED;
   const std::uint8_t mission = _state.Data().commander.missionNumber;
   if (mission == MISSION_SUPERNOVA)
@@ -926,22 +913,20 @@ void ShowMissionDebriefing(GameState& _state, Hardware& _hardware, bool _backwar
   _state.Data().commander.missionStage = 0;
 }
 
-DockedExit RunTitleAndDocked(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward)
+DockedExit RunTitleAndDocked(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
 {
   std::uint16_t countIfNone = _countIfNone;
-  bool backward = _backward;
   if (_state.Data().flow.titleShown != 1)
   {
-    countIfNone = RunTitle(_state, _hardware, _backward);
-    backward = false;
+    countIfNone = RunTitle(_state, _hardware);
   }
   // JMP into DockedKeyDispatch: back from a disk request, at the disc menu (CS:0BAC); otherwise at the status screen (CS:0B96),
   // with BP, which the status screen reads.
   if (_state.Data().saveLoad.resumeAtDiskMenu == 1)
   {
-    return DispatchDockedKeys(_state, _hardware, SCAN_ESCAPE, countIfNone, backward);
+    return DispatchDockedKeys(_state, _hardware, SCAN_ESCAPE, countIfNone);
   }
-  return DispatchDockedKeys(_state, _hardware, SCAN_F9, countIfNone, backward);
+  return DispatchDockedKeys(_state, _hardware, SCAN_F9, countIfNone);
 }
 
 } // namespace Elite

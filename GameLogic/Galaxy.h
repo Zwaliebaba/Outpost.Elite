@@ -140,7 +140,7 @@ void ComputeDistanceToSystem(GameState& _state);
 
 /// ShowNearestSystemDistance (CS:1341): the system nearest the chart cursor selected (FindNearestSystem, with
 /// _countIfNone), and 'Distance: nnn.n Light Years' and its name on the two text lines under the chart, at _segment.
-void ShowNearestSystemDistance(GameState& _state, std::uint16_t _countIfNone, std::uint16_t _segment);
+void ShowNearestSystemDistance(GameState& _state, std::uint16_t _countIfNone);
 
 /// LoadSystemSeeds (CS:139C): the seeds of system _system of the current galaxy: LoadGalaxySeeds, then
 /// AdvanceToNextSystem _system times.
@@ -155,29 +155,28 @@ std::uint8_t GenerateSystemName(GameState& _state);
 
 /// FindSystemByName (CS:140D): a name read under the chart at _segment (ReadTextLine) and, if a system of the galaxy has it and
 /// it is on the chart, the cursor moved there and ShowNearestSystemDistance; otherwise 'not on map'. Nothing typed is
-/// ShowNearestSystemDistance alone. _countIfNone is ShowNearestSystemDistance's; _backward is the direction flag, which the
-/// names' comparison (REPE CMPSB) goes by. Waits for keys as a rule (ADR-015).
-void FindSystemByName(GameState& _state, Hardware& _hardware, std::uint16_t _segment, std::uint16_t _countIfNone, bool _backward);
+/// ShowNearestSystemDistance alone. _countIfNone is ShowNearestSystemDistance's; Waits for keys as a rule (ADR-015).
+void FindSystemByName(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone);
 
 /// ShowSystemDataScreen (CS:5CDE): F7's data on the selected system and its description, then the keys until Esc or another F
 /// key (WaitForScreenExitKey, with _countIfNone), which selects the system at the chart cursor again. _backward is the
 /// direction flag, which DrawDockedFrame and ShowSystemDescription go by. Waits for keys as a rule (ADR-015).
-ScreenKey ShowSystemDataScreen(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _countIfNone);
+ScreenKey ShowSystemDataScreen(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone);
 
 /// ShowGalacticChart (CS:0CAE): F5's chart of the galaxy's 256 systems: the current system and the cursor kept for the galactic
 /// chart, a frame at a time until Esc or another F key closes it, the cursor moved by the steering. D shows the distance to the
 /// system nearest the cursor, F finds one by name, keypad 5 or fire recentres the cursor; a key that closes it selects the system
 /// at the cursor unless the hyperspace countdown runs. _backward is the direction flag on the first frame, and _segment the ES it
 /// draws its title through when the chart frame shows already (DrawChartFrame). Waits for keys as a rule (ADR-015).
-ScreenKey ShowGalacticChart(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _segment);
+ScreenKey ShowGalacticChart(GameState& _state, Hardware& _hardware);
 
 /// ShowShortRangeChart (CS:0E52): F6's chart of the systems around the current one, each a disc and a label placed clear of the
 /// others (PlaceChartLabels), run as ShowGalacticChart runs its own.
-ScreenKey ShowShortRangeChart(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _segment);
+ScreenKey ShowShortRangeChart(GameState& _state, Hardware& _hardware);
 
 /// DrawChartItems (CS:14C5): the short-range chart's chartItemCount items in colour 3: a label by DrawSmallViewString in ink
-/// FFFFh at its top-left corner, a disc (DrawDisc, which goes by _backward, the direction flag) at its centre.
-void DrawChartItems(GameState& _state, bool _backward);
+/// FFFFh at its top-left corner, a disc (DrawDisc) at its centre.
+void DrawChartItems(GameState& _state);
 
 /// PlaceChartLabels (CS:1505): each of chartItemCount pending labels, nudged clear of every chart item until
 /// NudgeChartLabel runs out of tries, added to chartItems by AddChartLabel.
@@ -195,7 +194,7 @@ void AddChartLabel(GameState& _state, ChartSpan _x, ChartSpan _rows);
 [[nodiscard]] bool ChartItemOverlaps(const GameState& _state, std::size_t _item, ChartSpan _x, ChartSpan _rows);
 
 /// ClearChartTextLines (CS:15BC): blankChartLine drawn in _ink at _segment over the two text lines under a chart.
-void ClearChartTextLines(GameState& _state, std::uint16_t _ink, std::uint16_t _segment);
+void ClearChartTextLines(GameState& _state, std::uint16_t _ink);
 
 /// TerminateSelectedSystemName (CS:60EB): a NUL after selectedSystem.name.
 void TerminateSelectedSystemName(GameState& _state);
@@ -207,7 +206,7 @@ std::string_view FormatSelectedSystemDistance(GameState& _state);
 /// ShowSystemDescription (CS:6FC0): descriptionBuffer zeroed a word at a time as REP STOSW does, backwards when _backward
 /// (the direction flag), the selected system's description expanded into it from descriptionTemplate, and printed on the text
 /// page from row 19, word-wrapped at the last space within 36 characters.
-void ShowSystemDescription(GameState& _state, bool _backward);
+void ShowSystemDescription(GameState& _state);
 
 /// ExpandDescriptionText (CS:700F): the coded text _text expanded into descriptionBuffer from its byte _output, recursively: a byte
 /// of 1-6 runs the

@@ -162,9 +162,9 @@ void AddCarried(std::uint16_t& _low, std::uint8_t& _high, std::uint16_t _value)
 
 } // namespace
 
-void ArriveInSystem(GameState& _state, Hardware& _hardware, bool _backward)
+void ArriveInSystem(GameState& _state, Hardware& _hardware)
 {
-  (void)SetUpLocalSpace(_state, _hardware, _backward);
+  (void)SetUpLocalSpace(_state, _hardware);
   if (_state.Data().commander.witchspaceCountdown != 0)
   {
     return;
@@ -236,7 +236,7 @@ MassLock IsMassLocked(GameState& _state)
   return lock;
 }
 
-void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward)
+void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
 {
   (void)EraseCompassAndBlips(_state);
   _state.Data().messages.messagePointer = Message::HyperspaceEngaged;
@@ -303,8 +303,8 @@ void CompleteHyperspaceJump(GameState& _state, Hardware& _hardware, std::uint16_
   }
 
   // The tunnel's frames end with FinishSpaceViewFrame's CLD, so the arrival copies forwards.
-  PlayHyperspaceTunnel(_state, _hardware, _backward);
-  ArriveInSystem(_state, _hardware, false);
+  PlayHyperspaceTunnel(_state, _hardware);
+  ArriveInSystem(_state, _hardware);
   UpdateMissionSchedule(_state);
   _state.Data().commander.supernovaHeat = 0;
   _state.Data().commander.supernovaFrames = 0;
@@ -353,19 +353,16 @@ void DrawHyperspaceRings(GameState& _state)
   }
 }
 
-void PlayHyperspaceTunnel(GameState& _state, Hardware& _hardware, bool _backward)
+void PlayHyperspaceTunnel(GameState& _state, Hardware& _hardware)
 {
-  // PUSH CX / POP CX keep the frames left round the frame's work. Every frame ends with
-  // FinishSpaceViewFrame's CLD, so only the first message line runs by _backward.
-  bool backward = _backward;
+  // PUSH CX / POP CX keep the frames left round the frame's work.
   for (std::uint16_t frames = HYPERSPACE_TUNNEL_FRAMES;;)
   {
-    UpdateMessageLine(_state, backward);
+    UpdateMessageLine(_state);
     DrawHyperspaceRings(_state);
     FinishSpaceViewFrame(_state, _hardware);
     // The frame as the game drew it, for a renderer that shows it in the cockpit (D68).
     _hardware.PublishSpaceViewPicture(WithoutScene(TakeFlightSnapshot(_state)));
-    backward = false;
     if (--frames == 0)
     {
       return;
@@ -425,7 +422,7 @@ void LatchHyperspaceTarget(GameState& _state)
   _state.Data().hyperspace.hyperspaceTarget = _state.Data().commander.selectedSystem;
 }
 
-bool TickHyperspaceCountdown(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone, bool _backward)
+bool TickHyperspaceCountdown(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
 {
   if (_state.Data().jump.galacticDriveReadyFrames != 0)
   {
@@ -447,7 +444,7 @@ bool TickHyperspaceCountdown(GameState& _state, Hardware& _hardware, std::uint16
   {
     return false;
   }
-  CompleteHyperspaceJump(_state, _hardware, _countIfNone, _backward);
+  CompleteHyperspaceJump(_state, _hardware, _countIfNone);
   return true;
 }
 

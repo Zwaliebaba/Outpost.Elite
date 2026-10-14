@@ -115,7 +115,7 @@ void ShowCargoMessage(GameState& _state, std::string_view _text, std::uint8_t _s
 [[nodiscard]] Quantity ReadQuantity(GameState& _state, Hardware& _hardware)
 {
   PrintTextModeString(_state, QUANTITY_PROMPT_TEXT, MESSAGE_OFFSET);
-  ReadTextLine(_state, _hardware, _state.Data().menus.quantityText, QUANTITY_DIGITS, GameState::VIDEO_SEGMENT, QUANTITY_INPUT_OFFSET);
+  ReadTextLine(_state, _hardware, _state.Data().menus.quantityText, QUANTITY_DIGITS, QUANTITY_INPUT_OFFSET);
   return ParseQuantity(_state.Data().menus.quantityText);
 }
 
@@ -245,9 +245,9 @@ void StoreLot(GameState& _state, const CargoLot& _lot)
 
 } // namespace
 
-ScreenKey ShowMarketPricesScreen(GameState& _state, Hardware& _hardware, bool _backward, std::uint16_t _countIfNone)
+ScreenKey ShowMarketPricesScreen(GameState& _state, Hardware& _hardware, std::uint16_t _countIfNone)
 {
-  const std::string_view title = DrawDockedFrame(_state, _hardware, MARKET_PRICES_FRAME, _backward);
+  const std::string_view title = DrawDockedFrame(_state, _hardware, MARKET_PRICES_FRAME);
   // The system's name, cut for good at its first space after the first letter.
   const std::span<std::uint8_t> name(_state.Data().commander.currentSystem.name);
   for (std::size_t letter = 1;; ++letter)

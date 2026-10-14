@@ -432,7 +432,7 @@ void RunMountChooser(GameState& _state, Hardware& _hardware, MountSpace _space, 
         break;
       }
       // PUSH AX and POP AX round it.
-      ClearDockedMessageLine(_state, GameState::VIDEO_SEGMENT);
+      ClearDockedMessageLine(_state);
       if (code == SCAN_SPACE)
       {
         if (_space(_state))
@@ -570,9 +570,9 @@ void TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
   _state.Data().messages.messageFrames = SCOOP_MESSAGE_FRAMES;
 }
 
-ScreenKey ShowEquipShipScreen(GameState& _state, Hardware& _hardware, bool _backward)
+ScreenKey ShowEquipShipScreen(GameState& _state, Hardware& _hardware)
 {
-  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, EQUIP_SHIP_FRAME, _backward), TITLE_OFFSET);
+  PrintTextModeString(_state, DrawDockedFrame(_state, _hardware, EQUIP_SHIP_FRAME), TITLE_OFFSET);
   PrintCountedTextLines(_state, EQUIP_HELP_TEXT, HELP_TEXT_OFFSET);
 
   // The rows on sale at the system's tech level (EquipmentRowsOnSale), each its name and its price (EquipmentPriceTenths), and a
@@ -759,14 +759,14 @@ MenuCursor StartMenu(GameState& _state)
   SwapTextAttributeNibbles(_state);
   const std::uint16_t row = MenuFirstRowCell(_state);
   _state.Data().menus.menuSelectedRow = 1;
-  ToggleMenuRowHighlight(_state, GameState::VIDEO_SEGMENT, row);
+  ToggleMenuRowHighlight(_state, row);
   return MenuCursor{row};
 }
 
 MenuCursor MoveMenuCursorUp(GameState& _state, std::uint16_t _row)
 {
   PrintCreditsOnMessageLine(_state);
-  ToggleMenuRowHighlight(_state, GameState::VIDEO_SEGMENT, _row);
+  ToggleMenuRowHighlight(_state, _row);
   std::uint16_t row = _row;
   const auto selected = static_cast<std::uint8_t>(_state.Data().menus.menuSelectedRow - 1);
   _state.Data().menus.menuSelectedRow = selected;
@@ -780,14 +780,14 @@ MenuCursor MoveMenuCursorUp(GameState& _state, std::uint16_t _row)
     row = Offset(Offset(row, quarter), static_cast<std::uint16_t>(quarter >> 2));
   }
   row = static_cast<std::uint16_t>(row - ROW_BYTES);
-  ToggleMenuRowHighlight(_state, GameState::VIDEO_SEGMENT, row);
+  ToggleMenuRowHighlight(_state, row);
   return MenuCursor{row};
 }
 
 MenuCursor MoveMenuCursorDown(GameState& _state, std::uint16_t _row)
 {
   PrintCreditsOnMessageLine(_state);
-  ToggleMenuRowHighlight(_state, GameState::VIDEO_SEGMENT, _row);
+  ToggleMenuRowHighlight(_state, _row);
   std::uint16_t row = _row;
   const auto selected = static_cast<std::uint8_t>(_state.Data().menus.menuSelectedRow + 1);
   _state.Data().menus.menuSelectedRow = selected;
@@ -797,7 +797,7 @@ MenuCursor MoveMenuCursorDown(GameState& _state, std::uint16_t _row)
     _state.Data().menus.menuSelectedRow = 1;
   }
   row = static_cast<std::uint16_t>(row + ROW_BYTES);
-  ToggleMenuRowHighlight(_state, GameState::VIDEO_SEGMENT, row);
+  ToggleMenuRowHighlight(_state, row);
   return MenuCursor{row};
 }
 

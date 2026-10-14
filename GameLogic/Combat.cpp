@@ -167,10 +167,9 @@ void SetCoordinate(SpaceObject& _slot, std::size_t _axis, std::uint16_t _value)
 }
 
 // One beam: DrawLine from (_x, the bottom row) to _target, its x in the low byte and its row in the high, as DL and DH hold it.
-// Returns what DrawLine returns.
-bool DrawBeam(GameState& _state, std::uint8_t _x, std::uint16_t _target)
+void DrawBeam(GameState& _state, std::uint8_t _x, std::uint16_t _target)
 {
-  return DrawLine(_state, Low(_target), High(_target), _x, BEAM_ROW);
+  DrawLine(_state, Low(_target), High(_target), _x, BEAM_ROW);
 }
 
 // The crosshairs' test on one axis (8A7C, 8A93): |the view coordinate _axis of _slot| * 256 over its view z, below _radius.
@@ -377,16 +376,15 @@ Explosion DropCargo(GameState& _state, const SpaceObject& _object, Explosion _le
 
 // 8B63: _target destroyed by the player's laser: credited (CreditKill), a missile locked on it unlocked
 // (CheckMissileTargetDestroyed), and exploded (ExplodeObject), with BX 0 once CreditKill paid, else _bx, what FindShipInCrosshairs
-// left there; then the beams, and the laser's flags cleared. Returns whether a beam was a horizontal line.
-bool DestroyTarget(GameState& _state, Hardware& _hardware, SpaceObject& _target, std::uint16_t _bx)
+// left there; then the beams, and the laser's flags cleared.
+void DestroyTarget(GameState& _state, Hardware& _hardware, SpaceObject& _target, std::uint16_t _bx)
 {
   const KillCredit credit = CreditKill(_state, _target);
   CheckMissileTargetDestroyed(_state, _target);
   (void)ExplodeObject(_state, _hardware, _target, credit.paidTenths ? std::uint16_t{0} : _bx);
-  const bool filled = DrawLaserBeams(_state, _hardware);
+  DrawLaserBeams(_state, _hardware);
   _state.Data().combat.miningLaserOnAsteroid = 0;
   _state.Data().playerShip.laserFiring = 0;
-  return filled;
 }
 
 // From 8AD2: the player's laser hits _target, which is marked hostile, with the impact's sound and its STI; the damage is the
@@ -511,19 +509,18 @@ std::optional<std::uint8_t> GetViewLaser(const GameState& _state)
   return static_cast<std::uint8_t>((shift >= 8 ? 0 : types >> shift) & 3);
 }
 
-bool DrawLaserBeams(GameState& _state, Hardware& _hardware)
+void DrawLaserBeams(GameState& _state, Hardware& _hardware)
 {
   // AND AX,303h / ADD AL,7Eh / ADD AH,3Eh: the point the beams end at, its x in the low byte and its row in the high, as DX
   // holds it.
   const auto scatter = static_cast<std::uint16_t>(NextRandom(_state) & BEAM_SCATTER_MASK);
   const std::uint16_t target =
     Join(static_cast<std::uint8_t>(High(scatter) + BEAM_TARGET_ROW), static_cast<std::uint8_t>(Low(scatter) + BEAM_TARGET_X));
-  bool filled = false;
   // Each beam watched for the space view, which the renderer draws in its place (ADR-035); no byte of the state is written.
-  const auto beam = [&_state, &_hardware, &filled, target](std::uint8_t _x)
+  const auto beam = [&_state, &_hardware, target](std::uint8_t _x)
   {
     _hardware.BeginSpaceViewObject();
-    filled = DrawBeam(_state, _x, target) || filled;
+    DrawBeam(_state, _x, target);
     _hardware.EndSpaceViewRendered();
     _hardware.NoteSpaceViewBeam(std::int16_t{_x}, std::int16_t{BEAM_ROW}, std::int16_t{Low(target)}, std::int16_t{High(target)},
                                 std::uint8_t{_state.Data().drawing.drawColor});
@@ -549,7 +546,7 @@ bool DrawLaserBeams(GameState& _state, Hardware& _hardware)
     }
     beam(BEAM_OUTER_LEFT);
     beam(BEAM_OUTER_RIGHT);
-    return filled;
+    return;
   }
   // Types 0 and 2: one side a shot, alternately.
   const std::uint8_t color = NextBeamColor(_state.Data().combat.laserBeamColor, (type & 2) != 0);
@@ -561,11 +558,10 @@ bool DrawLaserBeams(GameState& _state, Hardware& _hardware)
   {
     beam(BEAM_OUTER_LEFT);
     beam(BEAM_INNER_LEFT);
-    return filled;
+    return;
   }
   beam(BEAM_OUTER_RIGHT);
   beam(BEAM_INNER_RIGHT);
-  return filled;
 }
 
 Explosion ExplodeObject(GameState& _state, Hardware& _hardware, SpaceObject& _object, std::uint16_t _bx)
@@ -728,28 +724,28 @@ CrosshairTarget FindShipInCrosshairs(GameState& _state)
   return target;
 }
 
-bool ResolveLaserFire(GameState& _state, Hardware& _hardware)
+void ResolveLaserFire(GameState& _state, Hardware& _hardware)
 {
   if (_state.Data().playerShip.laserFiring != 1)
   {
-    return false;
+    return;
   }
   if (const CrosshairTarget target = FindShipInCrosshairs(_state); target.slot)
   {
     SpaceObject& hit = _state.Slot(*target.slot);
     if (HitTarget(_state, _hardware, hit))
     {
-      return DestroyTarget(_state, _hardware, hit, target.bx);
+      DestroyTarget(_state, _hardware, hit, target.bx);
+      return;
     }
   }
-  const bool filled = DrawLaserBeams(_state, _hardware);
+  DrawLaserBeams(_state, _hardware);
   if (StartLaserSound(_state))
   {
     _hardware.EnableInterrupts();
   }
   _state.Data().combat.miningLaserOnAsteroid = 0;
   _state.Data().playerShip.laserFiring = 0;
-  return filled;
 }
 
 void CheckMissileTargetDestroyed(GameState& _state, const SpaceObject& _slot)
@@ -801,16 +797,15 @@ KillCredit CreditKill(GameState& _state, SpaceObject& _slot)
   return credit;
 }
 
-bool ApplyEnemyLaserHit(GameState& _state, Hardware& _hardware)
+void ApplyEnemyLaserHit(GameState& _state, Hardware& _hardware)
 {
   if (_state.Data().combat.playerHitPending == 0)
   {
-    return false;
+    return;
   }
   // StartPlayerHitSound's CLI round its writes, which nothing interrupts in native code, then its STI.
   StartPlayerHitSound(_state);
   _hardware.EnableInterrupts();
-  bool filled = false;
   const SpaceObject& attacker = _state.Slot(_state.Data().combat.playerHitBy);
   if ((attacker.type & SLOT_DRAWN) != 0)
   {
@@ -843,7 +838,7 @@ bool ApplyEnemyLaserHit(GameState& _state, Hardware& _hardware)
     _state.Data().drawing.drawColor = ENEMY_BEAM_COLOR;
     // Watched for the space view, which the renderer draws in its place (ADR-035); no byte of the state is written.
     _hardware.BeginSpaceViewObject();
-    filled = DrawClippedLine(_state, static_cast<std::uint16_t>(from.x), static_cast<std::uint16_t>(from.y), edgeX, edgeRow);
+    DrawClippedLine(_state, static_cast<std::uint16_t>(from.x), static_cast<std::uint16_t>(from.y), edgeX, edgeRow);
     _hardware.EndSpaceViewRendered();
     _hardware.NoteSpaceViewBeam(static_cast<std::int16_t>(from.x), static_cast<std::int16_t>(from.y), static_cast<std::int16_t>(edgeX),
                                 static_cast<std::int16_t>(edgeRow), ENEMY_BEAM_COLOR);
@@ -857,7 +852,7 @@ bool ApplyEnemyLaserHit(GameState& _state, Hardware& _hardware)
   shield = static_cast<std::uint8_t>(strength - SHIELD_HIT);
   if (strength >= SHIELD_HIT)
   {
-    return filled;
+    return;
   }
   const std::uint8_t wrapped = shield;
   shield = 0;
@@ -866,11 +861,10 @@ bool ApplyEnemyLaserHit(GameState& _state, Hardware& _hardware)
   _state.Data().playerShip.playerEnergy = static_cast<std::uint16_t>(energy - excess);
   if (energy >= excess)
   {
-    return filled;
+    return;
   }
   _state.Data().playerShip.playerEnergy = 0;
   _state.Data().playerShip.playerDead = 1;
-  return filled;
 }
 
 std::optional<std::uint8_t> TakeDamage(GameState& _state, std::uint16_t _damage)

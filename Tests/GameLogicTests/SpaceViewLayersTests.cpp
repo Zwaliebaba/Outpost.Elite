@@ -510,7 +510,7 @@ public:
           DrawPixel(state, LATE_ROW, x, late(LATE_ROW, x));
         }
         hardware.EndSpaceViewObject(LATE_SLOT);
-        Elite::PresentSpaceView(state, hardware, false);
+        Elite::PresentSpaceView(state, hardware);
         hardware.PublishFlightSnapshot(Elite::TakeFlightSnapshot(state), false);
       });
     Assert::IsTrue(rig.Host().RunUntil(10'000'000) == Elite::StopReason::Terminated, L"the frame is drawn");
