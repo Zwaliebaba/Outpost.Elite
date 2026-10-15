@@ -13,7 +13,8 @@ namespace OutpostTests
 
 /// A screen's golden image (§6.5, D94): what a screen drawn on WARP from a prepared view is compared with. The test writes what
 /// it drew to RENDERED_DIRECTORY, which CI keeps as an artifact; the owner looks at it and commits it to GOLDEN_DIRECTORY as the
-/// golden. A missing golden fails; a difference is reported, not failed, as WARP's output can change with the Windows build.
+/// golden. A missing golden or a difference is reported, not failed: WARP's output can change with the Windows build, and a
+/// new screen has no golden until the owner has looked at it (D94). A golden that cannot be read fails.
 class GoldenImage
 {
 public:
@@ -38,8 +39,8 @@ public:
   /// The pixels of _found more than _tolerance from _golden in any channel; every pixel when the sizes differ.
   [[nodiscard]] static std::size_t Differences(const Picture& _found, const Picture& _golden, int _tolerance);
 
-  /// _picture, named _name, written to RENDERED_DIRECTORY and compared with its golden: the test fails when the golden is
-  /// missing or cannot be read, and writes a difference to its log.
+  /// _picture, named _name, written to RENDERED_DIRECTORY and compared with its golden: the test fails when the golden
+  /// cannot be read, and writes a missing golden or a difference to its log.
   static void Check(std::string_view _name, const Picture& _picture);
 };
 

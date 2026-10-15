@@ -240,9 +240,11 @@ void GoldenImage::Check(std::string_view _name, const Picture& _picture)
   const std::filesystem::path golden = root / GOLDEN_DIRECTORY / (name + L".png");
   if (!std::filesystem::exists(golden))
   {
-    Assert::Fail((L"no golden image " + golden.wstring() + L": look at " + rendered.wstring() +
-                  L" (the CI artifact rendered-images) and commit it there once it is right (D94)")
-                   .c_str());
+    // Reported, not failed (D94): the owner commits the golden once they have looked at what was drawn.
+    Logger::WriteMessage((L"no golden image " + golden.wstring() + L" yet: look at " + rendered.wstring() +
+                          L" (the CI artifact rendered-images) and commit it there once it is right (D94)\n")
+                           .c_str());
+    return;
   }
   const std::optional<Picture> expected = Load(golden, error);
   if (!expected)

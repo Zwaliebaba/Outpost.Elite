@@ -1,6 +1,6 @@
 # ADR-059 — OutpostTests: the shell's drawing on WARP, against golden images
 
-**Status:** accepted 2026-10-14, with the change that implements it, under the owner's ruling D94. It amends the layout ADR-004 records, adding a sixth project.
+**Status:** accepted 2026-10-14, with the change that implements it, under the owner's ruling D94. It amends the layout ADR-004 records, adding a sixth project. Amended 2026-10-15 under D94's amendment: a missing golden is reported, not failed (item 2).
 
 ## Context
 
@@ -21,9 +21,10 @@ WARP needs Windows, so the images cannot be made where the code is written here.
 2. **`GoldenImage`, in the test project.**
    - It writes what a test drew to `x64/Rendered/<name>.png` through WIC. The PNG is 24-bit, from `Renderer::Capture` at 1920 × 1080.
    - It compares the drawing with `Tests/OutpostTests/Golden/<name>.png`. A pixel differs when a channel is off by more than 8.
-   - A missing or unreadable golden fails the test, with the paths in the message. A difference is written to the test's log, not failed (§6.5).
+   - A golden that cannot be read fails the test, with the paths in the message. A missing golden and a difference are written to the test's log, not failed (§6.5).
    - CI uploads `x64/Rendered` as the artifact `rendered-images` whatever the run's outcome. The owner looks at each image and commits it to `Golden/` once it is right (D94).
-   - A test whose golden is missing therefore fails until then, by design: the first run of a new screen is red until its image is accepted.
+   - Until then, a new screen's test passes and its log names the image to look at.
+   - As first ruled, a missing golden failed. With WARP needing Windows, the images reach the tree only through the owner, and the rule held every new screen's change red until then. It was amended so that only an unreadable golden fails (D94, 2026-10-15). What this costs: until its golden is committed, nothing checks a screen against an image, only that it draws.
 3. **What the first tests draw**, from views prepared as the design's numbers:
    - `D01-Market`: D01 as `docked/01-market.png` draws it.
    - `D01-Market-States`: a refusal strip, [B] BUY and [S] SELL off, and the pointer on [S] SELL.
