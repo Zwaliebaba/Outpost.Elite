@@ -20,9 +20,6 @@ constexpr std::uint32_t AMBER_LIGHT = 0xFFFFCF80;
 constexpr std::uint32_t TEXT = 0xFFF3E6CF;
 constexpr std::uint32_t LABEL = 0xFFC9BCA6;
 constexpr std::uint32_t UNIT_SELECTED = 0xFFD1A866;
-constexpr std::uint32_t ROW_STRIPE = 0xFF161411;
-constexpr std::uint32_t ROW_SELECTED = 0xFF453416;
-constexpr std::uint32_t ROW_HOVER = 0xFF221C14;
 constexpr std::uint32_t RULE = 0xFF64491D;
 constexpr std::uint32_t CONTROL_EDGE = 0xFF886124;
 constexpr std::uint32_t CONTROL_LIT_FILL = 0xFF382A14;
@@ -199,13 +196,10 @@ void Table(const Elite::MarketView& _view, std::optional<Engine::Point> _pointer
   {
     const Engine::Rect rect = RowRect(row);
     const bool selected = row == _view.selected;
-    const bool hover = !selected && _pointer && DockedFrame::Contains(rect, *_pointer);
-    if (selected || hover || row % 2 == 1)
-    {
-      _canvas.Box(rect, selected ? ROW_SELECTED : (hover ? ROW_HOVER : ROW_STRIPE));
-    }
+    const DockedFrame::RowLook look = DockedFrame::RowLookOf(row, selected, _pointer && DockedFrame::Contains(rect, *_pointer), true);
+    DockedFrame::Row(rect, look, _canvas);
     const float y = rect.top + ROW_TEXT;
-    const std::uint32_t text = selected ? AMBER_LIGHT : TEXT;
+    const std::uint32_t text = DockedFrame::RowText(look);
     _canvas.Text(COMMODITIES[row].name, Engine::Font::Label, ROW_SIZE, 0.0f, Engine::Point{.x = NAME_X, .y = y}, Engine::Align::Left, text);
     _canvas.Text(UnitText(COMMODITIES[row].unit), Engine::Font::Label, ROW_SIZE, 0.0f, Engine::Point{.x = UNIT_X, .y = y},
                  Engine::Align::Left, selected ? UNIT_SELECTED : LABEL);

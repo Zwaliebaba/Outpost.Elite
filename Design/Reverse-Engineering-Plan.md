@@ -321,7 +321,7 @@ Then come the changes on purpose, from which the game diverges freely (D26). The
 
 About 38 days. CGA's docked text mode and the 1987 docked routines go once T7 to T16 have replaced them (D76).
 
-*Written: T3 and T7 (ADR-058); T2, the docked host on the key bar's keys, the original's screens behind them (ADR-061, D96).*
+*Written: T3 and T7 (ADR-058); T2, the docked host on the key bar's keys, the original's screens behind them (ADR-061, D96); T1, the panel, the strip, the key bar and the top bar (ADR-058) and the table row and the modal (ADR-062, D97).*
 
 **What the canvas does not show yet (D54).** Each item is in the 1987 game (Reference-Map.md, `UpdateDashboard`, `Message.h`). The owner draws it before the piece that needs it.
 
@@ -506,6 +506,7 @@ After D44, no replay reaches the docked screens. Their rules are functions with 
 | D94 | How a golden image is made, as WARP needs Windows and the docked drawing is the shell's, which no test project builds (raised with T7, 2026-10-14) | A test project, `OutpostTests`, builds the shell's drawing and renders each screen on WARP from a prepared view; a missing image fails (§6.5); the run's images are a CI artifact, which the owner commits as the golden once looked at. | **As recommended** (2026-10-14). **Amended** (2026-10-15): a missing image is reported, not failed, so a new screen does not hold CI red until its golden is committed; a golden that cannot be read still fails. ADR-059 records it. |
 | D95 | How far the comments' last 1987 goes: the narrated instructions, the registers and flags, and the word itself (raised after step 9, 2026-10-14) | All of it, after D01, as its own change: each comment says what the code does; where an answer came from stays; `Arithmetic.h`, which models the 8086's wrapping, keeps naming what it models. | **As recommended** (2026-10-14). ADR-060 records it. |
 | D96 | What the docked keys do while D02 to D10 are still the original's screens, which the original opens with F4, F5, F6, F9 and F10, and what F7 to F10 do once their screens are replaced (raised with T2, 2026-10-15) | Keep the original's keys until each screen lands, as D01 did with F2; each old key opens its screen until the screen that replaces it lands, then does nothing docked. | **The key bar's keys now** (2026-10-15): F2 the market, F3 the equipment, F4 the galactic chart, F5 the short-range chart, F6 the status screen, the original's screens behind them until theirs land, and every replay and twin that presses a docked key rewritten and re-recorded; **as recommended** for the rest: F7 and F10 keep their screens until the charts and D08 take them in, and F8 and F9, whose screens are D01 and F6's, do nothing docked. ADR-061 records it. |
+| D97 | Whether T1's table row and modal are built before the screens that use them: the modal's first users are D03, D09 and D10 (raised with T1, 2026-10-15) | Both now: D01's row moved into the frame, and the modal from D09's and D10's pixels, tested by a WARP image over D01. | **As recommended** (2026-10-15). ADR-062 records it. |
 
 ## 9. ADRs this plan produces
 
@@ -573,4 +574,5 @@ After D44, no replay reaches the docked screens. Their rules are functions with 
 | [ADR-059](ADR/ADR-059-outpost-tests.md) | OutpostTests: the shell's drawing on WARP, against golden images (D94) | Phase 6, piece 5 — written |
 | [ADR-060](ADR/ADR-060-plain-comments.md) | Plain comments: no narrated instructions, no registers, no "1987" (D95) | Phase 7, step 9 — written |
 | [ADR-061](ADR/ADR-061-the-docked-host.md) | T2, the docked host: one state machine on the key bar's keys, now (D96) | Phase 6, piece 5 — written |
+| [ADR-062](ADR/ADR-062-table-row-and-modal.md) | T1's last widgets: the table row and the modal (D97) | Phase 6, piece 5 — written |
 | — | Wholly native: the other steps after the state (D76–D80) | Phase 7 — to write |
