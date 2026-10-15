@@ -117,6 +117,8 @@
     <ClInclude Include="JumpState.h" />
     <ClInclude Include="KeyboardState.h" />
     <ClInclude Include="Market.h" />
+    <ClInclude Include="MarketScreen.h" />
+    <ClInclude Include="MarketView.h" />
     <ClInclude Include="MarketState.h" />
     <ClInclude Include="MarketTables.h" />
     <ClInclude Include="Maths.h" />
@@ -189,6 +191,7 @@
     <ClCompile Include="Hyperspace.cpp" />
     <ClCompile Include="Input.cpp" />
     <ClCompile Include="Market.cpp" />
+    <ClCompile Include="MarketScreen.cpp" />
     <ClCompile Include="Maths.cpp" />
     <ClCompile Include="Mouse.cpp" />
     <ClCompile Include="Outcome.cpp" />

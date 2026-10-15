@@ -7,7 +7,7 @@
 namespace Elite
 {
 
-// The tables and constants this subsystem reads, which nothing writes (D33, D38): source since the 1987 image went (Phase 7,
+// The tables and constants this subsystem reads, which nothing writes (D33, D38): source since the original's image went (Phase 7,
 // step 5).
 // Ai.cpp alone includes this, so they are in an unnamed namespace (D38).
 namespace

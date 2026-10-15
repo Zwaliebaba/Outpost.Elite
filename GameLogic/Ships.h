@@ -38,13 +38,13 @@ inline constexpr std::uint8_t TYPE_PLANET = 0x1F;
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
 // A slot that a routine reads, writes, copies or clears is a SpaceObject; one it searches for is its number, a SlotIndex
-// (GameState::Slot gives the record), where the original holds its offset in SI or DI.
+// (GameState::Slot gives the record), where the original holds its offset.
 
 /// Where a search of the object slots stopped.
 struct SlotSearch
 {
   bool found;     ///< a slot was found
-  SlotIndex slot; ///< it; when none was, the slot past the last one looked at, where the original leaves SI
+  SlotIndex slot; ///< it; when none was, the slot past the last one looked at, where the original's search leaves off
 };
 
 /// What IsObjectNear finds of a slot.
@@ -52,7 +52,7 @@ struct NearTest
 {
   bool nearby;                              ///< each 24-bit coordinate fits a signed word
   std::optional<DashboardPixel> erasedBlip; ///< when one does not, the last pixel of the blip EraseScannerBlip erased, if it erased one
-  std::uint8_t lastHigh;                    ///< the last high byte the test looked at, INC'd and DEC'd back: what the original leaves in AL
+  std::uint8_t lastHigh;                    ///< the last high byte the test looked at, stepped up and back down, which leaves 0 for FFh
 };
 
 /// What IsStation finds of a slot.
@@ -78,12 +78,12 @@ struct Velocity
 /// The slot ReclaimShipSlot found.
 struct ReclaimedSlot
 {
-  SlotIndex slot; ///< it, which the original leaves in SI
+  SlotIndex slot; ///< it, which the original leaves for its caller
   bool evicted;   ///< every ship slot had a blip, so this one was removed to make room
 };
 
-/// ADD [slot+4+2*axis],_value / ADC [slot+1+axis],DL with DL from CWD: _value added to the 24-bit coordinate _axis (0 x, 1 y,
-/// 2 z) of _slot, the low word, then the high byte. Not an entry: the idiom several routines share.
+/// _value, sign-extended to 24 bits, added to the 24-bit coordinate _axis (0 x, 1 y, 2 z) of _slot: the low word, then the high
+/// byte with the carry. Not an entry: the idiom several routines share.
 void AddToCoordinate(SpaceObject& _slot, int _axis, std::int16_t _value);
 
 /// ClearObjectSlot: the 64 bytes of _slot zeroed, byte by byte.
@@ -150,7 +150,7 @@ void SpawnRandomHunter(GameState& _state, SpaceObject& _slot);
 void SpawnRandomWolf(GameState& _state, SpaceObject& _slot);
 
 /// InitObjectFromTemplate: _slot from the 10-byte record _index of spawnTemplates from _first, the first of a group of
-/// them, which the original holds the address of in BX: its state, flags and
+/// them, whose address the original holds: its state, flags and
 /// aggression cleared, its scanned byte 1, its type active, then the record's nine fields.
 void InitObjectFromTemplate(SpaceObject& _slot, std::size_t _first, std::uint8_t _index);
 
@@ -172,8 +172,8 @@ void FacePlayerWithRandomRoll(GameState& _state, SpaceObject& _slot);
 /// give it, in words, of which the slot keeps the low bytes.
 Velocity ComputeVelocity(GameState& _state, SpaceObject& _slot);
 
-/// MoveObject: _slot's velocity bytes, sign-extended, added to its 24-bit position, x, y then z, each as ADD on the
-/// low word and ADC on the high byte; then IsObjectNear, and RemoveObject when it is not near.
+/// MoveObject: _slot's velocity bytes, sign-extended, added to its 24-bit position, x, y then z, each to the low word and
+/// then, with its carry, to the high byte; then IsObjectNear, and RemoveObject when it is not near.
 MovedObject MoveObject(GameState& _state, SpaceObject& _slot);
 
 /// RemoveObject: _slot's active bit cleared, then EraseScannerBlip. Returns the blip's last pixel, when it erased one.
@@ -190,15 +190,15 @@ void FacePlayer(GameState& _state, SpaceObject& _slot);
 /// slots 4-19 at random, removed (RemoveObject) to make room.
 ReclaimedSlot ReclaimShipSlot(GameState& _state);
 
-/// ClearAllObjects: shipSlotCount slots from shipSlots zeroed, a word at a time as REP STOSW does, upwards: the direction flag is
-/// clear wherever the game calls it (change 3c).
+/// ClearAllObjects: shipSlotCount slots from shipSlots zeroed, a word at a time, upwards: a string instruction runs forwards
+/// wherever the game calls it (change 3c).
 void ClearAllObjects(GameState& _state);
 
 /// FindDebrisSlot: the first inactive debris slot, or, when every one is active, the oldest, the last of equals.
 [[nodiscard]] SlotIndex FindDebrisSlot(GameState& _state);
 
-/// CopyObject: _source's 64 bytes copied over _destination's a word at a time as REP MOVSW does, upwards: the direction flag is
-/// clear wherever the game calls it (change 3c).
+/// CopyObject: _source's 64 bytes copied over _destination's a word at a time, upwards: a string instruction runs forwards
+/// wherever the game calls it (change 3c).
 void CopyObject(const SpaceObject& _source, SpaceObject& _destination);
 
 /// UpdateDebrisAi: a fragment's frame: its lifetime counted down, and at 0 its active bit cleared; otherwise its age

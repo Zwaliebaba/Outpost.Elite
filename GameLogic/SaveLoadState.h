@@ -9,8 +9,8 @@
 namespace Elite
 {
 
-/// What SaveLoad.cpp, alone, writes of the game's state (D38), and its own: read elsewhere at most, never written. Its members are the 1987
-/// data segment's, by their names, in their order there; the GameState holds it in GameData.
+/// What SaveLoad.cpp, alone, writes of the game's state (D38), and its own: read elsewhere at most, never written. Its members are the
+/// original data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct SaveLoadState
 {
   /// what ShowDiscControlScreen asks Start to do, written: 0 Exit to DOS (Start calls WipeProgram, then exits), 1 lo...
@@ -25,7 +25,7 @@ struct SaveLoadState
   CommanderState startupCommander;
   /// '12345678.CDR' template; load, save and delete use it
   std::uint8_t commanderFileName[13];
-  /// 0 keyboard, 2 mouse (names); 1987's 1, the joystick, went with D81
+  /// 0 keyboard, 2 mouse (names); the original's 1, the joystick, went with D81
   std::uint8_t inputDevice;
   /// 1 after LeaveGameLoopForDisk; makes RunTitleAndDocked reopen ShowDiscControlScreen to show the result; cleared when an F-key leaves it
   std::uint8_t resumeAtDiskMenu;

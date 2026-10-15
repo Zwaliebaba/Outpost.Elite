@@ -7,8 +7,8 @@
 namespace Elite
 {
 
-/// The hyperspace and galactic jumps under way, which flight starts and Hyperspace counts down. Its members are the 1987 data segment's, by
-/// their names, in their order there; the GameState holds it in GameData.
+/// The hyperspace and galactic jumps under way, which flight starts and Hyperspace counts down. Its members are the
+/// original's data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct JumpState
 {
   /// set by ReadScanCode when W (11h) is pressed while Alt is held; on hyperspace arrival it forces EnterWitchSpace, which puts t...

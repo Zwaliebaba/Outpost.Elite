@@ -10,13 +10,13 @@ namespace Elite
 // halves of a register, sign extension, two's complement, shifts and loop counts with the 8088's own
 // edges. Each is what one instruction, or one idiom, of the original computes.
 
-/// AL of AX, BL of BX, and so on.
+/// The low byte of _word: a register's low half.
 [[nodiscard]] constexpr std::uint8_t Low(std::uint16_t _word) noexcept
 {
   return static_cast<std::uint8_t>(_word);
 }
 
-/// AH of AX, BH of BX, and so on.
+/// The high byte of _word: a register's high half.
 [[nodiscard]] constexpr std::uint8_t High(std::uint16_t _word) noexcept
 {
   return static_cast<std::uint8_t>(_word >> 8);
@@ -28,31 +28,31 @@ namespace Elite
   return static_cast<std::uint16_t>((_high << 8) | _low);
 }
 
-/// _word with its low byte replaced: MOV AL,_low.
+/// _word with its low byte replaced: a byte MOV into a register's low half.
 [[nodiscard]] constexpr std::uint16_t WithLow(std::uint16_t _word, std::uint8_t _low) noexcept
 {
   return Join(High(_word), _low);
 }
 
-/// _word with its high byte replaced: MOV AH,_high.
+/// _word with its high byte replaced: a byte MOV into a register's high half.
 [[nodiscard]] constexpr std::uint16_t WithHigh(std::uint16_t _word, std::uint8_t _high) noexcept
 {
   return Join(_high, Low(_word));
 }
 
-/// MOV AL,_low on the register _word.
+/// _word's low byte replaced in place: a byte MOV into a register's low half.
 constexpr void SetLow(std::uint16_t& _word, std::uint8_t _low) noexcept
 {
   _word = WithLow(_word, _low);
 }
 
-/// MOV AH,_high on the register _word.
+/// _word's high byte replaced in place: a byte MOV into a register's high half.
 constexpr void SetHigh(std::uint16_t& _word, std::uint8_t _high) noexcept
 {
   _word = WithHigh(_word, _high);
 }
 
-/// XCHG AH,AL.
+/// XCHG of a register's two halves: _word with its bytes swapped.
 [[nodiscard]] constexpr std::uint16_t Swap(std::uint16_t _word) noexcept
 {
   return Join(Low(_word), High(_word));
@@ -64,7 +64,7 @@ constexpr void SetHigh(std::uint16_t& _word, std::uint8_t _high) noexcept
   return static_cast<std::uint16_t>(static_cast<std::int16_t>(static_cast<std::int8_t>(_byte)));
 }
 
-/// CWD: the DX it leaves for _word in AX, FFFFh for a negative word and 0 otherwise.
+/// CWD: the high word it leaves for _word, FFFFh for a negative word and 0 otherwise.
 [[nodiscard]] constexpr std::uint16_t SignWord(std::uint16_t _word) noexcept
 {
   return (_word & 0x8000) != 0 ? std::uint16_t{0xFFFF} : std::uint16_t{0};
@@ -94,13 +94,13 @@ constexpr void SetHigh(std::uint16_t& _word, std::uint8_t _high) noexcept
   return static_cast<std::uint8_t>(static_cast<std::int8_t>(_value) >> (_count < 8 ? _count : 7));
 }
 
-/// The turns LOOP makes from CX = _count: a count of 0 runs 65,536 times.
+/// The turns LOOP makes from a count of _count: a count of 0 runs 65,536 times.
 [[nodiscard]] constexpr std::uint32_t LoopCount(std::uint16_t _count) noexcept
 {
   return _count == 0 ? 0x10000u : _count;
 }
 
-/// _base + _bytes, wrapping at 64K as an offset does: [BX+disp], LEA.
+/// _base + _bytes, wrapping at 64K as an offset does: a base-plus-displacement address, LEA.
 [[nodiscard]] constexpr std::uint16_t Offset(std::uint16_t _base, std::uint16_t _bytes) noexcept
 {
   return static_cast<std::uint16_t>(_base + _bytes);

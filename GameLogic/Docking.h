@@ -39,8 +39,8 @@ void DrawTunnelRectangle(GameState& _state, std::size_t _rectangle);
 
 /// MaskOutsideTunnel: zeroes the space-view buffer outside the centred rectangle whose top-left corner is the first point of
 /// rectangle _rectangle of tunnelRectangles: the rows above it and its left margins each forwards, as the direction flag is clear wherever
-/// the game calls it (change 3c), then, after its STD, the rows below it and its right margins from the end of the buffer down, and its
-/// CLD.
+/// the game calls it (change 3c), then, backwards, the rows below it and its right margins from the end of the buffer down, and the
+/// direction set forwards again.
 void MaskOutsideTunnel(GameState& _state, std::size_t _rectangle);
 
 /// ToggleDockingComputer: D, released: dockingKeyReleased cleared, and the docking computer off (all sound stopped,

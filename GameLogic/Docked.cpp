@@ -9,6 +9,7 @@
 #include "Galaxy.h"
 #include "Input.h"
 #include "Market.h"
+#include "MarketScreen.h"
 #include "SaveLoad.h"
 #include "Scene.h"
 #include "SharedTables.h"
@@ -76,17 +77,11 @@ constexpr std::uint16_t LINE_7 = 0x234;
 constexpr std::uint16_t LINE_8 = 0x284;
 constexpr std::uint16_t LINE_9 = 0x2D4;
 constexpr std::uint16_t LINE_10 = 0x324;
-constexpr std::uint8_t HEADER_ATTRIBUTE = 0x4E;
-constexpr std::uint8_t ROW_ATTRIBUTE = 0x4F;
 constexpr std::uint8_t STATUS_ATTRIBUTE = 0x0F;
 constexpr std::uint8_t EQUIPMENT_HEADING_ATTRIBUTE = 0x0D;
 constexpr std::uint16_t PRODUCT_NAME_END = 0x0C; // a product name's 12 characters, then a space
-constexpr std::uint16_t UNIT_AFTER_NAME = 0x0D;  // and then its unit
 constexpr std::uint16_t PRODUCT_NAME_BYTES = 0x11;
 constexpr std::uint16_t TRADE_ROWS = 0x11;
-// A trade row's price in screenPrices: a product's buy price, then its sell price.
-constexpr std::uint16_t MenusState::ScreenPrice::*BUY_PRICE = &MenusState::ScreenPrice::price;
-constexpr std::uint16_t MenusState::ScreenPrice::*SELL_PRICE = &MenusState::ScreenPrice::resale;
 constexpr std::uint16_t INVENTORY_ROWS = 0x12; // the 17 products and the refugees
 constexpr std::uint16_t QUANTITY_DIGITS_BLANKED = 4;
 constexpr std::uint8_t LEGAL_STATUS_OFFENDER = 1;
@@ -139,7 +134,7 @@ constexpr std::uint16_t TITLE_YAW_STEP = 0x14;
 constexpr std::uint16_t TITLE_ROLL_STEP = 0x1E;
 constexpr std::uint8_t TITLE_SHIP_FLAGS = 2;
 
-// CALL GetKey; JE back to it, de-assembled: GetKey until a key comes (ADR-039). Returns the key.
+// GetKey until a key comes (ADR-039). Returns the key.
 [[nodiscard]] Task<KeyPress> WaitForKey(GameState& _state, Host& _host)
 {
   for (;;)
@@ -165,7 +160,7 @@ constexpr std::uint8_t TITLE_SHIP_FLAGS = 2;
   return _state.Data().commander.selectedSystem.name;
 }
 
-// The cash without its leading spaces: INC SI from the byte before creditBalanceText while it is on a space. Returns the cash
+// The cash without its leading spaces: a step at a time along creditBalanceText while it is on a space. Returns the cash
 // from the first character that is not a space.
 std::string_view SkipCashSpaces(const GameState& _state)
 {
@@ -227,68 +222,11 @@ void FormatQuantity(std::uint16_t _quantity, std::span<std::uint8_t> _text)
   return JoinTexts({CharText(docked.fuelUnitsDigit), FUEL_TEXT_POINT, CharText(docked.fuelTenthsDigit), FUEL_TEXT_SUFFIX});
 }
 
-// Product _product's name and unit, up to its NUL.
-[[nodiscard]] std::string_view ProductName(const GameState& _state, std::uint16_t _product)
-{
-  return TextWithin(BytesOf(_state.Data().docked.productNames), std::size_t{_product} * PRODUCT_NAME_BYTES);
-}
-
-// What both trade screens start with: the frame from the descriptor _frame and its title, the two lines of help _help, the
-// header in its attribute, the rows' attribute, and the prices; cargoRowPointer on the first product, 0.
-template <typename Frame>
-void DrawTradeScreenHeader(GameState& _state, Host& _host, const Frame& _frame, std::span<const std::string_view> _help)
-{
-  PrintTextModeString(_state, DrawDockedFrame(_state, _host, _frame), TITLE_CELL);
-  PrintTextModeString(_state, _help[0], LINE_3);
-  PrintTextModeString(_state, _help[1], LINE_4); // INC SI: the second line, after the first's NUL
-  _state.Data().drawing.textAttribute = HEADER_ATTRIBUTE;
-  PrintTextModeString(_state, TRADE_HEADER_TEXT, LINE_5);
-  _state.Data().drawing.textAttribute = ROW_ATTRIBUTE;
-  ComputeMarketPrices(_state);
-  _state.Data().docked.cargoRowPointer = 0;
-}
-
-// A trade screen's row: the rows left, the product, and the row's place on the text page. The original holds the rows left in
-// CX, the product's name in SI, the place in DI and its prices in screenPrices in BX, and pushes them at the start of each
-// row.
-struct TradeRow
-{
-  std::uint16_t left;
-  std::uint16_t product;
-  std::uint16_t cell;
-};
-
-constexpr TradeRow FIRST_TRADE_ROW{TRADE_ROWS, 0, LINE_6};
-
-// A trade row's product name and price (PrintNameAndPrice): the price _price of the row's prices, four cells after the name.
-// Returns where the price's print stops.
-std::uint16_t PrintNameAndPrice(GameState& _state, const TradeRow& _row, std::uint16_t MenusState::ScreenPrice::*_price)
-{
-  const std::uint16_t named = PrintTextModeString(_state, ProductName(_state, _row.product), _row.cell);
-  FormatTenths(_state, ElementWithin(std::span(_state.Data().menus.screenPrices), _row.product).*_price);
-  return PrintTextModeString(_state, TextWithin(_state.Data().menus.priceText, 0), Offset(named, 4));
-}
-
-// After a row's quantity, printed up to _cell (PrintUnit): the unit after the row's product name.
-void PrintUnit(GameState& _state, const TradeRow& _row, std::uint16_t _cell)
-{
-  PrintTextModeString(
-    _state, TextWithin(BytesOf(_state.Data().docked.productNames), std::size_t{_row.product} * PRODUCT_NAME_BYTES + UNIT_AFTER_NAME),
-    _cell);
-}
-
-// The end of a trade row (EndTradeRow): the next prices, then the next row's place and product, and the count.
-[[nodiscard]] TradeRow EndTradeRow(const TradeRow& _row) noexcept
-{
-  return TradeRow{static_cast<std::uint16_t>(_row.left - 1), static_cast<std::uint16_t>(_row.product + 1),
-                  Offset(_row.cell, TEXT_ROW_BYTES)};
-}
-
 // RunTitle, the title: the ship slots cleared (ClearAllObjects), the music on, the
 // player's angles, the view and the lasers zeroed, the cockpit shown (screenLayout 2, which ShowCockpitScreen copies over with the
 // direction flag clear), the message line cleared and ---- E L I T E ---- on it; then the planet and the turning ship of type
 // titleShipType, in stationSlot at its titleShipDistances, until a key: F9 and F10 step the type through 2-29, any other ends it
-// with the music off, the credits and a new game. ES is B800h throughout, from its MOV ES,AX. TitleFrameLoop is one
+// with the music off, the credits and a new game. It writes video memory at B800h throughout. TitleFrameLoop is one
 // frame.
 [[nodiscard]] Task<void> RunTitle(GameState& _state, Host& _host)
 {
@@ -306,7 +244,7 @@ void PrintUnit(GameState& _state, const TradeRow& _row, std::uint16_t _cell)
   (void)DrawScreenString(_state, ELITE_TITLE_TEXT, WHITE_MASK, TITLE_TEXT_CELL);
   SpaceObject& ship = _state.Slot(SlotIndex::Station);
   _state.Data().world.shipSlotCount = TITLE_SHIP_SLOTS;
-  // XOR AX,AX, then the yaw, the roll, the low words of x and y, the high bytes of x and y as a word, and z's high byte.
+  // Zero into the yaw, the roll, the low words of x and y, the high bytes of x and y as a word, and z's high byte.
   ship.yaw = 0;
   ship.roll = 0;
   ship.x = 0;
@@ -324,8 +262,8 @@ void PrintUnit(GameState& _state, const TradeRow& _row, std::uint16_t _cell)
     DrawTitlePlanet(_state, TITLE_PLANET_RADIUS, TITLE_PLANET_X, TITLE_PLANET_Y);
     _host.EndSpaceViewRendered();
     ship.flags = TITLE_SHIP_FLAGS;
-    // MOV BL,titleShipType / SHL BL,1 / XOR BH,BH: the type doubled indexes titleShipDistances, and INC BL makes it the type byte,
-    // active. The ship stands at the type's own distance, turned a step on each axis: the roll, the yaw, then the pitch.
+    // titleShipType doubled, in 8 bits, indexes titleShipDistances, and one more makes it the type byte, active.
+    // The ship stands at the type's own distance, turned a step on each axis: the roll, the yaw, then the pitch.
     const auto doubled = static_cast<std::uint8_t>(_state.Data().docked.titleShipType << 1);
     const std::uint16_t distance = TITLE_SHIP_DISTANCES[doubled / 2];
     ship.type = static_cast<std::uint8_t>(doubled + 1);
@@ -384,13 +322,13 @@ struct DockedScreen
 };
 
 constexpr std::array<DockedScreen, 9> DOCKED_SCREENS = {{
-  {SCAN_F2, &ShowSellCargoScreen},
-  {SCAN_F3, &ShowBuyCargoScreen},
+  {SCAN_F2, &ShowMarketScreen},
+  {SCAN_F3, &ShowMarketScreen},
   {SCAN_F4, &ShowEquipShipScreen},
   {SCAN_F5, &ShowGalacticChart},
   {SCAN_F6, &ShowShortRangeChart},
   {SCAN_F7, &ShowSystemDataScreen},
-  {SCAN_F8, &ShowMarketPricesScreen},
+  {SCAN_F8, &ShowMarketScreen},
   {SCAN_F9,
    [](GameState& _state, Host& _host)
    {
@@ -435,7 +373,7 @@ constexpr std::array<DockedScreen, 9> DOCKED_SCREENS = {{
         screenKey = key.scanCode;
         break;
       }
-      // DEC AH: Esc reaches 0, and shows the disc menu.
+      // Esc, whose scan code less one is 0, shows the disc menu.
       if (key.scanCode == SCAN_ESCAPE)
       {
         screenKey = SCAN_ESCAPE;
@@ -459,7 +397,7 @@ void PrintCreditsOnMessageLine(GameState& _state)
 
 void FormatFuelLightYears(GameState& _state)
 {
-  // MUL AH by 10, then DIV BL by 36, which cannot overflow: at most 2550/36.
+  // The fuel times 10, then divided by 36 to a byte, which cannot overflow: at most 2550/36.
   const auto tenths = static_cast<std::uint16_t>(_state.Data().commander.fuel * FUEL_TENTHS_PER_UNIT);
   DockedState& docked = _state.Data().docked;
   FormatDecimal5(static_cast<std::uint8_t>(tenths / FUEL_UNITS_PER_TENTH), docked.fuelDigits);
@@ -546,90 +484,6 @@ void AwardArchangelTitle(GameState& _state)
   }
 }
 
-[[nodiscard]] Task<ScreenKey> ShowSellCargoScreen(GameState& _state, Host& _host)
-{
-  DrawTradeScreenHeader(_state, _host, SELL_CARGO_FRAME, SELL_CARGO_HELP_LINES);
-  TradeRow row = FIRST_TRADE_ROW;
-  for (;;)
-  {
-    const std::uint16_t price = PrintNameAndPrice(_state, row, SELL_PRICE);
-    // The units held, from the cargoHold entry of the product cargoRowPointer numbers, which moves on to the next.
-    const std::uint16_t product = _state.Data().docked.cargoRowPointer;
-    const std::uint8_t held = LotOf(_state, product).held;
-    _state.Data().docked.cargoRowPointer = static_cast<std::uint16_t>(product + 1);
-    if (held != 0)
-    {
-      FormatQuantity(held, _state.Data().menus.quantityText);
-      const std::uint16_t quantity =
-        PrintTextModeString(_state, TextWithin(BytesOf(_state.Data().menus.quantityText), 0), Offset(price, 2));
-      PrintUnit(_state, row, quantity);
-    }
-    else
-    {
-      PrintTextModeString(_state, NO_QUANTITY_TEXT, price);
-    }
-    row = EndTradeRow(row);
-    if (row.left == 0)
-    {
-      break;
-    }
-  }
-  _state.Data().docked.tradeScreenIsBuy = 0;
-  co_return co_await RunCargoTradeMenu(_state, _host);
-}
-
-[[nodiscard]] Task<ScreenKey> ShowBuyCargoScreen(GameState& _state, Host& _host)
-{
-  StartMarketRandom(_state);
-  DrawTradeScreenHeader(_state, _host, BUY_CARGO_FRAME, BUY_CARGO_HELP_LINES);
-  TradeRow row = FIRST_TRADE_ROW;
-  for (;;)
-  {
-    const std::uint16_t price = PrintNameAndPrice(_state, row, BUY_PRICE);
-    std::optional<std::uint8_t> onSale;
-    if (_state.Data().commander.marketQuantitiesSet == 0)
-    {
-      // The quantity on sale, the first time after an arrival.
-      onSale = RollQuantityOnSale(_state);
-    }
-    else
-    {
-      const std::uint8_t drawn = LotOf(_state, _state.Data().docked.cargoRowPointer).onSale;
-      if (drawn != 0)
-      {
-        onSale = drawn;
-      }
-    }
-    // The quantity into the market's byte of the product's cargoHold entry, and cargoRowPointer on to the next product.
-    if (onSale)
-    {
-      FormatQuantity(*onSale, _state.Data().menus.quantityText);
-      const std::uint16_t quantity =
-        PrintTextModeString(_state, TextWithin(BytesOf(_state.Data().menus.quantityText), 0), Offset(price, 2));
-      const std::uint16_t product = _state.Data().docked.cargoRowPointer;
-      LotOf(_state, product).onSale = *onSale;
-      _state.Data().docked.cargoRowPointer = static_cast<std::uint16_t>(product + 1);
-      PrintUnit(_state, row, quantity);
-    }
-    else
-    {
-      PrintTextModeString(_state, NO_QUANTITY_TEXT, price);
-      const std::uint16_t product = _state.Data().docked.cargoRowPointer;
-      LotOf(_state, product).onSale = 0;
-      _state.Data().docked.cargoRowPointer = static_cast<std::uint16_t>(product + 1);
-      // The jump back into the row's end, with CX the count and BX the next prices.
-    }
-    row = EndTradeRow(row);
-    if (row.left == 0)
-    {
-      break;
-    }
-  }
-  _state.Data().docked.tradeScreenIsBuy = 1;
-  _state.Data().commander.marketQuantitiesSet = 1;
-  co_return co_await RunCargoTradeMenu(_state, _host);
-}
-
 [[nodiscard]] Task<ScreenKey> ShowCommanderStatusScreen(GameState& _state, Host& _host)
 {
   if (_state.Data().flow.inFlight != 1 && _state.Data().commander.missionNumber != 0)
@@ -695,7 +549,7 @@ void AwardArchangelTitle(GameState& _state)
       if (SelectLaserType(_state))
       {
         std::uint16_t cell = PrintTextModeString(_state, MOUNTS_OPEN_TEXT, named);
-        // Each mount with this type of laser, from laserMountsFitted in DL and laserMountTypes in DH.
+        // Each mount with this type of laser, from laserMountsFitted and laserMountTypes, a bit of each at a time.
         std::uint8_t mounts = _state.Data().commander.laserMountsFitted;
         std::uint8_t types = _state.Data().commander.laserMountTypes;
         std::size_t mountName = 0;
@@ -792,7 +646,7 @@ void AwardArchangelTitle(GameState& _state)
     std::span<const std::string_view> reply = SUPERNOVA_REFUSED_LINES;
     if (answer == SCAN_Y)
     {
-      // The hold emptied for the refugees: MOV [DI],CH, which is 0, at each of the 17 amounts.
+      // The hold emptied for the refugees: 0 at each of the 17 amounts.
       for (std::uint16_t product = 0, left = TRADE_ROWS;;)
       {
         LotOf(_state, product).held = 0;
@@ -898,7 +752,7 @@ void AwardArchangelTitle(GameState& _state)
   {
     co_await RunTitle(_state, _host);
   }
-  // JMP into DockedKeyDispatch: back from a disk request, at the disc menu; otherwise at the status screen.
+  // On into DockedKeyDispatch: back from a disk request, at the disc menu; otherwise at the status screen.
   if (_state.Data().saveLoad.resumeAtDiskMenu == 1)
   {
     co_return co_await DispatchDockedKeys(_state, _host, SCAN_ESCAPE);

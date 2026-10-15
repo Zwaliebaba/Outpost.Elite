@@ -8,45 +8,13 @@
 namespace Elite
 {
 
-// The tables and constants this subsystem reads, which nothing writes (D33, D38): source since the 1987 image went (Phase 7,
+// The tables and constants this subsystem reads, which nothing writes (D33, D38): source since the original's image went (Phase 7,
 // step 5).
 // Market.cpp alone includes this, so they are in an unnamed namespace (D38).
 namespace
 {
 
 constexpr std::string_view PRICES_HEADER_TEXT = "PRODUCT    UNIT   BUY   /  SELL";
-
-constexpr std::string_view NO_QUANTITY_TEXT = "    -  ";
-
-constexpr std::string_view NOTHING_TO_SELL_TEXT = "Nothing to sell!   ";
-
-constexpr std::string_view SOLD_TEXT = "Sold specified qty.";
-
-constexpr std::string_view QUANTITY_PROMPT_TEXT = "Quantity?          ";
-
-constexpr std::string_view NOTHING_SOLD_TEXT = "Nothing Sold!      ";
-
-constexpr std::string_view QUANTITY_ERROR_TEXT = "ERROR: 0..250 only!";
-
-constexpr std::string_view NOT_ENOUGH_TO_SELL_TEXT = "Not enough to sell!";
-
-constexpr std::string_view NOTHING_TO_BUY_TEXT = "Nothing to buy!    ";
-
-constexpr std::string_view BOUGHT_TEXT = "Bought reqd. qty.  ";
-
-constexpr std::string_view CARGO_BAY_FULL_TEXT = "Cargo bay full!    ";
-
-constexpr std::string_view NOTHING_BOUGHT_TEXT = "Nothing bought!    ";
-
-constexpr std::string_view FULL_TO_CAPACITY_TEXT = "Full to capacity!  ";
-
-constexpr std::string_view CANNOT_BUY_TEXT = "Can not buy item!  ";
-
-constexpr std::string_view NOT_ENOUGH_CREDITS_TEXT = "Not enough credits!";
-
-constexpr std::string_view CANNOT_CARRY_TEXT = "Can not carry qty! ";
-
-constexpr std::string_view NOT_ENOUGH_TO_BUY_TEXT = "Not enough to buy! ";
 
 /// marketPricesFrame: frame bytes, then " MARKET PRICES"
 constexpr std::string_view MARKET_PRICES_FRAME = "/+ MARKET PRICES";

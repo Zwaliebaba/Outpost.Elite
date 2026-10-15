@@ -210,6 +210,12 @@
     <ClInclude Include="Market.h">
       <Filter>Market</Filter>
     </ClInclude>
+    <ClInclude Include="MarketScreen.h">
+      <Filter>Market</Filter>
+    </ClInclude>
+    <ClInclude Include="MarketView.h">
+      <Filter>Market</Filter>
+    </ClInclude>
     <ClInclude Include="MarketState.h">
       <Filter>Market</Filter>
     </ClInclude>
@@ -420,6 +426,9 @@
       <Filter>Input</Filter>
     </ClCompile>
     <ClCompile Include="Market.cpp">
+      <Filter>Market</Filter>
+    </ClCompile>
+    <ClCompile Include="MarketScreen.cpp">
       <Filter>Market</Filter>
     </ClCompile>
     <ClCompile Include="Maths.cpp">

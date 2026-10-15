@@ -20,7 +20,7 @@ namespace
 
 // The .cdr file's size: the commander's bytes (D78).
 constexpr std::size_t COMMANDER_FILE_BYTES = 208;
-// The state's bytes as its members write them: what the 1987 data segment's members took, less the joystick's ten (D81), the Amstrad's flag (D12) and the
+// The state's bytes as its members write them: what the original data segment's members took, less the joystick's ten (D81), the Amstrad's flag (D12) and the
 // screenshots' 24 (D86).
 constexpr std::size_t STATE_BYTES = 14'340;
 
@@ -84,13 +84,13 @@ public:
   }
 
   // The GameState owns the game's memory (D19), started as SetStartState sets it: the
-  // state the 1987 image loaded, whose hash this was measured as when the image still loaded it (Phase 7, step 4); a write to a member
-  // or to video memory lands there, and an offset past video memory is refused.
+  // state the original's image loaded, whose hash this was measured as when the image still loaded it (Phase 7, step 4); a write to a
+  // member or to video memory lands there, and an offset past video memory is refused.
   TEST_METHOD(TheGameStateHoldsTheGamesMemory)
   {
     GameRig rig("GameState");
     Elite::GameState& state = rig.State();
-    // The state as the 1987 image loaded it, less the joystick's members (D81), the Amstrad's flag (D12) and the screenshots' (D86), and video memory clear until the game sets its first mode.
+    // The state as the original's image loaded it, less the joystick's members (D81), the Amstrad's flag (D12) and the screenshots' (D86), and video memory clear until the game sets its first mode.
     Elite::Sha256 start;
     start.Update(Elite::StateBytes(std::as_const(state).Data()));
     Assert::AreEqual("2cd124d640cc79dfd6d6c65508f90b0e5c05646aa308ef7651cf45ebc767877d", Elite::Sha256::ToHex(start.Finish()).c_str(),

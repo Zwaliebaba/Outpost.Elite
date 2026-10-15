@@ -24,7 +24,7 @@ inline constexpr std::size_t DRAWING_BUFFER_BYTES = 0x2000;
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
-// Each is what the 1987 routine of its name computes, with no register in sight, and every byte it writes is written as the
+// Each is what the original routine of its name computes, with no register in sight, and every byte it writes is written as the
 // original writes it, in the same order and at the same width. A string instruction runs forwards (ADR-046).
 
 /// A point of the screen, x and row, signed: a vertex of vertexBuffer once ProjectVertices has projected it, what ProjectToScreen
@@ -35,8 +35,7 @@ struct ScreenPoint
   std::int16_t y;
 };
 
-/// Three projected vertices: a face's first three, which say which way it faces, or a filled triangle's corners A, B and C, as
-/// the original holds them in (AX, DX), (BX, BP) and (CX, DI).
+/// Three projected vertices: a face's first three, which say which way it faces, or a filled triangle's corners A, B and C.
 struct Triangle
 {
   ScreenPoint first;
@@ -60,7 +59,7 @@ struct Triangle
 /// through _host.
 [[nodiscard]] Task<void> CopyChartBufferToScreen(GameState& _state, Host& _host, std::uint8_t _bandsSkipped);
 
-/// ClearDrawBuffer: the drawing buffer (DrawingBuffer) zeroed a word at a time as REP STOSW does.
+/// ClearDrawBuffer: the drawing buffer (DrawingBuffer) zeroed a word at a time, forwards.
 void ClearDrawBuffer(GameState& _state);
 
 /// PlotPixel: the pixel at _x, _row of the drawing buffer set to colorFillBytes[drawColor].
@@ -70,31 +69,31 @@ void PlotPixel(GameState& _state, std::uint8_t _x, std::uint8_t _row);
 /// drawn (DrawLine).
 void DrawClippedLine(GameState& _state, std::uint16_t _fromX, std::uint16_t _fromRow, std::uint16_t _toX, std::uint16_t _toRow);
 
-/// A line as DrawClippedLine's clip routines hold it: its ends (CX, AX) and (DX, BX), the first coordinate of each the one an edge
-/// cuts and the second the one along it, and BP, the count of ends still outside 0-255.
+/// A line as DrawClippedLine's clip routines hold it: its two ends, the first coordinate of each the one an edge cuts and the
+/// second the one along it, and the count of ends still outside 0-255.
 struct ClipLine
 {
-  std::uint16_t firstCut;    ///< CX
-  std::uint16_t firstAlong;  ///< AX
-  std::uint16_t secondCut;   ///< DX
-  std::uint16_t secondAlong; ///< BX
-  std::uint16_t outside;     ///< BP
+  std::uint16_t firstCut;    ///< the first end, across the edge
+  std::uint16_t firstAlong;  ///< the first end, along it
+  std::uint16_t secondCut;   ///< the second end, across the edge
+  std::uint16_t secondAlong; ///< the second end, along it
+  std::uint16_t outside;     ///< the ends with a coordinate outside 0-255
 };
 
 /// What a clip routine leaves: the line, an end moved onto the edge where one was cut, and the flags DrawClippedLine reads.
 struct ClipStep
 {
   ClipLine line;
-  bool draw;      ///< CF: some of the line may still show
-  bool allInside; ///< ZF: no end is outside any more
+  bool draw;      ///< some of the line may still show
+  bool allInside; ///< no end is outside any more
 };
 
 /// ClipLineToLowEdge: of _line's ends, the one below 0 on the cut axis moved along the line onto 0, the first end, or
-/// the second with the ends swapped (SwapThenCutLine); BP less one when the moved end lands inside. Both below: nothing to draw.
+/// the second with the ends swapped (SwapThenCutLine); outside less one when the moved end lands inside. Both below: nothing to draw.
 [[nodiscard]] ClipStep ClipLineToLowEdge(ClipLine _line);
 
 /// ClipLineToHighEdge: ClipLineToLowEdge for the edge at 255, the caller having subtracted 0FFh from the cut
-/// coordinates: the end at or beyond 0 is the one moved. Both inside: still to draw; both beyond: nothing to draw, ZF set when
+/// coordinates: the end at or beyond 0 is the one moved. Both inside: still to draw; both beyond: nothing to draw, allInside set when
 /// the first end's high byte is 0.
 [[nodiscard]] ClipStep ClipLineToHighEdge(ClipLine _line);
 
@@ -103,7 +102,7 @@ struct ClipStep
 void DrawCircle(GameState& _state, std::uint8_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow);
 
 /// DrawLine: Bresenham from (_fromX, _fromRow) to (_toX, _toRow) into the drawing buffer in colorFillBytes[drawColor];
-/// a horizontal line's whole bytes are filled as REP STOSB fills them, forwards.
+/// a horizontal line's whole bytes are filled a byte at a time, forwards.
 void DrawLine(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromRow, std::uint8_t _toX, std::uint8_t _toRow);
 
 /// DrawDisc: a disc of radius _radius filled at (_centerX, _centerRow), signed words, in colorFillBytes[drawColor & 3],
@@ -112,18 +111,18 @@ void DrawLine(GameState& _state, std::uint8_t _fromX, std::uint8_t _fromRow, std
 void DrawDisc(GameState& _state, std::uint16_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow);
 
 /// FillSpan: row _doubledRow / 2 of the drawing buffer filled with discFillByte from x = _left to x = _right, the
-/// end bytes through spanLeftMasks and spanRightMasks and the bytes between them by STOSB and REP STOSW into ES = DS.
+/// end bytes through spanLeftMasks and spanRightMasks and the bytes between them by a byte store and word stores.
 void FillSpan(GameState& _state, std::uint8_t _left, std::uint8_t _right, std::uint8_t _doubledRow);
 
 /// FillTriangleSpan: x = _left to _right, _left first, of the drawing buffer's row at its byte _row filled with _fill: the
-/// end bytes through triangleEdgeMasks, which the original reads through BP, and the bytes between
-/// them by STOSB and REP STOSW into ES = DS.
+/// end bytes through triangleEdgeMasks, which the original reads in the stack segment, and the bytes between
+/// them by byte and word stores.
 void FillTriangleSpan(GameState& _state, std::uint16_t _row, std::uint8_t _left, std::uint8_t _right, std::uint8_t _fill);
 
 /// FillTriangle: _triangle filled with triangleFillPattern, its low byte on even rows and its high on odd ones. Wholly
 /// on the drawing buffer, the rows' spans are walked down from the top on 8.8 edges into a container, as the original pushes
 /// them, and drawn from the bottom up, as it pops them (DrawStackedSpansFromRow, FillTriangleSpan); otherwise FillClippedTriangle.
-/// The edges' steps are the instructions it patches into its code, ADD or SUB, which it writes as the original does.
+/// The edges' steps are the instructions it patches into its code, an add or a subtract, which it writes as the original does.
 void FillTriangle(GameState& _state, Triangle _triangle);
 
 /// FillClippedTriangle: FillTriangle's path for a triangle not wholly on the buffer, _doubled's rows twice the rows: one
@@ -154,7 +153,7 @@ void ClearCgaScreen(GameState& _state);
 void ClearTextScreen(GameState& _state);
 
 /// DrawChartFrame: unless the chart frame shows already (screenLayout 1), graphics mode from text or a clear screen from
-/// graphics, screenLayout 1, and the frame's box in colour 3: four horizontal lines by REP STOSW, forwards, then
+/// graphics, screenLayout 1, and the frame's box in colour 3: four horizontal lines a word at a time, forwards, then
 /// the two verticals a byte at a time.
 ScreenChange DrawChartFrame(GameState& _state, Host& _host);
 

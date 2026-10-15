@@ -44,7 +44,7 @@ constexpr std::uint8_t LEFT = 2;
 
 } // namespace
 
-// The shipyard's rules (D53, D74), by known answers: what the 1987 routines decide, with no state and no screen (ADR-043).
+// The shipyard's rules (D53, D74), by known answers: what the original routines decide, with no state and no screen (ADR-043).
 // EquipmentAnswerTests checks the prices over every shipyard.
 TEST_CLASS(EquipmentRulesTests)
 {

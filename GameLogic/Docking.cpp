@@ -90,10 +90,11 @@ static_assert(VIEW_BUFFER_BYTES == DRAWING_BUFFER_BYTES);
   return DrawingBuffer(_state);
 }
 
-// REP STOSB or REP STOSW into the space view's buffer from its byte _offset, ES = DS: _value, or its low byte, _count times, a byte or a
-// word at a time (_bytes), backwards when _backward: MaskOutsideTunnel's STD half. Returns the offset after the last, which the original
-// leaves in DI. Every store of every tunnel rectangle is in the buffer, either way (measured from tunnelRectangles: 382 to 7,872), so a
-// store outside it throws std::out_of_range (BytesWithin) rather than reaching on into the data segment as the original would (change 3c).
+// A run of stores into the space view's buffer from its byte _offset: _value, or its low byte, _count times, a byte or a word at a
+// time (_bytes), backwards when _backward: MaskOutsideTunnel's backward half. Returns the offset after the last, where the original's
+// store pointer is left. Every store of every tunnel rectangle is in the buffer, either way (measured from tunnelRectangles: 382 to
+// 7,872), so a store outside it throws std::out_of_range (BytesWithin) rather than reaching on into the data segment as the original
+// would (change 3c).
 std::uint16_t Store(GameState& _state, std::uint16_t _offset, std::uint16_t _count, std::uint16_t _value, std::uint16_t _bytes,
                     bool _backward)
 {
@@ -116,14 +117,14 @@ std::uint16_t Store(GameState& _state, std::uint16_t _offset, std::uint16_t _cou
   return at;
 }
 
-// Rectangle _rectangle of tunnelRectangles, its five points of two signed bytes, x and y. The original holds the rectangle's
-// address in SI. No loop reaches the one past the last: the last frames draw from 0-9 to the tenth.
+// Rectangle _rectangle of tunnelRectangles, its five points of two signed bytes, x and y. No loop reaches the one past the
+// last: the last frames draw from 0-9 to the tenth.
 [[nodiscard]] std::span<const std::uint8_t> TunnelRectangle(std::size_t _rectangle)
 {
   return std::span<const std::uint8_t>(TUNNEL_RECTANGLES).subspan(_rectangle * TUNNEL_RECTANGLE_BYTES, TUNNEL_RECTANGLE_BYTES);
 }
 
-// _count of tunnelRectangles from _first, each by DrawTunnelRectangle in the tunnel's colour, in the LOOP.
+// _count of tunnelRectangles from _first, each by DrawTunnelRectangle in the tunnel's colour, the count taken down after each.
 void DrawTunnelRectangles(GameState& _state, std::size_t _first, std::uint16_t _count)
 {
   std::size_t next = _first;
@@ -140,7 +141,7 @@ void DrawTunnelRectangles(GameState& _state, std::size_t _first, std::uint16_t _
   }
 }
 
-// MOV CX,_ticks, then WaitForTimerTick and the LOOP back to it: about _ticks milliseconds. The original leaves CX = 0.
+// WaitForTimerTick _ticks times, counted down after each: about _ticks milliseconds.
 [[nodiscard]] Task<void> WaitTimerTicks(GameState& _state, Host& _host, std::uint16_t _ticks)
 {
   std::uint16_t count = _ticks;
@@ -161,8 +162,7 @@ void PostDockingMessage(GameState& _state, Message _message)
   _state.Data().messages.messageFrames = DOCKING_MESSAGE_FRAMES;
 }
 
-// The station's position, z moved out to the approach point when _approach: what the original loads into AX, BX
-// and CX, with DI the station's slot.
+// The station's position, z moved out to the approach point when _approach.
 [[nodiscard]] Vector LoadStationPosition(GameState& _state, bool _approach)
 {
   const SpaceObject& station = _state.Slot(SlotIndex::Station);
@@ -178,7 +178,7 @@ void Steer(GameState& _state, std::uint16_t _steering)
   _state.Data().playerShip.rollRate = _steering;
 }
 
-// playerSpeed up by 4, and then held at 48: ADD and a MOV over it.
+// playerSpeed up by 4, and then held at 48: the sum written, and 48 over it.
 void SpeedUp(GameState& _state)
 {
   const auto speed = static_cast<std::uint16_t>(_state.Data().playerShip.playerSpeed + SPEED_STEP);
@@ -189,7 +189,7 @@ void SpeedUp(GameState& _state)
   }
 }
 
-// playerSpeed down by 4, and 4 again where that reaches 0: SUB and a MOV over it.
+// playerSpeed down by 4, and 4 again where that reaches 0: the difference written, and 4 over it.
 void SlowDown(GameState& _state)
 {
   const auto speed = static_cast<std::uint16_t>(_state.Data().playerShip.playerSpeed - SPEED_STEP);
@@ -200,7 +200,7 @@ void SlowDown(GameState& _state)
   }
 }
 
-// SAR r,1 twice: a rotated coordinate quartered for ArcTangent2.
+// A rotated coordinate quartered for ArcTangent2, shifted right twice with its sign kept.
 [[nodiscard]] std::int16_t Quarter(std::int16_t _value) noexcept
 {
   return static_cast<std::int16_t>(Sar(static_cast<std::uint16_t>(_value), 2));
@@ -264,11 +264,11 @@ void PitchToTarget(GameState& _state, bool _approach, std::uint16_t _tolerance, 
   const std::uint16_t angle = ArcTangent2(Quarter(target.y), Quarter(target.z));
   if (!AngleWithinTolerance(angle, 0, _tolerance))
   {
-    // MOV AL,step / TEST AX,400h / NEG AL / MOV AH,AL / XOR AL,AL: the step, against the angle's sign, in the high byte.
+    // The step, negated when the angle is negative, in the high byte, the low byte 0.
     Steer(_state, Join((angle & ANGLE_SIGN) != 0 ? Negate(_step) : _step, 0));
     return;
   }
-  // SAR AX,1 / MOV AH,AL / XOR AL,AL: half the angle, its low byte in the high byte.
+  // Half the angle, its sign kept, its low byte in the high byte and the low byte 0.
   Steer(_state, Join(Low(Sar(angle, 1)), 0));
   if (_state.Data().docking.dockingAlignPasses != 1)
   {
@@ -281,7 +281,7 @@ void PitchToTarget(GameState& _state, bool _approach, std::uint16_t _tolerance, 
   _state.Data().playerShip.velocityDirty = 1;
 }
 
-// CWD / IDIV BX: _coordinate over _frames, the frames left; with no frame left it divides by 0 into the game's trap.
+// _coordinate, sign-extended, over _frames, the frames left, as a signed divide; with no frame left it divides by 0 into the game's trap.
 [[nodiscard]] std::uint16_t VelocityOver(std::uint16_t _coordinate, std::uint16_t _frames)
 {
   const auto dividend = static_cast<std::uint32_t>(static_cast<std::int32_t>(static_cast<std::int16_t>(_coordinate)));
@@ -289,7 +289,7 @@ void PitchToTarget(GameState& _state, bool _approach, std::uint16_t _tolerance, 
 }
 
 // State 4: fly straight to the approach point, faster while 350 or more away (SpeedUp, SlowDown), at the velocity
-// that gets there in the frames left, the distance over the speed: XOR DX,DX / DIV playerSpeed, a speed of 0 dividing into the
+// that gets there in the frames left, the distance over the speed, unsigned, a speed of 0 dividing into the
 // game's trap. On the last frame there, the ship stops on it and goes on to state 5.
 // MoveObjectsByVelocity moves the world either way.
 void FlyToApproachPoint(GameState& _state)
@@ -318,7 +318,7 @@ void FlyToApproachPoint(GameState& _state)
     _state.Data().docking.dockingAlignPasses = 0;
     return;
   }
-  // MOV AX,[DI+axis] (and ADD AX,7D0h for z), then the divide, for x, y and z.
+  // Each coordinate of the approach point (z moved out by 7D0h) over the frames left, for x, y and z.
   _state.Data().playerShip.playerVelocityX = VelocityOver(static_cast<std::uint16_t>(approach.x), frames);
   _state.Data().playerShip.playerVelocityY = VelocityOver(static_cast<std::uint16_t>(approach.y), frames);
   _state.Data().playerShip.playerVelocityZ = VelocityOver(static_cast<std::uint16_t>(approach.z), frames);
@@ -356,7 +356,7 @@ void CloseIn(GameState& _state)
   _state.Data().playerShip.velocityDirty = 1;
 }
 
-// The station's spin angle plus _turn, negated for a Dodo (IsStation's CF).
+// The station's spin angle plus _turn, negated for a Dodo (IsStation's dodo).
 [[nodiscard]] std::uint16_t LoadStationSpin(GameState& _state, std::uint16_t _turn)
 {
   const SpaceObject& station = _state.Slot(SlotIndex::Station);
@@ -377,13 +377,13 @@ void MatchSpin(GameState& _state)
   }
   else if (AngleWithinTolerance(spin, Offset(roll, HALF_TURN), SPIN_TOLERANCE))
   {
-    // ADD CX,400h on the roll the first test left sign-extended in CX, which the second masks off again.
+    // Half a turn added to the roll as the first test left it, sign-extended, which the second masks off again.
     _state.Data().docking.dockingComputerState = ROLL_WITH_SPIN_TURNED;
   }
 }
 
 // States 10 and 11: MoveObjectsByVelocity, then the roll steered by half its difference from the station's
-// spin plus _turn, negated as a byte: NEG AL / XOR AH,AH.
+// spin plus _turn, negated as a byte, the high byte 0.
 void RollWithSpin(GameState& _state, std::uint16_t _turn)
 {
   MoveObjectsByVelocity(_state);
@@ -442,15 +442,14 @@ bool CheckDockingAlignment(const GameState& _state, const SpaceObject& _station,
 
 void MaskOutsideTunnel(GameState& _state, std::size_t _rectangle)
 {
-  // The margins: x/4 bytes either side, and the rows above and below the rectangle, in the space-view buffer,
-  // through ES = DS.
+  // The margins: x/4 bytes either side, and the rows above and below the rectangle, in the space-view buffer.
   const std::span<const std::uint8_t> corner = TunnelRectangle(_rectangle);
   const auto sideBytes = static_cast<std::uint16_t>(static_cast<std::uint8_t>(corner[0] + VIEW_CENTER_X) >> 2);
   const std::uint8_t top = corner[1];
   const auto rows = static_cast<std::uint16_t>(static_cast<std::uint8_t>(Negate(top) << 1));
   const auto marginWords = static_cast<std::uint16_t>(static_cast<std::uint8_t>(top + VIEW_CENTER_ROW) << 5);
   // The rows above, then the sides of each row of the rectangle, forwards: the direction flag is clear wherever the game calls it (change
-  // 3c). DEC BX and JNE count the rows, 65,536 for 0.
+  // 3c). The rows are counted down after each, 65,536 for 0.
   std::uint16_t row = Store(_state, 0, marginWords, 0, 2, false);
   std::uint16_t left = rows;
   do
@@ -459,7 +458,7 @@ void MaskOutsideTunnel(GameState& _state, std::size_t _rectangle)
     row = Offset(row, VIEW_ROW_BYTES);
   } while (--left != 0);
 
-  // The same from the end of the buffer, backwards (STD).
+  // The same from the end of the buffer, backwards.
   row = Offset(Store(_state, VIEW_LAST_WORD, marginWords, 0, 2, true), 1);
   left = rows;
   do
@@ -471,14 +470,14 @@ void MaskOutsideTunnel(GameState& _state, std::size_t _rectangle)
 
 [[nodiscard]] Task<void> PlayStationTunnel(GameState& _state, Host& _host)
 {
-  // MOV AX,leavingStationMessage, or autoDockMessage when docked, for one frame.
+  // leavingStationMessage, or autoDockMessage when docked, posted for one frame.
   _state.Data().messages.messagePointer = _state.Data().flight.playerDocked != 0 ? Message::AutoDock : Message::LeavingStation;
   _state.Data().messages.messageFrames = 1;
   UpdateMessageLine(_state);
   UpdateDashboard(_state);
 
-  // Frame n of the first ten draws the first n rectangles, n in AX, pushed round the frame and popped for its INC. Leaving, the world moves on behind the tunnel, which masks the view outside the first rectangle; docking, each frame waits
-  // for the timer first.
+  // Frame n of the first ten draws the first n rectangles, n kept round the frame and then counted up. Leaving, the world moves on
+  // behind the tunnel, which masks the view outside the first rectangle; docking, each frame waits for the timer first.
   for (std::uint16_t frame = 1;;)
   {
     if (_state.Data().flight.playerDocked == 0)
@@ -497,7 +496,7 @@ void MaskOutsideTunnel(GameState& _state, std::size_t _rectangle)
     // The frame as the game drew it, for a renderer that shows it in the cockpit (D68).
     _host.PublishSpaceViewPicture(WithoutScene(TakeFlightSnapshot(_state)));
     co_await WaitTimerTicks(_state, _host, TUNNEL_FRAME_TICKS);
-    // INC AX / CMP AL,0Bh.
+    // The frame counted up, its low byte compared with 11.
     frame = Offset(frame, 1);
     if (Low(frame) == TUNNEL_FRAMES + 1)
     {
@@ -505,8 +504,7 @@ void MaskOutsideTunnel(GameState& _state, std::size_t _rectangle)
     }
   }
 
-  // The last ten draw ten rectangles less one each frame, from one further along each time: CX and SI, pushed twice round the
-  // frame.
+  // The last ten draw ten rectangles less one each frame, from one further along each time.
   std::size_t first = 0;
   for (std::uint16_t frames = TUNNEL_FRAMES;;)
   {
@@ -576,7 +574,7 @@ void RunDockingComputer(GameState& _state)
   switch (state)
   {
   case SLOW_TO_STOP:
-    // SUB WORD playerSpeed,4 while it is not 0, then on to state 1.
+    // playerSpeed down by 4 while it is not 0, then on to state 1.
     if (_state.Data().playerShip.playerSpeed != 0)
     {
       _state.Data().playerShip.playerSpeed = static_cast<std::uint16_t>(_state.Data().playerShip.playerSpeed - SPEED_STEP);
@@ -630,7 +628,7 @@ void CancelDockingComputer(GameState& _state, Host& _host)
   }
   _state.Data().playerShip.dockingComputerOn = 0;
   _state.Data().playerShip.viewLocked = 0;
-  // PUSH AX / POP AX round it: StopAllSound's AX does not come out.
+  // All sound stopped; nothing it leaves is used.
   StopAllSound(_state, _host);
 }
 

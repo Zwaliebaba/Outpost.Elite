@@ -21,8 +21,8 @@ class Game;
 /// owns both, and it has no registers: a routine that takes a GameState takes its inputs as parameters and gives its results back.
 ///
 /// The host makes one for the whole run, inside a Game, which starts it (Game::Start). Since change 3c of D38
-/// nothing reaches the state by the original's addresses: native code names a member, a run of members that followed one another in 1987
-/// (BytesThrough, Text.h), or a byte within either. The code segment and the PSP are not here, nor what the game
+/// nothing reaches the state by the original's addresses: native code names a member, a run of members that followed one another in the
+/// original (BytesThrough, Text.h), or a byte within either. The code segment and the PSP are not here, nor what the game
 /// used of the vector table and the BIOS's data area, which is the host's (Host, ADR-041); the segments the game was
 /// loaded at are kept for the values that still carry them.
 ///
@@ -157,8 +157,8 @@ inline void SetWordIn(std::span<std::uint8_t> _bytes, std::size_t _at, std::uint
   return all.substr(0, all.find('\0'));
 }
 
-/// ADD byte,_value / JAE / MOV byte,0FFh on _field: the sum written, and FFh over it on a carry. Those are two writes, as the
-/// original's ADD and MOV are.
+/// _value added to the byte at _field: the sum written, and FFh over it on a carry. Those are two writes, the sum and then
+/// FFh, as the original's are.
 inline void AddSaturating(std::uint8_t& _field, std::uint8_t _value)
 {
   const unsigned sum = _field + unsigned{_value};

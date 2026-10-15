@@ -14,29 +14,15 @@ namespace Elite
 namespace
 {
 
-constexpr std::uint8_t SCAN_S = 0x1F;
-constexpr std::uint8_t SCAN_B = 0x30;
-constexpr std::uint8_t SCAN_F2 = 0x3C;
 constexpr std::uint8_t SCAN_F8 = 0x42;
-constexpr std::uint8_t SCAN_UP = 0x48;
-constexpr std::uint8_t SCAN_DOWN = 0x50;
 
 // The text page: offsets in B800, 80 bytes a row.
 constexpr std::uint16_t ROW_BYTES = 0x50;
 constexpr std::uint16_t TITLE_OFFSET = 0x54;
-constexpr std::uint16_t MESSAGE_OFFSET = 0x78;
-constexpr std::uint16_t QUANTITY_INPUT_OFFSET = 0x8C;
 constexpr std::uint16_t PRICES_HEADER_OFFSET = 0x144;
 constexpr std::uint16_t FIRST_PRODUCT_OFFSET = 0x1E4;
-constexpr std::uint16_t CARGO_MENU_FIRST_ROW = 6; // on the text page
 constexpr std::uint16_t BUY_PRICE_COLUMN = 4;
 constexpr std::uint16_t SELL_PRICE_COLUMN = 2;
-constexpr std::uint16_t QUANTITY_COLUMN = 0x31;
-
-constexpr std::uint8_t CARGO_MESSAGE_ATTRIBUTE = 0x4E;
-constexpr std::uint8_t QUANTITY_ATTRIBUTE = 0x7C;
-
-// The cargo menu's messages, 19 characters each.
 
 constexpr std::uint16_t RESALE_PRICE_CEILING = 100;
 constexpr std::uint16_t PRODUCT_NAME_BYTES = 0x11;
@@ -57,22 +43,11 @@ constexpr std::uint8_t QUANTITY_RANDOM_HIGH_MASK = 3;
 // last, cannot be bought.
 constexpr std::uint8_t FIRST_PRECIOUS_COMMODITY = 0x0D;
 constexpr std::uint8_t ALIEN_ITEMS = 0x10;
-constexpr std::uint8_t QUANTITY_DIGITS = 3;
-constexpr std::uint8_t QUANTITY_DIGITS_BLANKED = 4;
-constexpr std::uint16_t QUANTITY_MOST = 0xFA;
-constexpr std::uint8_t QUANTITY_BASE = 10; // ParseQuantity's decimal, which the original keeps in BH
 
-// MUL by _factor, then MOV AL,AH / MOV AH,DL: the product over 256, in 16 bits.
+// _value times _factor over 256, in 16 bits: the middle two bytes of the 32-bit product.
 [[nodiscard]] constexpr std::uint16_t ScaledProduct(std::uint16_t _value, std::uint16_t _factor) noexcept
 {
   return static_cast<std::uint16_t>((std::uint32_t{_value} * _factor) >> 8);
-}
-
-// The row's lot in cargoHold, for each product the amount held and the amount the market has. MOV BL,[menuSelectedRow] /
-// XOR BH,BH / DEC BX / SHL BX,1 / ADD BX,cargoHold.
-[[nodiscard]] CommanderState::CargoHold::Lot& SelectedHoldLot(GameState& _state)
-{
-  return ElementWithin(std::span(_state.Data().commander.cargoHold.lots), std::size_t{_state.Data().menus.menuSelectedRow} - 1);
 }
 
 // screenPrices: for each product its buy price and then its sell price, in tenths.
@@ -81,42 +56,10 @@ constexpr std::uint8_t QUANTITY_BASE = 10; // ParseQuantity's decimal, which the
   return _state.Data().menus.screenPrices;
 }
 
-// The selected row's prices on the trade screens.
-[[nodiscard]] const MenusState::ScreenPrice& SelectedRowPrices(GameState& _state)
-{
-  return ElementWithin(ScreenPrices(_state), std::size_t{_state.Data().menus.menuSelectedRow} - 1);
-}
-
 // Product _product's name and unit, up to its NUL.
 [[nodiscard]] std::string_view ProductName(const GameState& _state, std::uint16_t _product)
 {
   return TextWithin(BytesOf(_state.Data().docked.productNames), std::size_t{_product} * PRODUCT_NAME_BYTES);
-}
-
-// SI and textAttribute pushed for ShowCargoMessage, and the message's attribute set. Returns the attribute, which
-// the original pushes in AL.
-[[nodiscard]] std::uint8_t OpenCargoMessage(GameState& _state)
-{
-  const std::uint8_t saved = _state.Data().drawing.textAttribute;
-  _state.Data().drawing.textAttribute = CARGO_MESSAGE_ATTRIBUTE;
-  return saved;
-}
-
-// The message _text on the message line in 4Eh, and textAttribute put back to _saved, which the original pops into AL
-// before its jump back to the steering.
-void ShowCargoMessage(GameState& _state, std::string_view _text, std::uint8_t _saved)
-{
-  _state.Data().drawing.textAttribute = CARGO_MESSAGE_ATTRIBUTE;
-  PrintTextModeString(_state, _text, MESSAGE_OFFSET);
-  _state.Data().drawing.textAttribute = _saved;
-}
-
-// "Quantity?", up to three characters typed into quantityText, and ParseQuantity on them.
-[[nodiscard]] Task<Quantity> ReadQuantity(GameState& _state, Host& _host)
-{
-  PrintTextModeString(_state, QUANTITY_PROMPT_TEXT, MESSAGE_OFFSET);
-  co_await ReadTextLine(_state, _host, _state.Data().menus.quantityText, QUANTITY_DIGITS, QUANTITY_INPUT_OFFSET);
-  co_return ParseQuantity(_state.Data().menus.quantityText);
 }
 
 // The commander's credits, in tenths: the low word, then the high.
@@ -130,117 +73,6 @@ void StoreCredits(GameState& _state, std::uint32_t _tenths)
 {
   _state.Data().commander.creditsTenths = _tenths;
   FormatCredits(_state);
-}
-
-// menuSelectedRow's commodity, as a trade in it finds it.
-[[nodiscard]] CargoLot SelectedLot(GameState& _state)
-{
-  const CommanderState::CargoHold::Lot& lot = SelectedHoldLot(_state);
-  return CargoLot{.commodity = static_cast<std::uint8_t>(_state.Data().menus.menuSelectedRow - 1),
-                  .held = lot.held,
-                  .onSale = lot.onSale,
-                  .usedTonnes = _state.Data().commander.cargoHold.cargoUsedTonnes,
-                  .legalStatus = _state.Data().commander.legalStatus,
-                  .creditsTenths = Credits(_state)};
-}
-
-// A trade's lot, stored where the game keeps it, the credits reformatted.
-void StoreLot(GameState& _state, const CargoLot& _lot)
-{
-  CommanderState::CargoHold::Lot& lot = SelectedHoldLot(_state);
-  lot.held = _lot.held;
-  lot.onSale = _lot.onSale;
-  _state.Data().commander.cargoHold.cargoUsedTonnes = _lot.usedTonnes;
-  _state.Data().commander.legalStatus = _lot.legalStatus;
-  StoreCredits(_state, _lot.creditsTenths);
-}
-
-// The cargo menu's message for _refusal.
-[[nodiscard]] std::string_view RefusalText(CargoRefusal _refusal) noexcept
-{
-  switch (_refusal)
-  {
-  case CargoRefusal::None:
-    break;
-  case CargoRefusal::NothingOnSale:
-    return NOTHING_TO_BUY_TEXT;
-  case CargoRefusal::NotForSale:
-    return CANNOT_BUY_TEXT;
-  case CargoRefusal::FullToCapacity:
-    return FULL_TO_CAPACITY_TEXT;
-  case CargoRefusal::BayFull:
-    return CARGO_BAY_FULL_TEXT;
-  case CargoRefusal::NothingToSell:
-    return NOTHING_TO_SELL_TEXT;
-  case CargoRefusal::NotEnoughOnSale:
-    return NOT_ENOUGH_TO_BUY_TEXT;
-  case CargoRefusal::NotEnoughHeld:
-    return NOT_ENOUGH_TO_SELL_TEXT;
-  case CargoRefusal::CannotCarry:
-    return CANNOT_CARRY_TEXT;
-  case CargoRefusal::NotEnoughCredits:
-    return NOT_ENOUGH_CREDITS_TEXT;
-  }
-  return {};
-}
-
-// S on the sell screen, once OpenCargoMessage has saved the attribute: a typed quantity from the hold to the market, for
-// the sell price (CargoSold). Returns the message for ShowCargoMessage, after the jumps back the original takes to it.
-[[nodiscard]] Task<std::string_view> SellCargo(GameState& _state, Host& _host)
-{
-  const CargoRefusal refusal = RefuseToSell(SelectedLot(_state));
-  if (refusal != CargoRefusal::None)
-  {
-    co_return RefusalText(refusal);
-  }
-  const Quantity quantity = co_await ReadQuantity(_state, _host);
-  if (!quantity.valid)
-  {
-    co_return QUANTITY_ERROR_TEXT;
-  }
-  if (quantity.value == 0)
-  {
-    co_return NOTHING_SOLD_TEXT;
-  }
-  // The sell price, the word after the row's buy price.
-  const CargoTrade trade = CargoSold(SelectedLot(_state), Low(quantity.value), SelectedRowPrices(_state).resale);
-  if (trade.refusal != CargoRefusal::None)
-  {
-    co_return RefusalText(trade.refusal);
-  }
-  StoreLot(_state, trade.lot);
-  PrintCargoQuantity(_state, trade.lot.held);
-  co_return SOLD_TEXT;
-}
-
-// B on the buy screen, once OpenCargoMessage has saved the attribute: a typed quantity from the market into the hold, if
-// there is room and the cash, for the buy price (CargoBought). Returns the message for ShowCargoMessage, after the jumps back
-// the original takes to it.
-[[nodiscard]] Task<std::string_view> BuyCargo(GameState& _state, Host& _host)
-{
-  const bool largeBay = _state.Data().commander.largeCargoBayFitted == 1;
-  const CargoRefusal refusal = RefuseToBuy(SelectedLot(_state), largeBay);
-  if (refusal != CargoRefusal::None)
-  {
-    co_return RefusalText(refusal);
-  }
-  const Quantity quantity = co_await ReadQuantity(_state, _host);
-  if (!quantity.valid)
-  {
-    co_return QUANTITY_ERROR_TEXT;
-  }
-  if (quantity.value == 0)
-  {
-    co_return NOTHING_BOUGHT_TEXT;
-  }
-  const CargoTrade trade = CargoBought(SelectedLot(_state), largeBay, Low(quantity.value), SelectedRowPrices(_state).price);
-  if (trade.refusal != CargoRefusal::None)
-  {
-    co_return RefusalText(trade.refusal);
-  }
-  StoreLot(_state, trade.lot);
-  PrintCargoQuantity(_state, trade.lot.onSale);
-  co_return BOUGHT_TEXT;
 }
 
 } // namespace
@@ -268,7 +100,7 @@ void StoreLot(GameState& _state, const CargoLot& _lot)
   PrintTextModeString(_state, PRICES_HEADER_TEXT, PRICES_HEADER_OFFSET);
   ComputeMarketPrices(_state);
 
-  // Each commodity's name, buy price and sell price, the original holding the name, the row and the prices in SI, DI and BX.
+  // Each commodity's name, buy price and sell price.
   const std::span<const MenusState::ScreenPrice> prices = ScreenPrices(_state);
   std::uint16_t row = FIRST_PRODUCT_OFFSET;
   for (std::uint16_t product = 0, left = COMMODITY_KINDS;;)
@@ -344,7 +176,7 @@ std::uint16_t NextMarketRandom(GameState& _state)
   const std::uint16_t b = random[1];
   const std::uint16_t c = random[2];
   const auto sum = static_cast<std::uint16_t>(a + b);
-  // In the order the original's two XCHGs and its ADD write them.
+  // In the order the original's two swaps and its sum write them.
   random[1] = c;
   random[0] = b;
   random[2] = static_cast<std::uint16_t>(c + sum);
@@ -370,127 +202,6 @@ std::optional<std::uint8_t> RollQuantityOnSale(GameState& _state)
   return static_cast<std::uint8_t>((drawn - QUANTITY_RANDOM_BIAS) ^ (High(random) & QUANTITY_RANDOM_HIGH_MASK));
 }
 
-Quantity ParseQuantity(std::span<const std::uint8_t> _text)
-{
-  Quantity quantity{.value = 0, .valid = false, .end = 0, .lastRead = 0};
-  const auto next = [&_text, &quantity]()
-  {
-    quantity.lastRead = _text[quantity.end];
-    ++quantity.end;
-    return quantity.lastRead;
-  };
-  std::uint8_t character = 0;
-  do
-  {
-    character = next();
-  } while (character == ' ');
-  while (character != 0)
-  {
-    // A digit: AL times ten, plus it. MUL BH takes only AL, so a number past 255 has lost its high byte.
-    quantity.lastRead = static_cast<std::uint8_t>(character - '0');
-    if (character < '0' || quantity.lastRead >= 10)
-    {
-      return quantity;
-    }
-    quantity.value = static_cast<std::uint16_t>(Low(quantity.value) * QUANTITY_BASE + quantity.lastRead);
-    character = next();
-    if (character == ' ')
-    {
-      // Only spaces may follow.
-      do
-      {
-        character = next();
-      } while (character == ' ');
-      if (character != 0)
-      {
-        return quantity;
-      }
-    }
-  }
-  quantity.valid = quantity.value <= QUANTITY_MOST;
-  return quantity;
-}
-
-void PrintCargoQuantity(GameState& _state, std::uint16_t _quantity)
-{
-  std::string_view text = NO_QUANTITY_TEXT;
-  if (_quantity != 0)
-  {
-    FormatDecimal5(_quantity, _state.Data().menus.quantityText);
-    BlankLeadingZeros(_state.Data().menus.quantityText, QUANTITY_DIGITS_BLANKED);
-    text = TextWithin(BytesOf(_state.Data().menus.quantityText), 0);
-  }
-  const std::uint8_t attribute = _state.Data().drawing.textAttribute;
-  _state.Data().drawing.textAttribute = QUANTITY_ATTRIBUTE;
-  // (row-1)*80 bytes, as (row-1)*256/4 and that /4 again.
-  const auto quarter = static_cast<std::uint16_t>((static_cast<std::uint8_t>(_state.Data().menus.menuSelectedRow - 1) << 8) >> 2);
-  const auto cell = static_cast<std::uint16_t>(MenuFirstRowCell(_state) + QUANTITY_COLUMN + quarter + (quarter >> 2));
-  PrintTextModeString(_state, text, cell);
-  _state.Data().drawing.textAttribute = attribute;
-}
-
-[[nodiscard]] Task<ScreenKey> RunCargoTradeMenu(GameState& _state, Host& _host)
-{
-  _state.Data().menus.menuFirstRowAttr = CARGO_MENU_FIRST_ROW;
-  _state.Data().menus.menuRowCount = static_cast<std::uint8_t>(COMMODITY_KINDS);
-  std::uint16_t row = StartMenu(_state).row;
-  for (;;)
-  {
-    // The steering; then the keys.
-    row = SteerMenuCursor(_state, _host, row);
-    for (;;)
-    {
-      const KeyPress key = co_await PollMenuKey(_state, _host);
-      const std::uint8_t code = key.scanCode;
-      if (code == 0)
-      {
-        break;
-      }
-      // PUSH AX and POP AX round it.
-      PrintCreditsOnMessageLine(_state);
-      if (code == SCAN_B || code == SCAN_S)
-      {
-        // B on the buy screen and S on the sell screen: a typed quantity bought or sold, and its message. On the other screen
-        // the key does nothing.
-        const bool buy = code == SCAN_B;
-        if ((_state.Data().docked.tradeScreenIsBuy == 1) == buy)
-        {
-          const std::uint8_t saved = OpenCargoMessage(_state);
-          std::string_view message;
-          if (buy)
-          {
-            message = co_await BuyCargo(_state, _host);
-          }
-          else
-          {
-            message = co_await SellCargo(_state, _host);
-          }
-          ShowCargoMessage(_state, message, saved);
-        }
-        break;
-      }
-      if (code == SCAN_UP || code == SCAN_DOWN)
-      {
-        row = (code == SCAN_UP ? MoveMenuCursorUp(_state, row) : MoveMenuCursorDown(_state, row)).row;
-        continue;
-      }
-      // The screen's own key, F2 to sell or F3 to buy, does nothing here.
-      const auto own = static_cast<std::uint8_t>(SCAN_F2 + _state.Data().docked.tradeScreenIsBuy);
-      if (code != own && IsScreenKey(code))
-      {
-        co_return ScreenKey{code};
-      }
-      break;
-    }
-  }
-}
-
-void AddContrabandPenalty(GameState& _state)
-{
-  _state.Data().commander.legalStatus =
-    LegalStatusAfterSelling(_state.Data().commander.legalStatus, static_cast<std::uint8_t>(_state.Data().menus.menuSelectedRow - 1));
-}
-
 // ── The market's rules ──
 
 std::uint16_t ResaleTenths(std::uint16_t _priceTenths) noexcept
@@ -514,7 +225,7 @@ std::uint8_t MarketTechLevel(std::uint8_t _techLevel) noexcept
 
 CommodityPrices PricesOf(std::uint8_t _commodity, const MarketPlace& _place) noexcept
 {
-  // The economy's factor, the government's, 1.0 and the base price, each MUL then over 256.
+  // The economy's factor, the government's, 1.0 and the base price, each a product over 256.
   const std::size_t row = std::size_t{_commodity} * PRICE_FACTOR_ROW_WORDS;
   std::uint16_t price = ScaledProduct(UNIT_FACTOR, ECONOMY_PRICE_FACTORS[row + _place.economy]);
   price = ScaledProduct(price, GOVERNMENT_PRICE_FACTORS[row + _place.government]);
@@ -533,7 +244,7 @@ CommodityPrices PricesOf(std::uint8_t _commodity, const MarketPlace& _place) noe
 
 std::optional<std::uint32_t> CreditsAfterPaying(std::uint32_t _creditsTenths, std::uint32_t _priceTenths) noexcept
 {
-  // SUB, then SBB: put back by ADD and ADC when that borrows.
+  // The price taken off in 32 bits, and put back when that borrows.
   if (_creditsTenths < _priceTenths)
   {
     return std::nullopt;
@@ -543,7 +254,7 @@ std::optional<std::uint32_t> CreditsAfterPaying(std::uint32_t _creditsTenths, st
 
 std::uint32_t CreditsAfterEarning(std::uint32_t _creditsTenths, std::uint32_t _earnedTenths) noexcept
 {
-  // ADD the low word, then ADC the high word with the carry it makes.
+  // The low words added, then the high words with the carry that makes: a 32-bit sum that wraps.
   return _creditsTenths + _earnedTenths;
 }
 
@@ -603,7 +314,7 @@ CargoTrade CargoBought(const CargoLot& _lot, bool _largeBay, std::uint8_t _amoun
       return CargoTrade{.refusal = CargoRefusal::CannotCarry, .lot = _lot};
     }
   }
-  else if (_lot.held + _amount > PRECIOUS_HELD_MOST) // ADD CL,AL: a carry, or more than 250
+  else if (_lot.held + _amount > PRECIOUS_HELD_MOST) // an 8-bit sum: a carry, or more than 250
   {
     return CargoTrade{.refusal = CargoRefusal::CannotCarry, .lot = _lot};
   }

@@ -78,7 +78,7 @@ constexpr std::uint16_t STATION_Z = 0xFED4;  // -300
 constexpr std::uint8_t STATION_FLAGS = 0x04; // indestructible
 constexpr std::uint8_t STATION_ENERGY = 0x96;
 
-// The dashboard in CGA memory: the line DI names, then the next odd-bank lines and the even-bank lines
+// The dashboard in CGA memory: the line itself, then the next odd-bank lines and the even-bank lines
 // between them.
 constexpr std::array<std::uint16_t, 5> FIVE_LINES = {0x0000, 0x0050, 0x00A0, 0xE050, 0xE0A0};
 constexpr std::array<std::uint16_t, 3> THREE_LINES = {0x0000, 0x0050, 0xE050};
@@ -224,8 +224,7 @@ constexpr std::int16_t DEATH_DEBRIS_SPEED = 0x28;
   return static_cast<std::int8_t>(High(Word(_value)));
 }
 
-// mov [messagePointer], ax; mov [messageFrames], _frames, after mov ax, text: _message posted for _frames frames. Its callers
-// load AX with its text's address themselves.
+// _message posted for _frames frames: messagePointer and messageFrames. Its callers pick the text themselves.
 void SetMessage(GameState& _state, Message _message, std::uint16_t _frames)
 {
   _state.Data().messages.messagePointer = _message;
@@ -247,7 +246,7 @@ void MarkDustRespawned(GameState& _state, std::size_t _particle, std::uint8_t _l
   return static_cast<std::uint8_t>((Low(_random) & 0x1F) + 0x28);
 }
 
-// sar 2, keeping AH off 20h (which a 16-bit value shifted twice cannot reach).
+// Shifted right twice, its sign kept, and its high byte kept off 20h (which a 16-bit value shifted twice cannot reach).
 [[nodiscard]] std::uint16_t RandomDustX(std::uint16_t _random) noexcept
 {
   std::uint16_t x = Sar(_random, 2);
@@ -258,7 +257,8 @@ void MarkDustRespawned(GameState& _state, std::size_t _particle, std::uint8_t _l
   return x;
 }
 
-// sar 3, keeping BH off 10h (which a 16-bit value shifted three times cannot reach).
+// Shifted right three times, its sign kept, and its high byte kept off 10h (which a 16-bit value shifted three times cannot
+// reach).
 [[nodiscard]] std::uint16_t RandomDustY(std::uint16_t _random) noexcept
 {
   std::uint16_t y = Sar(_random, 3);
@@ -300,7 +300,7 @@ DustPosition MoveDust(GameState& _state, std::size_t _particle, DustPosition _po
   DustPosition position = _position;
   if (_state.Data().playerShip.playerSpeed != 0)
   {
-    // ADD AX,BP / ADD BX,DX, or SUB for the rear view.
+    // The step added to x and y, or taken from them for the rear view.
     const DustStep step = ScaleDustStep(_state, position);
     const auto move = [_rear](std::int16_t _coordinate, std::int16_t _by)
     { return Signed(_rear ? static_cast<std::uint16_t>(Word(_coordinate) - Word(_by)) : Plus(Word(_coordinate), _by)); };
@@ -318,7 +318,7 @@ DustPosition MoveDust(GameState& _state, std::size_t _particle, DustPosition _po
     }
     else if (!IsDustNearCenter(position))
     {
-      // DEC BYTE [SI+4] / JE: the lifetime counted down, the particle born again at 0.
+      // The lifetime counted down, the particle born again at 0.
       std::uint8_t& lifetime = _state.Data().flight.stardust[_particle].lifetime;
       lifetime = static_cast<std::uint8_t>(lifetime - 1);
       if (lifetime != 0)
@@ -333,10 +333,10 @@ DustPosition MoveDust(GameState& _state, std::size_t _particle, DustPosition _po
 
 // UpdateFrontStardust and UpdateRearStardust, which UpdateStardust jumps to: the pitch shifts the dust
 // vertically and the roll rolls it, _rear reversing both; then each of the 30 particles on screen moves (MoveDust) and is drawn
-// (DrawDust), PUSH CX and POP CX keeping the count round each.
+// (DrawDust).
 void UpdateFrontOrRearStardust(GameState& _state, bool _rear)
 {
-  // MOV DX,rollRate / ApplyReverseControlsToDx / AND DH,DH / XOR DL,DL / NEG DX for the front view / SAR DX,1.
+  // The reversed pitch byte, in the high byte with the low byte 0, negated for the front view and halved, its sign kept.
   const std::uint16_t pitchRate = _state.Data().playerShip.rollRate;
   const std::uint8_t pitch = ApplyReverseControls(_state, Steering{Low(pitchRate), High(pitchRate)}).pitch;
   if (pitch != 0)
@@ -344,7 +344,7 @@ void UpdateFrontOrRearStardust(GameState& _state, bool _rear)
     const std::uint16_t step = Join(pitch, 0);
     ShiftStardustVertically(_state, Signed(Sar(_rear ? step : Negate(step), 1)));
   }
-  // MOV AX,rollRate / ApplyReverseControls / CBW / NEG AX for the front view / SHL AX,1: the roll.
+  // The reversed roll byte, sign-extended, negated for the front view and doubled: the roll.
   const std::uint16_t rollRate = _state.Data().playerShip.rollRate;
   const std::uint16_t roll = SignExtend(ApplyReverseControls(_state, Steering{Low(rollRate), High(rollRate)}).roll);
   if (const auto angle = static_cast<std::uint16_t>((_rear ? roll : Negate(roll)) << 1); angle != 0)
@@ -363,7 +363,6 @@ void UpdateFrontOrRearStardust(GameState& _state, bool _rear)
 }
 
 // the side views only draw; ShiftStardustSideways has moved the dust. Each particle on screen is drawn (DrawDust),
-// PUSH CX and PUSH SI keeping the count and the particle round it.
 void DrawSideStardust(GameState& _state)
 {
   for (std::size_t particle = 0; particle < STARDUST_COUNT; ++particle)
@@ -380,8 +379,8 @@ void DrawSideStardust(GameState& _state)
 // moves it sideways, _left mirroring both, and then they draw it (DrawSideStardust).
 void UpdateSideStardust(GameState& _state, bool _left)
 {
-  // MOV DX,rollRate / ApplyReverseControlsToDx / MOV DH,DL: the reversed roll byte, as DX = roll:00, negated for the right view
-  // and halved, shifts the dust vertically.
+  // The reversed roll byte, in the high byte with the low byte 0, negated for the right view and halved, shifts the dust
+  // vertically.
   const std::uint16_t rollRate = _state.Data().playerShip.rollRate;
   const std::uint8_t roll = ApplyReverseControls(_state, Steering{Low(rollRate), High(rollRate)}).roll;
   if (roll != 0)
@@ -389,14 +388,14 @@ void UpdateSideStardust(GameState& _state, bool _left)
     const std::uint16_t step = Join(roll, 0);
     ShiftStardustVertically(_state, Signed(Sar(_left ? step : Negate(step), 1)));
   }
-  // The speed, negated for the left view, as DX = its low byte:00, shifted right three times, moves it sideways.
+  // The speed, negated for the left view, its low byte in the high byte with the low byte 0, shifted right three times, its sign
+  // kept, moves it sideways.
   if (const std::uint16_t speed = _state.Data().playerShip.playerSpeed; speed != 0)
   {
     const std::uint16_t step = Join(Low(_left ? Negate(speed) : speed), 0);
     ShiftStardustSideways(_state, Signed(Sar(step, 3)));
   }
-  // MOV AX,rollRate / ApplyReverseControls / MOV AL,AH / CBW / SHL AX,1: the reversed pitch byte, doubled and negated for the
-  // left view, rolls it.
+  // The reversed pitch byte, sign-extended, doubled and negated for the left view, rolls it.
   const std::uint16_t pitchRate = _state.Data().playerShip.rollRate;
   const auto angle =
     static_cast<std::uint16_t>(SignExtend(ApplyReverseControls(_state, Steering{Low(pitchRate), High(pitchRate)}).pitch) << 1);
@@ -421,8 +420,8 @@ void FillFiveLineWord(GameState& _state, std::uint16_t _line, std::uint16_t _wor
 
 // DrawFiveLineBarPixels and its copy in DrawThreeLineBar: _pixels, 0-48, on the _lines scanlines of the dashboard line
 // at B800:_line, a column of bytes at a time: colour 1 for each four, the partial byte from barPartialBytes, then colour 2 to
-// pixel 48. When there are fewer than four, the first run's loop leaves CH alone, so the second runs _countHigh:CL times, CH as
-// the caller left it.
+// pixel 48. When there are fewer than four, the first run's loop leaves the count's high byte alone, so the second runs
+// _countHigh * 256 + its own count times, _countHigh as the caller left it.
 template <std::size_t Lines>
 void DrawBar(GameState& _state, const std::array<std::uint16_t, Lines>& _lines, std::uint16_t _line, std::uint8_t _pixels,
              std::uint8_t _countHigh)
@@ -460,14 +459,14 @@ void DrawBar(GameState& _state, const std::array<std::uint16_t, Lines>& _lines, 
   }
 }
 
-// MOV BL,12 / MUL BL / MOV BL,3Fh / DIV BL: _value * 12 / 63, 0-48, which cannot overflow.
+// _value * 12 / 63, 0-48, a byte divide, which cannot overflow.
 [[nodiscard]] std::uint8_t ScaleBarValue(std::uint8_t _value) noexcept
 {
   return static_cast<std::uint8_t>((_value * 12u) / 63u);
 }
 
-// MOV AL,[_value] / CMP AL,[_shown] / JE / (MOV [_shown],AL) / MOV DI,_line / CALL DrawThreeLineBar, with CH = 0 as the earlier
-// draws leave it (UpdateDashboard).
+// _value against _shown, and when it changed, _shown set to it (when _remember) and the bar drawn at _line by DrawThreeLineBar,
+// with a high count byte of 0, as the earlier draws leave it (UpdateDashboard).
 void RedrawThreeLineBar(GameState& _state, const std::uint8_t& _value, std::uint8_t& _shown, std::uint16_t _line, bool _remember)
 {
   const std::uint8_t value = _value;
@@ -482,7 +481,7 @@ void RedrawThreeLineBar(GameState& _state, const std::uint8_t& _value, std::uint
   DrawThreeLineBar(_state, _line, value, 0);
 }
 
-// SUB byte,_value / JAE / MOV byte,0 on _field: the difference written, and 0 over it on a borrow.
+// _field less _value: the difference written, and 0 over it on a borrow.
 void SubtractFloored(std::uint8_t& _field, std::uint8_t _value)
 {
   const std::uint8_t before = _field;
@@ -493,7 +492,7 @@ void SubtractFloored(std::uint8_t& _field, std::uint8_t _value)
   }
 }
 
-// cmp [_shown], al; mov [_shown], al; je, with AL = _glyph: whether the glyph changed.
+// _glyph against _shown, then written over it: whether the glyph changed.
 [[nodiscard]] bool ExchangeShown(std::uint8_t& _shown, std::uint8_t _glyph)
 {
   const bool changed = _shown != _glyph;
@@ -517,7 +516,7 @@ void SubtractFloored(std::uint8_t& _field, std::uint8_t _value)
 // the damage (TakeDamage) and starts the impact sound.
 void CheckCollision(GameState& _state, SpaceObject& _slot)
 {
-  // MOV BL,[DI] / AND BX,3Eh: the type, doubled, indexes the box's half sizes.
+  // The type, from the slot's first byte, indexes the box's half sizes.
   const std::uint16_t range = COLLISION_RANGES[(_slot.type & 0x3E) >> 1];
   // The station's collided bit is bit 0 of its yaw's low byte.
   const auto clearCollided = [&_slot] { _slot.yaw = WithLow(_slot.yaw, static_cast<std::uint8_t>(Low(_slot.yaw) & 0xFE)); };
@@ -563,7 +562,7 @@ void CheckCollision(GameState& _state, SpaceObject& _slot)
       }
     }
   }
-  // PUSH AX / POP AX keep the damage round the kill's credit.
+  // The damage is kept round the kill's credit.
   (void)CreditKill(_state, _slot);
   CheckMissileTargetDestroyed(_state, _slot);
   if (damage == 0x5DC || !IsStation(_slot).station)
@@ -605,7 +604,7 @@ void SetWarning(GameState& _state, std::uint8_t _warning)
   }
 }
 
-// The four checks round-robin from _first, each falling on to the next with LOOP while _checks lasts, until one posts its
+// The four checks round-robin from _first, each falling on to the next while _checks lasts, until one posts its
 // warning.
 void RunWarningChecks(GameState& _state, std::uint16_t _first, std::uint16_t _checks)
 {
@@ -628,9 +627,9 @@ void RunWarningChecks(GameState& _state, std::uint16_t _first, std::uint16_t _ch
 
 // ---- The scanner and the compass ------------------------------------------------------------------
 
-// ScaleCompassAxis (in two copies): CMP CX,AX / JB, then CWD, three SHL AX / RCL DX and DIV CX:
-// 8 * _magnitude / _range when _range is not below _magnitude, else _magnitude; then at most 7. A magnitude of 8000h, which
-// NEG leaves so, is negative to CWD, and the divide traps.
+// ScaleCompassAxis (in two copies): 8 * _magnitude / _range when _range is not below _magnitude, else _magnitude; then at
+// most 7. The dividend is _magnitude sign-extended to 32 bits and shifted left three times, so a magnitude of 8000h, which
+// negating leaves so, counts as negative, and the divide traps.
 [[nodiscard]] std::uint16_t ScaleCompassAxis(std::uint16_t _magnitude, std::uint16_t _range)
 {
   std::uint16_t scaled = _magnitude;
@@ -642,7 +641,7 @@ void RunWarningChecks(GameState& _state, std::uint16_t _first, std::uint16_t _ch
   return scaled >= COMPASS_STEPS ? COMPASS_LAST_STEP : scaled;
 }
 
-// The eight neighbours XorCompassDot visits, in its order, as steps of DL and DH.
+// The eight neighbours XorCompassDot visits, in its order, as steps of x and y.
 struct DotStep
 {
   std::int8_t x;
@@ -655,7 +654,7 @@ constexpr std::array<DotStep, 8> COMPASS_RING = {
 
 // ---- The flight keys ------------------------------------------------------------------------------
 
-// CALL GetKey / JE back to it, de-assembled: GetKey until a key comes (ADR-039), the waits in FlightScreenDispatch,
+// GetKey until a key comes (ADR-039), the waits in FlightScreenDispatch,
 // ProcessFlightKeys' Ctrl+Esc and RunPauseScreen. Returns the key.
 [[nodiscard]] Task<KeyPress> WaitForKey(GameState& _state, Host& _host)
 {
@@ -683,8 +682,8 @@ constexpr std::array<DotStep, 8> COMPASS_RING = {
 constexpr std::array<std::string_view, PAUSE_OPTIONS> PAUSE_LETTERS = {RECENTER_LETTER, DAMPING_LETTER, Y_REVERSE_LETTER, XY_REVERSE_LETTER,
                                                                        SOUND_LETTER};
 
-// PauseShowOptions: the five option letters, in reverse video when on. The loop pushes and pops CX, DI
-// and SI round DrawViewChar: the options left, the letter's place and the next option's flag.
+// PauseShowOptions: the five option letters, in reverse video when on. The options left, the letter's place and the next
+// option's flag are kept round DrawViewChar.
 void ShowPauseOptions(GameState& _state)
 {
   std::uint16_t position = PAUSE_FIRST_OPTION;
@@ -696,7 +695,7 @@ void ShowPauseOptions(GameState& _state)
     std::uint16_t ink = ALL_COLORS;
     if (PauseOption(_state, option) == 1)
     {
-      // xchg [textPaperPattern], bx
+      // The ink and textPaperPattern exchanged: reverse video.
       ink = _state.Data().drawing.textPaperPattern;
       _state.Data().drawing.textPaperPattern = ALL_COLORS;
     }
@@ -737,7 +736,7 @@ enum class PauseExit : std::uint8_t
 
 // the drawing buffer cleared and the menu's eight lines drawn into it, in every colour on a paper of 0: each line of
 // pauseMenuText its place in the space view, a word, then its text, the last line's ending in frameRateKeyLabel, which the original
-// writes into it. The loop pushes and pops CX round each line, and SI walks the lines' places and texts.
+// writes into it. The lines' count is kept round each line, and the lines' places and texts are walked in turn.
 void DrawPauseMenu(GameState& _state)
 {
   ClearDrawBuffer(_state);
@@ -747,7 +746,7 @@ void DrawPauseMenu(GameState& _state)
   std::size_t line = 0;
   for (std::uint16_t lines = PAUSE_MENU_LINES;;)
   {
-    // MOV DI,[SI] / ADD SI,2: the line's place, then its text; INC SI past its NUL.
+    // The line's place, a word, then its text, then past its NUL.
     const std::string_view rest = std::string_view(menu).substr(line);
     const auto at = static_cast<std::uint16_t>(static_cast<std::uint8_t>(rest.at(0)) | (static_cast<std::uint8_t>(rest.at(1)) << 8));
     const std::string_view text = rest.substr(2, rest.find('\0', 2) - 2);
@@ -781,9 +780,9 @@ void SetFrameTime(GameState& _state, std::uint8_t _key)
   }
 }
 
-// The pause screen from PauseShowOptions: the options, presented (PresentSpaceView, after MOV AX,0B800h / MOV ES,AX),
-// then its keys, waited for, until one ends it. The jumps
-// back to PauseShowOptions and to the wait load or write every register they read, and carry nothing.
+// The pause screen from PauseShowOptions: the options, presented (PresentSpaceView, to the CGA's memory), then its keys,
+// waited for, until one ends it. The jumps back to PauseShowOptions and to the wait set afresh everything they read, and
+// carry nothing.
 [[nodiscard]] Task<PauseExit> RunPauseOptions(GameState& _state, Host& _host)
 {
   for (;;)
@@ -848,7 +847,8 @@ std::optional<ScreenChange> LeaveFlightScreens(GameState& _state, Host& _host)
   return change;
 }
 
-// flightScreenShown set, then push ax; call EraseCompassAndBlips; pop ax: a screen is about to be shown.
+// flightScreenShown set, then the compass and the blips erased (EraseCompassAndBlips), the key kept round it: a screen is
+// about to be shown.
 // Returns whether EraseCompassAndBlips erased anything.
 bool EraseForFlightScreen(GameState& _state)
 {
@@ -864,7 +864,7 @@ bool EraseForFlightScreen(GameState& _state)
   std::uint8_t key = _key;
   // flightScreenShown set and the compass and the blips erased (EraseForFlightScreen).
   const auto erase = [&_state] { (void)EraseForFlightScreen(_state); };
-  // A screen shown, and the key that closed it. Then JMP FlightScreenDispatch.
+  // A screen shown, and the key that closed it. Then back to FlightScreenDispatch.
   const auto shown = [&key](const ScreenKey& _closed) { key = _closed.scanCode; };
   // Where the screens leave: the cockpit back if a screen was shown (LeaveFlightScreens).
   const auto leave = [&_state, &_host, &screens]
@@ -922,7 +922,7 @@ bool EraseForFlightScreen(GameState& _state)
         {
           StartBeep(_state);
         }
-        // MOV AX,navCompErrorMessage, posted, then XOR AH,AH: no view.
+        // navCompErrorMessage, posted, and no view.
         SetMessage(_state, Message::NavCompError, 0x19);
         co_return leave();
       }
@@ -967,7 +967,7 @@ std::optional<std::uint16_t> ChangeView(GameState& _state, std::uint8_t _key)
   return ResetStardust(_state);
 }
 
-// mov ax, text; jmp back to the tail that posts _message for 25 frames.
+// _message posted for 25 frames, by the tail the refusals share.
 void PostHyperspaceRefusal(GameState& _state, Message _message)
 {
   SetMessage(_state, _message, 0x19);
@@ -978,7 +978,7 @@ void PostHyperspaceRefusal(GameState& _state, Message _message)
 {
   if (_state.Data().playerShip.dockingComputerOn == 1 || _state.Data().jump.hyperspaceCountdown != 0)
   {
-    // JE or JNE back to the JMP past the key's handling.
+    // Back past the key's handling.
     return false;
   }
   if (((_state.Data().commander.invadedStationDestroyed ^ 1) & _state.Data().commander.thargoidInvasionActive &
@@ -1004,9 +1004,8 @@ void PostHyperspaceRefusal(GameState& _state, Message _message)
       PostHyperspaceRefusal(_state, Message::OutOfRange);
       return false;
     }
-    // MOV BL,AL / MOV BH,0Ah / MOV AL,fuel / MUL BH / MOV BH,24h / DIV BH: the fuel times 10, over 24h, against the distance's
-    // low byte; then MOV AX,distance / MUL BH / MOV BH,0Ah / DIV BH: the cost, its low byte times 24h over 10, at least 1. BX
-    // holds BH and the distance's low byte at each divide.
+    // The fuel times 10, over 24h as a byte divide, against the distance's low byte; then the cost: the distance's low byte
+    // times 24h, over 10 as a byte divide, at least 1.
     const std::uint8_t tenths = Low(distance);
     const ByteQuotient reach = DivideByte(static_cast<std::uint16_t>(_state.Data().commander.fuel * FUEL_FACTOR), FUEL_DIVISOR);
     if (reach.quotient < tenths)
@@ -1095,7 +1094,7 @@ void HandleFireButton(GameState& _state, Host& _host)
   {
     return;
   }
-  // ADD [laserTemperature],5, and FFh written over it on a carry, which a temperature below F0h never makes.
+  // laserTemperature plus 5 in 8 bits, and FFh written over it on a carry, which a temperature below F0h never makes.
   const std::uint8_t temperature = _state.Data().flight.laserTemperature;
   _state.Data().flight.laserTemperature = static_cast<std::uint8_t>(temperature + LASER_HEAT_PER_SHOT);
   if (temperature + LASER_HEAT_PER_SHOT > 0xFF)
@@ -1144,7 +1143,7 @@ void HandleIdentifyKey(GameState& _state)
   }
   _state.Data().playerShip.missileState = 0;
   _state.Data().flight.shipIdRequested = 0;
-  // PUSH DI / POP DI keep the ship round ShowShipIdentity and StartBeep.
+  // The ship is kept round ShowShipIdentity and StartBeep.
   ShowShipIdentity(_state, static_cast<std::uint8_t>((ship.type >> 1) & TYPE_MASK), ship.behaviorClass, ship);
   StartBeep(_state);
   if (_state.Data().commander.missileCount != 0)
@@ -1154,8 +1153,7 @@ void HandleIdentifyKey(GameState& _state)
   }
 }
 
-// L runs the anti-ECM emulator, at one unit of energy a frame: SUB WORD [playerEnergy],1, and 0
-// written over it on a borrow.
+// L runs the anti-ECM emulator, at one unit of energy a frame: playerEnergy less 1, and 0 written over it on a borrow.
 void HandleAntiEcmKey(GameState& _state)
 {
   _state.Data().flight.antiEcmActive = 0;
@@ -1279,8 +1277,8 @@ void PlaceSunPlanetAndStation(GameState& _state)
   _state.Data().flight.spawnGovernment = std::uint8_t{_state.Data().commander.currentSystem.government};
 }
 
-// sub word [si+_low], ax; sbb byte [si+_high], dl; sub word [si+_compass], ax, with DL:AX = _velocityHigh:_velocity:
-// a 24-bit coordinate of _slot and its compass word, less the velocity. Every slot has its compass words moved,
+// A 24-bit coordinate of _slot, less _velocityHigh:_velocity, the low word's borrow taken from the high byte, and its compass
+// word less _velocity. Every slot has its compass words moved,
 // though only the station's are the compass's.
 void SubtractVelocity(SpaceObject& _slot, ObjectByte _high, ObjectWord _low, ObjectWord _compass, std::uint16_t _velocity,
                       std::uint8_t _velocityHigh)
@@ -1318,7 +1316,7 @@ void UpdateStardust(GameState& _state)
 
 void ComputeStardustShift(GameState& _state)
 {
-  // MOV AX,34h / SUB AX,playerSpeed / MOV BL,0Ch / DIV BL: a speed above 34h divides into the game's trap.
+  // 34h less playerSpeed, over 0Ch as a byte divide: a speed above 34h wraps the dividend and divides into the game's trap.
   const auto dividend = static_cast<std::uint16_t>(STARDUST_SHIFT_SPEED - _state.Data().playerShip.playerSpeed);
   auto shift = static_cast<std::uint8_t>(DivideByte(dividend, STARDUST_SHIFT_STEP).quotient + 4);
   if (_state.Data().flight.jumpDriveEngaged != 0)
@@ -1371,7 +1369,7 @@ std::optional<DustScreenPosition> GetPreviousDustScreenPosition(const GameState&
 
 std::uint16_t ComputeDustStripMask(std::int16_t _step)
 {
-  // SAR until the step is 0 or -1, a bit more of the mask for each halving before that.
+  // The step halved, its sign kept, until it is 0 or -1, a bit more of the mask for each halving before that.
   std::uint16_t step = Word(_step);
   std::uint16_t mask = 0;
   for (;;)
@@ -1502,7 +1500,7 @@ void StorePreviousDustPosition(GameState& _state, std::size_t _particle, DustPos
 
 DustScreenPosition DustToScreen(DustPosition _position)
 {
-  // shl ax,1 / xchg ah,al / shl ah,1 / cbw / rcl al,1: bits 13-6 in AL, AH the sign of bit 14.
+  // Bits 13-6 of the coordinate in the low byte, and bit 14 sign-extended through the high byte; then the centre added.
   const auto toScreen = [](std::int16_t _value, std::uint16_t _center)
   {
     const auto doubled = static_cast<std::uint16_t>(Word(_value) << 1);
@@ -1516,7 +1514,7 @@ DustScreenPosition DustToScreen(DustPosition _position)
 
 std::uint16_t ResetStardust(GameState& _state)
 {
-  // MOV AX,[messageFrames] / AND AL,AL / JNZ / XOR AH,AH / MOV [messageFrames],AX: the word cleared when its low byte is 0.
+  // messageFrames, a word, cleared when its low byte is 0.
   if (Low(_state.Data().messages.messageFrames) == 0)
   {
     _state.Data().messages.messageFrames = 0;
@@ -1547,8 +1545,8 @@ std::uint16_t ResetStardust(GameState& _state)
 
 void SaveStardustPositions(GameState& _state)
 {
-  // REP MOVSB with ES = DS, upwards: DF is clear wherever the reference calls it (its one STD is
-  // cleared again, with no call between).
+  // A byte at a time, upwards: the direction flag is clear wherever the reference calls it (its one backward copy sets it
+  // forwards again, with no call between).
   for (std::size_t particle = 0; particle < STARDUST_COUNT; ++particle)
   {
     _state.Data().flight.stardustPrevious[particle] = _state.Data().flight.stardust[particle];
@@ -1558,13 +1556,13 @@ void SaveStardustPositions(GameState& _state)
 [[nodiscard]] Task<FlightScreens> HandleFlightFunctionKeys(GameState& _state, Host& _host)
 {
   _state.Data().flow.inFlight = 0;
-  // F1-F10 in keyDown, BX the scan code and LOOP counting CX down from 10.
+  // F1-F10 in keyDown, from F1's scan code up, the ten keys counted down.
   std::uint16_t scan = SCAN_F1;
   for (std::uint16_t keys = FUNCTION_KEYS;;)
   {
     if (ByteWithin(BytesOf(_state.Data().keyboard.keyDown), scan) == 1)
     {
-      // MOV AH,BL, and PUSH AX / CALL ResetKeyboard / POP AX keep it.
+      // The scan code is kept round ResetKeyboard.
       ResetKeyboard(_state);
       _state.Data().flight.flightScreenShown = 0;
       co_return co_await DispatchFlightScreens(_state, _host, Low(scan));
@@ -1590,7 +1588,7 @@ ScreenChange RestoreFlightScreen(GameState& _state, Host& _host)
 
 void InvalidateDashboard(GameState& _state)
 {
-  // REP STOSB with ES = DS, upwards over the dashboard's cache, missileCountShown to speedShown: every value a gauge shows, stale.
+  // A byte at a time, upwards over the dashboard's cache, missileCountShown to speedShown: every value a gauge shows, stale.
   FlightState& flight = _state.Data().flight;
   for (std::uint8_t* const shown : {&flight.missileCountShown,   &flight.missileLockShown,      &flight.energyBanksShown[0],
                                     &flight.energyBanksShown[1], &flight.energyBanksShown[2],   &flight.energyBanksShown[3],
@@ -1612,7 +1610,7 @@ void UpdateDashboard(GameState& _state)
   UpdateEnergyAndLaserHeat(_state);
   UpdateSafeZone(_state);
 
-  // The S glyph inside the station's safe zone, and E for a frame when the ECM fires, each in every colour (BX = FFFFh) at
+  // The S glyph inside the station's safe zone, and E for a frame when the ECM fires, each in every colour (FFFFh) at
   // B800:1658 and B800:1656.
   const std::uint8_t safeZoneGlyph = InSafeZone(_state).inside ? SAFE_ZONE_GLYPH : SPACE;
   if (ExchangeShown(_state.Data().flight.safeZoneGlyphShown, safeZoneGlyph))
@@ -1648,7 +1646,7 @@ void UpdateDashboard(GameState& _state)
     DrawSignedIndicator(_state, ROLL_INDICATOR_LINE, static_cast<std::int8_t>(roll));
   }
 
-  // From DrawEnergyBanks' last LOOP on, CX's high byte stays 0: every draw after it leaves CX = 0, or CL a count.
+  // From DrawEnergyBanks' last loop on, the loop count's high byte stays 0: every draw after it leaves it 0, or below 256.
   RedrawThreeLineBar(_state, _state.Data().flight.laserTemperature, _state.Data().flight.laserTemperatureShown, 0x3B8C, true);
   RedrawThreeLineBar(_state, _state.Data().playerShip.altitude, _state.Data().flight.altitudeShown, 0x3CCC, true);
   RedrawThreeLineBar(_state, _state.Data().playerShip.cabinTemperature, _state.Data().flight.cabinTemperatureShown, 0x3A4C, true);
@@ -1657,7 +1655,7 @@ void UpdateDashboard(GameState& _state)
   RedrawThreeLineBar(_state, _state.Data().playerShip.foreShield, _state.Data().flight.foreShieldShown, 0x368C, false);
   RedrawThreeLineBar(_state, _state.Data().playerShip.aftShield, _state.Data().flight.aftShieldShown, 0x37CC, false);
 
-  // The speed, unscaled: MOV AX,playerSpeed / CMP AL,speedShown / JNE, then JMP DrawFiveLineBarPixels.
+  // The speed, unscaled: its low byte against speedShown, and when it changed, drawn by DrawFiveLineBarPixels.
   const std::uint8_t speed = Low(_state.Data().playerShip.playerSpeed);
   if (speed == _state.Data().flight.speedShown)
   {
@@ -1761,7 +1759,7 @@ void DrawMissileLockIndicator(GameState& _state)
 
 void DrawEnergyBanks(GameState& _state)
 {
-  // Each whole 100h of playerEnergy fills a bank from the top one down, by LOOP from CX = 4, the rest goes in the next, and the
+  // Each whole 100h of playerEnergy fills a bank from the top one down, the four counted down, the rest goes in the next, and the
   // banks below it are empty: the bank written is the last of those the count has left.
   const std::uint16_t energy = _state.Data().playerShip.playerEnergy;
   std::uint8_t wholeBanks = High(energy);
@@ -1780,8 +1778,8 @@ void DrawEnergyBanks(GameState& _state)
     }
   }
 
-  // Each bank against its shown value, from the top bank's bar upwards, PUSH CX, DI and SI round each: the count left in CX, so
-  // CH = 0 for the bar.
+  // Each bank against its shown value, from the top bank's bar upwards: the count left is below 256, so the bar's high count
+  // byte is 0.
   std::uint8_t(&shown)[ENERGY_BANKS] = _state.Data().flight.energyBanksShown;
   std::uint16_t line = ENERGY_BANK_LINE;
   for (std::uint16_t count = ENERGY_BANKS; count != 0; --count)
@@ -1808,8 +1806,8 @@ void UpdateEnergyAndLaserHeat(GameState& _state)
     }
     else
     {
-      // MOV AL,energyUnitFitted / SHL AL,1 / INC AL / CBW / ADD playerEnergy,AX, then CMP 400h / JB / MOV 3FFh: the sum written,
-      // and 3FFh over it from 400h.
+      // energyUnitFitted doubled plus 1, as a byte, sign-extended and added to playerEnergy: the sum written, and 3FFh over it
+      // from 400h.
       const auto recharge = SignExtend(static_cast<std::uint8_t>((_state.Data().commander.energyUnitFitted << 1) + 1));
       const std::uint16_t energy = Plus(_state.Data().playerShip.playerEnergy, recharge);
       _state.Data().playerShip.playerEnergy = energy;
@@ -1823,8 +1821,8 @@ void UpdateEnergyAndLaserHeat(GameState& _state)
   {
     return;
   }
-  // Below one bank, 50 in 65536 a frame, one of the 13 equipment bytes from missileCount is lost: XOR AH,AH / MOV BL,14h / DIV BL
-  // on a second random word, which cannot overflow.
+  // Below one bank, 50 in 65536 a frame, one of the 13 equipment bytes from missileCount is lost: the low byte of a second
+  // random word over 20, a byte divide, which cannot overflow.
   if (NextRandom(_state) >= EQUIPMENT_LOSS_ODDS)
   {
     return;
@@ -1924,7 +1922,7 @@ ScreenChange SetUpLocalSpace(GameState& _state, Host& _host)
 
 void CheckCollisions(GameState& _state)
 {
-  // MOV CL,objectSlotCount / XOR CH,CH, PUSH CX and POP CX round each slot, then DEC CX / JE: a count of 0 runs 65,536 times.
+  // objectSlotCount slots from the sun's, counted down after each: a count of 0 runs 65,536 times.
   SlotIndex slot = SlotIndex::Sun;
   for (std::uint32_t count = LoopCount(_state.Data().flight.objectSlotCount); count != 0; --count)
   {
@@ -1950,7 +1948,8 @@ void UpdateSafeZone(GameState& _state)
     _state.Data().flight.safeZoneFlags = 0;
     return;
   }
-  // RCL AL,1: bit 0 the answer, over what AL held: IsObjectNear's last high byte, or the low byte of the station's distance.
+  // Bit 0 the answer, shifted in under what the original's byte held: IsObjectNear's last high byte, or the low byte of the
+  // station's distance.
   const NearTest near = IsObjectNear(_state, station);
   std::uint8_t held = near.lastHigh;
   bool inside = false;
@@ -1976,14 +1975,13 @@ Vector ComputeDeathDebrisVector(GameState& _state)
   {
     const Pair viewed = RotateByStoredSinCos(_state, 8, Pair{x, y});
     (void)SetSinCos(_state, 8, Negate(_state.Data().playerShip.playerRollAngle));
-    // PUSH AX, BX, CX round SetSinCos8, and POP BX, CX, AX: y and z change places.
+    // y and z change places round SetSinCos8, and the roll turns (x, z).
     const Pair rolled = RotateByStoredSinCos(_state, 8, Pair{viewed.first, z});
     x = rolled.first;
     y = viewed.second;
     z = rolled.second;
   }
-  // Then the yaw turns (x, y) and the pitch (z, y), and the XCHGs leave x, the pitch's first and its second in AX, BX
-  // and CX.
+  // Then the yaw turns (x, y) and the pitch (z, y): the vector is x, the pitch's first and its second.
   const Pair yawed = RotateByStoredSinCos(_state, 7, Pair{x, y});
   const Pair pitched = RotateByStoredSinCos(_state, 6, Pair{z, yawed.second});
   return Vector{yawed.first, pitched.first, pitched.second};
@@ -1998,13 +1996,13 @@ void UpdateWarnings(GameState& _state)
   const std::uint8_t frames = _state.Data().messages.warningFrames;
   if (frames != 0)
   {
-    // XOR AH,AH / MOV [messageFrames],AX: the frames left, as a word.
+    // The frames left, as a word, into messageFrames.
     _state.Data().messages.messageFrames = frames;
     _state.Data().messages.messagePointer = Message{_state.Data().flight.warningMessage};
     _state.Data().messages.warningFrames = static_cast<std::uint8_t>(_state.Data().messages.warningFrames - 1);
     return;
   }
-  // The four checks from the one after the last warning (JMP [BX+warningChecks]).
+  // The four checks from the one after the last warning (warningChecks).
   RunWarningChecks(_state, static_cast<std::uint16_t>((_state.Data().flight.warningIndex + 1) & 3), WARNING_CHECKS);
 }
 
@@ -2049,8 +2047,8 @@ bool UpdateCompass(GameState& _state)
   const std::uint8_t shift = GetPositionScaleShift(aim).shift;
   aim.depth = shift;
   const Vector position = ScalePositionDown(aim, shift);
-  // PUSH AX / PUSH BX / PUSH CX round the station's scale shift, read back through MOV BP,SP: the position turned to the view
-  // for the station's compass words, then, popped, turned to the camera's frame for the dot.
+  // The position, kept round the station's scale shift: turned to the view for the station's compass words, then turned to the
+  // camera's frame for the dot.
   SpaceObject& station = _state.Slot(SlotIndex::Station);
   station.depth = GetPositionScaleShift(station).shift;
   const Vector view = TransformToView(_state, position);
@@ -2059,7 +2057,7 @@ bool UpdateCompass(GameState& _state)
   station.compassZ = Word(view.z);
   const Vector camera = RotatePitchYawRoll(_state, position);
 
-  // BP gathers z >= 0 in bit 15 and the signs of x and y in bits 0 and 1, each coordinate NEGed to its magnitude.
+  // Whether z >= 0, and the signs of x and y, kept, each coordinate negated to its magnitude.
   const bool inFront = !Negative(Word(camera.z));
   const std::uint16_t range = Plus(inFront ? Word(camera.z) : Negate(Word(camera.z)), COMPASS_DEPTH);
   const bool left = Negative(Word(camera.x));
@@ -2070,9 +2068,10 @@ bool UpdateCompass(GameState& _state)
   const std::uint16_t yStep = ScaleCompassAxis(yMagnitude, range);
   auto dotX = static_cast<std::uint8_t>(xStep);
   auto dotY = static_cast<std::uint8_t>(yStep);
-  // MUL AL twice: the dot's distance squared; from 41h, each step CBW'd or under the remainder AH still holds, times 8, divided
-  // by its square root from sqrtTable (BX = the root), its low three bits kept: each step is at most 7, so the square is within
-  // the table. The second divide can overflow, and the trap's 7Fh comes out as 7.
+  // Each step squared, the squares summed in 8 bits: the dot's distance squared; from 41h, each step, sign-extended for the first
+  // or under the remainder the first divide leaves for the second, times 8, divided by its square root from sqrtTable, its low
+  // three bits kept: each step is at most 7, so the square is within the table. The second divide can overflow, and the trap's
+  // 7Fh comes out as 7.
   const auto squared =
     static_cast<std::uint8_t>(Low(static_cast<std::uint16_t>(dotY * dotY)) + Low(static_cast<std::uint16_t>(dotX * dotX)));
   if (squared >= COMPASS_NORMALIZED_FROM)
@@ -2094,7 +2093,7 @@ bool UpdateCompass(GameState& _state)
   dotY = static_cast<std::uint8_t>(dotY + COMPASS_CENTER_Y);
   dotX = static_cast<std::uint8_t>(dotX + COMPASS_CENTER_X);
 
-  // XCHG [DI+26h],DX and XCHG [DI+28h],AH: the new dot and whether it is in front go into the station's blip bytes, the old
+  // The new dot and whether it is in front are exchanged into the station's blip bytes, the old
   // ones come out, and the old dot is XORed out if it is drawn; then the new one in, from what the bytes hold.
   // The dot is blipX and blipY, exchanged as one word.
   const std::uint16_t oldDot = Join(station.blipY, station.blipX);
@@ -2145,8 +2144,8 @@ DashboardPixel XorScannerBlip(GameState& _state, std::uint8_t _x, std::uint8_t _
   const std::uint8_t y = Sar(_y, 2);
   const std::uint8_t z = Sar(_z, 2);
   DashboardPixel pixel{static_cast<std::uint8_t>(_x + 0x3D), static_cast<std::uint8_t>(0x1F - z), 0};
-  // A stick of |y| pixels from the dot, up or down, then one more to the right at its end. The JNS after DEC CL never
-  // falls through: |y| is at most 20h, and the test for 0 stops the stick first.
+  // A stick of |y| pixels from the dot, up or down, then one more to the right at its end. The sign test after each
+  // count down never ends it: |y| is at most 20h, and the test for 0 stops the stick first.
   auto length = y;
   std::uint8_t step = 1;
   if ((length & 0x80) != 0)
@@ -2189,7 +2188,7 @@ bool EraseCompassAndBlips(GameState& _state)
   SpaceObject& station = _state.Slot(SlotIndex::Station);
   if ((station.flags & FLAG_BLIP_DRAWN) != 0)
   {
-    // The dot at BlipX and BlipY, solid while BlipZ is not 0 (CBW into BP), its flag cleared first.
+    // The dot at blipX and blipY, solid while blipZ is not 0, its flag cleared first.
     const bool inFront = station.blipZ != 0;
     const std::uint8_t x = station.blipX;
     const std::uint8_t y = station.blipY;
@@ -2197,7 +2196,7 @@ bool EraseCompassAndBlips(GameState& _state)
     XorCompassDot(_state, x, y, inFront);
     erased = true;
   }
-  // MOV CL,objectSlotCount / XOR CH,CH / SUB CL,3, and LOOP: 65,536 slots for a count of 3.
+  // objectSlotCount less 3, as a byte, slots from the first ship's, counted down after each: 65,536 slots for a count of 3.
   SlotIndex slot = SlotIndex::FirstShip;
   const auto slots = static_cast<std::uint8_t>(_state.Data().flight.objectSlotCount - 3);
   for (std::uint32_t count = LoopCount(slots); count != 0; --count)
@@ -2224,7 +2223,7 @@ void UpdateFuelLeak(GameState& _state, Host& _host)
   else if (_state.Data().commander.fuelLeakFrames != 0)
   {
     _state.Data().commander.fuelLeakFrames = static_cast<std::uint8_t>(_state.Data().commander.fuelLeakFrames - 1);
-    // SUB [fuel],5, and 0 written over it on a borrow.
+    // The fuel less 5, and 0 written over it on a borrow.
     const std::uint8_t fuel = _state.Data().commander.fuel;
     _state.Data().commander.fuel = static_cast<std::uint8_t>(fuel - FUEL_LEAK_STEP);
     if (fuel < FUEL_LEAK_STEP)
@@ -2268,7 +2267,8 @@ void UpdateFuelLeak(GameState& _state, Host& _host)
     firstFrame = false;
     UpdateObjectsAndSpawn(_state);
     UpdatePlayerMotion(_state, _host);
-    // DI past the slots, from which M's launch copies the missile unless a routine before it moves DI (ProcessFlightKeys).
+    // The original's slot pointer is left past the slots, from which M's launch copies the missile unless a routine before it
+    // moves the pointer (ProcessFlightKeys).
     CheckCollisions(_state);
     if (_state.Data().flight.playerDocked == 1)
     {
@@ -2307,7 +2307,7 @@ void UpdateFuelLeak(GameState& _state, Host& _host)
       continue;
     }
     ResetKeyboard(_state);
-    // MOV AX,0B800h / MOV ES,AX for the message line and the title.
+    // The message line and the title, in the CGA's memory.
     ClearMessageLine(_state);
     _state.Data().drawing.textPaperPattern = 0;
     (void)DrawScreenString(_state, ELITE_TITLE_TEXT, ALL_COLORS, TITLE_TEXT_POSITION);
@@ -2333,7 +2333,7 @@ bool TickEscapePod(GameState& _state)
   }
   if (_state.Data().playerShip.escapePodFrames != 0)
   {
-    // JNE back to the RET above.
+    // Back out, as above.
     co_return FlightKeysExit{false};
   }
   const FlightScreens screens = co_await HandleFlightFunctionKeys(_state, _host);
@@ -2421,7 +2421,7 @@ bool TickEscapePod(GameState& _state)
 
 void DrainEnergy(GameState& _state, std::int8_t _amount)
 {
-  // CBW / SUB [playerEnergy],AX, and 0 written over it on a borrow.
+  // playerEnergy less _amount, sign-extended, and 0 written over it on a borrow.
   const std::uint16_t amount = Word(_amount);
   const std::uint16_t energy = _state.Data().playerShip.playerEnergy;
   _state.Data().playerShip.playerEnergy = static_cast<std::uint16_t>(energy - amount);
@@ -2434,7 +2434,7 @@ void DrainEnergy(GameState& _state, std::int8_t _amount)
 
 JumpDriveRequest EngageJumpDrive(GameState& _state)
 {
-  // MOV AX,message, then the shared tail posts it for 5 frames.
+  // The message, posted for 5 frames by the shared tail.
   const auto post = [&_state](Message _message) { SetMessage(_state, _message, JUMP_DRIVE_MESSAGE_FRAMES); };
   std::optional<MassLock> lock;
   if (_state.Data().playerShip.dockingComputerOn != 1)
@@ -2506,7 +2506,7 @@ void UpdatePlayerMotion(GameState& _state, Host& _host)
     steering = ApplyReverseControls(_state, read);
   }
 
-  // Roll, -23 to 23, negated, turns the roll angle by twice as much: NEG AL / JE, then the limits, CBW / SHL AX,1.
+  // Roll, -23 to 23, negated, turns the roll angle by twice as much, sign-extended, when it is not 0.
   if (const auto roll = static_cast<std::int8_t>(Negate(steering.roll)); roll != 0)
   {
     const std::int8_t held = roll <= -MOST_ROLL - 1 ? static_cast<std::int8_t>(-MOST_ROLL) : roll >= MOST_ROLL + 1 ? MOST_ROLL : roll;
@@ -2531,7 +2531,7 @@ void UpdatePlayerVelocity(GameState& _state)
   {
     return;
   }
-  // DEC: the 1 becomes 0.
+  // The 1 counted down to 0.
   _state.Data().playerShip.velocityDirty = 0;
   (void)SetSinCos(_state, 6, Negate(Plus(_state.Data().playerShip.playerPitchAngle, 0x400)));
   (void)SetSinCos(_state, 7, Plus(_state.Data().playerShip.playerYawAngle, 0x400));
@@ -2553,7 +2553,7 @@ void UpdatePlayerVelocity(GameState& _state)
 
 void MoveObjectsByVelocity(GameState& _state)
 {
-  // LOOP from CX = shipSlotCount: a count of 0 runs 65,536 times.
+  // shipSlotCount slots, counted down after each: a count of 0 runs 65,536 times.
   SlotIndex index = SlotIndex::Sun;
   for (std::uint32_t slots = LoopCount(_state.Data().world.shipSlotCount); slots != 0; --slots)
   {
@@ -2580,7 +2580,7 @@ void MoveObjectsByVelocity(GameState& _state)
     {
       co_return exit == PauseExit::Abort;
     }
-    // The menu again, which loads or writes every register it reads.
+    // The menu again, which sets afresh everything it reads.
   }
 }
 

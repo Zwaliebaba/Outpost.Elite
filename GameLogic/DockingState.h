@@ -7,11 +7,11 @@
 namespace Elite
 {
 
-/// What Docking.cpp, alone, writes of the game's state (D38), and its own: read elsewhere at most, never written. Its members are the 1987
-/// data segment's, by their names, in their order there; the GameState holds it in GameData.
+/// What Docking.cpp, alone, writes of the game's state (D38), and its own: read elsewhere at most, never written. Its members are the
+/// original's data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct DockingState
 {
-  /// RunDockingComputer's steering, AL=roll, AH=pitch
+  /// RunDockingComputer's steering: the roll in the low byte, the pitch in the high
   std::uint16_t dockingComputerSteering;
   /// RunDockingComputer's state, 0-11
   std::uint8_t dockingComputerState;

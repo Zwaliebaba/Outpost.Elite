@@ -6,6 +6,8 @@
 #include "Canvas.h"
 #include "Cockpit.h"
 #include "DirectoryFileStore.h"
+#include "DockedFrame.h"
+#include "DockedMarket.h"
 #include "Game.h"
 #include "Host.h"
 #include "Renderer.h"
@@ -17,6 +19,7 @@
 #include <shlobj.h>
 
 #include <format>
+#include <optional>
 #include <system_error>
 
 namespace Outpost
@@ -33,6 +36,49 @@ constexpr bool START_FULL_SCREEN = true; // borderless over the whole screen, F1
 constexpr std::uint32_t SAMPLE_RATE = 44'100;
 constexpr std::uint64_t LONGEST_CATCH_UP_MILLISECONDS = 250;
 constexpr std::uint32_t COCKPIT_BACKGROUND = 0x000000; // round the view in the frame's window, and past the design at other shapes
+constexpr std::uint32_t DOCKED_BACKGROUND = 0x070605;  // past the docked screens' design at other shapes (D82)
+
+// The scan code a click on the docked key bar sends (D83). While D02 to D08 are the original's, a key opens the screen its name says by
+// the key the original shows it on (D92): EQUIP is F4's, GALAXY F5's, LOCAL F6's and STATUS F9's; MARKET is the screen shown.
+[[nodiscard]] std::optional<std::uint8_t> ScanCodeOf(DockedKey _key) noexcept
+{
+  switch (_key)
+  {
+  case DockedKey::Disc:
+    return std::uint8_t{0x01};
+  case DockedKey::Launch:
+    return std::uint8_t{0x3B};
+  case DockedKey::Market:
+    break;
+  case DockedKey::Equip:
+    return std::uint8_t{0x3E};
+  case DockedKey::Galaxy:
+    return std::uint8_t{0x3F};
+  case DockedKey::Local:
+    return std::uint8_t{0x40};
+  case DockedKey::Status:
+    return std::uint8_t{0x43};
+  }
+  return std::nullopt;
+}
+
+// A click at _point on the market (D83): a key of the bar pressed and released, or the control under it named to the game.
+void ClickMarket(Elite::Host& _host, Engine::Point _point)
+{
+  if (const std::optional<DockedKey> key = DockedFrame::KeyAt(_point))
+  {
+    if (const std::optional<std::uint8_t> code = ScanCodeOf(*key))
+    {
+      _host.Inject(Elite::KeyEvent{.key = *code, .down = true});
+      _host.Inject(Elite::KeyEvent{.key = *code, .down = false});
+    }
+    return;
+  }
+  if (const std::optional<Elite::MarketClick> click = DockedMarket::ControlAt(_point))
+  {
+    _host.Click(*click);
+  }
+}
 
 // Initialises COM on this thread for XAudio2, and undoes it.
 class ComScope
@@ -151,6 +197,9 @@ int Application::Run(HINSTANCE _instance, bool _cheat)
     return (std::uint32_t{color.red} << 16) | (std::uint32_t{color.green} << 8) | color.blue;
   };
 
+  const TextMeasure measure = [&renderer](const Engine::CanvasText& _text) { return renderer.MeasureText(_text); };
+  std::optional<Engine::Point> pointer; // the mouse, in design units, while it is over the window
+
   Elite::StopReason reason = Elite::StopReason::Reached;
   while (window.PumpMessages())
   {
@@ -161,6 +210,24 @@ int Application::Run(HINSTANCE _instance, bool _cheat)
       if (Elite::KeyNameOf(key.scanCode))
       {
         platform->Inject(Elite::KeyEvent{.key = key.scanCode, .down = key.down});
+      }
+    }
+    for (const Engine::PointerEvent& event : window.TakePointerEvents())
+    {
+      if (event.kind == Engine::PointerEvent::Kind::Leave)
+      {
+        pointer.reset();
+        continue;
+      }
+      RECT client{};
+      GetClientRect(window.Handle(), &client);
+      const Engine::DesignPlacement place =
+        Engine::PlaceDesign(static_cast<std::uint32_t>(client.right - client.left), static_cast<std::uint32_t>(client.bottom - client.top));
+      pointer = Engine::Point{.x = (static_cast<float>(event.x) - place.left) / place.scale,
+                              .y = (static_cast<float>(event.y) - place.top) / place.scale};
+      if (event.kind == Engine::PointerEvent::Kind::LeftDown && platform->ShownMarket() != nullptr)
+      {
+        ClickMarket(*platform, *pointer);
       }
     }
     if (window.TakeResized() && !renderer.Resize())
@@ -192,11 +259,16 @@ int Application::Run(HINSTANCE _instance, bool _cheat)
     audioTime = platform->Clock();
     platform->Sound().DiscardBefore(Elite::Speaker::FirstSampleStart(audioTime, SAMPLE_RATE));
 
-    // In flight and on the title, the cockpit with the space view in its window (ADR-034, D63, D64); on every other screen, the
-    // CGA picture.
+    // On the market, D01 (ADR-058); in flight and on the title, the cockpit with the space view in its window (ADR-034, D63, D64);
+    // on every other screen, the CGA picture.
     bool presented = false;
     const Elite::FlightSnapshot& latest = platform->LatestFlightSnapshot();
-    if (latest.sequence != 0 && platform->SpaceViewShown())
+    if (const Elite::MarketView* const market = platform->ShownMarket())
+    {
+      DockedMarket::Draw(*market, pointer, measure, canvas);
+      presented = renderer.Present({}, DOCKED_BACKGROUND, nullptr, &canvas);
+    }
+    else if (latest.sequence != 0 && platform->SpaceViewShown())
     {
       Cockpit::Draw(latest.dashboard, latest.sight, elapsedMilliseconds, renderer, canvas);
       SpaceView::DrawWords(*platform, Cockpit::VIEW, canvas);

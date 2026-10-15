@@ -7,8 +7,8 @@
 namespace Elite
 {
 
-/// What Timer.cpp, alone, writes of the game's state (D38), and its own: read elsewhere at most, never written. Its members are the 1987
-/// data segment's, by their names, in their order there; the GameState holds it in GameData.
+/// What Timer.cpp, alone, writes of the game's state (D38), and its own: read elsewhere at most, never written. Its members are the
+/// original data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct TimerState
 {
   /// port 0x61 at start-up, restored on exit

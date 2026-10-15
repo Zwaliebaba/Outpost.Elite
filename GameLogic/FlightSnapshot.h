@@ -48,7 +48,7 @@ struct SnapshotObject
   std::int16_t viewZ = 0;
   bool continues = false; ///< the same object as in the snapshot before (ContinueFrom)
   bool model = false;     ///< drawn as its blueprint's model this frame, which a renderer draws in its place (SpaceViewLayers)
-  bool inView = false;    ///< in the 1987 view's cone this frame, which the game draws (ClassifyViewPosition): |x| and |y| at most z / 2
+  bool inView = false;    ///< in the view's cone this frame, which the game draws (ClassifyViewPosition): |x| and |y| at most z / 2
   bool flashes = false;   ///< it flashes, carrying the masking device (Flashes), its frames counted only as the game draws it
   SnapshotDrawing drawing = SnapshotDrawing::None; ///< how the game would draw it in the view (DrawingOf), in it or not
 

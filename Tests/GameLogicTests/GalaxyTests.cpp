@@ -31,7 +31,7 @@ struct Position
 // Leesti, near Lave in the first galaxy: of tech level 10.
 constexpr Position LEESTI = {13, 186};
 
-// The ninth galaxy's seeds: the six bytes after galaxySeeds' eight entries in the 1987 data segment, read from its image while
+// The ninth galaxy's seeds: the six bytes after galaxySeeds' eight entries in the original data segment, read from its image while
 // the tree held it (Phase 7, step 5).
 constexpr std::array<std::uint32_t, 3> NINTH_GALAXY_SEEDS = {0x1234, 0x5678, 0x9ABC};
 

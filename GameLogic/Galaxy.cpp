@@ -124,7 +124,7 @@ constexpr std::uint16_t TEXT_ROW_BYTES = 0x50;
 constexpr std::uint8_t DESCRIPTION_PHRASE_CODE = 0x80;
 constexpr std::uint8_t SEVEN_NAMES = 7; // the bits DescribeSystem gives the economy, the government and each of the species' bytes
 constexpr std::uint8_t DESCRIPTION_PHRASE_DIVISOR = 0x34;
-// The byte before descriptionBuffer in 1987, which ExpandDescriptionText reads before the first character it writes: the NUL that
+// The byte before descriptionBuffer in the original, which ExpandDescriptionText reads before the first character it writes: the NUL that
 // ends descriptionTemplate.
 constexpr char BEFORE_DESCRIPTION_BUFFER = DESCRIPTION_TEMPLATE.data()[DESCRIPTION_TEMPLATE.size()];
 static_assert(BEFORE_DESCRIPTION_BUFFER == '\0');
@@ -134,20 +134,20 @@ static_assert(BEFORE_DESCRIPTION_BUFFER == '\0');
   return static_cast<std::uint16_t>(_low | (_high << 8));
 }
 
-// The difference of two bytes as a word, then made positive with neg.
+// The difference of two bytes as a word, then negated when it is negative.
 [[nodiscard]] std::uint16_t Magnitude(std::uint16_t _value) noexcept
 {
   return (_value & 0x8000) != 0 ? static_cast<std::uint16_t>(0u - _value) : _value;
 }
 
-// mul al.
+// The byte squared, as a word.
 [[nodiscard]] std::uint16_t Square(std::uint8_t _value) noexcept
 {
   return static_cast<std::uint16_t>(_value * _value);
 }
 
-// The galaxy-unit offset of a short-range chart coordinate from the chart's centre: shl ax,1 then idiv
-// by 7 into AL (it cannot overflow), cbw, from _origin, clamped at 0.
+// The galaxy-unit offset of a short-range chart coordinate from the chart's centre: doubled, then divided by 7, signed, into
+// a byte (it cannot overflow), sign-extended, from _origin, clamped at 0.
 [[nodiscard]] std::uint16_t ChartToGalaxy(std::uint16_t _fromCenter, std::uint8_t _origin) noexcept
 {
   const auto doubled = static_cast<std::int16_t>(_fromCenter << 1);
@@ -156,7 +156,7 @@ static_assert(BEFORE_DESCRIPTION_BUFFER == '\0');
   return (position & 0x8000) != 0 ? static_cast<std::uint16_t>(0) : position;
 }
 
-// 3.5 times a galaxy-unit offset (x*2 + x + x sar 1), from the chart's centre.
+// 3.5 times a galaxy-unit offset (x*2 + x + x halved, signed), from the chart's centre.
 [[nodiscard]] std::uint16_t GalaxyToChart(std::uint16_t _offset, std::uint16_t _center) noexcept
 {
   const auto half = static_cast<std::uint16_t>(static_cast<std::int16_t>(_offset) >> 1);
@@ -168,7 +168,7 @@ static_assert(BEFORE_DESCRIPTION_BUFFER == '\0');
   return static_cast<std::uint16_t>(_value);
 }
 
-// A chart item's x range or rows as DX and BX hold them: the first in the low byte, the last in the high.
+// A chart item's x range or rows as a word: the first in the low byte, the last in the high.
 [[nodiscard]] constexpr std::uint16_t Word(ChartSpan _span) noexcept
 {
   return Join(_span.last, _span.first);
@@ -208,8 +208,7 @@ void SetItemBox(GalaxyState::ChartItem& _item, ChartSpan _x, ChartSpan _rows) no
   _item.rowsLast = _rows.last;
 }
 
-// The loop of byte moves (mov al,[si]; mov [di],al; inc si; inc di; loop) some routines make: each of _from's bytes to the
-// same place of _to, in order.
+// The loop of byte moves some routines make, a byte at a time: each of _from's bytes to the same place of _to, in order.
 void CopyBytes(std::span<const std::uint8_t> _from, std::span<std::uint8_t> _to)
 {
   for (std::size_t done = 0; done < _from.size(); ++done)
@@ -256,7 +255,7 @@ template <typename State> [[nodiscard]] auto LabelBytes(State& _state, std::size
 }
 
 // One pass of PlaceChartLabels over chartItems: whether an item overlaps the label with x range _x and
-// rows _rows. It stops at the first that does, and LOOP counts chartItemCount items, 65,536 for 0.
+// rows _rows. It stops at the first that does, and counts chartItemCount items, 65,536 for 0.
 [[nodiscard]] bool AnyChartItemOverlaps(const GameState& _state, ChartSpan _x, ChartSpan _rows)
 {
   std::size_t item = 0;
@@ -272,9 +271,9 @@ template <typename State> [[nodiscard]] auto LabelBytes(State& _state, std::size
   return false;
 }
 
-// jmp [bx] through textControlCodes to control code _code's handler, with SI and the return to ResumeTextExpansion pushed; the
-// handler returns there, which pops SI. The stack keeps no more than SI and the way back, so the handler's value routine runs on
-// the output at DS:_output. Codes 7-31 jump into descriptionPhraseLists, whose words the original would run as code; the
+// Control code _code's handler, which the original reaches through textControlCodes, keeping the place in the text and the way
+// back to ResumeTextExpansion; the handler returns there. The original keeps no more than those, so the handler's value routine
+// runs on the output at _output. Codes 7-31 jump into descriptionPhraseLists, whose words the original would run as code; the
 // routine runs nothing for them. No text in the game holds such a code (TableTests checks the phrases), and no
 // description reaches textControlCodes to write over it: the longest is 144 bytes of descriptionBuffer's 256. Returns the place
 // past what the handler wrote.
@@ -302,7 +301,7 @@ std::uint16_t RunTextControlCode(GameState& _state, std::uint8_t _code, std::uin
 }
 
 // A chart's cross: _arm either way of (_x, _row), across and then down, each a clipped line. The
-// original keeps the centre on the stack between them (PUSH BX / PUSH DX).
+// original keeps the centre on the stack between them.
 void DrawCross(GameState& _state, std::uint16_t _x, std::uint16_t _row, std::uint16_t _arm)
 {
   DrawClippedLine(_state, Offset(_x, _arm), _row, static_cast<std::uint16_t>(_x - _arm), _row);
@@ -319,7 +318,7 @@ void DrawChartCursor(GameState& _state)
 }
 
 // The steering moves a chart's cursor: the roll across, clamped to the chart, and the pitch negated down,
-// clamped to its 128 rows. Returns the cursor, which the original leaves in AX.
+// clamped to its 128 rows. Returns the cursor.
 ChartPoint MoveChartCursor(GameState& _state, Host& _host)
 {
   const Steering steering = ReadSteering(_state, _host);
@@ -363,7 +362,7 @@ void DrawGalacticChart(GameState& _state, Host& /*_host*/)
   DrawCross(_state, _state.Data().commander.currentSystemX, _state.Data().commander.currentSystemChartY, CURRENT_SYSTEM_ARM);
   DrawChartCursor(_state);
   _state.Data().drawing.drawColor = CHART_DISC_COLOR;
-  // XOR AL,AL, then PUSH AX / POP AX round each dot.
+  // A byte counted up from 0 until it wraps: a dot for each of the 256 systems.
   for (std::uint8_t systems = 0;;)
   {
     PlotPixel(_state, SystemX(_state), static_cast<std::uint8_t>(SystemY(_state) >> 1));
@@ -454,7 +453,7 @@ constexpr ChartKeys SHORT_RANGE_CHART_KEYS{.drawFrame = &DrawShortRangeChart,
     co_await FindSystemByName(_state, _host);
     co_return std::nullopt;
   }
-  // PUSH AX / POP AX round ReadFireButton keep the key.
+  // The key, kept across ReadFireButton.
   if (scanCode == SCAN_KEYPAD_5 || ReadFireButton(_state, _host))
   {
     _chart.recenter(_state);
@@ -464,7 +463,7 @@ constexpr ChartKeys SHORT_RANGE_CHART_KEYS{.drawFrame = &DrawShortRangeChart,
   {
     co_return std::nullopt;
   }
-  // PUSH AX / POP AX round the selection keep the key.
+  // The key, kept across the selection.
   if (_state.Data().jump.hyperspaceCountdown == 0)
   {
     SelectSystemAtCursor(_state);
@@ -503,8 +502,8 @@ void DrawChartTitle(GameState& _state, std::string_view _title)
 
 // ShowShortRangeChart's item for the system in systemSeeds, _x and _row its offsets from the current system: a
 // disc of radius 4 or 6 at 3.5 times them about the centre, and a label to place to its right, the name GenerateSystemName
-// makes. The seeds are left on the next system. The disc's centre, which the original keeps on the stack for the label
-// (PUSH CX / PUSH DX, then POP DX / POP BX), is a local; the label's endless loop down from the top spins on _host.
+// makes. The seeds are left on the next system. The disc's centre, which the original keeps on the stack for the label, is a
+// local; the label's endless loop down from the top spins on _host.
 void AddShortRangeSystem(GameState& _state, Host& _host, std::int16_t _x, std::int16_t _row)
 {
   const std::uint8_t centerX = Low(GalaxyToChart(Word(_x), SHORT_RANGE_CENTER_X));
@@ -516,7 +515,7 @@ void AddShortRangeSystem(GameState& _state, Host& _host, std::int16_t _x, std::i
   const auto radius = static_cast<std::uint8_t>(((SystemY(_state) & 1) << 1) + 4);
   item.radius = radius;
   item.isLabel = 0;
-  // Its box: half the radius either side, as add al,dl / xchg / sub al,dl / neg al make it.
+  // Its box: half the radius either side of the centre, in 8 bits.
   const auto half = static_cast<std::uint8_t>(radius >> 1);
   SetItemBox(item, ChartSpan{static_cast<std::uint8_t>(centerX - half), static_cast<std::uint8_t>(half + centerX)},
              ChartSpan{static_cast<std::uint8_t>(centerRow - half), static_cast<std::uint8_t>(half + centerRow)});
@@ -527,7 +526,7 @@ void AddShortRangeSystem(GameState& _state, Host& _host, std::int16_t _x, std::i
   // The label: from seven pixels right of the disc's centre, six a letter, and from two rows above it to three below.
   const auto left = static_cast<std::uint8_t>(centerX + LABEL_OFFSET_X);
   const ChartSpan x{left, static_cast<std::uint8_t>(left + Low(static_cast<std::uint16_t>(SMALL_LETTER_PIXELS * length)))};
-  // The label's bytes, its name LOOP counts in CX, 65,536 letters for 0, and its NUL.
+  // The label's bytes: its name, its length counted as the original's loop counts it, 65,536 letters for 0, and its NUL.
   const std::uint16_t cursor = _state.Data().galaxy.chartLabelCursor;
   const std::uint32_t letters = LoopCount(length);
   // A label that would run past pendingChartLabels is not kept, a change on purpose: the original wrote on past it. Only a chart
@@ -558,7 +557,7 @@ void AddShortRangeSystem(GameState& _state, Host& _host, std::int16_t _x, std::i
     rows.last = static_cast<std::uint8_t>(rows.last - 1);
   }
   SetSpanIn(label, CHART_LABEL_ROWS, rows);
-  // The name, a byte at a time, LOOP counting its length in CX; then the NUL, from CH.
+  // The name, a byte at a time, for its length; then the NUL.
   for (std::uint32_t copied = 0;;)
   {
     label[CHART_LABEL_NAME + copied] = std::uint8_t{name[copied]};
@@ -575,11 +574,11 @@ void AddShortRangeSystem(GameState& _state, Host& _host, std::int16_t _x, std::i
 // What REPE CMPSB finds.
 struct ByteComparison
 {
-  std::uint16_t compared; // the bytes it compared, which SI and DI move on by and CX goes down by
-  bool equal;             // every byte compared was equal: ZF
+  std::uint16_t compared; // the bytes it compared, which both places move on by and the count goes down by
+  bool equal;             // every byte compared was equal: the zero flag it leaves
 };
 
-// REPE CMPSB with ES on the data segment: _source with _destination from their first bytes, for at most _count bytes, until two
+// REPE CMPSB, both places in the game's data: _source with _destination from their first bytes, for at most _count bytes, until two
 // differ. A count of 0 compares nothing, and the flags keep what they held. Its one use compares a name with what was typed
 // (FindSystemByName).
 [[nodiscard]] ByteComparison CompareBytes(std::span<const std::uint8_t> _source, std::span<const std::uint8_t> _destination,
@@ -609,14 +608,14 @@ void ShowNotOnMap(GameState& _state)
   (void)DrawScreenString(_state, FIND_ERROR_SUFFIX, INK_3, nameEnd);
 }
 
-// FindNearestSystem's search: what it leaves in BP, the count its loop had left at the nearest system on the current
-// chart, CL with CH cleared (XOR CH,CH / MOV BP,CX); or, when no system is on the chart, which never happens, 100h less the
-// current system's index, where the original keeps BP as it came (ADR-046). The index it selects is 100h less that count.
+// FindNearestSystem's search: the low byte of the count its loop had left at the nearest system on the current chart; or, when
+// no system is on the chart, which never happens, 100h less the current system's index, where the original keeps what it came
+// with (ADR-046). The index it selects is 100h less that count.
 std::uint16_t SearchNearestSystem(GameState& _state)
 {
   LoadGalaxySeeds(_state);
   const ChartPoint cursor = GetCursorGalaxyPosition(_state);
-  // SI the nearest distance so far, and BP the loop's count, CL, at the nearest.
+  // The nearest distance so far, and the low byte of the loop's count at the nearest.
   std::uint16_t nearest = 0xFFFF;
   std::uint16_t nearestCount = static_cast<std::uint16_t>(GALAXY_SYSTEMS - _state.Data().commander.currentSystem.index);
   for (std::uint16_t count = GALAXY_SYSTEMS; count != 0; --count)
@@ -681,9 +680,7 @@ void SelectNearestSystem(GameState& _state)
   _state.Data().galaxy.chartItemEnd = 0;
   _state.Data().galaxy.chartLabelCursor = 0;
   LoadGalaxySeeds(_state);
-  // Each of the 256 systems that is on the chart becomes an item. XOR AL,AL, then PUSH AX round the system and POP AX at its end,
-  // where a system off the chart jumps back to with the count on the stack; the jump back to the next system carries it
-  // in AL.
+  // Each of the 256 systems that is on the chart becomes an item: a byte counted up from 0 until it wraps.
   for (std::uint8_t systems = 0;;)
   {
     const ShortRangeOffset offset = GetShortRangeOffset(_state);
@@ -729,14 +726,14 @@ ShortRangeOffset GetShortRangeOffset(const GameState& _state)
 
 bool IsSystemOnChart(const GameState& _state)
 {
-  // CMP chartIsShortRange,1 sets CF on the galactic chart, where GetShortRangeOffset would find every system too.
+  // Every system is on the galactic chart, as GetShortRangeOffset finds too.
   return GetShortRangeOffset(_state).onChart;
 }
 
 void TwistSystemSeeds(GameState& _state)
 {
   const SystemSeeds seeds = ReadSystemSeeds(_state);
-  // In the order the original's two XCHGs and its ADD write them.
+  // In the order the original writes them: two exchanges, then the sum.
   _state.Data().galaxy.systemSeed1 = seeds.seed2;
   _state.Data().galaxy.systemSeed0 = seeds.seed1;
   _state.Data().galaxy.systemSeed2 = static_cast<std::uint16_t>(seeds.seed0 + seeds.seed1 + seeds.seed2);
@@ -744,7 +741,7 @@ void TwistSystemSeeds(GameState& _state)
 
 void LoadGalaxySeeds(GameState& _state)
 {
-  // The table offset is figured in BL, a byte: galaxyNumber times six, from galaxySeeds. The eight galaxies' seeds are its entries,
+  // The table offset is figured in a byte: galaxyNumber times six, from galaxySeeds. The eight galaxies' seeds are its entries,
   // and the ninth's, which GalacticJump makes now and then after the eighth, the six bytes after it, gap29A6's (NINTH_GALAXY_SEEDS).
   // galaxyNumber is 0-8 wherever the game writes it (GalacticJump, a new game, a commander the game saved); a number past 8 would
   // have the original read the seeds on past gap29A6, and throws std::out_of_range.
@@ -823,7 +820,7 @@ void DescribeSystem(GameState& _state)
     _state.Data().commander.selectedSystem.speciesType = static_cast<std::uint8_t>(((seed2High & 3) + mixed) & 7);
   }
 
-  // (government+8)^2 in AL, times the population, times 4.
+  // (government+8)^2, kept to a byte, times the population, times 4.
   const std::uint8_t squared = Low(Square(static_cast<std::uint8_t>(government + 8)));
   _state.Data().commander.selectedSystem.productivityMillionCredits = static_cast<std::uint16_t>((squared * population) << 2);
 
@@ -1002,21 +999,21 @@ std::uint8_t GenerateSystemName(GameState& _state)
 
 void DrawChartItems(GameState& _state)
 {
-  // MOV CL,[chartItemCount] / AND CX,0FFh: CH stays 0, the high byte of a disc's centre row.
+  // chartItemCount, a byte: the count's high byte is 0, and the original shares it as the high byte of a disc's centre row.
   const std::uint8_t items = _state.Data().galaxy.chartItemCount;
   if (items == 0)
   {
     return;
   }
   _state.Data().drawing.drawColor = CHART_DISC_COLOR;
-  // PUSH CX / PUSH DI round each item keep the count and the item: the LOOP's count is a local.
+  // Each item in turn, the count a local.
   std::size_t index = 0;
   for (std::uint8_t itemsLeft = items; itemsLeft != 0; --itemsLeft)
   {
     const GalaxyState::ChartItem& item = ChartItem(std::as_const(_state), index);
     if (item.isLabel != 0)
     {
-      // A label, its text at its top-left corner: the x range's first byte in DL and the rows' first in DH. One that ran out of
+      // A label, its text at its top-left corner: the x range's first byte and the rows' first. One that ran out of
       // nudges below the chart is not drawn, a change on purpose: the original drew it on past the drawing buffer.
       if (item.rowsLast < CHART_ROWS)
       {
@@ -1025,7 +1022,7 @@ void DrawChartItems(GameState& _state)
     }
     else
     {
-      // A disc: the radius in BX, the centre's x in DX and its row in CX.
+      // A disc: its radius, and the centre's x and row.
       const std::uint16_t center = item.text;
       DrawDisc(_state, item.radius, Low(center), High(center));
     }
@@ -1177,7 +1174,7 @@ void ClearChartTextLines(GameState& _state, std::uint16_t _ink)
   }
   else
   {
-    // Each of the species' four bytes indexes its table (SHL AL,1 / XOR AH,AH). DescribeSystem gives each three bits.
+    // Each of the species' four bytes indexes its table of names. DescribeSystem gives each three bits.
     const CommanderState& commander = _state.Data().commander;
     cell = PrintTextModeString(_state, SPECIES_SIZE_NAMES[size & SEVEN_NAMES], printed);
     cell = PrintTextModeString(_state, SPECIES_COLOR_NAMES[commander.selectedSystem.speciesAdjective2 & SEVEN_NAMES], cell);
@@ -1211,7 +1208,7 @@ void TerminateSelectedSystemName(GameState& _state)
 
 std::string_view FormatSelectedSystemDistance(GameState& _state)
 {
-  // SI and DI, backwards: the copy runs until it has copied a space, which SelectNearestSystem leaves before the digits: the
+  // Backwards from the digits' end: the copy runs until it has copied a space, which SelectNearestSystem leaves before the digits: the
   // distance is below 10000 tenths of a light year (it is at most four times the root of 255^2 + 127^2), so its first digit is a
   // zero BlankLeadingZeros blanks, and the copy stops there at the latest.
   const std::span<const std::uint8_t> digits(_state.Data().galaxy.distanceDigits);
@@ -1235,7 +1232,7 @@ std::string_view FormatSelectedSystemDistance(GameState& _state)
 
 void ShowSystemDescription(GameState& _state)
 {
-  // REP STOSW of zeros over descriptionBuffer, ES = DS, from its start, forwards: DI, a byte of it.
+  // Zeros over descriptionBuffer, a word at a time, from its start, forwards.
   const std::span<std::uint8_t> buffer(_state.Data().galaxy.descriptionBuffer);
   std::uint16_t word = 0;
   for (std::uint16_t words = DESCRIPTION_BUFFER_WORDS; words != 0; --words)
@@ -1249,7 +1246,7 @@ void ShowSystemDescription(GameState& _state)
   const std::uint16_t expanded = ExpandDescriptionText(_state, DESCRIPTION_TEMPLATE, 0);
   ByteWithin(buffer, expanded) = 0;
 
-  // Word-wrapped at the last space within 36 characters, a text row at a time: SI the line and DI its end, bytes of the buffer.
+  // Word-wrapped at the last space within 36 characters, a text row at a time: line and end, offsets in the buffer.
   std::uint16_t line = 0;
   std::uint16_t cell = DESCRIPTION_SCREEN_OFFSET;
   for (;;)
@@ -1293,7 +1290,7 @@ std::uint16_t ExpandDescriptionText(GameState& _state, std::string_view _text, s
       continue;
     }
     const std::uint16_t output = next;
-    // The byte before the output, which the original reads at DI-1: before the buffer's first byte, the byte before it in 1987,
+    // The byte before the output, which the original reads just behind it: before the buffer's first byte, the original's byte before it,
     // descriptionTemplate's NUL (DESCRIPTION_TEMPLATE's nine bytes end with it).
     const std::uint8_t previous = output == 0 ? std::uint8_t{BEFORE_DESCRIPTION_BUFFER} : std::uint8_t{ByteWithin(buffer, output - 1)};
     if (code == SPACE && previous == SPACE)
@@ -1314,7 +1311,7 @@ std::uint16_t ExpandDescriptionText(GameState& _state, std::string_view _text, s
 
 std::uint16_t InsertSystemName(GameState& _state, std::uint16_t _output)
 {
-  // MOV AX,20h / MOV [DI],AX: the space and the NUL after the name again, as a word.
+  // The space and the NUL after the name again, written as one word.
   const std::size_t space = CopySelectedNameLower(_state);
   const std::span<std::uint8_t> end = BytesWithin(std::span(_state.Data().galaxy.descriptionNameBuffer), space, 2);
   end[0] = SPACE;
@@ -1391,7 +1388,7 @@ std::size_t CopySelectedNameLower(GameState& _state)
   {
     to[letter] = static_cast<std::uint8_t>(from[letter] | LOWER_CASE_BIT);
   }
-  // The space, then the NUL from AL.
+  // The space, then the NUL.
   to[length] = SPACE;
   to[length + 1] = 0;
   return length;

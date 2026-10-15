@@ -16,7 +16,7 @@ namespace Elite
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
-// Each is what the 1987 routine of its name computes, with no register in sight: its inputs are
+// Each is what the original routine of its name computes, with no register in sight: its inputs are
 // parameters, its results come back, and every byte it writes is written as the original writes it,
 // in the same order, scratch words and the divide trap's saves in the code segment included. Signed
 // words are std::int16_t; angles, 2048 to a turn, are std::uint16_t.
@@ -28,7 +28,7 @@ struct SinCos
   std::int16_t cosine;
 };
 
-/// The two coordinates a rotation turns, in the order the original's AX and BX hold them.
+/// The two coordinates a rotation turns, in the order the original holds them.
 struct Pair
 {
   std::int16_t first;
@@ -56,17 +56,17 @@ struct PositionScale
   std::uint8_t shift; ///< what brings the largest coordinate below 10000h and then below 24B8h
 };
 
-/// What a byte divide leaves: AL and AH.
+/// What a byte divide leaves: the quotient and the remainder.
 struct ByteQuotient
 {
   std::uint8_t quotient;  ///< 7Fh when the divide traps
   std::uint8_t remainder; ///< the dividend's high byte, as it was, when the divide traps
 };
 
-/// What a word divide leaves: AX and DX.
+/// What a word divide leaves: the quotient and the remainder.
 struct WordQuotient
 {
-  std::uint16_t quotient;  ///< what DivideOverflowInterrupt leaves in AX when the divide traps
+  std::uint16_t quotient;  ///< what DivideOverflowInterrupt leaves for it when the divide traps
   std::uint16_t remainder; ///< the dividend's high word, as it was, when the divide traps
 };
 
@@ -75,14 +75,16 @@ struct WordQuotient
 /// where it is made (D33, piece 3), as the reference's code bytes give it.
 enum class DivideTrap : std::uint8_t
 {
-  Word,   ///< bit 0 set, a word divide's opcode or a ModRM byte such as DIV [DI+14h]'s 75h: AX = 7FFFh
-  LowByte ///< bit 0 clear, as DIV [SI+4]'s ModRM byte 74h, which the handler takes for a byte divide's opcode: AL = 7Fh alone
+  Word,   ///< bit 0 set, a word divide's opcode or a ModRM byte such as ProjectDiscCoordinate's 75h: a quotient of 7FFFh
+  LowByte ///< bit 0 clear, as ProjectVertices' ModRM byte 74h, which the handler takes for a byte divide's opcode: 7Fh in the
+          ///< quotient's low byte alone
 };
 
-/// DivideOverflowInterrupt, the int 0 handler, for a divide that traps as _trap says, with AX = _ax: AL = 7Fh or
-/// AX = 7FFFh, the remainder untouched. An 80286 pushes the divide's own address, so the handler steps the return address over
-/// a DIV or IDIV it finds there, assuming a register operand; _trap is what that reading gives. The original first saves BX and
-/// DS in its code segment, which nothing reads. Returns AX as it leaves it.
+/// DivideOverflowInterrupt, the int 0 handler, for a divide that traps as _trap says, with _ax the quotient word as the divide
+/// left it: 7Fh in its low byte or 7FFFh in the whole, the remainder untouched. An 80286 pushes the divide's own address, so the
+/// handler steps the return address over a DIV or IDIV it finds there, assuming a register operand; _trap is what that reading
+/// gives. The original first saves two registers in its code segment, which nothing reads. Returns the quotient word as it
+/// leaves it.
 [[nodiscard]] std::uint16_t DivideOverflowInterrupt(DivideTrap _trap, std::uint16_t _ax);
 
 /// DIV r/m16: _dividend / _divisor, or, when the quotient does not fit, what DivideOverflowInterrupt does for a divide that
@@ -90,11 +92,11 @@ enum class DivideTrap : std::uint8_t
 [[nodiscard]] WordQuotient DivideUnsigned(std::uint32_t _dividend, std::uint16_t _divisor, DivideTrap _trap);
 
 /// DIV r/m8: _dividend / _divisor, or, when the quotient does not fit, what DivideOverflowInterrupt does for a byte divide:
-/// AL = 7Fh, AH as it was. The handler reads every byte divide in the program as one.
+/// a quotient of 7Fh, the dividend's high byte as it was. The handler reads every byte divide in the program as one.
 [[nodiscard]] ByteQuotient DivideByte(std::uint16_t _dividend, std::uint8_t _divisor);
 
-/// DIV r/m16: _dividend / _divisor, or AX = 7FFFh and DX as it was. The handler reads every word divide in the program as one
-/// but ProjectVertices' two, which DivideUnsigned serves.
+/// DIV r/m16: _dividend / _divisor, or a quotient of 7FFFh and the dividend's high word as it was. The handler reads every word
+/// divide in the program as one but ProjectVertices' two, which DivideUnsigned serves.
 [[nodiscard]] WordQuotient DivideWord(std::uint32_t _dividend, std::uint16_t _divisor);
 
 /// IDIV r/m16, as the 8088 does it: the magnitudes divided, and the trap as DivideWord's when the quotient's magnitude

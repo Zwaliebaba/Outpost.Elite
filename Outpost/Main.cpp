@@ -7,7 +7,7 @@
 namespace
 {
 
-// Whether the command line holds --cheat as one of its words: the game's cheat, where 1987 read ' cheat' (D80).
+// Whether the command line holds --cheat as one of its words: the game's cheat, where the original read ' cheat' (D80).
 [[nodiscard]] bool AsksForCheat(std::wstring_view _commandLine) noexcept
 {
   constexpr std::wstring_view CHEAT = L"--cheat";

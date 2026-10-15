@@ -7,7 +7,7 @@
 namespace Elite
 {
 
-/// The disk operation's error, which saving and loading and the start-up share. Its member is the 1987 data segment's, by its name;
+/// The disk operation's error, which saving and loading and the start-up share. Its member is the original data segment's, by its name;
 /// the GameState holds it in GameData.
 struct DiskState
 {

@@ -12,9 +12,9 @@ namespace Elite
 namespace
 {
 
-// What DivideOverflowInterrupt leaves in AX after a word divide overflows: the positive maximum (plan §7.1).
+// What DivideOverflowInterrupt leaves for the quotient after a word divide overflows: the positive maximum (plan §7.1).
 constexpr std::uint16_t DIVIDE_OVERFLOW_WORD = 0x7FFF;
-// What it leaves in AL after a byte divide overflows.
+// What it leaves for the quotient after a byte divide overflows.
 constexpr std::uint8_t DIVIDE_OVERFLOW_BYTE = 0x7F;
 
 constexpr std::uint16_t ANGLE_MASK = 0x7FF;       // 2048 to a turn
@@ -30,11 +30,11 @@ constexpr std::uint16_t TANGENT_TOP_BYTES = 0x1FE;
 constexpr std::uint32_t MASK_24_BITS = 0xFFFFFF;
 constexpr std::uint32_t SIGN_24_BITS = 0x800000;
 constexpr std::uint16_t SCALED_POSITION_LIMIT = 0x24B8; // GetPositionScaleShift's ceiling
-// ScaleByInverseDistance's divide, DIV BX, a word divide's opcode.
+// ScaleByInverseDistance's divide, by a register: a word divide's opcode.
 constexpr DivideTrap SCALE_DIVIDE_TRAP = DivideTrap::Word;
 constexpr std::uint16_t SCALE_LIMIT = 0xFF;
 
-// imul, then shl ax,1 / rcl dx,1 / shl ax,1 / adc dx,0: the high word of 2ab, rounded on the bit below.
+// The signed product, doubled: the high word of 2ab, rounded up when the bit below it is set.
 [[nodiscard]] std::uint16_t RoundedProduct(std::uint16_t _a, std::uint16_t _b) noexcept
 {
   const auto product = static_cast<std::uint32_t>(static_cast<std::int32_t>(static_cast<std::int16_t>(_a)) * static_cast<std::int16_t>(_b));
@@ -48,20 +48,20 @@ constexpr std::uint16_t SCALE_LIMIT = 0xFF;
   return (angle & ANGLE_SIGN) != 0 ? static_cast<std::uint16_t>(angle | ANGLE_EXTENSION) : angle;
 }
 
-// and r,r / jns / neg r: 8000h stays 8000h.
+// The magnitude, by two's complement: 8000h stays 8000h.
 [[nodiscard]] std::uint16_t Magnitude(std::uint16_t _value) noexcept
 {
   return (_value & 0x8000) != 0 ? Negate(_value) : _value;
 }
 
-// imul of a word by itself: DX:AX.
+// A signed word times itself: the whole 32-bit product.
 [[nodiscard]] std::uint32_t Square(std::uint16_t _value) noexcept
 {
   const auto value = static_cast<std::int32_t>(static_cast<std::int16_t>(_value));
   return static_cast<std::uint32_t>(value * value);
 }
 
-// The magnitude of a 24-bit coordinate: not, not, add 1, adc 0, so that 800000h stays 800000h.
+// The magnitude of a 24-bit coordinate, by two's complement in 24 bits, so that 800000h stays 800000h.
 [[nodiscard]] std::uint32_t Magnitude24(std::uint32_t _value) noexcept
 {
   return (_value & SIGN_24_BITS) != 0 ? (0u - _value) & MASK_24_BITS : _value;

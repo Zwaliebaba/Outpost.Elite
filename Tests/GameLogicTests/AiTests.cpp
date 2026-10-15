@@ -17,7 +17,7 @@ namespace
 
 using Commander = Elite::CommanderState;
 
-// The twins' prepared commanders, from Replays/: commanders the 1987 game saved, changed as its own code would change them.
+// The twins' prepared commanders, from Replays/: commanders the original game saved, changed as its own code would change them.
 constexpr std::string_view ARMED = "armed.cdr";
 constexpr std::string_view INVASION_MISSION = "invasion-mission.cdr";
 // From the title: the credits, the status screen, the disc menu, and JAMESON loaded.

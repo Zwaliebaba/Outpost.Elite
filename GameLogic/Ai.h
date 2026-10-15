@@ -18,10 +18,10 @@ namespace Elite
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 
-/// UpdateObjectsAndSpawn: once a frame, activeObjectCount and the class counts cleared (REP STOSB, upwards: the direction flag is
-/// clear wherever the game calls it, change 3c), then every active slot of shipSlotCount counted, debris apart, and run by its class's
-/// handler; maskingBackgroundColor cleared; then, with fewer than 10 active objects and no more than objectSlotCount, the mask mission's
-/// ships, an invasion's Thargoids, or the government's spawns.
+/// UpdateObjectsAndSpawn: once a frame, activeObjectCount and the class counts cleared (a byte at a time, upwards, as the original's
+/// string writes run wherever the game calls it, change 3c), then every active slot of shipSlotCount counted, debris apart, and run
+/// by its class's handler; maskingBackgroundColor cleared; then, with fewer than 10 active objects and no more than objectSlotCount,
+/// the mask mission's ships, an invasion's Thargoids, or the government's spawns.
 void UpdateObjectsAndSpawn(GameState& _state);
 
 /// UpdateStationAi: class 1: the station at _station spins; while it is hostile and the government is no anarchy, it looks for an

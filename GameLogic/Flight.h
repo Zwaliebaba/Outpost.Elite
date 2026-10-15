@@ -19,7 +19,7 @@ namespace Elite
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
-// Each is what the 1987 routine of its name computes, with no register in sight, and every byte it writes is
+// Each is what the original's routine of its name computes, with no register in sight, and every byte it writes is
 // written as the original writes it, in the same order and at the same width. The dashboard's routines draw into
 // the CGA's video memory.
 
@@ -161,7 +161,7 @@ void UpdateDashboard(GameState& _state);
 
 /// DrawFiveLineBar: _value * 12 / 63, 0-48 pixels, as a bar 5 scanlines high on the dashboard line at B800:_line:
 /// colour 1, a partial byte from barPartialBytes, then colour 2 to the 48th pixel. For a value of fewer than 4 pixels the second
-/// run counts _countHigh, CH as the caller leaves it, in its high byte.
+/// run counts _countHigh, as the caller leaves it, in its high byte.
 void DrawFiveLineBar(GameState& _state, std::uint16_t _line, std::uint8_t _value, std::uint8_t _countHigh);
 
 /// DrawThreeLineBar: DrawFiveLineBar's bar 3 scanlines high.
@@ -217,7 +217,7 @@ void UpdateConditionColor(GameState& _state);
 [[nodiscard]] SafeZone InSafeZone(const GameState& _state);
 
 /// UpdateSafeZone: safeZoneFlags from the station in stationSlot: bit 0 set while it is an active station, IsObjectNear
-/// and nearer than 32C8h, over what the original's AL held: IsObjectNear's last high byte, or the low byte of the distance.
+/// and nearer than 32C8h, over what the original's byte held: IsObjectNear's last high byte, or the low byte of the distance.
 void UpdateSafeZone(GameState& _state);
 
 /// ComputeDeathDebrisVector: (0, 40, 0) turned by the view and, off the front view, by the roll, then by the yaw
@@ -270,7 +270,7 @@ std::uint8_t XorDashboardPixel(GameState& _state, std::uint8_t _x, std::uint8_t 
 void UpdateFuelLeak(GameState& _state, Host& _host);
 
 /// TickEscapePod: escapePodFrames counted down while it runs. Returns whether the pod has arrived, when the original
-/// drops its own return address so that its RET leaves RunFlight.
+/// drops its own return address so that its return leaves RunFlight.
 bool TickEscapePod(GameState& _state);
 
 /// DrainEnergy: playerEnergy less _amount, sign-extended; on a borrow it is 0 and the player dead.
@@ -295,7 +295,7 @@ void MoveObjectsByVelocity(GameState& _state);
 /// What HandleFlightFunctionKeys leaves that ProcessFlightKeys reads.
 struct FlightScreens
 {
-  std::uint8_t view;                    ///< AH: the F1-F4 that ended it, or 0: no key, or the navigation computer's error
+  std::uint8_t view;                    ///< the F1-F4 that ended it, or 0: no key, or the navigation computer's error
   std::optional<ScreenChange> restored; ///< what RestoreFlightScreen did, once a screen was shown
 };
 
@@ -310,7 +310,7 @@ struct FlightScreens
 /// How ProcessFlightKeys ends.
 struct FlightKeysExit
 {
-  /// The pause screen's A: the original drops its own return address and ProcessFlightKeys', so that the RET leaves RunFlight for
+  /// The pause screen's A: the original drops its own return address and ProcessFlightKeys', so that the return leaves RunFlight for
   /// the title (RunPauseScreen).
   bool aborted;
 };

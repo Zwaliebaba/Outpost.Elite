@@ -7,8 +7,8 @@
 namespace Elite
 {
 
-/// What Market.cpp, alone, writes of the game's state (D38), and its own: read elsewhere at most, never written. Its members are the 1987
-/// data segment's, by their names, in their order there; the GameState holds it in GameData.
+/// What Market.cpp, alone, writes of the game's state (D38), and its own: read elsewhere at most, never written. Its members are the
+/// original data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct MarketState
 {
   /// where ComputeMarketPrices leaves its walk: the economy's and the government's price factors, a row of eight words to a

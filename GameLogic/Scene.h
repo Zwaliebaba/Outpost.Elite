@@ -21,8 +21,8 @@ namespace Elite
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
-// A vertex is the offset in the data segment of its three words, x, y and z, as the original holds it in SI or DI. A string
-// instruction runs forwards (ADR-046).
+// A vertex is the offset in the data segment of its three words, x, y and z, as the original holds it. A string instruction
+// runs forwards (ADR-046).
 
 /// The vertices a blueprint's program starts from, by the handler its first word names.
 enum class BlueprintShape : std::uint8_t
@@ -82,7 +82,7 @@ struct ShipRangeCheck
 
 /// ProjectVertices: the first projectedVertexCount 6-byte vertices of vertexBuffer projected in place to 4-byte points,
 /// 80h + 256x/z and 40h + 256y/z rounded; a vertex nearer than nearPlaneZ gets x = 8000h and keeps a stale y. Each divide takes a
-/// memory operand, so the trap saturates only AL when it overflows.
+/// memory operand, so the trap saturates only the quotient's low byte when it overflows.
 void ProjectVertices(GameState& _state);
 
 /// ReflectVertexAboutCenter: for x, y and z in turn, the vertex at _reflection = drawCenter - the vertex at _vertex,
@@ -152,12 +152,12 @@ Vector TransformToViewWithBlip(GameState& _state, SpaceObject& _slot, Vector _po
 Vector TransformToView(GameState& _state, Vector _position);
 
 /// TransformAndDrawObjects: the player's pitch, yaw and roll into rotation pairs 0-2; every one of shipSlotCount slots
-/// classified and transformed (ClassifyObject), from the slot each leaves DI on; then, from the farthest in, the visible objects
+/// classified and transformed (ClassifyObject), from the slot each leaves the pass on; then, from the farthest in, the visible objects
 /// drawn (DrawFarthestObject): the sun or the planet, the station as a disc, a dot, or a blueprint.
 void TransformAndDrawObjects(GameState& _state, Host& _host);
 
-/// What SizePlanet and SizeSun scale to an object's distance, its disc's radius in rows at 256 of its view units off (MOV DX,32h
-/// and MOV DX,64h), which makes the planet a sphere of 50 x 256 units and the sun one of 100 x 256 (ADR-035).
+/// What SizePlanet and SizeSun scale to an object's distance, its disc's radius in rows at 256 of its view units off (32h and
+/// 64h), which makes the planet a sphere of 50 x 256 units and the sun one of 100 x 256 (ADR-035).
 inline constexpr std::uint16_t PLANET_DISC_SCALE = 0x32;
 inline constexpr std::uint16_t SUN_DISC_SCALE = 0x64;
 

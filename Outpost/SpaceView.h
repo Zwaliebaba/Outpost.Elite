@@ -32,8 +32,8 @@ public:
   [[nodiscard]] bool AddModels(Engine::Renderer& _renderer);
 
   /// The scene to draw now, as _platform's last two flight snapshots make it, a frame drawn one update late between them (D49),
-  /// its 1987 view stretched over _view and the scene filling _window round it at the same scale (Hor+, D50), places in design
-  /// units under a canvas (ADR-034). The game's layers lie over _view; beside it, the renderer draws by 1987's own rule what the
+  /// its original view stretched over _view and the scene filling _window round it at the same scale (Hor+, D50), places in design
+  /// units under a canvas (ADR-034). The game's layers lie over _view; beside it, the renderer draws by the original's own rule what the
   /// game drew nothing of (D69). None while the screen does not show the last one. It holds until the next call.
   [[nodiscard]] const Engine::SceneFrame* Frame(const Elite::Host& _platform, const Engine::Rect& _view, const Engine::Rect& _window);
 
@@ -55,7 +55,7 @@ private:
   void TakeBeams(const Elite::FlightSnapshot& _before, const std::array<std::uint32_t, 4>& _palette);
 
   // The stardust (D67), moved back by the player's velocity for the paced time since the last call and seen by the camera as it is
-  // drawn now, as strokes in _palette's colour of 1987's dust; none while the frame draws no dust, nor moved.
+  // drawn now, as strokes in _palette's colour of the original's dust; none while the frame draws no dust, nor moved.
   void MoveStardust(const Elite::Host& _platform, const std::array<std::uint32_t, 4>& _palette);
 
   std::vector<Elite::ShipModel> m_models; // by type

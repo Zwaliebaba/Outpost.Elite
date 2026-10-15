@@ -17,8 +17,8 @@ namespace Elite
 /// How the disc menu ends.
 struct DiscMenuExit
 {
-  bool leaves;           ///< through LeaveGameLoopForDisk, for a disk operation or to leave for DOS: its two POP AX drop the
-                         ///< return addresses of the menu's call and RunTitleAndDocked's, so that the RET returns from GameLoop
+  bool leaves;           ///< through LeaveGameLoopForDisk, for a disk operation or to leave for DOS: the original drops the
+                         ///< return addresses of the menu's call and RunTitleAndDocked's, so that it returns from GameLoop
                          ///< to Start
   std::uint8_t scanCode; ///< otherwise the F-key that ends it
 };
@@ -42,8 +42,8 @@ void PerformDiskRequest(GameState& _state, Host& _host, std::uint8_t _request);
 /// columns of ten.
 void PrintCommanderCatalogue(GameState& _state);
 
-/// SaveStartupCommander: commanderFileBytes of commanderBlock copied to startupCommander, a byte at a time, going up as REP MOVSB
-/// does: the direction flag is clear wherever the game calls it (change 3c).
+/// SaveStartupCommander: commanderFileBytes of commanderBlock copied to startupCommander, a byte at a time, going up as
+/// the original's copy does: nothing leaves it running downward where the game calls it (change 3c).
 void SaveStartupCommander(GameState& _state);
 
 } // namespace Elite

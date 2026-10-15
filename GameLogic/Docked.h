@@ -17,7 +17,7 @@ namespace Elite
 
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
-// Each is what the 1987 routine of its name computes, with no register in sight: its inputs are
+// Each is what the original routine of its name computes, with no register in sight: its inputs are
 // parameters, its results come back, and every byte it writes is written as the original writes it, in
 // the same order and at the same width.
 
@@ -34,15 +34,6 @@ void AwardArchangelTitle(GameState& _state);
 /// ShowInventoryScreen jump into: GetKey until Esc, or an F-key other than the screen's own, _ownKey, then SelectSystemAtCursor.
 /// Waits for keys as a rule (ADR-015).
 [[nodiscard]] Task<ScreenKey> WaitForScreenExitKey(GameState& _state, Host& _host, std::uint8_t _ownKey);
-
-/// ShowSellCargoScreen, F2, with PrintNameAndPrice, PrintUnit and EndTradeRow as one unit (ADR-012 item 14): the
-/// products with their sell prices and the units held, then RunCargoTradeMenu, which returns the key that closes it. Waits for
-/// keys as a rule (ADR-015).
-[[nodiscard]] Task<ScreenKey> ShowSellCargoScreen(GameState& _state, Host& _host);
-
-/// ShowBuyCargoScreen, F3, as ShowSellCargoScreen: the products with their buy prices and the quantities on sale,
-/// drawn from the market's random state the first time after an arrival, then RunCargoTradeMenu.
-[[nodiscard]] Task<ScreenKey> ShowBuyCargoScreen(GameState& _state, Host& _host);
 
 /// ShowCommanderStatusScreen, F9, docked or in flight: docked, a mission's briefing or debriefing first; then the
 /// commander, systems, fuel, cash, legal status, rating and equipment, and the wait for the key that closes it
@@ -72,7 +63,7 @@ void FormatFuelLightYears(GameState& _state);
 /// screen's attribute _screen and the frame's, _frame: the text mode set unless screenLayout says the text page shows,
 /// textAttribute the screen's attribute without its blink bit and the border its background, the page cleared, the frame's rows
 /// at lines 0, 2 and 24 and its sides in the frame's attribute, and its six corners and tees from frameCorners. The clear and the
-/// rows' REP STOSW run forwards.
+/// rows' fills run forwards.
 void DrawDockedFrameAt(GameState& _state, Host& _host, std::uint8_t _screen, std::uint8_t _frame);
 
 /// DrawDockedFrame: DrawDockedFrameAt from _descriptor, the bytes of GameData from where a frame's descriptor starts to the end
@@ -89,7 +80,7 @@ inline std::string_view DrawDockedFrame(GameState& _state, Host& _host, std::spa
 std::string_view DrawDockedFrame(GameState& _state, Host& _host, std::string_view _descriptor);
 
 /// DrawFrameSides: BAh in attribute _attribute at columns 0 and 39 of _rows rows of the text page in video memory from _cell,
-/// 65,536 for 0, as LOOP counts. The original takes the page's segment in ES, which is the video segment wherever it is called.
+/// 65,536 for 0, as the original's count runs. The page is in video memory wherever the original calls it.
 void DrawFrameSides(GameState& _state, std::uint16_t _cell, std::uint16_t _rows, std::uint8_t _attribute);
 
 /// DrawFrameRow: the character and attribute _value in 38 cells of video memory from _cell,.

@@ -19,6 +19,22 @@ struct KeyEvent
   bool repeat = false; ///< a make the keyboard repeated while the key was held
 };
 
+/// The mouse over the client area (D83): moved, its left button pressed, or gone from the window. x and y are physical pixels
+/// from the client area's top-left corner.
+struct PointerEvent
+{
+  enum class Kind : std::uint8_t
+  {
+    Move,
+    LeftDown,
+    Leave,
+  };
+
+  Kind kind = Kind::Move;
+  int x = 0;
+  int y = 0;
+};
+
 /// The game's window: a resizable top-level window whose client area the Renderer draws into. It reports
 /// keys, including the ones Windows keeps for itself (Alt, F10), and releases every held key when it loses
 /// the focus, so nothing sticks down. F11 switches between a window and the whole screen, borderless.
@@ -45,6 +61,9 @@ public:
   /// The keys reported since the last call, oldest first.
   [[nodiscard]] std::vector<KeyEvent> TakeKeyEvents();
 
+  /// The mouse's events since the last call, oldest first.
+  [[nodiscard]] std::vector<PointerEvent> TakePointerEvents();
+
   /// Whether the client area changed size since the last call.
   [[nodiscard]] bool TakeResized() noexcept;
 
@@ -67,6 +86,8 @@ private:
   WINDOWPLACEMENT m_windowedPlacement{};
   std::vector<KeyEvent> m_events;
   std::vector<KeyEvent> m_held;
+  std::vector<PointerEvent> m_pointerEvents;
+  bool m_trackingLeave = false; // TrackMouseEvent asked for the WM_MOUSELEAVE of the mouse now over the window
 };
 
 } // namespace Engine

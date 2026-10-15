@@ -10,7 +10,7 @@ namespace Elite
 {
 
 /// What Hyperspace.cpp, alone, writes of the game's state (D38), and its own: read elsewhere at most, never written. Its members are the
-/// 1987 data segment's, by their names, in their order there; the GameState holds it in GameData.
+/// original's data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct HyperspaceState
 {
   /// 'Hyperspaced into galaxy ', the digit GalacticJump writes, galaxyNumber + '1', and the NUL

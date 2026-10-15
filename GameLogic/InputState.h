@@ -7,8 +7,8 @@
 namespace Elite
 {
 
-/// What Input.cpp, alone, writes of the game's state (D38), and its own: read elsewhere at most, never written. Its members are the 1987
-/// data segment's, by their names, in their order there; the GameState holds it in GameData.
+/// What Input.cpp, alone, writes of the game's state (D38), and its own: read elsewhere at most, never written. Its members are the
+/// original data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct InputState
 {
   /// ring buffer of make codes, written by ReadScanCode
@@ -27,7 +27,7 @@ struct InputState
   std::uint8_t keyboardRollRamp;
   /// as keyboardRollRamp, for pitch
   std::uint8_t keyboardPitchRamp;
-  /// integrated roll for the keyboard, +-23; ReadSteering stores AX here (word with keyboardPitchRate)
+  /// integrated roll for the keyboard, +-23; ReadSteering stores the roll and pitch here as one word (with keyboardPitchRate)
   std::uint8_t keyboardRollRate;
   /// integrated pitch, as keyboardRollRate
   std::uint8_t keyboardPitchRate;

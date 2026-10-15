@@ -4,6 +4,7 @@
 #include "Cga.h"
 #include "FileStore.h"
 #include "FlightSnapshot.h"
+#include "MarketView.h"
 #include "Mouse.h"
 #include "KeyboardState.h"
 #include "SpaceViewLayers.h"
@@ -73,7 +74,7 @@ public:
   {
     DosDateTime startMoment;   ///< The date and time at power-on, which the commander files' stamps count from.
     bool mousePresent = false; ///< Whether a mouse is attached (Mouse::Present).
-    bool cheat = false;        ///< Whether the game starts with the cheat on: the shell's --cheat, where 1987 read ' cheat' (D80).
+    bool cheat = false;        ///< Whether the game starts with the cheat on: the shell's --cheat, where the original read ' cheat' (D80).
   };
 
   /// A native routine at an address, and how often it ran.
@@ -264,6 +265,25 @@ public:
   /// publishes it, continuing nothing, with the layers holding the whole view as the screen shows it (SpaceViewLayers::FinishPicture).
   void PublishSpaceViewPicture(const FlightSnapshot& _snapshot) noexcept;
 
+  /// _view published as what the market screen, D01, shows now (ADR-058): numbered, one more than the last. While one is shown,
+  /// the shell draws it in place of the CGA picture.
+  void ShowMarket(MarketView _view);
+
+  /// D01 no longer shown: the market screen's routine ended. The clicks not yet taken go with it.
+  void HideMarket() noexcept;
+
+  /// The market screen's view while it is shown, or nothing.
+  [[nodiscard]] const MarketView* ShownMarket() const noexcept
+  {
+    return m_marketShown ? &m_marketView : nullptr;
+  }
+
+  /// A click on one of D01's controls, from the shell (D83), queued for the market screen; dropped while it is not shown.
+  void Click(const MarketClick& _click);
+
+  /// The oldest click queued, taken, or nothing.
+  [[nodiscard]] std::optional<MarketClick> TakeClick() noexcept;
+
   /// The space view's layers as the last published snapshot's frame drew them (ADR-033): what a renderer that draws the ships
   /// itself draws under and over them. PublishFlightSnapshot finishes them and marks each object drawn as a model.
   [[nodiscard]] const SpaceViewLayers& SpaceView() const noexcept
@@ -387,6 +407,9 @@ private:
   // The tick and the keys (D87, D88): when each next falls due, and what has fallen due for RunDue.
   Milliseconds m_nextTickAt = NO_EVENT;
   std::deque<KeyEvent> m_keys;
+  MarketView m_marketView;          // the market screen's latest view
+  bool m_marketShown = false;       // while the market screen's routine runs
+  std::deque<MarketClick> m_clicks; // the shell's clicks on it, oldest first
   Milliseconds m_nextKeyAt = NO_EVENT;
   bool m_keysToGame = false;
   bool m_tickDue = false;

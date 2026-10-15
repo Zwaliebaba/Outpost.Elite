@@ -83,8 +83,8 @@ constexpr std::uint16_t COUNTDOWN_MESSAGE_FRAMES = 10;
   return _jumps == FIRST_MISSION_JUMPS ? FIRST_MISSION : _jumps == SECOND_MISSION_JUMPS ? SECOND_MISSION : THIRD_MISSION;
 }
 
-// NextRandom made an offset of 200h-3FFh, negated when the number's top bit is set (mov dh,ah; shl dh,1
-// leaves that bit in CF). Nothing reads the DH it leaves: ArriveInSystem's CWD loads DX next.
+// NextRandom made an offset of 200h-3FFh, negated when the number's top bit is set. The original
+// leaves a shifted byte behind in testing that bit, which nothing reads.
 [[nodiscard]] std::uint16_t RandomArrivalOffset(GameState& _state)
 {
   const std::uint16_t random = NextRandom(_state);
@@ -111,7 +111,7 @@ void GalacticJump(GameState& _state)
   }
   _state.Data().hyperspace.arrivalGalaxyText[ARRIVAL_GALAXY_DIGIT] =
     static_cast<std::uint8_t>(_state.Data().commander.galaxyNumber + GALAXY_DIGIT_ONE);
-  // AND AL,3Fh / ADD AL,60h, and AND AH,1Fh / ADD AH,30h: a random point about the middle of the chart.
+  // The low byte's bottom six bits plus 60h, and the high byte's bottom five plus 30h: a random point about the middle of the chart.
   const std::uint16_t random = NextRandom(_state);
   _state.Data().commander.chartCursorX = static_cast<std::uint8_t>((Low(random) & 0x3F) + 0x60);
   _state.Data().commander.chartCursorY = static_cast<std::uint8_t>((High(random) & 0x1F) + 0x30);
@@ -151,8 +151,8 @@ void PostArrival(GameState& _state)
   }
 }
 
-// add [_low], low byte of _value; adc [_high], high byte: _value added to the top 16 bits of a coordinate, _low's high byte
-// and _high.
+// _value added to the top 16 bits of a coordinate, _low's high byte and _high, a byte at a time: the low byte's carry goes into
+// _high with the high byte.
 void AddCarried(std::uint16_t& _low, std::uint8_t& _high, std::uint16_t _value)
 {
   const auto sum = static_cast<unsigned>(High(_low) + Low(_value));
@@ -169,11 +169,11 @@ void ArriveInSystem(GameState& _state, Host& _host)
   {
     return;
   }
-  // A random word for z, in CX, then the offsets for y, in BX, and x, in AX.
+  // A random word for z, then the offsets for y and x.
   const std::uint16_t zOffset = NextRandom(_state);
   const std::uint16_t yOffset = RandomArrivalOffset(_state);
   const std::uint16_t xOffset = RandomArrivalOffset(_state);
-  // XCHG CX,AX / CWD / XCHG CX,AX: DL is z's sign, which carries into its top byte; DH counts the three slots.
+  // z's sign, extended to a byte, carries into its top byte; the loop counts the three slots.
   const std::uint8_t zTop = (zOffset & 0x8000) != 0 ? std::uint8_t{0xFF} : std::uint8_t{0};
   SlotIndex index = SlotIndex::Sun;
   for (std::uint8_t slots = ARRIVAL_SLOTS; slots != 0; --slots)
@@ -209,8 +209,8 @@ MassLock IsMassLocked(GameState& _state)
   {
     return lock;
   }
-  // Any ship on the scanner but the rocks, barrels and splinters: MOV CL,objectSlotCount / XOR CH,CH / SUB CL,3 / JG, else RET
-  // with the SUB's borrow.
+  // Any ship on the scanner but the rocks, barrels and splinters: objectSlotCount less 3, as a signed byte; when that is not above
+  // 0, no ship is looked at, and the jump drive is locked only when taking 3 borrowed.
   const std::uint8_t slots = _state.Data().flight.objectSlotCount;
   ShipScan scan{SlotIndex::FirstShip, static_cast<std::uint8_t>(slots - FIRST_SHIP_SLOT_INDEX)};
   if (static_cast<std::int8_t>(slots) <= FIRST_SHIP_SLOT_INDEX)
@@ -248,7 +248,7 @@ MassLock IsMassLocked(GameState& _state)
   }
   else
   {
-    // SUB [fuel],AL; then SUB [legalStatus],5, and 0 written over it on a borrow.
+    // The fuel less the jump's cost; then legalStatus less 5, and 0 written over it on a borrow.
     _state.Data().commander.fuel = static_cast<std::uint8_t>(_state.Data().commander.fuel - _state.Data().flight.hyperspaceFuelCost);
     const std::uint8_t legal = _state.Data().commander.legalStatus;
     _state.Data().commander.legalStatus = static_cast<std::uint8_t>(legal - LEGAL_STATUS_PER_JUMP);
@@ -274,7 +274,7 @@ MassLock IsMassLocked(GameState& _state)
   }
   if (!misjump && _state.Data().jump.forceMisjump == 1)
   {
-    // JE MisJump, back into the code above.
+    // Back into the mis-jump above.
     misjump = true;
   }
   if (misjump)
@@ -302,7 +302,7 @@ MassLock IsMassLocked(GameState& _state)
     }
   }
 
-  // The tunnel's frames end with FinishSpaceViewFrame's CLD, so the arrival copies forwards.
+  // The tunnel's frames end with FinishSpaceViewFrame setting the direction forwards, so the arrival copies forwards.
   co_await PlayHyperspaceTunnel(_state, _host);
   ArriveInSystem(_state, _host);
   UpdateMissionSchedule(_state);
@@ -314,9 +314,9 @@ MassLock IsMassLocked(GameState& _state)
 
 void ResetHyperspaceRings(GameState& _state)
 {
-  // REP MOVSW within the data segment, a word at a time, SI and DI from the tables' starts: hyperspaceRingStart's bytes into
-  // hyperspaceRings, upwards, as the direction flag is clear wherever the game calls it: the only STD,
-  // MaskOutsideTunnel's, has its CLD before the routine returns (change 3c).
+  // A word at a time within the data segment, from the tables' starts: hyperspaceRingStart's bytes into hyperspaceRings, upwards,
+  // as the direction flag is clear wherever the game calls it: the only backward copy, MaskOutsideTunnel's, sets it forwards
+  // again before the routine returns (change 3c).
   static_assert(sizeof(HyperspaceState::hyperspaceRings) == std::size_t{HYPERSPACE_RING_WORDS} * 2);
   for (std::size_t ring = 0; ring < HYPERSPACE_RING_START.size(); ++ring)
   {
@@ -329,8 +329,7 @@ void ResetHyperspaceRings(GameState& _state)
 
 void DrawHyperspaceRings(GameState& _state)
 {
-  // LOOP over the ten rings, three bytes each: the delay, the radius and the colour. PUSH CX and PUSH SI keep the count and
-  // the ring round DrawCircle.
+  // The ten rings, three bytes each: the delay, the radius and the colour.
   for (std::uint8_t(&ring)[HYPERSPACE_RING_BYTES] : _state.Data().hyperspace.hyperspaceRings)
   {
     const std::uint8_t delay = ring[0];
@@ -355,7 +354,7 @@ void DrawHyperspaceRings(GameState& _state)
 
 [[nodiscard]] Task<void> PlayHyperspaceTunnel(GameState& _state, Host& _host)
 {
-  // PUSH CX / POP CX keep the frames left round the frame's work.
+  // The frames left, counted down after each frame.
   for (std::uint16_t frames = HYPERSPACE_TUNNEL_FRAMES;;)
   {
     UpdateMessageLine(_state);
@@ -379,7 +378,7 @@ void EnterWitchSpace(GameState& _state)
   _state.Data().commander.chartCursorX = x;
   _state.Data().commander.galacticCursorX = x;
   _state.Data().commander.shortRangeCursorX = CHART_CENTER_X;
-  // add al, [currentSystemChartY]; shr al,1: a byte sum, its carry lost.
+  // The destination's y, halved, plus currentSystemChartY in 8 bits, its carry lost, then halved.
   const auto sum = static_cast<std::uint8_t>((SystemY(_state) >> 1) + _state.Data().commander.currentSystemChartY);
   const auto y = static_cast<std::uint8_t>(sum >> 1);
   _state.Data().commander.currentSystemChartY = y;

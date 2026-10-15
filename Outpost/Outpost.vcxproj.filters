@@ -4,6 +4,9 @@
     <Filter Include="Application">
       <UniqueIdentifier>{8169A49D-2F6B-5064-896A-DDD636E20079}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Docked">
+      <UniqueIdentifier>{BECF9939-2905-529C-8695-3E7E47A38880}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Build">
       <UniqueIdentifier>{EAEE20D4-72A8-56E3-A99C-1A9831677C9D}</UniqueIdentifier>
     </Filter>
@@ -14,6 +17,12 @@
     </ClInclude>
     <ClInclude Include="Cockpit.h">
       <Filter>Application</Filter>
+    </ClInclude>
+    <ClInclude Include="DockedFrame.h">
+      <Filter>Docked</Filter>
+    </ClInclude>
+    <ClInclude Include="DockedMarket.h">
+      <Filter>Docked</Filter>
     </ClInclude>
     <ClInclude Include="pch.h">
       <Filter>Build</Filter>
@@ -28,6 +37,12 @@
     </ClCompile>
     <ClCompile Include="Cockpit.cpp">
       <Filter>Application</Filter>
+    </ClCompile>
+    <ClCompile Include="DockedFrame.cpp">
+      <Filter>Docked</Filter>
+    </ClCompile>
+    <ClCompile Include="DockedMarket.cpp">
+      <Filter>Docked</Filter>
     </ClCompile>
     <ClCompile Include="Main.cpp">
       <Filter>Application</Filter>

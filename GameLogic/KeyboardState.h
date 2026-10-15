@@ -46,7 +46,7 @@ inline constexpr std::uint8_t H = 0x23;
 inline constexpr std::uint8_t J = 0x24;
 /// anti-ECM emulator while held
 inline constexpr std::uint8_t L = 0x26;
-/// makes ReadScanCode OR 80h into the buffered code
+/// makes ReadScanCode set 80h in the buffered code
 inline constexpr std::uint8_t LEFT_SHIFT = 0x2A;
 /// launches the escape capsule
 inline constexpr std::uint8_t C = 0x2E;
@@ -60,7 +60,7 @@ inline constexpr std::uint8_t M = 0x32;
 inline constexpr std::uint8_t COMMA = 0x33;
 /// playerSpeed +4
 inline constexpr std::uint8_t PERIOD = 0x34;
-/// makes ReadScanCode OR 80h into the buffered code
+/// makes ReadScanCode set 80h in the buffered code
 inline constexpr std::uint8_t RIGHT_SHIFT = 0x36;
 /// with W the mis-jump latch
 inline constexpr std::uint8_t ALT = 0x38;
@@ -77,12 +77,12 @@ inline constexpr std::uint8_t DOWN = 0x50;
 
 } // namespace Keys
 
-/// The keys held, which the keyboard's handler writes and flight clears. Its members are the 1987 data segment's, by their names, in their
-/// order there; the GameState holds it in GameData.
+/// The keys held, which the keyboard's handler writes and flight clears. Its members are the original data segment's, by their names, in
+/// their order there; the GameState holds it in GameData.
 struct KeyboardState
 {
-  /// 1 while the key is held, indexed by the scan code itself (Keys; entry 0 unused; the map's 'scan code - 1' misses ReadScanCode's
-  /// inc ah); written by ReadScanCode
+  /// 1 while the key is held, indexed by the scan code itself (Keys; entry 0 unused; the map's 'scan code - 1' misses the one
+  /// ReadScanCode adds); written by ReadScanCode
   std::uint8_t keyDown[128];
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.

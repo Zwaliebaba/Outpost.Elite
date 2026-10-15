@@ -110,6 +110,13 @@ std::vector<KeyEvent> Window::TakeKeyEvents()
   return events;
 }
 
+std::vector<PointerEvent> Window::TakePointerEvents()
+{
+  std::vector<PointerEvent> events;
+  events.swap(m_pointerEvents);
+  return events;
+}
+
 bool Window::TakeResized() noexcept
 {
   const bool resized = m_resized;
@@ -181,6 +188,24 @@ LRESULT Window::HandleMessage(UINT _message, WPARAM _wParam, LPARAM _lParam)
   }
   case WM_SYSCHAR:
     return 0; // no beep for Alt with a letter
+  case WM_MOUSEMOVE:
+  case WM_LBUTTONDOWN:
+  {
+    if (!m_trackingLeave)
+    {
+      TRACKMOUSEEVENT track{.cbSize = sizeof(TRACKMOUSEEVENT), .dwFlags = TME_LEAVE, .hwndTrack = m_window, .dwHoverTime = 0};
+      m_trackingLeave = TrackMouseEvent(&track) != FALSE;
+    }
+    // The client coordinates, signed: a captured or multi-screen mouse can be left of or above the client area.
+    m_pointerEvents.push_back(PointerEvent{.kind = _message == WM_MOUSEMOVE ? PointerEvent::Kind::Move : PointerEvent::Kind::LeftDown,
+                                           .x = static_cast<short>(LOWORD(_lParam)),
+                                           .y = static_cast<short>(HIWORD(_lParam))});
+    return 0;
+  }
+  case WM_MOUSELEAVE:
+    m_trackingLeave = false;
+    m_pointerEvents.push_back(PointerEvent{.kind = PointerEvent::Kind::Leave, .x = 0, .y = 0});
+    return 0;
   case WM_KILLFOCUS:
     ReleaseHeldKeys();
     return 0;
