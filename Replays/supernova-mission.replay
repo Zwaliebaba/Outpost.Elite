@@ -35,13 +35,13 @@ digest refugees bf2c74c84ff70ab6ffe8e1c16e938196d2a2fa78d3277bd0edbec8cf11dda65c
 picture refugees 28537daead2c177d76ee2edd331ad248efa8dbe421b1b505551971774cbfe7bb
 outcome refugees galaxy=1 system=98 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=100000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=20 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=0 laserMounts=1 laserTypes=0 mission=1 missionStage=1 missionJumps=32 jumpedSinceBriefing=1 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=20 fuel=45 shipSlotsInUse=4 cabinTemperature=10 laserTemperature=0 altitude=254 fuelLeakDelayFrames=0 fuelLeakFrames=9 supernovaFrames=0 supernovaHeat=0
 key space; wait 1                  # the status screen
-key F4; wait 0.8                   # Equip Ship, its cursor on Fuel, which the mission does not sell
+key F3; wait 0.8                   # Equip Ship, its cursor on Fuel, which the mission does not sell
 key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15
 key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15
 key b; wait 0.3                    # an escape capsule
 key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15
 key b; wait 0.3                    # a galactic hyperdrive
-digest bought 4c1a08f724e7d06d4eaed94024ebb4032dc2701d50224367d0c74d588db337a8
+digest bought 85f966c5409b2af36ea13ee86c771d9f0c316b6c8a6479d5fabe00771e3ba5ed
 picture bought 9382727d8f711527d050b5a3ea06eb883f2b91320d6bc11bff82b4eff1d19934
 outcome bought galaxy=1 system=98 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=39891 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=20 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=1 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=1 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=0 laserMounts=1 laserTypes=0 mission=1 missionStage=1 missionJumps=32 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=20 fuel=45 shipSlotsInUse=4 cabinTemperature=10 laserTemperature=0 altitude=254 fuelLeakDelayFrames=0 fuelLeakFrames=9 supernovaFrames=400 supernovaHeat=0
 key F1; wait 0.5                   # launch

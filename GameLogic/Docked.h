@@ -1,6 +1,7 @@
 // GameLogic/Docked.h
 #pragma once
 
+#include "DockedKeys.h"
 #include "GameState.h"
 #include "Host.h"
 #include "Input.h"
@@ -31,18 +32,18 @@ struct ScreenKey
 void AwardArchangelTitle(GameState& _state);
 
 /// WaitForScreenExitKey, the tail that ShowSystemDataScreen, ShowMarketPricesScreen, ShowCommanderStatusScreen and
-/// ShowInventoryScreen jump into: GetKey until Esc, or an F-key other than the screen's own, _ownKey, then SelectSystemAtCursor.
-/// Waits for keys as a rule (ADR-015).
-[[nodiscard]] Task<ScreenKey> WaitForScreenExitKey(GameState& _state, Host& _host, std::uint8_t _ownKey);
+/// ShowInventoryScreen jump into: GetKey until a key that closes a screen at _place (ClosesScreen) other than the screen's own,
+/// _ownKey, then SelectSystemAtCursor. Waits for keys as a rule (ADR-015).
+[[nodiscard]] Task<ScreenKey> WaitForScreenExitKey(GameState& _state, Host& _host, std::uint8_t _ownKey, ScreenPlace _place);
 
-/// ShowCommanderStatusScreen, F9, docked or in flight: docked, a mission's briefing or debriefing first; then the
+/// ShowCommanderStatusScreen, F6 docked (D96) and F9 in flight: docked, a mission's briefing or debriefing first; then the
 /// commander, systems, fuel, cash, legal status, rating and equipment, and the wait for the key that closes it
 /// (WaitForScreenExitKey).
-[[nodiscard]] Task<ScreenKey> ShowCommanderStatusScreen(GameState& _state, Host& _host);
+[[nodiscard]] Task<ScreenKey> ShowCommanderStatusScreen(GameState& _state, Host& _host, ScreenPlace _place);
 
 /// ShowInventoryScreen, F10: fuel, cash and every product held, and the wait for the key that closes it, as
 /// ShowCommanderStatusScreen's.
-[[nodiscard]] Task<ScreenKey> ShowInventoryScreen(GameState& _state, Host& _host);
+[[nodiscard]] Task<ScreenKey> ShowInventoryScreen(GameState& _state, Host& _host, ScreenPlace _place);
 
 /// ShowMissionBriefing: missionStage=1, and the EMERGENCY screen of missionNumber, which waits for a key (Y or N
 /// for the supernova's refugees, who take the hold).

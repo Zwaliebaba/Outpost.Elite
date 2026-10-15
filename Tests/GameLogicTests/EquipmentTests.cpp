@@ -193,7 +193,7 @@ public:
     rig.Both([](Elite::Host&, Elite::GameState& _state) { _state.Data().commander.currentSystem.techLevel = 9; }); // all 14 items
     SetByte(rig, &Commander::fuel, 100);
     SetByte(rig, &Commander::missionNumber, 1);
-    rig.Play("key F4; wait 1\nkey b; wait 0.2"); // no fuel in the first mission
+    rig.Play("key F3; wait 1\nkey b; wait 0.2"); // no fuel in the first mission
     SetByte(rig, &Commander::missionNumber, 0);
     // Fuel bought, then full, and never sold; a fourth missile, and not a fifth.
     rig.Play("key b; wait 0.2\nkey b; wait 0.2\nkey s; wait 0.2\nkey Down; wait 0.2\nkey b; wait 0.2\nkey b; wait 0.2");
@@ -220,11 +220,11 @@ public:
              "key Down; wait 0.2\nkey b; wait 0.2\nkey Up; wait 0.2");
     SetByte(rig, &Commander::fuel, 100);
     // Too little for fuel, round the top, and the keys the menu ignores.
-    rig.Play("key b; wait 0.2\nkey Up; wait 0.2\nkey F4; wait 0.2\nkey x; wait 0.2\nkey Home; wait 0.2");
+    rig.Play("key b; wait 0.2\nkey Up; wait 0.2\nkey F3; wait 0.2\nkey x; wait 0.2\nkey Home; wait 0.2");
     SetByte(rig, &Elite::InputState::keyboardPitchRate, 5);
     rig.Play("wait 0.3");
     SetByte(rig, &Elite::InputState::keyboardPitchRate, 0xFB);
-    rig.Play("wait 0.3\ndigest cursor\nkey F9; wait 0.5\ndigest left");
+    rig.Play("wait 0.3\ndigest cursor\nkey F6; wait 0.5\ndigest left");
   }
 
   // A beam laser bought and sold: both mount choosers moved round both ends by the arrow keys and by the steering,
@@ -234,7 +234,7 @@ public:
     TwinRig rig("TwinLaserMounts");
     rig.Play("key space; wait 4");
     SetCredits(rig, 1000000);
-    rig.Play("key F4; wait 1\nkey Down; wait 0.2\nkey Down; wait 0.2\nkey Down; wait 0.2\nkey Down; wait 0.2\nkey Down; wait 0.2\n"
+    rig.Play("key F3; wait 1\nkey Down; wait 0.2\nkey Down; wait 0.2\nkey Down; wait 0.2\nkey Down; wait 0.2\nkey Down; wait 0.2\n"
              "key b; wait 0.3\nkey space; wait 0.2\nkey Left; wait 0.2\nkey Right; wait 0.2\nkey Right; wait 0.2\nkey x; wait 0.2");
     SetByte(rig, &Elite::InputState::keyboardRollRate, 5);
     rig.Play("wait 0.3");
@@ -267,7 +267,7 @@ public:
       }
       return steps;
     };
-    rig.Play("key F3; wait 0.5\n" + more(10) + "key b; wait 0.05\nkey Down; wait 0.05\n" + more(6) + "key b; wait 0.3\ndigest cargo");
+    rig.Play("key F2; wait 0.5\n" + more(10) + "key b; wait 0.05\nkey Down; wait 0.05\n" + more(6) + "key b; wait 0.3\ndigest cargo");
     Assert::AreEqual(std::uint8_t{18}, TwinByte(rig, &Commander::CargoHold::cargoUsedTonnes), L"18 tonnes aboard");
     rig.Play("key F1; wait 1.5\ndigest launched");
     MakeBelowTheNose(rig, Scoopable::MaskingDeviceBarrel);

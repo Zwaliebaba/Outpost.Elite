@@ -2,6 +2,7 @@
 #pragma once
 
 #include "Cga.h"
+#include "DockedKeys.h"
 #include "FileStore.h"
 #include "FlightSnapshot.h"
 #include "MarketView.h"
@@ -278,6 +279,24 @@ public:
     return m_marketShown ? &m_marketView : nullptr;
   }
 
+  /// _screen published as the docked screen open now (D96): the docked host's, while it runs.
+  void ShowDockedScreen(DockedScreen _screen) noexcept
+  {
+    m_dockedScreen = _screen;
+  }
+
+  /// No docked screen open: the docked host ended, at the launch or the disc's leaving.
+  void HideDockedScreen() noexcept
+  {
+    m_dockedScreen.reset();
+  }
+
+  /// The docked screen open while the docked host runs, or nothing in flight and at the title.
+  [[nodiscard]] std::optional<DockedScreen> ShownDockedScreen() const noexcept
+  {
+    return m_dockedScreen;
+  }
+
   /// A click on one of D01's controls, from the shell (D83), queued for the market screen; dropped while it is not shown.
   void Click(const MarketClick& _click);
 
@@ -407,9 +426,10 @@ private:
   // The tick and the keys (D87, D88): when each next falls due, and what has fallen due for RunDue.
   Milliseconds m_nextTickAt = NO_EVENT;
   std::deque<KeyEvent> m_keys;
-  MarketView m_marketView;          // the market screen's latest view
-  bool m_marketShown = false;       // while the market screen's routine runs
-  std::deque<MarketClick> m_clicks; // the shell's clicks on it, oldest first
+  MarketView m_marketView;                    // the market screen's latest view
+  bool m_marketShown = false;                 // while the market screen's routine runs
+  std::deque<MarketClick> m_clicks;           // the shell's clicks on it, oldest first
+  std::optional<DockedScreen> m_dockedScreen; // the docked host's open screen, while it runs
   Milliseconds m_nextKeyAt = NO_EVENT;
   bool m_keysToGame = false;
   bool m_tickDue = false;

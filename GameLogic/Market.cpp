@@ -117,7 +117,7 @@ void StoreCredits(GameState& _state, std::uint32_t _tenths)
       break;
     }
   }
-  co_return co_await WaitForScreenExitKey(_state, _host, SCAN_F8);
+  co_return co_await WaitForScreenExitKey(_state, _host, SCAN_F8, ScreenPlace::Flight);
 }
 
 bool SubtractCredits(GameState& _state, std::uint32_t _tenths)

@@ -1,6 +1,6 @@
 # ADR-058 — D01, the market: its own state and rules, a view the shell draws, clicks the shell hit-tests
 
-**Status:** accepted 2026-10-14, with the change that implements it, task T7 of Phase 6's piece 5 ([Reverse-Engineering-Plan.md §5, Phase 6](../Reverse-Engineering-Plan.md#phase-6--the-new-game)), with T3, the market's logic, and the parts of T1 and T2 that D01 needs. Under the owner's rulings D82 (the screen as drawn), D83 (the mouse on while docked), D92 (how it lands) and D93 (what MAX does).
+**Status:** accepted 2026-10-14, with the change that implements it, task T7 of Phase 6's piece 5 ([Reverse-Engineering-Plan.md §5, Phase 6](../Reverse-Engineering-Plan.md#phase-6--the-new-game)), with T3, the market's logic, and the parts of T1 and T2 that D01 needs. Under the owner's rulings D82 (the screen as drawn), D83 (the mouse on while docked), D92 (how it lands) and D93 (what MAX does). Amended 2026-10-15 by ADR-061 (D96): F2 alone opens D01, and the key bar sends the keys it names.
 
 ## Context
 

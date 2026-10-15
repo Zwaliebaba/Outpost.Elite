@@ -15,7 +15,7 @@ key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
 digest loaded 0fb2b88134543dc93a1a2c1786d3dc5f0f91e7aaae84ad43ef587cedbe2ba042
 picture loaded 361ad782e46b4fca68ba8e14bbac08966458c215f96b0ec2b628c924935fc8d5
 outcome loaded galaxy=0 system=7 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=1000 legalStatus=0 kills=20 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=1 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=1 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=0 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=1 laserTypes=3 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=48 fuel=255 shipSlotsInUse=1 cabinTemperature=12 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
-key F6; wait 0.5                   # the short-range chart: F finds a system by name
+key F5; wait 0.5                   # the short-range chart: F finds a system by name
 key f; wait 0.3; key o; key r; key e; key r; key v; key e; key Return; wait 0.3
 key F1; wait 0.5                   # launch
 down h; wait 1; up h               # the countdown to Orerve

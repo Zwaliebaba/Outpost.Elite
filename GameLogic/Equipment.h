@@ -20,9 +20,6 @@ namespace Elite
 // The reference's equipment routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): buying and fitting equipment. Each
 // takes values and gives values back, on the GameState and, where it drives a device, the devices (ADR-014).
 
-/// Whether _key ends a menu screen: Esc, or F1 to F10.
-[[nodiscard]] bool IsScreenKey(std::uint8_t _key) noexcept;
-
 // ── The routines de-assembled (ADR-012): values in, values out, on the GameState ──
 
 /// TryScoopObject: freeCargoTonnes, and the object in _slot scooped into the hold if its view position _view is in

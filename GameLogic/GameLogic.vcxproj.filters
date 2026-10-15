@@ -120,6 +120,9 @@
     <ClInclude Include="Docked.h">
       <Filter>Docked</Filter>
     </ClInclude>
+    <ClInclude Include="DockedKeys.h">
+      <Filter>Docked</Filter>
+    </ClInclude>
     <ClInclude Include="DockedState.h">
       <Filter>Docked</Filter>
     </ClInclude>
@@ -390,6 +393,9 @@
       <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="Docked.cpp">
+      <Filter>Docked</Filter>
+    </ClCompile>
+    <ClCompile Include="DockedKeys.cpp">
       <Filter>Docked</Filter>
     </ClCompile>
     <ClCompile Include="Docking.cpp">

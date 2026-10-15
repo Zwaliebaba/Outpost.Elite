@@ -55,7 +55,7 @@ template <typename Struct> [[nodiscard]] std::uint8_t TwinByte(TwinRig& _rig, Da
 TEST_CLASS(InputTests)
 {
 public:
-  // The mask mission's briefing, which the docked status screen shows first when F9 brings it back from another screen, waits in
+  // The mask mission's briefing, which the docked status screen shows first when F6 brings it back from another screen (D96), waits in
   // WaitForKeyPress until space: the routine that waits gives the original's digests while it waits and after.
   TEST_METHOD(WaitForKeyPressWaitsThroughABriefing)
   {
@@ -67,7 +67,7 @@ public:
         _state.Data().commander.missionNumber = 2;
         _state.Data().commander.missionStage = 0;
       });
-    rig.Play("key F8; wait 0.5\nkey F9; wait 1\ndigest briefing\nkey space; wait 1\ndigest status");
+    rig.Play("key F2; wait 0.5\nkey F6; wait 1\ndigest briefing\nkey space; wait 1\ndigest status");
   }
 
   // Flight steered by the mouse, with the machine's own driver loaded (ADR-008 item 8, D20): M at the disc menu, which takes the

@@ -87,6 +87,7 @@
     <ClInclude Include="DirectoryFileStore.h" />
     <ClInclude Include="DiskState.h" />
     <ClInclude Include="Docked.h" />
+    <ClInclude Include="DockedKeys.h" />
     <ClInclude Include="DockedState.h" />
     <ClInclude Include="DockedTables.h" />
     <ClInclude Include="Docking.h" />
@@ -179,6 +180,7 @@
     <ClCompile Include="Combat.cpp" />
     <ClCompile Include="DirectoryFileStore.cpp" />
     <ClCompile Include="Docked.cpp" />
+    <ClCompile Include="DockedKeys.cpp" />
     <ClCompile Include="Docking.cpp" />
     <ClCompile Include="Equipment.cpp" />
     <ClCompile Include="FileStore.cpp" />

@@ -53,17 +53,9 @@ constexpr std::uint16_t FRAME_RIGHT_SIDE = 0x4E; // column 39
 constexpr std::uint16_t TEXT_ROW_BYTES = 0x50;
 
 // Scan codes.
-constexpr std::uint8_t SCAN_ESCAPE = 0x01;
 constexpr std::uint8_t SCAN_Y = 0x15;
 constexpr std::uint8_t SCAN_N = 0x31;
-constexpr std::uint8_t SCAN_F1 = 0x3B;
-constexpr std::uint8_t SCAN_F2 = 0x3C;
-constexpr std::uint8_t SCAN_F3 = 0x3D;
-constexpr std::uint8_t SCAN_F4 = 0x3E;
-constexpr std::uint8_t SCAN_F5 = 0x3F;
 constexpr std::uint8_t SCAN_F6 = 0x40;
-constexpr std::uint8_t SCAN_F7 = 0x41;
-constexpr std::uint8_t SCAN_F8 = 0x42;
 constexpr std::uint8_t SCAN_F9 = 0x43;
 constexpr std::uint8_t SCAN_F10 = 0x44;
 
@@ -313,42 +305,64 @@ void FormatQuantity(std::uint16_t _quantity, std::span<std::uint8_t> _text)
   _state.Data().flow.titleShown = 1;
 }
 
-// The screen each F-key shows in DockedKeyDispatch, in the order it tests them. The status screen's arm resets
-// the keyboard first.
-struct DockedScreen
+// The routine that shows _screen docked (D96). The status screen resets the keyboard first; Esc's disc menu is DispatchDockedKeys's.
+[[nodiscard]] Task<ScreenKey> ShowDockedScreen(GameState& _state, Host& _host, DockedScreen _screen)
 {
-  std::uint8_t key;
-  Task<ScreenKey> (*show)(GameState&, Host&);
+  switch (_screen)
+  {
+  case DockedScreen::Market:
+    return ShowMarketScreen(_state, _host);
+  case DockedScreen::Equip:
+    return ShowEquipShipScreen(_state, _host);
+  case DockedScreen::Galaxy:
+    return ShowGalacticChart(_state, _host, ScreenPlace::Docked);
+  case DockedScreen::Local:
+    return ShowShortRangeChart(_state, _host, ScreenPlace::Docked);
+  case DockedScreen::Data:
+    return ShowSystemDataScreen(_state, _host, ScreenPlace::Docked);
+  case DockedScreen::Inventory:
+    return ShowInventoryScreen(_state, _host, ScreenPlace::Docked);
+  case DockedScreen::Status:
+  case DockedScreen::Disc:
+    break;
+  }
+  ResetKeyboard(_state);
+  return ShowCommanderStatusScreen(_state, _host, ScreenPlace::Docked);
+}
+
+// The docked screen published to the host while the docked host runs, and taken down when it ends.
+class DockedScreenShown
+{
+public:
+  explicit DockedScreenShown(Host& _host) noexcept
+    : m_host(_host)
+  {
+  }
+
+  DockedScreenShown(const DockedScreenShown&) = delete;
+  DockedScreenShown& operator=(const DockedScreenShown&) = delete;
+
+  ~DockedScreenShown()
+  {
+    m_host.HideDockedScreen();
+  }
+
+private:
+  Host& m_host;
 };
 
-constexpr std::array<DockedScreen, 9> DOCKED_SCREENS = {{
-  {SCAN_F2, &ShowMarketScreen},
-  {SCAN_F3, &ShowMarketScreen},
-  {SCAN_F4, &ShowEquipShipScreen},
-  {SCAN_F5, &ShowGalacticChart},
-  {SCAN_F6, &ShowShortRangeChart},
-  {SCAN_F7, &ShowSystemDataScreen},
-  {SCAN_F8, &ShowMarketScreen},
-  {SCAN_F9,
-   [](GameState& _state, Host& _host)
-   {
-     ResetKeyboard(_state);
-     return ShowCommanderStatusScreen(_state, _host);
-   }},
-  {SCAN_F10, &ShowInventoryScreen},
-}};
-
-// DockedKeyDispatch, from the arm that shows the screen for _screenKey: F9's status screen, or Esc's disc menu
-// . Each screen returns the key that closed it, which picks the next screen, until F1 leaves; Esc is the disc menu, and
-// any other key waits for one. Returns whether the disc menu left for the disk, through LeaveGameLoopForDisk, which returns
-// past RunTitleAndDocked (DiscMenuExit); otherwise F1 ended them.
-[[nodiscard]] Task<bool> DispatchDockedKeys(GameState& _state, Host& _host, std::uint8_t _screenKey)
+// The docked host (D96): from _screen, the status screen or Esc's disc menu, each screen returns the key that closed it, which
+// picks the next screen (DockedTargetOf), until F1 leaves; any other key waits for one. Returns whether the disc menu left for the
+// disk, through LeaveGameLoopForDisk, which returns past RunTitleAndDocked (DiscMenuExit); otherwise F1 ended them.
+[[nodiscard]] Task<bool> DispatchDockedKeys(GameState& _state, Host& _host, DockedScreen _screen)
 {
-  std::uint8_t screenKey = _screenKey;
+  const DockedScreenShown shown(_host);
+  DockedScreen screen = _screen;
   for (;;)
   {
+    _host.ShowDockedScreen(screen);
     ScreenKey key{};
-    if (screenKey == SCAN_ESCAPE)
+    if (screen == DockedScreen::Disc)
     {
       const DiscMenuExit exit = co_await ShowDiscControlScreen(_state, _host);
       if (exit.leaves)
@@ -359,24 +373,18 @@ constexpr std::array<DockedScreen, 9> DOCKED_SCREENS = {{
     }
     else
     {
-      const auto screen = std::ranges::find(DOCKED_SCREENS, screenKey, &DockedScreen::key);
-      key = co_await screen->show(_state, _host);
+      key = co_await ShowDockedScreen(_state, _host, screen);
     }
     for (;;)
     {
-      if (key.scanCode == SCAN_F1)
+      const DockedTarget target = DockedTargetOf(key.scanCode);
+      if (target.launches)
       {
         co_return false;
       }
-      if (std::ranges::find(DOCKED_SCREENS, key.scanCode, &DockedScreen::key) != DOCKED_SCREENS.end())
+      if (target.screen)
       {
-        screenKey = key.scanCode;
-        break;
-      }
-      // Esc, whose scan code less one is 0, shows the disc menu.
-      if (key.scanCode == SCAN_ESCAPE)
-      {
-        screenKey = SCAN_ESCAPE;
+        screen = *target.screen;
         break;
       }
       // Back to the GetKey.
@@ -460,14 +468,14 @@ void DrawFrameRow(GameState& _state, std::uint16_t _cell, std::uint16_t _value)
   }
 }
 
-[[nodiscard]] Task<ScreenKey> WaitForScreenExitKey(GameState& _state, Host& _host, std::uint8_t _ownKey)
+[[nodiscard]] Task<ScreenKey> WaitForScreenExitKey(GameState& _state, Host& _host, std::uint8_t _ownKey, ScreenPlace _place)
 {
-  // GetKey until Esc or another screen's F-key, every other key and an empty poll going back to the GetKey.
+  // GetKey until Esc or another screen's key, every other key and an empty poll going back to the GetKey.
   for (;;)
   {
     const KeyPress key = GetKey(_state);
     const std::uint8_t scanCode = key.scanCode;
-    if (scanCode != 0 && scanCode != _ownKey && (scanCode == SCAN_ESCAPE || (scanCode >= SCAN_F1 && scanCode <= SCAN_F10)))
+    if (scanCode != 0 && scanCode != _ownKey && ClosesScreen(scanCode, _place))
     {
       SelectSystemAtCursor(_state);
       co_return ScreenKey{scanCode};
@@ -484,7 +492,7 @@ void AwardArchangelTitle(GameState& _state)
   }
 }
 
-[[nodiscard]] Task<ScreenKey> ShowCommanderStatusScreen(GameState& _state, Host& _host)
+[[nodiscard]] Task<ScreenKey> ShowCommanderStatusScreen(GameState& _state, Host& _host, ScreenPlace _place)
 {
   if (_state.Data().flow.inFlight != 1 && _state.Data().commander.missionNumber != 0)
   {
@@ -579,10 +587,10 @@ void AwardArchangelTitle(GameState& _state)
       break;
     }
   }
-  co_return co_await WaitForScreenExitKey(_state, _host, SCAN_F9);
+  co_return co_await WaitForScreenExitKey(_state, _host, _place == ScreenPlace::Docked ? SCAN_F6 : SCAN_F9, _place);
 }
 
-[[nodiscard]] Task<ScreenKey> ShowInventoryScreen(GameState& _state, Host& _host)
+[[nodiscard]] Task<ScreenKey> ShowInventoryScreen(GameState& _state, Host& _host, ScreenPlace _place)
 {
   PrintTextModeString(_state, DrawDockedFrame(_state, _host, INVENTORY_FRAME), TITLE_CELL);
   // The fuel text without the padding the status screen has: 'Fuel: ', which the original cuts from the text by a NUL that
@@ -622,7 +630,7 @@ void AwardArchangelTitle(GameState& _state)
       break;
     }
   }
-  co_return co_await WaitForScreenExitKey(_state, _host, SCAN_F10);
+  co_return co_await WaitForScreenExitKey(_state, _host, SCAN_F10, _place);
 }
 
 [[nodiscard]] Task<void> ShowMissionBriefing(GameState& _state, Host& _host)
@@ -755,9 +763,9 @@ void AwardArchangelTitle(GameState& _state)
   // On into DockedKeyDispatch: back from a disk request, at the disc menu; otherwise at the status screen.
   if (_state.Data().saveLoad.resumeAtDiskMenu == 1)
   {
-    co_return co_await DispatchDockedKeys(_state, _host, SCAN_ESCAPE);
+    co_return co_await DispatchDockedKeys(_state, _host, DockedScreen::Disc);
   }
-  co_return co_await DispatchDockedKeys(_state, _host, SCAN_F9);
+  co_return co_await DispatchDockedKeys(_state, _host, DockedScreen::Status);
 }
 
 } // namespace Elite

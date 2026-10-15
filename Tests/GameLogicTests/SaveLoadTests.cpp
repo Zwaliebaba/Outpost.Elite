@@ -126,7 +126,7 @@ void PlayEveryDiscMenuPath(TwinRig& _rig)
   // From inside the last prompt's frame: a good name, saved; then, back in the menu after another bad one, the
   // catalogue, and a function key out of the menu.
   _rig.Play("key s; wait 0.05; key a; key Return; wait 0.1\ndigest saved-a\nkey s; wait 0.05; key Return; wait 0.05\n"
-            "key c; wait 0.1\ndigest catalogued-again\nkey s; wait 0.05; key Return; wait 0.05\nkey F9; wait 0.1\ndigest status");
+            "key c; wait 0.1\ndigest catalogued-again\nkey s; wait 0.05; key Return; wait 0.05\nkey F6; wait 0.1\ndigest status");
   Assert::IsTrue(HoldsExactly(_rig.Files(), DISC_MENU_FILES), L"the files the original wrote");
 }
 
@@ -149,7 +149,7 @@ public:
   TEST_METHOD(SavingAndLeavingForDosAgree)
   {
     TwinRig twin("TwinQuit");
-    twin.Play("key space; wait 3.3\nkey F5; wait 0.1");
+    twin.Play("key space; wait 3.3\nkey F4; wait 0.1");
     twin.Play("wait 0.6; key Escape; wait 0.15; key s; wait 0.05");
     twin.Play("key x; key Return; wait 0.1\ndigest saved");
     twin.Play("key e; wait 0.05; key y; wait 0.5", Elite::StopReason::Terminated);

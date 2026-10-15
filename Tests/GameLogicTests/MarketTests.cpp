@@ -232,8 +232,8 @@ public:
     Assert::IsFalse(Elite::MarketKey(0x3C).has_value(), L"an F-key is the docked host's");
   }
 
-  // F2, F3 and F8 open the market while docked: the prices are Lave's, the stock is rolled once, and keys and clicks trade; it
-  // stays open on its own keys, and another F-key closes it.
+  // F2 opens the market while docked: the prices are Lave's, the stock is rolled once, and keys and clicks trade; it
+  // stays open on its own key and the keys that do nothing docked (D96), and another screen's key closes it.
   TEST_METHOD(TheMarketRunsDocked)
   {
     GameRig rig("Market");
@@ -260,15 +260,16 @@ public:
     Assert::IsTrue(view->message.notice == Elite::MarketNotice::Bought, L"its strip");
 
     rig.Host().Click(Elite::MarketClick{.control = Elite::MarketControl::Sell});
-    Play(rig, "wait 0.05\nkey F3; wait 0.05\nkey F8; wait 0.05");
+    Play(rig, "wait 0.05\nkey F2; wait 0.05\nkey F8; wait 0.05\nkey F9; wait 0.05");
     Assert::AreEqual(std::uint8_t{0}, rig.State().Data().commander.cargoHold.lots[FOOD].held, L"sold back by a click");
-    Assert::IsTrue(rig.Host().ShownMarket() != nullptr, L"F3 and F8 keep it open");
+    Assert::IsTrue(rig.Host().ShownMarket() != nullptr, L"F2, its own key, and F8 and F9, which do nothing docked, keep it open");
 
-    Play(rig, "key F9; wait 0.3");
-    Assert::IsTrue(rig.Host().ShownMarket() == nullptr, L"F9 closes it");
+    Play(rig, "key F6; wait 0.3");
+    Assert::IsTrue(rig.Host().ShownMarket() == nullptr, L"F6 closes it");
+    Assert::IsTrue(rig.Host().ShownDockedScreen() == Elite::DockedScreen::Status, L"for the status screen");
     rig.Host().Click(Elite::MarketClick{.control = Elite::MarketControl::Buy});
     Assert::IsFalse(rig.Host().TakeClick().has_value(), L"a click with the market closed is dropped");
-    Play(rig, "key F3; wait 0.2");
+    Play(rig, "key F2; wait 0.2");
     Assert::AreEqual(stock, rig.Host().ShownMarket()->stock[FOOD], L"the stock is not rolled again: what was sold back is on sale");
   }
 };

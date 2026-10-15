@@ -159,17 +159,17 @@ std::uint8_t GenerateSystemName(GameState& _state);
 
 /// ShowSystemDataScreen: F7's data on the selected system and its description, then the keys until Esc or another F
 /// key (WaitForScreenExitKey), which selects the system at the chart cursor again. Waits for keys as a rule (ADR-015).
-[[nodiscard]] Task<ScreenKey> ShowSystemDataScreen(GameState& _state, Host& _host);
+[[nodiscard]] Task<ScreenKey> ShowSystemDataScreen(GameState& _state, Host& _host, ScreenPlace _place);
 
 /// ShowGalacticChart: F5's chart of the galaxy's 256 systems: the current system and the cursor kept for the galactic
 /// chart, a frame at a time until Esc or another F key closes it, the cursor moved by the steering. D shows the distance to the
 /// system nearest the cursor, F finds one by name, keypad 5 or fire recentres the cursor; a key that closes it selects the system
 /// at the cursor unless the hyperspace countdown runs. Waits for keys as a rule (ADR-015).
-[[nodiscard]] Task<ScreenKey> ShowGalacticChart(GameState& _state, Host& _host);
+[[nodiscard]] Task<ScreenKey> ShowGalacticChart(GameState& _state, Host& _host, ScreenPlace _place);
 
 /// ShowShortRangeChart: F6's chart of the systems around the current one, each a disc and a label placed clear of the
 /// others (PlaceChartLabels), run as ShowGalacticChart runs its own.
-[[nodiscard]] Task<ScreenKey> ShowShortRangeChart(GameState& _state, Host& _host);
+[[nodiscard]] Task<ScreenKey> ShowShortRangeChart(GameState& _state, Host& _host, ScreenPlace _place);
 
 /// DrawChartItems: the short-range chart's chartItemCount items in colour 3: a label by DrawSmallViewString in ink
 /// FFFFh at its top-left corner, a disc (DrawDisc) at its centre.

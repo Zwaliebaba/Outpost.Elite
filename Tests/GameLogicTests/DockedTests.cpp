@@ -17,8 +17,8 @@ using Commander = Elite::CommanderState;
 // From the title: the credits, then the status screen.
 constexpr std::string_view TO_THE_DOCK = "key space; wait 3.2";
 
-// The status screen ignores its own F9, so F10 first and back.
-constexpr std::string_view STATUS_AGAIN = "key F10; wait 0.2\nkey F9; wait 0.2\n";
+// The status screen ignores its own F6 (D96), so F10 first and back.
+constexpr std::string_view STATUS_AGAIN = "key F10; wait 0.2\nkey F6; wait 0.2\n";
 
 // Sets the byte _member names to _value on the twin.
 template <typename Struct> void SetBoth(TwinRig& _rig, DataByte<Struct> _member, std::uint8_t _value)
@@ -89,7 +89,7 @@ public:
     SetBoth(rig, &Commander::legalStatus, 5);
     SetBoth(rig, &Commander::witchspaceCountdown, 3);
     SetBoth(rig, &Commander::militaryLaserCount, 1);
-    rig.Play("key F9; wait 0.2\ndigest offender");
+    rig.Play("key F6; wait 0.2\ndigest offender");
     SetBoth(rig, &Commander::legalStatus, 0x30);
     rig.Play(StatusAgain("digest fugitive"));
   }
@@ -157,7 +157,7 @@ public:
     Assert::AreEqual(std::uint8_t{0}, TwinByte(rig, &Commander::CargoHold::refugeesTonnes), L"no refugees aboard");
     // Equip Ship, its cursor on Fuel, which the mission does not sell: seven rows down an escape capsule, four more a galactic
     // hyperdrive.
-    rig.Play("key F4; wait 0.8\n"
+    rig.Play("key F3; wait 0.8\n"
              "key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15\n"
              "key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15\nkey b; wait 0.3\n"
              "key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15\nkey b; wait 0.3\ndigest bought");

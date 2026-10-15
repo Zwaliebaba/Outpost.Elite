@@ -884,17 +884,17 @@ bool EraseForFlightScreen(GameState& _state)
       erase();
       if (key == SCAN_F5)
       {
-        shown(co_await ShowGalacticChart(_state, _host));
+        shown(co_await ShowGalacticChart(_state, _host, ScreenPlace::Flight));
         continue;
       }
       if (key == SCAN_F6)
       {
-        shown(co_await ShowShortRangeChart(_state, _host));
+        shown(co_await ShowShortRangeChart(_state, _host, ScreenPlace::Flight));
         continue;
       }
       if (key == SCAN_F7)
       {
-        shown(co_await ShowSystemDataScreen(_state, _host));
+        shown(co_await ShowSystemDataScreen(_state, _host, ScreenPlace::Flight));
         continue;
       }
       if (key == SCAN_F8)
@@ -912,7 +912,7 @@ bool EraseForFlightScreen(GameState& _state)
         if (_state.Data().commander.witchspaceCountdown == 1)
         {
           erase();
-          shown(co_await ShowShortRangeChart(_state, _host));
+          shown(co_await ShowShortRangeChart(_state, _host, ScreenPlace::Flight));
           continue;
         }
       }
@@ -933,14 +933,14 @@ bool EraseForFlightScreen(GameState& _state)
     {
       ResetKeyboard(_state);
       _state.Data().flow.inFlight = 1;
-      const ScreenKey closed = co_await ShowCommanderStatusScreen(_state, _host);
+      const ScreenKey closed = co_await ShowCommanderStatusScreen(_state, _host, ScreenPlace::Flight);
       _state.Data().flow.inFlight = 0;
       shown(closed);
       continue;
     }
     if (key == SCAN_F10)
     {
-      shown(co_await ShowInventoryScreen(_state, _host));
+      shown(co_await ShowInventoryScreen(_state, _host, ScreenPlace::Flight));
       continue;
     }
     // Back to GetKey, until a key comes.

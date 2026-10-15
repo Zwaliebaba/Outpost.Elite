@@ -2,6 +2,7 @@
 
 #include "MarketScreen.h"
 
+#include "DockedKeys.h"
 #include "Equipment.h"
 #include "GameState.h"
 #include "Host.h"
@@ -30,8 +31,6 @@ constexpr std::uint8_t SCAN_KEYPAD_PLUS = 0x4E;
 constexpr std::uint8_t SCAN_B = 0x30;
 constexpr std::uint8_t SCAN_S = 0x1F;
 constexpr std::uint8_t SCAN_F2 = 0x3C;
-constexpr std::uint8_t SCAN_F3 = 0x3D;
-constexpr std::uint8_t SCAN_F8 = 0x42;
 
 // A stored tech level from which the station is a Dodo.
 constexpr std::uint8_t DODO_TECH_LEVEL = 9;
@@ -419,7 +418,7 @@ Task<ScreenKey> ShowMarketScreen(GameState& _state, Host& _host)
         act(*input);
         changed = true;
       }
-      else if (IsScreenKey(key.scanCode) && key.scanCode != SCAN_F2 && key.scanCode != SCAN_F3 && key.scanCode != SCAN_F8)
+      else if (key.scanCode != SCAN_F2 && ClosesScreen(key.scanCode, ScreenPlace::Docked))
       {
         co_return ScreenKey{key.scanCode};
       }
