@@ -87,6 +87,8 @@
     <ClInclude Include="Cockpit.h" />
     <ClInclude Include="DockedFrame.h" />
     <ClInclude Include="DockedMarket.h" />
+    <ClInclude Include="DockedNames.h" />
+    <ClInclude Include="DockedStatus.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="SpaceView.h" />
   </ItemGroup>
@@ -95,6 +97,8 @@
     <ClCompile Include="Cockpit.cpp" />
     <ClCompile Include="DockedFrame.cpp" />
     <ClCompile Include="DockedMarket.cpp" />
+    <ClCompile Include="DockedNames.cpp" />
+    <ClCompile Include="DockedStatus.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>

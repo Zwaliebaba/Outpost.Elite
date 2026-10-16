@@ -20,6 +20,9 @@
     <ClCompile Include="DockedMarketTests.cpp">
       <Filter>Docked</Filter>
     </ClCompile>
+    <ClCompile Include="DockedStatusTests.cpp">
+      <Filter>Docked</Filter>
+    </ClCompile>
     <ClCompile Include="GoldenImage.cpp">
       <Filter>Docked</Filter>
     </ClCompile>

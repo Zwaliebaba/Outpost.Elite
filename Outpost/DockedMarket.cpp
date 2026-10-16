@@ -2,10 +2,13 @@
 
 #include "DockedMarket.h"
 
+#include "DockedNames.h"
+
 #include <algorithm>
 #include <array>
 #include <cwctype>
 #include <format>
+#include <string_view>
 #include <utility>
 
 namespace Outpost
@@ -66,54 +69,6 @@ constexpr float SEGMENT_WIDTH = 9.0f;
 constexpr Engine::Rect STRIP{.left = 1380.0f, .top = 667.0f, .width = 479.0f, .height = 64.0f};
 constexpr Engine::Point FOOTER{.x = 1380.0f, .y = 947.0f};
 
-// The commodities, in the market's order, and their units.
-enum class Unit : std::uint8_t
-{
-  Tonnes,
-  Kilograms,
-  Grams,
-};
-
-struct Commodity
-{
-  const wchar_t* name;
-  Unit unit;
-};
-
-constexpr std::array<Commodity, Elite::COMMODITY_KINDS> COMMODITIES = {{
-  {L"Food", Unit::Tonnes},
-  {L"Textiles", Unit::Tonnes},
-  {L"Radioactives", Unit::Tonnes},
-  {L"Slaves", Unit::Tonnes},
-  {L"Liquor/Wines", Unit::Tonnes},
-  {L"Luxuries", Unit::Tonnes},
-  {L"Narcotics", Unit::Tonnes},
-  {L"Computers", Unit::Tonnes},
-  {L"Machinery", Unit::Tonnes},
-  {L"Alloys", Unit::Tonnes},
-  {L"Firearms", Unit::Tonnes},
-  {L"Furs", Unit::Tonnes},
-  {L"Minerals", Unit::Tonnes},
-  {L"Gold", Unit::Kilograms},
-  {L"Platinum", Unit::Kilograms},
-  {L"Gem-Stones", Unit::Grams},
-  {L"Alien Items", Unit::Tonnes},
-}};
-
-[[nodiscard]] const wchar_t* UnitText(Unit _unit) noexcept
-{
-  switch (_unit)
-  {
-  case Unit::Kilograms:
-    return L"kg";
-  case Unit::Grams:
-    return L"g";
-  case Unit::Tonnes:
-    break;
-  }
-  return L"t";
-}
-
 [[nodiscard]] std::wstring Upper(std::wstring _text)
 {
   std::ranges::transform(_text, _text.begin(), [](wchar_t _letter) { return static_cast<wchar_t>(std::towupper(_letter)); });
@@ -127,13 +82,13 @@ constexpr std::array<Commodity, Elite::COMMODITY_KINDS> COMMODITIES = {{
   {
     return L"\u2014";
   }
-  return std::format(L"{} {}", _amount, UnitText(COMMODITIES[_commodity].unit));
+  return std::format(L"{} {}", _amount, DockedNames::Unit(_commodity));
 }
 
 // The same in a strip's capitals: "11 T".
 [[nodiscard]] std::wstring Capitals(std::uint8_t _amount, std::uint8_t _commodity)
 {
-  return std::format(L"{} {}", _amount, Upper(UnitText(COMMODITIES[_commodity].unit)));
+  return std::format(L"{} {}", _amount, Upper(DockedNames::Unit(_commodity)));
 }
 
 [[nodiscard]] Engine::Rect RowRect(std::size_t _row) noexcept
@@ -200,9 +155,10 @@ void Table(const Elite::MarketView& _view, std::optional<Engine::Point> _pointer
     DockedFrame::Row(rect, look, _canvas);
     const float y = rect.top + ROW_TEXT;
     const std::uint32_t text = DockedFrame::RowText(look);
-    _canvas.Text(COMMODITIES[row].name, Engine::Font::Label, ROW_SIZE, 0.0f, Engine::Point{.x = NAME_X, .y = y}, Engine::Align::Left, text);
-    _canvas.Text(UnitText(COMMODITIES[row].unit), Engine::Font::Label, ROW_SIZE, 0.0f, Engine::Point{.x = UNIT_X, .y = y},
-                 Engine::Align::Left, selected ? UNIT_SELECTED : LABEL);
+    _canvas.Text(DockedNames::Commodity(row), Engine::Font::Label, ROW_SIZE, 0.0f, Engine::Point{.x = NAME_X, .y = y}, Engine::Align::Left,
+                 text);
+    _canvas.Text(DockedNames::Unit(row), Engine::Font::Label, ROW_SIZE, 0.0f, Engine::Point{.x = UNIT_X, .y = y}, Engine::Align::Left,
+                 selected ? UNIT_SELECTED : LABEL);
     _canvas.Text(DockedFrame::Tenths(_view.buyTenths[row]), Engine::Font::Number, ROW_SIZE, 0.0f, Engine::Point{.x = BUY_RIGHT, .y = y},
                  Engine::Align::Right, text);
     _canvas.Text(DockedFrame::Tenths(_view.sellTenths[row]), Engine::Font::Number, ROW_SIZE, 0.0f, Engine::Point{.x = SELL_RIGHT, .y = y},
@@ -224,12 +180,12 @@ void Detail(const wchar_t* _label, const std::wstring& _value, float _y, Engine:
 void SelectedPanel(const Elite::MarketView& _view, std::optional<Engine::Point> _pointer, Engine::Canvas& _canvas)
 {
   const std::uint8_t row = _view.selected;
-  const wchar_t* const unit = UnitText(COMMODITIES[row].unit);
+  const wchar_t* const unit = DockedNames::Unit(row);
   DockedFrame::Panel(SELECTED, true, false, _canvas);
   _canvas.Text(L"SELECTED", Engine::Font::Label, SMALL_LABEL, SMALL_SPACING, Engine::Point{.x = INSIDE_LEFT, .y = 145.5f},
                Engine::Align::Left, LABEL);
-  _canvas.Text(COMMODITIES[row].name, Engine::Font::Label, 40.0f, 0.0f, Engine::Point{.x = INSIDE_LEFT, .y = 189.5f}, Engine::Align::Left,
-               AMBER_LIGHT);
+  _canvas.Text(DockedNames::Commodity(row), Engine::Font::Label, 40.0f, 0.0f, Engine::Point{.x = INSIDE_LEFT, .y = 189.5f},
+               Engine::Align::Left, AMBER_LIGHT);
   Detail(L"Buy price", std::format(L"{} / {}", DockedFrame::Tenths(_view.buyTenths[row]), unit), 238.5f, _canvas);
   Detail(L"Sell price", std::format(L"{} / {}", DockedFrame::Tenths(_view.sellTenths[row]), unit), 270.5f, _canvas);
   Detail(L"Station stock", Amount(_view.stock[row], row), 302.5f, _canvas);
@@ -338,7 +294,7 @@ std::optional<Elite::MarketClick> DockedMarket::ControlAt(Engine::Point _point) 
 DockedMarket::Words DockedMarket::WordsOf(const Elite::MarketMessage& _message)
 {
   const std::uint8_t commodity = _message.commodity;
-  const std::wstring name = Upper(COMMODITIES[commodity].name);
+  const std::wstring name = Upper(DockedNames::Commodity(commodity));
   switch (_message.notice)
   {
   case Elite::MarketNotice::None:
@@ -354,7 +310,7 @@ DockedMarket::Words DockedMarket::WordsOf(const Elite::MarketMessage& _message)
   case Elite::MarketNotice::NotForSale:
     return Words{L"ALIEN ITEMS", L"NOT FOR SALE AT THIS STATION"};
   case Elite::MarketNotice::HoldFull:
-    if (COMMODITIES[commodity].unit == Unit::Tonnes)
+    if (std::wstring_view(DockedNames::Unit(commodity)) == L"t")
     {
       return Words{L"CARGO HOLD FULL",
                    std::format(L"{} FREE OF {}", Capitals(_message.freeUnits, commodity), Capitals(_message.capacityUnits, commodity))};

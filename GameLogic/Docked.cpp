@@ -35,6 +35,7 @@ constexpr std::uint16_t CREDITS_ON_MESSAGE_LINE = 0x78; // B800:0078
 
 constexpr std::uint8_t FUEL_TENTHS_PER_UNIT = 10;
 constexpr std::uint8_t FUEL_UNITS_PER_TENTH = 0x24; // 255 is 7.0 light years
+constexpr std::uint8_t DODO_TECH_LEVEL = 9;         // a Dodo station from this tech level up, as D01 draws it
 // fuelDigits' last two, the units and the tenths, which go either side of the fuel text's point.
 constexpr std::size_t FUEL_UNITS_DIGIT = 3;
 constexpr std::size_t FUEL_TENTHS_DIGIT = 4;
@@ -331,6 +332,36 @@ void FormatQuantity(std::uint16_t _quantity, std::span<std::uint8_t> _text)
 }
 
 // The docked screen published to the host while the docked host runs, and taken down when it ends.
+// D08's view published to the host while the docked status screen waits for its key, when there is one, and taken down after.
+class StatusShown
+{
+public:
+  StatusShown(Host& _host, std::optional<StatusView> _view)
+    : m_host(_host),
+      m_shown(_view.has_value())
+  {
+    if (_view)
+    {
+      m_host.ShowStatus(std::move(*_view));
+    }
+  }
+
+  StatusShown(const StatusShown&) = delete;
+  StatusShown& operator=(const StatusShown&) = delete;
+
+  ~StatusShown()
+  {
+    if (m_shown)
+    {
+      m_host.HideStatus();
+    }
+  }
+
+private:
+  Host& m_host;
+  bool m_shown;
+};
+
 class DockedScreenShown
 {
 public:
@@ -521,19 +552,9 @@ void AwardArchangelTitle(GameState& _state)
   printed = PrintTextModeString(_state, CASH_LABEL_TEXT, LINE_6);
   PrintTextModeString(_state, SkipCashSpaces(_state), printed);
   printed = PrintTextModeString(_state, LEGAL_STATUS_LABEL_TEXT, LINE_7);
-  const std::uint8_t legal = _state.Data().commander.legalStatus;
-  const std::uint16_t standing = legal < LEGAL_STATUS_OFFENDER ? 0 : legal < LEGAL_STATUS_FUGITIVE ? 1 : 2;
-  PrintTextModeString(_state, LEGAL_STATUS_NAMES[standing], printed);
+  PrintTextModeString(_state, LEGAL_STATUS_NAMES[static_cast<std::size_t>(LegalStandingOf(_state.Data().commander.legalStatus))], printed);
   printed = PrintTextModeString(_state, RATING_LABEL_TEXT, LINE_8);
-  // The rating: the first threshold above the kill count. The last threshold is above any kill count (killCount stops at FEh),
-  // so the rating is one of the nine.
-  const std::uint8_t kills = _state.Data().commander.killCount;
-  std::uint16_t rating = 0;
-  while (kills >= RATING_THRESHOLDS[rating])
-  {
-    ++rating;
-  }
-  PrintTextModeString(_state, RATING_NAMES[rating], printed);
+  PrintTextModeString(_state, RATING_NAMES[RatingOf(_state.Data().commander.killCount)], printed);
   _state.Data().drawing.textAttribute = EQUIPMENT_HEADING_ATTRIBUTE;
   PrintTextModeString(_state, EQUIPMENT_HEADING_TEXT, LINE_9);
   _state.Data().drawing.textAttribute = STATUS_ATTRIBUTE;
@@ -587,7 +608,91 @@ void AwardArchangelTitle(GameState& _state)
       break;
     }
   }
+  // Docked, D08 shows over the screen while it waits (ADR-063).
+  const StatusShown shown(_host, _place == ScreenPlace::Docked ? std::optional<StatusView>(StatusViewOf(_state)) : std::nullopt);
   co_return co_await WaitForScreenExitKey(_state, _host, _place == ScreenPlace::Docked ? SCAN_F6 : SCAN_F9, _place);
+}
+
+namespace
+{
+
+// _text without the spaces the original pads its names with: "JAMESON " is JAMESON.
+[[nodiscard]] std::string WithoutTrailingSpaces(std::string_view _text)
+{
+  const std::size_t end = _text.find_last_not_of(' ');
+  return std::string(_text.substr(0, end == std::string_view::npos ? 0 : end + 1));
+}
+
+} // namespace
+
+LegalStanding LegalStandingOf(std::uint8_t _legalStatus) noexcept
+{
+  if (_legalStatus < LEGAL_STATUS_OFFENDER)
+  {
+    return LegalStanding::Clean;
+  }
+  return _legalStatus < LEGAL_STATUS_FUGITIVE ? LegalStanding::Offender : LegalStanding::Fugitive;
+}
+
+std::uint8_t RatingOf(std::uint8_t _kills) noexcept
+{
+  // The last threshold is above any kill count (killCount stops at FEh), so the rating is one of the nine.
+  std::uint8_t rating = 0;
+  while (_kills >= RATING_THRESHOLDS[rating])
+  {
+    ++rating;
+  }
+  return rating;
+}
+
+StatusView StatusViewOf(const GameState& _state)
+{
+  const CommanderState& commander = _state.Data().commander;
+  StatusView view;
+  view.systemName = std::string(TextWithin(commander.currentSystem.name, 0));
+  view.dodo = commander.currentSystem.techLevel >= DODO_TECH_LEVEL;
+  view.title = WithoutTrailingSpaces(TextIn(commander.commanderRankText));
+  view.commanderName = WithoutTrailingSpaces(TextWithin(commander.defaultCommanderName, 0));
+  view.witchSpace = commander.witchspaceCountdown != 0;
+  view.presentSystem = view.systemName;
+  view.hyperspaceTarget = std::string(TextWithin(SelectedNameRun(_state), 0));
+  view.fuelTenths = static_cast<std::uint8_t>(commander.fuel * FUEL_TENTHS_PER_UNIT / FUEL_UNITS_PER_TENTH);
+  view.creditsTenths = commander.creditsTenths;
+  view.legal = LegalStandingOf(commander.legalStatus);
+  view.rating = RatingOf(commander.killCount);
+  // Each item fitted, in the list's order from the missiles; a laser with the mounts whose two bits of laserMountTypes are its type.
+  const std::span<std::uint8_t CommanderState::*const> fitted = std::span(EQUIPMENT_ITEMS).subspan(1, EQUIPMENT_ROWS);
+  for (std::size_t item = 0; item < fitted.size(); ++item)
+  {
+    const std::uint8_t count = commander.*fitted[item];
+    if (count == 0)
+    {
+      continue;
+    }
+    FittedItem entry{.kind = static_cast<FittedKind>(item), .count = count, .mounts = 0};
+    if (const std::optional<std::uint8_t> type = LaserTypeOfRow(static_cast<std::uint8_t>(FIRST_EQUIPMENT_MENU_ROW + item));
+        type.has_value())
+    {
+      const std::uint8_t laser = type.value_or(0);
+      for (std::uint8_t mount = 0; mount < LASER_MOUNTS; ++mount)
+      {
+        const bool on = ((commander.laserMountsFitted >> mount) & 1) != 0;
+        if (on && ((commander.laserMountTypes >> (2 * mount)) & LASER_MOUNT_TYPE_MASK) == laser)
+        {
+          entry.mounts = static_cast<std::uint8_t>(entry.mounts | (1 << mount));
+        }
+      }
+    }
+    view.equipment.push_back(entry);
+  }
+  for (std::size_t commodity = 0; commodity < COMMODITY_KINDS; ++commodity)
+  {
+    view.held[commodity] = HeldOf(_state, commodity);
+  }
+  view.refugeesTonnes = commander.cargoHold.refugeesTonnes;
+  view.usedTonnes = commander.cargoHold.cargoUsedTonnes;
+  view.bayTonnes = CargoBayTonnes(commander.largeCargoBayFitted == 1);
+  return view;
 }
 
 [[nodiscard]] Task<ScreenKey> ShowInventoryScreen(GameState& _state, Host& _host, ScreenPlace _place)

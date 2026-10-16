@@ -9,6 +9,7 @@
 #include "Mouse.h"
 #include "KeyboardState.h"
 #include "SpaceViewLayers.h"
+#include "StatusView.h"
 #include "Speaker.h"
 #include "Task.h"
 #include "Timing.h"
@@ -279,6 +280,19 @@ public:
     return m_marketShown ? &m_marketView : nullptr;
   }
 
+  /// _view published as what the status screen, D08, shows now (ADR-063): numbered, one more than the last. While one is shown,
+  /// the shell draws it in place of the CGA picture.
+  void ShowStatus(StatusView _view);
+
+  /// D08 no longer shown: the status screen closed.
+  void HideStatus() noexcept;
+
+  /// The status screen's view while it is shown, or nothing.
+  [[nodiscard]] const StatusView* ShownStatus() const noexcept
+  {
+    return m_statusShown ? &m_statusView : nullptr;
+  }
+
   /// _screen published as the docked screen open now (D96): the docked host's, while it runs.
   void ShowDockedScreen(DockedScreen _screen) noexcept
   {
@@ -430,6 +444,8 @@ private:
   bool m_marketShown = false;                 // while the market screen's routine runs
   std::deque<MarketClick> m_clicks;           // the shell's clicks on it, oldest first
   std::optional<DockedScreen> m_dockedScreen; // the docked host's open screen, while it runs
+  StatusView m_statusView;                    // the status screen's latest view
+  bool m_statusShown = false;                 // while the docked status screen waits for its key
   Milliseconds m_nextKeyAt = NO_EVENT;
   bool m_keysToGame = false;
   bool m_tickDue = false;
