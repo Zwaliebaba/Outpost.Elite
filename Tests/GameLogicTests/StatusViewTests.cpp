@@ -4,6 +4,7 @@
 #include "GameRig.h"
 #include "Replay.h"
 
+#include <algorithm>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -115,15 +116,9 @@ public:
     const Elite::StatusView view = Elite::StatusViewOf(rig.State());
     const auto find = [&view](Elite::FittedKind _kind)
     {
-      for (const Elite::FittedItem& item : view.equipment)
-      {
-        if (item.kind == _kind)
-        {
-          return item;
-        }
-      }
-      Assert::Fail(L"the item is listed");
-      return Elite::FittedItem{};
+      const auto item = std::ranges::find(view.equipment, _kind, &Elite::FittedItem::kind);
+      Assert::IsTrue(item != view.equipment.end(), L"the item is listed");
+      return *item;
     };
     Assert::AreEqual(Elite::MOUNT_FORE, find(Elite::FittedKind::PulseLaser).mounts, L"the pulse laser fore");
     Assert::AreEqual(static_cast<std::uint8_t>(Elite::MOUNT_AFT | Elite::MOUNT_LEFT), find(Elite::FittedKind::BeamLaser).mounts,
