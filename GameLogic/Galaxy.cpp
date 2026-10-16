@@ -398,8 +398,9 @@ void DrawShortRangeChart(GameState& _state, Host& /*_host*/)
 struct ChartKeys
 {
   void (*drawFrame)(GameState&, Host&);
-  PacingPoint pacing;  // the IBM PC's redraw (D18), paid before PresentChartFrame
-  std::uint8_t ownKey; // the chart's own F key, which leaves it open
+  PacingPoint pacing;        // the IBM PC's redraw (D18), paid before PresentChartFrame
+  DockedScreen dockedScreen; // the chart docked, whose key (DockedKeyOf) leaves it open there (D96)
+  std::uint8_t flightKey;    // the chart's own F key in flight, which leaves it open there
   void (*recenter)(GameState&);
   std::uint8_t CommanderState::*keptCursorX; // where the cursor is kept while the chart is closed
   std::uint8_t CommanderState::*keptCursorY;
@@ -421,13 +422,15 @@ void RecenterShortRangeCursor(GameState& _state)
 
 constexpr ChartKeys GALACTIC_CHART_KEYS{.drawFrame = &DrawGalacticChart,
                                         .pacing = GALACTIC_CHART_PACING,
-                                        .ownKey = SCAN_F5,
+                                        .dockedScreen = DockedScreen::Galaxy,
+                                        .flightKey = SCAN_F5,
                                         .recenter = &RecenterGalacticCursor,
                                         .keptCursorX = &CommanderState::galacticCursorX,
                                         .keptCursorY = &CommanderState::galacticCursorY};
 constexpr ChartKeys SHORT_RANGE_CHART_KEYS{.drawFrame = &DrawShortRangeChart,
                                            .pacing = SHORT_RANGE_CHART_PACING,
-                                           .ownKey = SCAN_F6,
+                                           .dockedScreen = DockedScreen::Local,
+                                           .flightKey = SCAN_F6,
                                            .recenter = &RecenterShortRangeCursor,
                                            .keptCursorX = &CommanderState::shortRangeCursorX,
                                            .keptCursorY = &CommanderState::shortRangeCursorY};
@@ -435,7 +438,7 @@ constexpr ChartKeys SHORT_RANGE_CHART_KEYS{.drawFrame = &DrawShortRangeChart,
 // A chart's key: D shows the distance to the system nearest the cursor, F finds one by name, keypad 5 or fire
 // recentres the cursor, and Esc or an F key other than the chart's own closes it, selecting the system at the cursor unless the
 // hyperspace countdown runs. Returns the key that closes it; otherwise the original jumps back to the chart's frame.
-[[nodiscard]] Task<std::optional<ScreenKey>> ReadChartKey(GameState& _state, Host& _host, const ChartKeys& _chart)
+[[nodiscard]] Task<std::optional<ScreenKey>> ReadChartKey(GameState& _state, Host& _host, const ChartKeys& _chart, ScreenPlace _place)
 {
   const KeyPress key = GetKey(_state);
   const std::uint8_t scanCode = key.scanCode;
@@ -458,7 +461,8 @@ constexpr ChartKeys SHORT_RANGE_CHART_KEYS{.drawFrame = &DrawShortRangeChart,
   {
     _chart.recenter(_state);
   }
-  const bool closes = scanCode == SCAN_ESCAPE || (scanCode >= SCAN_F1 && scanCode <= SCAN_F10 && scanCode != _chart.ownKey);
+  const std::uint8_t ownKey = _place == ScreenPlace::Docked ? DockedKeyOf(_chart.dockedScreen) : _chart.flightKey;
+  const bool closes = scanCode != ownKey && ClosesScreen(scanCode, _place);
   if (!closes)
   {
     co_return std::nullopt;
@@ -476,7 +480,7 @@ constexpr ChartKeys SHORT_RANGE_CHART_KEYS{.drawFrame = &DrawShortRangeChart,
 
 // A chart's frames until a key closes it: the frame drawn, the IBM PC's redraw paid (D18), presented, the
 // cursor steered, and the key read.
-[[nodiscard]] Task<ScreenKey> RunChartFrames(GameState& _state, Host& _host, const ChartKeys& _chart)
+[[nodiscard]] Task<ScreenKey> RunChartFrames(GameState& _state, Host& _host, const ChartKeys& _chart, ScreenPlace _place)
 {
   for (;;)
   {
@@ -484,7 +488,7 @@ constexpr ChartKeys SHORT_RANGE_CHART_KEYS{.drawFrame = &DrawShortRangeChart,
     co_await _host.Spend(_chart.pacing.milliseconds);
     co_await PresentChartFrame(_state, _host);
     (void)MoveChartCursor(_state, _host);
-    if (const std::optional<ScreenKey> key = co_await ReadChartKey(_state, _host, _chart))
+    if (const std::optional<ScreenKey> key = co_await ReadChartKey(_state, _host, _chart, _place))
     {
       co_return *key;
     }
@@ -651,7 +655,7 @@ void SelectNearestSystem(GameState& _state)
 
 } // namespace
 
-[[nodiscard]] Task<ScreenKey> ShowGalacticChart(GameState& _state, Host& _host)
+[[nodiscard]] Task<ScreenKey> ShowGalacticChart(GameState& _state, Host& _host, ScreenPlace _place)
 {
   _state.Data().drawing.sunFringeMask = 0;
   LoadSystemSeeds(_state, _state.Data().commander.currentSystem.index);
@@ -665,10 +669,10 @@ void SelectNearestSystem(GameState& _state)
   _state.Data().commander.chartCursorX = std::uint8_t{_state.Data().commander.galacticCursorX};
   _state.Data().commander.chartCursorY = std::uint8_t{_state.Data().commander.galacticCursorY};
   _state.Data().commander.chartIsShortRange = 0;
-  co_return co_await RunChartFrames(_state, _host, GALACTIC_CHART_KEYS);
+  co_return co_await RunChartFrames(_state, _host, GALACTIC_CHART_KEYS, _place);
 }
 
-[[nodiscard]] Task<ScreenKey> ShowShortRangeChart(GameState& _state, Host& _host)
+[[nodiscard]] Task<ScreenKey> ShowShortRangeChart(GameState& _state, Host& _host, ScreenPlace _place)
 {
   _state.Data().drawing.sunFringeMask = 0;
   (void)DrawChartFrame(_state, _host);
@@ -700,7 +704,7 @@ void SelectNearestSystem(GameState& _state)
     }
   }
   PlaceChartLabels(_state);
-  co_return co_await RunChartFrames(_state, _host, SHORT_RANGE_CHART_KEYS);
+  co_return co_await RunChartFrames(_state, _host, SHORT_RANGE_CHART_KEYS, _place);
 }
 
 SystemSeeds ReadSystemSeeds(const GameState& _state)
@@ -1130,7 +1134,7 @@ void ClearChartTextLines(GameState& _state, std::uint16_t _ink)
   DrawScreenString(_state, BLANK_CHART_LINE, _ink, CHART_TEXT_LINE_2);
 }
 
-[[nodiscard]] Task<ScreenKey> ShowSystemDataScreen(GameState& _state, Host& _host)
+[[nodiscard]] Task<ScreenKey> ShowSystemDataScreen(GameState& _state, Host& _host, ScreenPlace _place)
 {
   const std::uint16_t titleEnd = PrintTextModeString(_state, DrawDockedFrame(_state, _host, SYSTEM_DATA_FRAME), DATA_TITLE);
   TerminateSelectedSystemName(_state);
@@ -1196,7 +1200,7 @@ void ClearChartTextLines(GameState& _state, std::uint16_t _ink)
   galaxy.radiusDigits[0] = SPACE;
   PrintTextModeString(_state, JoinTexts({RADIUS_LABEL, DigitsText(galaxy.radiusDigits), RADIUS_UNIT_TEXT}), RADIUS_ROW);
   ShowSystemDescription(_state);
-  co_return co_await WaitForScreenExitKey(_state, _host, SCAN_F7);
+  co_return co_await WaitForScreenExitKey(_state, _host, SCAN_F7, _place);
 }
 
 void TerminateSelectedSystemName(GameState& _state)

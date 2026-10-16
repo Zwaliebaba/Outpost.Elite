@@ -68,11 +68,11 @@ public:
     rig.Play(DOCKED);
     PokeBoth(rig, &Commander::galacticCursorX, 3);
     PokeBoth(rig, &Commander::galacticCursorY, 2);
-    rig.Play("key F5; wait 0.3\n"
+    rig.Play("key F4; wait 0.3\n"
              "down Left; down Up; wait 0.5; up Left; up Up; wait 0.1\n"
              "key KP_Begin; wait 0.1\n"
              "key d; wait 0.1\n"
-             "key a; wait 0.1; key F5; wait 0.1; key Delete; wait 0.1\n"
+             "key a; wait 0.1; key F4; wait 0.1; key Delete; wait 0.1\n"
              "down space; wait 0.1; up space; wait 0.1\n"
              "key f; wait 0.1; key l; key a; key v; key e; key Return; wait 0.1\n"
              "key f; wait 0.1; key z; key z; key Return; wait 0.1\n"
@@ -83,19 +83,19 @@ public:
   }
 
   // The short-range chart's keys: the cursor held against each edge, for five of the chart's frames of 84 to
-  // 100 ms (D18), D, keypad 5, F with a system on the chart and one off it, and F6, its own key, ignored.
+  // 100 ms (D18), D, keypad 5, F with a system on the chart and one off it, and F5, its own key docked (D96), ignored.
   TEST_METHOD(ShortRangeChartAgreesOnEveryKey)
   {
     TwinRig rig("TwinShortRangeChart");
     rig.Play(DOCKED);
     PokeBoth(rig, &Commander::shortRangeCursorX, 0xFC);
     PokeBoth(rig, &Commander::shortRangeCursorY, 0x7C);
-    rig.Play("key F6; wait 0.3\n"
+    rig.Play("key F5; wait 0.3\n"
              "down Right; down Down; wait 0.5; up Right; up Down; wait 0.1");
     PokeBoth(rig, &Commander::chartCursorX, 3);
     PokeBoth(rig, &Commander::chartCursorY, 2);
     rig.Play("down Left; down Up; wait 0.5; up Left; up Up; wait 0.1\n"
-             "key d; wait 0.1; key KP_Begin; wait 0.1; key F6; wait 0.1\n"
+             "key d; wait 0.1; key KP_Begin; wait 0.1; key F5; wait 0.1\n"
              "key f; wait 0.1; key t; key i; key b; key e; key d; key i; key e; key d; key Return; wait 0.1\n"
              "key f; wait 0.1; key r; key i; key e; key d; key q; key u; key a; key t; key Return; wait 0.1\n"
              "key Escape; wait 0.3\ndigest closed");
@@ -143,11 +143,11 @@ public:
       state.Data().commander.currentSystem.index = chart.system;
       state.Data().commander.currentSystemX = std::uint8_t{Elite::SystemX(state)};
       state.Data().commander.currentSystemChartY = static_cast<std::uint8_t>(Elite::SystemY(state) >> 1);
-      play("key F6; wait 0.5");
+      play("key F5; wait 0.5");
       Assert::IsTrue(std::size_t{state.Data().galaxy.chartItemEnd} <= std::size(state.Data().galaxy.chartItems), L"32 items");
       Assert::IsTrue(std::size_t{state.Data().galaxy.chartLabelCursor} <= sizeof(Elite::GalaxyState::pendingChartLabels),
                      L"the labels within their buffer");
-      play("key F9; wait 0.5");
+      play("key F6; wait 0.5");
     }
   }
 

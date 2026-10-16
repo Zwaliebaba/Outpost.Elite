@@ -6,6 +6,7 @@
 #include "GoldenImage.h"
 #include "Renderer.h"
 
+#include <functional>
 #include <optional>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -48,8 +49,9 @@ constexpr std::uint32_t BACKGROUND = 0x070605;
   return view;
 }
 
-// _view drawn on WARP at 1920 x 1080, the pointer at _pointer.
-[[nodiscard]] GoldenImage::Picture Drawn(const Elite::MarketView& _view, std::optional<Engine::Point> _pointer)
+// _view drawn on WARP at 1920 x 1080, the pointer at _pointer, and _over drawn over it.
+[[nodiscard]] GoldenImage::Picture Drawn(const Elite::MarketView& _view, std::optional<Engine::Point> _pointer,
+                                         const std::function<void(Engine::Canvas&)>& _over = {})
 {
   Engine::Renderer renderer;
   Assert::IsTrue(
@@ -59,6 +61,10 @@ constexpr std::uint32_t BACKGROUND = 0x070605;
   Engine::Canvas canvas;
   const Outpost::TextMeasure measure = [&renderer](const Engine::CanvasText& _text) { return renderer.MeasureText(_text); };
   Outpost::DockedMarket::Draw(_view, _pointer, measure, canvas);
+  if (_over)
+  {
+    _over(canvas);
+  }
   GoldenImage::Picture picture{.width = DESIGN_WIDTH_PIXELS,
                                .height = DESIGN_HEIGHT_PIXELS,
                                .pixels = renderer.Capture({}, BACKGROUND, DESIGN_WIDTH_PIXELS, DESIGN_HEIGHT_PIXELS, nullptr, &canvas)};
@@ -110,6 +116,31 @@ public:
     Elite::MarketView view = Refusing();
     view.message = Elite::MarketMessage{.notice = Elite::MarketNotice::Bought, .commodity = 0, .amount = 3, .tenths = 84};
     GoldenImage::Check("D01-Market-Bought", Drawn(view, Engine::Point{.x = 300.0f, .y = 400.0f}));
+  }
+
+  // T1's modal over the market, where `docked/10-disc-menu.png` draws D10's: the market dimmed, and the panel with its full
+  // amber border and its two chamfers.
+  TEST_METHOD(TheModalOverTheMarket)
+  {
+    GoldenImage::Check(
+      "T1-Modal",
+      Drawn(AsDrawn(), std::nullopt, [](Engine::Canvas& _canvas)
+            { Outpost::DockedFrame::Modal(Engine::Rect{.left = 360.0f, .top = 150.0f, .width = 1200.0f, .height = 740.0f}, _canvas); }));
+  }
+
+  // A table row's look: the selected row lit whether or not the pointer is on it, a hovered one shaded, and every second
+  // row striped where the table is; its text light amber on the selected row only.
+  TEST_METHOD(ARowLooksAsItsTableSays)
+  {
+    using Look = Outpost::DockedFrame::RowLook;
+    Assert::IsTrue(Outpost::DockedFrame::RowLookOf(1, true, true, true) == Look::Selected, L"selected, under the pointer");
+    Assert::IsTrue(Outpost::DockedFrame::RowLookOf(2, false, true, true) == Look::Hovered, L"under the pointer");
+    Assert::IsTrue(Outpost::DockedFrame::RowLookOf(1, false, false, true) == Look::Striped, L"a second row");
+    Assert::IsTrue(Outpost::DockedFrame::RowLookOf(2, false, false, true) == Look::Plain, L"a first row");
+    Assert::IsTrue(Outpost::DockedFrame::RowLookOf(1, false, false, false) == Look::Plain, L"a table with no stripes");
+    Assert::AreNotEqual(Outpost::DockedFrame::RowText(Look::Selected), Outpost::DockedFrame::RowText(Look::Hovered),
+                        L"the selected row's text");
+    Assert::AreEqual(Outpost::DockedFrame::RowText(Look::Plain), Outpost::DockedFrame::RowText(Look::Striped), L"every other row's");
   }
 
   // A click on a row selects it, on −, +, MAX, [B] BUY and [S] SELL presses it, and anywhere else does nothing; the key bar is

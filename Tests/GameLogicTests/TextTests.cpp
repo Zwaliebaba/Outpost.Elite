@@ -155,7 +155,7 @@ public:
   TEST_METHOD(ReadTextLineAgreesWhileEditing)
   {
     TwinRig rig("TwinReadTextLine");
-    rig.Play("key space; wait 4\nkey F5; wait 0.3\nkey f; wait 0.1\n"
+    rig.Play("key space; wait 4\nkey F4; wait 0.3\nkey f; wait 0.1\n"
              "down Shift_L; wait 0.02; key l; wait 0.02; up Shift_L; wait 0.02\n"
              "key a; key v; key e; key q; wait 0.02; key q; key q; key q; key q; wait 0.05\n"
              "key BackSpace; key BackSpace; key BackSpace; key BackSpace; key BackSpace; wait 0.02\n"

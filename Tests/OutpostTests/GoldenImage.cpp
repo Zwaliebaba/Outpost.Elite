@@ -9,7 +9,6 @@
 #include <wrl/client.h>
 
 #include <algorithm>
-#include <bit>
 #include <cstdlib>
 #include <format>
 #include <system_error>
@@ -25,8 +24,9 @@ namespace
 
 template <typename T> using ComPtr = Microsoft::WRL::ComPtr<T>;
 
-constexpr std::uint32_t BYTES_PER_PIXEL = 3; // what is written: 24-bit BGR, as a PNG has no use for the fourth byte
-constexpr int MOST_CHANNEL_DIFFERENCE = 8;   // a pixel within this of its golden's, in every channel, is the same
+constexpr std::uint32_t BYTES_PER_PIXEL = 3;      // what is written: 24-bit BGR, as a PNG has no use for the fourth byte
+constexpr std::uint32_t READ_BYTES_PER_PIXEL = 4; // what is read: 32-bit BGR, which WIC converts any PNG to
+constexpr int MOST_CHANNEL_DIFFERENCE = 8;        // a pixel within this of its golden's, in every channel, is the same
 
 // COM on this thread for as long as it lives, as WIC needs it; a thread that already has it keeps it as it was.
 class ComScope
@@ -185,20 +185,23 @@ std::optional<GoldenImage::Picture> GoldenImage::Load(const std::filesystem::pat
     result =
       converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppBGR, WICBitmapDitherTypeNone, nullptr, 0.0, WICBitmapPaletteTypeCustom);
   }
+  std::vector<BYTE> bytes;
   if (SUCCEEDED(result))
   {
-    picture.pixels.resize(std::size_t{picture.width} * picture.height);
-    result = converter->CopyPixels(nullptr, picture.width * 4, static_cast<UINT>(picture.pixels.size() * 4),
-                                   std::bit_cast<BYTE*>(picture.pixels.data()));
+    bytes.resize(std::size_t{picture.width} * picture.height * READ_BYTES_PER_PIXEL);
+    result = converter->CopyPixels(nullptr, picture.width * READ_BYTES_PER_PIXEL, static_cast<UINT>(bytes.size()), bytes.data());
   }
   if (FAILED(result))
   {
     _error = Failure(L"reading the PNG", result);
     return std::nullopt;
   }
-  for (std::uint32_t& pixel : picture.pixels)
+  // 32-bit BGR, the fourth byte unused: each pixel's blue, green and red into 0x00RRGGBB.
+  picture.pixels.resize(std::size_t{picture.width} * picture.height);
+  for (std::size_t index = 0; index < picture.pixels.size(); ++index)
   {
-    pixel &= 0x00FFFFFFu;
+    const std::size_t at = index * READ_BYTES_PER_PIXEL;
+    picture.pixels[index] = std::uint32_t{bytes[at]} | (std::uint32_t{bytes[at + 1]} << 8) | (std::uint32_t{bytes[at + 2]} << 16);
   }
   return picture;
 }

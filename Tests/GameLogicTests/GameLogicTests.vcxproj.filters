@@ -98,6 +98,9 @@
     <ClCompile Include="GameDataTests.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
+    <ClCompile Include="DockedKeysTests.cpp">
+      <Filter>Docked</Filter>
+    </ClCompile>
     <ClCompile Include="DockedTests.cpp">
       <Filter>Docked</Filter>
     </ClCompile>

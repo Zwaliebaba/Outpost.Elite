@@ -30,6 +30,11 @@ constexpr std::uint32_t ALERT = 0xFFFF5A2C;
 constexpr std::uint32_t ALERT_LIGHT = 0xFFFFB09A;
 constexpr std::uint32_t PANEL_FILL = 0xFF110F0C;
 constexpr std::uint32_t PANEL_EDGE = 0xFF64491D; // amber at 35% over the background
+constexpr std::uint32_t MODAL_FILL = 0xFF14110D;
+constexpr std::uint32_t MODAL_BACKDROP = 0xC7050403; // the screen under a modal, dimmed to 22% (D09, D10)
+constexpr std::uint32_t ROW_STRIPE = 0xFF161411;
+constexpr std::uint32_t ROW_SELECTED = 0xFF453416;
+constexpr std::uint32_t ROW_HOVER = 0xFF221C14;
 constexpr std::uint32_t KEY_FILL = 0xFF0C0E10;
 constexpr std::uint32_t KEY_EDGE = 0xFF49371B;
 constexpr std::uint32_t KEY_NAME = 0xFF917449;
@@ -64,6 +69,9 @@ constexpr float KEY_TAB_RIGHT = 1370.0f;
 constexpr float KEY_TAB_SLANT = 22.0f;
 constexpr float KEY_HEIGHT = 60.0f;
 constexpr float CHAMFER = 24.0f;
+constexpr float MODAL_CHAMFER = 28.0f;
+constexpr float DESIGN_WIDTH = 1920.0f;
+constexpr float DESIGN_HEIGHT = 1080.0f;
 constexpr float STRIP_ICON = 26.0f;
 constexpr float STRIP_ICON_LEFT = 17.0f;
 constexpr float STRIP_TEXT_LEFT = 58.0f;
@@ -98,6 +106,51 @@ void Edges(const Engine::Rect& _rect, std::uint32_t _color, Engine::Canvas& _can
   _canvas.BoxEdge(
     Engine::Rect{.left = _rect.left + 0.5f, .top = _rect.top + 0.5f, .width = _rect.width - 1.0f, .height = _rect.height - 1.0f}, 1.0f,
     _color);
+}
+
+// A panel in _rect: _fill, a 1-unit border of _edge, and a chamfer of _chamfer at its top-right corner when _topRight and its
+// bottom-left when _bottomLeft.
+void ChamferedPanel(const Engine::Rect& _rect, float _chamfer, std::uint32_t _fill, std::uint32_t _edge, bool _topRight, bool _bottomLeft,
+                    Engine::Canvas& _canvas)
+{
+  const float left = _rect.left;
+  const float top = _rect.top;
+  const float right = _rect.left + _rect.width;
+  const float bottom = _rect.top + _rect.height;
+  const float upper = _topRight ? top + _chamfer : top;
+  const float lower = _bottomLeft ? bottom - _chamfer : bottom;
+  // The fill: the body, then the bands the chamfers cut.
+  _canvas.Box(Engine::Rect{.left = left, .top = upper, .width = _rect.width, .height = lower - upper}, _fill);
+  if (_topRight)
+  {
+    _canvas.Quad({Engine::Point{.x = left, .y = top}, Engine::Point{.x = right - _chamfer, .y = top}, Engine::Point{.x = right, .y = upper},
+                  Engine::Point{.x = left, .y = upper}},
+                 _fill, _fill);
+  }
+  if (_bottomLeft)
+  {
+    _canvas.Quad({Engine::Point{.x = left, .y = lower}, Engine::Point{.x = right, .y = lower}, Engine::Point{.x = right, .y = bottom},
+                  Engine::Point{.x = left + _chamfer, .y = bottom}},
+                 _fill, _fill);
+  }
+  // The border, on the half unit inside each edge, and across each chamfer.
+  const float inLeft = left + 0.5f;
+  const float inTop = top + 0.5f;
+  const float inRight = right - 0.5f;
+  const float inBottom = bottom - 0.5f;
+  _canvas.Line(Engine::Point{.x = inLeft, .y = inTop}, Engine::Point{.x = _topRight ? right - _chamfer : inRight, .y = inTop}, 1.0f, _edge);
+  _canvas.Line(Engine::Point{.x = inRight, .y = upper}, Engine::Point{.x = inRight, .y = inBottom}, 1.0f, _edge);
+  _canvas.Line(Engine::Point{.x = _bottomLeft ? left + _chamfer : inLeft, .y = inBottom}, Engine::Point{.x = inRight, .y = inBottom}, 1.0f,
+               _edge);
+  _canvas.Line(Engine::Point{.x = inLeft, .y = inTop}, Engine::Point{.x = inLeft, .y = lower}, 1.0f, _edge);
+  if (_topRight)
+  {
+    _canvas.Line(Engine::Point{.x = right - _chamfer, .y = inTop}, Engine::Point{.x = inRight, .y = upper}, 1.0f, _edge);
+  }
+  if (_bottomLeft)
+  {
+    _canvas.Line(Engine::Point{.x = inLeft, .y = lower}, Engine::Point{.x = left + _chamfer, .y = inBottom}, 1.0f, _edge);
+  }
 }
 
 } // namespace
@@ -188,45 +241,49 @@ std::optional<DockedKey> DockedFrame::KeyAt(Engine::Point _point) noexcept
 
 void DockedFrame::Panel(const Engine::Rect& _rect, bool _topRight, bool _bottomLeft, Engine::Canvas& _canvas)
 {
-  const float left = _rect.left;
-  const float top = _rect.top;
-  const float right = _rect.left + _rect.width;
-  const float bottom = _rect.top + _rect.height;
-  const float upper = _topRight ? top + CHAMFER : top;
-  const float lower = _bottomLeft ? bottom - CHAMFER : bottom;
-  // The fill: the body, then the bands the chamfers cut.
-  _canvas.Box(Engine::Rect{.left = left, .top = upper, .width = _rect.width, .height = lower - upper}, PANEL_FILL);
-  if (_topRight)
+  ChamferedPanel(_rect, CHAMFER, PANEL_FILL, PANEL_EDGE, _topRight, _bottomLeft, _canvas);
+}
+
+DockedFrame::RowLook DockedFrame::RowLookOf(std::size_t _index, bool _selected, bool _hovered, bool _striped) noexcept
+{
+  if (_selected)
   {
-    _canvas.Quad({Engine::Point{.x = left, .y = top}, Engine::Point{.x = right - CHAMFER, .y = top}, Engine::Point{.x = right, .y = upper},
-                  Engine::Point{.x = left, .y = upper}},
-                 PANEL_FILL, PANEL_FILL);
+    return RowLook::Selected;
   }
-  if (_bottomLeft)
+  if (_hovered)
   {
-    _canvas.Quad({Engine::Point{.x = left, .y = lower}, Engine::Point{.x = right, .y = lower}, Engine::Point{.x = right, .y = bottom},
-                  Engine::Point{.x = left + CHAMFER, .y = bottom}},
-                 PANEL_FILL, PANEL_FILL);
+    return RowLook::Hovered;
   }
-  // The border, on the half unit inside each edge, and across each chamfer.
-  const float inLeft = left + 0.5f;
-  const float inTop = top + 0.5f;
-  const float inRight = right - 0.5f;
-  const float inBottom = bottom - 0.5f;
-  _canvas.Line(Engine::Point{.x = inLeft, .y = inTop}, Engine::Point{.x = _topRight ? right - CHAMFER : inRight, .y = inTop}, 1.0f,
-               PANEL_EDGE);
-  _canvas.Line(Engine::Point{.x = inRight, .y = upper}, Engine::Point{.x = inRight, .y = inBottom}, 1.0f, PANEL_EDGE);
-  _canvas.Line(Engine::Point{.x = _bottomLeft ? left + CHAMFER : inLeft, .y = inBottom}, Engine::Point{.x = inRight, .y = inBottom}, 1.0f,
-               PANEL_EDGE);
-  _canvas.Line(Engine::Point{.x = inLeft, .y = inTop}, Engine::Point{.x = inLeft, .y = lower}, 1.0f, PANEL_EDGE);
-  if (_topRight)
+  return _striped && _index % 2 == 1 ? RowLook::Striped : RowLook::Plain;
+}
+
+void DockedFrame::Row(const Engine::Rect& _rect, RowLook _look, Engine::Canvas& _canvas)
+{
+  switch (_look)
   {
-    _canvas.Line(Engine::Point{.x = right - CHAMFER, .y = inTop}, Engine::Point{.x = inRight, .y = upper}, 1.0f, PANEL_EDGE);
+  case RowLook::Plain:
+    return;
+  case RowLook::Striped:
+    _canvas.Box(_rect, ROW_STRIPE);
+    return;
+  case RowLook::Hovered:
+    _canvas.Box(_rect, ROW_HOVER);
+    return;
+  case RowLook::Selected:
+    _canvas.Box(_rect, ROW_SELECTED);
+    return;
   }
-  if (_bottomLeft)
-  {
-    _canvas.Line(Engine::Point{.x = inLeft, .y = lower}, Engine::Point{.x = left + CHAMFER, .y = inBottom}, 1.0f, PANEL_EDGE);
-  }
+}
+
+std::uint32_t DockedFrame::RowText(RowLook _look) noexcept
+{
+  return _look == RowLook::Selected ? AMBER_LIGHT : TEXT;
+}
+
+void DockedFrame::Modal(const Engine::Rect& _rect, Engine::Canvas& _canvas)
+{
+  _canvas.Box(Engine::Rect{.left = 0.0f, .top = 0.0f, .width = DESIGN_WIDTH, .height = DESIGN_HEIGHT}, MODAL_BACKDROP);
+  ChamferedPanel(_rect, MODAL_CHAMFER, MODAL_FILL, AMBER, true, true, _canvas);
 }
 
 void DockedFrame::Strip(const Engine::Rect& _rect, Tone _tone, std::wstring_view _headline, std::wstring_view _detail,

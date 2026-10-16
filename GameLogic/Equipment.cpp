@@ -22,13 +22,10 @@ namespace
 {
 
 // Scan codes the menus read.
-constexpr std::uint8_t SCAN_ESCAPE = 0x01;
 constexpr std::uint8_t SCAN_S = 0x1F;
 constexpr std::uint8_t SCAN_B = 0x30;
 constexpr std::uint8_t SCAN_SPACE = 0x39;
-constexpr std::uint8_t SCAN_F1 = 0x3B;
-constexpr std::uint8_t SCAN_F4 = 0x3E;
-constexpr std::uint8_t SCAN_PAST_F10 = 0x45;
+constexpr std::uint8_t SCAN_F3 = 0x3D;
 constexpr std::uint8_t SCAN_UP = 0x48;
 constexpr std::uint8_t SCAN_LEFT = 0x4B;
 constexpr std::uint8_t SCAN_RIGHT = 0x4D;
@@ -656,8 +653,8 @@ bool SelectLaserType(GameState& _state)
         row = (code == SCAN_UP ? MoveMenuCursorUp(_state, row) : MoveMenuCursorDown(_state, row)).row;
         continue;
       }
-      // The screen's own F4 does nothing here.
-      if (code != SCAN_F4 && IsScreenKey(code))
+      // The screen's own F3 does nothing here (D96).
+      if (code != SCAN_F3 && ClosesScreen(code, ScreenPlace::Docked))
       {
         co_return ScreenKey{code};
       }
@@ -797,11 +794,6 @@ MenuCursor MoveMenuCursorDown(GameState& _state, std::uint16_t _row)
   row = static_cast<std::uint16_t>(row + ROW_BYTES);
   ToggleMenuRowHighlight(_state, row);
   return MenuCursor{row};
-}
-
-bool IsScreenKey(std::uint8_t _key) noexcept
-{
-  return _key == SCAN_ESCAPE || (_key >= SCAN_F1 && _key < SCAN_PAST_F10);
 }
 
 std::uint16_t SteerMenuCursor(GameState& _state, Host& _host, std::uint16_t _row)

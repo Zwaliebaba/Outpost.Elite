@@ -38,26 +38,26 @@ constexpr std::uint64_t LONGEST_CATCH_UP_MILLISECONDS = 250;
 constexpr std::uint32_t COCKPIT_BACKGROUND = 0x000000; // round the view in the frame's window, and past the design at other shapes
 constexpr std::uint32_t DOCKED_BACKGROUND = 0x070605;  // past the docked screens' design at other shapes (D82)
 
-// The scan code a click on the docked key bar sends (D83). While D02 to D08 are the original's, a key opens the screen its name says by
-// the key the original shows it on (D92): EQUIP is F4's, GALAXY F5's, LOCAL F6's and STATUS F9's; MARKET is the screen shown.
+// The scan code a click on the docked key bar sends (D83): the key the bar names, which the docked host acts on (D96); MARKET is the
+// screen shown.
 [[nodiscard]] std::optional<std::uint8_t> ScanCodeOf(DockedKey _key) noexcept
 {
   switch (_key)
   {
   case DockedKey::Disc:
-    return std::uint8_t{0x01};
+    return Elite::DockedKeyOf(Elite::DockedScreen::Disc);
   case DockedKey::Launch:
     return std::uint8_t{0x3B};
   case DockedKey::Market:
     break;
   case DockedKey::Equip:
-    return std::uint8_t{0x3E};
+    return Elite::DockedKeyOf(Elite::DockedScreen::Equip);
   case DockedKey::Galaxy:
-    return std::uint8_t{0x3F};
+    return Elite::DockedKeyOf(Elite::DockedScreen::Galaxy);
   case DockedKey::Local:
-    return std::uint8_t{0x40};
+    return Elite::DockedKeyOf(Elite::DockedScreen::Local);
   case DockedKey::Status:
-    return std::uint8_t{0x43};
+    return Elite::DockedKeyOf(Elite::DockedScreen::Status);
   }
   return std::nullopt;
 }

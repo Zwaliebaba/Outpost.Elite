@@ -381,7 +381,8 @@ void RejectFileName(GameState& _state)
       PrintAt(_state, VERSION_STRING, HELP_POSITION);
       continue;
     }
-    if (scan < SCAN_F1 || scan >= SCAN_PAST_F10)
+    // An F-key that the docked host acts on (D96) leaves; the others, F8 and F9, do nothing here.
+    if (scan < SCAN_F1 || scan >= SCAN_PAST_F10 || !ClosesScreen(scan, ScreenPlace::Docked))
     {
       continue;
     }
