@@ -46,9 +46,13 @@ public:
   // The rating is the first of ratingThresholds above the kills: 2, 4, 9, 20, 35, 90, 155 and 230 kills begin the next.
   TEST_METHOD(TheRatingIsTheFirstThresholdAboveTheKills)
   {
-    const std::vector<std::pair<std::uint8_t, std::uint8_t>> cases = {{0, 0},  {1, 0},   {2, 1},   {3, 1},   {4, 2},   {8, 2},
-                                                                      {9, 3},  {19, 3},  {20, 4},  {34, 4},  {35, 5},  {89, 5},
-                                                                      {90, 6}, {154, 6}, {155, 7}, {229, 7}, {230, 8}, {254, 8}};
+    struct Case
+    {
+      std::uint8_t kills;
+      std::uint8_t rating;
+    };
+    const std::vector<Case> cases = {{0, 0},  {1, 0},  {2, 1},  {3, 1},  {4, 2},   {8, 2},   {9, 3},   {19, 3},  {20, 4},
+                                     {34, 4}, {35, 5}, {89, 5}, {90, 6}, {154, 6}, {155, 7}, {229, 7}, {230, 8}, {254, 8}};
     for (const auto& [kills, rating] : cases)
     {
       Assert::AreEqual(rating, Elite::RatingOf(kills), std::to_wstring(kills).c_str());
