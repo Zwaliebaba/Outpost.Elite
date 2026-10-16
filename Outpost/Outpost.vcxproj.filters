@@ -24,6 +24,12 @@
     <ClInclude Include="DockedMarket.h">
       <Filter>Docked</Filter>
     </ClInclude>
+    <ClInclude Include="DockedNames.h">
+      <Filter>Docked</Filter>
+    </ClInclude>
+    <ClInclude Include="DockedStatus.h">
+      <Filter>Docked</Filter>
+    </ClInclude>
     <ClInclude Include="pch.h">
       <Filter>Build</Filter>
     </ClInclude>
@@ -42,6 +48,12 @@
       <Filter>Docked</Filter>
     </ClCompile>
     <ClCompile Include="DockedMarket.cpp">
+      <Filter>Docked</Filter>
+    </ClCompile>
+    <ClCompile Include="DockedNames.cpp">
+      <Filter>Docked</Filter>
+    </ClCompile>
+    <ClCompile Include="DockedStatus.cpp">
       <Filter>Docked</Filter>
     </ClCompile>
     <ClCompile Include="Main.cpp">

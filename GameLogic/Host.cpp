@@ -273,6 +273,18 @@ void Host::HideMarket() noexcept
   m_clicks.clear();
 }
 
+void Host::ShowStatus(StatusView _view)
+{
+  _view.sequence = m_statusView.sequence + 1;
+  m_statusView = std::move(_view);
+  m_statusShown = true;
+}
+
+void Host::HideStatus() noexcept
+{
+  m_statusShown = false;
+}
+
 void Host::Click(const MarketClick& _click)
 {
   if (m_marketShown)

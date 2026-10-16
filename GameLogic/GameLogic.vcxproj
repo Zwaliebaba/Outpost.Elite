@@ -153,6 +153,7 @@
     <ClInclude Include="SoundTables.h" />
     <ClInclude Include="SpaceObject.h" />
     <ClInclude Include="SpaceViewLayers.h" />
+    <ClInclude Include="StatusView.h" />
     <ClInclude Include="Speaker.h" />
     <ClInclude Include="StartState.h" />
     <ClInclude Include="StartUp.h" />

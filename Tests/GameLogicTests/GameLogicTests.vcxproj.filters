@@ -104,6 +104,9 @@
     <ClCompile Include="DockedTests.cpp">
       <Filter>Docked</Filter>
     </ClCompile>
+    <ClCompile Include="StatusViewTests.cpp">
+      <Filter>Docked</Filter>
+    </ClCompile>
     <ClCompile Include="EquipmentTests.cpp">
       <Filter>Equipment</Filter>
     </ClCompile>

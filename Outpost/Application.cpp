@@ -8,6 +8,7 @@
 #include "DirectoryFileStore.h"
 #include "DockedFrame.h"
 #include "DockedMarket.h"
+#include "DockedStatus.h"
 #include "Game.h"
 #include "Host.h"
 #include "Renderer.h"
@@ -62,8 +63,9 @@ constexpr std::uint32_t DOCKED_BACKGROUND = 0x070605;  // past the docked screen
   return std::nullopt;
 }
 
-// A click at _point on the market (D83): a key of the bar pressed and released, or the control under it named to the game.
-void ClickMarket(Elite::Host& _host, Engine::Point _point)
+// A click at _point on a docked screen the shell draws (D83): a key of the bar pressed and released, or on the market the control
+// under it named to the game.
+void ClickDocked(Elite::Host& _host, Engine::Point _point)
 {
   if (const std::optional<DockedKey> key = DockedFrame::KeyAt(_point))
   {
@@ -72,6 +74,10 @@ void ClickMarket(Elite::Host& _host, Engine::Point _point)
       _host.Inject(Elite::KeyEvent{.key = *code, .down = true});
       _host.Inject(Elite::KeyEvent{.key = *code, .down = false});
     }
+    return;
+  }
+  if (_host.ShownMarket() == nullptr)
+  {
     return;
   }
   if (const std::optional<Elite::MarketClick> click = DockedMarket::ControlAt(_point))
@@ -225,9 +231,9 @@ int Application::Run(HINSTANCE _instance, bool _cheat)
         Engine::PlaceDesign(static_cast<std::uint32_t>(client.right - client.left), static_cast<std::uint32_t>(client.bottom - client.top));
       pointer = Engine::Point{.x = (static_cast<float>(event.x) - place.left) / place.scale,
                               .y = (static_cast<float>(event.y) - place.top) / place.scale};
-      if (event.kind == Engine::PointerEvent::Kind::LeftDown && platform->ShownMarket() != nullptr)
+      if (event.kind == Engine::PointerEvent::Kind::LeftDown && (platform->ShownMarket() != nullptr || platform->ShownStatus() != nullptr))
       {
-        ClickMarket(*platform, *pointer);
+        ClickDocked(*platform, *pointer);
       }
     }
     if (window.TakeResized() && !renderer.Resize())
@@ -259,13 +265,18 @@ int Application::Run(HINSTANCE _instance, bool _cheat)
     audioTime = platform->Clock();
     platform->Sound().DiscardBefore(Elite::Speaker::FirstSampleStart(audioTime, SAMPLE_RATE));
 
-    // On the market, D01 (ADR-058); in flight and on the title, the cockpit with the space view in its window (ADR-034, D63, D64);
+    // On the market, D01 (ADR-058); on the status screen, D08 (ADR-063); in flight and on the title, the cockpit with the space view in its window (ADR-034, D63, D64);
     // on every other screen, the CGA picture.
     bool presented = false;
     const Elite::FlightSnapshot& latest = platform->LatestFlightSnapshot();
     if (const Elite::MarketView* const market = platform->ShownMarket())
     {
       DockedMarket::Draw(*market, pointer, measure, canvas);
+      presented = renderer.Present({}, DOCKED_BACKGROUND, nullptr, &canvas);
+    }
+    else if (const Elite::StatusView* const status = platform->ShownStatus())
+    {
+      DockedStatus::Draw(*status, pointer, measure, canvas);
       presented = renderer.Present({}, DOCKED_BACKGROUND, nullptr, &canvas);
     }
     else if (latest.sequence != 0 && platform->SpaceViewShown())

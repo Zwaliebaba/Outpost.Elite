@@ -5,6 +5,7 @@
 #include "GameState.h"
 #include "Host.h"
 #include "Input.h"
+#include "StatusView.h"
 #include "Text.h"
 
 #include <cstdint>
@@ -40,6 +41,16 @@ void AwardArchangelTitle(GameState& _state);
 /// commander, systems, fuel, cash, legal status, rating and equipment, and the wait for the key that closes it
 /// (WaitForScreenExitKey).
 [[nodiscard]] Task<ScreenKey> ShowCommanderStatusScreen(GameState& _state, Host& _host, ScreenPlace _place);
+
+/// The legal status the status screen names for _legalStatus: Clean below 1, Offender below 40, Fugitive from 40.
+[[nodiscard]] LegalStanding LegalStandingOf(std::uint8_t _legalStatus) noexcept;
+
+/// The rating the status screen names for _kills: the first of ratingThresholds above them, 0 Harmless to 8 Elite.
+[[nodiscard]] std::uint8_t RatingOf(std::uint8_t _kills) noexcept;
+
+/// What D08 shows of the commander as _state holds them (ADR-063): what ShowCommanderStatusScreen prints, and the cargo the
+/// inventory lists (D75), as plain values.
+[[nodiscard]] StatusView StatusViewOf(const GameState& _state);
 
 /// ShowInventoryScreen, F10: fuel, cash and every product held, and the wait for the key that closes it, as
 /// ShowCommanderStatusScreen's.

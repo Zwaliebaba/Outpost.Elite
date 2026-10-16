@@ -17,8 +17,8 @@ using Commander = Elite::CommanderState;
 // From the title: the credits, then the status screen.
 constexpr std::string_view TO_THE_DOCK = "key space; wait 3.2";
 
-// The status screen ignores its own F6 (D96), so F10 first and back.
-constexpr std::string_view STATUS_AGAIN = "key F10; wait 0.2\nkey F6; wait 0.2\n";
+// The status screen ignores its own F6 (D96), so the disc menu first and back.
+constexpr std::string_view STATUS_AGAIN = "key Escape; wait 0.2\nkey F6; wait 0.2\n";
 
 // Sets the byte _member names to _value on the twin.
 template <typename Struct> void SetBoth(TwinRig& _rig, DataByte<Struct> _member, std::uint8_t _value)
@@ -75,8 +75,9 @@ template <typename Struct> [[nodiscard]] std::uint8_t TwinByte(TwinRig& _rig, Da
 TEST_CLASS(DockedTests)
 {
 public:
-  // Cargo held: the inventory's rows; then the status screen in witch space, an offender with the last equipment item
-  // fitted, and a fugitive. The trade screens it once visited are the market's now (D01, D92).
+  // Cargo held: the status screen in witch space, an offender with the last equipment item fitted, and a fugitive; then the
+  // inventory's rows, in flight, since docked D08 shows the cargo and F10 does nothing (D96, ADR-063). The trade screens it once
+  // visited are the market's now (D01, D92).
   TEST_METHOD(TradeInventoryAndStatusScreensAgreeWithCargoAndARecord)
   {
     TwinRig rig("TwinDockedCargo");
@@ -85,13 +86,14 @@ public:
     SetHeld(rig, 6, 1);
     SetHeld(rig, 16, 2);
     SetBoth(rig, &Commander::CargoHold::refugeesTonnes, 3);
-    rig.Play("key F10; wait 0.2\ndigest inventory");
     SetBoth(rig, &Commander::legalStatus, 5);
     SetBoth(rig, &Commander::witchspaceCountdown, 3);
     SetBoth(rig, &Commander::militaryLaserCount, 1);
-    rig.Play("key F6; wait 0.2\ndigest offender");
+    rig.Play(StatusAgain("digest offender"));
     SetBoth(rig, &Commander::legalStatus, 0x30);
     rig.Play(StatusAgain("digest fugitive"));
+    SetBoth(rig, &Commander::witchspaceCountdown, 0);
+    rig.Play("key F1; wait 2\nkey F10; wait 0.2\ndigest inventory");
   }
 
   // Mission 1, the supernova: a key that is neither Y nor N, then N; the debriefing before the jump (it
