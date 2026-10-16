@@ -25,14 +25,14 @@ constexpr std::uint8_t SCAN_F8 = 0x42;
 constexpr std::uint8_t SCAN_F9 = 0x43;
 constexpr std::uint8_t SCAN_F10 = 0x44;
 
-// Each key the docked host shows a screen for, as the key bar names them (D96), and F7 and F10 until their screens land.
+// Each key the docked host shows a screen for, as the key bar names them (D96), and F7 until the charts take it in.
 struct KeyedScreen
 {
   std::uint8_t scanCode;
   Elite::DockedScreen screen;
 };
 
-constexpr std::array<KeyedScreen, 8> KEYED_SCREENS = {{
+constexpr std::array<KeyedScreen, 7> KEYED_SCREENS = {{
   {SCAN_ESCAPE, Elite::DockedScreen::Disc},
   {0x3C, Elite::DockedScreen::Market},
   {0x3D, Elite::DockedScreen::Equip},
@@ -40,7 +40,6 @@ constexpr std::array<KeyedScreen, 8> KEYED_SCREENS = {{
   {0x3F, Elite::DockedScreen::Local},
   {0x40, Elite::DockedScreen::Status},
   {0x41, Elite::DockedScreen::Data},
-  {SCAN_F10, Elite::DockedScreen::Inventory},
 }};
 
 // _steps, in Replay.h's syntax, played on _rig; each must run to its end.
@@ -70,13 +69,13 @@ void Play(GameRig& _rig, std::string_view _steps)
 
 } // namespace
 
-// The docked host's keys (D96): the key bar's F1 to F6 and Esc, F7 and F10 until their screens land, and F8 and F9, which do
+// The docked host's keys (D96): the key bar's F1 to F6 and Esc, F7 until the charts take it in, and F8, F9 and F10, which do
 // nothing docked; and where a screen is closed by them.
 TEST_CLASS(DockedKeysTests)
 {
 public:
-  // Every key that shows a screen shows the one the key bar names, and is the key that screen is shown by; F1 launches; F8, F9
-  // and every other key do nothing.
+  // Every key that shows a screen shows the one the key bar names, and is the key that screen is shown by; F1 launches; F8, F9,
+  // F10 and every other key do nothing.
   TEST_METHOD(TheKeysAreTheKeyBars)
   {
     for (const KeyedScreen& keyed : KEYED_SCREENS)
@@ -87,7 +86,7 @@ public:
     }
     const Elite::DockedTarget launch = Elite::DockedTargetOf(SCAN_F1);
     Assert::IsTrue(launch.launches && !launch.screen.has_value(), L"F1 launches");
-    for (const std::uint8_t idle : {SCAN_F8, SCAN_F9, SCAN_A, std::uint8_t{0}})
+    for (const std::uint8_t idle : {SCAN_F8, SCAN_F9, SCAN_F10, SCAN_A, std::uint8_t{0}})
     {
       const Elite::DockedTarget target = Elite::DockedTargetOf(idle);
       Assert::IsTrue(!target.launches && !target.screen.has_value(), L"nothing");
@@ -99,7 +98,7 @@ public:
   {
     for (std::uint8_t key = SCAN_F1; key <= SCAN_F10; ++key)
     {
-      const bool acted = key != SCAN_F8 && key != SCAN_F9;
+      const bool acted = key != SCAN_F8 && key != SCAN_F9 && key != SCAN_F10;
       Assert::AreEqual(acted, Elite::ClosesScreen(key, Elite::ScreenPlace::Docked), L"docked");
       Assert::IsTrue(Elite::ClosesScreen(key, Elite::ScreenPlace::Flight), L"in flight");
     }
@@ -109,8 +108,8 @@ public:
                     L"a letter");
   }
 
-  // The docked host as the game runs it: from the status screen, each key shows its screen and the host says which; F8 and F9
-  // leave the screen as it is; F1 launches, and the host shows none.
+  // The docked host as the game runs it: from the status screen, each key shows its screen and the host says which; F8, F9 and
+  // F10 leave the screen as it is; F1 launches, and the host shows none.
   TEST_METHOD(TheDockedHostShowsEachScreenByItsKey)
   {
     GameRig rig("DockedKeys");
@@ -119,15 +118,15 @@ public:
     Assert::IsTrue(Shows(rig, Elite::DockedScreen::Status), L"the status screen first");
 
     const std::string status = Picture(rig);
-    Play(rig, "key F8; wait 0.3\nkey F9; wait 0.3");
-    Assert::IsTrue(Shows(rig, Elite::DockedScreen::Status), L"F8 and F9 show no other screen");
+    Play(rig, "key F8; wait 0.3\nkey F9; wait 0.3\nkey F10; wait 0.3");
+    Assert::IsTrue(Shows(rig, Elite::DockedScreen::Status), L"F8, F9 and F10 show no other screen");
     Assert::AreEqual(status, Picture(rig), L"and leave the status screen as it was");
 
     Play(rig, "key F3; wait 0.8");
     Assert::IsTrue(Shows(rig, Elite::DockedScreen::Equip), L"F3, the equipment");
     const std::string equip = Picture(rig);
-    Play(rig, "key F8; wait 0.3\nkey F9; wait 0.3");
-    Assert::AreEqual(equip, Picture(rig), L"F8 and F9 do nothing on the equipment either");
+    Play(rig, "key F8; wait 0.3\nkey F9; wait 0.3\nkey F10; wait 0.3");
+    Assert::AreEqual(equip, Picture(rig), L"F8, F9 and F10 do nothing on the equipment either");
 
     Play(rig, "key F4; wait 0.5");
     Assert::IsTrue(Shows(rig, Elite::DockedScreen::Galaxy), L"F4, the galactic chart");
@@ -135,13 +134,11 @@ public:
     Assert::IsTrue(Shows(rig, Elite::DockedScreen::Local), L"F5, the short-range chart");
     Play(rig, "key F7; wait 0.5");
     Assert::IsTrue(Shows(rig, Elite::DockedScreen::Data), L"F7, Data on System, until the charts take it in");
-    Play(rig, "key F10; wait 0.5");
-    Assert::IsTrue(Shows(rig, Elite::DockedScreen::Inventory), L"F10, the inventory, until the status screen takes it in");
     Play(rig, "key Escape; wait 0.5");
     Assert::IsTrue(Shows(rig, Elite::DockedScreen::Disc), L"Esc, the disc menu");
     const std::string disc = Picture(rig);
-    Play(rig, "key F8; wait 0.3\nkey F9; wait 0.3");
-    Assert::AreEqual(disc, Picture(rig), L"F8 and F9 do nothing on the disc menu");
+    Play(rig, "key F8; wait 0.3\nkey F9; wait 0.3\nkey F10; wait 0.3");
+    Assert::AreEqual(disc, Picture(rig), L"F8, F9 and F10 do nothing on the disc menu");
     Play(rig, "key F2; wait 0.3");
     Assert::IsTrue(Shows(rig, Elite::DockedScreen::Market) && rig.Host().ShownMarket() != nullptr, L"F2, the market");
     Play(rig, "key F6; wait 0.5");

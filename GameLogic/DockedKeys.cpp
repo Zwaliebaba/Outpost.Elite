@@ -27,7 +27,7 @@ struct KeyedScreen
   DockedScreen screen;
 };
 
-constexpr std::array<KeyedScreen, 8> DOCKED_KEYS = {{
+constexpr std::array<KeyedScreen, 7> DOCKED_KEYS = {{
   {SCAN_ESCAPE, DockedScreen::Disc},
   {SCAN_F2, DockedScreen::Market},
   {SCAN_F3, DockedScreen::Equip},
@@ -35,7 +35,6 @@ constexpr std::array<KeyedScreen, 8> DOCKED_KEYS = {{
   {SCAN_F5, DockedScreen::Local},
   {SCAN_F6, DockedScreen::Status},
   {SCAN_F7, DockedScreen::Data},
-  {SCAN_F10, DockedScreen::Inventory},
 }};
 
 } // namespace

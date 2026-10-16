@@ -321,7 +321,7 @@ Then come the changes on purpose, from which the game diverges freely (D26). The
 
 About 38 days. CGA's docked text mode and the 1987 docked routines go once T7 to T16 have replaced them (D76).
 
-*Written: T3 and T7 (ADR-058); T2, the docked host on the key bar's keys, the original's screens behind them (ADR-061, D96); T1, the panel, the strip, the key bar and the top bar (ADR-058) and the table row and the modal (ADR-062, D97); T14, D08 (ADR-063).*
+*Written: T3 and T7 (ADR-058); T2, the docked host on the key bar's keys, the original's screens behind them (ADR-061, D96); T1, the panel, the strip, the key bar and the top bar (ADR-058) and the table row and the modal (ADR-062, D97); T14, D08, with F10 doing nothing docked (ADR-063).*
 
 **What the canvas does not show yet (D54).** Each item is in the 1987 game (Reference-Map.md, `UpdateDashboard`, `Message.h`). The owner draws it before the piece that needs it.
 

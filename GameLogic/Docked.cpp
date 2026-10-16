@@ -321,8 +321,6 @@ void FormatQuantity(std::uint16_t _quantity, std::span<std::uint8_t> _text)
     return ShowShortRangeChart(_state, _host, ScreenPlace::Docked);
   case DockedScreen::Data:
     return ShowSystemDataScreen(_state, _host, ScreenPlace::Docked);
-  case DockedScreen::Inventory:
-    return ShowInventoryScreen(_state, _host, ScreenPlace::Docked);
   case DockedScreen::Status:
   case DockedScreen::Disc:
     break;
