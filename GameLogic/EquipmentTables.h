@@ -3,7 +3,6 @@
 
 #include <array>
 #include <cstdint>
-#include <string_view>
 
 namespace Elite
 {
@@ -13,71 +12,6 @@ namespace Elite
 // Equipment.cpp alone includes this, so they are in an unnamed namespace (D38).
 namespace
 {
-
-/// laserTypeNames: each pointer's text, up to its NUL.
-constexpr std::array<std::string_view, 4> LASER_TYPE_NAMES = {
-  std::string_view{"Pulse    "}, // [0]
-  std::string_view{"Beam     "}, // [1]
-  std::string_view{"Mining   "}, // [2]
-  std::string_view{"Military "}, // [3]
-};
-
-/// mountHeaderLines, after its count byte, 4: 4 texts, each after the one before's NUL.
-constexpr std::array<std::string_view, 4> MOUNT_HEADER_LINES = {
-  std::string_view{"mount. Press <SPACE> to fix laser. "}, // [0]
-  std::string_view{"                                   "}, // [1]
-  std::string_view{"FORE     AFT      RIGHT    LEFT    "}, // [2]
-  std::string_view{"======== ======== ======== ========"}, // [3]
-};
-
-constexpr std::string_view SELL_LASER_TEXT = "sell laser.";
-
-constexpr std::string_view FREE_MOUNT_TEXT = "Free     ";
-
-constexpr std::string_view NO_RESALE_TEXT = "     -";
-
-constexpr std::string_view MISSILE_PURCHASED_TEXT = "MISSILE PURCHASED  ";
-
-constexpr std::string_view FOUR_MISSILES_ONLY_TEXT = "4 MISSILES ONLY    ";
-
-constexpr std::string_view FUEL_FULL_TEXT = "FUEL FULL (7LY)    ";
-
-constexpr std::string_view FUEL_PURCHASED_TEXT = "FUEL PURCHASED     ";
-
-constexpr std::string_view ALREADY_FITTED_TEXT = "ALREADY FITTED!    ";
-
-constexpr std::string_view ITEM_PURCHASED_TEXT = "ITEM PURCHASED     ";
-
-constexpr std::string_view NOT_ENOUGH_CREDITS_TEXT = "NOT ENOUGH CREDITS!";
-
-constexpr std::string_view NO_ITEM_TO_SELL_TEXT = "NO ITEM TO SELL!   ";
-
-constexpr std::string_view ITEM_SOLD_TEXT = "ITEM SOLD          ";
-
-constexpr std::string_view NO_MISSILE_TO_SELL_TEXT = "NO MISSILE TO SELL!";
-
-constexpr std::string_view MISSILE_SOLD_TEXT = "MISSILE SOLD       ";
-
-constexpr std::string_view FUEL_SALE_ILLEGAL_TEXT = "FUEL SALE ILLEGAL! ";
-
-constexpr std::string_view TOO_MUCH_CARGO_TEXT = "TOO MUCH CARGO!    ";
-
-constexpr std::string_view SCOOP_NEEDED_TEXT = "SCOOP NEEDED FIRST!";
-
-constexpr std::string_view SELL_MINING_LASER_TEXT = "SELL MINING LASER! ";
-
-constexpr std::string_view NO_FUEL_AVAILABLE_TEXT = "NO FUEL AVAILABLE! ";
-
-constexpr std::string_view FOUR_LASERS_TEXT = "Carrying 4 lasers! ";
-
-constexpr std::string_view MOUNT_OCCUPIED_TEXT = "Mount occupied!    ";
-
-constexpr std::string_view NO_LASER_ON_MOUNT_TEXT = "No laser on mount! ";
-
-constexpr std::string_view WRONG_LASER_TYPE_TEXT = "Wrong laser type!  ";
-
-/// equipShipFrame: frame bytes, then "EQUIP SHIP"
-constexpr std::string_view EQUIP_SHIP_FRAME = "\037\037EQUIP SHIP";
 
 /// equipmentList: record; count byte, then per item: tech byte, NUL-terminated name, govFactor, econFactor (signed
 /// bytes), base price word in tenths of credits; Fuel 2.0 ... Military Lasers 6000.0
@@ -129,16 +63,6 @@ constexpr std::array<std::uint8_t, 376> EQUIPMENT_LIST = {
   0x69, 0x6C, 0x69, 0x74, 0x61, 0x72, 0x79, 0x20, // [352]
   0x4C, 0x61, 0x73, 0x65, 0x72, 0x73, 0x20, 0x20, // [360]
   0x20, 0x20, 0x20, 0x00, 0xDC, 0x17, 0x60, 0xEA, // [368]
-};
-
-/// equipHelpText: count byte (6), then the Equip Ship help lines and column header
-constexpr std::array<std::string_view, 6> EQUIP_HELP_TEXT = {
-  std::string_view{"Use control keys or device to select"}, // [0]
-  std::string_view{"item. Press either 'B' or 'S' to   "},  // [1]
-  std::string_view{"buy or sell that item. Press a     "},  // [2]
-  std::string_view{"function key to exit this screen.  "},  // [3]
-  std::string_view{"                                   "},  // [4]
-  std::string_view{" EQUIPMENT            BUY   /  SELL"},  // [5]
 };
 
 } // namespace

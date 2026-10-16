@@ -53,6 +53,15 @@ public:
     Selected,
   };
 
+  /// A button's look (D82): lit, with the amber edge and fill, as the first action or under the pointer; plain, with a dim edge;
+  /// off, when what it does would be refused.
+  enum class ButtonLook : std::uint8_t
+  {
+    Lit,
+    Plain,
+    Off,
+  };
+
   /// A message strip's kind (D82): a refusal in red with !, a success in amber with ✓.
   enum class Tone : std::uint8_t
   {
@@ -83,6 +92,13 @@ public:
   /// A modal in _rect over the screen drawn so far (D09, D10): the whole screen dimmed, and a panel with a full amber border and
   /// 28-unit chamfers at its top-right and bottom-left corners. The modal's own content is drawn over it.
   static void Modal(const Engine::Rect& _rect, Engine::Canvas& _canvas);
+
+  /// A button in _rect for _look, and _text in its middle in _font at _size, _spacing between its letters.
+  static void Button(const Engine::Rect& _rect, ButtonLook _look, std::wstring_view _text, Engine::Font _font, float _size, float _spacing,
+                     Engine::Canvas& _canvas);
+
+  /// A 1-unit edge in _color just inside _rect.
+  static void Edge(const Engine::Rect& _rect, std::uint32_t _color, Engine::Canvas& _canvas);
 
   /// A message strip in _rect: its icon, and _headline, with _detail on a second line when it is not empty.
   static void Strip(const Engine::Rect& _rect, Tone _tone, std::wstring_view _headline, std::wstring_view _detail, Engine::Canvas& _canvas);

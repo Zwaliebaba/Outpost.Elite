@@ -24,10 +24,6 @@ constexpr std::uint32_t TEXT = 0xFFF3E6CF;
 constexpr std::uint32_t LABEL = 0xFFC9BCA6;
 constexpr std::uint32_t UNIT_SELECTED = 0xFFD1A866;
 constexpr std::uint32_t RULE = 0xFF64491D;
-constexpr std::uint32_t CONTROL_EDGE = 0xFF886124;
-constexpr std::uint32_t CONTROL_LIT_FILL = 0xFF382A14;
-constexpr std::uint32_t DISABLED_EDGE = 0xFF3A2E1C;
-constexpr std::uint32_t DISABLED_TEXT = 0xFF6E6150;
 constexpr std::uint32_t TRACK = 0xFF1E170E;
 constexpr std::uint32_t GLOW = 0x55FFB43C;
 
@@ -96,37 +92,9 @@ constexpr Engine::Point FOOTER{.x = 1380.0f, .y = 947.0f};
   return Engine::Rect{.left = ROWS_LEFT, .top = ROWS_TOP + ROW_PITCH * static_cast<float>(_row), .width = ROWS_WIDTH, .height = ROW_PITCH};
 }
 
-void Edges(const Engine::Rect& _rect, std::uint32_t _color, Engine::Canvas& _canvas)
-{
-  _canvas.BoxEdge(
-    Engine::Rect{.left = _rect.left + 0.5f, .top = _rect.top + 0.5f, .width = _rect.width - 1.0f, .height = _rect.height - 1.0f}, 1.0f,
-    _color);
-}
-
 [[nodiscard]] Engine::Point Middle(const Engine::Rect& _rect) noexcept
 {
   return Engine::Point{.x = _rect.left + _rect.width / 2.0f, .y = _rect.top + _rect.height / 2.0f};
-}
-
-// A control: its box, lit (the amber edge and fill), hovered, plain or off, and its text in the middle.
-enum class Look : std::uint8_t
-{
-  Lit,
-  Plain,
-  Off,
-};
-
-void Control(const Engine::Rect& _rect, Look _look, const wchar_t* _text, Engine::Font _font, float _size, float _spacing,
-             Engine::Canvas& _canvas)
-{
-  if (_look == Look::Lit)
-  {
-    _canvas.Box(_rect, CONTROL_LIT_FILL);
-  }
-  Edges(_rect, _look == Look::Lit ? AMBER : (_look == Look::Off ? DISABLED_EDGE : CONTROL_EDGE), _canvas);
-  Engine::Point middle = Middle(_rect);
-  middle.x += _spacing / 2.0f; // the spacing after the last letter, which centring would count
-  _canvas.Text(_text, _font, _size, _spacing, middle, Engine::Align::Center, _look == Look::Off ? DISABLED_TEXT : AMBER_LIGHT);
 }
 
 void Header(const wchar_t* _text, float _x, Engine::Align _align, Engine::Canvas& _canvas)
@@ -197,23 +165,24 @@ void SelectedPanel(const Elite::MarketView& _view, std::optional<Engine::Point> 
   {
     if (!_on)
     {
-      return Look::Off;
+      return DockedFrame::ButtonLook::Off;
     }
-    return _pointer && DockedFrame::Contains(_rect, *_pointer) ? Look::Lit : Look::Plain;
+    return _pointer && DockedFrame::Contains(_rect, *_pointer) ? DockedFrame::ButtonLook::Lit : DockedFrame::ButtonLook::Plain;
   };
-  Control(LESS, look(LESS, true), L"\u2212", Engine::Font::Number, 26.0f, 0.0f, _canvas);
-  Edges(QUANTITY, AMBER, _canvas);
+  DockedFrame::Button(LESS, look(LESS, true), L"\u2212", Engine::Font::Number, 26.0f, 0.0f, _canvas);
+  DockedFrame::Edge(QUANTITY, AMBER, _canvas);
   _canvas.Text(std::format(L"{}", _view.quantity), Engine::Font::Number, 26.0f, 0.0f, Middle(QUANTITY), Engine::Align::Center, AMBER_LIGHT);
-  Control(MORE, look(MORE, _view.quantity < Elite::MOST_QUANTITY), L"+", Engine::Font::Number, 26.0f, 0.0f, _canvas);
-  Control(MOST, look(MOST, true), L"MAX", Engine::Font::Label, SMALL_LABEL, 2.0f, _canvas);
+  DockedFrame::Button(MORE, look(MORE, _view.quantity < Elite::MOST_QUANTITY), L"+", Engine::Font::Number, 26.0f, 0.0f, _canvas);
+  DockedFrame::Button(MOST, look(MOST, true), L"MAX", Engine::Font::Label, SMALL_LABEL, 2.0f, _canvas);
 
   // [B] BUY is lit as the screen's first action, as drawn, unless the pointer is on [S] SELL; each is off when its trade at
   // the quantity would be refused.
   const bool onSell = _pointer && DockedFrame::Contains(SELL, *_pointer);
-  const Look buy = !_view.buyAllowed ? Look::Off : (onSell ? Look::Plain : Look::Lit);
-  const Look sell = !_view.sellAllowed ? Look::Off : (onSell ? Look::Lit : Look::Plain);
-  Control(BUY, buy, L"[B] BUY", Engine::Font::Label, 22.0f, 4.0f, _canvas);
-  Control(SELL, sell, L"[S] SELL", Engine::Font::Label, 22.0f, 4.0f, _canvas);
+  using enum DockedFrame::ButtonLook;
+  const DockedFrame::ButtonLook buy = !_view.buyAllowed ? Off : (onSell ? Plain : Lit);
+  const DockedFrame::ButtonLook sell = !_view.sellAllowed ? Off : (onSell ? Lit : Plain);
+  DockedFrame::Button(BUY, buy, L"[B] BUY", Engine::Font::Label, 22.0f, 4.0f, _canvas);
+  DockedFrame::Button(SELL, sell, L"[S] SELL", Engine::Font::Label, 22.0f, 4.0f, _canvas);
 }
 
 void HoldPanel(const Elite::MarketView& _view, Engine::Canvas& _canvas)

@@ -43,6 +43,16 @@ constexpr std::array<const wchar_t*, 13> EQUIPMENT = {
   L"Military Laser",
 };
 
+// The shipyard's rows the names treat apart, from 1.
+constexpr std::size_t FUEL_ROW = 1;
+constexpr std::size_t MISSILE_ROW = 2;
+
+// The mounts by D03's names, as the game numbers them: fore, aft, right and left.
+constexpr std::array<const wchar_t*, 4> MOUNTS = {L"Front", L"Rear", L"Right", L"Left"};
+
+// The laser types.
+constexpr std::array<const wchar_t*, 4> LASER_TYPES = {L"Pulse", L"Beam", L"Mining", L"Military"};
+
 } // namespace
 
 const wchar_t* DockedNames::Commodity(std::size_t _commodity) noexcept
@@ -59,6 +69,30 @@ const wchar_t* DockedNames::Equipment(Elite::FittedKind _kind) noexcept
 {
   const auto index = static_cast<std::size_t>(_kind);
   return index < EQUIPMENT.size() ? EQUIPMENT[index] : L"";
+}
+
+const wchar_t* DockedNames::ListItem(std::size_t _row) noexcept
+{
+  switch (_row)
+  {
+  case FUEL_ROW:
+    return L"Fuel (per light year)";
+  case MISSILE_ROW:
+    return L"Missile";
+  default:
+    // From the cargo bay extension on, the list is the status screen's from its missiles.
+    return _row > MISSILE_ROW && _row - 2 < EQUIPMENT.size() ? EQUIPMENT[_row - 2] : L"";
+  }
+}
+
+const wchar_t* DockedNames::Mount(std::size_t _mount) noexcept
+{
+  return _mount < MOUNTS.size() ? MOUNTS[_mount] : L"";
+}
+
+const wchar_t* DockedNames::LaserType(std::size_t _type) noexcept
+{
+  return _type < LASER_TYPES.size() ? LASER_TYPES[_type] : L"";
 }
 
 } // namespace Outpost

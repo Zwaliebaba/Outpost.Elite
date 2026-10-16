@@ -35,18 +35,19 @@ key F3; wait 0.8                   # Equip Ship, its cursor on Fuel
 key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15
 key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15
 key b; wait 0.3                    # an escape capsule
-digest bought 911d5540da8b168dc0f154fa694fef83b22cddf6d75338a1f6872e00da0a46d5
-picture bought 8f6f4fdf75492b80a61507af8b601badc42a6f8f3917c087e2e1d7c69c792586
+digest bought 0d19d2e3ee17884545ddb16b118c2b88d3e732c5614e101dced52d3e5711b444
+picture bought 4fa6c3d3ea5092bdf2092aa03fac60c8079083868010ccc2621a193129f5c7f9
 outcome bought galaxy=1 system=6 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=89650 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=1 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=3 laserTypes=12 mission=3 missionStage=1 missionJumps=128 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=1 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=20 fuel=255 shipSlotsInUse=5 cabinTemperature=8 laserTemperature=0 altitude=254 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
-key F1; wait 1                     # launch, the station behind
+wait 0.05                          # the launch at the moment recorded (ADR-064)
+key F1; wait 0.95                  # launch, the station behind
 down F2; wait 0.1; up F2           # the rear view, the station in the sights
 down space; wait 4.2; up space     # the aft military laser destroys it
-digest station-destroyed cd4115f079a2813598a5a85420518a3751cb3f2871dc756a066ddbaf3d4f99dd
+digest station-destroyed 55499a81bfc02dcf5f011b684dc67d578c9a319867ee3a93e1cd9ab28217fce2
 picture station-destroyed 4a64ceb5b747b9f877eb2aa2cd5f8ba89480267f625bbb5b94e03f57545d9e3b
 outcome station-destroyed galaxy=1 system=6 witchSpace=0 docked=0 inFlight=1 dead=0 creditsTenths=89650 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=1 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=3 laserTypes=12 mission=3 missionStage=1 missionJumps=128 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=1 energy=1023 foreShield=255 aftShield=255 speed=20 fuel=255 shipSlotsInUse=12 cabinTemperature=11 laserTemperature=242 altitude=254 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 down c; wait 0.1; up c             # the escape capsule to the station: the status screen, no debriefing
 wait 5
-digest capsule-docked e0a6c8a22cd5079fd6225c136b8cc048579b95725f4d95ce28ce51b139a4a9d0
+digest capsule-docked 79d105c42c2ec8e3335d6552a6a94cceb616be94444e7d6a35b2aff9a514cd24
 picture capsule-docked c272a663cd1a658e8904638c8e6c4e163e3b48a207d8d13545ed3070244f5241
 outcome capsule-docked galaxy=1 system=6 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=89650 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=3 laserTypes=12 mission=3 missionStage=1 missionJumps=128 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=1 energy=1023 foreShield=255 aftShield=255 speed=20 fuel=255 shipSlotsInUse=3 cabinTemperature=11 laserTemperature=242 altitude=254 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 key F1; wait 6                     # launch: the tunnel, then space
@@ -54,10 +55,10 @@ down Down; wait 1.17; up Down      # pitch through 180 degrees, aimed a little l
 wait 0.5
 down Right; wait 0.65; up Right    # roll to the station's spin
 wait 10                            # straight in: the tunnel, then the status screen debriefs: TASK COMPLETE
-digest debriefing 0fbf6a8e60467be47a6c757a83c432bf27f296c6038fce687d3775312883c391
+digest debriefing 6ce5ab2aeb936ef800472ebcbe6281cd6d0d2aab1ff4d887c33b519c993dd556
 picture debriefing 68be91b63bba948ac2bd02dfed7333bb7086ef46983c8ef93cbd9dfbbebed391
 outcome debriefing galaxy=1 system=6 witchSpace=0 docked=1 inFlight=0 dead=0 creditsTenths=89650 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=3 laserTypes=12 mission=3 missionStage=2 missionJumps=128 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=1 energy=1023 foreShield=255 aftShield=255 speed=20 fuel=255 shipSlotsInUse=3 cabinTemperature=8 laserTemperature=0 altitude=254 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 key space; wait 1                  # the status screen of ARCHANGEL JAMESON
-digest archangel 1e25d10dc3cfa70745a96b09a54aed03c13b96ca9a73bada15c449610c89f410
+digest archangel c3032fd2cd1e63c66fa7f40d5acc04ff9a1e9553299ffc3dbf3d994bda3a082c
 picture archangel c9e424e82c352ac887422b968e47d0e5b6491fccaf5d8144a4fc91fa1a951ba2
 outcome archangel galaxy=1 system=6 witchSpace=0 docked=1 inFlight=0 dead=0 creditsTenths=89650 legalStatus=0 kills=0 title=ARCHANGEL cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=1 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=3 laserTypes=12 mission=0 missionStage=0 missionJumps=128 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=20 fuel=255 shipSlotsInUse=3 cabinTemperature=8 laserTemperature=0 altitude=254 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0

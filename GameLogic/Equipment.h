@@ -28,10 +28,6 @@ namespace Elite
 /// object cannot be scooped.
 void TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view);
 
-/// PayForEquipmentItem: menuSelectedRow's price off creditsTenths (SubtractCredits): fuel's by the tank's emptiness.
-/// Returns whether the credits were enough, and are now less the price.
-[[nodiscard]] bool PayForEquipmentItem(GameState& _state);
-
 /// LaunchEscapePod: an abandoned Cobra in a free ship slot, or one ReclaimShipSlot makes, the player turned away
 /// at speed 20 and moved 12 frames, the escape pod and the cargo hold gone.
 void LaunchEscapePod(GameState& _state);
@@ -40,75 +36,10 @@ void LaunchEscapePod(GameState& _state);
 /// original's count up a type at a time stops, for a row that is no laser's. Returns whether the row is a laser's.
 [[nodiscard]] bool SelectLaserType(GameState& _state);
 
-/// ShowEquipShipScreen: the F4 screen, each item up to the system's tech level with its price into screenPrices and
-/// its resale price, then RunEquipShipMenu from the first item's row, which returns the key that closes it. Waits for keys as a
-/// rule (ADR-015).
-[[nodiscard]] Task<ScreenKey> ShowEquipShipScreen(GameState& _state, Host& _host);
-
-/// RunEquipShipMenu, with OpenEquipMessage, ShowEquipMessage, ReportNotEnoughCredits and the buying and selling it
-/// runs into as one unit (ADR-012 item 14): the equipment menu from row _firstRow of the text page (menuFirstRowAttr), the
-/// cursor moved by the steering and the arrow keys, and B and S to buy and sell, each with its message. Returns Esc or the
-/// F-key, other than F4, that ends it. Waits for keys as a rule (ADR-015).
-[[nodiscard]] Task<ScreenKey> RunEquipShipMenu(GameState& _state, Host& _host, std::uint16_t _firstRow);
-
-/// ChooseMountToFitLaser: the mount menu, and the mount a bought laser goes on, chosen with the steering or the
-/// arrow keys and Space. Waits for keys as a rule (ADR-015).
-[[nodiscard]] Task<void> ChooseMountToFitLaser(GameState& _state, Host& _host);
-
-/// ChooseMountToRemoveLaser: the mount menu, and the mount a sold laser comes off, as ChooseMountToFitLaser.
-[[nodiscard]] Task<void> ChooseMountToRemoveLaser(GameState& _state, Host& _host);
-
-/// DrawLaserMountMenu: the mount header, each of the four mounts' laser or "Free" on the line after it, and
-/// FORE's box highlighted; selectedLaserMount = 0.
-void DrawLaserMountMenu(GameState& _state);
-
-/// RedrawEquipHelpText: the equipment screen's help lines again, over the mount menu, and textAttribute put
-/// back to the menu's.
-void RedrawEquipHelpText(GameState& _state);
-
-/// PaintLaserMountBox: textAttribute over the 8x3 cells of the mount box whose first attribute byte is at
-/// B800:_box.
-void PaintLaserMountBox(GameState& _state, std::uint16_t _box);
-
-/// ClearEquipmentSellPrice: "-" in menuSelectedRow's resale column, once the last of an item is sold.
-void ClearEquipmentSellPrice(GameState& _state);
-
-/// ShowEquipmentSellPrice: menuSelectedRow's resale price computed by ComputeResalePrice, stored after its
-/// price in screenPrices, and printed in its row's resale column.
-void ShowEquipmentSellPrice(GameState& _state);
-
-// What the menus that wait share, at each one's own addresses: no hook, and no entry.
-
-/// Where the menu's cursor is, after StartMenu or a move.
-struct MenuCursor
-{
-  std::uint16_t row; ///< the selected row's first attribute byte on the text page
-};
-
-/// The offset on the text page of the menu's first row's highlighted attribute, from the row menuFirstRowAttr holds, where
-/// the original holds that offset.
-[[nodiscard]] std::uint16_t MenuFirstRowCell(const GameState& _state) noexcept;
-
-/// The menus' start: the credits on the message line, then row 1 selected and highlighted from menuFirstRowAttr.
-MenuCursor StartMenu(GameState& _state);
-
-/// The cursor up a row from the row at _row, from the first round to the last.
-MenuCursor MoveMenuCursorUp(GameState& _state, std::uint16_t _row);
-
-/// The cursor down a row from the row at _row, from the last round to the first.
-MenuCursor MoveMenuCursorDown(GameState& _state, std::uint16_t _row);
-
-/// ReadSteering, and the cursor at _row, the selected row's first attribute byte on the text page, moved up or down a row if its
-/// pitch says so. Returns the cursor's row.
-std::uint16_t SteerMenuCursor(GameState& _state, Host& _host, std::uint16_t _row);
-
-/// 100 timer ticks, then GetKey. Returns the key.
-[[nodiscard]] Task<KeyPress> PollMenuKey(GameState& _state, Host& _host);
-
 // ── The shipyard's rules (D53, D74): values in, values out, no state and no screen ──
 //
-// What the routines above decide, apart from what they draw and where the game keeps it (ADR-043), as the market's rules are
-// (Market.h). The equipment list's rows count from 1, fuel's, in the list's order, which is by tech level.
+// What the original's equipment screen decided, apart from what it drew and where the game keeps it (ADR-043), as the market's
+// rules are (Market.h); D02 trades through them (ADR-064). The equipment list's rows count from 1, fuel's, in the list's order, which is by tech level.
 
 /// The items of the equipment list: fuel, missiles, the cargo bay extension, ECM, the pulse and beam lasers, fuel scoops, the
 /// escape pod, the energy bomb, the energy unit, the docking computer, the galactic hyperdrive, and the mining and military
@@ -205,7 +136,7 @@ enum class MountRefusal : std::uint8_t
 /// Row _row's count fitted, _count, once it is bought: a full tank for fuel, one more of anything else, in 8 bits.
 [[nodiscard]] std::uint8_t CountAfterFitting(std::uint8_t _row, std::uint8_t _count) noexcept;
 
-/// Whether a laser is on mount _mount, 0 to 3, fore, aft, left and right.
+/// Whether a laser is on mount _mount, 0 to 3, fore, aft, right and left.
 [[nodiscard]] bool MountHoldsLaser(const LaserMounts& _mounts, std::uint8_t _mount) noexcept;
 
 /// The type of the laser on mount _mount, by its two bits.

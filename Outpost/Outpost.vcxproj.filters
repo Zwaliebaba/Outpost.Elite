@@ -18,6 +18,9 @@
     <ClInclude Include="Cockpit.h">
       <Filter>Application</Filter>
     </ClInclude>
+    <ClInclude Include="DockedEquip.h">
+      <Filter>Docked</Filter>
+    </ClInclude>
     <ClInclude Include="DockedFrame.h">
       <Filter>Docked</Filter>
     </ClInclude>
@@ -43,6 +46,9 @@
     </ClCompile>
     <ClCompile Include="Cockpit.cpp">
       <Filter>Application</Filter>
+    </ClCompile>
+    <ClCompile Include="DockedEquip.cpp">
+      <Filter>Docked</Filter>
     </ClCompile>
     <ClCompile Include="DockedFrame.cpp">
       <Filter>Docked</Filter>

@@ -144,6 +144,12 @@
     <ClInclude Include="DrawingState.h">
       <Filter>State</Filter>
     </ClInclude>
+    <ClInclude Include="EquipScreen.h">
+      <Filter>Equipment</Filter>
+    </ClInclude>
+    <ClInclude Include="EquipView.h">
+      <Filter>Equipment</Filter>
+    </ClInclude>
     <ClInclude Include="Equipment.h">
       <Filter>Equipment</Filter>
     </ClInclude>
@@ -403,6 +409,9 @@
     </ClCompile>
     <ClCompile Include="Docking.cpp">
       <Filter>Docking</Filter>
+    </ClCompile>
+    <ClCompile Include="EquipScreen.cpp">
+      <Filter>Equipment</Filter>
     </ClCompile>
     <ClCompile Include="Equipment.cpp">
       <Filter>Equipment</Filter>

@@ -36,10 +36,6 @@ bool SpendCredits(GameState& _state, std::uint32_t _tenths);
 /// FormatCredits.
 void AddCredits(GameState& _state, std::uint32_t _tenths);
 
-/// ComputeResalePrice: resalePriceInput less one, less a 32nd of it halved until it is below 100;
-/// 0 for 0.
-[[nodiscard]] std::uint16_t ComputeResalePrice(const GameState& _state);
-
 /// ComputeMarketPrices: each commodity's buy and sell price into screenPrices, for the current system.
 void ComputeMarketPrices(GameState& _state);
 

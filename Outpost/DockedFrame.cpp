@@ -45,6 +45,10 @@ constexpr std::uint32_t STRIP_ALERT_FILL = 0xFF29160F;
 constexpr std::uint32_t STRIP_SUCCESS_FILL = 0xFF291F11;
 constexpr std::uint32_t STRIP_MARK = 0xFF2E160A; // the ! and the ✓ on their square
 constexpr std::uint32_t DOT_GLOW = 0x30C9BCA6;
+constexpr std::uint32_t BUTTON_LIT_FILL = 0xFF382A14;
+constexpr std::uint32_t BUTTON_EDGE = 0xFF886124;
+constexpr std::uint32_t BUTTON_OFF_EDGE = 0xFF3A2E1C;
+constexpr std::uint32_t BUTTON_OFF_TEXT = 0xFF6E6150;
 
 // The frame's measures, in design units.
 constexpr float BAR_HEIGHT = 44.0f;
@@ -284,6 +288,24 @@ void DockedFrame::Modal(const Engine::Rect& _rect, Engine::Canvas& _canvas)
 {
   _canvas.Box(Engine::Rect{.left = 0.0f, .top = 0.0f, .width = DESIGN_WIDTH, .height = DESIGN_HEIGHT}, MODAL_BACKDROP);
   ChamferedPanel(_rect, MODAL_CHAMFER, MODAL_FILL, AMBER, true, true, _canvas);
+}
+
+void DockedFrame::Button(const Engine::Rect& _rect, ButtonLook _look, std::wstring_view _text, Engine::Font _font, float _size,
+                         float _spacing, Engine::Canvas& _canvas)
+{
+  if (_look == ButtonLook::Lit)
+  {
+    _canvas.Box(_rect, BUTTON_LIT_FILL);
+  }
+  Edges(_rect, _look == ButtonLook::Lit ? AMBER : (_look == ButtonLook::Off ? BUTTON_OFF_EDGE : BUTTON_EDGE), _canvas);
+  // The spacing after the last letter, which centring would count, taken back.
+  const Engine::Point middle{.x = _rect.left + _rect.width / 2.0f + _spacing / 2.0f, .y = _rect.top + _rect.height / 2.0f};
+  _canvas.Text(_text, _font, _size, _spacing, middle, Engine::Align::Center, _look == ButtonLook::Off ? BUTTON_OFF_TEXT : AMBER_LIGHT);
+}
+
+void DockedFrame::Edge(const Engine::Rect& _rect, std::uint32_t _color, Engine::Canvas& _canvas)
+{
+  Edges(_rect, _color, _canvas);
 }
 
 void DockedFrame::Strip(const Engine::Rect& _rect, Tone _tone, std::wstring_view _headline, std::wstring_view _detail,

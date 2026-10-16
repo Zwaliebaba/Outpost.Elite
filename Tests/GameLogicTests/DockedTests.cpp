@@ -163,7 +163,8 @@ public:
              "key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15\n"
              "key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15\nkey b; wait 0.3\n"
              "key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15\nkey b; wait 0.3\ndigest bought");
-    rig.Play("key F1; wait 0.5\ndown g; wait 1; up g\ndown h; wait 0.1; up h\nwait 8\ndigest galaxy-3");
+    // The launch at the moment recorded (ADR-064).
+    rig.Play("wait 0.05\nkey F1; wait 0.45\ndown g; wait 1; up g\ndown h; wait 0.1; up h\nwait 8\ndigest galaxy-3");
     rig.Play("down c; wait 0.1; up c\nwait 5\ndigest capsule-docked");
     const std::uint32_t before = TwinCreditsTenths(rig);
     rig.Play("key F1; wait 6\ndown Down; wait 1.17; up Down\nwait 0.5\ndown Right; wait 0.65; up Right\nwait 10\ndigest debriefing");
