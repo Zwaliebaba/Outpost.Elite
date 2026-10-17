@@ -312,6 +312,18 @@ void Host::HideDisc() noexcept
   m_discClicks.clear();
 }
 
+void Host::ShowBriefing(BriefingView _view)
+{
+  _view.sequence = m_briefingView.sequence + 1;
+  m_briefingView = std::move(_view);
+  m_briefingShown = true;
+}
+
+void Host::HideBriefing() noexcept
+{
+  m_briefingShown = false;
+}
+
 void Host::ShowStatus(StatusView _view)
 {
   _view.sequence = m_statusView.sequence + 1;

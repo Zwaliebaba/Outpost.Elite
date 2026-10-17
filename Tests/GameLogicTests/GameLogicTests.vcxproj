@@ -95,6 +95,7 @@
     <ClCompile Include="AiTests.cpp" />
     <ClCompile Include="CgaFontTests.cpp" />
     <ClCompile Include="CgaTests.cpp" />
+    <ClCompile Include="BriefingViewTests.cpp" />
     <ClCompile Include="ChartScreenTests.cpp" />
     <ClCompile Include="DiscScreenTests.cpp" />
     <ClCompile Include="CorpusTests.cpp" />

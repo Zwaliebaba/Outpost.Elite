@@ -80,6 +80,7 @@
     <ClInclude Include="AudioState.h" />
     <ClInclude Include="Cga.h" />
     <ClInclude Include="CgaFont.h" />
+    <ClInclude Include="BriefingView.h" />
     <ClInclude Include="ChartScreen.h" />
     <ClInclude Include="ChartView.h" />
     <ClInclude Include="DiscScreen.h" />

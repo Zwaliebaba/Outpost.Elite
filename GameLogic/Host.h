@@ -5,6 +5,7 @@
 #include "DockedKeys.h"
 #include "FileStore.h"
 #include "FlightSnapshot.h"
+#include "BriefingView.h"
 #include "ChartView.h"
 #include "DiscView.h"
 #include "EquipView.h"
@@ -322,6 +323,19 @@ public:
     return m_discShown ? &m_discView : nullptr;
   }
 
+  /// _view published as what D09, a mission's briefing or debriefing over D08, shows now (ADR-068): numbered, one more than the
+  /// last. While one is shown, the shell draws it in place of the CGA picture.
+  void ShowBriefing(BriefingView _view);
+
+  /// D09 no longer shown: the briefing or the debriefing was acknowledged.
+  void HideBriefing() noexcept;
+
+  /// D09's view while it is shown, or nothing.
+  [[nodiscard]] const BriefingView* ShownBriefing() const noexcept
+  {
+    return m_briefingShown ? &m_briefingView : nullptr;
+  }
+
   /// _view published as what the status screen, D08, shows now (ADR-063): numbered, one more than the last. While one is shown,
   /// the shell draws it in place of the CGA picture.
   void ShowStatus(StatusView _view);
@@ -514,6 +528,8 @@ private:
   DiscView m_discView;                        // D10's latest view
   bool m_discShown = false;                   // while D10's routine runs
   std::deque<DiscClick> m_discClicks;         // the shell's clicks on it, oldest first
+  BriefingView m_briefingView;                // D09's latest view
+  bool m_briefingShown = false;               // while a briefing or a debriefing waits for its key
   StatusView m_statusView;                    // the status screen's latest view
   bool m_statusShown = false;                 // while the docked status screen waits for its key
   Milliseconds m_nextKeyAt = NO_EVENT;

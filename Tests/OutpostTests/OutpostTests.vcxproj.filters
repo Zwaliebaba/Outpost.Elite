@@ -17,6 +17,9 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="DockedBriefingTests.cpp">
+      <Filter>Docked</Filter>
+    </ClCompile>
     <ClCompile Include="DockedChartTests.cpp">
       <Filter>Docked</Filter>
     </ClCompile>
