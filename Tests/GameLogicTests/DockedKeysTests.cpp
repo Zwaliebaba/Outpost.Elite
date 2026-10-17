@@ -135,10 +135,11 @@ public:
     Play(rig, "key F7; wait 0.5");
     Assert::IsTrue(Shows(rig, Elite::DockedScreen::Local) && Picture(rig) == local, L"F7 does nothing on the chart");
     Play(rig, "key Escape; wait 0.5");
-    Assert::IsTrue(Shows(rig, Elite::DockedScreen::Disc), L"Esc, the disc menu");
+    Assert::IsTrue(Shows(rig, Elite::DockedScreen::Disc) && rig.Host().ShownDisc() != nullptr, L"Esc, D10");
     const std::string disc = Picture(rig);
     Play(rig, "key F8; wait 0.3\nkey F9; wait 0.3\nkey F10; wait 0.3");
-    Assert::AreEqual(disc, Picture(rig), L"F8, F9 and F10 do nothing on the disc menu");
+    Assert::AreEqual(disc, Picture(rig), L"F8, F9 and F10 do nothing on D10");
+    Assert::IsTrue(rig.Host().ShownDisc() != nullptr, L"which stays open");
     Play(rig, "key F2; wait 0.3");
     Assert::IsTrue(Shows(rig, Elite::DockedScreen::Market) && rig.Host().ShownMarket() != nullptr, L"F2, the market");
     Play(rig, "key F6; wait 0.5");

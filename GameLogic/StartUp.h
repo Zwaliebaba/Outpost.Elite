@@ -25,7 +25,7 @@ namespace Elite
 /// in GameLoop.
 [[nodiscard]] Task<void> Start(GameState& _state, Host& _host);
 
-/// GameLoop: RunTitleAndDocked, then RunFlight, and the title again after a death; for ever, but that the disc menu
+/// GameLoop: RunTitleAndDocked, then RunFlight, and the title again after a death; for ever, but that D10
 /// leaves it for the disk (LeaveGameLoopForDisk), whose return addresses the original drops so that a RET returns into Start.
 /// Waits as a rule (ADR-015).
 [[nodiscard]] Task<void> GameLoop(GameState& _state, Host& _host);

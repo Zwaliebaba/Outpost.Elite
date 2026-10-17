@@ -6,11 +6,11 @@
 # the scratch program mining-laser.replay's was, and what it pressed is recorded here.
 file JAMESON.CDR scooping-a-canister.cdr
 wait 0.5; key space; wait 3.5      # any key: the credits, then the status screen
-key Escape; wait 0.3               # the disc menu
-key l; wait 0.3                    # Load Commander: it asks for a file name
-key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
-digest loaded 23818326f7461aaaa6ac33fbb8f65933d9d7c80fbde403318d8aa646eb436bf1
-picture loaded 361ad782e46b4fca68ba8e14bbac08966458c215f96b0ec2b628c924935fc8d5
+key Escape; wait 0.3               # D10, Disc access, on Load commander
+key 1; wait 0.3                    # Load commander: the catalogue, JAMESON.CDR selected
+key Return; wait 0.5               # loaded
+digest loaded b490d4951d8d29465840ed146159f7b59188665e25fde23e280e65f7de570f55
+picture loaded b7ee12a527ba7c2fc4299cc3a1c8065e786260b87cad506b70e2b515d759d4e5
 outcome loaded galaxy=0 system=7 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=1000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=1 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=0 beamLasers=0 miningLasers=1 militaryLasers=0 laserMounts=1 laserTypes=2 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=48 fuel=255 shipSlotsInUse=1 cabinTemperature=12 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 key F1; wait 1                     # launch
 # The flight, as recorded: a step for each change of the keys, and the frames between.
@@ -19,7 +19,7 @@ up period; wait 0.250
 down Left; up Up; down Down; wait 0.050
 up Left; wait 0.200
 down Left; wait 0.050
-digest barrel 085ab427ca07d4aa37a3408ecc5706385b1d51f53a3052dcc7ea1f76f0aad083
+digest barrel 59e5fb57647c9b6f11a4c9cab8ddd8e4fda34c06904623ab073207acc0c58af1
 picture barrel 336f92350144534efb441c79e30fffdddb6105ecd9434610657f0c0939eeff1d
 outcome barrel galaxy=0 system=7 witchSpace=0 docked=0 inFlight=1 dead=0 creditsTenths=1000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=1 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=0 beamLasers=0 miningLasers=1 militaryLasers=0 laserMounts=1 laserTypes=2 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=48 fuel=255 shipSlotsInUse=4 cabinTemperature=10 laserTemperature=0 altitude=254 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 wait 0.100
@@ -72,6 +72,6 @@ down Left; wait 0.200
 up Left; down Up; up Down; wait 0.050
 up Up
 wait 0.100
-digest scooped 7d5474bc044c6bbd09c136035361eb8241e48c83e425946fc7ce5bb2fb95c3b7
+digest scooped cdc0a90d2c6eeba4f9d659bab22c0798ce2ed286624b8414ba684f0f2973ee31
 picture scooped 6c82f25b0385594add33828c2de9447a6f358938854919ae096bb8389c447789
 outcome scooped galaxy=0 system=7 witchSpace=0 docked=0 inFlight=1 dead=0 creditsTenths=1000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=1 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=0 beamLasers=0 miningLasers=1 militaryLasers=0 laserMounts=1 laserTypes=2 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=8 fuel=255 shipSlotsInUse=3 cabinTemperature=10 laserTemperature=0 altitude=232 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0

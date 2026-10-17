@@ -22,23 +22,6 @@ namespace GameLogicTests
 namespace
 {
 
-// PerformDiskRequest's requests.
-constexpr std::uint8_t LOAD_COMMANDER = 1;
-constexpr std::uint8_t SAVE_COMMANDER = 2;
-
-// keyBuffer is a ring of 16 codes: the write index wraps after its last.
-constexpr std::uint16_t KEY_BUFFER_WRAP_MASK = 0x000F;
-
-// _code at the end of keyBuffer, as ReadScanCode puts a key there: how a test sends a code no replay can name, such as
-// the Amstrad joystick's 77h-7Ch.
-void QueueScanCode(Elite::GameState& _state, std::uint8_t _code)
-{
-  const std::uint16_t write = _state.Data().input.keyBufferWrite;
-  _state.Data().input.keyBuffer[write] = _code;
-  _state.Data().input.keyBufferWrite = static_cast<std::uint16_t>((write + 1) & KEY_BUFFER_WRAP_MASK);
-  _state.Data().input.keyBufferCount = static_cast<std::uint8_t>(_state.Data().input.keyBufferCount + 1);
-}
-
 // A file in DOS's directory: its name, and the SHA-256 of its bytes in lowercase hex, or DIRECTORY for a directory.
 struct WrittenFile
 {
@@ -72,87 +55,29 @@ constexpr std::string_view DIRECTORY = "<directory>";
 // The files each twin leaves in DOS's directory, as the interpreted original wrote them for the same scenario, recorded
 // before D7 deleted it: what the twins' file comparisons checked, and what the known answers' digests do not cover, since
 // the game's state holds no file. Like a known answer (ADR-016 item 4), one changes only by a ruling recorded with its cause.
-// The disc menu's: A.CDR and ABCDEFI.CDR, the same commander saved under two names.
-constexpr std::array<WrittenFile, 2> DISC_MENU_FILES = {{
-  {"A.CDR", "87b5b23a48fee9234ff2ed89cc580f3059890ab9fe7d1cc1a7d091371437aa62"},
-  {"ABCDEFI.CDR", "87b5b23a48fee9234ff2ed89cc580f3059890ab9fe7d1cc1a7d091371437aa62"},
-}};
 // The commander saved before leaving for DOS.
 constexpr std::array<WrittenFile, 1> QUIT_FILES = {{
   {"X.CDR", "a71fb1c01109def521b285ec6cdb25f045be9e74ce4298f533f794981ebd5cdd"},
 }};
 
-// The Disc/Control menu's every path but leaving for DOS: the catalogue empty and with a name, the version, keys that do
-// nothing, a mouse driver absent and present, J, which chose a joystick until D81 and does nothing now, saving, deleting, a load that DOS fails
-// and its retry, names cut at eight characters and edited, and every kind of bad name, each rejected into the menu's
-// key loop from inside PromptCommanderFileName.
-void PlayEveryDiscMenuPath(TwinRig& _rig)
-{
-  _rig.Play("key space; wait 3.3\nkey Escape; wait 0.1\nkey c; wait 0.1\ndigest no-names");
-  _rig.Play("key v; wait 0.05\nkey q; wait 0.05\nkey Next; wait 0.05\nkey m; wait 0.05\ndigest no-mouse");
-  // A mouse attached, which the menu then offers.
-  const bool mouse = _rig.Host().MouseDevice().Present();
-  _rig.Both([](Elite::Host& _platform, Elite::GameState&) { _platform.MouseDevice().SetPresent(true); });
-  _rig.Play("key m; wait 0.05\ndigest mouse\nkey k; wait 0.05");
-  _rig.Both([mouse](Elite::Host& _platform, Elite::GameState&) { _platform.MouseDevice().SetPresent(mouse); });
-  // J and the keys that answered the joystick's questions until D81, the IBM stick's and the Amstrad's, and the codes the
-  // Amstrad's stick sent: each a key the menu ignores, as it ignores every other.
-  _rig.Play("key j; wait 0.05; key q; wait 0.05; key i; wait 0.05; key space; wait 0.1\ndigest no-stick");
-  _rig.Play("key j; wait 0.05; key i; wait 0.05; key space; wait 0.1\ndigest stick\nkey k; wait 0.05");
-  _rig.Play("key j; wait 0.05; key a; wait 0.05; key q; wait 0.05\ndigest amstrad-still\nkey j; wait 0.05; key a; wait 0.05");
-  _rig.Both(
-    [](Elite::Host&, Elite::GameState& _state)
-    {
-      constexpr std::array<std::uint8_t, 3> CODES = {0x60, 0x7D, 0x77};
-      for (const std::uint8_t code : CODES)
-        QueueScanCode(_state, code);
-    });
-  _rig.Play("key q; wait 0.05\ndigest amstrad-moved\nkey k; wait 0.05");
-  // Leaving for DOS, thought better of.
-  _rig.Play("key e; wait 0.05; key q; wait 0.05; key n; wait 0.05\ndigest stayed");
-  // AB1 saved, catalogued and deleted; then Z, which is not there, loaded, retried and given up.
-  _rig.Play("key s; wait 0.05; key a; down Shift_L; key b; up Shift_L; key 1; key Return; wait 0.1\ndigest saved\n"
-            "key c; wait 0.1\ndigest catalogued\n"
-            "key d; wait 0.05; key a; key b; key 1; key Return; wait 0.1\ndigest deleted\n"
-            "key l; wait 0.05; key z; key Return; wait 0.1\nkey q; wait 0.05; key y; wait 0.1\nkey n; wait 0.05\ndigest not-loaded");
-  // Nine characters typed keep eight, and a backspace takes one back: ABCDEFGI.
-  _rig.Play("key s; wait 0.05; key a; key b; key c; key d; key e; key f; key g; key h; key i; key BackSpace; key BackSpace; key i;"
-            " key Return; wait 0.1\ndigest long-name");
-  // Bad names: none, a digit or a bracket first, and then a minus, a semicolon or a bracket after a letter.
-  _rig.Play("key s; wait 0.05; key Return; wait 0.05\nkey s; wait 0.05; key 1; key Return; wait 0.05\n"
-            "key s; wait 0.05; key bracketleft; key Return; wait 0.05\nkey s; wait 0.05; key a; key minus; key Return; wait 0.05\n"
-            "key s; wait 0.05; key a; key semicolon; key Return; wait 0.05\n"
-            "key s; wait 0.05; key a; key bracketleft; key Return; wait 0.05\ndigest bad-names");
-  // From inside the last prompt's frame: a good name, saved; then, back in the menu after another bad one, the
-  // catalogue, and a function key out of the menu.
-  _rig.Play("key s; wait 0.05; key a; key Return; wait 0.1\ndigest saved-a\nkey s; wait 0.05; key Return; wait 0.05\n"
-            "key c; wait 0.1\ndigest catalogued-again\nkey s; wait 0.05; key Return; wait 0.05\nkey F6; wait 0.1\ndigest status");
-  Assert::IsTrue(HoldsExactly(_rig.Files(), DISC_MENU_FILES), L"the files the original wrote");
-}
-
 } // namespace
 
-// Twins of the Disc/Control menu and of leaving for DOS, which reach what no replay does (ADR-016).
+// Twins of saving and leaving for DOS, and the clamp of a loaded commander, which reach what no replay does (ADR-016). D10's own
+// keys and steps are DiscScreenTests'.
 TEST_CLASS(SaveLoadTests)
 {
 public:
-  // Every path of the Disc/Control menu but leaving for DOS. Two twins ran this scenario, one with its native calls
-  // compared with the original's and one not; they gave the same answers, and this is the one D7 kept.
-  TEST_METHOD(DiscMenuAgreesOnEveryPath)
-  {
-    TwinRig rig("TwinDiscMenu");
-    PlayEveryDiscMenuPath(rig);
-  }
-
-  // A commander saved from the chart's Escape, then E and Y at the menu, which ends the program: exit to DOS is a quit (D80),
-  // with no farewell. Alt and PrtSc's screenshots, which this twin took on the way until D86, are gone.
+  // A commander saved as X from D10, opened by the chart's Escape, its name typed over the commander's, then 5 and Y, which end
+  // the program: the quit (D80), with no farewell. Alt and PrtSc's screenshots, which this twin took on the way until D86, are
+  // gone.
   TEST_METHOD(SavingAndLeavingForDosAgree)
   {
     TwinRig twin("TwinQuit");
     twin.Play("key space; wait 3.3\nkey F4; wait 0.1");
-    twin.Play("wait 0.6; key Escape; wait 0.15; key s; wait 0.05");
-    twin.Play("key x; key Return; wait 0.1\ndigest saved");
-    twin.Play("key e; wait 0.05; key y; wait 0.5", Elite::StopReason::Terminated);
+    twin.Play("wait 0.6; key Escape; wait 0.15; key 2; wait 0.05");
+    twin.Play("key BackSpace; key BackSpace; key BackSpace; key BackSpace; key BackSpace; key BackSpace; key BackSpace; key x;"
+              " key Return; wait 0.1\ndigest saved");
+    twin.Play("key 5; wait 0.05; key y; wait 0.5", Elite::StopReason::Terminated);
     Assert::IsTrue(HoldsExactly(twin.Files(), QUIT_FILES), L"the commander the game saved");
   }
 
@@ -185,8 +110,8 @@ public:
         commander.creditsTenths = 1234;
         for (std::uint8_t& character : commander.creditBalanceText)
           character = 'X';
-        Elite::PerformDiskRequest(state, rig.Host(), SAVE_COMMANDER);
-        Elite::PerformDiskRequest(state, rig.Host(), LOAD_COMMANDER);
+        Elite::PerformDiskRequest(state, rig.Host(), Elite::DISK_SAVE);
+        Elite::PerformDiskRequest(state, rig.Host(), Elite::DISK_LOAD);
         co_return;
       });
     Assert::IsTrue(rig.Host().RunUntil(1'000'000) == Elite::StopReason::Terminated);

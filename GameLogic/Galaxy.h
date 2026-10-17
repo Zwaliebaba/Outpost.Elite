@@ -141,7 +141,7 @@ void AdvanceToNextSystem(GameState& _state);
 /// system. Returns the length.
 std::uint8_t GenerateSystemName(GameState& _state);
 
-/// What the original's Find found for the name in findInput, as ReadTextLine leaves it typed: nothing typed, the nearest system
+/// What the original's Find found for the name in findInput, as Find leaves it typed: nothing typed, the nearest system
 /// (NoteNearestSystem); a system of the galaxy by that name on the current chart, the cursor moved onto it and NoteNearestSystem;
 /// otherwise none on this chart.
 enum class FindResult : std::uint8_t

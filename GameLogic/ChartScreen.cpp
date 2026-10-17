@@ -50,7 +50,7 @@ constexpr std::size_t FIND_INPUT_BYTES = FIND_LETTERS_MOST + 1;
   return _kind == ChartKind::Galactic ? SCAN_F5 : SCAN_F6;
 }
 
-// Find's name typed into findInput, as ReadTextLine leaves it: its characters, then NULs.
+// Find's name typed into findInput, as the original's typed line left it: its characters, then NULs.
 void TypeFindInput(GameState& _state, const std::string& _typed)
 {
   std::uint8_t(&input)[FIND_INPUT_BYTES] = _state.Data().galaxy.findInput;

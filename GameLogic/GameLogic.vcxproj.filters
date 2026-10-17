@@ -291,7 +291,10 @@
     <ClInclude Include="SaveLoadState.h">
       <Filter>SaveLoad</Filter>
     </ClInclude>
-    <ClInclude Include="SaveLoadTables.h">
+    <ClInclude Include="DiscScreen.h">
+      <Filter>SaveLoad</Filter>
+    </ClInclude>
+    <ClInclude Include="DiscView.h">
       <Filter>SaveLoad</Filter>
     </ClInclude>
     <ClInclude Include="Scene.h">
@@ -403,6 +406,9 @@
     </ClCompile>
     <ClCompile Include="ChartScreen.cpp">
       <Filter>Galaxy</Filter>
+    </ClCompile>
+    <ClCompile Include="DiscScreen.cpp">
+      <Filter>SaveLoad</Filter>
     </ClCompile>
     <ClCompile Include="Combat.cpp">
       <Filter>Combat</Filter>

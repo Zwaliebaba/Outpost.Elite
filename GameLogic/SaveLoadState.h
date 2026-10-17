@@ -13,9 +13,9 @@ namespace Elite
 /// original data segment's, by their names, in their order there; the GameState holds it in GameData.
 struct SaveLoadState
 {
-  /// what ShowDiscControlScreen asks Start to do, written: 0 Exit to DOS (Start calls WipeProgram, then exits), 1 lo...
+  /// what D10 asks Start to do (ShowDiscScreen): 0 quit (D80), 1 load, 2 save, 3 delete
   std::uint8_t diskOperation;
-  /// file names without extension, NUL-terminated, written by PerformDiskRequest's catalogue
+  /// file names without extension, NUL-terminated, which the original's catalogue wrote; nothing writes it since D10 (ADR-067)
   std::uint8_t commanderFileList[370];
   /// names in commanderFileList, capped at 40
   std::uint8_t commanderFileCount;
@@ -27,7 +27,7 @@ struct SaveLoadState
   std::uint8_t commanderFileName[13];
   /// 0 keyboard, 2 mouse (names); the original's 1, the joystick, went with D81
   std::uint8_t inputDevice;
-  /// 1 after LeaveGameLoopForDisk; makes RunTitleAndDocked reopen ShowDiscControlScreen to show the result; cleared when an F-key leaves it
+  /// 1 after LeaveGameLoopForDisk; makes RunTitleAndDocked reopen D10 to show the result; cleared when a key closes D10
   std::uint8_t resumeAtDiskMenu;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.

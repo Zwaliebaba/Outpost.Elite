@@ -14,7 +14,7 @@ struct MouseMotion
 };
 
 /// A two-button mouse as the game reads it (ADR-051): the host moves it and sets its buttons between runs, and the game reads
-/// the motion since its last read and the buttons held. Whether one is attached is the host's; the disc menu offers the mouse
+/// the motion since its last read and the buttons held. Whether one is attached is the host's; D10 offers the mouse
 /// only when one is. A mouse that is not attached is never moved and holds no button.
 ///
 /// Counters are 16 bits and wrap, as the driver's did. Not thread-safe.

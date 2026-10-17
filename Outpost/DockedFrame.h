@@ -91,8 +91,9 @@ public:
   /// A row's text for _look: light amber on the selected row, the text's colour on every other.
   [[nodiscard]] static std::uint32_t RowText(RowLook _look) noexcept;
 
-  /// A modal in _rect over the screen drawn so far (D09, D10): the whole screen dimmed, and a panel with a full amber border and
-  /// 28-unit chamfers at its top-right and bottom-left corners. The modal's own content is drawn over it.
+  /// A modal in _rect over the screen drawn so far (D09, D10): the screen between the top bar and the key bar dimmed, the bars as
+  /// they were, and a panel with a full amber border and 28-unit chamfers at its top-right and bottom-left corners. The modal's own
+  /// content is drawn over it.
   static void Modal(const Engine::Rect& _rect, Engine::Canvas& _canvas);
 
   /// A button in _rect for _look, and _text in its middle in _font at _size, _spacing between its letters.

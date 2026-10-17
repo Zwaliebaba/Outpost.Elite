@@ -75,7 +75,7 @@ struct Step
 ///   file NAME SOURCE     put a copy of SOURCE, a file beside the replay (Replays/ for the corpus), into DOS's
 ///                        directory as NAME, a DOS 8.3 name, at this moment: a file with no attributes, stamped
 ///                        1980-01-01 00:00:00, as one copied there before the run would be. This is how a replay
-///                        starts from a prepared commander, which the disc menu then loads as the game's own save.
+///                        starts from a prepared commander, which D10 then loads as the game's own save.
 ///                        SOURCE is a bare file name, so a replay reaches nothing but the files beside it.
 ///   click X Y            a click on the chart open at X and Y, in its units (ChartClick, D111): on the galactic chart a
 ///                        system's x and half its y, on the short-range chart 3.5 to a galaxy unit about 80, 64. It

@@ -21,10 +21,8 @@ namespace Elite
 namespace
 {
 
-constexpr std::uint16_t CURSOR_BLINK_TICKS = 300;
 constexpr std::uint8_t FIRST_UNMAPPED_SCAN = 0x54; // scanCodeToAscii's length
 constexpr std::uint8_t NO_CHARACTER = 0xFF;        // in scanCodeToAscii: a key that types nothing
-constexpr std::uint8_t CURSOR_HIDDEN = ' ';
 constexpr std::uint8_t LOWER_CASE_BIT = 0x20;
 constexpr std::uint8_t UPPER_CASE_MASK = 0xDF;
 
@@ -54,7 +52,6 @@ constexpr std::uint16_t SMALL_GLYPH_ROWS = 5;
 constexpr std::uint16_t SMALL_GLYPH_BYTES = 10; // a smallFont letter: a word a row
 constexpr std::uint8_t SMALL_GLYPH_SHIFT = 4;   // the half byte a letter starts at
 constexpr std::uint16_t TEXT_ROW_BYTES = 0x50;  // a row of the 40-column text page
-constexpr std::uint8_t TEXT_LAYOUT = 2;         // screenLayout of the docked text screens
 
 constexpr std::uint16_t MESSAGE_LINE_OFFSET = 0x58; // B800:0058, x=32, y=2
 constexpr std::uint16_t MESSAGE_LINE_WORDS = 0x20;
@@ -72,9 +69,6 @@ constexpr std::uint8_t TENTHS_BLANKS = 3;
 constexpr std::uint8_t BLANK_BELOW = '1';
 constexpr std::uint16_t CREDIT_DIGITS = 10;
 constexpr std::uint16_t CREDIT_BLANKS = 8;
-
-constexpr std::uint8_t CURSOR_GRAPHICS_TOGGLE = 0xA0; // space <-> 80h glyph
-constexpr std::uint8_t CURSOR_TEXT_TOGGLE = 0xFB;     // space <-> DBh, CP437's block
 
 // SHL r16, CL on the 8088, which does not mask the count.
 [[nodiscard]] std::uint16_t ShiftLeft(std::uint16_t _value, std::uint8_t _count) noexcept
@@ -155,28 +149,6 @@ template <std::size_t Bytes> void CopyNameInto(const std::array<std::uint8_t, By
   {
     _to[moved] = _name[moved];
   }
-}
-
-// The line ReadTextLine reads: the buffer it types into, and where RedrawInputLine echoes it. Neither changes from one turn of
-// its loop to the next.
-struct TypedLine
-{
-  std::span<std::uint8_t> buffer;
-  std::uint16_t cell;
-};
-
-// ReadTextLine's redraw: the line typed and the cursor printed, then the jump back to counting the blink.
-void RedrawTypedLine(GameState& _state, const TypedLine& _line, std::uint16_t _length)
-{
-  RedrawInputLine(_state, _line.buffer, _length, _line.cell);
-}
-
-// ReadTextLine's blink: 300 ticks to the next, the cursor flipped, and the line redrawn.
-void RestartInputBlink(GameState& _state, const TypedLine& _line, std::uint16_t _length)
-{
-  _state.Data().text.cursorBlinkTicks = CURSOR_BLINK_TICKS;
-  ToggleInputCursor(_state);
-  RedrawTypedLine(_state, _line, _length);
 }
 
 // MessageLine's second half: the message in messagePointer, unless it is already shown, on the message line,
@@ -561,90 +533,6 @@ std::optional<std::uint8_t> TypedCharacter(const KeyPress& _key) noexcept
     }
   }
   return character;
-}
-
-[[nodiscard]] Task<void> ReadTextLine(GameState& _state, Host& _host, std::span<std::uint8_t> _buffer, std::uint8_t _most,
-                                      std::uint16_t _cell)
-{
-  const TypedLine line{_buffer, _cell};
-  ResetKeyboard(_state);
-  _state.Data().drawing.textPaperPattern = 0;
-  _state.Data().text.inputCharsLeft = _most;
-  std::uint16_t length = 0;
-  RestartInputBlink(_state, line, length);
-  for (;;)
-  {
-    const auto blink = static_cast<std::uint16_t>(_state.Data().text.cursorBlinkTicks - 1);
-    _state.Data().text.cursorBlinkTicks = blink;
-    if (blink == 0)
-    {
-      RestartInputBlink(_state, line, length);
-      continue;
-    }
-    co_await WaitForTimerTick(_state, _host);
-    const KeyPress key = GetKey(_state);
-    const std::optional<std::uint8_t> typed = TypedCharacter(key);
-    if (!typed)
-    {
-      continue;
-    }
-    const std::uint8_t character = *typed;
-    if (character == TYPED_ENTER)
-    {
-      if (_state.Data().text.inputCursorText[0] != CURSOR_HIDDEN)
-      {
-        ToggleInputCursor(_state);
-        RedrawInputLine(_state, _buffer, length, _cell);
-      }
-      co_return;
-    }
-    if (character == TYPED_BACKSPACE)
-    {
-      if (length != 0)
-      {
-        --length;
-        _state.Data().text.inputCharsLeft = static_cast<std::uint8_t>(_state.Data().text.inputCharsLeft + 1);
-        RedrawInputLine(_state, _buffer, length, _cell);
-      }
-      continue;
-    }
-    _buffer[length] = character;
-    ++length;
-    const auto left = static_cast<std::uint8_t>(_state.Data().text.inputCharsLeft - 1);
-    _state.Data().text.inputCharsLeft = left;
-    if ((left & 0x80) != 0)
-    {
-      // No room: the character is taken back.
-      --length;
-      _state.Data().text.inputCharsLeft = static_cast<std::uint8_t>(left + 1);
-    }
-    RedrawTypedLine(_state, line, length);
-  }
-}
-
-void ToggleInputCursor(GameState& _state)
-{
-  std::uint8_t& cursor = _state.Data().text.inputCursorText[0];
-  const std::uint8_t toggle = _state.Data().drawing.screenLayout == TEXT_LAYOUT ? CURSOR_TEXT_TOGGLE : CURSOR_GRAPHICS_TOGGLE;
-  cursor = static_cast<std::uint8_t>(cursor ^ toggle);
-}
-
-void RedrawInputLine(GameState& _state, std::span<std::uint8_t> _buffer, std::uint16_t _length, std::uint16_t _cell)
-{
-  _buffer[_length] = 0;
-  const std::uint16_t next = PrintStringForLayout(_state, TextIn(_buffer), MESSAGE_INK, _cell);
-  // The cursor's glyph and a space, and the NUL after them, which nothing writes.
-  (void)PrintStringForLayout(_state, TextWithin(_state.Data().text.inputCursorText, 0), MESSAGE_INK, next);
-}
-
-std::uint16_t PrintStringForLayout(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _cell)
-{
-  // A tail jump to either printer.
-  if (_state.Data().drawing.screenLayout == TEXT_LAYOUT)
-  {
-    return PrintTextModeString(_state, _text, _cell);
-  }
-  return DrawScreenString(_state, _text, _ink, _cell);
 }
 
 } // namespace Elite

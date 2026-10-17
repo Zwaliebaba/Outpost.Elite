@@ -89,6 +89,9 @@
     <ClCompile Include="ChartScreenTests.cpp">
       <Filter>Galaxy</Filter>
     </ClCompile>
+    <ClCompile Include="DiscScreenTests.cpp">
+      <Filter>SaveLoad</Filter>
+    </ClCompile>
     <ClCompile Include="CorpusTests.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
