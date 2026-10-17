@@ -31,7 +31,7 @@ constexpr std::uint32_t ALERT_LIGHT = 0xFFFFB09A;
 constexpr std::uint32_t PANEL_FILL = 0xFF110F0C;
 constexpr std::uint32_t PANEL_EDGE = 0xFF64491D; // amber at 35% over the background
 constexpr std::uint32_t MODAL_FILL = 0xFF14110D;
-constexpr std::uint32_t MODAL_BACKDROP = 0xC7050403; // the screen under a modal, dimmed to 22% (D09, D10)
+constexpr std::uint32_t MODAL_BACKDROP = 0xC7050403; // the screen between the bars under a modal, dimmed to 22% (D09, D10)
 constexpr std::uint32_t ROW_STRIPE = 0xFF161411;
 constexpr std::uint32_t ROW_SELECTED = 0xFF453416;
 constexpr std::uint32_t ROW_HOVER = 0xFF221C14;
@@ -75,8 +75,6 @@ constexpr float KEY_TAB_SLANT = 22.0f;
 constexpr float KEY_HEIGHT = 60.0f;
 constexpr float CHAMFER = 24.0f;
 constexpr float MODAL_CHAMFER = 28.0f;
-constexpr float DESIGN_WIDTH = 1920.0f;
-constexpr float DESIGN_HEIGHT = 1080.0f;
 constexpr float STRIP_ICON = 26.0f;
 constexpr float STRIP_ICON_LEFT = 17.0f;
 constexpr float STRIP_TEXT_LEFT = 58.0f;
@@ -291,7 +289,8 @@ std::uint32_t DockedFrame::RowText(RowLook _look) noexcept
 
 void DockedFrame::Modal(const Engine::Rect& _rect, Engine::Canvas& _canvas)
 {
-  _canvas.Box(Engine::Rect{.left = 0.0f, .top = 0.0f, .width = DESIGN_WIDTH, .height = DESIGN_HEIGHT}, MODAL_BACKDROP);
+  _canvas.Box(Engine::Rect{.left = 0.0f, .top = TAB_BOTTOM_Y, .width = Engine::DESIGN_WIDTH, .height = KEY_TAB_TOP_Y - TAB_BOTTOM_Y},
+              MODAL_BACKDROP);
   ChamferedPanel(_rect, MODAL_CHAMFER, MODAL_FILL, AMBER, true, true, _canvas);
 }
 

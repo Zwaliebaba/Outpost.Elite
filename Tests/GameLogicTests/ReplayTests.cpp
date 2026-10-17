@@ -236,14 +236,14 @@ public:
     Assert::IsTrue(error.find("only digest and shot may follow end") != std::string::npos, L"says why");
   }
 
-  // Leaving for DOS: E on the disc menu asks, Y answers, and the program ends (int 20h) in the next step that runs the
+  // Leaving for DOS: 5 on D10 asks, Y answers, and the program ends (int 20h) in the next step that runs the
   // machine. In an end step that is what must happen, and digests after it read what the program left; in a wait it stops
   // the run, as only an end step may; and an end step in which the program does not end, here because nothing answers
   // the question, fails as surely (ExpectedStop).
   TEST_METHOD(OnlyAnEndStepMayEndTheProgram)
   {
-    // Any key, the disc menu, and E: "Are you sure (Y/N)?".
-    constexpr std::string_view TO_THE_QUESTION = "wait 0.5; key space; wait 3.5; key Escape; wait 0.3; key e; wait 0.3";
+    // Any key, D10, and 5: quit the game?
+    constexpr std::string_view TO_THE_QUESTION = "wait 0.5; key space; wait 3.5; key Escape; wait 0.3; key 5; wait 0.3";
     struct Ending
     {
       std::string_view steps;

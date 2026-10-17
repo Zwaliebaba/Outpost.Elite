@@ -20,9 +20,8 @@ using Commander = Elite::CommanderState;
 // The twins' prepared commanders, from Replays/: commanders the original game saved, changed as its own code would change them.
 constexpr std::string_view ARMED = "armed.cdr";
 constexpr std::string_view INVASION_MISSION = "invasion-mission.cdr";
-// From the title: the credits, the status screen, the disc menu, and JAMESON loaded.
-constexpr std::string_view LOAD_JAMESON = "key space; wait 4\nkey Escape; wait 0.3\nkey l; wait 0.3\n"
-                                          "key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5";
+// From the title: the credits, the status screen, D10, and JAMESON loaded from its catalogue.
+constexpr std::string_view LOAD_JAMESON = "key space; wait 4\nkey Escape; wait 0.3\nkey 1; wait 0.3\nkey Return; wait 0.5";
 constexpr std::uint16_t FIRST_SHIP_SLOT = 3;
 constexpr std::uint8_t TYPE_SHUTTLE = 0x08;
 // LaunchAtOffender puts what it launches 0F0h along z from the station: a ship within this of it on every axis has just left it,
@@ -30,8 +29,8 @@ constexpr std::uint8_t TYPE_SHUTTLE = 0x08;
 constexpr std::int32_t LAUNCH_REACH = 0x800;
 
 // Replays/_source, a prepared commander, copied into the twin's DOS directory as JAMESON.CDR, as a replay's file step copies
-// one (DirectoryFileStore gives a file it did not write attribute 0 and DOS's stamp), and loaded at the disc menu as the game
-// loads its own saves.
+// one (DirectoryFileStore gives a file it did not write attribute 0 and DOS's stamp), and loaded at D10 as the game loads
+// its own saves.
 void LoadCommander(TwinRig& _rig, std::string_view _source)
 {
   const std::filesystem::path source = Elite::FindInRepository(std::filesystem::path("Replays") / _source);

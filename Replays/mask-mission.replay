@@ -12,18 +12,18 @@
 # milliseconds (D87).
 file JAMESON.CDR mask-mission.cdr
 wait 0.5; key space; wait 3.5      # any key: the credits, then the status screen
-key Escape; wait 0.3               # the disc menu
-key l; wait 0.3                    # Load Commander: it asks for a file name
-key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
-digest loaded 777531ee33d7183f16c25ce41cb81f3a69fdada3c1da83e65613c608095c9d99
-picture loaded 361ad782e46b4fca68ba8e14bbac08966458c215f96b0ec2b628c924935fc8d5
+key Escape; wait 0.3               # D10, Disc access, on Load commander
+key 1; wait 0.3                    # Load commander: the catalogue, JAMESON.CDR selected
+key Return; wait 0.5               # loaded
+digest loaded b28be93b30af0a8dbef20b6127f5f6d7175d6d470e1f8efae41926b5138d3d28
+picture loaded b7ee12a527ba7c2fc4299cc3a1c8065e786260b87cad506b70e2b515d759d4e5
 outcome loaded galaxy=0 system=55 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=1000 legalStatus=0 kills=20 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=1 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=1 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=0 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=1 laserTypes=3 mission=2 missionStage=1 missionJumps=64 jumpedSinceBriefing=1 maskShipsLeft=5 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=1 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=48 fuel=126 shipSlotsInUse=1 cabinTemperature=12 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 key F1; wait 1.3                   # launch: the mask ship and its escorts, and the escorts ram the ship
-digest rammed 7c9452c92e659df5651af60b942c4c7eed40441aea63f465714c1eee17f77219
+digest rammed 7f08b3fa9c6b907cb5c8e54cfe2c7432c15c020fc2cf5d8f58280faf4045c1eb
 picture rammed 95c3eb1c72fbc66973a744a83bdc571ef21905b3089864f0b06cbf1bb7952da8
 outcome rammed galaxy=0 system=55 witchSpace=0 docked=0 inFlight=1 dead=1 creditsTenths=1600 legalStatus=0 kills=23 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=1 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=1 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=0 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=1 laserTypes=3 mission=2 missionStage=1 missionJumps=64 jumpedSinceBriefing=1 maskShipsLeft=5 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=1 invasion=0 invadedStationDestroyed=0 energy=0 foreShield=0 aftShield=255 speed=8 fuel=126 shipSlotsInUse=12 cabinTemperature=11 laserTemperature=0 altitude=254 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 wait 2.5                           # GAME OVER, then the title screen
-digest title 224f6ad035f609e8eb397c802f24af2ad1bf02b136588c28409bc5f1571fc4dc
+digest title 290abc601daa6eed2fc1d1ee10b59a6a3c6e74a5c98899f54d46b769954a60de
 picture title da745788d870d2b7f75e1b750d19401db8e9deb1fa1404eaceac846d0fb32429
 outcome title galaxy=0 system=55 witchSpace=0 docked=0 inFlight=0 dead=1 creditsTenths=1600 legalStatus=0 kills=23 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=1 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=1 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=0 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=0 laserTypes=3 mission=2 missionStage=1 missionJumps=64 jumpedSinceBriefing=1 maskShipsLeft=5 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=1 invasion=0 invadedStationDestroyed=0 energy=0 foreShield=0 aftShield=255 speed=8 fuel=126 shipSlotsInUse=1 cabinTemperature=11 laserTemperature=0 altitude=254 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 key space; wait 3.5                # a new game: the credits, then the status screen
@@ -31,8 +31,8 @@ file JAMESON.CDR mask-mission-fight.cdr
 key Escape; wait 0.3
 key l; wait 0.3
 key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5
-digest loaded-again b8b4ba69c1708baa6a45ff4836edd399b1b4d50e3abd11073fbfbab5725a5521
-picture loaded-again 361ad782e46b4fca68ba8e14bbac08966458c215f96b0ec2b628c924935fc8d5
+digest loaded-again 6c7ad572aa3361e0bcfa0b30fae6bc1ffbcd2c44b0d8ca7663b433edc6fc264b
+picture loaded-again b7ee12a527ba7c2fc4299cc3a1c8065e786260b87cad506b70e2b515d759d4e5
 outcome loaded-again galaxy=0 system=55 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=1000 legalStatus=0 kills=20 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=1 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=1 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=0 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=1 laserTypes=3 mission=2 missionStage=1 missionJumps=64 jumpedSinceBriefing=1 maskShipsLeft=5 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=1 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=8 fuel=126 shipSlotsInUse=1 cabinTemperature=12 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 key F1; wait 1                     # launch again: the mask ship and its escorts
 # The fight, as recorded: a step for each change of the keys, and the frames between.
@@ -411,6 +411,6 @@ up space; wait 0.150
 up Down; down space; wait 0.550
 up space; down Down; wait 0.050
 up Down
-digest after-the-fight ac8b3ec771e4857ac00ea536f6f1a58eedd2fe6aa79f73b4fd53298e1f1121a3
+digest after-the-fight 5aab5caba8d3b3281686dfa692c6a9a5d18480c6b2330379e2d6d682bd2fc195
 picture after-the-fight e26c0b7307b485ecc58962d08b323f3eb98edc9436c2223e168d8872f8ed9339
 outcome after-the-fight galaxy=0 system=55 witchSpace=0 docked=0 inFlight=1 dead=0 creditsTenths=1400 legalStatus=0 kills=22 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=1 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=1 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=0 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=1 laserTypes=3 mission=2 missionStage=1 missionJumps=64 jumpedSinceBriefing=1 maskShipsLeft=3 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=1 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=242 aftShield=171 speed=20 fuel=126 shipSlotsInUse=15 cabinTemperature=10 laserTemperature=223 altitude=254 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0

@@ -4,6 +4,7 @@
 
 #include "Arithmetic.h"
 #include "ChartScreen.h"
+#include "DiscScreen.h"
 #include "DockedTables.h"
 #include "EquipScreen.h"
 #include "Equipment.h"
@@ -306,7 +307,7 @@ void FormatQuantity(std::uint16_t _quantity, std::span<std::uint8_t> _text)
   _state.Data().flow.titleShown = 1;
 }
 
-// The routine that shows _screen docked (D96). The status screen resets the keyboard first; Esc's disc menu is DispatchDockedKeys's.
+// The routine that shows _screen docked (D96). The status screen resets the keyboard first; Esc's D10 is DispatchDockedKeys's.
 [[nodiscard]] Task<ScreenKey> ShowDockedScreen(GameState& _state, Host& _host, DockedScreen _screen)
 {
   switch (_screen)
@@ -378,9 +379,9 @@ private:
   Host& m_host;
 };
 
-// The docked host (D96): from _screen, the status screen or Esc's disc menu, each screen returns the key that closed it, which
-// picks the next screen (DockedTargetOf), until F1 leaves; any other key waits for one. Returns whether the disc menu left for the
-// disk, through LeaveGameLoopForDisk, which returns past RunTitleAndDocked (DiscMenuExit); otherwise F1 ended them.
+// The docked host (D96): from _screen, the status screen or Esc's D10, each screen returns the key that closed it, which picks the
+// next screen (DockedTargetOf), until F1 leaves; any other key waits for one. Returns whether D10 left for the disk, through
+// LeaveGameLoopForDisk, which returns past RunTitleAndDocked (DiscExit); otherwise F1 ended them.
 [[nodiscard]] Task<bool> DispatchDockedKeys(GameState& _state, Host& _host, DockedScreen _screen)
 {
   const DockedScreenShown shown(_host);
@@ -391,12 +392,12 @@ private:
     ScreenKey key{};
     if (screen == DockedScreen::Disc)
     {
-      const DiscMenuExit exit = co_await ShowDiscControlScreen(_state, _host);
+      const DiscExit exit = co_await ShowDiscScreen(_state, _host);
       if (exit.leaves)
       {
         co_return true;
       }
-      key = ScreenKey{exit.scanCode};
+      key = exit.key;
     }
     else
     {
@@ -854,7 +855,7 @@ StatusView StatusViewOf(const GameState& _state)
   {
     co_await RunTitle(_state, _host);
   }
-  // On into DockedKeyDispatch: back from a disk request, at the disc menu; otherwise at the status screen.
+  // On into DockedKeyDispatch: back from a disk request, at D10; otherwise at the status screen.
   if (_state.Data().saveLoad.resumeAtDiskMenu == 1)
   {
     co_return co_await DispatchDockedKeys(_state, _host, DockedScreen::Disc);

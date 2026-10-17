@@ -6,6 +6,7 @@
 #include "FileStore.h"
 #include "FlightSnapshot.h"
 #include "ChartView.h"
+#include "DiscView.h"
 #include "EquipView.h"
 #include "MarketView.h"
 #include "Mouse.h"
@@ -308,6 +309,19 @@ public:
     return m_chartShown ? &m_chartView : nullptr;
   }
 
+  /// _view published as what D10, Disc access, shows now (ADR-067): numbered, one more than the last. While one is shown, the shell
+  /// draws it in place of the CGA picture.
+  void ShowDisc(DiscView _view);
+
+  /// D10 no longer shown: its routine ended. The clicks not yet taken go with it.
+  void HideDisc() noexcept;
+
+  /// D10's view while it is shown, or nothing.
+  [[nodiscard]] const DiscView* ShownDisc() const noexcept
+  {
+    return m_discShown ? &m_discView : nullptr;
+  }
+
   /// _view published as what the status screen, D08, shows now (ADR-063): numbered, one more than the last. While one is shown,
   /// the shell draws it in place of the CGA picture.
   void ShowStatus(StatusView _view);
@@ -357,6 +371,12 @@ public:
 
   /// The oldest click on the chart queued, taken, or nothing.
   [[nodiscard]] std::optional<ChartClick> TakeChartClick() noexcept;
+
+  /// A click on one of D10's controls, from the shell (D83), queued for it; dropped while it is not shown.
+  void Click(const DiscClick& _click);
+
+  /// The oldest click on D10 queued, taken, or nothing.
+  [[nodiscard]] std::optional<DiscClick> TakeDiscClick() noexcept;
 
   /// The space view's layers as the last published snapshot's frame drew them (ADR-033): what a renderer that draws the ships
   /// itself draws under and over them. PublishFlightSnapshot finishes them and marks each object drawn as a model.
@@ -491,6 +511,9 @@ private:
   EquipView m_equipView;                      // the shipyard's latest view
   bool m_equipShown = false;                  // while the shipyard's routine runs
   std::deque<EquipClick> m_equipClicks;       // the shell's clicks on it, oldest first
+  DiscView m_discView;                        // D10's latest view
+  bool m_discShown = false;                   // while D10's routine runs
+  std::deque<DiscClick> m_discClicks;         // the shell's clicks on it, oldest first
   StatusView m_statusView;                    // the status screen's latest view
   bool m_statusShown = false;                 // while the docked status screen waits for its key
   Milliseconds m_nextKeyAt = NO_EVENT;

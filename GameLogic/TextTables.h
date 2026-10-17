@@ -283,7 +283,7 @@ constexpr std::array<std::array<std::uint8_t, 12>, 32> SHIP_TYPE_NAMES = {{
 }};
 
 /// scanCodeToAscii: byte; ASCII for scan codes 00h-53h (FFh = ignore, 0Dh Enter, 00h Backspace), upper-case letters; used
-/// by ReadTextLine
+/// by TypedCharacter
 constexpr std::array<std::uint8_t, 84> SCAN_CODE_TO_ASCII = {
   0xFF, 0xFF, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, // [0]
   0x37, 0x38, 0x39, 0x30, 0x2D, 0x3D, 0x00, 0xFF, // [8]

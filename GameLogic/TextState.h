@@ -15,11 +15,11 @@ struct TextState
   std::uint8_t bountyText[17];
   /// 'CLASS: 1234567 TYPE: 12345678901'; ShowShipIdentity fills the fields of 7 and 11 characters
   std::uint8_t shipIdentityText[33];
-  /// cursor glyph, a space and a zero: printed after the text by RedrawInputLine; ToggleInputCursor flips the first byte
+  /// cursor glyph, a space and a zero, which the original's typed line printed after the text; nothing writes it since D10 (ADR-067)
   std::uint8_t inputCursorText[3];
-  /// ReadTextLine's countdown, 300 timer ticks per cursor toggle
+  /// the original's typed line's countdown, 300 timer ticks per cursor toggle; nothing writes it since D10
   std::uint16_t cursorBlinkTicks;
-  /// characters ReadTextLine may still accept
+  /// characters the original's typed line could still accept; nothing writes it since D10
   std::uint8_t inputCharsLeft;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.

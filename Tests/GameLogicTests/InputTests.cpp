@@ -16,7 +16,7 @@ namespace
 // A key's release: its code with bit 7 set.
 constexpr std::uint8_t BREAK = 0x80;
 
-// inputDevice as the disc menu sets it.
+// inputDevice as D10 sets it.
 constexpr std::uint8_t MOUSE_DEVICE = 2;
 
 // The twin's mouse (Elite::Mouse, a twin made with mousePresent): moved _acrossMickeys right and _downMickeys down, which the
@@ -70,13 +70,13 @@ public:
     rig.Play("key F2; wait 0.5\nkey F6; wait 1\ndigest briefing\nkey space; wait 1\ndigest status");
   }
 
-  // Flight steered by the mouse, with the machine's own driver loaded (ADR-008 item 8, D20): M at the disc menu, which takes the
-  // mouse only with a driver; the launch; the mouse moved right and down, then further left and up, which ReadMouseSteering turns
+  // Flight steered by the mouse, with the machine's own driver loaded (ADR-008 item 8, D20): Input device's Mouse at D10, which takes
+  // the mouse only with one attached; the launch; the mouse moved right and down, then further left and up, which ReadMouseSteering turns
   // into rates that stay until it moves again; and the left button held, which fires the laser.
   TEST_METHOD(MouseSteersFlight)
   {
     TwinRig rig("TwinMouseFlight", {.mousePresent = true});
-    rig.Play("key space; wait 4\nkey Escape; wait 0.3\nkey m; wait 0.3\ndigest mouse");
+    rig.Play("key space; wait 4\nkey Escape; wait 0.3\nkey 6; key Down; key Return; wait 0.3\ndigest mouse");
     Assert::AreEqual(MOUSE_DEVICE, TwinByte(rig, &Elite::SaveLoadState::inputDevice), L"the mouse selected");
     rig.Play("key F1; wait 1\ndigest launched");
     MoveTwinMouse(rig, 0x100, 0x100);

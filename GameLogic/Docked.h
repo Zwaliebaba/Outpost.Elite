@@ -95,9 +95,8 @@ void DrawFrameSides(GameState& _state, std::uint16_t _cell, std::uint16_t _rows,
 void DrawFrameRow(GameState& _state, std::uint16_t _cell, std::uint16_t _value);
 
 /// RunTitleAndDocked: unless titleShown, the title (RunTitle) until a key, the credits and a new game; then the
-/// docked screens (DockedKeyDispatch) from the status screen, or from the disc menu after a disk request, until F1 or the
-/// disc menu leaves for the disk. Returns whether the disc menu left for the disk, through LeaveGameLoopForDisk (DiscMenuExit);
-/// otherwise F1 ended them. Waits as a rule (ADR-015).
+/// docked screens (DockedKeyDispatch) from the status screen, or from D10 after a disk request, until F1 or D10 leaves for the
+/// disk. Returns whether D10 left for the disk, through LeaveGameLoopForDisk (DiscExit); otherwise F1 ended them. Waits as a rule (ADR-015).
 [[nodiscard]] Task<bool> RunTitleAndDocked(GameState& _state, Host& _host);
 
 } // namespace Elite

@@ -18,8 +18,8 @@ namespace Elite
 /// shades, box-drawing pieces and blocks 0xB0-0xDF. That covers every character the reference
 /// can put in text mode: the docked screens' strings, which are printable ASCII only; the frame
 /// DrawDockedFrame draws from 0xBA, 0xCD and the corners and tees (0xB9,
-/// 0xBB, 0xBC, 0xC8, 0xC9, 0xCC); and the input cursor 0xDB that ToggleInputCursor
-/// makes in text mode. Every other code point, 0x01-0x1F, 0x7F-0xAF and 0xE0-0xFE, is not drawn
+/// 0xBB, 0xBC, 0xC8, 0xC9, 0xCC); and the input cursor 0xDB that the original's typed
+/// line made in text mode. Every other code point, 0x01-0x1F, 0x7F-0xAF and 0xE0-0xFE, is not drawn
 /// and renders as a hollow box, so that a gap shows on the screen instead of passing for text.
 ///
 /// A glyph is 8 rows of 8 dots. In a row's byte, bit 7 is the leftmost dot and a set bit is lit.

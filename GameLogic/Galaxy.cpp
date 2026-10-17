@@ -599,7 +599,7 @@ FindResult FindTypedSystem(GameState& _state)
   }
 
   // The name echoed for the error message and upper-cased in place, a space after it; the count to compare its length,
-  // counting the space when there is room for it. ReadTextLine leaves a NUL within findInput's nine bytes.
+  // counting the space when there is room for it. TypeFindInput leaves a NUL within findInput's nine bytes.
   const std::span<std::uint8_t> echo(_state.Data().galaxy.findInputEcho);
   std::uint16_t length = 0;
   for (;;)

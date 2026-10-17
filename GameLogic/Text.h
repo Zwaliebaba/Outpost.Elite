@@ -188,30 +188,12 @@ void PrintTextLines(GameState& _state, std::string_view _texts, std::uint16_t _c
   return std::string_view(reinterpret_cast<const char*>(_bytes.data()), _bytes.size());
 }
 
-/// What a key types, as ReadTextLine reads it: Enter (TYPED_ENTER), Backspace (TYPED_BACKSPACE), or a character, a letter lower
+/// What a key types, as Find and D10's name read it: Enter (TYPED_ENTER), Backspace (TYPED_BACKSPACE), or a character, a letter lower
 /// case unless Shift was held; nothing for a key with no character.
 inline constexpr std::uint8_t TYPED_ENTER = 0x0D;
 inline constexpr std::uint8_t TYPED_BACKSPACE = 0x00;
 
 /// The character _key types, by scanCodeToAscii, or nothing.
 [[nodiscard]] std::optional<std::uint8_t> TypedCharacter(const KeyPress& _key) noexcept;
-
-/// ReadTextLine: a line typed into _buffer, a buffer of the data segment of at least _most + 1 bytes, at most _most
-/// characters, after ResetKeyboard and with textPaperPattern cleared; echoed by RedrawInputLine at B800:_cell, with a
-/// cursor that blinks every 300 timer ticks. Enter ends it, Backspace deletes, a key with no character does nothing, and
-/// letters are lower case unless Shift is held. The buffer holds a NUL after it. Waits for keys as a rule (ADR-015).
-[[nodiscard]] Task<void> ReadTextLine(GameState& _state, Host& _host, std::span<std::uint8_t> _buffer, std::uint8_t _most,
-                                      std::uint16_t _cell);
-
-/// ToggleInputCursor: the input cursor's character flips between blank and block.
-void ToggleInputCursor(GameState& _state);
-
-/// RedrawInputLine: a NUL after the _length characters typed into _buffer, then they and inputCursorText after
-/// them, each by PrintStringForLayout from B800:_cell in the ink FFFFh.
-void RedrawInputLine(GameState& _state, std::span<std::uint8_t> _buffer, std::uint16_t _length, std::uint16_t _cell);
-
-/// PrintStringForLayout: _text by PrintTextModeString at B800:_cell in the text layout, and by DrawScreenString in
-/// _ink at B800:_cell otherwise. Returns the place after its last character.
-std::uint16_t PrintStringForLayout(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _cell);
 
 } // namespace Elite

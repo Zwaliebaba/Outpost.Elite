@@ -17,7 +17,7 @@ using Commander = Elite::CommanderState;
 // From the title: the credits, then the status screen.
 constexpr std::string_view TO_THE_DOCK = "key space; wait 3.2";
 
-// The status screen ignores its own F6 (D96), so the disc menu first and back.
+// The status screen ignores its own F6 (D96), so D10 first and back.
 constexpr std::string_view STATUS_AGAIN = "key Escape; wait 0.2\nkey F6; wait 0.2\n";
 
 // Sets the byte _member names to _value on the twin.
@@ -38,13 +38,12 @@ std::string StatusAgain(std::string_view _steps)
   return std::string(STATUS_AGAIN) + std::string(_steps);
 }
 
-// From the title: the credits, the status screen, the disc menu, and JAMESON loaded.
-constexpr std::string_view LOAD_JAMESON = "key space; wait 4\nkey Escape; wait 0.3\nkey l; wait 0.3\n"
-                                          "key j; key a; key m; key e; key s; key o; key n; key Return; wait 0.5";
+// From the title: the credits, the status screen, D10, and JAMESON loaded from its catalogue.
+constexpr std::string_view LOAD_JAMESON = "key space; wait 4\nkey Escape; wait 0.3\nkey 1; wait 0.3\nkey Return; wait 0.5";
 
 // Replays/_source, a prepared commander, copied into the twin's DOS directory as JAMESON.CDR, as a
-// replay's file step copies one (DirectoryFileStore gives a file it did not write attribute 0 and DOS's stamp), and loaded at the
-// disc menu as the game loads its own saves.
+// replay's file step copies one (DirectoryFileStore gives a file it did not write attribute 0 and DOS's stamp), and loaded at D10
+// as the game loads its own saves.
 void LoadCommander(TwinRig& _rig, std::string_view _source)
 {
   const std::filesystem::path source = Elite::FindInRepository(std::filesystem::path("Replays") / _source);

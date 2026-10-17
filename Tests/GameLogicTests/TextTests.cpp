@@ -146,24 +146,10 @@ void Identify(TwinRig& _rig, std::string_view _label, std::string_view _classNam
 
 } // namespace
 
-// Twins for a text line's editing and the ship identity's labels, which no replay shows (ADR-016).
+// Twins for the ship identity's labels, which no replay shows (ADR-016).
 TEST_CLASS(TextTests)
 {
 public:
-  // A line typed at the disc menu's Load Commander: a capital with Shift, one character more than fits, every one deleted and
-  // one Backspace more, then Enter while the cursor shows. (The galactic chart's F typed it until the chart's Find took its
-  // place, ADR-065.)
-  TEST_METHOD(ReadTextLineAgreesWhileEditing)
-  {
-    TwinRig rig("TwinReadTextLine");
-    rig.Play("key space; wait 4\nkey Escape; wait 0.3\nkey l; wait 0.3\n"
-             "down Shift_L; wait 0.02; key l; wait 0.02; up Shift_L; wait 0.02\n"
-             "key a; key v; key e; key q; wait 0.02; key q; key q; key q; key q; wait 0.05\n"
-             "key BackSpace; key BackSpace; key BackSpace; key BackSpace; key BackSpace; wait 0.02\n"
-             "key BackSpace; key BackSpace; key BackSpace; key BackSpace; key BackSpace; wait 0.05\n"
-             "key Return; wait 0.1\nkey Escape; wait 0.3\ndigest closed");
-  }
-
   // ShowShipIdentity's labels other than Debris (ADR-008 item 8, D20): one ship of each class it names, each made by the game's
   // own spawner, put ahead of the player launched from Lave, and identified with I. A trader; a Hermit, the trader that is a
   // rock; a Viper, Police whatever its class; a hunter; a Shuttle, Simple, of class 3 but no rock; a wolf; and the missile the

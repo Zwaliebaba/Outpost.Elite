@@ -7,6 +7,7 @@
 #include "Cockpit.h"
 #include "DirectoryFileStore.h"
 #include "DockedChart.h"
+#include "DockedDisc.h"
 #include "DockedEquip.h"
 #include "DockedFrame.h"
 #include "DockedMarket.h"
@@ -72,6 +73,11 @@ bool ClickDocked(Elite::Host& _host, Engine::Point _point)
   const Elite::ChartView* const chart = _host.ShownChart();
   if (const std::optional<DockedKey> key = DockedFrame::KeyAt(_point))
   {
+    if (*key == DockedKey::Disc && _host.ShownDisc() != nullptr)
+    {
+      // D10's own key, lit: Esc would close it.
+      return false;
+    }
     const std::optional<std::uint8_t> code = chart != nullptr && chart->flight ? DockedChart::FlightScanCodeOf(*key) : ScanCodeOf(*key);
     if (code)
     {
@@ -103,13 +109,21 @@ bool ClickDocked(Elite::Host& _host, Engine::Point _point)
       _host.Click(*click);
     }
   }
+  else if (const Elite::DiscView* const disc = _host.ShownDisc())
+  {
+    if (const std::optional<Elite::DiscClick> click = DockedDisc::ControlAt(*disc, _point))
+    {
+      _host.Click(*click);
+    }
+  }
   return false;
 }
 
 // Whether a screen the shell draws in the docked frame is shown, which a click acts on.
 [[nodiscard]] bool DockedFrameShown(const Elite::Host& _host) noexcept
 {
-  return _host.ShownMarket() != nullptr || _host.ShownEquip() != nullptr || _host.ShownStatus() != nullptr || _host.ShownChart() != nullptr;
+  return _host.ShownMarket() != nullptr || _host.ShownEquip() != nullptr || _host.ShownStatus() != nullptr ||
+         _host.ShownChart() != nullptr || _host.ShownDisc() != nullptr;
 }
 
 // Initialises COM on this thread for XAudio2, and undoes it.
@@ -315,8 +329,8 @@ int Application::Run(HINSTANCE _instance, bool _cheat)
     platform->Sound().DiscardBefore(Elite::Speaker::FirstSampleStart(audioTime, SAMPLE_RATE));
 
     // On the market, D01 (ADR-058); on the shipyard, D02 and D03 (ADR-064); on the status screen, D08 (ADR-063); on a chart, docked
-    // or in flight, D04 to D07 (ADR-065); in flight and on the title, the cockpit with the space view in its window (ADR-034, D63,
-    // D64); on every other screen, the CGA picture.
+    // or in flight, D04 to D07 (ADR-065); on Disc access, D10 (ADR-067); in flight and on the title, the cockpit with the space view
+    // in its window (ADR-034, D63, D64); on every other screen, the CGA picture.
     bool presented = false;
     const Elite::FlightSnapshot& latest = platform->LatestFlightSnapshot();
     if (const Elite::MarketView* const market = platform->ShownMarket())
@@ -337,6 +351,11 @@ int Application::Run(HINSTANCE _instance, bool _cheat)
     else if (const Elite::ChartView* const chart = platform->ShownChart())
     {
       DockedChart::Draw(*chart, pointer, measure, canvas);
+      presented = renderer.Present({}, DOCKED_BACKGROUND, nullptr, &canvas);
+    }
+    else if (const Elite::DiscView* const disc = platform->ShownDisc())
+    {
+      DockedDisc::Draw(*disc, pointer, measure, canvas);
       presented = renderer.Present({}, DOCKED_BACKGROUND, nullptr, &canvas);
     }
     else if (latest.sequence != 0 && platform->SpaceViewShown())

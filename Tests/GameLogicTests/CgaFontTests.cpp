@@ -13,7 +13,7 @@ namespace
 {
 
 // The frame DrawDockedFrame draws (0xBA, 0xCD and the six corners and tees) and the
-// block ToggleInputCursor makes in text mode.
+// block the original's typed line made in text mode.
 constexpr std::uint8_t FRAME_AND_CURSOR_CHARACTERS[] = {0xBA, 0xCD, 0xC9, 0xBB, 0xCC, 0xB9, 0xC8, 0xBC, 0xDB};
 
 } // namespace

@@ -82,6 +82,8 @@
     <ClInclude Include="CgaFont.h" />
     <ClInclude Include="ChartScreen.h" />
     <ClInclude Include="ChartView.h" />
+    <ClInclude Include="DiscScreen.h" />
+    <ClInclude Include="DiscView.h" />
     <ClInclude Include="Combat.h" />
     <ClInclude Include="CombatState.h" />
     <ClInclude Include="CombatTables.h" />
@@ -143,7 +145,6 @@
     <ClInclude Include="Replay.h" />
     <ClInclude Include="SaveLoad.h" />
     <ClInclude Include="SaveLoadState.h" />
-    <ClInclude Include="SaveLoadTables.h" />
     <ClInclude Include="Scene.h" />
     <ClInclude Include="SceneState.h" />
     <ClInclude Include="SceneTables.h" />
@@ -183,6 +184,7 @@
     <ClCompile Include="Cga.cpp" />
     <ClCompile Include="CgaFont.cpp" />
     <ClCompile Include="ChartScreen.cpp" />
+    <ClCompile Include="DiscScreen.cpp" />
     <ClCompile Include="Combat.cpp" />
     <ClCompile Include="DirectoryFileStore.cpp" />
     <ClCompile Include="Docked.cpp" />

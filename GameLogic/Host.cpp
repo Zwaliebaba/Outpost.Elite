@@ -299,6 +299,19 @@ void Host::HideEquip() noexcept
   m_equipClicks.clear();
 }
 
+void Host::ShowDisc(DiscView _view)
+{
+  _view.sequence = m_discView.sequence + 1;
+  m_discView = std::move(_view);
+  m_discShown = true;
+}
+
+void Host::HideDisc() noexcept
+{
+  m_discShown = false;
+  m_discClicks.clear();
+}
+
 void Host::ShowStatus(StatusView _view)
 {
   _view.sequence = m_statusView.sequence + 1;
@@ -365,6 +378,25 @@ std::optional<EquipClick> Host::TakeEquipClick() noexcept
   }
   const EquipClick click = m_equipClicks.front();
   m_equipClicks.pop_front();
+  return click;
+}
+
+void Host::Click(const DiscClick& _click)
+{
+  if (m_discShown)
+  {
+    m_discClicks.push_back(_click);
+  }
+}
+
+std::optional<DiscClick> Host::TakeDiscClick() noexcept
+{
+  if (m_discClicks.empty())
+  {
+    return std::nullopt;
+  }
+  const DiscClick click = m_discClicks.front();
+  m_discClicks.pop_front();
   return click;
 }
 
