@@ -61,7 +61,7 @@ D83 moves the cursor by the mouse alone, and D109 by a click or a drag, never by
      - The top bar says `IN FLIGHT · LAVE SYSTEM`, with `· HYPERSPACE COUNTDOWN` in light red while it runs, and the banner `HYPERSPACE 7 TARGET LOCKED` stands beside the legend.
      - The key bar reads `F1 FRONT`, with ESC DISC and F3 EQUIP off.
      - A click on the bar sends the flight's own key for the screen the bar names: F1, F8, F5, F6 and F9.
-   - **The mouse** (D109): a press on the chart sends its point, and a drag sends each new point under it. `Engine::Window` now reports the button's release and holds the mouse's capture while it is down. Hovering moves nothing.
+   - **The mouse** (D109): a press on the chart sends its point, and a drag sends each new point under it. `Engine::Window` now reports the button's release and holds the mouse's capture while it is down. Hovering moves nothing of the game's; the cursor's cross is drawn at the pointer while it is on the chart, and at the cursor otherwise (D116, amended 2026-10-17).
    - **The words the drawings leave open:**
      - `CURRENT SYSTEM` is the badge when the target is the system the ship is at (D113).
      - `WITCH SPACE` takes the system's name in witch space, this ADR's.

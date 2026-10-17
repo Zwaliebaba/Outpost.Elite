@@ -140,6 +140,20 @@ constexpr std::uint32_t BACKGROUND = 0x070605;
   return _click && _click->x == _x && _click->row == _row;
 }
 
+// Whether _canvas holds the cursor's cross about _middle: its left arm ends 10 units short of it.
+[[nodiscard]] bool CrossAt(const Engine::Canvas& _canvas, Engine::Point _middle)
+{
+  for (const Engine::CanvasShape& shape : _canvas.Shapes())
+  {
+    if (shape.kind == Engine::ShapeKind::Line && shape.params[0] == _middle.x - 32.0f && shape.params[1] == _middle.y &&
+        shape.params[2] == _middle.x - 10.0f && shape.params[3] == _middle.y)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
 } // namespace
 
 // D04 to D07, the galactic and the short-range chart, as the shell draws them (ADR-065, D82, D98 to D100, D109, D110): on WARP,
@@ -238,6 +252,23 @@ public:
     Assert::AreEqual(340.0f, edge.x - 800.0f, 0.01f, L"7.0 light years is the drawn ring's 340 units");
   }
 
+  // The cross follows the pointer while it is on the chart, and stands at the cursor while it is off it; the cursor and the
+  // target move only on a click (D116).
+  TEST_METHOD(TheCrossFollowsThePointerOnTheChart)
+  {
+    const Elite::ChartView view = GalacticAsDrawn();
+    const Engine::Point cursor = Outpost::DockedChart::PlaceOf(view.kind, view.cursorX, view.cursorRow);
+    const Engine::Point onChart{.x = 700.0f, .y = 500.0f};
+    Engine::Canvas canvas;
+    const Outpost::TextMeasure measure = [](const Engine::CanvasText&) { return 0.0f; };
+    Outpost::DockedChart::Draw(view, onChart, measure, canvas);
+    Assert::IsTrue(CrossAt(canvas, onChart) && !CrossAt(canvas, cursor), L"at the pointer on the chart");
+    Outpost::DockedChart::Draw(view, Engine::Point{.x = 1500.0f, .y = 500.0f}, measure, canvas);
+    Assert::IsTrue(CrossAt(canvas, cursor), L"at the cursor with the pointer on the side panel");
+    Outpost::DockedChart::Draw(view, std::nullopt, measure, canvas);
+    Assert::IsTrue(CrossAt(canvas, cursor), L"at the cursor with no pointer");
+  }
+
   // In flight a click on the bar sends the flight's own key for the screen it names (D110); docked keys are the frame's.
   TEST_METHOD(TheBarSendsTheFlightsKeysInFlight)
   {
@@ -261,11 +292,11 @@ public:
     view.target.inRange = false;
     view.target.facts.distanceTenths = 83;
     view.target.shortTenths = 13;
-    Assert::AreEqual(std::wstring(L"OUT OF RANGE · 1.3 LY SHORT"), DockedChart::BadgeOf(view));
+    Assert::AreEqual(std::wstring(L"OUT OF RANGE \u00B7 1.3 LY SHORT"), DockedChart::BadgeOf(view));
     view.target.facts.distanceTenths = 0;
     Assert::AreEqual(std::wstring(L"CURRENT SYSTEM"), DockedChart::BadgeOf(view));
     view.locked = true;
-    Assert::AreEqual(std::wstring(L"LOCKED · IN RANGE"), DockedChart::BadgeOf(view));
+    Assert::AreEqual(std::wstring(L"LOCKED \u00B7 IN RANGE"), DockedChart::BadgeOf(view));
     Assert::AreEqual(std::wstring(L"16 900"), DockedChart::Thousands(16900));
     Assert::AreEqual(std::wstring(L"980"), DockedChart::Thousands(980));
     Assert::AreEqual(std::wstring(L"1 234 567"), DockedChart::Thousands(1234567));

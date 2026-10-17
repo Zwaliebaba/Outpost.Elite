@@ -145,7 +145,7 @@ void Header(std::wstring_view _text, float _x, Engine::Align _align, Engine::Can
 void List(const Elite::EquipView& _view, std::optional<Engine::Point> _pointer, Engine::Canvas& _canvas)
 {
   DockedFrame::Panel(TABLE, true, true, _canvas);
-  Header(std::format(L"EQUIPMENT · TECH LEVEL {} · {} ITEMS", _view.techLevel, _view.rows), NAME_X, Engine::Align::Left, _canvas);
+  Header(std::format(L"EQUIPMENT \u00B7 TECH LEVEL {} \u00B7 {} ITEMS", _view.techLevel, _view.rows), NAME_X, Engine::Align::Left, _canvas);
   // A right-aligned header's spacing after its last letter is outside the column: its anchor is moved out by it.
   Header(L"BUY", BUY_RIGHT + HEADER_SPACING, Engine::Align::Right, _canvas);
   Header(L"SELL", SELL_RIGHT + HEADER_SPACING, Engine::Align::Right, _canvas);
@@ -169,7 +169,7 @@ void List(const Elite::EquipView& _view, std::optional<Engine::Point> _pointer, 
                  text);
     _canvas.Text(DockedFrame::Tenths(item.buyTenths), Engine::Font::Number, size, 0.0f, Engine::Point{.x = BUY_RIGHT, .y = y},
                  Engine::Align::Right, text);
-    _canvas.Text(row == FUEL_ROW ? std::wstring(L"—") : DockedFrame::Tenths(item.sellTenths), Engine::Font::Number, size, 0.0f,
+    _canvas.Text(row == FUEL_ROW ? std::wstring(L"\u2014") : DockedFrame::Tenths(item.sellTenths), Engine::Font::Number, size, 0.0f,
                  Engine::Point{.x = SELL_RIGHT, .y = y}, Engine::Align::Right, text);
     _canvas.Text(DockedEquip::FittedText(_view, row), Engine::Font::Number, size, 0.0f, Engine::Point{.x = FITTED_RIGHT, .y = y},
                  Engine::Align::Right, text);
@@ -193,7 +193,7 @@ void SelectedPanel(const Elite::EquipView& _view, std::optional<Engine::Point> _
   _canvas.Text(DockedNames::ListItem(row), Engine::Font::Label, 40.0f, 0.0f, Engine::Point{.x = INSIDE_LEFT, .y = 189.5f},
                Engine::Align::Left, AMBER_LIGHT);
   Detail(L"Buy", DockedFrame::Tenths(item.buyTenths), 238.5f, _canvas);
-  Detail(L"Sell", row == FUEL_ROW ? std::wstring(L"—") : DockedFrame::Tenths(item.sellTenths), 270.5f, _canvas);
+  Detail(L"Sell", row == FUEL_ROW ? std::wstring(L"\u2014") : DockedFrame::Tenths(item.sellTenths), 270.5f, _canvas);
   Detail(L"Fitted", DockedEquip::FittedText(_view, row), 302.5f, _canvas);
 
   // [B] BUY is lit as the screen's first action, as drawn, unless the pointer is on [S] SELL; each is off when it would be refused.
@@ -253,7 +253,7 @@ void Picker(const Elite::EquipView& _view, std::optional<Engine::Point> _pointer
 
   // The title (D03, D103), broken to fit beside ESC CANCEL.
   const std::wstring title =
-    std::format(L"{} {} — CHOOSE MOUNT", picker.selling ? L"SELL" : L"BUY", Upper(DockedNames::ListItem(picker.row)));
+    std::format(L"{} {} \u2014 CHOOSE MOUNT", picker.selling ? L"SELL" : L"BUY", Upper(DockedNames::ListItem(picker.row)));
   float y = PICKER_TITLE_Y;
   for (const std::wstring& line : Wrapped(title, PICKER_TITLE_WIDTH, PICKER_TITLE_SIZE, PICKER_TITLE_SPACING, _measure))
   {
@@ -320,11 +320,12 @@ void DockedEquip::Draw(const Elite::EquipView& _view, std::optional<Engine::Poin
 {
   _canvas.Clear();
   const std::wstring system = Upper(std::wstring(_view.systemName.begin(), _view.systemName.end()));
-  DockedFrame::Draw(DockedFrame::Desc{.location = std::format(L"DOCKED · {} STATION · {}", _view.dodo ? L"DODO" : L"CORIOLIS", system),
-                                      .title = L"EQUIP SHIP",
-                                      .creditsTenths = _view.creditsTenths,
-                                      .lit = DockedKey::Equip},
-                    _pointer, _measure, _canvas);
+  DockedFrame::Draw(
+    DockedFrame::Desc{.location = std::format(L"DOCKED \u00B7 {} STATION \u00B7 {}", _view.dodo ? L"DODO" : L"CORIOLIS", system),
+                      .title = L"EQUIP SHIP",
+                      .creditsTenths = _view.creditsTenths,
+                      .lit = DockedKey::Equip},
+    _pointer, _measure, _canvas);
   List(_view, _pointer, _canvas);
   SelectedPanel(_view, _pointer, _canvas);
   if (_view.picker.open)
@@ -338,8 +339,8 @@ void DockedEquip::Draw(const Elite::EquipView& _view, std::optional<Engine::Poin
                        IsSuccess(_view.message.notice) ? DockedFrame::Tone::Success : DockedFrame::Tone::Refusal, words.headline,
                        words.detail, _canvas);
   }
-  _canvas.Text(L"↑ ↓ or click to select · B buy · S sell · 1–4 choose laser mount ·", Engine::Font::Label, 17.0f, 0.0f, FOOTER,
-               Engine::Align::Left, LABEL);
+  _canvas.Text(L"\u2191 \u2193 or click to select \u00B7 B buy \u00B7 S sell \u00B7 1\u20134 choose laser mount \u00B7",
+               Engine::Font::Label, 17.0f, 0.0f, FOOTER, Engine::Align::Left, LABEL);
   _canvas.Text(L"Esc cancel", Engine::Font::Label, 17.0f, 0.0f, Engine::Point{.x = FOOTER.x, .y = FOOTER.y + FOOTER_LINE},
                Engine::Align::Left, LABEL);
 }
@@ -401,12 +402,12 @@ std::wstring DockedEquip::FittedText(const Elite::EquipView& _view, std::uint8_t
     {
       if ((item.mounts & (1u << mount)) != 0)
       {
-        mounts += (mounts.empty() ? L"" : L" · ") + Upper(DockedNames::Mount(mount));
+        mounts += (mounts.empty() ? L"" : L" \u00B7 ") + Upper(DockedNames::Mount(mount));
       }
     }
-    return mounts.empty() ? std::wstring(L"—") : mounts;
+    return mounts.empty() ? std::wstring(L"\u2014") : mounts;
   }
-  return item.count != 0 ? std::wstring(L"FITTED") : std::wstring(L"—");
+  return item.count != 0 ? std::wstring(L"FITTED") : std::wstring(L"\u2014");
 }
 
 DockedEquip::Words DockedEquip::WordsOf(const Elite::EquipMessage& _message)
@@ -420,17 +421,18 @@ DockedEquip::Words DockedEquip::WordsOf(const Elite::EquipMessage& _message)
     if (_message.row == FUEL_ROW)
     {
       return Words{L"FUEL TANKS FILLED",
-                   std::format(L"{} LIGHT YEARS · {} CR", LightYears(_message.fuelTenths), DockedFrame::Tenths(_message.tenths))};
+                   std::format(L"{} LIGHT YEARS \u00B7 {} CR", LightYears(_message.fuelTenths), DockedFrame::Tenths(_message.tenths))};
     }
     return Words{std::format(L"BOUGHT {}", name), std::format(L"{} CR", DockedFrame::Tenths(_message.tenths))};
   case Elite::EquipNotice::Sold:
     return Words{std::format(L"SOLD {}", name), std::format(L"{} CR", DockedFrame::Tenths(_message.tenths))};
   case Elite::EquipNotice::LaserFitted:
-    return Words{std::format(L"{} FITTED", name), _message.tradedIn
-                                                    ? std::format(L"{} · {} TRADED IN", MountOf(_message.mount), NameOf(_message.tradedRow))
-                                                    : MountOf(_message.mount)};
+    return Words{std::format(L"{} FITTED", name),
+                 _message.tradedIn ? std::format(L"{} \u00B7 {} TRADED IN", MountOf(_message.mount), NameOf(_message.tradedRow))
+                                   : MountOf(_message.mount)};
   case Elite::EquipNotice::LaserSold:
-    return Words{std::format(L"SOLD {}", name), std::format(L"{} · {} CR", MountOf(_message.mount), DockedFrame::Tenths(_message.tenths))};
+    return Words{std::format(L"SOLD {}", name),
+                 std::format(L"{} \u00B7 {} CR", MountOf(_message.mount), DockedFrame::Tenths(_message.tenths))};
   case Elite::EquipNotice::FuelFull:
     return Words{L"FUEL TANKS FULL", std::format(L"{} LIGHT YEARS", LightYears(_message.fuelTenths))};
   case Elite::EquipNotice::NoFuel:

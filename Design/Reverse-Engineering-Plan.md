@@ -525,6 +525,7 @@ After D44, no replay reaches the docked screens. Their rules are functions with 
 | D113 | The side panel's badge when the target is the system the ship is at, which no drawing shows (raised with T10, 2026-10-17) | `CURRENT SYSTEM`, grey. | **As recommended** (2026-10-17). |
 | D114 | Where `HYPERSPACE 7 TARGET LOCKED` goes, which D07 draws over the legend (raised with T13, 2026-10-17) | Beside the legend, between it and the header, clear of both. | **As recommended** (2026-10-17). |
 | D115 | `hyperspace-and-fight`'s recorded fight, which kills a pirate once a click leaves no launch roll (raised with T5, 2026-10-17) | Accept it as re-recorded; the replay and ADR-065 say why. | **As recommended** (2026-10-17). |
+| D116 | Whether the charts' cross follows the mouse as it hovers, raised by the owner on playing D04 (2026-10-17) | The cursor and the target follow the hover on both charts, a click no longer needed. | **The drawn cross only** (2026-10-17): the cross is drawn at the pointer while it is on the chart; the cursor, the bracketed target and the side panel move only on a click or a drag, as D109 rules. ADR-065 records it. |
 
 ## 9. ADRs this plan produces
 

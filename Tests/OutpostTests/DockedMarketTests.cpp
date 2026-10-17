@@ -168,19 +168,19 @@ public:
     const auto words = [](const Elite::MarketMessage& _message)
     {
       const Outpost::DockedMarket::Words found = Outpost::DockedMarket::WordsOf(_message);
-      return found.detail.empty() ? found.headline : found.headline + L" — " + found.detail;
+      return found.detail.empty() ? found.headline : found.headline + L" \u2014 " + found.detail;
     };
-    Assert::AreEqual(std::wstring(L"NOT ENOUGH CREDITS — 281.1 CR NEEDED, 41.2 CR AVAILABLE"),
+    Assert::AreEqual(std::wstring(L"NOT ENOUGH CREDITS \u2014 281.1 CR NEEDED, 41.2 CR AVAILABLE"),
                      words(Elite::MarketMessage{.notice = Elite::MarketNotice::NotEnoughCredits, .tenths = 2811, .creditsTenths = 412}));
-    Assert::AreEqual(std::wstring(L"CARGO HOLD FULL — 2 T FREE OF 20 T"),
+    Assert::AreEqual(std::wstring(L"CARGO HOLD FULL \u2014 2 T FREE OF 20 T"),
                      words(Elite::MarketMessage{.notice = Elite::MarketNotice::HoldFull, .freeUnits = 2, .capacityUnits = 20}));
-    Assert::AreEqual(std::wstring(L"ONLY 9 T IN STOCK — YOU ASKED FOR 12 T"),
+    Assert::AreEqual(std::wstring(L"ONLY 9 T IN STOCK \u2014 YOU ASKED FOR 12 T"),
                      words(Elite::MarketMessage{.notice = Elite::MarketNotice::NotEnoughInStock, .amount = 12, .stock = 9}));
-    Assert::AreEqual(std::wstring(L"ALIEN ITEMS — NOT FOR SALE AT THIS STATION"),
+    Assert::AreEqual(std::wstring(L"ALIEN ITEMS \u2014 NOT FOR SALE AT THIS STATION"),
                      words(Elite::MarketMessage{.notice = Elite::MarketNotice::NotForSale, .commodity = 16}));
     Assert::AreEqual(std::wstring(L"ONLY 2 T COMPUTERS IN THE HOLD"),
                      words(Elite::MarketMessage{.notice = Elite::MarketNotice::NotEnoughHeld, .commodity = 7, .amount = 3, .held = 2}));
-    Assert::AreEqual(std::wstring(L"BOUGHT 3 T FOOD — 8.4 CR"),
+    Assert::AreEqual(std::wstring(L"BOUGHT 3 T FOOD \u2014 8.4 CR"),
                      words(Elite::MarketMessage{.notice = Elite::MarketNotice::Bought, .commodity = 0, .amount = 3, .tenths = 84}));
   }
 };

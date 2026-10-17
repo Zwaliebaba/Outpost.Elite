@@ -257,8 +257,9 @@ void Stars(const Elite::ChartView& _view, Engine::Canvas& _canvas)
   }
 }
 
-// The current system at the centre of the fuel ring, the line to the target, the target bracketed with its name, and the cursor.
-void Marks(const Elite::ChartView& _view, Engine::Canvas& _canvas)
+// The current system at the centre of the fuel ring, the line to the target, the target bracketed with its name, and the cursor's
+// cross, at _pointer while it is on the chart.
+void Marks(const Elite::ChartView& _view, std::optional<Engine::Point> _pointer, Engine::Canvas& _canvas)
 {
   const Engine::Point current = DockedChart::PlaceOf(_view.kind, _view.currentX, _view.currentRow);
   const float scale = _view.kind == Elite::ChartKind::Galactic ? GALACTIC_UNIT : SHORT_RANGE_UNIT;
@@ -292,12 +293,15 @@ void Marks(const Elite::ChartView& _view, Engine::Canvas& _canvas)
   {
     Bracket(target, mark, _canvas);
     const std::wstring label =
-      _view.locked ? std::format(L"{} · LOCKED", NameOf(_view.target.facts.name))
-                   : std::format(L"{} · {} LY", NameOf(_view.target.facts.name), LightYears(_view.target.facts.distanceTenths));
+      _view.locked ? std::format(L"{} \u00B7 LOCKED", NameOf(_view.target.facts.name))
+                   : std::format(L"{} \u00B7 {} LY", NameOf(_view.target.facts.name), LightYears(_view.target.facts.distanceTenths));
     _canvas.Text(label, Engine::Font::Label, 19.0f, 3.0f, Engine::Point{.x = target.x + TARGET_LABEL.x, .y = target.y + TARGET_LABEL.y},
                  Engine::Align::Left, mark);
   }
-  Cursor(DockedChart::PlaceOf(_view.kind, _view.cursorX, _view.cursorRow), red ? ALERT : STAR, CURSOR_GAP, CURSOR_ARM, _canvas);
+  // The cross follows the pointer while it is on the chart; the cursor, and with it the target, moves only on a click (D109, D116).
+  const bool following = _pointer && DockedChart::ChartAt(_view.kind, *_pointer).has_value();
+  const Engine::Point cross = following ? *_pointer : DockedChart::PlaceOf(_view.kind, _view.cursorX, _view.cursorRow);
+  Cursor(cross, red ? ALERT : STAR, CURSOR_GAP, CURSOR_ARM, _canvas);
 }
 
 void Legend(const Elite::ChartView& _view, Engine::Canvas& _canvas)
@@ -314,9 +318,9 @@ void Legend(const Elite::ChartView& _view, Engine::Canvas& _canvas)
                3.0f);
   _canvas.Line(Engine::Point{.x = box.left + box.width, .y = box.top}, Engine::Point{.x = box.left + box.width, .y = box.top + box.height},
                1.0f, LABEL, 3.0f, 3.0f);
-  const std::array<const wchar_t*, 3> rows = {L"CURRENT SYSTEM — FIXED, CENTRE OF FUEL RING", L"CURSOR — MOVES FREELY",
-                                              _view.locked ? L"TARGET LOCKED — FIXED UNTIL THE JUMP"
-                                                           : L"NEAREST SYSTEM — LIVE, TARGETED ON CLOSE"};
+  const std::array<const wchar_t*, 3> rows = {L"CURRENT SYSTEM \u2014 FIXED, CENTRE OF FUEL RING", L"CURSOR \u2014 MOVES FREELY",
+                                              _view.locked ? L"TARGET LOCKED \u2014 FIXED UNTIL THE JUMP"
+                                                           : L"NEAREST SYSTEM \u2014 LIVE, TARGETED ON CLOSE"};
   for (std::size_t row = 0; row < rows.size(); ++row)
   {
     _canvas.Text(rows[row], Engine::Font::Label, 15.0f, 2.0f, Engine::Point{.x = LEGEND_TEXT_X, .y = LEGEND_ROWS[row]}, Engine::Align::Left,
@@ -347,7 +351,7 @@ void LockedBanner(const Elite::ChartView& _view, const TextMeasure& _measure, En
 void Find(const Elite::ChartView& _view, const TextMeasure& _measure, Engine::Canvas& _canvas)
 {
   const bool missing = _view.find == Elite::FindState::NotOnChart;
-  _canvas.Text(L"F · FIND SYSTEM", Engine::Font::Label, 15.0f, 3.0f, FIND_LABEL, Engine::Align::Left, AMBER);
+  _canvas.Text(L"F \u00B7 FIND SYSTEM", Engine::Font::Label, 15.0f, 3.0f, FIND_LABEL, Engine::Align::Left, AMBER);
   _canvas.Box(FIND_BOX, FIND_FILL);
   DockedFrame::Edge(FIND_BOX, missing ? ALERT : AMBER, _canvas);
   const std::wstring typed = Upper(Wide(_view.typed));
@@ -359,7 +363,7 @@ void Find(const Elite::ChartView& _view, const TextMeasure& _measure, Engine::Ca
     _canvas.Line(Engine::Point{.x = caret, .y = middle - 12.0f}, Engine::Point{.x = caret, .y = middle + 12.0f}, 2.0f, AMBER_LIGHT);
     return;
   }
-  const std::wstring words = std::format(L"{} — NOT ON THIS CHART", typed);
+  const std::wstring words = std::format(L"{} \u2014 NOT ON THIS CHART", typed);
   const Engine::Rect strip{.left = FIND_STRIP_LEFT,
                            .top = FIND_BOX.top,
                            .width = Measured(_measure, words, Engine::Font::Label, 18.0f, 3.0f) + 2.0f * FIND_STRIP_PADDING,
@@ -468,10 +472,10 @@ void SidePanel(const Elite::ChartView& _view, const TextMeasure& _measure, Engin
 {
   if (!_view.flight)
   {
-    return std::format(L"DOCKED · {} STATION · {}", _view.dodo ? L"DODO" : L"CORIOLIS", NameOf(_view.systemName));
+    return std::format(L"DOCKED \u00B7 {} STATION \u00B7 {}", _view.dodo ? L"DODO" : L"CORIOLIS", NameOf(_view.systemName));
   }
   const std::wstring where = _view.witchSpace ? std::wstring(L"WITCH SPACE") : NameOf(_view.systemName) + L" SYSTEM";
-  return _view.locked ? std::format(L"IN FLIGHT · {} · HYPERSPACE COUNTDOWN", where) : std::format(L"IN FLIGHT · {}", where);
+  return _view.locked ? std::format(L"IN FLIGHT \u00B7 {} \u00B7 HYPERSPACE COUNTDOWN", where) : std::format(L"IN FLIGHT \u00B7 {}", where);
 }
 
 } // namespace
@@ -489,10 +493,10 @@ void DockedChart::Draw(const Elite::ChartView& _view, std::optional<Engine::Poin
                                       .alert = _view.flight && _view.locked},
                     _pointer, _measure, _canvas);
   DockedFrame::Panel(MAP, true, false, _canvas);
-  _canvas.Text(galactic ? std::format(L"GALAXY {} · 256 SYSTEMS · RING = FUEL RANGE", _view.galaxyNumber)
-                        : std::wstring(L"LOCAL SPACE · RING = FUEL RANGE"),
+  _canvas.Text(galactic ? std::format(L"GALAXY {} \u00B7 256 SYSTEMS \u00B7 RING = FUEL RANGE", _view.galaxyNumber)
+                        : std::wstring(L"LOCAL SPACE \u00B7 RING = FUEL RANGE"),
                Engine::Font::Label, 15.0f, 4.0f, HEADER, Engine::Align::Left, LABEL);
-  Marks(_view, _canvas);
+  Marks(_view, _pointer, _canvas);
   Legend(_view, _canvas);
   if (_view.flight && _view.locked)
   {
@@ -563,7 +567,7 @@ std::wstring DockedChart::BadgeOf(const Elite::ChartView& _view)
 {
   if (_view.locked)
   {
-    return L"LOCKED · IN RANGE";
+    return L"LOCKED \u00B7 IN RANGE";
   }
   if (AtCurrent(_view))
   {
@@ -573,7 +577,7 @@ std::wstring DockedChart::BadgeOf(const Elite::ChartView& _view)
   {
     return L"IN RANGE";
   }
-  return std::format(L"OUT OF RANGE · {} LY SHORT", LightYears(_view.target.shortTenths));
+  return std::format(L"OUT OF RANGE \u00B7 {} LY SHORT", LightYears(_view.target.shortTenths));
 }
 
 std::wstring DockedChart::Thousands(std::uint32_t _value)

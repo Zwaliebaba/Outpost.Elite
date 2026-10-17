@@ -185,10 +185,10 @@ public:
     view.items[3].count = 1;
     Assert::AreEqual(std::wstring(L"7.0 LY"), Outpost::DockedEquip::FittedText(view, 1));
     Assert::AreEqual(std::wstring(L"3 / 4"), Outpost::DockedEquip::FittedText(view, 2));
-    Assert::AreEqual(std::wstring(L"—"), Outpost::DockedEquip::FittedText(view, 3));
+    Assert::AreEqual(std::wstring(L"\u2014"), Outpost::DockedEquip::FittedText(view, 3));
     Assert::AreEqual(std::wstring(L"FITTED"), Outpost::DockedEquip::FittedText(view, 4));
     Assert::AreEqual(std::wstring(L"FRONT"), Outpost::DockedEquip::FittedText(view, 5));
-    Assert::AreEqual(std::wstring(L"FRONT · LEFT · REAR"), Outpost::DockedEquip::FittedText(view, 6));
+    Assert::AreEqual(std::wstring(L"FRONT \u00B7 LEFT \u00B7 REAR"), Outpost::DockedEquip::FittedText(view, 6));
   }
 
   // D11's Equipment column, split at its dash.
@@ -197,21 +197,21 @@ public:
     const auto words = [](const Elite::EquipMessage& _message)
     {
       const Outpost::DockedEquip::Words split = Outpost::DockedEquip::WordsOf(_message);
-      return split.headline + L" — " + split.detail;
+      return split.headline + L" \u2014 " + split.detail;
     };
-    Assert::AreEqual(std::wstring(L"FUEL TANKS FULL — 7.0 LIGHT YEARS"),
+    Assert::AreEqual(std::wstring(L"FUEL TANKS FULL \u2014 7.0 LIGHT YEARS"),
                      words(Elite::EquipMessage{.notice = Elite::EquipNotice::FuelFull, .row = 1, .fuelTenths = 70}));
-    Assert::AreEqual(std::wstring(L"FOUR MISSILES ONLY — ALL PYLONS LOADED"),
+    Assert::AreEqual(std::wstring(L"FOUR MISSILES ONLY \u2014 ALL PYLONS LOADED"),
                      words(Elite::EquipMessage{.notice = Elite::EquipNotice::FourMissiles, .row = 2}));
-    Assert::AreEqual(std::wstring(L"FOUR LASERS — EVERY MOUNT ALREADY CARRIES A BEAM LASER"),
+    Assert::AreEqual(std::wstring(L"FOUR LASERS \u2014 EVERY MOUNT ALREADY CARRIES A BEAM LASER"),
                      words(Elite::EquipMessage{.notice = Elite::EquipNotice::FourLasers, .row = 6}));
-    Assert::AreEqual(std::wstring(L"TOO MUCH CARGO TO SELL THE EXTENSION — UNLOAD 6 T FIRST"),
+    Assert::AreEqual(std::wstring(L"TOO MUCH CARGO TO SELL THE EXTENSION \u2014 UNLOAD 6 T FIRST"),
                      words(Elite::EquipMessage{.notice = Elite::EquipNotice::TooMuchCargo, .row = 3, .tonnes = 6}));
     Assert::AreEqual(
-      std::wstring(L"NOT ENOUGH CREDITS — 1020.7 CR NEEDED, 41.2 CR AVAILABLE"),
+      std::wstring(L"NOT ENOUGH CREDITS \u2014 1020.7 CR NEEDED, 41.2 CR AVAILABLE"),
       words(Elite::EquipMessage{.notice = Elite::EquipNotice::NotEnoughCredits, .row = 6, .tenths = 10207, .creditsTenths = 412}));
     Assert::AreEqual(
-      std::wstring(L"BEAM LASER FITTED — REAR MOUNT · PULSE LASER TRADED IN"),
+      std::wstring(L"BEAM LASER FITTED \u2014 REAR MOUNT \u00B7 PULSE LASER TRADED IN"),
       words(Elite::EquipMessage{.notice = Elite::EquipNotice::LaserFitted, .row = 6, .mount = AFT, .tradedIn = true, .tradedRow = 5}));
   }
 };
