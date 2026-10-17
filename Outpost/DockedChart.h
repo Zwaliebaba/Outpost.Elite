@@ -20,7 +20,8 @@ namespace Outpost
 class DockedChart
 {
 public:
-  /// The chart of _view, with its frame, into _canvas: the key under _pointer, if any, shown as hovered.
+  /// The chart of _view, with its frame, into _canvas: the key under _pointer, if any, shown as hovered, and the cursor's cross at
+  /// _pointer while it is on the chart (D116).
   static void Draw(const Elite::ChartView& _view, std::optional<Engine::Point> _pointer, const TextMeasure& _measure,
                    Engine::Canvas& _canvas);
 

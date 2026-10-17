@@ -43,6 +43,9 @@ The rules, and the part of AGENTS.md each one enforces:
   spelling         §1 R11   No identifier (C++ or HLSL) and no source file name uses a spelling from
                             BRITISH_SPELLINGS. Comments and strings are prose and are not checked.
   pragma-warning   §4       No #pragma warning(disable ...) or (suppress ...) in C++ or HLSL.
+  ascii-literals   §4       No character past ASCII in a C++ string or character literal: MSVC reads a
+                            source without a BOM in the system code page, so '—' becomes 'â€”'. Escape
+                            it (\u2014). Comments are prose and are not checked.
   project-xml      §2       A project, filters or solution file that cannot be parsed or evaluated.
 
 What it does not do: follow an Import (a setting must be stated in the project to count, R16), or
@@ -80,6 +83,7 @@ RULES = {
   "type-affix": "§1 R2",
   "spelling": "§1 R11",
   "pragma-warning": "§4",
+  "ascii-literals": "§4",
   "project-xml": "§2",
 }
 
@@ -192,11 +196,12 @@ def blank(_text: str) -> str:
   return re.sub(r"[^\n]", " ", _text)
 
 
-def scan_source(_text: str) -> tuple[str, list[tuple[str, int]]]:
+def scan_source(_text: str, _literals: list[tuple[str, int]] | None = None) -> tuple[str, list[tuple[str, int]]]:
   """Strip comments and literals from C++ or HLSL.
 
   Returns the source with every comment and string/character literal blanked (line breaks kept), and
   the token stream -- identifiers and punctuation, with their lines -- that the R2 and R11 rules read.
+  Each literal, with the line it starts on, is appended to _literals when one is given.
   """
   out: list[str] = []
   tokens: list[tuple[str, int]] = []
@@ -237,6 +242,8 @@ def scan_source(_text: str) -> tuple[str, list[tuple[str, int]]]:
         close = _text.find(")" + delimiter + '"', max(open_paren, end))
         end = length if open_paren < 0 or close < 0 else close + len(delimiter) + 2
         out.append(word + blank(_text[index + len(word):end]))
+        if _literals is not None:
+          _literals.append((_text[index:end], line))
         line += _text.count("\n", index, end)
         index = end
         continue
@@ -257,6 +264,8 @@ def scan_source(_text: str) -> tuple[str, list[tuple[str, int]]]:
       index += 1
       continue
     # A comment or a literal: blanked, line breaks kept.
+    if _literals is not None and (char == '"' or char == "'"):
+      _literals.append((_text[index:end], line))
     out.append(blank(_text[index:end]))
     line += _text.count("\n", index, end)
     index = end
@@ -768,7 +777,15 @@ class Checker:
       suffix = PurePosixPath(path).suffix.casefold()
       if suffix not in CPP_EXTENSIONS + BANNED_EXTENSIONS + HLSL_EXTENSIONS:
         continue
-      stripped, tokens = scan_source(read_text(self.root / path))
+      literals: list[tuple[str, int]] = []
+      stripped, tokens = scan_source(read_text(self.root / path), literals)
+      if suffix in CPP_EXTENSIONS + BANNED_EXTENSIONS:
+        for literal, line in literals:
+          outside = sorted({char for char in literal if ord(char) > 0x7F})
+          if outside:
+            escapes = ", ".join(f"'{char}' as \\u{ord(char):04X}" for char in outside)
+            self.add(path, line + literal.count("\n", 0, literal.find(outside[0])), "ascii-literals",
+                     f"a literal holds characters past ASCII, which MSVC reads in the system code page; escape {escapes}")
       for match in SILENCED_WARNING.finditer(stripped):
         self.add(path, line_of(stripped, match.start()), "pragma-warning",
                  f"a warning({match.group(1)}: ...) pragma silences a diagnostic; fix the cause or report it")
