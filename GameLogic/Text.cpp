@@ -45,9 +45,6 @@ constexpr std::uint16_t CLASS_TEXT_OFFSET = 7;   // 'CLASS: '
 constexpr std::uint16_t TYPE_TEXT_OFFSET = 0x15; // 'CLASS: 1234567 TYPE: '
 constexpr std::uint16_t IDENTITY_FRAMES = 0x1E;
 
-constexpr std::uint16_t DOCKED_MESSAGE_OFFSET = 0x78; // row 1, column 20
-constexpr std::uint16_t DOCKED_MESSAGE_CHARACTERS = 0x13;
-
 constexpr std::uint8_t FIRST_GLYPH = 0x20;         // screenFont starts at the space
 constexpr std::uint8_t FIRST_SMALL_LETTER = 0x41;  // smallFont starts at 'A'
 constexpr std::uint16_t VIEW_ROW_BYTES = 0x40;     // a row of the space-view buffer
@@ -77,7 +74,6 @@ constexpr std::uint8_t TENTHS_BLANKS = 3;
 constexpr std::uint8_t BLANK_BELOW = '1';
 constexpr std::uint16_t CREDIT_DIGITS = 10;
 constexpr std::uint16_t CREDIT_BLANKS = 8;
-constexpr std::uint16_t MENU_ROW_ATTRIBUTES = 0x24;
 
 constexpr std::uint8_t CURSOR_GRAPHICS_TOGGLE = 0xA0; // space <-> 80h glyph
 constexpr std::uint8_t CURSOR_TEXT_TOGGLE = 0xFB;     // space <-> DBh, CP437's block
@@ -491,27 +487,6 @@ std::uint16_t PrintTextModeString(GameState& _state, std::string_view _text, std
     cell = static_cast<std::uint16_t>(cell + 2);
   }
   return cell;
-}
-
-void ToggleMenuRowHighlight(GameState& _state, std::uint16_t _row)
-{
-  const std::uint8_t attribute = SwapTextAttributeNibbles(_state);
-  std::uint16_t cell = _row;
-  for (std::uint16_t left = MENU_ROW_ATTRIBUTES; left != 0; --left)
-  {
-    _state.SetVideoByte(cell, attribute);
-    cell = Offset(cell, 2);
-  }
-}
-
-void ClearDockedMessageLine(GameState& _state)
-{
-  std::uint16_t cell = DOCKED_MESSAGE_OFFSET;
-  for (std::uint16_t left = DOCKED_MESSAGE_CHARACTERS; left != 0; --left)
-  {
-    _state.SetVideoByte(cell, ' ');
-    cell = Offset(cell, 2);
-  }
 }
 
 std::uint8_t SwapTextAttributeNibbles(GameState& _state)

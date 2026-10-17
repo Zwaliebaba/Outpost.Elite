@@ -141,11 +141,6 @@ void AddCredits(GameState& _state, std::uint32_t _tenths)
   StoreCredits(_state, CreditsAfterEarning(Credits(_state), _tenths));
 }
 
-std::uint16_t ComputeResalePrice(const GameState& _state)
-{
-  return ResaleTenths(_state.Data().menus.resalePriceInput);
-}
-
 void ComputeMarketPrices(GameState& _state)
 {
   const MarketPlace place{.economy = _state.Data().commander.currentSystem.economy,

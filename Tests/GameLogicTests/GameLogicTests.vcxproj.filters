@@ -89,6 +89,9 @@
     <ClCompile Include="CorpusTests.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
+    <ClCompile Include="EquipScreenTests.cpp">
+      <Filter>Equipment</Filter>
+    </ClCompile>
     <ClCompile Include="EquipmentAnswerTests.cpp">
       <Filter>Equipment</Filter>
     </ClCompile>

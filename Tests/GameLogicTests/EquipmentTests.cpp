@@ -28,12 +28,6 @@ template <typename Struct> void SetByte(TwinRig& _rig, DataByte<Struct> _member,
   _rig.Both([_member, _value](Elite::Host&, Elite::GameState& _state) { DataByteIn(_state, _member) = _value; });
 }
 
-// The cash, in tenths of credits, on the twin.
-void SetCredits(TwinRig& _rig, std::uint32_t _tenths)
-{
-  _rig.Both([_tenths](Elite::Host&, Elite::GameState& _state) { _state.Data().commander.creditsTenths = _tenths; });
-}
-
 // The byte _member names, as the twin holds it.
 template <typename Struct> [[nodiscard]] std::uint8_t TwinByte(TwinRig& _rig, DataByte<Struct> _member)
 {
@@ -179,74 +173,10 @@ void MakeBelowTheNose(TwinRig& _rig, Scoopable _what)
 
 } // namespace
 
-// Twins for the equipment screen and the fuel scoops in states no replay reaches (ADR-016).
+// Twins for the fuel scoops in states no replay reaches (ADR-016). The equipment screen's are D02's own tests (EquipScreenTests).
 TEST_CLASS(EquipmentTests)
 {
 public:
-  // Every message of the equipment menu, B and S on each kind of row, the cursor round both ends by keys and by the
-  // steering, and the keys it ignores: what RunEquipShipMenu does that docked-screens.replay does not.
-  TEST_METHOD(EquipmentMenuBuysAndSellsEveryKindOfItem)
-  {
-    TwinRig rig("TwinEquipmentMenu");
-    rig.Play("key space; wait 4");
-    SetCredits(rig, 1000000);
-    rig.Both([](Elite::Host&, Elite::GameState& _state) { _state.Data().commander.currentSystem.techLevel = 9; }); // all 14 items
-    SetByte(rig, &Commander::fuel, 100);
-    SetByte(rig, &Commander::missionNumber, 1);
-    rig.Play("key F3; wait 1\nkey b; wait 0.2"); // no fuel in the first mission
-    SetByte(rig, &Commander::missionNumber, 0);
-    // Fuel bought, then full, and never sold; a fourth missile, and not a fifth.
-    rig.Play("key b; wait 0.2\nkey b; wait 0.2\nkey s; wait 0.2\nkey Down; wait 0.2\nkey b; wait 0.2\nkey b; wait 0.2");
-    SetByte(rig, &Commander::missileCount, 1);
-    rig.Play("key s; wait 0.2\nkey s; wait 0.2\nkey Down; wait 0.2"); // the last missile sold, then none
-    SetByte(rig, &Commander::CargoHold::cargoUsedTonnes, 25);
-    rig.Play("key s; wait 0.2"); // too much cargo to sell the bay extension
-    SetByte(rig, &Commander::CargoHold::cargoUsedTonnes, 0);
-    // None to sell, bought, already fitted, sold.
-    rig.Play("key s; wait 0.2\nkey b; wait 0.2\nkey b; wait 0.2\nkey s; wait 0.2\ndigest items\nkey Down; wait 0.2\nkey Down; wait 0.2");
-    SetByte(rig, &Commander::laserMountsFitted, 0x0F);
-    rig.Play("key b; wait 0.2\nkey Down; wait 0.2\nkey b; wait 0.2"); // four lasers aboard: a pulse laser, and a beam laser
-    SetByte(rig, &Commander::laserMountsFitted, 0x01);
-    rig.Play("key Down; wait 0.2\nkey b; wait 0.2"); // fuel scoops
-    SetByte(rig, &Commander::miningLaserCount, 1);
-    rig.Play("key s; wait 0.2"); // not while a mining laser needs them
-    SetByte(rig, &Commander::miningLaserCount, 0);
-    SetByte(rig, &Commander::fuelScoopsFitted, 0);
-    rig.Play("key Down; wait 0.2\nkey Down; wait 0.2\nkey Down; wait 0.2\nkey Down; wait 0.2\nkey Down; wait 0.2\n"
-             "key Down; wait 0.2\nkey b; wait 0.2\ndigest lasers"); // a mining laser needs fuel scoops
-    SetCredits(rig, 10);
-    // Too little cash for the hyperdrive, round the bottom to a missile, and up to fuel.
-    rig.Play("key Up; wait 0.2\nkey b; wait 0.2\nkey Down; wait 0.2\nkey Down; wait 0.2\nkey Down; wait 0.2\n"
-             "key Down; wait 0.2\nkey b; wait 0.2\nkey Up; wait 0.2");
-    SetByte(rig, &Commander::fuel, 100);
-    // Too little for fuel, round the top, and the keys the menu ignores.
-    rig.Play("key b; wait 0.2\nkey Up; wait 0.2\nkey F3; wait 0.2\nkey x; wait 0.2\nkey Home; wait 0.2");
-    SetByte(rig, &Elite::InputState::keyboardPitchRate, 5);
-    rig.Play("wait 0.3");
-    SetByte(rig, &Elite::InputState::keyboardPitchRate, 0xFB);
-    rig.Play("wait 0.3\ndigest cursor\nkey F6; wait 0.5\ndigest left");
-  }
-
-  // A beam laser bought and sold: both mount choosers moved round both ends by the arrow keys and by the steering,
-  // Space on an occupied mount, on an empty one and on the wrong laser, and the keys they ignore.
-  TEST_METHOD(LaserMountsAreChosenToFitAndToRemove)
-  {
-    TwinRig rig("TwinLaserMounts");
-    rig.Play("key space; wait 4");
-    SetCredits(rig, 1000000);
-    rig.Play("key F3; wait 1\nkey Down; wait 0.2\nkey Down; wait 0.2\nkey Down; wait 0.2\nkey Down; wait 0.2\nkey Down; wait 0.2\n"
-             "key b; wait 0.3\nkey space; wait 0.2\nkey Left; wait 0.2\nkey Right; wait 0.2\nkey Right; wait 0.2\nkey x; wait 0.2");
-    SetByte(rig, &Elite::InputState::keyboardRollRate, 5);
-    rig.Play("wait 0.3");
-    SetByte(rig, &Elite::InputState::keyboardRollRate, 0xFB);
-    rig.Play("wait 0.3\nkey space; wait 0.3\ndigest fitted\nkey s; wait 0.3\nkey space; wait 0.2\nkey Left; wait 0.2\n"
-             "key space; wait 0.2\nkey Right; wait 0.2\nkey Right; wait 0.2\nkey x; wait 0.2");
-    SetByte(rig, &Elite::InputState::keyboardRollRate, 5);
-    rig.Play("wait 0.3");
-    SetByte(rig, &Elite::InputState::keyboardRollRate, 0xFB);
-    rig.Play("wait 0.3\nkey space; wait 0.3\ndigest removed");
-  }
-
   // The fuel scoops' rare paths (ADR-008 item 8, D20), which TryScoopObject takes for what TransformShip offers it below the
   // nose: the masking device's barrel, which the mask ship drops; a Thargon, alien items; a splinter with minerals, gems, gold and
   // platinum and, with room, minerals; and a barrel with the hold full. With fuel scoops, which the equipment screen fits with

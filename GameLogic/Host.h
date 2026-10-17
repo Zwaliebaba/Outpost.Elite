@@ -5,6 +5,7 @@
 #include "DockedKeys.h"
 #include "FileStore.h"
 #include "FlightSnapshot.h"
+#include "EquipView.h"
 #include "MarketView.h"
 #include "Mouse.h"
 #include "KeyboardState.h"
@@ -280,6 +281,19 @@ public:
     return m_marketShown ? &m_marketView : nullptr;
   }
 
+  /// _view published as what the shipyard, D02 and its picker D03, shows now (ADR-064): numbered, one more than the last. While
+  /// one is shown, the shell draws it in place of the CGA picture.
+  void ShowEquip(EquipView _view);
+
+  /// D02 no longer shown: the shipyard's routine ended. The clicks not yet taken go with it.
+  void HideEquip() noexcept;
+
+  /// The shipyard's view while it is shown, or nothing.
+  [[nodiscard]] const EquipView* ShownEquip() const noexcept
+  {
+    return m_equipShown ? &m_equipView : nullptr;
+  }
+
   /// _view published as what the status screen, D08, shows now (ADR-063): numbered, one more than the last. While one is shown,
   /// the shell draws it in place of the CGA picture.
   void ShowStatus(StatusView _view);
@@ -316,6 +330,12 @@ public:
 
   /// The oldest click queued, taken, or nothing.
   [[nodiscard]] std::optional<MarketClick> TakeClick() noexcept;
+
+  /// A click on one of D02's or D03's controls, from the shell (D83), queued for the shipyard; dropped while it is not shown.
+  void Click(const EquipClick& _click);
+
+  /// The oldest click on the shipyard queued, taken, or nothing.
+  [[nodiscard]] std::optional<EquipClick> TakeEquipClick() noexcept;
 
   /// The space view's layers as the last published snapshot's frame drew them (ADR-033): what a renderer that draws the ships
   /// itself draws under and over them. PublishFlightSnapshot finishes them and marks each object drawn as a model.
@@ -444,6 +464,9 @@ private:
   bool m_marketShown = false;                 // while the market screen's routine runs
   std::deque<MarketClick> m_clicks;           // the shell's clicks on it, oldest first
   std::optional<DockedScreen> m_dockedScreen; // the docked host's open screen, while it runs
+  EquipView m_equipView;                      // the shipyard's latest view
+  bool m_equipShown = false;                  // while the shipyard's routine runs
+  std::deque<EquipClick> m_equipClicks;       // the shell's clicks on it, oldest first
   StatusView m_statusView;                    // the status screen's latest view
   bool m_statusShown = false;                 // while the docked status screen waits for its key
   Milliseconds m_nextKeyAt = NO_EVENT;

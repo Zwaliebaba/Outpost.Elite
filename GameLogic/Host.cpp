@@ -273,6 +273,19 @@ void Host::HideMarket() noexcept
   m_clicks.clear();
 }
 
+void Host::ShowEquip(EquipView _view)
+{
+  _view.sequence = m_equipView.sequence + 1;
+  m_equipView = std::move(_view);
+  m_equipShown = true;
+}
+
+void Host::HideEquip() noexcept
+{
+  m_equipShown = false;
+  m_equipClicks.clear();
+}
+
 void Host::ShowStatus(StatusView _view)
 {
   _view.sequence = m_statusView.sequence + 1;
@@ -301,6 +314,25 @@ std::optional<MarketClick> Host::TakeClick() noexcept
   }
   const MarketClick click = m_clicks.front();
   m_clicks.pop_front();
+  return click;
+}
+
+void Host::Click(const EquipClick& _click)
+{
+  if (m_equipShown)
+  {
+    m_equipClicks.push_back(_click);
+  }
+}
+
+std::optional<EquipClick> Host::TakeEquipClick() noexcept
+{
+  if (m_equipClicks.empty())
+  {
+    return std::nullopt;
+  }
+  const EquipClick click = m_equipClicks.front();
+  m_equipClicks.pop_front();
   return click;
 }
 

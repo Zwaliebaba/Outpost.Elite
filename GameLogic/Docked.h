@@ -64,10 +64,6 @@ void AwardArchangelTitle(GameState& _state);
 /// for a key, and the reward.
 [[nodiscard]] Task<void> ShowMissionDebriefing(GameState& _state, Host& _host);
 
-/// PrintCreditsOnMessageLine: creditBalanceText at B800:0078 in the swapped textAttribute, which is swapped
-/// back after.
-void PrintCreditsOnMessageLine(GameState& _state);
-
 /// FormatFuelLightYears: fuel as "n.n" light years into the fuel text.
 void FormatFuelLightYears(GameState& _state);
 

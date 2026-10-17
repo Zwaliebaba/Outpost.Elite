@@ -94,6 +94,8 @@
     <ClInclude Include="DockingState.h" />
     <ClInclude Include="DockingTables.h" />
     <ClInclude Include="DrawingState.h" />
+    <ClInclude Include="EquipScreen.h" />
+    <ClInclude Include="EquipView.h" />
     <ClInclude Include="Equipment.h" />
     <ClInclude Include="EquipmentState.h" />
     <ClInclude Include="EquipmentTables.h" />
@@ -183,6 +185,7 @@
     <ClCompile Include="Docked.cpp" />
     <ClCompile Include="DockedKeys.cpp" />
     <ClCompile Include="Docking.cpp" />
+    <ClCompile Include="EquipScreen.cpp" />
     <ClCompile Include="Equipment.cpp" />
     <ClCompile Include="FileStore.cpp" />
     <ClCompile Include="Flight.cpp" />

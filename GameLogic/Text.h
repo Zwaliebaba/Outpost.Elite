@@ -160,13 +160,6 @@ void ShowShipIdentity(GameState& _state, std::uint8_t _type, std::uint8_t _class
 /// PrintTextModeString: _text to the text page at B800:_cell, in textAttribute. Returns the cell after its last.
 std::uint16_t PrintTextModeString(GameState& _state, std::string_view _text, std::uint16_t _cell);
 
-/// ToggleMenuRowHighlight: SwapTextAttributeNibbles, and the attribute that makes into the 36 attribute bytes
-/// of a menu row at B800:_row.
-void ToggleMenuRowHighlight(GameState& _state, std::uint16_t _row);
-
-/// ClearDockedMessageLine: 19 spaces from text offset 78h, characters only.
-void ClearDockedMessageLine(GameState& _state);
-
 /// SwapTextAttributeNibbles: textAttribute's nibbles exchanged, and the attribute that makes.
 std::uint8_t SwapTextAttributeNibbles(GameState& _state);
 

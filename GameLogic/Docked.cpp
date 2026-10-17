@@ -4,6 +4,7 @@
 
 #include "Arithmetic.h"
 #include "DockedTables.h"
+#include "EquipScreen.h"
 #include "Equipment.h"
 #include "FlightSnapshot.h"
 #include "Galaxy.h"
@@ -30,8 +31,6 @@ namespace Elite
 
 namespace
 {
-
-constexpr std::uint16_t CREDITS_ON_MESSAGE_LINE = 0x78; // B800:0078
 
 constexpr std::uint8_t FUEL_TENTHS_PER_UNIT = 10;
 constexpr std::uint8_t FUEL_UNITS_PER_TENTH = 0x24; // 255 is 7.0 light years
@@ -314,7 +313,7 @@ void FormatQuantity(std::uint16_t _quantity, std::span<std::uint8_t> _text)
   case DockedScreen::Market:
     return ShowMarketScreen(_state, _host);
   case DockedScreen::Equip:
-    return ShowEquipShipScreen(_state, _host);
+    return ShowEquipScreen(_state, _host);
   case DockedScreen::Galaxy:
     return ShowGalacticChart(_state, _host, ScreenPlace::Docked);
   case DockedScreen::Local:
@@ -424,13 +423,6 @@ private:
 }
 
 } // namespace
-
-void PrintCreditsOnMessageLine(GameState& _state)
-{
-  SwapTextAttributeNibbles(_state);
-  PrintTextModeString(_state, TextWithin(CashRun(_state), 0), CREDITS_ON_MESSAGE_LINE);
-  SwapTextAttributeNibbles(_state);
-}
 
 void FormatFuelLightYears(GameState& _state)
 {
