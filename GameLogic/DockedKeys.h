@@ -24,8 +24,7 @@ enum class DockedScreen : std::uint8_t
   Equip,
   Galaxy,
   Local,
-  Status,
-  Data
+  Status
 };
 
 /// What a key does to the docked host: launches, shows a screen, or nothing.
@@ -36,8 +35,8 @@ struct DockedTarget
 };
 
 /// The docked host's keys (D96): F1 launches, F2 the market, F3 the equipment, F4 the galactic chart, F5 the short-range chart, F6
-/// the status screen, and Esc the disc menu, as the key bar shows them. F7's Data on System keeps its key until the charts take
-/// it in. F8, F9 and F10 do nothing docked: their screens are D01's, F6's and D08's, which shows the inventory's cargo (ADR-063).
+/// the status screen, and Esc the disc menu, as the key bar shows them. F7, F8, F9 and F10 do nothing docked: their screens are the
+/// charts', D01's, F6's and D08's, which shows the inventory's cargo (ADR-063, ADR-065).
 [[nodiscard]] DockedTarget DockedTargetOf(std::uint8_t _scanCode) noexcept;
 
 /// The key that shows _screen docked.

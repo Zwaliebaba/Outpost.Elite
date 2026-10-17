@@ -17,7 +17,6 @@ constexpr std::uint8_t SCAN_F3 = 0x3D;
 constexpr std::uint8_t SCAN_F4 = 0x3E;
 constexpr std::uint8_t SCAN_F5 = 0x3F;
 constexpr std::uint8_t SCAN_F6 = 0x40;
-constexpr std::uint8_t SCAN_F7 = 0x41;
 constexpr std::uint8_t SCAN_F10 = 0x44;
 
 // A key and the screen it shows docked.
@@ -27,14 +26,13 @@ struct KeyedScreen
   DockedScreen screen;
 };
 
-constexpr std::array<KeyedScreen, 7> DOCKED_KEYS = {{
+constexpr std::array<KeyedScreen, 6> DOCKED_KEYS = {{
   {SCAN_ESCAPE, DockedScreen::Disc},
   {SCAN_F2, DockedScreen::Market},
   {SCAN_F3, DockedScreen::Equip},
   {SCAN_F4, DockedScreen::Galaxy},
   {SCAN_F5, DockedScreen::Local},
   {SCAN_F6, DockedScreen::Status},
-  {SCAN_F7, DockedScreen::Data},
 }};
 
 } // namespace

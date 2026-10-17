@@ -6,6 +6,7 @@
 #include "Canvas.h"
 #include "Cockpit.h"
 #include "DirectoryFileStore.h"
+#include "DockedChart.h"
 #include "DockedEquip.h"
 #include "DockedFrame.h"
 #include "DockedMarket.h"
@@ -64,18 +65,30 @@ constexpr std::uint32_t DOCKED_BACKGROUND = 0x070605;  // past the docked screen
   return std::nullopt;
 }
 
-// A click at _point on a docked screen the shell draws (D83): a key of the bar pressed and released, or on the market or the
-// shipyard the control under it named to the game.
-void ClickDocked(Elite::Host& _host, Engine::Point _point)
+// A click at _point on a screen the shell draws in the docked frame (D83): a key of the bar pressed and released, the flight's own
+// on a chart in flight (D110), or the control under it named to the game. On a chart, the point is sent as the chart's (D99, D109);
+// returns whether it was, so that a drag from it goes on moving the cursor.
+bool ClickDocked(Elite::Host& _host, Engine::Point _point)
 {
+  const Elite::ChartView* const chart = _host.ShownChart();
   if (const std::optional<DockedKey> key = DockedFrame::KeyAt(_point))
   {
-    if (const std::optional<std::uint8_t> code = ScanCodeOf(*key))
+    const std::optional<std::uint8_t> code = chart != nullptr && chart->flight ? DockedChart::FlightScanCodeOf(*key) : ScanCodeOf(*key);
+    if (code)
     {
       _host.Inject(Elite::KeyEvent{.key = *code, .down = true});
       _host.Inject(Elite::KeyEvent{.key = *code, .down = false});
     }
-    return;
+    return false;
+  }
+  if (chart != nullptr)
+  {
+    const std::optional<Elite::ChartClick> click = DockedChart::ChartAt(chart->kind, _point);
+    if (click)
+    {
+      _host.Click(*click);
+    }
+    return click.has_value();
   }
   if (_host.ShownMarket() != nullptr)
   {
@@ -91,6 +104,13 @@ void ClickDocked(Elite::Host& _host, Engine::Point _point)
       _host.Click(*click);
     }
   }
+  return false;
+}
+
+// Whether a screen the shell draws in the docked frame is shown, which a click acts on.
+[[nodiscard]] bool DockedFrameShown(const Elite::Host& _host) noexcept
+{
+  return _host.ShownMarket() != nullptr || _host.ShownEquip() != nullptr || _host.ShownStatus() != nullptr || _host.ShownChart() != nullptr;
 }
 
 // Initialises COM on this thread for XAudio2, and undoes it.
@@ -211,7 +231,8 @@ int Application::Run(HINSTANCE _instance, bool _cheat)
   };
 
   const TextMeasure measure = [&renderer](const Engine::CanvasText& _text) { return renderer.MeasureText(_text); };
-  std::optional<Engine::Point> pointer; // the mouse, in design units, while it is over the window
+  std::optional<Engine::Point> pointer;     // the mouse, in design units, while it is over the window
+  std::optional<Elite::ChartClick> dragged; // while the left button, pressed on a chart, is held: the last point it sent (D109)
 
   Elite::StopReason reason = Elite::StopReason::Reached;
   while (window.PumpMessages())
@@ -232,16 +253,37 @@ int Application::Run(HINSTANCE _instance, bool _cheat)
         pointer.reset();
         continue;
       }
+      if (event.kind == Engine::PointerEvent::Kind::LeftUp)
+      {
+        dragged.reset();
+        continue;
+      }
       RECT client{};
       GetClientRect(window.Handle(), &client);
       const Engine::DesignPlacement place =
         Engine::PlaceDesign(static_cast<std::uint32_t>(client.right - client.left), static_cast<std::uint32_t>(client.bottom - client.top));
       pointer = Engine::Point{.x = (static_cast<float>(event.x) - place.left) / place.scale,
                               .y = (static_cast<float>(event.y) - place.top) / place.scale};
-      if (event.kind == Engine::PointerEvent::Kind::LeftDown &&
-          (platform->ShownMarket() != nullptr || platform->ShownEquip() != nullptr || platform->ShownStatus() != nullptr))
+      if (event.kind == Engine::PointerEvent::Kind::LeftDown && DockedFrameShown(*platform))
       {
-        ClickDocked(*platform, *pointer);
+        dragged = ClickDocked(*platform, *pointer) && platform->ShownChart() != nullptr
+                    ? DockedChart::ChartAt(platform->ShownChart()->kind, *pointer)
+                    : std::nullopt;
+      }
+      else if (event.kind == Engine::PointerEvent::Kind::Move && dragged)
+      {
+        // A drag moves the cursor with it, held to the chart's units, each new point sent once (D109).
+        const Elite::ChartView* const chart = platform->ShownChart();
+        const std::optional<Elite::ChartClick> at = chart != nullptr ? DockedChart::ChartAt(chart->kind, *pointer) : std::nullopt;
+        if (chart == nullptr)
+        {
+          dragged.reset();
+        }
+        else if (at && (at->x != dragged->x || at->row != dragged->row))
+        {
+          platform->Click(*at);
+          dragged = at;
+        }
       }
     }
     if (window.TakeResized() && !renderer.Resize())
@@ -273,8 +315,9 @@ int Application::Run(HINSTANCE _instance, bool _cheat)
     audioTime = platform->Clock();
     platform->Sound().DiscardBefore(Elite::Speaker::FirstSampleStart(audioTime, SAMPLE_RATE));
 
-    // On the market, D01 (ADR-058); on the shipyard, D02 and D03 (ADR-064); on the status screen, D08 (ADR-063); in flight and on the title, the cockpit with the space view in its window (ADR-034, D63, D64);
-    // on every other screen, the CGA picture.
+    // On the market, D01 (ADR-058); on the shipyard, D02 and D03 (ADR-064); on the status screen, D08 (ADR-063); on a chart, docked
+    // or in flight, D04 to D07 (ADR-065); in flight and on the title, the cockpit with the space view in its window (ADR-034, D63,
+    // D64); on every other screen, the CGA picture.
     bool presented = false;
     const Elite::FlightSnapshot& latest = platform->LatestFlightSnapshot();
     if (const Elite::MarketView* const market = platform->ShownMarket())
@@ -290,6 +333,11 @@ int Application::Run(HINSTANCE _instance, bool _cheat)
     else if (const Elite::StatusView* const status = platform->ShownStatus())
     {
       DockedStatus::Draw(*status, pointer, measure, canvas);
+      presented = renderer.Present({}, DOCKED_BACKGROUND, nullptr, &canvas);
+    }
+    else if (const Elite::ChartView* const chart = platform->ShownChart())
+    {
+      DockedChart::Draw(*chart, pointer, measure, canvas);
       presented = renderer.Present({}, DOCKED_BACKGROUND, nullptr, &canvas);
     }
     else if (latest.sequence != 0 && platform->SpaceViewShown())

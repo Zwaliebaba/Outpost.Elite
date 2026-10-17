@@ -10,6 +10,7 @@
 #include <string_view>
 #include <vector>
 
+#include "ChartView.h"
 #include "Timing.h"
 
 namespace Elite
@@ -44,6 +45,7 @@ enum class StepKind : std::uint8_t
   Shot,   ///< write the screen as a PNG (the caller's business)
   Digest, ///< the SHA-256 of the game's state (GameStateDigest), checked when an expected value is given
   File,   ///< copy a file from beside the replay into DOS's directory, as a commander the game can then load
+  Click,  ///< a click on the chart open, in its units: what the shell sends (Host::Click)
   End     ///< let time pass, in which the program must end: a replay that leaves for DOS
 };
 
@@ -57,6 +59,7 @@ struct Step
   std::string expectedPicture;        ///< Digest: the picture digest its picture line gives, lowercase hex, or empty for none
   std::string expectedOutcomes;       ///< Digest: the outcomes its outcome line gives (OutcomeText's form), or empty for none
   std::string source;                 ///< File: the name of the file beside the replay that it copies
+  ChartClick click;                   ///< Click: where, in the chart's units
   std::size_t line = 0;               ///< the 1-based line the step was read from
 };
 
@@ -74,6 +77,9 @@ struct Step
 ///                        1980-01-01 00:00:00, as one copied there before the run would be. This is how a replay
 ///                        starts from a prepared commander, which the disc menu then loads as the game's own save.
 ///                        SOURCE is a bare file name, so a replay reaches nothing but the files beside it.
+///   click X Y            a click on the chart open at X and Y, in its units (ChartClick, D111): on the galactic chart a
+///                        system's x and half its y, on the short-range chart 3.5 to a galaxy unit about 80, 64. It
+///                        is what the shell sends as the mouse moves the cursor; with no chart open the click is lost.
 ///   end S                S seconds, as wait, by the end of which the program must have ended (int 20h, as
 ///                        StopReason::Terminated): how a replay that leaves for DOS ends. It is the
 ///                        last step that runs the machine: only digest and shot steps, which look at what the

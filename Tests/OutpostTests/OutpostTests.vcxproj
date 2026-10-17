@@ -65,7 +65,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(VCInstallDir)Auxiliary\VS\UnitTest\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <!-- The shell's drawing, as the shell's own build compiles it (ADR-059): an executable is no library, so its objects are linked. -->
-      <AdditionalDependencies>$(SolutionDir)$(Platform)\$(Configuration)\Outpost\pch.obj;$(SolutionDir)$(Platform)\$(Configuration)\Outpost\DockedEquip.obj;$(SolutionDir)$(Platform)\$(Configuration)\Outpost\DockedFrame.obj;$(SolutionDir)$(Platform)\$(Configuration)\Outpost\DockedMarket.obj;$(SolutionDir)$(Platform)\$(Configuration)\Outpost\DockedNames.obj;$(SolutionDir)$(Platform)\$(Configuration)\Outpost\DockedStatus.obj;d3d12.lib;dxgi.lib;dwrite.lib;windowscodecs.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(SolutionDir)$(Platform)\$(Configuration)\Outpost\pch.obj;$(SolutionDir)$(Platform)\$(Configuration)\Outpost\DockedChart.obj;$(SolutionDir)$(Platform)\$(Configuration)\Outpost\DockedEquip.obj;$(SolutionDir)$(Platform)\$(Configuration)\Outpost\DockedFrame.obj;$(SolutionDir)$(Platform)\$(Configuration)\Outpost\DockedMarket.obj;$(SolutionDir)$(Platform)\$(Configuration)\Outpost\DockedNames.obj;$(SolutionDir)$(Platform)\$(Configuration)\Outpost\DockedStatus.obj;d3d12.lib;dxgi.lib;dwrite.lib;windowscodecs.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -89,6 +89,7 @@
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="DockedChartTests.cpp" />
     <ClCompile Include="DockedEquipTests.cpp" />
     <ClCompile Include="DockedMarketTests.cpp" />
     <ClCompile Include="DockedStatusTests.cpp" />

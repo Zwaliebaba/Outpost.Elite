@@ -42,6 +42,8 @@ public:
     std::wstring title;    ///< LAVE MARKET
     std::uint32_t creditsTenths = 0;
     DockedKey lit = DockedKey::Market;
+    bool flight = false; ///< a chart in flight (D07, D110): F1 is FRONT, and ESC DISC and F3 EQUIP are off
+    bool alert = false;  ///< the hyperspace countdown runs: where the ship is, and its dot, in light red (D07)
   };
 
   /// A table row's look (D82): every second row striped, the selected row lit, and a row under the pointer shaded.

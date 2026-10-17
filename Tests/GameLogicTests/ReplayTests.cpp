@@ -41,6 +41,13 @@ public:
     Assert::IsTrue(steps[6].kind == Elite::StepKind::File);
     Assert::AreEqual("PILOT.CDR", steps[6].name.c_str());
     Assert::AreEqual("rich-at-leesti.cdr", steps[6].source.c_str());
+
+    // A click step is a click on the chart open, in its units (D111).
+    Assert::IsTrue(Elite::ParseSteps("click 255 0", steps, error), L"a click step parses");
+    Assert::AreEqual(std::size_t{8}, steps.size());
+    Assert::IsTrue(steps[7].kind == Elite::StepKind::Click);
+    Assert::AreEqual(255u, std::uint32_t{steps[7].click.x});
+    Assert::AreEqual(0u, std::uint32_t{steps[7].click.row});
   }
 
   // A replay file: one step or several to a line, comments, blank lines, and the line each came from.
@@ -110,6 +117,11 @@ public:
     fails("file PILOT.CDR ../Replays/a.cdr", "without a directory");
     fails("file PILOT.CDR ..", "without a directory");
     fails("file PILOT.CDR C:a.cdr", "without a directory");
+    fails("click 20", "click takes the chart's x and row");
+    fails("click 20 30 40", "click takes the chart's x and row");
+    fails("click 256 30", "whole numbers from 0 to 255");
+    fails("click 20 -1", "whole numbers from 0 to 255");
+    fails("click 2.5 30", "whole numbers from 0 to 255");
     fails("end", "a step is a verb and one argument");
     fails("end 0.0001", "end takes seconds, with at most three decimals");
     fails("end 1; key y", "only digest and shot may follow end");

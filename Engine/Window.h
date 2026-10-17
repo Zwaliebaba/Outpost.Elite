@@ -27,6 +27,7 @@ struct PointerEvent
   {
     Move,
     LeftDown,
+    LeftUp, ///< the left button released, or its press ended by Windows taking the mouse away; then at 0, 0
     Leave,
   };
 
@@ -88,6 +89,7 @@ private:
   std::vector<KeyEvent> m_held;
   std::vector<PointerEvent> m_pointerEvents;
   bool m_trackingLeave = false; // TrackMouseEvent asked for the WM_MOUSELEAVE of the mouse now over the window
+  bool m_pressed = false;       // the left button went down in the window, which holds the capture until it comes up
 };
 
 } // namespace Engine

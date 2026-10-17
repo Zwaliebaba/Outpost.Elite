@@ -99,6 +99,12 @@
     <ClInclude Include="CgaFont.h">
       <Filter>Platform</Filter>
     </ClInclude>
+    <ClInclude Include="ChartScreen.h">
+      <Filter>Galaxy</Filter>
+    </ClInclude>
+    <ClInclude Include="ChartView.h">
+      <Filter>Galaxy</Filter>
+    </ClInclude>
     <ClInclude Include="Combat.h">
       <Filter>Combat</Filter>
     </ClInclude>
@@ -394,6 +400,9 @@
     </ClCompile>
     <ClCompile Include="CgaFont.cpp">
       <Filter>Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="ChartScreen.cpp">
+      <Filter>Galaxy</Filter>
     </ClCompile>
     <ClCompile Include="Combat.cpp">
       <Filter>Combat</Filter>

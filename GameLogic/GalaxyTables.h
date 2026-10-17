@@ -366,15 +366,6 @@ constexpr std::array<std::array<std::uint8_t, 6>, 8> GALAXY_SEEDS = {{
   {0x25, 0x2D, 0x24, 0x01, 0xA9, 0xDB}, // [7]
 }};
 
-/// blankChartLine: 27 spaces and a NUL; ClearChartTextLines prints it twice
-constexpr std::string_view BLANK_CHART_LINE = "                           ";
-
-/// nameLinePadding: 12 spaces printed after a system name
-constexpr std::string_view NAME_LINE_PADDING = "            ";
-
-/// findPrompt: 'FIND: Which System ?'
-constexpr std::string_view FIND_PROMPT = "FIND: Which System ?";
-
 /// systemNameDigrams: 2 characters; entry 0 is two spaces, which add nothing
 constexpr std::array<std::array<std::uint8_t, 2>, 32> SYSTEM_NAME_DIGRAMS = {{
   {0x20, 0x20}, // [0]
@@ -410,22 +401,6 @@ constexpr std::array<std::array<std::uint8_t, 2>, 32> SYSTEM_NAME_DIGRAMS = {{
   {0x52, 0x49}, // [30]
   {0x4F, 0x4E}, // [31]
 }};
-
-/// shortRangeChartTitle: 'SHORT RANGE CHART'
-constexpr std::string_view SHORT_RANGE_CHART_TITLE = "SHORT RANGE CHART";
-
-/// galacticChartTitle: 'GALACTIC CHART ' then galacticChartNumber
-constexpr std::string_view GALACTIC_CHART_TITLE{"GALACTIC CHART ", 15};
-
-/// galacticChartTitleEnd: the space and the NUL that end the galactic chart's title after galacticChartNumber (change 3c
-/// names it)
-constexpr std::string_view GALACTIC_CHART_TITLE_END = " ";
-
-/// findErrorPrefix: 'ERROR: '
-constexpr std::string_view FIND_ERROR_PREFIX = "ERROR: ";
-
-/// findErrorSuffix: ' not on map!'
-constexpr std::string_view FIND_ERROR_SUFFIX = " not on map!";
 
 /// systemDataFrame: frame bytes, then "DATA ON "
 constexpr std::string_view SYSTEM_DATA_FRAME = "\033\037DATA ON ";

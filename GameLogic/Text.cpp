@@ -24,8 +24,6 @@ namespace
 constexpr std::uint16_t CURSOR_BLINK_TICKS = 300;
 constexpr std::uint8_t FIRST_UNMAPPED_SCAN = 0x54; // scanCodeToAscii's length
 constexpr std::uint8_t NO_CHARACTER = 0xFF;        // in scanCodeToAscii: a key that types nothing
-constexpr std::uint8_t ENTER_KEY = 0x0D;
-constexpr std::uint8_t BACKSPACE_KEY = 0x00;
 constexpr std::uint8_t CURSOR_HIDDEN = ' ';
 constexpr std::uint8_t LOWER_CASE_BIT = 0x20;
 constexpr std::uint8_t UPPER_CASE_MASK = 0xDF;
@@ -542,6 +540,29 @@ void PrintTextLines(GameState& _state, std::string_view _texts, std::uint16_t _c
   }
 }
 
+std::optional<std::uint8_t> TypedCharacter(const KeyPress& _key) noexcept
+{
+  if (_key.scanCode == 0 || _key.scanCode >= FIRST_UNMAPPED_SCAN)
+  {
+    return std::nullopt;
+  }
+  std::uint8_t character = SCAN_CODE_TO_ASCII[_key.scanCode];
+  if (character == NO_CHARACTER)
+  {
+    return std::nullopt;
+  }
+  if (character >= 'A' && character <= 'Z')
+  {
+    // Bit 20h set, and cleared after it when GetKey says Shift was held: lower case unless Shift is held.
+    character = static_cast<std::uint8_t>(character | LOWER_CASE_BIT);
+    if (_key.shift)
+    {
+      character = static_cast<std::uint8_t>(character & UPPER_CASE_MASK);
+    }
+  }
+  return character;
+}
+
 [[nodiscard]] Task<void> ReadTextLine(GameState& _state, Host& _host, std::span<std::uint8_t> _buffer, std::uint8_t _most,
                                       std::uint16_t _cell)
 {
@@ -562,20 +583,13 @@ void PrintTextLines(GameState& _state, std::string_view _texts, std::uint16_t _c
     }
     co_await WaitForTimerTick(_state, _host);
     const KeyPress key = GetKey(_state);
-    if (key.scanCode == 0)
+    const std::optional<std::uint8_t> typed = TypedCharacter(key);
+    if (!typed)
     {
       continue;
     }
-    if (key.scanCode >= FIRST_UNMAPPED_SCAN)
-    {
-      continue;
-    }
-    std::uint8_t character = SCAN_CODE_TO_ASCII[key.scanCode];
-    if (character == NO_CHARACTER)
-    {
-      continue;
-    }
-    if (character == ENTER_KEY)
+    const std::uint8_t character = *typed;
+    if (character == TYPED_ENTER)
     {
       if (_state.Data().text.inputCursorText[0] != CURSOR_HIDDEN)
       {
@@ -584,7 +598,7 @@ void PrintTextLines(GameState& _state, std::string_view _texts, std::uint16_t _c
       }
       co_return;
     }
-    if (character == BACKSPACE_KEY)
+    if (character == TYPED_BACKSPACE)
     {
       if (length != 0)
       {
@@ -593,15 +607,6 @@ void PrintTextLines(GameState& _state, std::string_view _texts, std::uint16_t _c
         RedrawInputLine(_state, _buffer, length, _cell);
       }
       continue;
-    }
-    if (character >= 'A' && character <= 'Z')
-    {
-      // Bit 20h set, and cleared after it when GetKey says Shift was held: lower case unless Shift is held.
-      character = static_cast<std::uint8_t>(character | LOWER_CASE_BIT);
-      if (key.shift)
-      {
-        character = static_cast<std::uint8_t>(character & UPPER_CASE_MASK);
-      }
     }
     _buffer[length] = character;
     ++length;

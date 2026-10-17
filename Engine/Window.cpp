@@ -190,18 +190,40 @@ LRESULT Window::HandleMessage(UINT _message, WPARAM _wParam, LPARAM _lParam)
     return 0; // no beep for Alt with a letter
   case WM_MOUSEMOVE:
   case WM_LBUTTONDOWN:
+  case WM_LBUTTONUP:
   {
     if (!m_trackingLeave)
     {
       TRACKMOUSEEVENT track{.cbSize = sizeof(TRACKMOUSEEVENT), .dwFlags = TME_LEAVE, .hwndTrack = m_window, .dwHoverTime = 0};
       m_trackingLeave = TrackMouseEvent(&track) != FALSE;
     }
+    // A press captures the mouse, so that a drag goes on outside the window and its release comes here.
+    PointerEvent::Kind kind = PointerEvent::Kind::Move;
+    if (_message == WM_LBUTTONDOWN)
+    {
+      kind = PointerEvent::Kind::LeftDown;
+      m_pressed = true;
+      SetCapture(m_window);
+    }
+    else if (_message == WM_LBUTTONUP)
+    {
+      kind = PointerEvent::Kind::LeftUp;
+      m_pressed = false;
+      ReleaseCapture();
+    }
     // The client coordinates, signed: a captured or multi-screen mouse can be left of or above the client area.
-    m_pointerEvents.push_back(PointerEvent{.kind = _message == WM_MOUSEMOVE ? PointerEvent::Kind::Move : PointerEvent::Kind::LeftDown,
-                                           .x = static_cast<short>(LOWORD(_lParam)),
-                                           .y = static_cast<short>(HIWORD(_lParam))});
+    m_pointerEvents.push_back(
+      PointerEvent{.kind = kind, .x = static_cast<short>(LOWORD(_lParam)), .y = static_cast<short>(HIWORD(_lParam))});
     return 0;
   }
+  case WM_CAPTURECHANGED:
+    // The capture lost before the release, as to a window Windows put in front: the press ends there, and with it a drag.
+    if (m_pressed)
+    {
+      m_pressed = false;
+      m_pointerEvents.push_back(PointerEvent{.kind = PointerEvent::Kind::LeftUp, .x = 0, .y = 0});
+    }
+    return 0;
   case WM_MOUSELEAVE:
     m_trackingLeave = false;
     m_pointerEvents.push_back(PointerEvent{.kind = PointerEvent::Kind::Leave, .x = 0, .y = 0});

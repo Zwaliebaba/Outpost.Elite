@@ -150,12 +150,13 @@ void Identify(TwinRig& _rig, std::string_view _label, std::string_view _classNam
 TEST_CLASS(TextTests)
 {
 public:
-  // A line typed on the galactic chart's F: a capital with Shift, one character more than fits, every one
-  // deleted and one Backspace more, then Enter while the cursor shows.
+  // A line typed at the disc menu's Load Commander: a capital with Shift, one character more than fits, every one deleted and
+  // one Backspace more, then Enter while the cursor shows. (The galactic chart's F typed it until the chart's Find took its
+  // place, ADR-065.)
   TEST_METHOD(ReadTextLineAgreesWhileEditing)
   {
     TwinRig rig("TwinReadTextLine");
-    rig.Play("key space; wait 4\nkey F4; wait 0.3\nkey f; wait 0.1\n"
+    rig.Play("key space; wait 4\nkey Escape; wait 0.3\nkey l; wait 0.3\n"
              "down Shift_L; wait 0.02; key l; wait 0.02; up Shift_L; wait 0.02\n"
              "key a; key v; key e; key q; wait 0.02; key q; key q; key q; key q; wait 0.05\n"
              "key BackSpace; key BackSpace; key BackSpace; key BackSpace; key BackSpace; wait 0.02\n"
