@@ -80,6 +80,8 @@
     <ClInclude Include="AudioState.h" />
     <ClInclude Include="Cga.h" />
     <ClInclude Include="CgaFont.h" />
+    <ClInclude Include="ChartScreen.h" />
+    <ClInclude Include="ChartView.h" />
     <ClInclude Include="Combat.h" />
     <ClInclude Include="CombatState.h" />
     <ClInclude Include="CombatTables.h" />
@@ -180,6 +182,7 @@
     <ClCompile Include="Ai.cpp" />
     <ClCompile Include="Cga.cpp" />
     <ClCompile Include="CgaFont.cpp" />
+    <ClCompile Include="ChartScreen.cpp" />
     <ClCompile Include="Combat.cpp" />
     <ClCompile Include="DirectoryFileStore.cpp" />
     <ClCompile Include="Docked.cpp" />

@@ -102,6 +102,23 @@ std::optional<std::uint64_t> ParseSeconds(std::string_view _text) noexcept
   return milliseconds;
 }
 
+// "0" to "255", a click's x or row in the chart's units.
+std::optional<std::uint8_t> ParseChartUnit(std::string_view _text) noexcept
+{
+  if (_text.empty() || _text.size() > 3)
+    return std::nullopt;
+  unsigned value = 0;
+  for (const char digit : _text)
+  {
+    if (digit < '0' || digit > '9')
+      return std::nullopt;
+    value = value * 10 + static_cast<unsigned>(digit - '0');
+  }
+  if (value > 0xFF)
+    return std::nullopt;
+  return static_cast<std::uint8_t>(value);
+}
+
 bool IsDigestHex(std::string_view _text) noexcept
 {
   if (_text.size() != DIGEST_HEX_DIGITS)
@@ -194,9 +211,12 @@ bool ParseStep(std::string_view _text, std::size_t _line, std::vector<Step>& _st
   }
   const bool isDigest = verb == "digest";
   const bool isFile = verb == "file";
+  const bool isClick = verb == "click";
   if (isFile && words.size() != 3)
     return failure("file takes a DOS name and the file beside the replay to copy");
-  if (!isFile && (words.size() < 2 || words.size() > (isDigest ? 3u : 2u)))
+  if (isClick && words.size() != 3)
+    return failure("click takes the chart's x and row");
+  if (!isFile && !isClick && (words.size() < 2 || words.size() > (isDigest ? 3u : 2u)))
     return failure(isDigest ? "digest takes a label and an optional value" : "a step is a verb and one argument");
 
   Step step;
@@ -241,8 +261,17 @@ bool ParseStep(std::string_view _text, std::size_t _line, std::vector<Step>& _st
     step.name = std::move(canonical);
     step.source = std::string(words[2]);
   }
+  else if (isClick)
+  {
+    const std::optional<std::uint8_t> x = ParseChartUnit(words[1]);
+    const std::optional<std::uint8_t> row = ParseChartUnit(words[2]);
+    if (!x || !row)
+      return failure("a click's x and row are whole numbers from 0 to 255");
+    step.kind = StepKind::Click;
+    step.click = ChartClick{.x = *x, .row = *row};
+  }
   else
-    return failure("steps are wait, key, down, up, shot, digest, file and end, and a digest's picture and outcome");
+    return failure("steps are wait, key, down, up, click, shot, digest, file and end, and a digest's picture and outcome");
   if (_ended && step.kind != StepKind::Digest && step.kind != StepKind::Shot)
     return failure("only digest and shot may follow end, the last step that runs the machine");
   _ended = _ended || step.kind == StepKind::End;
@@ -438,6 +467,9 @@ StopReason ReplayPlayer::Play(const Step& _step, Checkpoint& _checkpoint)
     break;
   case StepKind::File:
     CopyFile(_step);
+    break;
+  case StepKind::Click:
+    m_platform.Click(_step.click);
     break;
   case StepKind::Shot:
     break;

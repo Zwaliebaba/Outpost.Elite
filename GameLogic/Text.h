@@ -3,12 +3,14 @@
 
 #include "GameState.h"
 #include "Host.h"
+#include "Input.h"
 #include "Message.h"
 #include "SpaceObject.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -185,6 +187,14 @@ void PrintTextLines(GameState& _state, std::string_view _texts, std::uint16_t _c
 {
   return std::string_view(reinterpret_cast<const char*>(_bytes.data()), _bytes.size());
 }
+
+/// What a key types, as ReadTextLine reads it: Enter (TYPED_ENTER), Backspace (TYPED_BACKSPACE), or a character, a letter lower
+/// case unless Shift was held; nothing for a key with no character.
+inline constexpr std::uint8_t TYPED_ENTER = 0x0D;
+inline constexpr std::uint8_t TYPED_BACKSPACE = 0x00;
+
+/// The character _key types, by scanCodeToAscii, or nothing.
+[[nodiscard]] std::optional<std::uint8_t> TypedCharacter(const KeyPress& _key) noexcept;
 
 /// ReadTextLine: a line typed into _buffer, a buffer of the data segment of at least _most + 1 bytes, at most _most
 /// characters, after ResetKeyboard and with textPaperPattern cleared; echoed by RedrawInputLine at B800:_cell, with a

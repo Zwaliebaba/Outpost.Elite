@@ -132,7 +132,7 @@ public:
              "key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15\n"
              "key Down; wait 0.15; key Down; wait 0.15; key Down; wait 0.15\nkey b; wait 0.3\ndigest bought");
     // The short-range chart at the moment recorded (ADR-064).
-    rig.Play("wait 0.05\nkey F5; wait 0.95\ndown Right; wait 0.55; up Right; wait 0.05\nkey F1; wait 1\ndown h; wait 0.2; up h\nwait 7.5\n"
+    rig.Play("wait 0.05\nkey F5; wait 0.95\nclick 108 46; wait 0.649\nkey F1; wait 0.951\ndown h; wait 0.2; up h\nwait 7.5\n"
              "digest arrived");
     Assert::AreEqual(std::uint8_t{1}, TwinByte(rig, &Commander::jumpedSinceBriefing), L"a jump since the briefing");
     rig.Play("down c; wait 0.1; up c\nwait 5\nkey F1; wait 1.5\ndigest launched");

@@ -3,6 +3,7 @@
 #include "Docked.h"
 
 #include "Arithmetic.h"
+#include "ChartScreen.h"
 #include "DockedTables.h"
 #include "EquipScreen.h"
 #include "Equipment.h"
@@ -315,11 +316,9 @@ void FormatQuantity(std::uint16_t _quantity, std::span<std::uint8_t> _text)
   case DockedScreen::Equip:
     return ShowEquipScreen(_state, _host);
   case DockedScreen::Galaxy:
-    return ShowGalacticChart(_state, _host, ScreenPlace::Docked);
+    return ShowChartScreen(_state, _host, ChartKind::Galactic, ScreenPlace::Docked);
   case DockedScreen::Local:
-    return ShowShortRangeChart(_state, _host, ScreenPlace::Docked);
-  case DockedScreen::Data:
-    return ShowSystemDataScreen(_state, _host, ScreenPlace::Docked);
+    return ShowChartScreen(_state, _host, ChartKind::ShortRange, ScreenPlace::Docked);
   case DockedScreen::Status:
   case DockedScreen::Disc:
     break;

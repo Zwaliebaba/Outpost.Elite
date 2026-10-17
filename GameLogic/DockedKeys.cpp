@@ -27,14 +27,13 @@ struct KeyedScreen
   DockedScreen screen;
 };
 
-constexpr std::array<KeyedScreen, 7> DOCKED_KEYS = {{
+constexpr std::array<KeyedScreen, 6> DOCKED_KEYS = {{
   {SCAN_ESCAPE, DockedScreen::Disc},
   {SCAN_F2, DockedScreen::Market},
   {SCAN_F3, DockedScreen::Equip},
   {SCAN_F4, DockedScreen::Galaxy},
   {SCAN_F5, DockedScreen::Local},
   {SCAN_F6, DockedScreen::Status},
-  {SCAN_F7, DockedScreen::Data},
 }};
 
 } // namespace
@@ -74,7 +73,7 @@ bool ClosesScreen(std::uint8_t _scanCode, ScreenPlace _place) noexcept
     const DockedTarget target = DockedTargetOf(_scanCode);
     return target.launches || target.screen.has_value();
   }
-  return _scanCode == SCAN_ESCAPE || (_scanCode >= SCAN_F1 && _scanCode <= SCAN_F10);
+  return _scanCode == SCAN_ESCAPE || (_scanCode >= SCAN_F1 && _scanCode <= SCAN_F10 && _scanCode != SCAN_F7);
 }
 
 } // namespace Elite

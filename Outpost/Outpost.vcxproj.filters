@@ -18,6 +18,9 @@
     <ClInclude Include="Cockpit.h">
       <Filter>Application</Filter>
     </ClInclude>
+    <ClInclude Include="DockedChart.h">
+      <Filter>Docked</Filter>
+    </ClInclude>
     <ClInclude Include="DockedEquip.h">
       <Filter>Docked</Filter>
     </ClInclude>
@@ -46,6 +49,9 @@
     </ClCompile>
     <ClCompile Include="Cockpit.cpp">
       <Filter>Application</Filter>
+    </ClCompile>
+    <ClCompile Include="DockedChart.cpp">
+      <Filter>Docked</Filter>
     </ClCompile>
     <ClCompile Include="DockedEquip.cpp">
       <Filter>Docked</Filter>

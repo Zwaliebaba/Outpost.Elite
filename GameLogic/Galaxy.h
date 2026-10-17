@@ -2,6 +2,7 @@
 #pragma once
 
 #include "Arithmetic.h"
+#include "ChartView.h"
 #include "Docked.h"
 #include "GameState.h"
 #include "Host.h"
@@ -9,7 +10,9 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <string_view>
+#include <vector>
 
 namespace Elite
 {
@@ -82,20 +85,6 @@ struct ShortRangeOffset
   std::optional<std::int16_t> row; ///< its chart row less the current system's, measured once x is within the chart
 };
 
-/// The first and the last of a span on the short-range chart: a chart item's x range, or its rows.
-struct ChartSpan
-{
-  std::uint8_t first;
-  std::uint8_t last;
-};
-
-/// What NudgeChartLabel does with a label's rows.
-struct LabelNudge
-{
-  bool moved;     ///< it moved them; otherwise it is out of tries
-  ChartSpan rows; ///< the rows, as it leaves them either way
-};
-
 /// GetShortRangeOffset: whether the system in systemSeeds is on the current chart, and on the
 /// short-range chart its offsets from the current system.
 [[nodiscard]] ShortRangeOffset GetShortRangeOffset(const GameState& _state);
@@ -137,9 +126,9 @@ std::uint8_t FindNearestSystem(GameState& _state);
 /// tenths of a light year: four times the root of dx^2 + (dy/2)^2. It writes selectedSystem.distanceTenthsLy.
 void ComputeDistanceToSystem(GameState& _state);
 
-/// ShowNearestSystemDistance: the system nearest the chart cursor selected (FindNearestSystem), and
-/// 'Distance: nnn.n Light Years' and its name on the two text lines under the chart.
-void ShowNearestSystemDistance(GameState& _state);
+/// What the original's D showed under the chart, without the showing: the system nearest the chart cursor selected
+/// (FindNearestSystem), its distance into distanceDigits and distanceText, and its name generated.
+void NoteNearestSystem(GameState& _state);
 
 /// LoadSystemSeeds: the seeds of system _system of the current galaxy: LoadGalaxySeeds, then
 /// AdvanceToNextSystem _system times.
@@ -152,58 +141,56 @@ void AdvanceToNextSystem(GameState& _state);
 /// system. Returns the length.
 std::uint8_t GenerateSystemName(GameState& _state);
 
-/// FindSystemByName: a name read under the chart (ReadTextLine) and, if a system of the galaxy has it and
-/// it is on the chart, the cursor moved there and ShowNearestSystemDistance; otherwise 'not on map'. Nothing typed is
-/// ShowNearestSystemDistance alone. Waits for keys as a rule (ADR-015).
-[[nodiscard]] Task<void> FindSystemByName(GameState& _state, Host& _host);
+/// What the original's Find found for the name in findInput, as ReadTextLine leaves it typed: nothing typed, the nearest system
+/// (NoteNearestSystem); a system of the galaxy by that name on the current chart, the cursor moved onto it and NoteNearestSystem;
+/// otherwise none on this chart.
+enum class FindResult : std::uint8_t
+{
+  Nearest,
+  Found,
+  NotOnChart,
+};
 
-/// ShowSystemDataScreen: F7's data on the selected system and its description, then the keys until Esc or another F
-/// key (WaitForScreenExitKey), which selects the system at the chart cursor again. Waits for keys as a rule (ADR-015).
-[[nodiscard]] Task<ScreenKey> ShowSystemDataScreen(GameState& _state, Host& _host, ScreenPlace _place);
+/// The original's Find, once the name is typed into findInput: the name echoed into findInputEcho and upper-cased, and each
+/// system's name compared with it, the cursor moved as FindResult says.
+FindResult FindTypedSystem(GameState& _state);
 
-/// ShowGalacticChart: F5's chart of the galaxy's 256 systems: the current system and the cursor kept for the galactic
-/// chart, a frame at a time until Esc or another F key closes it, the cursor moved by the steering. D shows the distance to the
-/// system nearest the cursor, F finds one by name, keypad 5 or fire recentres the cursor; a key that closes it selects the system
-/// at the cursor unless the hyperspace countdown runs. Waits for keys as a rule (ADR-015).
-[[nodiscard]] Task<ScreenKey> ShowGalacticChart(GameState& _state, Host& _host, ScreenPlace _place);
+/// What the original's chart did on opening, without the drawing: the galactic chart (_kind) the current system's place on it,
+/// its number in the title's place, and the cursor it keeps; the short-range chart the cursor it keeps; either the chart's
+/// screen layout (DrawChartFrame) and chartIsShortRange.
+void EnterChart(GameState& _state, Host& _host, ChartKind _kind);
 
-/// ShowShortRangeChart: F6's chart of the systems around the current one, each a disc and a label placed clear of the
-/// others (PlaceChartLabels), run as ShowGalacticChart runs its own.
-[[nodiscard]] Task<ScreenKey> ShowShortRangeChart(GameState& _state, Host& _host, ScreenPlace _place);
+/// What the original's chart did as a key closed it: unless the hyperspace countdown runs, the system at the cursor selected
+/// (SelectSystemAtCursor) and the cursor kept for the chart open, as chartIsShortRange says.
+void LeaveChart(GameState& _state);
 
-/// DrawChartItems: the short-range chart's chartItemCount items in colour 3: a label by DrawSmallViewString in ink
-/// FFFFh at its top-left corner, a disc (DrawDisc) at its centre.
-void DrawChartItems(GameState& _state);
+/// Keypad 5's: the cursor back on the current system, the galactic chart's on it and the short-range chart's on its centre.
+void RecenterChartCursor(GameState& _state);
 
-/// PlaceChartLabels: each of chartItemCount pending labels, nudged clear of every chart item until
-/// NudgeChartLabel runs out of tries, added to chartItems by AddChartLabel.
-void PlaceChartLabels(GameState& _state);
+/// The cursor moved to _point, in the open chart's units, held to its 128 rows as the steering held it.
+void PlaceChartCursor(GameState& _state, ChartClick _point);
 
-/// AddChartLabel: appends a label item, its x range _x and its rows _rows, for the name at
-/// chartLabelCursor, and moves chartLabelCursor past the name.
-void AddChartLabel(GameState& _state, ChartSpan _x, ChartSpan _rows);
+/// The short-range chart's centre, in its units: the current system's place.
+inline constexpr ChartClick SHORT_RANGE_CENTER{.x = 0x50, .row = 0x40};
 
-/// NudgeChartLabel: moves a label's rows out by the next step, up for an odd step and down for an
-/// even one, skipping a move off the chart, until it is out of tries.
-[[nodiscard]] LabelNudge NudgeChartLabel(GameState& _state, ChartSpan _rows);
+/// The selected system's facts, as DescribeSystem leaves them in selectedSystem and Data on System prints them, its description
+/// expanded (SystemDescription).
+[[nodiscard]] SystemFacts SelectedSystemFacts(GameState& _state);
 
-/// ChartItemOverlaps: whether item _item of chartItems overlaps x range _x and rows _rows.
-[[nodiscard]] bool ChartItemOverlaps(const GameState& _state, std::size_t _item, ChartSpan _x, ChartSpan _rows);
+/// Every system of the open chart, in its units: on the galactic chart the galaxy's 256, on the short-range chart those on it, with
+/// their names. It moves the seeds.
+[[nodiscard]] std::vector<ChartStar> ChartStars(GameState& _state);
 
-/// ClearChartTextLines: blankChartLine drawn in _ink over the two text lines under a chart.
-void ClearChartTextLines(GameState& _state, std::uint16_t _ink);
+/// System _system's place on the open chart, in its units: where MoveCursorToSystem would put the cursor. It moves the seeds and
+/// the cursor.
+[[nodiscard]] ChartClick SystemChartPlace(GameState& _state, std::uint8_t _system);
 
 /// TerminateSelectedSystemName: a NUL after selectedSystem.name.
 void TerminateSelectedSystemName(GameState& _state);
 
-/// FormatSelectedSystemDistance: the distance digits with a decimal point, copied into selectedDistanceText, ending at
-/// its last byte. Returns the text, from its first digit.
-std::string_view FormatSelectedSystemDistance(GameState& _state);
-
-/// ShowSystemDescription: descriptionBuffer zeroed a word at a time, forwards, the selected
-/// system's description expanded into it from descriptionTemplate, and printed on the text
-/// page from row 19, word-wrapped at the last space within 36 characters.
-void ShowSystemDescription(GameState& _state);
+/// SystemDescription: descriptionBuffer zeroed a word at a time, forwards, and the selected system's description expanded into
+/// it from descriptionTemplate. Returns the description.
+std::string SystemDescription(GameState& _state);
 
 /// ExpandDescriptionText: the coded text _text expanded into descriptionBuffer from its byte _output, recursively: a byte
 /// of 1-6 runs the

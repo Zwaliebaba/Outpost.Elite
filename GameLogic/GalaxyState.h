@@ -17,12 +17,12 @@ struct GalaxyState
   std::uint16_t systemSeed1;
   /// low byte bit 7 clear means human colonials; bit 0 adds 1 to the tech level
   std::uint16_t systemSeed2;
-  /// 'Distance: 100.0 Light Years'; ShowNearestSystemDistance patches the digits at +0x0A-0x0C and +0x0E
+  /// 'Distance: 100.0 Light Years'; NoteNearestSystem patches the digits at +0x0A-0x0C and +0x0E
   std::uint8_t distanceText[28];
   /// FormatDecimal5's five ASCII digits of selectedSystem.distanceTenthsLy: the first blank, then the hundreds, tens, units and
   /// tenths
   std::uint8_t distanceDigits[5];
-  /// FindSystemByName's typed name, 8 characters and a terminator
+  /// FindTypedSystem's typed name, 8 characters and a terminator
   std::uint8_t findInput[9];
   /// the name as typed, for the error message
   std::uint8_t findInputEcho[9];
@@ -73,16 +73,18 @@ struct GalaxyState
   ChartItem chartItems[32];
   /// next pending label in pendingChartLabels; AddChartLabel moves it past the name
   std::uint16_t chartLabelCursor;
-  /// records of an x range and a row range, each first then last, then a NUL-terminated system name, written by ShowShortRangeChart
+  /// records of an x range and a row range, each first then last, then a NUL-terminated system name, which the original's
+  /// short-range chart wrote and nothing writes now
   std::uint8_t pendingChartLabels[256];
   /// tries so far for the current label; NudgeChartLabel gives up at 35
   std::uint8_t labelNudgeCount;
   /// counted down by PlaceChartLabels
   std::uint8_t labelsLeftToPlace;
-  /// the data screen's tech level, one to sixteen: its tens digit, a space below ten, and its units digit
+  /// The members from here to radiusDigits were the original's Data on System's working fields, which nothing writes now (D112).
+  /// The tech level, one to sixteen: its tens digit, a space below ten, and its units digit
   std::uint8_t techLevelTensDigit;
   std::uint8_t techLevelUnitsDigit;
-  /// the selected system's distance as FormatSelectedSystemDistance copies it, its digits and point, back to the space before them (chan...
+  /// the selected system's distance as the data screen copied it, its digits and point, back to the space before them (chan...
   std::uint8_t selectedDistanceText[6];
   /// the population's five digits, the units digit and a point moved into the last two (change 3c names it)
   std::uint8_t populationDigits[5];

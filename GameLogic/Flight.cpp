@@ -4,6 +4,7 @@
 
 #include "Ai.h"
 #include "Arithmetic.h"
+#include "ChartScreen.h"
 #include "Combat.h"
 #include "Docked.h"
 #include "Docking.h"
@@ -884,17 +885,12 @@ bool EraseForFlightScreen(GameState& _state)
       erase();
       if (key == SCAN_F5)
       {
-        shown(co_await ShowGalacticChart(_state, _host, ScreenPlace::Flight));
+        shown(co_await ShowChartScreen(_state, _host, ChartKind::Galactic, ScreenPlace::Flight));
         continue;
       }
       if (key == SCAN_F6)
       {
-        shown(co_await ShowShortRangeChart(_state, _host, ScreenPlace::Flight));
-        continue;
-      }
-      if (key == SCAN_F7)
-      {
-        shown(co_await ShowSystemDataScreen(_state, _host, ScreenPlace::Flight));
+        shown(co_await ShowChartScreen(_state, _host, ChartKind::ShortRange, ScreenPlace::Flight));
         continue;
       }
       if (key == SCAN_F8)
@@ -912,7 +908,7 @@ bool EraseForFlightScreen(GameState& _state)
         if (_state.Data().commander.witchspaceCountdown == 1)
         {
           erase();
-          shown(co_await ShowShortRangeChart(_state, _host, ScreenPlace::Flight));
+          shown(co_await ShowChartScreen(_state, _host, ChartKind::ShortRange, ScreenPlace::Flight));
           continue;
         }
       }
@@ -1006,9 +1002,7 @@ void PostHyperspaceRefusal(GameState& _state, Message _message)
     }
     // The fuel times 10, over 24h as a byte divide, against the distance's low byte; then the cost: the distance's low byte
     // times 24h, over 10 as a byte divide, at least 1.
-    const std::uint8_t tenths = Low(distance);
-    const ByteQuotient reach = DivideByte(static_cast<std::uint16_t>(_state.Data().commander.fuel * FUEL_FACTOR), FUEL_DIVISOR);
-    if (reach.quotient < tenths)
+    if (FuelReachTenths(_state.Data().commander.fuel) < Low(distance))
     {
       PostHyperspaceRefusal(_state, Message::NotEnoughFuel);
       return false;
@@ -1460,6 +1454,16 @@ DustPosition RespawnDustAnywhere(GameState& _state, std::size_t _particle)
   return DustPosition{Signed(RandomDustX(random)), Signed(RandomDustY(Swap(random)))};
 }
 
+std::uint8_t FuelReachTenths(std::uint8_t _fuel)
+{
+  return DivideByte(static_cast<std::uint16_t>(_fuel * FUEL_FACTOR), FUEL_DIVISOR).quotient;
+}
+
+bool WithinJumpRange(std::uint16_t _distanceTenths, std::uint8_t _fuel)
+{
+  return _distanceTenths != 0 && _distanceTenths < OUT_OF_RANGE_TENTHS && FuelReachTenths(_fuel) >= Low(_distanceTenths);
+}
+
 bool IsDustOnScreen(DustPosition _position)
 {
   const std::int8_t x = WholePart(_position.x);
@@ -1556,11 +1560,12 @@ void SaveStardustPositions(GameState& _state)
 [[nodiscard]] Task<FlightScreens> HandleFlightFunctionKeys(GameState& _state, Host& _host)
 {
   _state.Data().flow.inFlight = 0;
-  // F1-F10 in keyDown, from F1's scan code up, the ten keys counted down.
+  // F1-F10 in keyDown, from F1's scan code up, the ten keys counted down; F7, whose Data on System is the charts' side panel now,
+  // does nothing in flight (D112).
   std::uint16_t scan = SCAN_F1;
   for (std::uint16_t keys = FUNCTION_KEYS;;)
   {
-    if (ByteWithin(BytesOf(_state.Data().keyboard.keyDown), scan) == 1)
+    if (scan != SCAN_F7 && ByteWithin(BytesOf(_state.Data().keyboard.keyDown), scan) == 1)
     {
       // The scan code is kept round ResetKeyboard.
       ResetKeyboard(_state);

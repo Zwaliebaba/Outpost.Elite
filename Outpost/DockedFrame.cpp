@@ -45,6 +45,7 @@ constexpr std::uint32_t STRIP_ALERT_FILL = 0xFF29160F;
 constexpr std::uint32_t STRIP_SUCCESS_FILL = 0xFF291F11;
 constexpr std::uint32_t STRIP_MARK = 0xFF2E160A; // the ! and the ✓ on their square
 constexpr std::uint32_t DOT_GLOW = 0x30C9BCA6;
+constexpr std::uint32_t DOT_ALERT_GLOW = 0x30FFB09A;
 constexpr std::uint32_t BUTTON_LIT_FILL = 0xFF382A14;
 constexpr std::uint32_t BUTTON_EDGE = 0xFF886124;
 constexpr std::uint32_t BUTTON_OFF_EDGE = 0xFF3A2E1C;
@@ -198,15 +199,17 @@ void DockedFrame::Draw(const Desc& _desc, std::optional<Engine::Point> _pointer,
   _canvas.Text(title.text, title.font, title.size, title.spacing, title.anchor, title.align, title.color);
 
   // Where the ship is, and the credits.
-  _canvas.Ellipse(Engine::Point{.x = 65.0f, .y = 21.0f}, 8.0f, 8.0f, DOT_GLOW);
-  _canvas.Ellipse(Engine::Point{.x = 65.0f, .y = 21.0f}, 4.5f, 4.5f, LABEL);
-  _canvas.Text(_desc.location, Engine::Font::Label, 17.0f, 4.0f, Engine::Point{.x = 83.0f, .y = STATUS_Y}, Engine::Align::Left, LABEL);
+  const std::uint32_t where = _desc.alert ? ALERT_LIGHT : LABEL;
+  _canvas.Ellipse(Engine::Point{.x = 65.0f, .y = 21.0f}, 8.0f, 8.0f, _desc.alert ? DOT_ALERT_GLOW : DOT_GLOW);
+  _canvas.Ellipse(Engine::Point{.x = 65.0f, .y = 21.0f}, 4.5f, 4.5f, where);
+  _canvas.Text(_desc.location, Engine::Font::Label, 17.0f, 4.0f, Engine::Point{.x = 83.0f, .y = STATUS_Y}, Engine::Align::Left, where);
   _canvas.Text(Tenths(_desc.creditsTenths), Engine::Font::Number, 25.0f, 0.0f, Engine::Point{.x = CREDITS_RIGHT, .y = 19.5f},
                Engine::Align::Right, AMBER_LIGHT);
   _canvas.Text(L"CREDITS", Engine::Font::Label, 14.0f, 3.0f, Engine::Point{.x = CREDITS_LABEL_LEFT, .y = 23.0f}, Engine::Align::Left,
                LABEL);
 
-  // The key bar, its tab, and the keys, the open screen's lit and the one under the pointer hovered.
+  // The key bar, its tab, and the keys, the open screen's lit and the one under the pointer hovered; in flight, F1 FRONT, and ESC
+  // DISC and F3 EQUIP off, as no key reaches them there (D110).
   _canvas.Quad({Engine::Point{.x = KEY_TAB_LEFT, .y = KEY_TAB_TOP_Y}, Engine::Point{.x = KEY_TAB_RIGHT, .y = KEY_TAB_TOP_Y},
                 Engine::Point{.x = KEY_TAB_RIGHT + KEY_TAB_SLANT, .y = KEY_BAR_TOP_Y},
                 Engine::Point{.x = KEY_TAB_LEFT - KEY_TAB_SLANT, .y = KEY_BAR_TOP_Y}},
@@ -219,15 +222,17 @@ void DockedFrame::Draw(const Desc& _desc, std::optional<Engine::Point> _pointer,
   {
     const KeyPlace& place = KEYS[index];
     const Engine::Rect rect = KeyRect(place);
-    const bool lit = static_cast<std::size_t>(_desc.lit) == index;
-    const bool hover = !lit && hovered == static_cast<DockedKey>(index);
+    const auto key = static_cast<DockedKey>(index);
+    const bool off = _desc.flight && (key == DockedKey::Disc || key == DockedKey::Equip);
+    const bool lit = _desc.lit == key;
+    const bool hover = !lit && !off && hovered == key;
     _canvas.Box(rect, lit ? KEY_LIT_FILL : (hover ? KEY_HOVER_FILL : KEY_FILL));
-    Edges(rect, lit ? AMBER : (hover ? KEY_HOVER_EDGE : KEY_EDGE), _canvas);
+    Edges(rect, lit ? AMBER : (hover ? KEY_HOVER_EDGE : (off ? BUTTON_OFF_EDGE : KEY_EDGE)), _canvas);
     const float center = place.left + place.width / 2.0f;
     _canvas.Text(place.key, Engine::Font::Label, 14.0f, 0.0f, Engine::Point{.x = center, .y = 1024.5f}, Engine::Align::Center,
-                 lit ? AMBER_LIGHT : KEY_NAME);
-    _canvas.Text(place.name, Engine::Font::Label, 15.0f, 2.0f, Engine::Point{.x = center + 1.0f, .y = 1044.0f}, Engine::Align::Center,
-                 lit ? TEXT : LABEL);
+                 lit ? AMBER_LIGHT : (off ? BUTTON_OFF_TEXT : KEY_NAME));
+    _canvas.Text(_desc.flight && key == DockedKey::Launch ? L"FRONT" : place.name, Engine::Font::Label, 15.0f, 2.0f,
+                 Engine::Point{.x = center + 1.0f, .y = 1044.0f}, Engine::Align::Center, lit ? TEXT : (off ? BUTTON_OFF_TEXT : LABEL));
   }
 }
 

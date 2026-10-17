@@ -5,6 +5,7 @@
 #include "DockedKeys.h"
 #include "FileStore.h"
 #include "FlightSnapshot.h"
+#include "ChartView.h"
 #include "EquipView.h"
 #include "MarketView.h"
 #include "Mouse.h"
@@ -294,6 +295,19 @@ public:
     return m_equipShown ? &m_equipView : nullptr;
   }
 
+  /// _view published as what a chart, D04 to D07, shows now (ADR-065): numbered, one more than the last. While one is shown, the
+  /// shell draws it in place of the CGA picture and the cockpit.
+  void ShowChart(ChartView _view);
+
+  /// The chart no longer shown: its routine ended. The clicks not yet taken go with it.
+  void HideChart() noexcept;
+
+  /// The chart's view while it is shown, or nothing.
+  [[nodiscard]] const ChartView* ShownChart() const noexcept
+  {
+    return m_chartShown ? &m_chartView : nullptr;
+  }
+
   /// _view published as what the status screen, D08, shows now (ADR-063): numbered, one more than the last. While one is shown,
   /// the shell draws it in place of the CGA picture.
   void ShowStatus(StatusView _view);
@@ -336,6 +350,13 @@ public:
 
   /// The oldest click on the shipyard queued, taken, or nothing.
   [[nodiscard]] std::optional<EquipClick> TakeEquipClick() noexcept;
+
+  /// A click or a drag's move on a chart, from the shell (D99, D109), in the chart's units, queued for it; dropped while none is
+  /// shown.
+  void Click(const ChartClick& _click);
+
+  /// The oldest click on the chart queued, taken, or nothing.
+  [[nodiscard]] std::optional<ChartClick> TakeChartClick() noexcept;
 
   /// The space view's layers as the last published snapshot's frame drew them (ADR-033): what a renderer that draws the ships
   /// itself draws under and over them. PublishFlightSnapshot finishes them and marks each object drawn as a model.
@@ -464,6 +485,9 @@ private:
   bool m_marketShown = false;                 // while the market screen's routine runs
   std::deque<MarketClick> m_clicks;           // the shell's clicks on it, oldest first
   std::optional<DockedScreen> m_dockedScreen; // the docked host's open screen, while it runs
+  ChartView m_chartView;                      // the chart's latest view
+  bool m_chartShown = false;                  // while a chart's routine runs
+  std::deque<ChartClick> m_chartClicks;       // the shell's clicks on it, oldest first
   EquipView m_equipView;                      // the shipyard's latest view
   bool m_equipShown = false;                  // while the shipyard's routine runs
   std::deque<EquipClick> m_equipClicks;       // the shell's clicks on it, oldest first

@@ -86,29 +86,7 @@ constexpr std::array<std::string_view, 8> SPECIES_TYPE_NAMES = {
   std::string_view{"Insects)"},   // [7]
 };
 
-constexpr std::string_view ECONOMY_LABEL_TEXT = "Economy:      ";
-
-constexpr std::string_view GOVERNMENT_LABEL_TEXT = "Government:   ";
-
-constexpr std::string_view TECH_LEVEL_LABEL_TEXT = "Tech. Level:  ";
-
-constexpr std::string_view DISTANCE_LABEL_TEXT = "Distance:     ";
-
-constexpr std::string_view LIGHT_YEARS_TEXT = " Light Years";
-
-constexpr std::string_view POPULATION_LABEL_TEXT = "Population:   ";
-
-constexpr std::string_view POPULATION_UNIT_TEXT = " Billion";
-
-constexpr std::string_view SPECIES_OPEN_TEXT = "(";
-
 constexpr std::string_view HUMAN_COLONIALS_TEXT = "Human Colonials)";
-
-constexpr std::string_view PRODUCTIVITY_LABEL_TEXT = "Productivity: ";
-
-constexpr std::string_view PRODUCTIVITY_UNIT_TEXT = " M CR";
-
-constexpr std::string_view RADIUS_UNIT_TEXT = " km";
 
 /// Every phrase descriptionPhraseLists' lists point at, in the order of their addresses: its text up to its NUL, which
 /// may hold the control codes (1-31) and phrase codes (80h on) ExpandDescriptionText expands.
@@ -366,15 +344,6 @@ constexpr std::array<std::array<std::uint8_t, 6>, 8> GALAXY_SEEDS = {{
   {0x25, 0x2D, 0x24, 0x01, 0xA9, 0xDB}, // [7]
 }};
 
-/// blankChartLine: 27 spaces and a NUL; ClearChartTextLines prints it twice
-constexpr std::string_view BLANK_CHART_LINE = "                           ";
-
-/// nameLinePadding: 12 spaces printed after a system name
-constexpr std::string_view NAME_LINE_PADDING = "            ";
-
-/// findPrompt: 'FIND: Which System ?'
-constexpr std::string_view FIND_PROMPT = "FIND: Which System ?";
-
 /// systemNameDigrams: 2 characters; entry 0 is two spaces, which add nothing
 constexpr std::array<std::array<std::uint8_t, 2>, 32> SYSTEM_NAME_DIGRAMS = {{
   {0x20, 0x20}, // [0]
@@ -410,28 +379,6 @@ constexpr std::array<std::array<std::uint8_t, 2>, 32> SYSTEM_NAME_DIGRAMS = {{
   {0x52, 0x49}, // [30]
   {0x4F, 0x4E}, // [31]
 }};
-
-/// shortRangeChartTitle: 'SHORT RANGE CHART'
-constexpr std::string_view SHORT_RANGE_CHART_TITLE = "SHORT RANGE CHART";
-
-/// galacticChartTitle: 'GALACTIC CHART ' then galacticChartNumber
-constexpr std::string_view GALACTIC_CHART_TITLE{"GALACTIC CHART ", 15};
-
-/// galacticChartTitleEnd: the space and the NUL that end the galactic chart's title after galacticChartNumber (change 3c
-/// names it)
-constexpr std::string_view GALACTIC_CHART_TITLE_END = " ";
-
-/// findErrorPrefix: 'ERROR: '
-constexpr std::string_view FIND_ERROR_PREFIX = "ERROR: ";
-
-/// findErrorSuffix: ' not on map!'
-constexpr std::string_view FIND_ERROR_SUFFIX = " not on map!";
-
-/// systemDataFrame: frame bytes, then "DATA ON "
-constexpr std::string_view SYSTEM_DATA_FRAME = "\033\037DATA ON ";
-
-/// radiusLabel: 'Radius (Av): ', which runs on into radiusDigits (change 3c names it)
-constexpr std::string_view RADIUS_LABEL{"Radius (Av): ", 13};
 
 /// descriptionTemplate: code 6, phrase 0x92, "is ", phrase 0x93, code 4, "."
 constexpr std::string_view DESCRIPTION_TEMPLATE = "\006\222is \223\004.";

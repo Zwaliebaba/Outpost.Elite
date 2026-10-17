@@ -111,6 +111,13 @@ void ShiftStardustVertically(GameState& _state, std::int16_t _step);
 /// IsDustOnScreen: whether the high byte of x is in -20h..1Fh and that of y in -10h..0Fh.
 [[nodiscard]] bool IsDustOnScreen(DustPosition _position);
 
+/// PressHyperspace's rule: how far _fuel reaches, in tenths of a light year: ten times it over 36, a byte divide.
+[[nodiscard]] std::uint8_t FuelReachTenths(std::uint8_t _fuel);
+
+/// PressHyperspace's rule: whether a jump of _distanceTenths tenths of a light year goes on _fuel: under 7.1 light years, and
+/// the distance's low byte within the fuel's reach. A distance of 0, the current system, is none selected.
+[[nodiscard]] bool WithinJumpRange(std::uint16_t _distanceTenths, std::uint8_t _fuel);
+
 /// IsDustNearCenter: whether the high byte of x is in -6..6 and that of y in -3..3, where the rear
 /// view respawns a particle.
 [[nodiscard]] bool IsDustNearCenter(DustPosition _position);

@@ -273,6 +273,19 @@ void Host::HideMarket() noexcept
   m_clicks.clear();
 }
 
+void Host::ShowChart(ChartView _view)
+{
+  _view.sequence = m_chartView.sequence + 1;
+  m_chartView = std::move(_view);
+  m_chartShown = true;
+}
+
+void Host::HideChart() noexcept
+{
+  m_chartShown = false;
+  m_chartClicks.clear();
+}
+
 void Host::ShowEquip(EquipView _view)
 {
   _view.sequence = m_equipView.sequence + 1;
@@ -314,6 +327,25 @@ std::optional<MarketClick> Host::TakeClick() noexcept
   }
   const MarketClick click = m_clicks.front();
   m_clicks.pop_front();
+  return click;
+}
+
+void Host::Click(const ChartClick& _click)
+{
+  if (m_chartShown)
+  {
+    m_chartClicks.push_back(_click);
+  }
+}
+
+std::optional<ChartClick> Host::TakeChartClick() noexcept
+{
+  if (m_chartClicks.empty())
+  {
+    return std::nullopt;
+  }
+  const ChartClick click = m_chartClicks.front();
+  m_chartClicks.pop_front();
   return click;
 }
 
