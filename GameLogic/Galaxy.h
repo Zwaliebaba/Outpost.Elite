@@ -155,10 +155,6 @@ enum class FindResult : std::uint8_t
 /// system's name compared with it, the cursor moved as FindResult says.
 FindResult FindTypedSystem(GameState& _state);
 
-/// ShowSystemDataScreen: F7's data on the selected system and its description, then the keys until Esc or another F
-/// key (WaitForScreenExitKey), which selects the system at the chart cursor again. Waits for keys as a rule (ADR-015).
-[[nodiscard]] Task<ScreenKey> ShowSystemDataScreen(GameState& _state, Host& _host, ScreenPlace _place);
-
 /// What the original's chart did on opening, without the drawing: the galactic chart (_kind) the current system's place on it,
 /// its number in the title's place, and the cursor it keeps; the short-range chart the cursor it keeps; either the chart's
 /// screen layout (DrawChartFrame) and chartIsShortRange.
@@ -192,17 +188,9 @@ inline constexpr ChartClick SHORT_RANGE_CENTER{.x = 0x50, .row = 0x40};
 /// TerminateSelectedSystemName: a NUL after selectedSystem.name.
 void TerminateSelectedSystemName(GameState& _state);
 
-/// FormatSelectedSystemDistance: the distance digits with a decimal point, copied into selectedDistanceText, ending at
-/// its last byte. Returns the text, from its first digit.
-std::string_view FormatSelectedSystemDistance(GameState& _state);
-
 /// SystemDescription: descriptionBuffer zeroed a word at a time, forwards, and the selected system's description expanded into
 /// it from descriptionTemplate. Returns the description.
 std::string SystemDescription(GameState& _state);
-
-/// ShowSystemDescription: SystemDescription, printed on the text page from row 19, word-wrapped at the last space within 36
-/// characters.
-void ShowSystemDescription(GameState& _state);
 
 /// ExpandDescriptionText: the coded text _text expanded into descriptionBuffer from its byte _output, recursively: a byte
 /// of 1-6 runs the

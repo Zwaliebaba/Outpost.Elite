@@ -58,7 +58,7 @@ struct ChartInput
                                     ScreenPlace _place);
 
 /// D04 to D07, the galactic and the short-range chart (D82), which F4 and F5 open docked and F5 and F6 in flight, in place of the
-/// original's charts and, docked, Data on System. The chart is entered as the original entered it (EnterChart), then each tick
+/// original's charts and Data on System (D112). The chart is entered as the original entered it (EnterChart), then each tick
 /// the clicks the shell sent move the cursor (D99, D109), a key acts (ChartKey), and the view is published (Host::ShowChart). A
 /// key that closes it selects the system at the cursor unless the countdown runs (LeaveChart). Returns that key: Esc, or an
 /// F-key other than the chart's own.

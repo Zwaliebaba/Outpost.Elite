@@ -32,9 +32,9 @@ struct ScreenKey
 /// AwardArchangelTitle: 'ARCHANGEL' over the rank in commanderRankText.
 void AwardArchangelTitle(GameState& _state);
 
-/// WaitForScreenExitKey, the tail that ShowSystemDataScreen, ShowMarketPricesScreen, ShowCommanderStatusScreen and
-/// ShowInventoryScreen jump into: GetKey until a key that closes a screen at _place (ClosesScreen) other than the screen's own,
-/// _ownKey, then SelectSystemAtCursor. Waits for keys as a rule (ADR-015).
+/// WaitForScreenExitKey, the tail that ShowMarketPricesScreen, ShowCommanderStatusScreen and ShowInventoryScreen jump into:
+/// GetKey until a key that closes a screen at _place (ClosesScreen) other than the screen's own, _ownKey, then
+/// SelectSystemAtCursor. Waits for keys as a rule (ADR-015).
 [[nodiscard]] Task<ScreenKey> WaitForScreenExitKey(GameState& _state, Host& _host, std::uint8_t _ownKey, ScreenPlace _place);
 
 /// ShowCommanderStatusScreen, F6 docked (D96) and F9 in flight: docked, a mission's briefing or debriefing first; then the

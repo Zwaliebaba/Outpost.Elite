@@ -92,14 +92,14 @@ public:
     }
   }
 
-  // Docked, a screen closes on the keys the docked host acts on; in flight, on Esc and every F-key, as in the original.
+  // Docked, a screen closes on the keys the docked host acts on; in flight, on Esc and every F-key but F7 (D112).
   TEST_METHOD(AScreenClosesOnTheKeysOfItsPlace)
   {
     for (std::uint8_t key = SCAN_F1; key <= SCAN_F10; ++key)
     {
       const bool acted = key != SCAN_F7 && key != SCAN_F8 && key != SCAN_F9 && key != SCAN_F10;
       Assert::AreEqual(acted, Elite::ClosesScreen(key, Elite::ScreenPlace::Docked), L"docked");
-      Assert::IsTrue(Elite::ClosesScreen(key, Elite::ScreenPlace::Flight), L"in flight");
+      Assert::AreEqual(key != SCAN_F7, Elite::ClosesScreen(key, Elite::ScreenPlace::Flight), L"in flight, every F-key but F7 (D112)");
     }
     Assert::IsTrue(
       Elite::ClosesScreen(SCAN_ESCAPE, Elite::ScreenPlace::Docked) && Elite::ClosesScreen(SCAN_ESCAPE, Elite::ScreenPlace::Flight), L"Esc");

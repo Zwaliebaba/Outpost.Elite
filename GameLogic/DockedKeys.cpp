@@ -17,6 +17,7 @@ constexpr std::uint8_t SCAN_F3 = 0x3D;
 constexpr std::uint8_t SCAN_F4 = 0x3E;
 constexpr std::uint8_t SCAN_F5 = 0x3F;
 constexpr std::uint8_t SCAN_F6 = 0x40;
+constexpr std::uint8_t SCAN_F7 = 0x41;
 constexpr std::uint8_t SCAN_F10 = 0x44;
 
 // A key and the screen it shows docked.
@@ -72,7 +73,7 @@ bool ClosesScreen(std::uint8_t _scanCode, ScreenPlace _place) noexcept
     const DockedTarget target = DockedTargetOf(_scanCode);
     return target.launches || target.screen.has_value();
   }
-  return _scanCode == SCAN_ESCAPE || (_scanCode >= SCAN_F1 && _scanCode <= SCAN_F10);
+  return _scanCode == SCAN_ESCAPE || (_scanCode >= SCAN_F1 && _scanCode <= SCAN_F10 && _scanCode != SCAN_F7);
 }
 
 } // namespace Elite

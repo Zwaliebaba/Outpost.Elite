@@ -19,17 +19,6 @@ namespace Elite
 namespace
 {
 
-// Scan codes the charts and the data screen read.
-constexpr std::uint8_t SCAN_ESCAPE = 0x01;
-constexpr std::uint8_t SCAN_D = 0x20;
-constexpr std::uint8_t SCAN_F = 0x21;
-constexpr std::uint8_t SCAN_F1 = 0x3B;
-constexpr std::uint8_t SCAN_F5 = 0x3F;
-constexpr std::uint8_t SCAN_F6 = 0x40;
-constexpr std::uint8_t SCAN_F7 = 0x41;
-constexpr std::uint8_t SCAN_F10 = 0x44;
-constexpr std::uint8_t SCAN_KEYPAD_5 = 0x4C;
-
 // A description's control codes, in the order textControlCodes lists their handlers.
 constexpr std::uint8_t INSERT_SYSTEM_NAME = 1;
 constexpr std::uint8_t INSERT_SYSTEM_ADJECTIVE = 2;
@@ -39,8 +28,6 @@ constexpr std::uint8_t START_CAPITALIZING = 5;
 constexpr std::uint8_t STOP_CAPITALIZING = 6;
 
 constexpr std::uint8_t SPACE = 0x20;
-constexpr std::uint8_t TEXT_LAYOUT = 2; // screenLayout of the docked text screens
-constexpr std::uint8_t DECIMAL_POINT = 0x2E;
 
 // The short-range chart: half its width and height in galaxy units, and its centre in chart pixels.
 constexpr std::uint16_t SHORT_RANGE_HALF_WIDTH = 0x14;
@@ -55,30 +42,10 @@ constexpr std::uint8_t GALAXY_SEED_BYTES = 6;
 // image (GalaxyTests holds them to it), which the original reads as a ninth entry.
 constexpr std::uint8_t NINTH_GALAXY = 8;
 constexpr std::array<std::uint8_t, GALAXY_SEED_BYTES> NINTH_GALAXY_SEEDS = {0x34, 0x12, 0x78, 0x56, 0xBC, 0x9A};
-constexpr std::uint8_t CHART_DISC_COLOR = 3;
-constexpr std::uint8_t LABEL_TRIES = 0x23;
-constexpr std::uint8_t LABEL_LOWEST_ROW = 0x7C;
 
-// The text lines under a chart, as CGA offsets.
-constexpr std::uint16_t CHART_TEXT_LINE_1 = 0x1B8A;
-constexpr std::uint16_t CHART_TEXT_LINE_2 = 0x1D1A;
-constexpr std::uint16_t CHART_NAME_PADDING = 0x1B9A; // past the eight characters of a name on line 1
-constexpr std::uint16_t CHART_TITLE = 0x0388;
-
-// Inks as CGA pixel patterns: colours 1, 2 and 3.
-constexpr std::uint16_t INK_1 = 0x5555;
-constexpr std::uint16_t INK_2 = 0xAAAA;
-constexpr std::uint16_t INK_3 = 0xFFFF;
-
-// The charts' crosses: half their arms, in pixels.
-constexpr std::uint16_t CURRENT_SYSTEM_ARM = 0x11;
-constexpr std::uint16_t CURSOR_ARM = 5;
+// The chart's rows, and the lowest a click below them is held to.
 constexpr std::uint8_t CURSOR_LOWEST_ROW = 0x7F;
 constexpr std::uint8_t CHART_ROWS = 0x80;
-constexpr std::uint8_t LABEL_OFFSET_X = 7;
-constexpr std::uint8_t LABEL_ABOVE = 2;
-constexpr std::uint8_t LABEL_BELOW = 3;
-constexpr std::uint8_t SMALL_LETTER_PIXELS = 6;
 
 // distanceText's digits: hundreds, tens and units, then the tenths past the point.
 constexpr std::uint16_t DISTANCE_TEXT_HUNDREDS = 0x0A;
@@ -93,34 +60,15 @@ constexpr std::uint8_t LOWER_CASE_BIT = 0x20;
 constexpr std::uint16_t SYSTEM_NAME_PAIRS = 4;
 constexpr std::uint16_t SYSTEM_NAME_FOURTH_PAIR = 0x40;
 
-// Where the data screen prints (text offsets). The fields it writes into are members (change 3c), and its labels and units are
-// constants (GalaxyTables.h).
-constexpr std::uint16_t DATA_TITLE = 0x0054;
-constexpr std::uint16_t DISTANCE_ROW = 0x0144;
-constexpr std::uint16_t ECONOMY_ROW = 0x01E4;
-constexpr std::uint16_t GOVERNMENT_ROW = 0x0284;
-constexpr std::uint16_t TECH_LEVEL_ROW = 0x0324;
-constexpr std::size_t POPULATION_SHOWN = 2; // the units digit, where the point goes after it
-constexpr std::uint16_t POPULATION_ROW = 0x03C4;
-constexpr std::uint16_t SPECIES_ROW = 0x0414;
+// speciesAdjective1 when the system's species is human colonials.
 constexpr std::uint8_t NO_SPECIES = 0xFF;
-constexpr std::uint16_t PRODUCTIVITY_ROW = 0x04B4;
-constexpr std::uint16_t RADIUS_ROW = 0x0554;
-constexpr std::uint8_t TECH_LEVEL_TENS = 10;
 
 // Where InsertRandomName keeps selectedSystem.name while it borrows it: in invasionDebriefText's row.
 constexpr std::size_t SAVED_SYSTEM_NAME = 0x9650 - 0x94B9;
 constexpr std::uint16_t SYSTEM_NAME_BYTES = 8;
 constexpr std::uint16_t ADJECTIVE_SUFFIX_BYTES = 5;
-// A label in pendingChartLabels: its x range and its rows, two bytes each, the first then the last, then its name.
-constexpr std::size_t CHART_LABEL_X = 0;
-constexpr std::size_t CHART_LABEL_ROWS = 2;
-constexpr std::size_t CHART_LABEL_NAME = 4;
 
 constexpr std::uint16_t DESCRIPTION_BUFFER_WORDS = 0x80;
-constexpr std::uint16_t DESCRIPTION_SCREEN_OFFSET = 0x5F4;
-constexpr std::uint16_t DESCRIPTION_LINE_CHARACTERS = 0x24;
-constexpr std::uint16_t TEXT_ROW_BYTES = 0x50;
 constexpr std::uint8_t DESCRIPTION_PHRASE_CODE = 0x80;
 constexpr std::uint8_t SEVEN_NAMES = 7; // the bits DescribeSystem gives the economy, the government and each of the species' bytes
 constexpr std::uint8_t DESCRIPTION_PHRASE_DIVISOR = 0x34;
@@ -183,12 +131,6 @@ void CopyBytes(std::span<const std::uint8_t> _from, std::span<std::uint8_t> _to)
 template <typename State> [[nodiscard]] auto SystemNameField(State& _state)
 {
   return std::span(_state.Data().commander.selectedSystem.name);
-}
-
-// _digits' characters, a field of the data screen the game writes, as a text (JoinTexts).
-[[nodiscard]] std::string_view DigitsText(std::span<const std::uint8_t> _digits) noexcept
-{
-  return std::string_view(reinterpret_cast<const char*>(_digits.data()), _digits.size());
 }
 
 // Control code _code's handler, which the original reaches through textControlCodes, keeping the place in the text and the way
@@ -699,104 +641,11 @@ FindResult FindTypedSystem(GameState& _state)
   return FindResult::NotOnChart;
 }
 
-[[nodiscard]] Task<ScreenKey> ShowSystemDataScreen(GameState& _state, Host& _host, ScreenPlace _place)
-{
-  const std::uint16_t titleEnd = PrintTextModeString(_state, DrawDockedFrame(_state, _host, SYSTEM_DATA_FRAME), DATA_TITLE);
-  TerminateSelectedSystemName(_state);
-  PrintTextModeString(_state, TextWithin(SystemNameField(_state), 0), titleEnd);
-  std::uint16_t printed = PrintTextModeString(_state, DISTANCE_LABEL_TEXT, DISTANCE_ROW);
-  printed = PrintTextModeString(_state, FormatSelectedSystemDistance(_state), printed);
-  PrintTextModeString(_state, LIGHT_YEARS_TEXT, printed);
-  printed = PrintTextModeString(_state, ECONOMY_LABEL_TEXT, ECONOMY_ROW);
-  PrintTextModeString(_state, ECONOMY_NAMES[_state.Data().commander.selectedSystem.economy & SEVEN_NAMES], printed);
-  printed = PrintTextModeString(_state, GOVERNMENT_LABEL_TEXT, GOVERNMENT_ROW);
-  PrintTextModeString(_state, GOVERNMENT_NAMES[_state.Data().commander.selectedSystem.government & SEVEN_NAMES], printed);
-  printed = PrintTextModeString(_state, TECH_LEVEL_LABEL_TEXT, TECH_LEVEL_ROW);
-
-  // The tech level, one to sixteen, in the two characters at techLevelTensDigit, a column left when it is one digit.
-  auto level = static_cast<std::uint8_t>(_state.Data().commander.selectedSystem.techLevel + 1);
-  auto cell = static_cast<std::uint16_t>(printed - 2);
-  _state.Data().galaxy.techLevelTensDigit = SPACE;
-  if (level >= TECH_LEVEL_TENS)
-  {
-    level = static_cast<std::uint8_t>(level - TECH_LEVEL_TENS);
-    _state.Data().galaxy.techLevelTensDigit = '1';
-    cell = Offset(cell, 2);
-  }
-  _state.Data().galaxy.techLevelUnitsDigit = static_cast<std::uint8_t>(level + '0');
-  PrintTextModeString(
-    _state, JoinTexts({CharText(_state.Data().galaxy.techLevelTensDigit), CharText(_state.Data().galaxy.techLevelUnitsDigit)}), cell);
-
-  // The population in tenths of a billion, its last two digits about a point.
-  const std::span<std::uint8_t> population = BytesOf(_state.Data().galaxy.populationDigits);
-  FormatDecimal5(_state.Data().commander.selectedSystem.populationTenthsBillion, population);
-  printed = PrintTextModeString(_state, POPULATION_LABEL_TEXT, POPULATION_ROW);
-  population[POPULATION_SHOWN] = std::uint8_t{population[POPULATION_SHOWN + 1]};
-  population[POPULATION_SHOWN + 1] = DECIMAL_POINT;
-  PrintTextModeString(_state, JoinTexts({DigitsText(population.subspan(POPULATION_SHOWN)), POPULATION_UNIT_TEXT}), printed);
-
-  printed = PrintTextModeString(_state, SPECIES_OPEN_TEXT, SPECIES_ROW);
-  const std::uint8_t size = _state.Data().commander.selectedSystem.speciesAdjective1;
-  if (size == NO_SPECIES)
-  {
-    PrintTextModeString(_state, HUMAN_COLONIALS_TEXT, printed);
-  }
-  else
-  {
-    // Each of the species' four bytes indexes its table of names. DescribeSystem gives each three bits.
-    const CommanderState& commander = _state.Data().commander;
-    cell = PrintTextModeString(_state, SPECIES_SIZE_NAMES[size & SEVEN_NAMES], printed);
-    cell = PrintTextModeString(_state, SPECIES_COLOR_NAMES[commander.selectedSystem.speciesAdjective2 & SEVEN_NAMES], cell);
-    cell = PrintTextModeString(_state, SPECIES_TRAIT_NAMES[commander.selectedSystem.speciesAdjective3 & SEVEN_NAMES], cell);
-    PrintTextModeString(_state, SPECIES_TYPE_NAMES[commander.selectedSystem.speciesType & SEVEN_NAMES], cell);
-  }
-
-  // The productivity, its leading zero blanked a column left; the radius, its leading digit blanked.
-  GalaxyState& galaxy = _state.Data().galaxy;
-  FormatDecimal5(_state.Data().commander.selectedSystem.productivityMillionCredits, galaxy.productivityDigits);
-  cell = PrintTextModeString(_state, PRODUCTIVITY_LABEL_TEXT, PRODUCTIVITY_ROW);
-  if (galaxy.productivityDigits[0] == '0')
-  {
-    galaxy.productivityDigits[0] = SPACE;
-    cell = static_cast<std::uint16_t>(cell - 2);
-  }
-  PrintTextModeString(_state, JoinTexts({DigitsText(galaxy.productivityDigits), PRODUCTIVITY_UNIT_TEXT}), cell);
-  FormatDecimal5(_state.Data().commander.selectedSystem.radiusKm, galaxy.radiusDigits);
-  galaxy.radiusDigits[0] = SPACE;
-  PrintTextModeString(_state, JoinTexts({RADIUS_LABEL, DigitsText(galaxy.radiusDigits), RADIUS_UNIT_TEXT}), RADIUS_ROW);
-  ShowSystemDescription(_state);
-  co_return co_await WaitForScreenExitKey(_state, _host, SCAN_F7, _place);
-}
-
 void TerminateSelectedSystemName(GameState& _state)
 {
   // GenerateSystemName's length, at most eight, wherever the game writes it: the NUL goes in the name field.
   const std::uint8_t length = _state.Data().commander.selectedSystem.nameLength;
   ByteWithin(SystemNameField(_state), length) = 0;
-}
-
-std::string_view FormatSelectedSystemDistance(GameState& _state)
-{
-  // Backwards from the digits' end: the copy runs until it has copied a space, which SelectNearestSystem leaves before the digits: the
-  // distance is below 10000 tenths of a light year (it is at most four times the root of 255^2 + 127^2), so its first digit is a
-  // zero BlankLeadingZeros blanks, and the copy stops there at the latest.
-  const std::span<const std::uint8_t> digits(_state.Data().galaxy.distanceDigits);
-  const std::span<std::uint8_t> texts(_state.Data().galaxy.selectedDistanceText);
-  std::size_t from = digits.size() - 1;
-  std::size_t to = texts.size() - 1;
-  ByteWithin(texts, to) = std::uint8_t{ByteWithin(digits, from)};
-  --to;
-  ByteWithin(texts, to) = DECIMAL_POINT;
-  // Backwards through the digits, up to and including the space before them.
-  std::uint8_t copied = 0;
-  do
-  {
-    --to;
-    --from;
-    copied = ByteWithin(digits, from);
-    ByteWithin(texts, to) = copied;
-  } while (copied != SPACE);
-  return DigitsText(texts.subspan(to + 1));
 }
 
 std::string SystemDescription(GameState& _state)
@@ -815,34 +664,6 @@ std::string SystemDescription(GameState& _state)
   const std::uint16_t expanded = ExpandDescriptionText(_state, DESCRIPTION_TEMPLATE, 0);
   ByteWithin(buffer, expanded) = 0;
   return std::string(TextWithin(buffer, 0));
-}
-
-void ShowSystemDescription(GameState& _state)
-{
-  (void)SystemDescription(_state);
-  const std::span<std::uint8_t> buffer(_state.Data().galaxy.descriptionBuffer);
-
-  // Word-wrapped at the last space within 36 characters, a text row at a time: line and end, offsets in the buffer.
-  std::uint16_t line = 0;
-  std::uint16_t cell = DESCRIPTION_SCREEN_OFFSET;
-  for (;;)
-  {
-    std::uint16_t end = Offset(line, DESCRIPTION_LINE_CHARACTERS);
-    if (ByteWithin(buffer, end) == 0)
-    {
-      (void)PrintTextModeString(_state, TextWithin(buffer, line), cell);
-      return;
-    }
-    while (ByteWithin(buffer, end) != SPACE)
-    {
-      --end;
-    }
-    ByteWithin(buffer, end) = 0;
-    const std::string_view text = TextWithin(buffer, line);
-    (void)PrintTextModeString(_state, text, cell);
-    line = Offset(line, static_cast<std::uint16_t>(text.size() + 1));
-    cell = Offset(cell, TEXT_ROW_BYTES);
-  }
 }
 
 std::uint16_t ExpandDescriptionText(GameState& _state, std::string_view _text, std::uint16_t _output)

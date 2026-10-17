@@ -5,7 +5,8 @@
 - D83, the mouse while docked;
 - D96, the key bar's keys;
 - D98 to D100, Space, a click, and the scales;
-- D109 to D111, the cursor by click and drag, the flight's keys and the bar in flight, and the replays' click step.
+- D109 to D111, the cursor by click and drag, the flight's keys and the bar in flight, and the replays' click step;
+- D112 to D115, F7 in flight, the badge at the current system, the countdown's banner, and `hyperspace-and-fight`'s fight.
 
 ## Context
 
@@ -46,7 +47,7 @@ D83 moves the cursor by the mouse alone, and D109 by a click or a drag, never by
    - The key that closes it selects as the original's did.
    - It draws nothing on the CGA but the chart's screen layout (`DrawChartFrame`), which flight reads.
    - In flight it blocks the flight loop, as the original's chart did.
-4. **The original's charts go**, with their drawing, labels, items, prompts and texts. `GalaxyState` keeps the members they wrote, `chartItems` and `pendingChartLabels` among them, and nothing writes them. Docked F7 does nothing now (D96): the side panel is Data on System. In flight F7 still shows the original's Data on System.
+4. **The original's charts go**, with their drawing, labels, items, prompts and texts. `GalaxyState` keeps the members they wrote, `chartItems` and `pendingChartLabels` among them, and nothing writes them. F7 does nothing docked (D96) or in flight (D112): the side panel is Data on System. The original's Data on System goes with its working code, texts and constants; `GalaxyState` keeps the fields it wrote, and nothing writes them.
 5. **The shell draws them (T10 to T13)** (`Outpost/DockedChart`), in the docked frame with F4 or F5 lit:
    - the header and legend;
    - the fuel ring, filled and dashed, and the stars, named on the short-range chart;
@@ -62,9 +63,8 @@ D83 moves the cursor by the mouse alone, and D109 by a click or a drag, never by
      - A click on the bar sends the flight's own key for the screen the bar names: F1, F8, F5, F6 and F9.
    - **The mouse** (D109): a press on the chart sends its point, and a drag sends each new point under it. `Engine::Window` now reports the button's release and holds the mouse's capture while it is down. Hovering moves nothing.
    - **The words the drawings leave open:**
-     - `CURRENT SYSTEM` is the badge when the target is the system the ship is at.
-     - `WITCH SPACE` takes the system's name in witch space.
-     - Both are this ADR's.
+     - `CURRENT SYSTEM` is the badge when the target is the system the ship is at (D113).
+     - `WITCH SPACE` takes the system's name in witch space, this ADR's.
 6. **The replays click (D111).** `click X Y` is a replay step: a click on the chart open, in its units, as the shell sends it. Replays that steered the cursor with held arrows now click where the old cursor stopped.
 
 ## How it was measured
@@ -84,7 +84,7 @@ The positions, sizes and colours were read from the drawings' pixels. Two findin
 
 D04 to D07 were drawn by the shell's code, compiled with g++ against the portable canvas and rasterised with the Inter typeface, then compared by eye with the drawings. Two corrections came of it:
 - The target's own name is no longer drawn under its label.
-- The countdown's banner moved clear of the header. D07 draws it over the legend; here it ends before the legend.
+- The countdown's banner moved clear of the header. D07 draws it over the legend; here it ends before the legend (D114).
 
 The view's sizes and the text's widths are the renderer's measure on Windows, so the WARP images are the check.
 
@@ -95,16 +95,17 @@ The view's sizes and the text's widths are the renderer's measure on Windows, so
   - the short-range chart: Find found, not on the chart and cleared by a click, D, and F1's selection;
   - the lock in flight.
 - `ReplayTests` parses the click step and refuses its mistakes.
-- `DockedKeysTests` has F7 doing nothing docked.
+- `DockedKeysTests` has F7 doing nothing docked, and closing no screen in flight.
 - `DockedChartTests` draws `D04-Galactic-Chart`, `D05-Find-Out-Of-Range`, `D06-Short-Range-Chart` and `D07-In-Flight-Locked` on WARP for the owner to make golden (D94). It also checks a click's point, the flight's keys and the panel's words. Those three checks were run here, through the same code, outside the test framework: 0 failures.
 
 **What retires (D108's way).**
 - `GalacticChartAgreesOnEveryKey` and `ShortRangeChartAgreesOnEveryKey` tested the original's chart keys, and go with their known answers, pictures and outcomes.
 - `CrowdedShortRangeChartsStayInTheirBuffers` tested the label buffers no chart writes now.
 - `docked-screens`' `data-on-riedquat` digest goes with docked F7.
+- `SystemDataScreenAgreesForTwoDigitTechLevels` goes with flight F7 (D112): the two-digit tech level is `ChartScreenTests`' Leesti, as the side panel shows it.
+- `flight-screens` presses F7 on the short-range chart, which stays, and its system-data shot goes. Compared by position with the run before, its digest points differ only in the data screen's working fields: no time, random state or outcome moved.
 
 **What is rewritten.**
-- `SystemDataScreenAgreesForTwoDigitTechLevels` clicks Leesti on the galactic chart, launches, and shows Data on System in flight.
 - `ReadTextLineAgreesWhileEditing` types at the disc menu's Load Commander.
 
 **The re-recording.** Every replay and twin that opens a chart was dumped member by member on main and after the change, and compared at each digest by name. What differs is:
@@ -112,7 +113,7 @@ The view's sizes and the text's widths are the renderer's measure on Windows, so
 - the keys the old chart left in the buffer;
 - the keyboard state its steering left.
 
-The digests were re-recorded from the run's own values, and the pictures and outcomes with the guard. The suite passes, 171 tests under g++, on two runs in check mode.
+The digests were re-recorded from the run's own values, and the pictures and outcomes with the guard. The suite passes, 170 tests under g++, on two runs in check mode.
 
 **What the timing changed, and how it was kept.**
 - Find with F then Enter ran through the original's prompt, after which the old chart read its next key a frame later. The combat replays' F1 therefore launched 100 ms after the step that pressed it, at 6300. They now press it 99 ms later and wait as much less, and launch at 6300 with the same random state. Their outcomes and their fights are unchanged.
@@ -123,7 +124,7 @@ The digests were re-recorded from the run's own values, and the pictures and out
 - `TwinInvasion`'s progress outcomes held.
 - `hyperspace-and-fight`'s scripted fight now destroys one pirate, as it did before ADR-046: `kills` 0 → 1 and `creditsTenths` 1000 → 1200 at `pirates` and `after-the-fight`.
 
-The replay says so. Every other progress outcome is as recorded.
+The replay says so, and the owner accepted it as re-recorded (D115). Every other progress outcome is as recorded.
 
 `CheckFormat` and `CheckProjectFiles` are clean. g++ (`-Wall -Wextra -Wpedantic -Wconversion -Wshadow`) and clang-tidy 18 are clean on the changed files. clang-tidy 18's `EnumCastOutOfRange` reports on `SpaceObject.h:42` and `AiTests.cpp:82` are on lines this change does not touch.
 
@@ -132,4 +133,4 @@ The replay says so. Every other progress outcome is as recorded.
 
 ## What this forecloses
 
-The charts' cursor has no key: a replay or a test moves it with `click`. The keyboard's steering no longer carries from a chart into flight, which the original's did. A chart's starfield is the galaxy, not the drawing. Data on System is the charts' side panel docked; in flight F7 keeps the original's screen until it gets its own design.
+The charts' cursor has no key: a replay or a test moves it with `click`. The keyboard's steering no longer carries from a chart into flight, which the original's did. A chart's starfield is the galaxy, not the drawing. Data on System is the charts' side panel, docked and in flight, and has no key of its own.

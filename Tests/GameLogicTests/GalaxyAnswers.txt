@@ -7,7 +7,7 @@
 # How a system is described: galaxyNumber set to its galaxy and the galactic chart chosen, its seeds loaded
 # (Elite::LoadSystemSeeds), and from them its record and its name (Elite::DescribeSystem, the part of SelectSystemAtCursor
 # after the search). Then the chart's cursor is put on its place (Elite::MoveCursorToSystem) and the system there selected
-# (Elite::SelectSystemAtCursor), as the status and data screens select one.
+# (Elite::SelectSystemAtCursor), as the status screen and the charts select one.
 #
 # Format: one system per line, in order of galaxy and then system, twelve fields separated by single spaces, all decimal
 # but the name:

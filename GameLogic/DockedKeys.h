@@ -43,7 +43,7 @@ struct DockedTarget
 [[nodiscard]] std::uint8_t DockedKeyOf(DockedScreen _screen) noexcept;
 
 /// Whether _scanCode closes a screen shown at _place: Esc, or a key that shows another screen there or launches. Docked, those are
-/// the docked host's (DockedTargetOf); in flight, every F-key, as in the original.
+/// the docked host's (DockedTargetOf); in flight, every F-key but F7, which does nothing there (D112).
 [[nodiscard]] bool ClosesScreen(std::uint8_t _scanCode, ScreenPlace _place) noexcept;
 
 } // namespace Elite

@@ -893,11 +893,6 @@ bool EraseForFlightScreen(GameState& _state)
         shown(co_await ShowChartScreen(_state, _host, ChartKind::ShortRange, ScreenPlace::Flight));
         continue;
       }
-      if (key == SCAN_F7)
-      {
-        shown(co_await ShowSystemDataScreen(_state, _host, ScreenPlace::Flight));
-        continue;
-      }
       if (key == SCAN_F8)
       {
         shown(co_await ShowMarketPricesScreen(_state, _host));
@@ -1565,11 +1560,12 @@ void SaveStardustPositions(GameState& _state)
 [[nodiscard]] Task<FlightScreens> HandleFlightFunctionKeys(GameState& _state, Host& _host)
 {
   _state.Data().flow.inFlight = 0;
-  // F1-F10 in keyDown, from F1's scan code up, the ten keys counted down.
+  // F1-F10 in keyDown, from F1's scan code up, the ten keys counted down; F7, whose Data on System is the charts' side panel now,
+  // does nothing in flight (D112).
   std::uint16_t scan = SCAN_F1;
   for (std::uint16_t keys = FUNCTION_KEYS;;)
   {
-    if (ByteWithin(BytesOf(_state.Data().keyboard.keyDown), scan) == 1)
+    if (scan != SCAN_F7 && ByteWithin(BytesOf(_state.Data().keyboard.keyDown), scan) == 1)
     {
       // The scan code is kept round ResetKeyboard.
       ResetKeyboard(_state);
