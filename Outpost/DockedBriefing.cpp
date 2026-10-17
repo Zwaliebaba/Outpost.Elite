@@ -141,12 +141,12 @@ void DockedBriefing::Draw(const Elite::BriefingView& _view, std::optional<Engine
   _canvas.Ellipse(DOT, DOT_RADIUS, DOT_RADIUS, ALERT);
   _canvas.Text(Debriefing(_view) ? L"TASK COMPLETE" : L"INCOMING TRANSMISSION", Engine::Font::Label, 17.0f, 4.0f,
                Engine::Point{.x = HEADER_TEXT_LEFT, .y = HEADER_Y}, Engine::Align::Left, ALERT_LIGHT);
-  _canvas.Text(std::format(L"MISSION {} \u00B7 {}", _view.mission, Debriefing(_view) ? L"DEBRIEFING" : L"BRIEFING"), Engine::Font::Label, 14.0f,
-               3.0f, Engine::Point{.x = RIGHT + 3.0f, .y = HEADER_Y}, Engine::Align::Right, TEXT);
+  _canvas.Text(std::format(L"MISSION {} \u00B7 {}", _view.mission, Debriefing(_view) ? L"DEBRIEFING" : L"BRIEFING"), Engine::Font::Label,
+               14.0f, 3.0f, Engine::Point{.x = RIGHT + 3.0f, .y = HEADER_Y}, Engine::Align::Right, TEXT);
   _canvas.Line(Engine::Point{.x = LEFT, .y = HEADER_RULE_Y}, Engine::Point{.x = RIGHT, .y = HEADER_RULE_Y}, 1.0f, RULE);
 
-  _canvas.Text(L"FROM \u00B7 " + SenderOf(_view), Engine::Font::Label, 14.0f, 3.5f, Engine::Point{.x = LEFT, .y = SENDER_Y}, Engine::Align::Left,
-               LABEL);
+  _canvas.Text(L"FROM \u00B7 " + SenderOf(_view), Engine::Font::Label, 14.0f, 3.5f, Engine::Point{.x = LEFT, .y = SENDER_Y},
+               Engine::Align::Left, LABEL);
   _canvas.Text(TitleOf(_view), Engine::Font::Label, TITLE_SIZE, 3.0f, Engine::Point{.x = LEFT, .y = TITLE_Y}, Engine::Align::Left,
                AMBER_LIGHT);
   float y = BODY_TOP;
