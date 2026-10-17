@@ -597,4 +597,5 @@ After D44, no replay reaches the docked screens. Their rules are functions with 
 | [ADR-063](ADR/ADR-063-the-status-screen.md) | D08, the commander's status: a view the shell draws, over the original's routine (D75, D82) | Phase 6, piece 5 — written |
 | [ADR-064](ADR/ADR-064-the-shipyard.md) | D02 and D03, the shipyard and its mount picker: its own state and rules, a view the shell draws, clicks the shell hit-tests (D82, D103 to D108) | Phase 6, piece 5 — written |
 | [ADR-065](ADR/ADR-065-the-charts.md) | D04 to D07, the charts: the cursor by the mouse, a view the shell draws, clicks in the chart's units (D82, D98 to D100, D109 to D115) | Phase 6, piece 5 — written |
+| [ADR-066](ADR/ADR-066-ascii-literals.md) | String and character literals are ASCII, and `CheckProjectFiles` says so (AGENTS.md §4) | Phase 6, piece 5 — written |
 | — | Wholly native: the other steps after the state (D76–D80) | Phase 7 — to write |

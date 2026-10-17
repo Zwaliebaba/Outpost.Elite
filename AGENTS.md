@@ -128,7 +128,7 @@ private:
 | Rule | Enforced by |
 |---|---|
 | The naming table, R1, R3, R5, R8 | [`.clang-tidy`](.clang-tidy), gated in CI over the whole tree |
-| R2 affixes, R7 file names and project registration, R11 spellings, §2 flat directories, shader names and functional filters | `Build/CheckProjectFiles.py`, gated in CI |
+| R2 affixes, R7 file names and project registration, R11 spellings, §2 flat directories, shader names and functional filters, §4 ASCII literals | `Build/CheckProjectFiles.py`, gated in CI |
 | R4, R6, R9, R10 | Review. Check your own diff against the table before handing it back. |
 
 **Both checkers exist and gate in CI** (§6). `Build/RunClangTidy.py` runs `.clang-tidy` over every translation unit the solution builds, and `Build/CheckProjectFiles.py` carries the rules in its row. Each fails, rather than passes, on a tree with nothing to check.
@@ -211,6 +211,7 @@ python Build\RunClangTidy.py          # needs a Developer PowerShell (INCLUDE mu
 - **Include order is load-bearing and grouped by hand**, which is why `SortIncludes` is `Never`: `pch.h`, then `<windows.h>` before any D3D12/DXGI/XAudio2 header, then the rest of the SDK, then project headers, then the standard library. A formatter reordering these behind a change's back is a correctness risk, not a style preference.
 - **One header owns the Windows macro family, and nothing else defines any of it.** `NOMINMAX`, `WIN32_LEAN_AND_MEAN`, `NOMCX`, `NOSERVICE`, `NOHELP` are set in that one header, before `<windows.h>`, and the project files deliberately define none of them. Two owners of one macro is C4005, and `/WX` makes that fatal — `/D` spells a bare macro as `1` where a `#define` spells it as nothing, so the collision is guaranteed rather than possible. If you need `<windows.h>`, include that header; do not add the macros yourself.
 - Do not silence a diagnostic with `#pragma warning(disable: ...)` to make a build pass. Fix the cause, or report it.
+- **A string or character literal is ASCII.** A source file is UTF-8 without a BOM, and MSVC reads such a file in the system code page, so a `—` in a literal reaches the screen as `â€”` while every test that compares the same literal still passes. Escape anything past ASCII — `L"\u2014"`, `L"\u00B7"` — and keep the characters themselves to comments. [ADR-066](Design/ADR/ADR-066-ascii-literals.md) records why this is a rule and not `/utf-8`.
 
 ---
 
