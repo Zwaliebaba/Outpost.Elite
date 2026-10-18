@@ -96,10 +96,7 @@
     <FxCompile Include="Shader\CompositePS.hlsl">
       <Filter>Shader</Filter>
     </FxCompile>
-    <FxCompile Include="Shader\PresentPS.hlsl">
-      <Filter>Shader</Filter>
-    </FxCompile>
-    <FxCompile Include="Shader\PresentVS.hlsl">
+    <FxCompile Include="Shader\FullScreenVS.hlsl">
       <Filter>Shader</Filter>
     </FxCompile>
     <FxCompile Include="Shader\ScenePS.hlsl">

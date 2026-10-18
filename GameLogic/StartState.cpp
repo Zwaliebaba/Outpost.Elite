@@ -50,10 +50,6 @@ void SetStartState(GameData& _data) noexcept
 {
   _data.combat.laserBeamColorToggle = 0x03;
   _data.combat.laserBeamColor = 0x02;
-  _data.docked.fuelUnitsDigit = 0x30;
-  _data.docked.fuelTenthsDigit = 0x30;
-  FillText(_data.docked.fuelDigits, "00000");
-  _data.docked.missileCountDigit = 0x3F;
   FillText(_data.docked.productNames, "Food         t  \0"
                                       "Textiles     t  \0"
                                       "Radioactives t  \0"
@@ -104,13 +100,6 @@ void SetStartState(GameData& _data) noexcept
   Fill(_data.galaxy.distanceDigits, {0x20, 0x20, 0x20, 0x30, 0x30});
   FillText(_data.galaxy.findInput, "12345678");
   FillText(_data.galaxy.findInputEcho, "12345678");
-  _data.galaxy.techLevelTensDigit = 0x2E;
-  _data.galaxy.techLevelUnitsDigit = 0x2E;
-  FillText(_data.galaxy.selectedDistanceText, "\0"
-                                              "01234");
-  FillText(_data.galaxy.populationDigits, "000.0");
-  FillText(_data.galaxy.productivityDigits, "00000");
-  FillText(_data.galaxy.radiusDigits, "00000");
   FillText(_data.galaxy.invasionDebriefText, "Thank you for destroying the\0"
                                              "thargoid base in the last system.\0"
                                              "From your flight log records, we\0"
@@ -150,15 +139,12 @@ void SetStartState(GameData& _data) noexcept
   _data.sound.musicPlaying = 0x01;
   FillText(_data.text.bountyText, "BOUNTY:000000 Cr");
   FillText(_data.text.shipIdentityText, "CLASS: 1234567 TYPE: 12345678901");
-  Fill(_data.text.inputCursorText, {0x20, 0x20});
   _data.video.fringeRandomA = 0x3039;
   _data.video.fringeRandomB = 0x0045;
   _data.playerShip.playerEnergy = 0x03FF;
   _data.playerShip.playerVelocityZ = 0x0030;
   _data.playerShip.playerSpeed = 0x0030;
   _data.messages.messagePointer = Message{0x05};
-  FillText(_data.menus.priceText, "000000");
-  FillText(_data.menus.quantityText, "00000");
   _data.drawing.screenLayout = 0xFF;
   _data.world.shipSlotCount = 0x20;
   Fill(_data.commander.fileSignature, {0x43, 0x6F, 0x6D, 0x6D, 0x61, 0x6E, 0x64, 0x65, 0x72, 0x20, 0x66, 0x69, 0x6C, 0x65, 0x1A});

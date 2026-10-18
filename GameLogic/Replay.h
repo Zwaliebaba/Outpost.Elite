@@ -16,25 +16,23 @@
 namespace Elite
 {
 
-class Cga;
+class Display;
 class FileStore;
 class Host;
 enum class StopReason : std::uint8_t;
 
 class GameState;
 
-/// What a digest step takes of the game: the state digest, which checks every byte, the picture digest, which checks what
-/// the player sees (StateDigest.h), each in lowercase hex, and the outcomes, the named facts a player could notice
-/// (Outcome.h).
+/// What a digest step takes of the game: the state digest, which checks every byte (StateDigest.h), in lowercase hex, and the
+/// outcomes, the named facts a player could notice (Outcome.h).
 struct Checkpoint
 {
   std::string digest;   ///< GameStateDigest
-  std::string picture;  ///< PictureDigest
   std::string outcomes; ///< OutcomeText
 };
 
-/// The checkpoint of the game whose memory _state holds and whose CGA is _video, as it is now.
-[[nodiscard]] Checkpoint TakeCheckpoint(const GameState& _state, const Cga& _video);
+/// The checkpoint of the game whose memory _state holds and whose display is _display, as it is now.
+[[nodiscard]] Checkpoint TakeCheckpoint(const GameState& _state, const Display& _display);
 
 enum class StepKind : std::uint8_t
 {
@@ -56,7 +54,6 @@ struct Step
   std::uint8_t scanCode = 0;          ///< Key, Down and Up: the XT make code
   std::string name;                   ///< Key, Down and Up: as written; Shot and Digest: the label; File: the DOS name, canonical
   std::string expectedDigest;         ///< Digest: lowercase hex, or empty for none
-  std::string expectedPicture;        ///< Digest: the picture digest its picture line gives, lowercase hex, or empty for none
   std::string expectedOutcomes;       ///< Digest: the outcomes its outcome line gives (OutcomeText's form), or empty for none
   std::string source;                 ///< File: the name of the file beside the replay that it copies
   ChartClick click;                   ///< Click: where, in the chart's units
@@ -84,22 +81,18 @@ struct Step
 ///                        StopReason::Terminated): how a replay that leaves for DOS ends. It is the
 ///                        last step that runs the machine: only digest and shot steps, which look at what the
 ///                        program left, may follow it. No other step may end the program (ExpectedStop).
-///   picture NAME HEX     not a step but a line of the digest step NAME, which must be the step just before it: the picture
-///                        digest (PictureDigest) that digest point gives, in its Step's expectedPicture. A replay keeps every
-///                        line it had before pictures were recorded; the picture lines were added, each after its digest's
-///                        line (RecordCheckpoints), from runs that met every state digest (D33).
-///   outcome NAME FACTS   likewise a line of the digest step NAME just before it, after its picture line if it has one: the
+///   outcome NAME FACTS   not a step but a line of the digest step NAME, which must be the step just before it: the
 ///                        outcomes (Outcome.h) that digest point gives, FACTS being name=value pairs as OutcomeText writes
-///                        them, in its Step's expectedOutcomes. Recorded as the picture lines are.
+///                        them, in its Step's expectedOutcomes. Recorded after its digest's line (RecordCheckpoints), from
+///                        runs that met every state digest (D33).
 ///
 /// Appends the steps to _steps and returns true, or returns false with _error naming the first step it
 /// could not read. (Not std::expected: clang 18 with libstdc++ 13 cannot compile it, ADR-004.)
 [[nodiscard]] bool ParseSteps(std::string_view _text, std::vector<Step>& _steps, std::string& _error);
 
 /// _text, a replay, with the checkpoint of each digest step in _checkpoints, by the line the step is on, written after that
-/// line: a picture line, then an outcome line. The picture and outcome lines that followed it before are replaced; every
-/// other line is kept, byte for byte, and a new line ends as the digest's line does. This is how the corpus's pictures and
-/// outcomes are recorded (CorpusTests), only from runs that met every state digest. Returns false, with _error naming the
+/// line: an outcome line. The outcome line that followed it before is replaced; every other line is kept, byte for byte, and
+/// a new line ends as the digest's line does. This is how the corpus's outcomes are recorded (CorpusTests), only from runs that met every state digest. Returns false, with _error naming the
 /// line, if a digest step in _checkpoints is not alone on its line or no digest step is on it.
 [[nodiscard]] bool RecordCheckpoints(std::string_view _text, const std::map<std::size_t, Checkpoint>& _checkpoints, std::string& _recorded,
                                      std::string& _error);

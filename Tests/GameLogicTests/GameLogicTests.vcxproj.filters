@@ -80,17 +80,14 @@
     <ClCompile Include="AiTests.cpp">
       <Filter>Ai</Filter>
     </ClCompile>
-    <ClCompile Include="CgaFontTests.cpp">
-      <Filter>Platform</Filter>
-    </ClCompile>
-    <ClCompile Include="CgaTests.cpp">
-      <Filter>Platform</Filter>
-    </ClCompile>
     <ClCompile Include="ChartScreenTests.cpp">
       <Filter>Galaxy</Filter>
     </ClCompile>
     <ClCompile Include="DiscScreenTests.cpp">
       <Filter>SaveLoad</Filter>
+    </ClCompile>
+    <ClCompile Include="DisplayTests.cpp">
+      <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="CorpusTests.cpp">
       <Filter>Replay</Filter>
@@ -215,9 +212,6 @@
       <Filter>Rigs</Filter>
     </None>
     <None Include="KnownOutcomes.txt">
-      <Filter>Rigs</Filter>
-    </None>
-    <None Include="KnownPictures.txt">
       <Filter>Rigs</Filter>
     </None>
     <None Include="MarketAnswers.txt">

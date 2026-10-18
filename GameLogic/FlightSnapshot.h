@@ -139,6 +139,40 @@ struct SnapshotDisc
   friend bool operator==(const SnapshotDisc&, const SnapshotDisc&) = default;
 };
 
+/// What a tunnel's frame is: none, the station's, between it and space, or the hyperspace rings'.
+enum class TunnelKind : std::uint8_t
+{
+  None,
+  Station,
+  Hyperspace
+};
+
+/// One shape of a tunnel's frame, about the tunnel's centre: a rectangle halfWidth by halfHeight pixels of the drawing buffer each
+/// side of it, the station's, or a ring of halfWidth across and halfHeight down, the hyperspace's, in pixel value color, 0-3.
+struct SnapshotTunnelShape
+{
+  std::uint8_t halfWidth = 0;
+  std::uint8_t halfHeight = 0;
+  std::uint8_t color = 0;
+
+  friend bool operator==(const SnapshotTunnelShape&, const SnapshotTunnelShape&) = default;
+};
+
+/// A tunnel's frame (ADR-069), which the renderer draws in place of the view: the shapes the game drew in it, smallest first,
+/// about (centerX, centerRow) of the drawing buffer. The station's are its rectangles, the hyperspace's its rings.
+struct SnapshotTunnel
+{
+  static constexpr std::size_t MOST_SHAPES = 10; ///< the station's ten rectangles, the hyperspace's ten rings
+
+  TunnelKind kind = TunnelKind::None;
+  std::int16_t centerX = 0;
+  std::int16_t centerRow = 0;
+  std::array<SnapshotTunnelShape, MOST_SHAPES> shapes{};
+  std::size_t shapeCount = 0;
+
+  friend bool operator==(const SnapshotTunnel&, const SnapshotTunnel&) = default;
+};
+
 /// What one frame of flight drew (ADR-032, D49): the camera and every active object, taken where RunFlight's frame is finished,
 /// so that a renderer can draw between the last two. It is the game's, in the game's units; the space view (Phase 6, piece 3)
 /// makes the engine's scene of it. It is taken outside the game's state, and changes nothing the digests see.
@@ -158,7 +192,6 @@ struct FlightSnapshot
   Orientation player;           ///< the player's angles as the rotation RotatePitchYawRoll makes of them (PlayerRotation)
   bool cameraContinues = false; ///< the camera turned from the snapshot before's, as the player can in one frame (ContinueFrom)
   bool title = false;           ///< a frame of the title's turning ship (RunTitle), not of flight
-  bool picture = false;         ///< a frame of the game's own picture of the view, a tunnel's (D68), which the renderer draws none of
   bool stardust = false;        ///< the frame drew the stardust (UpdateStardust): one of flight, not the title, words or a tunnel
   std::int16_t velocityX = 0;   ///< the player's velocity (UpdatePlayerVelocity), what every object moves back by in a frame, in
   std::int16_t velocityY = 0;   ///< the scene's axes: the speed along the heading, 32 times it while the jump drive is engaged
@@ -180,6 +213,7 @@ struct FlightSnapshot
   std::uint8_t galaxy = 0;        ///< the system the planet is: galaxyNumber
   std::uint8_t system = 0;        ///< and currentSystem.index
   SnapshotDisc titlePlanet;       ///< the planet the title draws behind its ship (DrawTitlePlanet)
+  SnapshotTunnel tunnel;          ///< a tunnel's frame (Host::PublishTunnel), which the renderer draws in place of the view
 };
 
 /// A sun or a planet as the renderer draws it (ADR-035, D65): a sphere, its centre in the game's axes as ScenePosition gives a

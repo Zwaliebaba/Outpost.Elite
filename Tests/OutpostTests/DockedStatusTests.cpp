@@ -46,16 +46,14 @@ constexpr std::uint32_t BACKGROUND = 0x070605;
 [[nodiscard]] GoldenImage::Picture Drawn(const Elite::StatusView& _view)
 {
   Engine::Renderer renderer;
-  Assert::IsTrue(
-    renderer.Create(Engine::Renderer::Desc{.warp = true, .sourceWidth = 4, .sourceHeight = 2, .logicalWidth = 8, .logicalHeight = 4}),
-    L"WARP");
+  Assert::IsTrue(renderer.Create(Engine::Renderer::Desc{.warp = true}), L"WARP");
   Assert::IsTrue(renderer.HasBahnschrift(), L"Bahnschrift installed: the design's face");
   Engine::Canvas canvas;
   const Outpost::TextMeasure measure = [&renderer](const Engine::CanvasText& _text) { return renderer.MeasureText(_text); };
   Outpost::DockedStatus::Draw(_view, std::nullopt, measure, canvas);
   GoldenImage::Picture picture{.width = DESIGN_WIDTH_PIXELS,
                                .height = DESIGN_HEIGHT_PIXELS,
-                               .pixels = renderer.Capture({}, BACKGROUND, DESIGN_WIDTH_PIXELS, DESIGN_HEIGHT_PIXELS, nullptr, &canvas)};
+                               .pixels = renderer.Capture(BACKGROUND, DESIGN_WIDTH_PIXELS, DESIGN_HEIGHT_PIXELS, nullptr, &canvas)};
   Assert::AreEqual(std::size_t{DESIGN_WIDTH_PIXELS} * DESIGN_HEIGHT_PIXELS, picture.pixels.size(), L"the whole picture captured");
   return picture;
 }
@@ -84,6 +82,15 @@ public:
     view.refugeesTonnes = 3;
     view.usedTonnes = 9;
     GoldenImage::Check("D08-Status-Fugitive", Drawn(view));
+  }
+
+  // F9 in flight (ADR-069): the same screen, where the ship is in the top bar, and the key bar the flight's, F1 FRONT, with ESC DISC
+  // and F3 EQUIP off.
+  TEST_METHOD(TheStatusInFlight)
+  {
+    Elite::StatusView view = AsDrawn();
+    view.flight = true;
+    GoldenImage::Check("D08-Status-InFlight", Drawn(view));
   }
 
   // The equipment list's words: the missiles with their count, a laser with its mounts in D03's order, front, left, right and

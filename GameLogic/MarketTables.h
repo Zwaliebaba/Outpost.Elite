@@ -14,11 +14,6 @@ namespace Elite
 namespace
 {
 
-constexpr std::string_view PRICES_HEADER_TEXT = "PRODUCT    UNIT   BUY   /  SELL";
-
-/// marketPricesFrame: frame bytes, then " MARKET PRICES"
-constexpr std::string_view MARKET_PRICES_FRAME = "/+ MARKET PRICES";
-
 /// economyPriceFactors: word; [commodity*16 + economy*2], factor/256
 constexpr std::array<std::uint16_t, 136> ECONOMY_PRICE_FACTORS = {
   0x00D7, 0x00E1, 0x00F0, 0x00FA, 0x0104, 0x010E, 0x0118, 0x0122, // [0]

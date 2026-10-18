@@ -79,50 +79,19 @@ constexpr std::uint16_t STATION_Z = 0xFED4;  // -300
 constexpr std::uint8_t STATION_FLAGS = 0x04; // indestructible
 constexpr std::uint8_t STATION_ENERGY = 0x96;
 
-// The dashboard in CGA memory: the line itself, then the next odd-bank lines and the even-bank lines
-// between them.
-constexpr std::array<std::uint16_t, 5> FIVE_LINES = {0x0000, 0x0050, 0x00A0, 0xE050, 0xE0A0};
-constexpr std::array<std::uint16_t, 3> THREE_LINES = {0x0000, 0x0050, 0xE050};
-constexpr std::uint16_t EVEN_BANK = 0x2000;
-constexpr std::uint8_t BAR_VALUE_BYTE = 0x55;
-constexpr std::uint8_t BAR_REST_BYTE = 0xAA;
-constexpr std::uint8_t BAR_PIXELS = 0x30;
-constexpr std::uint16_t BACKGROUND_WORD = 0xAAAA;
-constexpr std::uint16_t SPEED_BAR_LINE = 0x36B8;
-constexpr std::uint16_t PITCH_INDICATOR_LINE = 0x3938;
-constexpr std::uint16_t ROLL_INDICATOR_LINE = 0x37F8;
-// The S and E glyphs: the safe zone and the ECM, at B800:1658 and B800:1656.
+// The dashboard: the S and E glyphs, the safe zone's and the ECM's, as the snapshot reads them.
 constexpr std::uint8_t SAFE_ZONE_GLYPH = 0x82;
 constexpr std::uint8_t ECM_GLYPH = 0x81;
-constexpr std::uint16_t SAFE_ZONE_GLYPH_CELL = 0x1658;
-constexpr std::uint16_t ECM_GLYPH_CELL = 0x1656;
-// The four energy banks' bars, from B800:3E38 upwards, 8 scanlines apart, each full at 100h of playerEnergy.
+constexpr std::uint8_t DASHBOARD_STALE = 0x80; // a cached value no gauge shows
+// The four energy banks, each full at 100h of playerEnergy.
 constexpr std::uint16_t ENERGY_BANKS = 4;
 constexpr std::uint8_t FULL_BANK = 0xFF;
-constexpr std::uint16_t ENERGY_BANK_LINE = 0x3E38;
-constexpr std::uint16_t ENERGY_BANK_STEP = 0x140;
 constexpr std::uint16_t ONE_BANK = 0x100;
 constexpr std::uint16_t MOST_ENERGY = 0x3FF;
 constexpr std::uint8_t LASER_COOLING = 2;
 constexpr std::uint16_t EQUIPMENT_LOSS_ODDS = 0x32; // in 65536 a frame, below one bank
 constexpr std::uint8_t EQUIPMENT_LOSS_DIVISOR = 0x14;
 constexpr std::uint16_t EQUIPMENT_LOSS_FRAMES = 0x1E;
-constexpr std::uint16_t DASHBOARD_ORIGIN = 0x1698;
-constexpr std::uint16_t NEXT_LINE_PAIR = 0x50;  // a line on, in the same bank
-constexpr std::uint16_t NEXT_ODD_LINE = 0xE050; // from an even-bank line to the odd-bank line below it
-constexpr std::uint8_t DASHBOARD_STALE = 0x80;  // a cached value no gauge shows
-constexpr std::uint16_t MISSILE_LOCK_LINE = 0x1E15;
-constexpr std::uint16_t MISSILE_LOCK_LINE_PAIRS = 3;
-constexpr std::uint16_t CONDITION_LIGHT_LINE = 0x176C;
-constexpr std::uint16_t CONDITION_LIGHT_LINE_PAIRS = 4;
-// The roll and pitch indicators: six words of strip, the marker at pixel value + 23, and the column of the strip's
-// last byte, where the marker's word would run past it.
-constexpr std::uint16_t INDICATOR_WORDS = 6;
-constexpr std::uint8_t INDICATOR_CENTER = 0x17;
-constexpr std::uint16_t INDICATOR_LAST_COLUMN = 0x0B;
-// The missile icons: four cells of a word, from x=48, y=193.
-constexpr std::uint16_t MISSILE_ICONS_LINE = 0x3E0C;
-constexpr std::uint8_t MISSILE_CELLS = 4;
 
 constexpr std::uint8_t SCAN_F1 = 0x3B;
 constexpr std::uint8_t SCAN_F4 = 0x3E;
@@ -163,7 +132,6 @@ constexpr std::uint8_t FUEL_DIVISOR = 0x24;
 constexpr std::uint16_t MISSILE_JAM_ODDS = 0x1F4;
 constexpr std::uint8_t FLAG_MASKED = 0x20;
 constexpr std::uint16_t ALL_COLORS = 0xFFFF;
-constexpr std::uint16_t TITLE_TEXT_POSITION = 0x65; // on the message line, in CGA memory
 constexpr std::uint8_t DIGIT_ZERO = 0x30;
 constexpr std::uint8_t DIGIT_ONE = 0x31;
 constexpr std::uint8_t DIGIT_NINE = 0x39;
@@ -410,78 +378,6 @@ void UpdateSideStardust(GameState& _state, bool _left)
 
 // ---- The dashboard --------------------------------------------------------------------------------
 
-// _word on the five scanlines of the dashboard line at B800:_line.
-void FillFiveLineWord(GameState& _state, std::uint16_t _line, std::uint16_t _word)
-{
-  for (const std::uint16_t scanline : FIVE_LINES)
-  {
-    _state.SetVideoWord(Plus(_line, scanline), _word);
-  }
-}
-
-// DrawFiveLineBarPixels and its copy in DrawThreeLineBar: _pixels, 0-48, on the _lines scanlines of the dashboard line
-// at B800:_line, a column of bytes at a time: colour 1 for each four, the partial byte from barPartialBytes, then colour 2 to
-// pixel 48. When there are fewer than four, the first run's loop leaves the count's high byte alone, so the second runs
-// _countHigh * 256 + its own count times, _countHigh as the caller left it.
-template <std::size_t Lines>
-void DrawBar(GameState& _state, const std::array<std::uint16_t, Lines>& _lines, std::uint16_t _line, std::uint8_t _pixels,
-             std::uint8_t _countHigh)
-{
-  std::uint16_t column = _line;
-  const auto fill = [&_state, &_lines, &column](std::uint8_t _byte)
-  {
-    for (const std::uint16_t line : _lines)
-    {
-      _state.SetVideoByte(Plus(column, line), _byte);
-    }
-    column = Plus(column, 1);
-  };
-  std::uint8_t countHigh = _countHigh;
-  if (const auto full = static_cast<std::uint8_t>(_pixels >> 2); full != 0)
-  {
-    countHigh = 0;
-    for (std::uint8_t bytes = full; bytes != 0; --bytes)
-    {
-      fill(BAR_VALUE_BYTE);
-    }
-  }
-  if (const auto partial = static_cast<std::uint8_t>(_pixels & 3); partial != 0)
-  {
-    fill(BAR_PARTIAL_BYTES[partial]);
-  }
-  const auto rest = static_cast<std::uint8_t>(static_cast<std::uint8_t>(BAR_PIXELS - _pixels) >> 2);
-  if (rest == 0)
-  {
-    return;
-  }
-  for (std::uint16_t bytes = Join(countHigh, rest); bytes != 0; --bytes)
-  {
-    fill(BAR_REST_BYTE);
-  }
-}
-
-// _value * 12 / 63, 0-48, a byte divide, which cannot overflow.
-[[nodiscard]] std::uint8_t ScaleBarValue(std::uint8_t _value) noexcept
-{
-  return static_cast<std::uint8_t>((_value * 12u) / 63u);
-}
-
-// _value against _shown, and when it changed, _shown set to it (when _remember) and the bar drawn at _line by DrawThreeLineBar,
-// with a high count byte of 0, as the earlier draws leave it (UpdateDashboard).
-void RedrawThreeLineBar(GameState& _state, const std::uint8_t& _value, std::uint8_t& _shown, std::uint16_t _line, bool _remember)
-{
-  const std::uint8_t value = _value;
-  if (value == _shown)
-  {
-    return;
-  }
-  if (_remember)
-  {
-    _shown = value;
-  }
-  DrawThreeLineBar(_state, _line, value, 0);
-}
-
 // _field less _value: the difference written, and 0 over it on a borrow.
 void SubtractFloored(std::uint8_t& _field, std::uint8_t _value)
 {
@@ -491,14 +387,6 @@ void SubtractFloored(std::uint8_t& _field, std::uint8_t _value)
   {
     _field = 0;
   }
-}
-
-// _glyph against _shown, then written over it: whether the glyph changed.
-[[nodiscard]] bool ExchangeShown(std::uint8_t& _shown, std::uint8_t _glyph)
-{
-  const bool changed = _shown != _glyph;
-  _shown = _glyph;
-  return changed;
 }
 
 // ---- Collisions -----------------------------------------------------------------------------------
@@ -568,7 +456,7 @@ void CheckCollision(GameState& _state, SpaceObject& _slot)
   CheckMissileTargetDestroyed(_state, _slot);
   if (damage == 0x5DC || !IsStation(_slot).station)
   {
-    (void)RemoveObject(_state, _slot);
+    (void)RemoveObject(_slot);
   }
   TakeDamage(_state, damage);
   StartImpactSound(_state);
@@ -641,17 +529,6 @@ void RunWarningChecks(GameState& _state, std::uint16_t _first, std::uint16_t _ch
   }
   return scaled >= COMPASS_STEPS ? COMPASS_LAST_STEP : scaled;
 }
-
-// The eight neighbours XorCompassDot visits, in its order, as steps of x and y.
-struct DotStep
-{
-  std::int8_t x;
-  std::int8_t y;
-};
-
-constexpr std::array<DotStep, 8> COMPASS_RING = {
-  DotStep{1, 0}, DotStep{0, 1}, DotStep{-1, 0}, DotStep{-1, 0}, DotStep{0, -1}, DotStep{0, -1}, DotStep{1, 0}, DotStep{1, 0},
-};
 
 // ---- The flight keys ------------------------------------------------------------------------------
 
@@ -781,7 +658,7 @@ void SetFrameTime(GameState& _state, std::uint8_t _key)
   }
 }
 
-// The pause screen from PauseShowOptions: the options, presented (PresentSpaceView, to the CGA's memory), then its keys,
+// The pause screen from PauseShowOptions: the options, presented (PresentSpaceView), then its keys,
 // waited for, until one ends it. The jumps back to PauseShowOptions and to the wait set afresh everything they read, and
 // carry nothing.
 [[nodiscard]] Task<PauseExit> RunPauseOptions(GameState& _state, Host& _host)
@@ -816,7 +693,6 @@ void SetFrameTime(GameState& _state, std::uint8_t _key)
       {
         // Abort to the title.
         ResetKeyboard(_state);
-        ClearMessageLine(_state);
         ClearDrawBuffer(_state);
         StopSoundEffects(_state);
         _state.Data().flight.gamePaused = 0;
@@ -901,7 +777,7 @@ bool EraseForFlightScreen(GameState& _state)
     }
     else
     {
-      // In witch space the short-range chart still shows once the countdown is down to 1, and F9 and F10 show; the charts and the
+      // In witch space the short-range chart still shows once the countdown is down to 1, and F9 shows; the charts and the
       // market need the navigation computer, which witch space jams.
       if (key == SCAN_F6)
       {
@@ -924,7 +800,7 @@ bool EraseForFlightScreen(GameState& _state)
       }
       erase();
     }
-    // F9 and F10; any other key the screens return is waited past.
+    // F9; any other key the screens return is waited past.
     if (key == SCAN_F9)
     {
       ResetKeyboard(_state);
@@ -932,11 +808,6 @@ bool EraseForFlightScreen(GameState& _state)
       const ScreenKey closed = co_await ShowCommanderStatusScreen(_state, _host, ScreenPlace::Flight);
       _state.Data().flow.inFlight = 0;
       shown(closed);
-      continue;
-    }
-    if (key == SCAN_F10)
-    {
-      shown(co_await ShowInventoryScreen(_state, _host, ScreenPlace::Flight));
       continue;
     }
     // Back to GetKey, until a key comes.
@@ -1561,11 +1432,11 @@ void SaveStardustPositions(GameState& _state)
 {
   _state.Data().flow.inFlight = 0;
   // F1-F10 in keyDown, from F1's scan code up, the ten keys counted down; F7, whose Data on System is the charts' side panel now,
-  // does nothing in flight (D112).
+  // does nothing in flight (D112), nor F10, as D08 lists the cargo the inventory did (ADR-069).
   std::uint16_t scan = SCAN_F1;
   for (std::uint16_t keys = FUNCTION_KEYS;;)
   {
-    if (scan != SCAN_F7 && ByteWithin(BytesOf(_state.Data().keyboard.keyDown), scan) == 1)
+    if (scan != SCAN_F7 && scan != SCAN_F10 && ByteWithin(BytesOf(_state.Data().keyboard.keyDown), scan) == 1)
     {
       // The scan code is kept round ResetKeyboard.
       ResetKeyboard(_state);
@@ -1611,158 +1482,40 @@ void InvalidateDashboard(GameState& _state)
 void UpdateDashboard(GameState& _state)
 {
   UpdateConditionColor(_state);
-  DrawConditionLight(_state);
+  // The condition light flashes black and red, on bit 9 of millisecondCounter, while conditionColor is 0.
+  FlightState& flight = _state.Data().flight;
+  std::uint8_t color = flight.conditionColor;
+  if (color == 0)
+  {
+    color = static_cast<std::uint8_t>(High(_state.Data().timer.millisecondCounter) & 2);
+  }
+  flight.conditionColorShown = color;
   UpdateEnergyAndLaserHeat(_state);
   UpdateSafeZone(_state);
 
-  // The S glyph inside the station's safe zone, and E for a frame when the ECM fires, each in every colour (FFFFh) at
-  // B800:1658 and B800:1656.
-  const std::uint8_t safeZoneGlyph = InSafeZone(_state).inside ? SAFE_ZONE_GLYPH : SPACE;
-  if (ExchangeShown(_state.Data().flight.safeZoneGlyphShown, safeZoneGlyph))
-  {
-    (void)DrawScreenChar(_state, safeZoneGlyph, ALL_COLORS, SAFE_ZONE_GLYPH_CELL);
-  }
+  // The S glyph inside the station's safe zone, and E for a frame when the ECM fires.
+  flight.safeZoneGlyphShown = InSafeZone(_state).inside ? SAFE_ZONE_GLYPH : SPACE;
   std::uint8_t ecmGlyph = SPACE;
   if (_state.Data().playerShip.ecmFired == 1)
   {
     _state.Data().playerShip.ecmFired = 0;
     ecmGlyph = ECM_GLYPH;
   }
-  if (ExchangeShown(_state.Data().flight.ecmGlyphShown, ecmGlyph))
-  {
-    (void)DrawScreenChar(_state, ecmGlyph, ALL_COLORS, ECM_GLYPH_CELL);
-  }
+  flight.ecmGlyphShown = ecmGlyph;
 
-  DrawEnergyBanks(_state);
-  DrawMissileLockIndicator(_state);
-  DrawMissileIcons(_state);
-
-  // The pitch, then the roll, each indicator redrawn when it changed.
-  const std::uint8_t pitch = High(_state.Data().playerShip.rollRate);
-  if (pitch != _state.Data().flight.pitchRateShown)
-  {
-    _state.Data().flight.pitchRateShown = pitch;
-    DrawSignedIndicator(_state, PITCH_INDICATOR_LINE, static_cast<std::int8_t>(pitch));
-  }
-  const std::uint8_t roll = Low(_state.Data().playerShip.rollRate);
-  if (roll != _state.Data().flight.rollRateShown)
-  {
-    _state.Data().flight.rollRateShown = roll;
-    DrawSignedIndicator(_state, ROLL_INDICATOR_LINE, static_cast<std::int8_t>(roll));
-  }
-
-  // From DrawEnergyBanks' last loop on, the loop count's high byte stays 0: every draw after it leaves it 0, or below 256.
-  RedrawThreeLineBar(_state, _state.Data().flight.laserTemperature, _state.Data().flight.laserTemperatureShown, 0x3B8C, true);
-  RedrawThreeLineBar(_state, _state.Data().playerShip.altitude, _state.Data().flight.altitudeShown, 0x3CCC, true);
-  RedrawThreeLineBar(_state, _state.Data().playerShip.cabinTemperature, _state.Data().flight.cabinTemperatureShown, 0x3A4C, true);
-  RedrawThreeLineBar(_state, _state.Data().commander.fuel, _state.Data().flight.fuelShown, 0x390C, true);
-  // The original never stores the shields' shown values, so a shield bar is drawn every frame.
-  RedrawThreeLineBar(_state, _state.Data().playerShip.foreShield, _state.Data().flight.foreShieldShown, 0x368C, false);
-  RedrawThreeLineBar(_state, _state.Data().playerShip.aftShield, _state.Data().flight.aftShieldShown, 0x37CC, false);
-
-  // The speed, unscaled: its low byte against speedShown, and when it changed, drawn by DrawFiveLineBarPixels.
-  const std::uint8_t speed = Low(_state.Data().playerShip.playerSpeed);
-  if (speed == _state.Data().flight.speedShown)
-  {
-    return;
-  }
-  _state.Data().flight.speedShown = speed;
-  DrawBar(_state, FIVE_LINES, SPEED_BAR_LINE, speed, 0);
+  SplitEnergyBanks(_state);
+  flight.missileLockShown = _state.Data().playerShip.missileState;
+  flight.missileCountShown = _state.Data().commander.missileCount;
+  flight.pitchRateShown = High(_state.Data().playerShip.rollRate);
+  flight.rollRateShown = Low(_state.Data().playerShip.rollRate);
+  flight.laserTemperatureShown = flight.laserTemperature;
+  flight.altitudeShown = _state.Data().playerShip.altitude;
+  flight.cabinTemperatureShown = _state.Data().playerShip.cabinTemperature;
+  flight.fuelShown = _state.Data().commander.fuel;
+  flight.speedShown = Low(_state.Data().playerShip.playerSpeed);
 }
 
-void DrawFiveLineBar(GameState& _state, std::uint16_t _line, std::uint8_t _value, std::uint8_t _countHigh)
-{
-  DrawBar(_state, FIVE_LINES, _line, ScaleBarValue(_value), _countHigh);
-}
-
-void DrawSignedIndicator(GameState& _state, std::uint16_t _line, std::int8_t _value)
-{
-  std::int8_t value = _value;
-  if (value <= -24)
-  {
-    value = -23;
-  }
-  if (value >= 24)
-  {
-    value = 23;
-  }
-  // The strip: six words of the background, 48 pixels in colour 2.
-  for (std::uint16_t word = 0; word < INDICATOR_WORDS; ++word)
-  {
-    FillFiveLineWord(_state, Plus(_line, word * 2), BACKGROUND_WORD);
-  }
-  // The marker: a word of indicatorMarkers at pixel value + 23, or its first byte alone at the right end.
-  const auto pixel = static_cast<std::uint8_t>(INDICATOR_CENTER + value);
-  const auto column = static_cast<std::uint16_t>((pixel >> 2) & 0x0F);
-  const std::uint16_t at = Plus(_line, column);
-  const std::uint16_t marker = INDICATOR_MARKERS[pixel & 3];
-  if (column == INDICATOR_LAST_COLUMN)
-  {
-    for (const std::uint16_t scanline : FIVE_LINES)
-    {
-      _state.SetVideoByte(Plus(at, scanline), Low(marker));
-    }
-    return;
-  }
-  FillFiveLineWord(_state, at, marker);
-}
-
-void DrawThreeLineBar(GameState& _state, std::uint16_t _line, std::uint8_t _value, std::uint8_t _countHigh)
-{
-  DrawBar(_state, THREE_LINES, _line, ScaleBarValue(_value), _countHigh);
-}
-
-void DrawMissileIcons(GameState& _state)
-{
-  const std::uint8_t count = _state.Data().commander.missileCount;
-  if (count == _state.Data().flight.missileCountShown)
-  {
-    return;
-  }
-  _state.Data().flight.missileCountShown = count;
-  // A word a cell: the icons for the count's low two bits, then the background to the fourth cell, a byte count that
-  // wraps past four missiles.
-  std::uint16_t cell = MISSILE_ICONS_LINE;
-  for (std::uint16_t icon = 0; icon < (count & 3u); ++icon)
-  {
-    // missileIcon holds the icon's five lines in bank order: odd, even, odd, even, odd.
-    constexpr std::array<std::size_t, 5> ICON_LINES = {0, 2, 4, 1, 3};
-    for (std::size_t index = 0; index < FIVE_LINES.size(); ++index)
-    {
-      _state.SetVideoWord(Plus(cell, FIVE_LINES[index]), MISSILE_ICON[ICON_LINES[index]]);
-    }
-    cell = Plus(cell, 2);
-  }
-  for (auto cells = static_cast<std::uint8_t>(MISSILE_CELLS - count); cells != 0; --cells)
-  {
-    FillFiveLineWord(_state, cell, BACKGROUND_WORD);
-    cell = Plus(cell, 2);
-  }
-}
-
-void DrawMissileLockIndicator(GameState& _state)
-{
-  const std::uint8_t missileState = _state.Data().playerShip.missileState;
-  if (missileState == _state.Data().flight.missileLockShown)
-  {
-    return;
-  }
-  _state.Data().flight.missileLockShown = missileState;
-  const std::uint8_t fill = COLOR_FILL_BYTES[missileState & 3u];
-  const std::uint16_t fillWord = Join(fill, fill);
-  // Three bytes on each of six lines: a word and a byte in the odd bank, then the same in the even.
-  std::uint16_t line = MISSILE_LOCK_LINE;
-  for (std::uint16_t pair = 0; pair < MISSILE_LOCK_LINE_PAIRS; ++pair)
-  {
-    _state.SetVideoWord(line, fillWord);
-    _state.SetVideoByte(Plus(line, 2), fill);
-    _state.SetVideoWord(Plus(line, EVEN_BANK), fillWord);
-    _state.SetVideoByte(Plus(line, EVEN_BANK + 2), fill);
-    line = Plus(line, NEXT_LINE_PAIR);
-  }
-}
-
-void DrawEnergyBanks(GameState& _state)
+void SplitEnergyBanks(GameState& _state)
 {
   // Each whole 100h of playerEnergy fills a bank from the top one down, the four counted down, the rest goes in the next, and the
   // banks below it are empty: the bank written is the last of those the count has left.
@@ -1782,21 +1535,7 @@ void DrawEnergyBanks(GameState& _state)
       fills[banks - 1] = 0;
     }
   }
-
-  // Each bank against its shown value, from the top bank's bar upwards: the count left is below 256, so the bar's high count
-  // byte is 0.
-  std::uint8_t(&shown)[ENERGY_BANKS] = _state.Data().flight.energyBanksShown;
-  std::uint16_t line = ENERGY_BANK_LINE;
-  for (std::uint16_t count = ENERGY_BANKS; count != 0; --count)
-  {
-    const std::uint8_t fill = fills[count - 1];
-    if (fill != shown[count - 1])
-    {
-      shown[count - 1] = fill;
-      DrawFiveLineBar(_state, line, fill, 0);
-    }
-    line = static_cast<std::uint16_t>(line - ENERGY_BANK_STEP);
-  }
+  std::ranges::copy(fills, _state.Data().flight.energyBanksShown);
 }
 
 void UpdateEnergyAndLaserHeat(GameState& _state)
@@ -1840,32 +1579,6 @@ void UpdateEnergyAndLaserHeat(GameState& _state)
   }
   equipment = static_cast<std::uint8_t>(equipment - 1);
   SetMessage(_state, Message::EquipmentLoss, EQUIPMENT_LOSS_FRAMES);
-}
-
-void DrawConditionLight(GameState& _state)
-{
-  std::uint8_t color = _state.Data().flight.conditionColor;
-  if (color == 0)
-  {
-    // Flashing: black and red, on bit 9 of millisecondCounter.
-    color = static_cast<std::uint8_t>(High(_state.Data().timer.millisecondCounter) & 2);
-  }
-  if (color == _state.Data().flight.conditionColorShown)
-  {
-    return;
-  }
-  _state.Data().flight.conditionColorShown = color;
-  const std::uint8_t fill = COLOR_FILL_BYTES[color];
-  const std::uint16_t mask = Join(fill, fill);
-  // The bitmap's words, byte-swapped and masked by the colour: a line in the odd bank, then the even line below.
-  std::uint16_t line = CONDITION_LIGHT_LINE;
-  for (std::size_t pair = 0; pair < CONDITION_LIGHT_LINE_PAIRS; ++pair)
-  {
-    _state.SetVideoWord(line, static_cast<std::uint16_t>(Swap(CONDITION_LIGHT_BITMAP[pair * 2]) & mask));
-    line = Plus(line, EVEN_BANK);
-    _state.SetVideoWord(line, static_cast<std::uint16_t>(Swap(CONDITION_LIGHT_BITMAP[pair * 2 + 1]) & mask));
-    line = Plus(line, NEXT_ODD_LINE);
-  }
 }
 
 void UpdateConditionColor(GameState& _state)
@@ -1955,7 +1668,7 @@ void UpdateSafeZone(GameState& _state)
   }
   // Bit 0 the answer, shifted in under what the original's byte held: IsObjectNear's last high byte, or the low byte of the
   // station's distance.
-  const NearTest near = IsObjectNear(_state, station);
+  const NearTest near = IsObjectNear(station);
   std::uint8_t held = near.lastHigh;
   bool inside = false;
   if (near.nearby)
@@ -2020,17 +1733,9 @@ void UpdateScannerBlip(GameState& _state, SpaceObject& _slot, Vector _camera)
   _slot.scanned = 1;
   // The scanner's y and z are 1.25 times the camera's. The blip is the high bytes, each XCHGed with the old blip's.
   const auto scaled = [](std::int16_t _coordinate) { return High(Plus(Word(_coordinate), Signed(Sar(Word(_coordinate), 2)))); };
-  const std::uint8_t oldX = _slot.blipX;
   _slot.blipX = High(Word(_camera.x));
-  const std::uint8_t oldY = _slot.blipY;
   _slot.blipY = scaled(_camera.y);
-  const std::uint8_t oldZ = _slot.blipZ;
   _slot.blipZ = scaled(_camera.z);
-  if ((_slot.flags & FLAG_BLIP_DRAWN) != 0)
-  {
-    (void)XorScannerBlip(_state, oldX, oldY, oldZ);
-  }
-  (void)XorScannerBlip(_state, _slot.blipX, _slot.blipY, _slot.blipZ);
   _slot.flags = static_cast<std::uint8_t>(_slot.flags | FLAG_BLIP_DRAWN);
 }
 
@@ -2098,53 +1803,26 @@ bool UpdateCompass(GameState& _state)
   dotY = static_cast<std::uint8_t>(dotY + COMPASS_CENTER_Y);
   dotX = static_cast<std::uint8_t>(dotX + COMPASS_CENTER_X);
 
-  // The new dot and whether it is in front are exchanged into the station's blip bytes, the old
-  // ones come out, and the old dot is XORed out if it is drawn; then the new one in, from what the bytes hold.
-  // The dot is blipX and blipY, exchanged as one word.
-  const std::uint16_t oldDot = Join(station.blipY, station.blipX);
+  // The new dot and whether it is in front go to the station's blip bytes, and the dot is marked drawn.
   station.blipX = dotX;
   station.blipY = dotY;
-  const std::uint8_t wasInFront = station.blipZ;
   station.blipZ = inFront ? COMPASS_IN_FRONT : std::uint8_t{0};
-  if ((station.flags & FLAG_BLIP_DRAWN) != 0)
-  {
-    XorCompassDot(_state, Low(oldDot), High(oldDot), wasInFront != 0);
-  }
-  const std::uint8_t nowInFront = station.blipZ;
-  const std::uint16_t dot = Join(station.blipY, station.blipX);
   station.flags = static_cast<std::uint8_t>(station.flags | FLAG_BLIP_DRAWN);
-  XorCompassDot(_state, Low(dot), High(dot), SignExtend(nowInFront) != 0);
   return true;
 }
 
-void XorCompassDot(GameState& _state, std::uint8_t _x, std::uint8_t _y, bool _inFront)
-{
-  if (_inFront)
-  {
-    (void)XorDashboardPixel(_state, _x, _y);
-  }
-  std::uint8_t x = _x;
-  std::uint8_t y = _y;
-  for (const DotStep step : COMPASS_RING)
-  {
-    x = static_cast<std::uint8_t>(x + step.x);
-    y = static_cast<std::uint8_t>(y + step.y);
-    (void)XorDashboardPixel(_state, x, y);
-  }
-}
-
-std::optional<DashboardPixel> EraseScannerBlip(GameState& _state, SpaceObject& _slot)
+std::optional<DashboardPixel> EraseScannerBlip(SpaceObject& _slot)
 {
   if (IsStation(_slot).station || (_slot.flags & FLAG_BLIP_DRAWN) == 0)
   {
     return std::nullopt;
   }
-  const DashboardPixel last = XorScannerBlip(_state, _slot.blipX, _slot.blipY, _slot.blipZ);
+  const DashboardPixel last = ScannerBlipEnd(_slot.blipX, _slot.blipY, _slot.blipZ);
   _slot.flags = static_cast<std::uint8_t>(_slot.flags & ~FLAG_BLIP_DRAWN);
   return last;
 }
 
-DashboardPixel XorScannerBlip(GameState& _state, std::uint8_t _x, std::uint8_t _y, std::uint8_t _z)
+DashboardPixel ScannerBlipEnd(std::uint8_t _x, std::uint8_t _y, std::uint8_t _z) noexcept
 {
   const std::uint8_t y = Sar(_y, 2);
   const std::uint8_t z = Sar(_z, 2);
@@ -2160,7 +1838,7 @@ DashboardPixel XorScannerBlip(GameState& _state, std::uint8_t _x, std::uint8_t _
   }
   for (;;)
   {
-    pixel.mask = XorDashboardPixel(_state, pixel.x, pixel.y);
+    pixel.mask = DashboardPixelMask(pixel.x);
     if (length == 0)
     {
       break;
@@ -2173,18 +1851,13 @@ DashboardPixel XorScannerBlip(GameState& _state, std::uint8_t _x, std::uint8_t _
     }
   }
   ++pixel.x;
-  pixel.mask = XorDashboardPixel(_state, pixel.x, pixel.y);
+  pixel.mask = DashboardPixelMask(pixel.x);
   return pixel;
 }
 
-std::uint8_t XorDashboardPixel(GameState& _state, std::uint8_t _x, std::uint8_t _y)
+std::uint8_t DashboardPixelMask(std::uint8_t _x) noexcept
 {
-  // The bank from y's parity, 80 bytes a pair of lines, 4 pixels a byte.
-  const auto offset =
-    static_cast<std::uint16_t>(((_y & 1) != 0 ? EVEN_BANK : 0) + (_y >> 1) * NEXT_LINE_PAIR + (_x >> 2) + DASHBOARD_ORIGIN);
-  const std::uint8_t mask = DASHBOARD_PIXEL_MASKS[_x & 3u];
-  _state.SetVideoByte(offset, static_cast<std::uint8_t>(_state.VideoByte(offset) ^ mask));
-  return mask;
+  return DASHBOARD_PIXEL_MASKS[_x & 3u];
 }
 
 bool EraseCompassAndBlips(GameState& _state)
@@ -2193,12 +1866,7 @@ bool EraseCompassAndBlips(GameState& _state)
   SpaceObject& station = _state.Slot(SlotIndex::Station);
   if ((station.flags & FLAG_BLIP_DRAWN) != 0)
   {
-    // The dot at blipX and blipY, solid while blipZ is not 0, its flag cleared first.
-    const bool inFront = station.blipZ != 0;
-    const std::uint8_t x = station.blipX;
-    const std::uint8_t y = station.blipY;
     station.flags = static_cast<std::uint8_t>(station.flags & ~FLAG_BLIP_DRAWN);
-    XorCompassDot(_state, x, y, inFront);
     erased = true;
   }
   // objectSlotCount less 3, as a byte, slots from the first ship's, counted down after each: 65,536 slots for a count of 3.
@@ -2206,7 +1874,7 @@ bool EraseCompassAndBlips(GameState& _state)
   const auto slots = static_cast<std::uint8_t>(_state.Data().flight.objectSlotCount - 3);
   for (std::uint32_t count = LoopCount(slots); count != 0; --count)
   {
-    erased = EraseScannerBlip(_state, _state.Slot(slot)).has_value() || erased;
+    erased = EraseScannerBlip(_state.Slot(slot)).has_value() || erased;
     slot = SlotAfter(slot);
   }
   return erased;
@@ -2243,7 +1911,7 @@ void UpdateFuelLeak(GameState& _state, Host& _host)
   {
     border = _state.Data().drawing.maskingBackgroundColor;
   }
-  _host.Video().SetColorSelect(static_cast<std::uint8_t>(border | BRIGHT_PALETTE));
+  _host.Screen().SetColorSelect(static_cast<std::uint8_t>(border | BRIGHT_PALETTE));
 }
 
 [[nodiscard]] Task<void> RunFlight(GameState& _state, Host& _host)
@@ -2297,7 +1965,7 @@ void UpdateFuelLeak(GameState& _state, Host& _host)
     {
       continue;
     }
-    // Dead: GAME OVER for 40 frames, then the title's ELITE on the message line, and back.
+    // Dead: GAME OVER for 40 frames, and back to the title.
     _state.Data().jump.hyperspaceCountdown = 0;
     if (_state.Data().flight.gameOverFrames == 0)
     {
@@ -2312,10 +1980,7 @@ void UpdateFuelLeak(GameState& _state, Host& _host)
       continue;
     }
     ResetKeyboard(_state);
-    // The message line and the title, in the CGA's memory.
-    ClearMessageLine(_state);
     _state.Data().drawing.textPaperPattern = 0;
-    (void)DrawScreenString(_state, ELITE_TITLE_TEXT, ALL_COLORS, TITLE_TEXT_POSITION);
     co_return;
   }
 }

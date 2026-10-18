@@ -1,7 +1,7 @@
 // GameLogic/Host.h
 #pragma once
 
-#include "Cga.h"
+#include "Display.h"
 #include "DockedKeys.h"
 #include "FileStore.h"
 #include "FlightSnapshot.h"
@@ -49,15 +49,15 @@ using KeyRoutine = std::function<void(const KeyEvent&)>;
 /// The program's start (ADR-010), a coroutine that waits (D77): the Host resumes it each run until it ends.
 using ProgramRoutine = std::function<Task<void>()>;
 
-/// The host the game runs on (D90): its clock and its waits, the keys and the mouse, the sound, the CGA and the files. Every
+/// The host the game runs on (D90): its clock and its waits, the keys and the mouse, the sound, the display and the files. Every
 /// routine that waits or drives a device is given it beside the GameState, which holds the game's memory.
 ///
-/// It holds the clock and what it waits for: the game's tick, the keys the host queues, and the CGA's retrace; the sound, the
-/// tone and its two bits (Speaker); the mouse (Mouse); the CGA (Cga), whose modes the game sets on it; and the file store that
+/// It holds the clock and what it waits for: the game's tick, the keys the host queues, and the display's retrace; the sound, the
+/// tone and its two bits (Speaker); the mouse (Mouse); the display's frame clock and colours (Display, ADR-069); and the file store that
 /// holds the commander files (FileStore, D78).
 ///
 /// Time is whole milliseconds (Timing.h, D87), and it is paced (ADR-008): the game's work takes no time. The clock moves only
-/// while the game waits, and then straight to the next thing that falls due: the next tick, the next key or the CGA's next
+/// while the game waits, and then straight to the next thing that falls due: the next tick, the next key or the display's next
 /// change of status, or the end of the run.
 ///
 /// Waiting is declared (ADR-039). Each wait of the game polls for what it waits for, and when a poll finds nothing it says
@@ -126,9 +126,8 @@ public:
   /// fewer than a host would run before someone notices.
   static constexpr std::uint64_t DEFAULT_SPIN_LIMIT = 50'000'000;
 
-  /// Powers on: every device in its power-on state, the CGA with every register clear until the game sets its mode, the tick
-  /// stopped, and the keys not yet the game's. _state is the game's memory and _files where the commander files are;
-  /// both must outlive the Host. Not noexcept: the devices allocate.
+  /// Powers on: every device in its power-on state, the tick stopped, and the keys not yet the game's. _state is the game's
+  /// memory and _files where the commander files are; both must outlive the Host. Not noexcept: the devices allocate.
   Host(GameState& _state, FileStore& _files, const Desc& _desc);
   Host(const Host&) = delete;
   Host& operator=(const Host&) = delete;
@@ -243,13 +242,11 @@ public:
     return m_speaker;
   }
 
-  [[nodiscard]] Cga& Video() noexcept
+  /// The display's frame clock and colour select (ADR-069).
+  [[nodiscard]] Display& Screen() noexcept
   {
-    return m_cga;
+    return m_display;
   }
-
-  /// The picture the CGA shows now, from the GameState's video memory.
-  void Render(FrameImage& _image) const noexcept;
 
   /// The snapshot of the last frame of flight the game published (ADR-032), and the one before it: a renderer draws between the
   /// two. Each is empty, sequence 0, until one is published.
@@ -267,12 +264,12 @@ public:
   /// before it (ContinueFrom), which becomes the previous.
   void PublishFlightSnapshot(const FlightSnapshot& _snapshot, bool _continues) noexcept;
 
-  /// _snapshot published as the latest frame of the game's own picture of the view, a tunnel's (D68): as PublishFlightSnapshot
-  /// publishes it, continuing nothing, with the layers holding the whole view as the screen shows it (SpaceViewLayers::FinishPicture).
-  void PublishSpaceViewPicture(const FlightSnapshot& _snapshot) noexcept;
+  /// _snapshot published as the latest frame of a tunnel, _tunnel, which the renderer draws in place of the view (ADR-069): as
+  /// PublishFlightSnapshot publishes it, continuing nothing, with no object, beam or layer of the view (SpaceViewLayers::FinishTunnel).
+  void PublishTunnel(const FlightSnapshot& _snapshot, const SnapshotTunnel& _tunnel) noexcept;
 
   /// _view published as what the market screen, D01, shows now (ADR-058): numbered, one more than the last. While one is shown,
-  /// the shell draws it in place of the CGA picture.
+  /// the shell draws it.
   void ShowMarket(MarketView _view);
 
   /// D01 no longer shown: the market screen's routine ended. The clicks not yet taken go with it.
@@ -285,7 +282,7 @@ public:
   }
 
   /// _view published as what the shipyard, D02 and its picker D03, shows now (ADR-064): numbered, one more than the last. While
-  /// one is shown, the shell draws it in place of the CGA picture.
+  /// one is shown, the shell draws it.
   void ShowEquip(EquipView _view);
 
   /// D02 no longer shown: the shipyard's routine ended. The clicks not yet taken go with it.
@@ -298,7 +295,7 @@ public:
   }
 
   /// _view published as what a chart, D04 to D07, shows now (ADR-065): numbered, one more than the last. While one is shown, the
-  /// shell draws it in place of the CGA picture and the cockpit.
+  /// shell draws it in place of the cockpit.
   void ShowChart(ChartView _view);
 
   /// The chart no longer shown: its routine ended. The clicks not yet taken go with it.
@@ -311,7 +308,7 @@ public:
   }
 
   /// _view published as what D10, Disc access, shows now (ADR-067): numbered, one more than the last. While one is shown, the shell
-  /// draws it in place of the CGA picture.
+  /// draws it.
   void ShowDisc(DiscView _view);
 
   /// D10 no longer shown: its routine ended. The clicks not yet taken go with it.
@@ -324,7 +321,7 @@ public:
   }
 
   /// _view published as what D09, a mission's briefing or debriefing over D08, shows now (ADR-068): numbered, one more than the
-  /// last. While one is shown, the shell draws it in place of the CGA picture.
+  /// last. While one is shown, the shell draws it.
   void ShowBriefing(BriefingView _view);
 
   /// D09 no longer shown: the briefing or the debriefing was acknowledged.
@@ -337,7 +334,7 @@ public:
   }
 
   /// _view published as what the status screen, D08, shows now (ADR-063): numbered, one more than the last. While one is shown,
-  /// the shell draws it in place of the CGA picture.
+  /// the shell draws it.
   void ShowStatus(StatusView _view);
 
   /// D08 no longer shown: the status screen closed.
@@ -399,12 +396,23 @@ public:
     return m_spaceView;
   }
 
-  /// Whether the screen still shows the last published frame's view: the CGA in its graphics mode from the start of video memory
-  /// (Cga::ShowsGraphicsFromStart), and the view's bytes unchanged there (SpaceViewLayers::Shown). While it does, a renderer may
-  /// draw the frame's scene in its place.
+  /// Whether the screen still shows the last published frame's view: a frame was finished, and the game has shown no other screen
+  /// since (SpaceViewLayers::Shown). While it does, a renderer may draw the frame's scene.
   [[nodiscard]] bool SpaceViewShown() const noexcept
   {
-    return m_cga.ShowsGraphicsFromStart() && m_spaceView.Shown(m_state);
+    return m_spaceView.Shown();
+  }
+
+  /// The drawing buffer, _buffer, presented as the screen's view (PresentSpaceView), where the original copied it to video memory.
+  void PresentSpaceView(std::span<const std::uint8_t> _buffer) noexcept
+  {
+    m_spaceView.Present(_buffer);
+  }
+
+  /// The game shows a screen other than the space view: a chart's, a docked screen's, or the cockpit's afresh (ADR-069).
+  void LeaveSpaceView() noexcept
+  {
+    m_spaceView.Leave();
   }
 
   /// The space view's watch of a frame's drawing (Host::BeginSpaceViewFrame and the rest), over the game's state.
@@ -452,10 +460,10 @@ public:
     m_spaceView.EndObject(m_state, _slot);
   }
 
-  /// The colours, 0-15 of CgaPalette, the 320x200 graphics mode shows its four pixel values in now (Cga::GraphicsColors).
+  /// The colours, 0-15 of DisplayPalette, the space view's four pixel values show in now (Display::GraphicsColors).
   [[nodiscard]] std::array<std::uint8_t, 4> GraphicsColors() const noexcept
   {
-    return m_cga.GraphicsColors();
+    return m_display.GraphicsColors();
   }
 
   /// Where the commander files are (D78): the game reads and writes them directly.
@@ -501,7 +509,7 @@ private:
   Milliseconds m_clock = 0;
   Speaker m_speaker;
   std::uint8_t m_speakerBits = 0;
-  Cga m_cga;
+  Display m_display;
   std::array<FlightSnapshot, 2> m_flightSnapshots{}; // the previous and the latest
   SpaceViewLayers m_spaceView;
   std::array<SnapshotBeam, FlightSnapshot::MOST_BEAMS> m_beams{}; // the frame's beams, since BeginSpaceViewFrame

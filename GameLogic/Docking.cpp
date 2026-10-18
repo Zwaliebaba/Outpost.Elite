@@ -124,6 +124,20 @@ std::uint16_t Store(GameState& _state, std::uint16_t _offset, std::uint16_t _cou
   return std::span<const std::uint8_t>(TUNNEL_RECTANGLES).subspan(_rectangle * TUNNEL_RECTANGLE_BYTES, TUNNEL_RECTANGLE_BYTES);
 }
 
+// The station tunnel's frame for the renderer (ADR-069): _count of tunnelRectangles from _first, about the view's centre, each
+// its first point's distance from it across and down, in the tunnel's colour.
+[[nodiscard]] SnapshotTunnel StationTunnelOf(std::size_t _first, std::uint16_t _count)
+{
+  SnapshotTunnel tunnel{.kind = TunnelKind::Station, .centerX = VIEW_CENTER_X, .centerRow = VIEW_CENTER_ROW};
+  for (std::size_t rectangle = _first; rectangle < _first + _count && tunnel.shapeCount < tunnel.shapes.size(); ++rectangle)
+  {
+    const std::span<const std::uint8_t> corner = TunnelRectangle(rectangle);
+    tunnel.shapes[tunnel.shapeCount++] =
+      SnapshotTunnelShape{.halfWidth = Negate(corner[0]), .halfHeight = Negate(corner[1]), .color = TUNNEL_COLOR};
+  }
+  return tunnel;
+}
+
 // _count of tunnelRectangles from _first, each by DrawTunnelRectangle in the tunnel's colour, the count taken down after each.
 void DrawTunnelRectangles(GameState& _state, std::size_t _first, std::uint16_t _count)
 {
@@ -493,8 +507,8 @@ void MaskOutsideTunnel(GameState& _state, std::size_t _rectangle)
     }
     DrawTunnelRectangles(_state, 0, frame);
     co_await FinishSpaceViewFrame(_state, _host);
-    // The frame as the game drew it, for a renderer that shows it in the cockpit (D68).
-    _host.PublishSpaceViewPicture(WithoutScene(TakeFlightSnapshot(_state)));
+    // The frame's rectangles, which the renderer draws in the cockpit (ADR-069).
+    _host.PublishTunnel(WithoutScene(TakeFlightSnapshot(_state)), StationTunnelOf(0, frame));
     co_await WaitTimerTicks(_state, _host, TUNNEL_FRAME_TICKS);
     // The frame counted up, its low byte compared with 11.
     frame = Offset(frame, 1);
@@ -521,7 +535,7 @@ void MaskOutsideTunnel(GameState& _state, std::size_t _rectangle)
     }
     DrawTunnelRectangles(_state, first, frames);
     co_await FinishSpaceViewFrame(_state, _host);
-    _host.PublishSpaceViewPicture(WithoutScene(TakeFlightSnapshot(_state)));
+    _host.PublishTunnel(WithoutScene(TakeFlightSnapshot(_state)), StationTunnelOf(first, frames));
     ++first;
     if (--frames == 0)
     {

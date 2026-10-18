@@ -5,18 +5,16 @@
 #include <bitset>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 
 namespace Elite
 {
 
 class GameState;
 
-/// The space view as the screen shows it: 256 pixels of the 320x200 screen across from x 32, and 126 lines down from line 12,
-/// buffer rows 1-126 of the drawing buffer (FinishSpaceViewFrame).
+/// The space view: 256 pixels across and 126 lines down, buffer rows 1-126 of the drawing buffer (FinishSpaceViewFrame).
 inline constexpr std::uint32_t SPACE_VIEW_WIDTH_PIXELS = 256;
 inline constexpr std::uint32_t SPACE_VIEW_HEIGHT_PIXELS = 126;
-inline constexpr std::uint32_t SPACE_VIEW_LEFT_PIXELS = 32;
-inline constexpr std::uint32_t SPACE_VIEW_TOP_LINES = 12;
 
 /// A pixel of a layer that holds nothing: what is under it shows through. Any other value is a pixel value, 0-3.
 inline constexpr std::uint8_t LAYER_CLEAR = 0xFF;
@@ -34,9 +32,9 @@ using SpaceViewLayer = std::array<std::uint8_t, std::size_t{SPACE_VIEW_WIDTH_PIX
 /// - which slots were drawn as a blueprint's model, and which object last changed each pixel.
 ///
 /// It watches the drawing buffer round each object TransformAndDrawObjects draws and round each thing the renderer draws
-/// (BeginObject, EndObject), and reads the finished view from video memory once FinishSpaceViewFrame has copied it (Finish). It
-/// reads the game's state and writes none of it: it is the platform's, outside the game's state, as the flight snapshot is
-/// (ADR-032).
+/// (BeginObject, EndObject), and reads the finished view from the buffer PresentSpaceView presented (Present, Finish), where the
+/// original copied it to video memory (ADR-069). It reads the game's state and writes none of it: it is the platform's, outside the
+/// game's state, as the flight snapshot is (ADR-032).
 class SpaceViewLayers
 {
 public:
@@ -66,13 +64,19 @@ public:
   /// EndObject's slot for what is drawn like an object but is no slot's.
   static constexpr std::uint8_t NO_SLOT = 0xFF;
 
-  /// The frame's drawing is finished and in video memory: the over layer of it, and the under layer and the models as the
-  /// objects left them, published for the renderer.
-  void Finish(const GameState& _state) noexcept;
+  /// The drawing buffer, _buffer, presented as the frame's view.
+  void Present(std::span<const std::uint8_t> _buffer) noexcept;
 
-  /// The frame in video memory is the game's own picture of the view, a tunnel's, which the renderer draws nothing of (D68): the
-  /// over layer all of it, as the screen shows it, and no model, nothing the renderer's and no words.
-  void FinishPicture(const GameState& _state) noexcept;
+  /// The game shows a screen other than the view: it is no longer shown until the next frame finishes.
+  void Leave() noexcept;
+
+  /// The frame's drawing is finished and presented: the over layer of it, and the under layer and the models as the objects left
+  /// them, published for the renderer.
+  void Finish() noexcept;
+
+  /// The frame is a tunnel's, which the renderer draws from the snapshot's tunnel (ADR-069): both layers clear, and no model,
+  /// nothing the renderer's and no words.
+  void FinishTunnel() noexcept;
 
   /// The last finished frame's layers and models.
   [[nodiscard]] const SpaceViewLayer& Under() const noexcept
@@ -90,10 +94,9 @@ public:
     return _slot < SLOTS && m_publishedModels[_slot];
   }
 
-  /// Whether the screen still shows the view of the last finished frame, byte for byte: false once the game has drawn anything
-  /// else there, a tunnel, a chart or a screen of its own, and before any frame is finished. A frame's view reaches the screen in
-  /// work, which paced time does not divide, so between two frames of flight it is true.
-  [[nodiscard]] bool Shown(const GameState& _state) const noexcept;
+  /// Whether the screen still shows the view of the last finished frame: false once the game has shown a screen of its own, a
+  /// chart's, a docked screen's or the cockpit's afresh (Leave), and before any frame is finished.
+  [[nodiscard]] bool Shown() const noexcept;
 
   /// Whether a model or something the renderer draws was the last to change pixel _pixel of the last finished frame, row by row:
   /// there the renderer's drawing shows, unless the over layer covers it.
@@ -116,15 +119,15 @@ public:
     return _pixel < m_publishedOwners.size() ? m_publishedOwners[_pixel] : NO_SLOT;
   }
 
+  /// Pixel _x of view row _row as PresentSpaceView last presented the view, 0-3.
+  [[nodiscard]] std::uint8_t PresentedPixel(std::size_t _row, std::size_t _x) const noexcept;
+
   static constexpr std::size_t BUFFER_BYTES = 0x2000; ///< the drawing buffer's, DRAWING_BUFFER_BYTES
 
 private:
   using Buffer = std::array<std::uint8_t, BUFFER_BYTES>;
   using PixelBits = std::bitset<std::size_t{SPACE_VIEW_WIDTH_PIXELS} * SPACE_VIEW_HEIGHT_PIXELS>;
   using PixelSlots = std::array<std::uint8_t, std::size_t{SPACE_VIEW_WIDTH_PIXELS} * SPACE_VIEW_HEIGHT_PIXELS>;
-
-  // The view's bytes as the screen shows them now, which Shown compares, and the frame finished.
-  void KeepShown(const GameState& _state) noexcept;
 
   // What the object being drawn is.
   enum class Drawing : std::uint8_t
@@ -151,8 +154,9 @@ private:
   PixelBits m_publishedWords;
   PixelSlots m_publishedOwners{};
   std::bitset<SLOTS> m_publishedModels;
-  std::array<std::uint8_t, std::size_t{SPACE_VIEW_HEIGHT_PIXELS} * SPACE_VIEW_WIDTH_PIXELS / 4> m_publishedShown{}; // its bytes
+  Buffer m_presented{}; // the drawing buffer as PresentSpaceView presented it
   bool m_finished = false;
+  bool m_left = false; // the game has shown another screen since the frame finished
 };
 
 } // namespace Elite

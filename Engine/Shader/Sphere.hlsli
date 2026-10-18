@@ -1,6 +1,6 @@
 // Engine/Shader/Sphere.hlsli
 // What SpherePS and SphereGlowPS share (ADR-035): the root constants Renderer sets for a sphere, and the ray through a pixel of
-// the inset that meets it. Both draw over the whole inset, PresentVS's triangle, and find the sphere by the ray.
+// the inset that meets it. Both draw over the whole inset, FullScreenVS's triangle, and find the sphere by the ray.
 
 #include "Noise.hlsli"
 

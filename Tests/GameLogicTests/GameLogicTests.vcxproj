@@ -93,11 +93,10 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AiTests.cpp" />
-    <ClCompile Include="CgaFontTests.cpp" />
-    <ClCompile Include="CgaTests.cpp" />
     <ClCompile Include="BriefingViewTests.cpp" />
     <ClCompile Include="ChartScreenTests.cpp" />
     <ClCompile Include="DiscScreenTests.cpp" />
+    <ClCompile Include="DisplayTests.cpp" />
     <ClCompile Include="CorpusTests.cpp" />
     <ClCompile Include="EquipScreenTests.cpp" />
     <ClCompile Include="EquipmentAnswerTests.cpp" />
@@ -142,7 +141,6 @@
     <None Include="GalaxyAnswers.txt" />
     <None Include="KnownAnswers.txt" />
     <None Include="KnownOutcomes.txt" />
-    <None Include="KnownPictures.txt" />
     <None Include="MarketAnswers.txt" />
     <None Include="MathsAnswers.txt" />
   </ItemGroup>

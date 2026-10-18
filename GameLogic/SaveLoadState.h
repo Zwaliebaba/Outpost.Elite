@@ -15,12 +15,6 @@ struct SaveLoadState
 {
   /// what D10 asks Start to do (ShowDiscScreen): 0 quit (D80), 1 load, 2 save, 3 delete
   std::uint8_t diskOperation;
-  /// file names without extension, NUL-terminated, which the original's catalogue wrote; nothing writes it since D10 (ADR-067)
-  std::uint8_t commanderFileList[370];
-  /// names in commanderFileList, capped at 40
-  std::uint8_t commanderFileCount;
-  /// write pointer into commanderFileList
-  std::uint16_t commanderFileListNext;
   /// copy of commanderBlock taken by SaveStartupCommander
   CommanderState startupCommander;
   /// '12345678.CDR' template; load, save and delete use it
@@ -34,9 +28,6 @@ struct SaveLoadState
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
   {
     _visitor("diskOperation", _self.diskOperation);
-    _visitor("commanderFileList", _self.commanderFileList);
-    _visitor("commanderFileCount", _self.commanderFileCount);
-    _visitor("commanderFileListNext", _self.commanderFileListNext);
     _visitor("startupCommander", _self.startupCommander);
     _visitor("commanderFileName", _self.commanderFileName);
     _visitor("inputDevice", _self.inputDevice);

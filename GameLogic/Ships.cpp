@@ -268,18 +268,18 @@ ReclaimedSlot ReclaimShipSlot(GameState& _state)
   }
   // Every one has a blip: one of slots 4-19 at random (EvictedSlots), removed first.
   const SlotIndex evicted = SlotAfter(static_cast<SlotIndex>(FIRST_EVICTED_SLOT), EvictedSlots(NextRandom(_state)));
-  (void)RemoveObject(_state, _state.Slot(evicted));
+  (void)RemoveObject(_state.Slot(evicted));
   return ReclaimedSlot{evicted, true};
 }
 
-NearTest IsObjectNear(GameState& _state, SpaceObject& _slot)
+NearTest IsObjectNear(SpaceObject& _slot)
 {
   const PositionFit fit = PositionFitsWords(_slot);
   if (fit.fits)
   {
     return NearTest{true, std::nullopt, fit.lastHigh};
   }
-  return NearTest{false, EraseScannerBlip(_state, _slot), fit.lastHigh};
+  return NearTest{false, EraseScannerBlip(_slot), fit.lastHigh};
 }
 
 bool IsSunOrPlanet(const SpaceObject& _slot)
@@ -405,7 +405,7 @@ Velocity ComputeVelocity(GameState& _state, SpaceObject& _slot)
   return Velocity{Vector{first.first, second.first, second.second}};
 }
 
-MovedObject MoveObject(GameState& _state, SpaceObject& _slot)
+MovedObject MoveObject(SpaceObject& _slot)
 {
   // Each axis's velocity byte, sign-extended to 24 bits and added to its coordinate, the low word's carry into the high byte:
   // x, then y and z.
@@ -413,18 +413,18 @@ MovedObject MoveObject(GameState& _state, SpaceObject& _slot)
   {
     AddToCoordinate(_slot, static_cast<int>(axis), static_cast<std::int16_t>(SignExtend(_slot.*VELOCITY[axis])));
   }
-  const NearTest near = IsObjectNear(_state, _slot);
+  const NearTest near = IsObjectNear(_slot);
   if (near.nearby)
   {
     return MovedObject{near, std::nullopt};
   }
-  return MovedObject{near, RemoveObject(_state, _slot)};
+  return MovedObject{near, RemoveObject(_slot)};
 }
 
-std::optional<DashboardPixel> RemoveObject(GameState& _state, SpaceObject& _slot)
+std::optional<DashboardPixel> RemoveObject(SpaceObject& _slot)
 {
   _slot.type = static_cast<std::uint8_t>(_slot.type & ~SpaceObject::ACTIVE);
-  return EraseScannerBlip(_state, _slot);
+  return EraseScannerBlip(_slot);
 }
 
 void FacePlayer(GameState& _state, SpaceObject& _slot)
@@ -500,7 +500,7 @@ void CopyObject(const SpaceObject& _source, SpaceObject& _destination)
   _destination = _source;
 }
 
-std::optional<MovedObject> UpdateDebrisAi(GameState& _state, SpaceObject& _slot)
+std::optional<MovedObject> UpdateDebrisAi(SpaceObject& _slot)
 {
   const auto lifetime = static_cast<std::uint8_t>(_slot.lifetime - 1);
   _slot.lifetime = lifetime;
@@ -513,7 +513,7 @@ std::optional<MovedObject> UpdateDebrisAi(GameState& _state, SpaceObject& _slot)
   // The roll spin, sign-extended, added to the roll, then the pitch spin to the pitch.
   _slot.roll = Offset(_slot.roll, SignExtend(_slot.SpinRoll()));
   _slot.pitch = Offset(_slot.pitch, SignExtend(_slot.SpinPitch()));
-  return MoveObject(_state, _slot);
+  return MoveObject(_slot);
 }
 
 bool IsDebrisType(const SpaceObject& _slot)

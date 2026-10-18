@@ -1,6 +1,5 @@
 #include "pch.h"
 
-#include "Cga.h"
 #include "Host.h"
 #include "Input.h"
 #include "HostRig.h"
@@ -188,7 +187,7 @@ public:
       Assert::IsTrue(rig.Host().RunUntil(1'001) == Elite::StopReason::Reached);
       clocks[run] = rig.Host().Clock();
       ticks[run] = rig.Host().TicksRun();
-      digests[run] = Elite::GameStateDigest(rig.State(), rig.Host().Video());
+      digests[run] = Elite::GameStateDigest(rig.State(), rig.Host().Screen());
     }
     Assert::AreEqual(clocks[0], clocks[1]);
     Assert::AreEqual(std::uint64_t{1'000}, ticks[0], L"a thousand ticks in a second");

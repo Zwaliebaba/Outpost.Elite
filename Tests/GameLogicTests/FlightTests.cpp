@@ -86,16 +86,17 @@ public:
   }
 
   // A screen left by Escape, which waits for a key; in witch space the short-range chart at the
-  // last of the countdown, F9 past the navigation computer, Escape back to it, and the charts refused.
+  // last of the countdown, F9 past the navigation computer, Escape back to it, and the charts refused, F9 still shown. F10 shows
+  // nothing in flight (ADR-069), so F9's status screen stands where the inventory was.
   TEST_METHOD(FlightScreensAgreeInWitchSpace)
   {
     TwinRig rig("TwinWitchScreens");
     Launch(rig);
-    rig.Play("down F10; wait 0.1; up F10; wait 1\nkey Escape; wait 1\nkey F1; wait 1\ndigest after-escape");
+    rig.Play("down F9; wait 0.1; up F9; wait 1\nkey Escape; wait 1\nkey F1; wait 1\ndigest after-escape");
     SetBoth(rig, &Commander::witchspaceCountdown, 1);
     rig.Play("down F6; wait 0.1; up F6; wait 1\nkey F9; wait 1\nkey Escape; wait 1\ndigest witch-chart");
     SetBoth(rig, &Commander::witchspaceCountdown, 2);
-    rig.Play("down F6; wait 0.1; up F6; wait 0.5\ndown F10; wait 0.1; up F10; wait 1\nkey F1; wait 1\ndigest witch-inventory");
+    rig.Play("down F6; wait 0.1; up F6; wait 0.5\ndown F9; wait 0.1; up F9; wait 1\nkey F1; wait 1\ndigest witch-status");
   }
 };
 

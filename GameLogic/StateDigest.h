@@ -6,35 +6,19 @@
 namespace Elite
 {
 
-class Cga;
+class Display;
 class GameState;
 
-/// The SHA-256, as lowercase hex, of the game's state (ADR-008): what replays check and what Phase 3
-/// must leave unchanged. In this order:
+/// The SHA-256, as lowercase hex, of the game's state (ADR-008): what replays check. In this order:
 ///
 ///  1. the game's state, every member GameData holds, written by its members in their order (StateWriter, D76), not by
 ///     how the struct lays them out;
-///  2. the CGA's 16 KiB of video memory at B800:0000;
-///  3. the CGA's mode control and colour select registers and its 18 CRTC registers.
+///  2. the display's colour select, the one register the game still sets, a byte (ADR-069).
 ///
-/// The first two are _state's own (D19), the third _video's.
-///
-/// Left out on purpose: the registers, because a native routine has no instruction pointer to agree on;
-/// the code segment, where the triangle filler patches its step instructions as the original rewrites
-/// its own (PatchStep), because nothing reads a patched site back: the native filler steps each edge by
-/// its sign; the stack, which holds whatever the last calls and interrupts left below its top, and the
-/// constants and gaps nothing uses, none of which GameData holds (D38); and DOS's and the BIOS's own
-/// memory, which the game does not read.
-[[nodiscard]] std::string GameStateDigest(const GameState& _state, const Cga& _video);
-
-/// The SHA-256, as lowercase hex, of what the player sees (D33): the second and third parts of GameStateDigest, in its
-/// order, and nothing else:
-///
-///  1. the CGA's 16 KiB of video memory at B800:0000;
-///  2. the CGA's mode control and colour select registers and its 18 CRTC registers, 20 bytes.
-///
-/// It was recorded beside every state digest of the corpus and the twins while each still met the original's (Phase 5's
-/// first piece), so that what the player sees at those points stays the original's once the rest of the state may differ.
-[[nodiscard]] std::string PictureDigest(const GameState& _state, const Cga& _video);
+/// Left out on purpose: the code segment, where the triangle filler patches its step instructions as the original rewrites
+/// its own (PatchStep), because nothing reads a patched site back: the native filler steps each edge by its sign; the
+/// constants and gaps nothing uses, none of which GameData holds (D38); and DOS's and the BIOS's own memory, which the game
+/// does not read.
+[[nodiscard]] std::string GameStateDigest(const GameState& _state, const Display& _display);
 
 } // namespace Elite

@@ -77,12 +77,12 @@ private:
 /// The environment variable that makes a run dump the game's state at every state digest it takes, into the directory it
 /// names, instead of checking the digests: one file for each digest step of each replay, DIR/replays/<replay>/<line>.txt, and
 /// for each known answer of each twin, DIR/twins/<twin>/<ordinal>.txt, each byte and word of the state a line, its path and
-/// its value in hex (StateLeaves). The pictures and outcomes are checked as ever.
+/// its value in hex (StateLeaves). The outcomes are checked as ever.
 inline constexpr const char* DUMP_STATE = "OUTPOST_ELITE_DUMP_STATE";
 
 /// The environment variable that makes a run re-base the state digests from the directory it names, which holds the dumps of
 /// the tree before the change, as DUMP_STATE writes them. At every digest it takes, every byte and word of the state must hold
-/// the value the dump before the change gives it, by its path, wherever each tree lays it out; and the picture and
+/// the value the dump before the change gives it, by its path, wherever each tree lays it out; and
 /// every outcome, timing outcomes too, the recorded ones exactly. Then the run writes its own digests: every replay's digest
 /// lines, and each twin's known answers in KnownAnswers.txt, only once all of the replay's or the twin's points have met that
 /// gate. It is run by hand, in one process, never in CI, once the subsystems' answers and the turn probe are known to hold; a
@@ -113,7 +113,7 @@ public:
     Assert::IsTrue(RUN.m_mode == DigestMode::Check || EnvironmentVariable("CI").empty(),
                    L"OUTPOST_ELITE_DUMP_STATE or OUTPOST_ELITE_REBASE_DIGESTS is set where CI is: never in CI");
     Assert::IsTrue(RUN.m_mode == DigestMode::Check || EnvironmentVariable(RECORD_GUARD).empty(),
-                   L"OUTPOST_ELITE_RECORD_GUARD is set with a dump or a re-base, which check the pictures and outcomes it records");
+                   L"OUTPOST_ELITE_RECORD_GUARD is set with a dump or a re-base, which check the outcomes it records");
     Assert::IsTrue(RUN.m_error.empty(), AnswerFile::Widen(RUN.m_error).c_str());
     return RUN;
   }

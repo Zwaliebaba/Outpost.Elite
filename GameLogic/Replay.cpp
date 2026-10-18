@@ -157,7 +157,7 @@ std::vector<std::string_view> Words(std::string_view _text)
   return words;
 }
 
-// The digest step named _name if it is the last of _steps, which a picture or outcome line belongs to; otherwise nothing.
+// The digest step named _name if it is the last of _steps, which an outcome line belongs to; otherwise nothing.
 Step* DigestBefore(std::vector<Step>& _steps, std::string_view _name) noexcept
 {
   if (_steps.empty() || _steps.back().kind != StepKind::Digest || _steps.back().name != _name)
@@ -175,24 +175,9 @@ bool ParseStep(std::string_view _text, std::size_t _line, std::vector<Step>& _st
     return false;
   };
   const std::string_view verb = words.front();
-  if (verb == "picture")
-  {
-    // Not a step: the expected picture of the digest step just before it.
-    if (words.size() != 3)
-      return failure("picture takes the label of the digest before it and a value");
-    if (!IsDigestHex(words[2]))
-      return failure("a picture's value is 64 lowercase hex digits");
-    Step* const digest = DigestBefore(_steps, words[1]);
-    if (digest == nullptr)
-      return failure("a picture follows the digest step it names");
-    if (!digest->expectedPicture.empty())
-      return failure("that digest has its picture already");
-    digest->expectedPicture = std::string(words[2]);
-    return true;
-  }
   if (verb == "outcome")
   {
-    // Not a step either: the expected outcomes of the digest step just before it.
+    // Not a step: the expected outcomes of the digest step just before it.
     if (words.size() < 3)
       return failure("outcome takes the label of the digest before it and its outcomes");
     std::string outcomes;
@@ -271,7 +256,7 @@ bool ParseStep(std::string_view _text, std::size_t _line, std::vector<Step>& _st
     step.click = ChartClick{.x = *x, .row = *row};
   }
   else
-    return failure("steps are wait, key, down, up, click, shot, digest, file and end, and a digest's picture and outcome");
+    return failure("steps are wait, key, down, up, click, shot, digest, file and end, and a digest's outcome");
   if (_ended && step.kind != StepKind::Digest && step.kind != StepKind::Shot)
     return failure("only digest and shot may follow end, the last step that runs the machine");
   _ended = _ended || step.kind == StepKind::End;
@@ -330,7 +315,7 @@ bool RecordCheckpoints(std::string_view _text, const std::map<std::size_t, Check
 {
   std::string recorded;
   std::size_t written = 0;
-  bool replacing = false; // past a recorded digest's line, whose old picture and outcome lines the new ones replace
+  bool replacing = false; // past a recorded digest's line, whose old outcome line the new one replaces
   std::size_t line = 0;
   while (!_text.empty())
   {
@@ -342,7 +327,7 @@ bool RecordCheckpoints(std::string_view _text, const std::map<std::size_t, Check
     std::string_view ending = whole.ends_with("\r\n") ? "\r\n" : whole.ends_with('\n') ? "\n" : "";
     const std::string_view content = Trim(whole.substr(0, std::min(whole.find('#'), whole.size() - ending.size())));
     const std::vector<std::string_view> words = Words(content);
-    if (replacing && !words.empty() && (words.front() == "picture" || words.front() == "outcome"))
+    if (replacing && !words.empty() && words.front() == "outcome")
       continue;
     replacing = replacing && words.empty();
     recorded += whole;
@@ -360,8 +345,6 @@ bool RecordCheckpoints(std::string_view _text, const std::map<std::size_t, Check
       ending = "\n";
       recorded += ending;
     }
-    recorded += std::format("picture {} {}", words[1], checkpoint->second.picture);
-    recorded += ending;
     recorded += std::format("outcome {} {}", words[1], checkpoint->second.outcomes);
     recorded += ending;
     replacing = true;
@@ -418,9 +401,9 @@ bool RecordDigests(std::string_view _text, const std::map<std::size_t, std::stri
   return true;
 }
 
-Checkpoint TakeCheckpoint(const GameState& _state, const Cga& _video)
+Checkpoint TakeCheckpoint(const GameState& _state, const Display& _display)
 {
-  return Checkpoint{GameStateDigest(_state, _video), PictureDigest(_state, _video), OutcomeText(_state)};
+  return Checkpoint{GameStateDigest(_state, _display), OutcomeText(_state)};
 }
 
 StopReason ExpectedStop(const Step& _step) noexcept
@@ -463,7 +446,7 @@ StopReason ReplayPlayer::Play(const Step& _step, Checkpoint& _checkpoint)
     m_platform.Inject(KeyEvent{.key = _step.scanCode, .down = false});
     break;
   case StepKind::Digest:
-    _checkpoint = TakeCheckpoint(m_state, m_platform.Video());
+    _checkpoint = TakeCheckpoint(m_state, m_platform.Screen());
     break;
   case StepKind::File:
     CopyFile(_step);

@@ -5,6 +5,8 @@
 #include "Replay.h"
 
 #include <array>
+#include <cstdint>
+#include <format>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -56,10 +58,13 @@ void Play(GameRig& _rig, std::string_view _steps)
   }
 }
 
-// What the screen shows now, as its picture's digest.
+// What the screen shows now: each view the host shows, by the sequence it was published with, 0 for one not shown.
 [[nodiscard]] std::string Picture(GameRig& _rig)
 {
-  return Elite::TakeCheckpoint(_rig.State(), _rig.Host().Video()).picture;
+  const Elite::Host& host = _rig.Host();
+  const auto sequence = [](const auto* _view) { return _view == nullptr ? std::uint64_t{0} : std::uint64_t{_view->sequence}; };
+  return std::format("{} {} {} {} {} {}", sequence(host.ShownStatus()), sequence(host.ShownMarket()), sequence(host.ShownEquip()),
+                     sequence(host.ShownChart()), sequence(host.ShownDisc()), sequence(host.ShownBriefing()));
 }
 
 [[nodiscard]] bool Shows(GameRig& _rig, Elite::DockedScreen _screen)
@@ -92,14 +97,15 @@ public:
     }
   }
 
-  // Docked, a screen closes on the keys the docked host acts on; in flight, on Esc and every F-key but F7 (D112).
+  // Docked, a screen closes on the keys the docked host acts on; in flight, on Esc and every F-key but F7 (D112) and F10 (ADR-069).
   TEST_METHOD(AScreenClosesOnTheKeysOfItsPlace)
   {
     for (std::uint8_t key = SCAN_F1; key <= SCAN_F10; ++key)
     {
       const bool acted = key != SCAN_F7 && key != SCAN_F8 && key != SCAN_F9 && key != SCAN_F10;
       Assert::AreEqual(acted, Elite::ClosesScreen(key, Elite::ScreenPlace::Docked), L"docked");
-      Assert::AreEqual(key != SCAN_F7, Elite::ClosesScreen(key, Elite::ScreenPlace::Flight), L"in flight, every F-key but F7 (D112)");
+      Assert::AreEqual(key != SCAN_F7 && key != SCAN_F10, Elite::ClosesScreen(key, Elite::ScreenPlace::Flight),
+                       L"in flight, every F-key but F7 (D112) and F10 (ADR-069)");
     }
     Assert::IsTrue(
       Elite::ClosesScreen(SCAN_ESCAPE, Elite::ScreenPlace::Docked) && Elite::ClosesScreen(SCAN_ESCAPE, Elite::ScreenPlace::Flight), L"Esc");

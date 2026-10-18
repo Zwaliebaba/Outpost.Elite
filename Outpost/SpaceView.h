@@ -2,7 +2,6 @@
 #pragma once
 
 #include "Canvas.h"
-#include "Cga.h"
 #include "Renderer.h"
 #include "SceneSnapshot.h"
 #include "ShipModel.h"
@@ -24,7 +23,8 @@ namespace Outpost
 /// its blueprints' models, the sun and the planet as spheres, the planet's surface and the sky the system's (PlanetLookOf,
 /// SkyLookOf), the stardust and the beams as strokes, all drawn by the renderer, between the space view's two layers, the game's
 /// own pixels of everything else. It draws while the screen shows the last frame of flight or of the title the game published, and
-/// draws nothing otherwise: the tunnels, the jumps and every other screen keep the CGA picture.
+/// draws nothing otherwise. A tunnel's frame it draws from the snapshot's tunnel (ADR-069): the station's rectangles as a corridor of
+/// glowing edges and rails, the hyperspace's rings as glowing loops, on black.
 class SpaceView
 {
 public:
@@ -50,6 +50,9 @@ private:
   // _snapshot's objects out of the view's cone that the game would draw as dots (D69), as strokes in _palette's colours with the
   // stardust.
   void TakeSideDots(const Elite::FlightSnapshot& _snapshot, const std::array<std::uint32_t, 4>& _palette);
+
+  // _latest's tunnel, as strokes in _palette's colours, in place of the beams.
+  void TakeTunnel(const Elite::FlightSnapshot& _latest, const std::array<std::uint32_t, 4>& _palette);
 
   // _before's beams, as strokes in _palette's colours.
   void TakeBeams(const Elite::FlightSnapshot& _before, const std::array<std::uint32_t, 4>& _palette);

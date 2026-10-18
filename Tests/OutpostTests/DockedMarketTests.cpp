@@ -54,9 +54,7 @@ constexpr std::uint32_t BACKGROUND = 0x070605;
                                          const std::function<void(Engine::Canvas&)>& _over = {})
 {
   Engine::Renderer renderer;
-  Assert::IsTrue(
-    renderer.Create(Engine::Renderer::Desc{.warp = true, .sourceWidth = 4, .sourceHeight = 2, .logicalWidth = 8, .logicalHeight = 4}),
-    L"WARP");
+  Assert::IsTrue(renderer.Create(Engine::Renderer::Desc{.warp = true}), L"WARP");
   Assert::IsTrue(renderer.HasBahnschrift(), L"Bahnschrift installed: the design's face");
   Engine::Canvas canvas;
   const Outpost::TextMeasure measure = [&renderer](const Engine::CanvasText& _text) { return renderer.MeasureText(_text); };
@@ -67,7 +65,7 @@ constexpr std::uint32_t BACKGROUND = 0x070605;
   }
   GoldenImage::Picture picture{.width = DESIGN_WIDTH_PIXELS,
                                .height = DESIGN_HEIGHT_PIXELS,
-                               .pixels = renderer.Capture({}, BACKGROUND, DESIGN_WIDTH_PIXELS, DESIGN_HEIGHT_PIXELS, nullptr, &canvas)};
+                               .pixels = renderer.Capture(BACKGROUND, DESIGN_WIDTH_PIXELS, DESIGN_HEIGHT_PIXELS, nullptr, &canvas)};
   Assert::AreEqual(std::size_t{DESIGN_WIDTH_PIXELS} * DESIGN_HEIGHT_PIXELS, picture.pixels.size(), L"the whole picture captured");
   return picture;
 }
@@ -116,6 +114,16 @@ public:
     Elite::MarketView view = Refusing();
     view.message = Elite::MarketMessage{.notice = Elite::MarketNotice::Bought, .commodity = 0, .amount = 3, .tenths = 84};
     GoldenImage::Check("D01-Market-Bought", Drawn(view, Engine::Point{.x = 300.0f, .y = 400.0f}));
+  }
+
+  // F8 in flight (ADR-069): the prices and the hold, read only: no selected panel, no trade, and the key bar the flight's.
+  TEST_METHOD(TheMarketInFlight)
+  {
+    Elite::MarketView view = AsDrawn();
+    view.flight = true;
+    view.buyAllowed = false;
+    view.sellAllowed = false;
+    GoldenImage::Check("D01-Market-InFlight", Drawn(view, std::nullopt));
   }
 
   // T1's modal over the market, where `docked/10-disc-menu.png` draws D10's: the market dimmed, and the panel with its full

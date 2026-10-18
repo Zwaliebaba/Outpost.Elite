@@ -61,7 +61,7 @@ public:
   }
 
   // Every way to reach a member writes the member: an array's element, a record's, a nested struct's member, a word's high byte, a
-  // slot's field by name and by its number, a buffer's byte, a helper's reference, and video memory.
+  // slot's field by name and by its number, a buffer's byte and a helper's reference.
   TEST_METHOD(EveryWritePathReachesTheState)
   {
     Elite::GameState state;
@@ -83,8 +83,6 @@ public:
     Assert::AreEqual(1u, std::uint32_t{Elite::BytesOf(std::as_const(state).Data().drawing.drawingBuffer)[63]}, L"a buffer's byte");
     StoreSeven(data.commander.legalStatus);
     Assert::AreEqual(7u, std::uint32_t{std::as_const(state).Data().commander.legalStatus}, L"a helper's reference");
-    state.SetVideoByte(0x10, 0x20);
-    Assert::AreEqual(0x20u, std::uint32_t{state.VideoByte(0x10)}, L"a byte of video memory");
   }
 
   // Each GameState holds its own state, with nothing shared between them: tests run several games in one process.
@@ -99,7 +97,7 @@ public:
     Assert::AreEqual(1u, std::uint32_t{second->Data().commander.fuel});
   }
 
-  // IndexOf gives a slot's number; a record that is not one of the slots and an offset past video memory are refused (change 3c).
+  // IndexOf gives a slot's number; a record that is not one of the slots is refused (change 3c).
   TEST_METHOD(SlotsAreFoundByMember)
   {
     Elite::GameState state;
@@ -109,8 +107,6 @@ public:
     const Elite::SpaceObject outside{};
     Assert::ExpectException<std::out_of_range>([&state, &outside] { (void)state.IndexOf(outside); }, L"a record that is no slot");
     Assert::ExpectException<std::out_of_range>([&state] { (void)state.Slot(Elite::SlotIndex::End); }, L"a number past the last");
-
-    Assert::ExpectException<std::out_of_range>([&state] { (void)state.VideoByte(0x4000); }, L"past video memory");
   }
 };
 

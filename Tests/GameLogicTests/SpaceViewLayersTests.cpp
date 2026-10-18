@@ -1,6 +1,5 @@
 #include "pch.h"
 
-#include "Cga.h"
 #include "FlightSnapshot.h"
 #include "GameRig.h"
 #include "GameState.h"
@@ -57,13 +56,10 @@ constexpr std::size_t HYPERSPACE_TUNNEL_FRAMES = 50;
   return text.str();
 }
 
-// Pixel _x of view row _row as the screen shows it: video memory, the 320x200 mode's banks of even and odd lines.
-[[nodiscard]] std::uint8_t ShownPixel(const Elite::GameState& _state, std::size_t _row, std::size_t _x)
+// Pixel _x of view row _row as the screen was given it: the view PresentSpaceView last presented (ADR-069).
+[[nodiscard]] std::uint8_t ShownPixel(const Elite::Host& _platform, std::size_t _row, std::size_t _x)
 {
-  const std::size_t line = _row + Elite::SPACE_VIEW_TOP_LINES;
-  const std::size_t column = Elite::SPACE_VIEW_LEFT_PIXELS + _x;
-  const std::uint8_t byte = _state.VideoByte(static_cast<std::uint16_t>((line % 2) * 0x2000 + (line / 2) * 80 + column / 4));
-  return static_cast<std::uint8_t>((byte >> (2 * (3 - column % 4))) & 3);
+  return _platform.SpaceView().PresentedPixel(_row, _x);
 }
 
 // A pattern of every pixel value, which differs from row to row and pixel to pixel: what a test object draws.
@@ -99,7 +95,8 @@ struct Seen
   std::size_t titleWordPixels = 0;
   std::size_t wordsFrames = 0; ///< frames of only the game's words: the credits, the pause screen
   std::size_t creditsFrames = 0;
-  std::size_t pictureFrames = 0;  ///< frames of a tunnel, the game's own picture (D68)
+  std::size_t tunnelFrames = 0;   ///< frames of a tunnel, which the renderer draws from the snapshot (ADR-069)
+  std::size_t tunnelShapes = 0;   ///< the rectangles and rings of those frames
   std::size_t ruledModels = 0;    ///< objects in the view the game drew as models, which DrawingOf says it would (D69)
   std::size_t ruledDots = 0;      ///< and those it did not, which DrawingOf says are dots
   std::size_t ruledOutside = 0;   ///< objects out of the view's cone that DrawingOf would draw
@@ -245,27 +242,21 @@ constexpr std::size_t GLYPH_ROWS = 8;
 
 // The latest frame's layers explain what the screen shows: where the over layer holds a pixel it is the screen's, where a model
 // drew last the renderer's model shows, and everywhere else the screen shows the under layer, or the background, colour 0, where
-// that is clear. And the screen is what the CGA shows of it, in the colours GraphicsColors names.
-void CheckFrame(GameRig& _rig, Elite::FrameImage& _image, Seen& _seen)
+// that is clear.
+void CheckFrame(GameRig& _rig, Seen& _seen)
 {
   const Elite::SpaceViewLayers& layers = _rig.Host().SpaceView();
-  _rig.Host().Render(_image);
-  const std::array<std::uint8_t, 4> colors = _rig.Host().GraphicsColors();
+  const Elite::FlightSnapshot& snapshot = _rig.Host().LatestFlightSnapshot();
+  const bool tunnel = snapshot.tunnel.kind != Elite::TunnelKind::None;
   for (std::size_t row = 0; row < Elite::SPACE_VIEW_HEIGHT_PIXELS; ++row)
   {
     for (std::size_t x = 0; x < Elite::SPACE_VIEW_WIDTH_PIXELS; ++x)
     {
       const std::size_t pixel = row * Elite::SPACE_VIEW_WIDTH_PIXELS + x;
-      const std::uint8_t shown = ShownPixel(_rig.State(), row, x);
+      const std::uint8_t shown = ShownPixel(_rig.Host(), row, x);
       const auto where = [&_seen, row, x](const wchar_t* _what) {
         return L"frame " + std::to_wstring(_seen.frames) + L", row " + std::to_wstring(row) + L", x " + std::to_wstring(x) + L": " + _what;
       };
-      const std::uint8_t color = _image.At(static_cast<std::uint32_t>(2 * (Elite::SPACE_VIEW_LEFT_PIXELS + x)),
-                                           static_cast<std::uint32_t>(Elite::SPACE_VIEW_TOP_LINES + row));
-      if (color != colors[shown])
-      {
-        Assert::Fail(where(L"the CGA's colour").c_str());
-      }
       const std::uint8_t over = layers.Over()[pixel];
       const std::uint8_t under = layers.Under()[pixel];
       _seen.underPixels += under != Elite::LAYER_CLEAR ? 1 : 0;
@@ -283,14 +274,13 @@ void CheckFrame(GameRig& _rig, Elite::FrameImage& _image, Seen& _seen)
         ++_seen.modelPixels;
         continue;
       }
-      if (shown != (under == Elite::LAYER_CLEAR ? std::uint8_t{0} : under))
+      if (!tunnel && shown != (under == Elite::LAYER_CLEAR ? std::uint8_t{0} : under))
       {
         Assert::Fail(where(L"under").c_str());
       }
     }
   }
   Assert::IsTrue(_rig.Host().SpaceViewShown(), L"the screen shows the frame just published");
-  const Elite::FlightSnapshot& snapshot = _rig.Host().LatestFlightSnapshot();
   // What the renderer draws that is no slot's is all in the snapshot (ADR-035).
   for (std::size_t row = 0; row < Elite::SPACE_VIEW_HEIGHT_PIXELS; ++row)
   {
@@ -311,7 +301,7 @@ void CheckFrame(GameRig& _rig, Elite::FrameImage& _image, Seen& _seen)
   }
   // The game's words (D66): the over layer's pixels no object drew, never the renderer's. On the title's turning ship they are
   // its line's; in a frame of words only, the credits' or the pause screen's, they are all it shows.
-  const bool wordsOnly = !snapshot.picture && snapshot.objectCount == 0 && snapshot.dustCount == 0 &&
+  const bool wordsOnly = !tunnel && snapshot.objectCount == 0 && snapshot.dustCount == 0 &&
                          snapshot.sight == Elite::FlightSnapshot::NO_SIGHT && !snapshot.titlePlanet.shown;
   for (std::size_t row = 0; row < Elite::SPACE_VIEW_HEIGHT_PIXELS; ++row)
   {
@@ -322,16 +312,17 @@ void CheckFrame(GameRig& _rig, Elite::FrameImage& _image, Seen& _seen)
         return L"frame " + std::to_wstring(_seen.frames) + L", row " + std::to_wstring(row) + L", x " + std::to_wstring(x) + L": " + _what;
       };
       const bool ink = layers.HoldsWords(pixel) && layers.Over()[pixel] != 0;
-      // A tunnel's frame is all the over layer's, as the screen shows it, and none of it words or the renderer's (D68).
-      if (snapshot.picture && (layers.Over()[pixel] == Elite::LAYER_CLEAR || layers.HoldsWords(pixel) || layers.RendererOwns(pixel)))
+      // A tunnel's frame is the renderer's, from the snapshot's tunnel, and none of it the layers' (ADR-069).
+      if (tunnel && (layers.Over()[pixel] != Elite::LAYER_CLEAR || layers.Under()[pixel] != Elite::LAYER_CLEAR ||
+                     layers.HoldsWords(pixel) || layers.RendererOwns(pixel)))
       {
-        Assert::Fail(where(L"a tunnel's frame is the game's picture").c_str());
+        Assert::Fail(where(L"a tunnel's frame holds nothing of the layers").c_str());
       }
       if (layers.HoldsWords(pixel) && (layers.Over()[pixel] == Elite::LAYER_CLEAR || layers.RendererOwns(pixel)))
       {
         Assert::Fail(where(L"words are the over layer's").c_str());
       }
-      if (wordsOnly && ShownPixel(_rig.State(), row, x) != 0 && !ink)
+      if (wordsOnly && ShownPixel(_rig.Host(), row, x) != 0 && !ink)
       {
         Assert::Fail(where(L"a frame of words shows only its words").c_str());
       }
@@ -348,12 +339,15 @@ void CheckFrame(GameRig& _rig, Elite::FrameImage& _image, Seen& _seen)
   }
   _seen.wordsFrames += wordsOnly ? 1 : 0;
   _seen.creditsFrames += wordsOnly && snapshot.title ? 1 : 0;
-  if (snapshot.picture)
+  if (tunnel)
   {
-    ++_seen.pictureFrames;
+    ++_seen.tunnelFrames;
     Assert::IsTrue(snapshot.objectCount == 0 && snapshot.dustCount == 0 && snapshot.beamCount == 0 &&
                      snapshot.sight == Elite::FlightSnapshot::NO_SIGHT,
-                   L"a tunnel's frame holds nothing the renderer draws");
+                   L"a tunnel's frame holds nothing the renderer draws but the tunnel");
+    Assert::IsTrue(snapshot.tunnel.shapeCount > 0 || snapshot.tunnel.kind == Elite::TunnelKind::Hyperspace,
+                   L"the station's tunnel draws a rectangle every frame");
+    _seen.tunnelShapes += snapshot.tunnel.shapeCount;
   }
   _seen.dust += snapshot.dustCount;
   _seen.beams += snapshot.beamCount;
@@ -444,17 +438,16 @@ public:
     }
     Assert::IsFalse(layers->DrawnAsModel(3) || layers->RendererOwns(0));
     Assert::AreEqual(Elite::SpaceViewLayers::NO_SLOT, layers->OwnerOf(0));
-    const auto state = std::make_unique<Elite::GameState>();
-    Assert::IsFalse(layers->Shown(*state), L"no frame is shown before one is finished");
+    Assert::IsFalse(layers->Shown(), L"no frame is shown before one is finished");
   }
 
-  // Where the layers put a pixel, held to the game's own copy of the view to the screen and to the CGA's picture of it. Before
+  // Where the layers put a pixel, held to the view PresentSpaceView presented. Before
   // any object a row is drawn, as the title draws its words; an object that is not a model draws a pattern over the rest of the
   // view; a model draws over part of it; something the renderer draws, as the stardust is, over a row of the model; and last
   // another plain object a row of its own. The early row is over, and so is the late one, drawn after the renderer's. The under
   // layer is the pattern, pixel for pixel, but for its 0s, which changed nothing of the cleared buffer; where the model or the
-  // renderer's drew last the pixel is the renderer's. Each pixel's owner is the slot that changed it last. The screen shows them
-  // where PresentSpaceView copies them, in the CGA's colours, and the view is shown in graphics mode until a byte of it changes.
+  // renderer's drew last the pixel is the renderer's. Each pixel's owner is the slot that changed it last. The view is shown until
+  // the game shows another screen.
   TEST_METHOD(PixelsAreWhereTheScreenShowsThem)
   {
     constexpr std::size_t MODEL_FIRST_ROW = 40;
@@ -474,7 +467,7 @@ public:
       {
         Elite::Host& host = rig.Host();
         Elite::GameState& state = rig.State();
-        Elite::SetGraphicsMode(state, host); // the game's mode 4, in which the CGA shows the view
+        Elite::SetGraphicsMode(state, host); // the game's graphics mode, in which the view is shown
         host.BeginSpaceViewFrame();
         for (std::size_t x = 0; x < Elite::SPACE_VIEW_WIDTH_PIXELS; ++x)
         {
@@ -517,9 +510,6 @@ public:
     Assert::IsTrue(rig.Host().RunUntil(10'000'000) == Elite::StopReason::Terminated, L"the frame is drawn");
 
     const Elite::SpaceViewLayers& layers = rig.Host().SpaceView();
-    const auto image = std::make_unique<Elite::FrameImage>();
-    rig.Host().Render(*image);
-    const std::array<std::uint8_t, 4> colors = rig.Host().GraphicsColors();
     Assert::IsTrue(layers.DrawnAsModel(MODEL_SLOT) && !layers.DrawnAsModel(PATTERN_SLOT), L"the model's slot");
     for (std::size_t row = 0; row < Elite::SPACE_VIEW_HEIGHT_PIXELS; ++row)
     {
@@ -552,22 +542,15 @@ public:
         }
         renderers = renderers || row == BACKGROUND_ROW;
         if (layers.Under()[pixel] != under || layers.Over()[pixel] != over || layers.RendererOwns(pixel) != renderers ||
-            layers.OwnerOf(pixel) != owner || layers.HoldsWords(pixel) != (row == EARLY_ROW) || ShownPixel(rig.State(), row, x) != drawn ||
-            image->At(static_cast<std::uint32_t>(2 * (Elite::SPACE_VIEW_LEFT_PIXELS + x)),
-                      static_cast<std::uint32_t>(Elite::SPACE_VIEW_TOP_LINES + row)) != colors[drawn])
+            layers.OwnerOf(pixel) != owner || layers.HoldsWords(pixel) != (row == EARLY_ROW) || ShownPixel(rig.Host(), row, x) != drawn)
         {
           Assert::Fail((L"row " + std::to_wstring(row) + L", x " + std::to_wstring(x)).c_str());
         }
       }
     }
     Assert::IsTrue(rig.Host().SpaceViewShown(), L"the screen shows the frame");
-    const std::uint8_t graphics = rig.Host().Video().ModeControl(); // as the BIOS's mode 4 set it
-    rig.Host().Video().SetModeControl(0x08); // 40-column text, as the escape pod's screen has it, over the same bytes
-    Assert::IsFalse(rig.Host().SpaceViewShown(), L"not in text mode");
-    rig.Host().Video().SetModeControl(graphics);
-    Assert::IsTrue(rig.Host().SpaceViewShown(), L"in graphics mode again");
-    rig.State().SetVideoByte(static_cast<std::uint16_t>((40 / 2) * 80 + 20), 0x5A); // screen line 40, view row 28: bank 0
-    Assert::IsFalse(rig.Host().SpaceViewShown(), L"not once the screen has changed");
+    rig.Host().LeaveSpaceView(); // as a screen of the game's own leaves it (MakeGraphicsScreen, SetTextMode)
+    Assert::IsFalse(rig.Host().SpaceViewShown(), L"not once the game shows another screen");
   }
 
   // Every frame of a fight, each checked a millisecond after it was published: every pixel of the view is its over layer's, the
@@ -584,7 +567,6 @@ public:
 
     GameRig rig("SpaceViewLayers");
     Elite::ReplayPlayer player(rig.Host(), rig.State(), rig.Store(), directory);
-    const auto image = std::make_unique<Elite::FrameImage>();
     Seen seen;
     std::uint64_t checkedSequence = 0;
     // By each frame's sequence: whether the screen stopped showing it before the next, and when it was published.
@@ -613,12 +595,12 @@ public:
         if (sequence != checkedSequence)
         {
           checkedSequence = sequence;
-          CheckFrame(rig, *image, seen);
+          CheckFrame(rig, seen);
           hidden.push_back(false);
           publishedMilliseconds.push_back(elapsedMilliseconds);
           titles.push_back(rig.Host().LatestFlightSnapshot().title);
           // The tunnels' runs of frames, as each ends.
-          if (rig.Host().LatestFlightSnapshot().picture)
+          if (rig.Host().LatestFlightSnapshot().tunnel.kind != Elite::TunnelKind::None)
           {
             ++tunnelRun;
           }
@@ -660,6 +642,7 @@ public:
     Assert::IsTrue(seen.creditsFrames > 0, L"the credits, published and shown");
     Assert::IsTrue(std::ranges::contains(tunnelRuns, STATION_TUNNEL_FRAMES), L"the station's tunnel, every frame published");
     Assert::IsTrue(std::ranges::contains(tunnelRuns, HYPERSPACE_TUNNEL_FRAMES), L"the hyperspace rings, every frame published");
+    Assert::IsTrue(seen.tunnelShapes > 0, L"the tunnels' rectangles and rings, in their snapshots (ADR-069)");
     Assert::IsTrue(seen.worstCenterPixels <= MOST_DISC_PIXELS, L"each disc's centre where its sphere's projects");
     Assert::IsTrue(seen.worstRadiusPixels <= MOST_DISC_PIXELS, L"each disc's radius its sphere's, projected");
     Logger::WriteMessage(("frames " + std::to_string(seen.frames) + ", models " + std::to_string(seen.models) + ", model pixels " +
@@ -667,11 +650,12 @@ public:
                           std::to_string(seen.overPixels) + ", renderer's " + std::to_string(seen.rendererPixels) + ", dust " +
                           std::to_string(seen.dust) + ", beams " + std::to_string(seen.beams) + ", sights " + std::to_string(seen.sights) +
                           ", discs " + std::to_string(seen.discs) + ", words " + std::to_string(seen.wordPixels) + ", frames of words " +
-                          std::to_string(seen.wordsFrames) + ", frames of tunnels " + std::to_string(seen.pictureFrames) +
-                          ", ruled models " + std::to_string(seen.ruledModels) + ", dots " + std::to_string(seen.ruledDots) + ", outside " +
-                          std::to_string(seen.ruledOutside) + ", entering " + std::to_string(seen.ruledEntering) + ", centre off " +
-                          std::to_string(seen.worstCenterPixels) + ", radius off " + std::to_string(seen.worstRadiusPixels) +
-                          ", radius share " + std::to_string(seen.leastRadiusShare) + "-" + std::to_string(seen.mostRadiusShare))
+                          std::to_string(seen.wordsFrames) + ", frames of tunnels " + std::to_string(seen.tunnelFrames) +
+                          ", tunnel shapes " + std::to_string(seen.tunnelShapes) + ", ruled models " + std::to_string(seen.ruledModels) +
+                          ", dots " + std::to_string(seen.ruledDots) + ", outside " + std::to_string(seen.ruledOutside) + ", entering " +
+                          std::to_string(seen.ruledEntering) + ", centre off " + std::to_string(seen.worstCenterPixels) + ", radius off " +
+                          std::to_string(seen.worstRadiusPixels) + ", radius share " + std::to_string(seen.leastRadiusShare) + "-" +
+                          std::to_string(seen.mostRadiusShare))
                            .c_str());
   }
 
@@ -687,7 +671,6 @@ public:
 
     GameRig rig("SpaceViewEntering");
     Elite::ReplayPlayer player(rig.Host(), rig.State(), rig.Store(), directory);
-    const auto image = std::make_unique<Elite::FrameImage>();
     Seen seen;
     std::uint64_t checkedSequence = 0;
     for (const Elite::Step& step : steps)
@@ -707,7 +690,7 @@ public:
         if (sequence != checkedSequence && rig.Host().SpaceViewShown())
         {
           checkedSequence = sequence;
-          CheckFrame(rig, *image, seen);
+          CheckFrame(rig, seen);
         }
       }
     }
@@ -729,7 +712,6 @@ public:
 
     GameRig rig("SpaceViewPause");
     Elite::ReplayPlayer player(rig.Host(), rig.State(), rig.Store(), directory);
-    const auto image = std::make_unique<Elite::FrameImage>();
     Seen seen;
     std::uint64_t checkedSequence = 0;
     std::size_t pausedFrames = 0;
@@ -760,7 +742,7 @@ public:
           }
           // Of flight's frames, not the credits'. The frame of flight that saw the key is published paused too.
           const std::size_t flightWords = seen.wordsFrames - seen.creditsFrames;
-          CheckFrame(rig, *image, seen);
+          CheckFrame(rig, seen);
           const bool words = seen.wordsFrames - seen.creditsFrames > flightWords;
           Assert::IsTrue(!words || paused, L"a frame of words only while paused");
           pausedFrames += words ? 1 : 0;

@@ -127,15 +127,8 @@ public:
     fails("end 1; key y", "only digest and shot may follow end");
     fails("end 1\nwait 1", "line 2");
     fails("end 1; end 1", "only digest and shot may follow end");
-    fails("picture boot 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "follows the digest step it names");
-    fails("digest boot\npicture boot 1234", "64 lowercase hex digits");
-    fails("digest boot\npicture boot", "picture takes the label of the digest before it and a value");
-    fails("digest boot\nwait 1\npicture boot 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "line 3");
-    fails("digest boot\npicture title 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-          "follows the digest step it names");
-    fails("digest boot\npicture boot 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n"
-          "picture boot 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-          "has its picture already");
+    fails("digest boot\npicture boot 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "a step is a verb and one argument");
     fails("outcome boot kills=0", "follows the digest step it names");
     fails("digest boot\noutcome boot", "outcome takes the label of the digest before it and its outcomes");
     fails("digest boot\noutcome boot kills=0 fuelTonnes=3", "'fuelTonnes' is not an outcome");
@@ -145,48 +138,43 @@ public:
     fails("digest boot\noutcome boot kills=0\noutcome boot fuel=70", "has its outcomes already");
   }
 
-  // A picture or outcome line (Replay.h) is not a step: it gives the picture digest or the outcomes the digest step just
-  // before it must give, even after an end step, and a replay with such lines has the same steps as one without.
-  TEST_METHOD(APictureLineBelongsToTheDigestBeforeIt)
+  // An outcome line belongs to the digest step just before it, and is no step itself; a picture line, which the corpus no
+  // longer records (ADR-069), does not parse.
+  TEST_METHOD(AnOutcomeLineBelongsToTheDigestBeforeIt)
   {
     constexpr std::string_view DIGEST = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
-    constexpr std::string_view PICTURE = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210";
     std::vector<Elite::Step> steps;
     std::string error;
     const std::string text =
-      std::format("wait 1\ndigest boot {}\npicture boot {}   # recorded\noutcome boot kills=0  fuel=70\nend 1; digest dos\n"
-                  "outcome dos kills=1\npicture dos {}\n",
-                  DIGEST, PICTURE, PICTURE);
+      std::format("wait 1\ndigest boot {}   # recorded\noutcome boot kills=0  fuel=70\nend 1; digest dos\noutcome dos kills=1\n", DIGEST);
     Assert::IsTrue(Elite::ParseSteps(text, steps, error), L"parses");
-    Assert::AreEqual(std::size_t{4}, steps.size(), L"wait, digest, end, digest: the pictures and outcomes are not steps");
+    Assert::AreEqual(std::size_t{4}, steps.size(), L"wait, digest, end, digest: the outcomes are not steps");
     Assert::AreEqual("kills=0 fuel=70", steps[1].expectedOutcomes.c_str(), false, L"separated by single spaces");
-    Assert::AreEqual("kills=1", steps[3].expectedOutcomes.c_str(), false, L"before the picture line too");
+    Assert::AreEqual("kills=1", steps[3].expectedOutcomes.c_str());
     Assert::AreEqual(std::string(DIGEST).c_str(), steps[1].expectedDigest.c_str());
-    Assert::AreEqual(std::string(PICTURE).c_str(), steps[1].expectedPicture.c_str());
     Assert::IsTrue(steps[3].expectedDigest.empty(), L"a digest with no value");
-    Assert::AreEqual(std::string(PICTURE).c_str(), steps[3].expectedPicture.c_str(), false, L"may still have its picture");
+    std::vector<Elite::Step> pictured;
+    Assert::IsFalse(Elite::ParseSteps(std::format("digest boot {}\npicture boot {}\n", DIGEST, DIGEST), pictured, error),
+                    L"a picture line is no longer a line of the corpus");
   }
 
-  // Recording a corpus's pictures and outcomes (RecordCheckpoints) writes them after their digest's line, ending as that line
-  // does, and replaces the picture and outcome lines there were; every other line, comments and blank lines included, is
-  // kept byte for byte.
-  TEST_METHOD(RecordingAPictureKeepsEveryOtherLine)
+  // Recording a corpus's outcomes (RecordCheckpoints) writes them after their digest's line, ending as that line does, and
+  // replaces the outcome line there was; every other line, comments and blank lines included, is kept byte for byte.
+  TEST_METHOD(RecordingAnOutcomeKeepsEveryOtherLine)
   {
     const std::string digest(64, 'a');
-    const std::string old(64, 'b');
-    const std::string picture(64, 'c');
-    const std::string text = "# a replay\r\nwait 3\r\ndigest boot " + digest + "\r\npicture boot " + old + "\r\noutcome boot kills=1" +
+    const std::string text = "# a replay\r\nwait 3\r\ndigest boot " + digest + "\r\noutcome boot kills=1" +
                              "\r\n\nkey F1; wait 1  # launch\n" + "digest flight " + digest;
     std::vector<Elite::Step> steps;
     std::string error;
     Assert::IsTrue(Elite::ParseSteps(text, steps, error), L"parses");
-    const Elite::Checkpoint checkpoint{digest, picture, "kills=2 fuel=70"};
-    const std::map<std::size_t, Elite::Checkpoint> checkpoints = {{3, checkpoint}, {8, checkpoint}};
+    const Elite::Checkpoint checkpoint{digest, "kills=2 fuel=70"};
+    const std::map<std::size_t, Elite::Checkpoint> checkpoints = {{3, checkpoint}, {7, checkpoint}};
     std::string recorded;
     Assert::IsTrue(Elite::RecordCheckpoints(text, checkpoints, recorded, error), L"records");
-    const std::string expected = "# a replay\r\nwait 3\r\ndigest boot " + digest + "\r\npicture boot " + picture +
+    const std::string expected = "# a replay\r\nwait 3\r\ndigest boot " + digest +
                                  "\r\noutcome boot kills=2 fuel=70\r\n\nkey F1; wait 1  # launch\ndigest flight " + digest +
-                                 "\npicture flight " + picture + "\noutcome flight kills=2 fuel=70\n";
+                                 "\noutcome flight kills=2 fuel=70\n";
     Assert::AreEqual(expected.c_str(), recorded.c_str());
     std::string again;
     Assert::IsTrue(Elite::RecordCheckpoints(recorded, checkpoints, again, error), L"records again");
@@ -195,7 +183,7 @@ public:
     Assert::IsFalse(Elite::RecordCheckpoints(text, {{2, checkpoint}}, recorded, error), L"line 2 is a wait");
     Assert::IsTrue(error.find("line 2") != std::string::npos, L"names the line");
     Assert::IsFalse(Elite::RecordCheckpoints("key F1; digest boot\n", {{1, checkpoint}}, recorded, error), L"not alone");
-    Assert::IsFalse(Elite::RecordCheckpoints(text, {{9, checkpoint}}, recorded, error), L"past the end");
+    Assert::IsFalse(Elite::RecordCheckpoints(text, {{8, checkpoint}}, recorded, error), L"past the end");
   }
 
   // Re-basing a corpus's digests (RecordDigests) writes each over the one its line holds, and keeps every other byte, each
@@ -204,12 +192,12 @@ public:
   {
     const std::string old(64, 'a');
     const std::string digest(64, 'b');
-    const std::string text = "# a replay\r\nwait 3\r\ndigest boot " + old + "\r\npicture boot " + old + "\r\n\nkey F1; wait 1\n" +
+    const std::string text = "# a replay\r\nwait 3\r\ndigest boot " + old + "\r\noutcome boot kills=0\r\n\nkey F1; wait 1\n" +
                              "digest flight " + old + "  # launched\n" + "digest last " + old;
     std::string recorded;
     std::string error;
     Assert::IsTrue(Elite::RecordDigests(text, {{3, digest}, {7, digest}, {8, digest}}, recorded, error), L"records");
-    const std::string expected = "# a replay\r\nwait 3\r\ndigest boot " + digest + "\r\npicture boot " + old +
+    const std::string expected = "# a replay\r\nwait 3\r\ndigest boot " + digest + "\r\noutcome boot kills=0" +
                                  "\r\n\nkey F1; wait 1\ndigest flight " + digest + "  # launched\ndigest last " + digest;
     Assert::AreEqual(expected.c_str(), recorded.c_str());
 

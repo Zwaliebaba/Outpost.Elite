@@ -27,26 +27,6 @@ constexpr std::array<Message, 4> WARNING_MESSAGES = {
 /// stardustColor: drawColor for stardust; 3 in the file
 constexpr std::uint8_t STARDUST_COLOR = 0x03;
 
-/// barPartialBytes: byte; the partial byte of a bar: 1, 2 or 3 pixels of colour 1 then colour 2 (entry 0 unused)
-constexpr std::array<std::uint8_t, 4> BAR_PARTIAL_BYTES = {
-  0xAA, 0x6A, 0x5A, 0x56, // [0]
-};
-
-/// indicatorMarkers: word; DrawSignedIndicator's 2-pixel marker at each pixel offset
-constexpr std::array<std::uint16_t, 4> INDICATOR_MARKERS = {
-  0xAA5A, 0xAA96, 0xAAA5, 0x6AA9, // [0]
-};
-
-/// missileIcon: word, one per scanline; drawn by DrawMissileIcons in the order +0, +4, +8, +2, +6 to match the CGA banks
-constexpr std::array<std::uint16_t, 5> MISSILE_ICON = {
-  0x55A5, 0xA9A6, 0xA9A6, 0xA9A6, 0x55A5, // [0]
-};
-
-/// conditionLightBitmap: word, one per scanline; an 8x8 disc, ANDed with the condition colour
-constexpr std::array<std::uint16_t, 8> CONDITION_LIGHT_BITMAP = {
-  0x0FF0, 0x3FFC, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0x3FFC, 0x0FF0, // [0]
-};
-
 /// collisionRanges: word; box half-size per object type for CheckCollisions: 275 for types 0-1 (stations), 100 for the
 /// rest
 constexpr std::array<std::uint16_t, 32> COLLISION_RANGES = {
@@ -78,7 +58,7 @@ constexpr std::array<std::uint8_t, 129> SQRT_TABLE = {
   0x0B,                                           // [128]
 };
 
-/// dashboardPixelMasks: byte; 0x80, 0x20, 0x08, 0x02: a colour-2 pixel at each position in a CGA byte; XorDashboardPixel
+/// dashboardPixelMasks: byte; 0x80, 0x20, 0x08, 0x02: a colour-2 pixel at each position in a byte of four; DashboardPixelMask
 constexpr std::array<std::uint8_t, 4> DASHBOARD_PIXEL_MASKS = {
   0x80, 0x20, 0x08, 0x02, // [0]
 };

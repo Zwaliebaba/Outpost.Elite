@@ -21,7 +21,7 @@ namespace GameLogicTests
 {
 
 /// The environment variable that makes a run record the guard of D33 instead of checking it, when it is set and not empty:
-/// the corpus's picture and outcome lines and the twins' pictures and outcomes, each recorded only from a run that met every
+/// the corpus's outcome lines and the twins' outcomes, each recorded only from a run that met every
 /// state digest, and the subsystems' known answers (CheckSubsystemAnswers). The guard is recorded by hand, in one process,
 /// never in CI, and a second recording reproduces every file byte for byte.
 inline constexpr const char* RECORD_GUARD = "OUTPOST_ELITE_RECORD_GUARD";
@@ -197,7 +197,7 @@ public:
   /// What a value is.
   enum class Shape : std::uint8_t
   {
-    Sha256,  ///< a SHA-256 in lowercase hex: a state digest or a picture digest
+    Sha256,  ///< a SHA-256 in lowercase hex: a state digest
     Outcomes ///< outcomes as Elite::OutcomeText writes them, name=value pairs separated by single spaces
   };
 

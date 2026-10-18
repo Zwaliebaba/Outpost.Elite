@@ -12,15 +12,13 @@ wait 0.5; key space; wait 3.5      # any key: the credits, then the status scree
 key Escape; wait 0.3               # D10, Disc access, on Load commander
 key 1; wait 0.3                    # Load commander: the catalogue, JAMESON.CDR selected
 key Return; wait 0.5               # loaded
-digest loaded aff4c1059c5a8510b79bfcf9079bce85d4916e2786f86082b5b0c8ee89d3a60b
-picture loaded b7ee12a527ba7c2fc4299cc3a1c8065e786260b87cad506b70e2b515d759d4e5
+digest loaded f753477237944fda31be1167d42d240c11a5eb80fdc0117c97bdf9e74d480e0f
 outcome loaded galaxy=0 system=7 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=1000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=1 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=0 beamLasers=0 miningLasers=1 militaryLasers=0 laserMounts=1 laserTypes=2 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=48 fuel=255 shipSlotsInUse=1 cabinTemperature=12 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 key F1; wait 1                     # launch
 # The flight, as recorded: a step for each change of the keys, and the frames between.
 down Up; down period; wait 0.350
 up Up; up period; wait 0.850
-digest escape-pod 0d39babe12dacc984ab8d1de96a141fcdc3fcad01864eec2db3b036d7bd3fed5
-picture escape-pod e77f98333eb2ca9023d2306a3ed69ba36de6bfd6e94100565d8e05b13e00420e
+digest escape-pod 9522660a6e7c2d626991c9deaa8f9929afc7d3794c308289c4fc6b2c2abb559a
 outcome escape-pod galaxy=0 system=7 witchSpace=0 docked=0 inFlight=1 dead=0 creditsTenths=1000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=1 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=0 beamLasers=0 miningLasers=1 militaryLasers=0 laserMounts=1 laserTypes=2 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=48 fuel=255 shipSlotsInUse=4 cabinTemperature=8 laserTemperature=0 altitude=254 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 down Right; down Up; wait 0.100
 up Up; wait 0.050
@@ -51,8 +49,7 @@ down Down; wait 0.400
 up Down; up Left; down Right; wait 0.100
 down Up; wait 0.200
 up Right; up Up
-digest slaves ac1da767f8d6912b3e30a3e5844c19e6c84027ba82a82ab632e5e731e43e951e
-picture slaves e7e9ad9fcd4cb3f471f07081897a5e5de6cd1995e29a69a3d28c91dbfb40e910
+digest slaves 3329d5880090f86c43427e09bd7ca147d7637de3d119dd24622a18d5ff489c4f
 outcome slaves galaxy=0 system=7 witchSpace=0 docked=0 inFlight=1 dead=0 creditsTenths=1000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=1 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=0 beamLasers=0 miningLasers=1 militaryLasers=0 laserMounts=1 laserTypes=2 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=48 fuel=255 shipSlotsInUse=3 cabinTemperature=8 laserTemperature=0 altitude=220 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 wait 2.000
 down Down; down Left; wait 0.900
@@ -75,11 +72,9 @@ up Down; wait 0.200
 down Down; wait 0.250
 down Right; wait 0.050
 up Down; up Right
-digest retrieval-inactive 83cfa340e777b0a590a7949299d55c184f31d8db8a8eb38f3314677c82bc6d95
-picture retrieval-inactive 10445fc9d7487e11643ef976e5a56a0945ee43a29977e6dcae08c8220f90c956
+digest retrieval-inactive 3b58ab41074a7e65a204183b4849492a5126dbf6003c387e91946142ff36bffb
 outcome retrieval-inactive galaxy=0 system=7 witchSpace=0 docked=0 inFlight=1 dead=0 creditsTenths=1000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=1 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=0 beamLasers=0 miningLasers=1 militaryLasers=0 laserMounts=1 laserTypes=2 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=48 fuel=255 shipSlotsInUse=5 cabinTemperature=8 laserTemperature=0 altitude=220 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 down Up; wait 0.050
 up Up
-digest rammed c019e89e3901b652191762dcb32a419808aed62546864606de74326ca7ea90ac
-picture rammed 24bda9181232b3aec44e6f1d6f43f0d2ffa565ff38434820c936c4cd0236bcb7
+digest rammed 7751b6819d41cd6d1a098eea1cd68abb6766911ce74d7dadc31f78361006f78d
 outcome rammed galaxy=0 system=7 witchSpace=0 docked=0 inFlight=1 dead=0 creditsTenths=1001 legalStatus=0 kills=1 title=COMMANDER cargo=0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=1 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=0 beamLasers=0 miningLasers=1 militaryLasers=0 laserMounts=1 laserTypes=2 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=829 foreShield=0 aftShield=255 speed=48 fuel=255 shipSlotsInUse=4 cabinTemperature=8 laserTemperature=0 altitude=220 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0

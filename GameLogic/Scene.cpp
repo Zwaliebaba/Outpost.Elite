@@ -494,7 +494,7 @@ void ClassifyViewPosition(GameState& _state, SpaceObject& _slot, Vector _view)
     _slot.FramesAway() = static_cast<std::uint8_t>(_slot.FramesAway() + 1);
     if (_slot.FramesAway() == 0)
     {
-      (void)RemoveObject(_state, _slot);
+      (void)RemoveObject(_slot);
       return _state.IndexOf(_slot);
     }
   }
@@ -505,7 +505,7 @@ void ClassifyViewPosition(GameState& _state, SpaceObject& _slot, Vector _view)
   }
   if (!IsStation(_slot).station)
   {
-    if (CheckShipInRange(_state, _slot).InRange())
+    if (CheckShipInRange(_slot).InRange())
     {
       TransformShip(_state, _slot);
     }
@@ -1127,9 +1127,9 @@ void DrawVisibleFaces(GameState& _state, const Blueprint& _blueprint, std::uint1
   } while (Loop(faces));
 }
 
-ShipRangeCheck CheckShipInRange(GameState& _state, SpaceObject& _slot)
+ShipRangeCheck CheckShipInRange(SpaceObject& _slot)
 {
-  ShipRangeCheck check{IsObjectNear(_state, _slot), ShipRange{}};
+  ShipRangeCheck check{IsObjectNear(_slot), ShipRange{}};
   if (check.near.nearby)
   {
     check.range = ShipWithinRange(_slot);
@@ -1138,7 +1138,7 @@ ShipRangeCheck CheckShipInRange(GameState& _state, SpaceObject& _slot)
       return check;
     }
   }
-  (void)EraseScannerBlip(_state, _slot);
+  (void)EraseScannerBlip(_slot);
   return check;
 }
 

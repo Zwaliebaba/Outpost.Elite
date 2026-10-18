@@ -86,7 +86,7 @@ Turn TurnTowardAngles(SpaceObject& _slot, Angles _wanted);
 /// UpdateDriftingObjectAi: class 3: _slot moved (MoveObject), and a rock (IsDebrisType) tumbled: 37h added to its
 /// pitch and FFDFh to its roll when bit 1 of its type byte is set, the other way round when it is clear. Returns what MoveObject
 /// did.
-MovedObject UpdateDriftingObjectAi(GameState& _state, SpaceObject& _slot);
+MovedObject UpdateDriftingObjectAi(SpaceObject& _slot);
 
 /// UpdateTraderOrPoliceAi: class 4: traders and the police at _slot: deciding, attacking, fleeing with jinks, breaking off; rocks
 /// only spin. A ship breaking off measures its range by a box of its range byte in 256ths (ADR-046). Every path ends with MoveObject:

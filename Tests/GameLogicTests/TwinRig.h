@@ -33,10 +33,6 @@ struct TwinOptions
 /// The twins' known answers, from the repository's root. The file's header documents its format.
 inline constexpr std::string_view KNOWN_ANSWERS_FILE = "Tests/GameLogicTests/KnownAnswers.txt";
 
-/// The twins' pictures (D33), from the repository's root: beside each known answer, the picture digest of the same state,
-/// under the same twin and ordinal. The file's header documents its format.
-inline constexpr std::string_view KNOWN_PICTURES_FILE = "Tests/GameLogicTests/KnownPictures.txt";
-
 /// The twins' outcomes (D33), from the repository's root: beside each known answer, the outcomes of the same state
 /// (Elite::OutcomeText), under the same twin and ordinal. The file's header documents its format.
 inline constexpr std::string_view KNOWN_OUTCOMES_FILE = "Tests/GameLogicTests/KnownOutcomes.txt";
@@ -135,13 +131,12 @@ template <typename Struct> [[nodiscard]] std::uint8_t& DataByteIn(Elite::GameSta
 /// of every Play, must be the twin's next known answer (KnownAnswers), which the interpreted original gave for the same
 /// scenario before D7 deleted it.
 ///
-/// Beside each answer, the picture and the outcomes of the same state (D33) are checked against the ones recorded in
-/// KNOWN_PICTURES_FILE and KNOWN_OUTCOMES_FILE (GuardReport). A picture, or a timing outcome, that differs is reported: it
-/// is written to the test's log with both values. An outcome of the player's progress that differs fails, and so does a
-/// picture or outcomes not recorded. While the guard is recorded (RecordingGuard), a twin keeps its pictures and outcomes
-/// instead and writes them when it is done, only if every state digest it gave met its known answer. While the state
+/// Beside each answer, the outcomes of the same state (D33) are checked against the ones recorded in KNOWN_OUTCOMES_FILE
+/// (GuardReport). A timing outcome that differs is reported: it is written to the test's log with both values. An outcome of
+/// the player's progress that differs fails, and so do outcomes not recorded. While the guard is recorded (RecordingGuard), a
+/// twin keeps its outcomes instead and writes them when it is done, only if every state digest it gave met its known answer. While the state
 /// is dumped or the digests re-based (StateDumps), each answer's state is dumped or held to the dump before the
-/// change instead of its digest to the known answer; a re-base fails on any picture or outcome that differs, and the twin
+/// change instead of its digest to the known answer; a re-base fails on any outcome that differs, and the twin
 /// writes its digests as its known answers when it is done.
 class TwinRig
 {
@@ -166,7 +161,7 @@ public:
   TwinRig& operator=(TwinRig&&) = delete;
 
   /// A twin that is done, and threw nothing, so that every state digest it gave met its known answer: while the guard is
-  /// recorded it writes its pictures and outcomes, replacing the ones it had; otherwise it writes its summary to the test's
+  /// recorded it writes its outcomes, replacing the ones it had; otherwise it writes its summary to the test's
   /// log. While the digests are re-based, every one it gave met the re-base's gate, and it writes them as its known answers.
   ~TwinRig()
   {
@@ -190,12 +185,11 @@ public:
     {
       m_report.LogSummary();
     }
-    else if (!TwinAnswers::Record(KNOWN_PICTURES_FILE, TwinAnswers::Shape::Sha256, m_name, m_recordedPictures) ||
-             !TwinAnswers::Record(KNOWN_OUTCOMES_FILE, TwinAnswers::Shape::Outcomes, m_name, m_recordedOutcomes))
+    else if (!TwinAnswers::Record(KNOWN_OUTCOMES_FILE, TwinAnswers::Shape::Outcomes, m_name, m_recordedOutcomes))
     {
       try
       {
-        GuardReport::Log(Widen(m_name) + L": its pictures and outcomes could not be written");
+        GuardReport::Log(Widen(m_name) + L": its outcomes could not be written");
       }
       catch (...)
       {
@@ -233,7 +227,7 @@ public:
         Answer(checkpoint, where);
       }
     }
-    Answer(Elite::TakeCheckpoint(m_rig.State(), m_rig.Host().Video()), Widen(m_name) + L", the state Play ends in");
+    Answer(Elite::TakeCheckpoint(m_rig.State(), m_rig.Host().Screen()), Widen(m_name) + L", the state Play ends in");
   }
 
   [[nodiscard]] Elite::Host& Host() noexcept
@@ -285,10 +279,10 @@ private:
     return checkpoint;
   }
 
-  /// _checkpoint, which _what names, is the twin's next answer: its digest must be the known answer, and its picture and
-  /// outcomes are checked against the recorded ones (GuardReport), which fails on an outcome of the player's progress that
-  /// differs and reports the rest; a picture or outcomes not recorded fail. While the guard is recorded, the picture and
-  /// the outcomes are kept for the destructor to write instead.
+  /// _checkpoint, which _what names, is the twin's next answer: its digest must be the known answer, and its outcomes are
+  /// checked against the recorded ones (GuardReport), which fails on an outcome of the player's progress that differs and
+  /// reports the rest; outcomes not recorded fail. While the guard is recorded, the outcomes are kept for the destructor to
+  /// write instead.
   void Answer(const Elite::Checkpoint& _checkpoint, const std::wstring& _what)
   {
     using Microsoft::VisualStudio::CppUnitTestFramework::Assert;
@@ -302,19 +296,10 @@ private:
     m_digestsGiven.push_back(_checkpoint.digest);
     if (m_recording)
     {
-      m_recordedPictures.push_back(_checkpoint.picture);
       m_recordedOutcomes.push_back(_checkpoint.outcomes);
       return;
     }
-    const std::string* const picture = m_pictures.Find(m_name, m_digests);
-    if (picture == nullptr)
-    {
-      Assert::Fail((_what + L": the picture is " + Widen(_checkpoint.picture) + L", and " +
-                    Widen(std::format("{} has no recorded picture {} in {}", m_name, m_digests, KNOWN_PICTURES_FILE)))
-                     .c_str());
-    }
     const std::wstring point = _what + L", answer " + std::to_wstring(m_digests);
-    m_report.Picture(point, *picture, _checkpoint.picture);
     const std::string* const outcomes = m_outcomes.Find(m_name, m_digests);
     if (outcomes == nullptr)
     {
@@ -326,9 +311,9 @@ private:
     {
       Assert::Fail(failure.c_str());
     }
-    if (dumps.Mode() == DigestMode::Rebase && (*picture != _checkpoint.picture || *outcomes != _checkpoint.outcomes))
+    if (dumps.Mode() == DigestMode::Rebase && *outcomes != _checkpoint.outcomes)
     {
-      Assert::Fail((point + L": the picture or the outcomes differ, and a re-base needs every one as recorded").c_str());
+      Assert::Fail((point + L": the outcomes differ, and a re-base needs every one as recorded").c_str());
     }
   }
 
@@ -339,12 +324,10 @@ private:
 
   std::string m_name;
   KnownAnswers m_answers;
-  TwinAnswers m_pictures{KNOWN_PICTURES_FILE, TwinAnswers::Shape::Sha256};
   TwinAnswers m_outcomes{KNOWN_OUTCOMES_FILE, TwinAnswers::Shape::Outcomes};
   GuardReport m_report;
   bool m_recording = false;                    // the guard is recorded, not checked (RecordingGuard)
   int m_exceptions = 0;                        // std::uncaught_exceptions() when the twin was made
-  std::vector<std::string> m_recordedPictures; // while recording, the pictures by ordinal from 1
   std::vector<std::string> m_recordedOutcomes; // while recording, the outcomes by ordinal from 1
   std::vector<std::string> m_digestsGiven;     // the state digests, by ordinal from 1, which a re-base records
   std::size_t m_digests = 0;                   // the twin's digests so far, the last one's ordinal

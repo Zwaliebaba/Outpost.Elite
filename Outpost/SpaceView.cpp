@@ -2,6 +2,7 @@
 
 #include "SpaceView.h"
 
+#include "Display.h"
 #include "FlightSnapshot.h"
 #include "PlanetLook.h"
 #include "Host.h"
@@ -10,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <numbers>
 #include <vector>
 
 namespace Outpost
@@ -69,6 +71,19 @@ constexpr float MIDDLE = 0.5f;
 constexpr float FIRST_VIEW_ROW = 1.0f;
 // How much of the scene's light past 1 blooms.
 constexpr float BLOOM_SHARE = 1.0f;
+// The tunnels (ADR-069), drawn as strokes from the snapshot's shapes, which bloom. The station's: each rectangle's edges, wider the
+// nearer it is, and rails along the corridor's corners from each rectangle to the next and on past the last to the window's edge,
+// RAIL_REACH times as far out, fainter. The hyperspace's: each ring a loop of RING_SEGMENTS strokes, wider as it grows.
+constexpr float TUNNEL_EDGE_ROWS = 0.6f;
+constexpr float TUNNEL_EDGE_ROWS_PER_PIXEL = 1.0f / 60.0f;
+constexpr float TUNNEL_EDGE_INTENSITY = 1.6f;
+constexpr float TUNNEL_RAIL_ROWS = 0.5f;
+constexpr float TUNNEL_RAIL_INTENSITY = 0.8f;
+constexpr float RAIL_REACH = 3.0f;
+constexpr std::size_t RING_SEGMENTS = 48;
+constexpr float RING_ROWS = 0.8f;
+constexpr float RING_ROWS_PER_PIXEL = 1.0f / 50.0f;
+constexpr float RING_INTENSITY = 2.2f;
 
 [[nodiscard]] float LayerX(std::int16_t _x) noexcept
 {
@@ -143,7 +158,7 @@ static_assert(Engine::SCENE_LAYER_CLEAR == Elite::LAYER_CLEAR, "the game's layer
 [[nodiscard]] std::array<std::uint32_t, PALETTE_COLORS> PaletteOf(const Elite::Host& _platform) noexcept
 {
   const std::array<std::uint8_t, 4> colors = _platform.GraphicsColors();
-  const auto palette = Elite::CgaPalette();
+  const auto palette = Elite::DisplayPalette();
   std::array<std::uint32_t, PALETTE_COLORS> rgb{};
   for (std::size_t color = 0; color < PALETTE_COLORS; ++color)
   {
@@ -390,6 +405,65 @@ void SpaceView::TakeBeams(const Elite::FlightSnapshot& _before, const std::array
   }
 }
 
+void SpaceView::TakeTunnel(const Elite::FlightSnapshot& _latest, const std::array<std::uint32_t, 4>& _palette)
+{
+  // Tunnels continue nothing: each frame's shapes, about the tunnel's centre in the layers' pixels.
+  m_beams.clear();
+  const Elite::SnapshotTunnel& tunnel = _latest.tunnel;
+  const float centerX = LayerX(tunnel.centerX);
+  const float centerY = LayerY(tunnel.centerRow);
+  const auto stroke = [this](float _fromX, float _fromY, float _toX, float _toY, float _rows, std::uint32_t _color, float _intensity)
+  {
+    m_beams.push_back(Engine::SceneStroke{.fromX = _fromX,
+                                          .fromY = _fromY,
+                                          .toX = _toX,
+                                          .toY = _toY,
+                                          .fromWidth = _rows,
+                                          .toWidth = _rows,
+                                          .color = _color,
+                                          .intensity = _intensity});
+  };
+  for (std::size_t index = 0; index < tunnel.shapeCount; ++index)
+  {
+    const Elite::SnapshotTunnelShape& shape = tunnel.shapes[index];
+    const float across = static_cast<float>(shape.halfWidth);
+    const float down = static_cast<float>(shape.halfHeight);
+    const std::uint32_t color = _palette.at(shape.color & (PALETTE_COLORS - 1));
+    if (tunnel.kind == Elite::TunnelKind::Hyperspace)
+    {
+      const float rows = RING_ROWS + across * RING_ROWS_PER_PIXEL;
+      for (std::size_t segment = 0; segment < RING_SEGMENTS; ++segment)
+      {
+        const float from = std::numbers::pi_v<float> * 2.0f * static_cast<float>(segment) / static_cast<float>(RING_SEGMENTS);
+        const float to = std::numbers::pi_v<float> * 2.0f * static_cast<float>(segment + 1) / static_cast<float>(RING_SEGMENTS);
+        stroke(centerX + across * std::cos(from), centerY + down * std::sin(from), centerX + across * std::cos(to),
+               centerY + down * std::sin(to), rows, color, RING_INTENSITY);
+      }
+      continue;
+    }
+    // The rectangle's corners, clockwise from its top left, and its edges between them.
+    const std::array<float, 4> cornerX = {centerX - across, centerX + across, centerX + across, centerX - across};
+    const std::array<float, 4> cornerY = {centerY - down, centerY - down, centerY + down, centerY + down};
+    const float rows = TUNNEL_EDGE_ROWS + across * TUNNEL_EDGE_ROWS_PER_PIXEL;
+    for (std::size_t corner = 0; corner < cornerX.size(); ++corner)
+    {
+      const std::size_t next = (corner + 1) % cornerX.size();
+      stroke(cornerX.at(corner), cornerY.at(corner), cornerX.at(next), cornerY.at(next), rows, color, TUNNEL_EDGE_INTENSITY);
+    }
+    // The rails, from this rectangle's corners to the next one's, or on past the last.
+    const bool last = index + 1 == tunnel.shapeCount;
+    const float nextAcross = last ? across * RAIL_REACH : static_cast<float>(tunnel.shapes[index + 1].halfWidth);
+    const float nextDown = last ? down * RAIL_REACH : static_cast<float>(tunnel.shapes[index + 1].halfHeight);
+    for (std::size_t corner = 0; corner < cornerX.size(); ++corner)
+    {
+      const float outX = cornerX.at(corner) < centerX ? -1.0f : 1.0f;
+      const float outY = cornerY.at(corner) < centerY ? -1.0f : 1.0f;
+      stroke(cornerX.at(corner), cornerY.at(corner), centerX + outX * nextAcross, centerY + outY * nextDown, TUNNEL_RAIL_ROWS, color,
+             TUNNEL_RAIL_INTENSITY);
+    }
+  }
+}
+
 const Engine::SceneFrame* SpaceView::Frame(const Elite::Host& _platform, const Engine::Rect& _view, const Engine::Rect& _window)
 {
   const Elite::FlightSnapshot& latest = _platform.LatestFlightSnapshot();
@@ -406,8 +480,15 @@ const Engine::SceneFrame* SpaceView::Frame(const Elite::Host& _platform, const E
   }
   const float blend = Engine::BlendFactor(m_before.time, m_after.time, _platform.Clock());
   m_drawn = Engine::Interpolate(m_before, m_after, blend);
-  // The beams of the frame before, unless the latest starts a flight or a view, which continues nothing before it.
-  TakeBeams(latest.cameraContinues ? _platform.PreviousFlightSnapshot() : latest, rgb);
+  // The beams of the frame before, unless the latest starts a flight or a view, which continues nothing before it; or a tunnel's.
+  if (latest.tunnel.kind != Elite::TunnelKind::None)
+  {
+    TakeTunnel(latest, rgb);
+  }
+  else
+  {
+    TakeBeams(latest.cameraContinues ? _platform.PreviousFlightSnapshot() : latest, rgb);
+  }
   MoveStardust(_platform, rgb);
   TakeSideDots(latest, rgb);
 
@@ -455,8 +536,8 @@ const Engine::SceneFrame* SpaceView::Frame(const Elite::Host& _platform, const E
   inset.dust = m_dust;
   inset.beams = m_beams;
   const Elite::SkyLook sky = Elite::SkyLookOf(latest.galaxy, latest.system);
-  // A tunnel's picture is black round its rings, and so is the window beside it (D68).
-  inset.sky = Engine::SceneSky{.shown = !latest.picture,
+  // A tunnel is black round its shapes, and so is the window beside it (ADR-069).
+  inset.sky = Engine::SceneSky{.shown = latest.tunnel.kind == Elite::TunnelKind::None,
                                .seed = sky.seed,
                                .nebula = sky.nebula,
                                .nebulaDensity = static_cast<float>(sky.nebulaDensity) / SHARE,

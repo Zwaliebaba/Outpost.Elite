@@ -200,6 +200,25 @@ public:
     Assert::AreEqual(RIEDQUAT, rig.State().Data().commander.selectedSystem.index, L"Riedquat selected for the jump");
   }
 
+  // The two charts share the system selected (D124): Riedquat picked on the galactic chart is the short-range chart's target as it
+  // opens, its cursor on it, and closing it unmoved keeps it; a click there picks anew.
+  TEST_METHOD(TheChartsShareTheSelectedSystem)
+  {
+    GameRig rig("SharedSelection");
+    Play(rig, TO_THE_STATUS_SCREEN);
+    Play(rig, "key F4; wait 0.2\nclick 4 89; wait 0.05\nkey F5; wait 0.2");
+    Assert::AreEqual(RIEDQUAT, rig.State().Data().commander.selectedSystem.index, L"Riedquat selected on the galactic chart");
+    const Elite::ChartView& opened = Shown(rig);
+    Assert::IsTrue(opened.kind == Elite::ChartKind::ShortRange, L"the short-range chart");
+    Assert::AreEqual(RIEDQUAT, opened.target.facts.index, L"its target Riedquat");
+    Assert::IsTrue(opened.cursorX == opened.target.x && opened.cursorRow == opened.target.row, L"the cursor on it");
+    Play(rig, "key F4; wait 0.2");
+    Assert::AreEqual(RIEDQUAT, rig.State().Data().commander.selectedSystem.index, L"closed unmoved: still Riedquat");
+    Assert::AreEqual(RIEDQUAT, Shown(rig).target.facts.index, L"and the galactic chart's target");
+    Play(rig, "key F5; wait 0.2\nclick 80 64; wait 0.05\nkey F6; wait 0.3");
+    Assert::AreEqual(LAVE, rig.State().Data().commander.selectedSystem.index, L"a click picks anew");
+  }
+
   // In flight, once the countdown runs, F6 shows the target locked: its countdown, the latched system whatever the cursor, and
   // closing the chart selects nothing (D07).
   TEST_METHOD(TheTargetLocksInFlight)

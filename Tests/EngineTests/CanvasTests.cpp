@@ -29,8 +29,7 @@ constexpr int MOST_CHANNEL_ERROR = 3;
 
 [[nodiscard]] Engine::Renderer::Desc WarpDesc() noexcept
 {
-  // The picture is not drawn under a canvas; its grid is any.
-  return Engine::Renderer::Desc{.warp = true, .sourceWidth = 4, .sourceHeight = 2, .logicalWidth = 8, .logicalHeight = 4};
+  return Engine::Renderer::Desc{.warp = true};
 }
 
 [[nodiscard]] bool CloseTo(std::uint32_t _found, std::uint32_t _expected, int _error = MOST_CHANNEL_ERROR) noexcept
@@ -86,7 +85,7 @@ public:
     canvas.Quad({Engine::Point{.x = 1400.0f, .y = 100.0f}, Engine::Point{.x = 1800.0f, .y = 100.0f},
                  Engine::Point{.x = 1800.0f, .y = 900.0f}, Engine::Point{.x = 1400.0f, .y = 900.0f}},
                 0xFF000000, 0xFFFFFFFF);
-    const std::vector<std::uint32_t> pixels = renderer.Capture({}, BORDER, TARGET_WIDTH, TARGET_HEIGHT, nullptr, &canvas);
+    const std::vector<std::uint32_t> pixels = renderer.Capture(BORDER, TARGET_WIDTH, TARGET_HEIGHT, nullptr, &canvas);
     Assert::AreEqual(std::size_t{TARGET_WIDTH} * TARGET_HEIGHT, pixels.size(), L"a pixel for each of the target's");
     Assert::AreEqual(0xFF0000u, At(pixels, 30, 25), L"inside the box");
     Assert::AreEqual(BORDER, At(pixels, 5, 5), L"outside every shape: the border");
@@ -115,7 +114,7 @@ public:
 
     Engine::Canvas canvas;
     canvas.Text(L"88", Engine::Font::Number, 400.0f, 0.0f, Engine::Point{.x = 960.0f, .y = 540.0f}, Engine::Align::Center, 0xFFFFFFFF);
-    const std::vector<std::uint32_t> pixels = renderer.Capture({}, 0x000000, TARGET_WIDTH, TARGET_HEIGHT, nullptr, &canvas);
+    const std::vector<std::uint32_t> pixels = renderer.Capture(0x000000, TARGET_WIDTH, TARGET_HEIGHT, nullptr, &canvas);
     Assert::AreEqual(std::size_t{TARGET_WIDTH} * TARGET_HEIGHT, pixels.size(), L"a pixel for each of the target's");
     std::size_t bright = 0;
     for (std::uint32_t y = 0; y < TARGET_HEIGHT; ++y)
@@ -165,7 +164,7 @@ public:
                                                                .sky = {},
                                                                .bloom = 0.0f}};
     const Engine::Canvas canvas;
-    const std::vector<std::uint32_t> pixels = renderer.Capture({}, BORDER, TARGET_WIDTH, TARGET_HEIGHT, &frame, &canvas);
+    const std::vector<std::uint32_t> pixels = renderer.Capture(BORDER, TARGET_WIDTH, TARGET_HEIGHT, &frame, &canvas);
     Assert::AreEqual(std::size_t{TARGET_WIDTH} * TARGET_HEIGHT, pixels.size(), L"a pixel for each of the target's");
     Assert::AreEqual(0x00AAAAu, At(pixels, 96, 54), L"the inset, from 48 to 144 across and 27 to 81 down");
     Assert::AreEqual(0x00AAAAu, At(pixels, 49, 28), L"its top left corner");

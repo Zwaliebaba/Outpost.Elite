@@ -14,77 +14,6 @@ namespace Elite
 namespace
 {
 
-/// A corner or tee of a docked screen's frame (DrawDockedFrame): its cell on the 40-column text page and its character.
-struct FrameCorner
-{
-  std::uint8_t row;
-  std::uint8_t column;
-  std::uint8_t character; ///< CP437
-};
-
-/// laserMountNames: each pointer's text, up to its NUL.
-constexpr std::array<std::string_view, 4> LASER_MOUNT_NAMES = {
-  std::string_view{"Fore,"},  // [0]
-  std::string_view{"Aft,"},   // [1]
-  std::string_view{"Right,"}, // [2]
-  std::string_view{"Left,"},  // [3]
-};
-
-/// legalStatusNames: each pointer's text, up to its NUL.
-constexpr std::array<std::string_view, 3> LEGAL_STATUS_NAMES = {
-  std::string_view{"Clean"},    // [0]
-  std::string_view{"Offender"}, // [1]
-  std::string_view{"Fugitive"}, // [2]
-};
-
-/// ratingNames: each pointer's text, up to its NUL.
-constexpr std::array<std::string_view, 9> RATING_NAMES = {
-  std::string_view{"Harmless"},        // [0]
-  std::string_view{"Mostly Harmless"}, // [1]
-  std::string_view{"Poor"},            // [2]
-  std::string_view{"Average"},         // [3]
-  std::string_view{"Above Average"},   // [4]
-  std::string_view{"Competent"},       // [5]
-  std::string_view{"Dangerous"},       // [6]
-  std::string_view{"Deadly"},          // [7]
-  std::string_view{"Elite"},           // [8]
-};
-
-/// equipmentNames: each pointer's text, up to its NUL.
-constexpr std::array<std::string_view, 13> EQUIPMENT_NAMES = {
-  std::string_view{},                      // a buffer: the status screen writes the missiles' count at its '?' (missileCountDigit)
-  std::string_view{"Cargo Bay Extension"}, // [1]
-  std::string_view{"ECM System"},          // [2]
-  std::string_view{"Pulse Laser"},         // [3]
-  std::string_view{"Beam Laser"},          // [4]
-  std::string_view{"Fuel Scoops"},         // [5]
-  std::string_view{"Escape Capsule"},      // [6]
-  std::string_view{"Energy Bomb"},         // [7]
-  std::string_view{"Extra Energy Unit"},   // [8]
-  std::string_view{"Docking Computers"},   // [9]
-  std::string_view{"Galactic Hyperdrive"}, // [10]
-  std::string_view{"Mining Laser"},        // [11]
-  std::string_view{"Military Laser"},      // [12]
-};
-
-constexpr std::string_view MOUNTS_OPEN_TEXT = " (";
-
-constexpr std::string_view MOUNTS_CLOSE_TEXT = ")";
-
-constexpr std::string_view SYSTEM_LABEL_TEXT = "System:       ";
-
-constexpr std::string_view HYPERSYSTEM_LABEL_TEXT = "Hypersystem:  ";
-
-constexpr std::string_view CASH_LABEL_TEXT = "Cash:         ";
-
-constexpr std::string_view LEGAL_STATUS_LABEL_TEXT = "Legal Status: ";
-
-constexpr std::string_view RATING_LABEL_TEXT = "Rating:       ";
-
-constexpr std::string_view EQUIPMENT_HEADING_TEXT = "EQUIPMENT:";
-
-constexpr std::string_view WITCH_SPACE_TEXT = "WITCH SPACE";
-
 /// 8 texts, each after the one before's NUL.
 constexpr std::array<std::string_view, 8> SUPERNOVA_REFUSED_LINES = {
   std::string_view{"We hope you die a horribly long"}, // [0]
@@ -140,37 +69,17 @@ constexpr std::array<std::string_view, 8> MASK_RECOVERED_LINES = {
   std::string_view{"Press any key to continue!"},          // [7]
 };
 
-/// frameCorners: the docked frame's corners and tees, each a cell of the 40-column text page,
-/// as its row and column, and the CP437 character there.
-constexpr std::array<FrameCorner, 6> FRAME_CORNERS = {{
-  {0, 0, 0xC9},   // cell 0000h
-  {0, 39, 0xBB},  // cell 004Eh
-  {2, 0, 0xCC},   // cell 00A0h
-  {2, 39, 0xB9},  // cell 00EEh
-  {24, 0, 0xC8},  // cell 0780h
-  {24, 39, 0xBC}, // cell 07CEh
-}};
-
 /// archangelTitle: 'ARCHANGEL', ended by the forceMisjump byte
 constexpr std::array<std::uint8_t, 9> ARCHANGEL_TITLE = {
   0x41, 0x52, 0x43, 0x48, 0x41, 0x4E, 0x47, 0x45, // [0]
   0x4C,                                           // [8]
 };
 
-/// inventoryFrame: frame bytes, then "INVENTORY"
-constexpr std::string_view INVENTORY_FRAME = "pxINVENTORY";
-
-/// emergencyFrame: frame bytes, then "EMERGENCY"
-constexpr std::string_view EMERGENCY_FRAME = "\017\017EMERGENCY";
-
 /// fuelTextPrefix: 'Fuel:' and its padding, which runs on into the fuel's units digit (change 3c names it)
 constexpr std::string_view FUEL_TEXT_PREFIX{"Fuel:         ", 14};
 
 /// fuelTextPoint: the fuel text's point, between its two digits (change 3c names it)
 constexpr std::string_view FUEL_TEXT_POINT{".", 1};
-
-/// fuelTextSuffix: ' Light Years' and its NUL, after the fuel's tenths digit (change 3c names it)
-constexpr std::string_view FUEL_TEXT_SUFFIX = " Light Years";
 
 /// ratingThresholds: byte; 2, 4, 9, 20, 35, 90, 155, 230, 255 against killCount
 constexpr std::array<std::uint8_t, 9> RATING_THRESHOLDS = {
@@ -181,9 +90,6 @@ constexpr std::array<std::uint8_t, 9> RATING_THRESHOLDS = {
 /// missileNameOpen: 'Missile (', which runs on into the missile count's digit (change 3c names it)
 constexpr std::string_view MISSILE_NAME_OPEN{"Missile (", 9};
 
-/// missileNameClose: ')' and its NUL, after the missile count's digit (change 3c names it)
-constexpr std::string_view MISSILE_NAME_CLOSE = ")";
-
 /// supernovaBriefingText: 5 lines ending "Will you help us (Y/N)?"
 constexpr std::array<std::string_view, 5> SUPERNOVA_BRIEFING_TEXT = {
   std::string_view{"Our sun is going supernova!"},     // [0]
@@ -192,9 +98,6 @@ constexpr std::array<std::string_view, 5> SUPERNOVA_BRIEFING_TEXT = {
   std::string_view{" "},                               // [3]
   std::string_view{"Will you help us (Y/N)?"},         // [4]
 };
-
-/// taskCompleteFrame: frame bytes, then "TASK COMPLETE - CONGRATULATIONS!"
-constexpr std::string_view TASK_COMPLETE_FRAME = "\017\017TASK COMPLETE - CONGRATULATIONS!";
 
 /// supernovaDebriefOpen: 'Thank you for saving us.', then 'Please accept 1', which runs on into refugeeRewardDigit
 /// (change 3c names it)

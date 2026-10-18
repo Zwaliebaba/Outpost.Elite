@@ -22,8 +22,7 @@ constexpr std::uint8_t FLAG_HOSTILE = 0x01;
 constexpr std::uint8_t FLAG_BLIP_DRAWN = 0x02;
 constexpr std::uint8_t FLAG_DEVICE = 0x20;
 
-// The behaviour classes, behaviorHandlers' indexes.
-constexpr std::uint8_t INERT_CLASS = 0;
+// The behaviour classes, behaviorHandlers' indexes; class 0 is inert.
 constexpr std::uint8_t STATION_CLASS = 1;
 constexpr std::uint8_t MISSILE_CLASS = 2;
 constexpr std::uint8_t DRIFTING_CLASS = 3;
@@ -337,7 +336,7 @@ struct OffenderLaunch
 // of itself (CopyObject) in a free slot, out along z, turned round, its roll reversed, and its velocity set.
 OffenderLaunch LaunchAtOffender(GameState& _state, SpaceObject& _station)
 {
-  OffenderLaunch launch{IsObjectNear(_state, _station), std::nullopt};
+  OffenderLaunch launch{IsObjectNear(_station), std::nullopt};
   if (!launch.near.nearby || ObjectWithinBox(_station, STATION_GUARD_BOX))
   {
     return launch;
@@ -438,7 +437,7 @@ MovedObject WolfTurnAway(GameState& _state, SpaceObject& _slot)
     (void)TurnToVector(_state, _slot, GetObjectPosition(_slot));
     (void)ComputeVelocity(_state, _slot);
     TryLaunchThargon(_state, _slot);
-    return MoveObject(_state, _slot);
+    return MoveObject(_slot);
   }
   const auto passes = static_cast<std::uint8_t>(_slot.passes - 1);
   _slot.passes = passes;
@@ -467,7 +466,7 @@ MovedObject WolfTurnAway(GameState& _state, SpaceObject& _slot)
   {
     _slot.aiState = STATE_ATTACK_RUN;
   }
-  return MoveObject(_state, _slot);
+  return MoveObject(_slot);
 }
 
 // 256 plus the random low byte rotated right a bit, negated when the bit rotated out was set: a jink of +-(256 + low/2, with
@@ -511,12 +510,12 @@ MovedObject HunterEvade(GameState& _state, SpaceObject& _slot)
   if (!WithinRange(_slot))
   {
     _slot.aiState = STATE_IDLE;
-    return MoveObject(_state, _slot);
+    return MoveObject(_slot);
   }
   (void)TurnTowardAngles(_slot, JinkAway(_state, _slot));
   TryLaunchMissileAtPlayer(_state, _slot, HUNTER_MISSILE_ODDS);
   (void)ComputeVelocity(_state, _slot);
-  return MoveObject(_state, _slot);
+  return MoveObject(_slot);
 }
 
 // UpdateHunterAi's state 0: flying at the player until it turns hostile, then picking how to hunt: with two or more
@@ -529,7 +528,7 @@ MovedObject HunterIdle(GameState& _state, SpaceObject& _slot)
   {
     (void)TurnToVector(_state, _slot, GetVectorToPlayer(_slot));
     (void)ComputeVelocity(_state, _slot);
-    return MoveObject(_state, _slot);
+    return MoveObject(_slot);
   }
   if ((flags & FLAG_HOSTILE) != 0)
   {
@@ -552,7 +551,7 @@ MovedObject HunterIdle(GameState& _state, SpaceObject& _slot)
       _slot.aiState = STATE_FORMATION;
     }
   }
-  return MoveObject(_state, _slot);
+  return MoveObject(_slot);
 }
 
 // UpdateTraderOrPoliceAi's state 1: a police Viper attacks a player of legal status 5 or more; otherwise one the player
@@ -567,7 +566,7 @@ MovedObject TraderDecide(GameState& _state, SpaceObject& _slot)
   {
     _slot.aiState = NextRandom(_state) < TRADER_FLEE_ODDS ? TRADER_FLEEING : TRADER_ATTACKING;
   }
-  return MoveObject(_state, _slot);
+  return MoveObject(_slot);
 }
 
 // UpdateTraderOrPoliceAi's state 2: at the player, firing, the police with missiles against an offender, until within
@@ -577,12 +576,12 @@ MovedObject TraderAttack(GameState& _state, SpaceObject& _slot)
   if (!IsPoliceViper(_slot) && _slot.energy < TRADER_FLEE_ENERGY)
   {
     _slot.aiState = TRADER_FLEEING;
-    return MoveObject(_state, _slot);
+    return MoveObject(_slot);
   }
   if (ObjectWithinBox(_slot, TRADER_BREAK_OFF_BOX))
   {
     _slot.aiState = TRADER_BREAKING_OFF;
-    return MoveObject(_state, _slot);
+    return MoveObject(_slot);
   }
   const Turn turn = TurnToVector(_state, _slot, GetVectorToPlayer(_slot));
   TryFireLaserAtPlayer(_state, _slot, turn.pitch.errorMagnitude, turn.yaw.errorMagnitude);
@@ -592,7 +591,7 @@ MovedObject TraderAttack(GameState& _state, SpaceObject& _slot)
     TryLaunchMissileAtPlayer(_state, _slot, status >= FUGITIVE_FOR_POLICE ? FUGITIVE_MISSILE_ODDS : POLICE_MISSILE_ODDS);
   }
   (void)ComputeVelocity(_state, _slot);
-  return MoveObject(_state, _slot);
+  return MoveObject(_slot);
 }
 
 // UpdateTraderOrPoliceAi's state 3: fleeing from the player with random jinks, a missile when nearly dead, and now and
@@ -609,7 +608,7 @@ MovedObject TraderFlee(GameState& _state, SpaceObject& _slot)
   {
     _state.Data().ai.npcEcmFrames = TRADER_ECM_FRAMES;
   }
-  return MoveObject(_state, _slot);
+  return MoveObject(_slot);
 }
 
 // UpdateTraderOrPoliceAi's state 4 and above: flying on away until beyond its range, then attacking again; weak, any but
@@ -619,16 +618,16 @@ MovedObject TraderBreakOff(GameState& _state, SpaceObject& _slot)
   if (!WithinRange(_slot))
   {
     _slot.aiState = TRADER_ATTACKING;
-    return MoveObject(_state, _slot);
+    return MoveObject(_slot);
   }
   if (_slot.energy < RETURN_ENERGY && !IsPoliceViper(_slot))
   {
     _slot.aiState = TRADER_FLEEING;
-    return MoveObject(_state, _slot);
+    return MoveObject(_slot);
   }
   (void)TurnToVector(_state, _slot, GetObjectPosition(_slot));
   (void)ComputeVelocity(_state, _slot);
-  return MoveObject(_state, _slot);
+  return MoveObject(_slot);
 }
 
 // The handler of class _behavior for _slot, which the original calls through behaviorHandlers. The table's eight words, which
@@ -644,7 +643,7 @@ void RunBehaviorHandler(GameState& _state, SpaceObject& _slot, std::uint8_t _beh
     UpdateMissileAi(_state, _slot);
     return;
   case DRIFTING_CLASS:
-    (void)UpdateDriftingObjectAi(_state, _slot);
+    (void)UpdateDriftingObjectAi(_slot);
     return;
   case TRADER_CLASS:
     (void)UpdateTraderOrPoliceAi(_state, _slot);
@@ -656,7 +655,7 @@ void RunBehaviorHandler(GameState& _state, SpaceObject& _slot, std::uint8_t _beh
     (void)UpdateHunterAi(_state, _slot);
     return;
   case DEBRIS_CLASS:
-    (void)UpdateDebrisAi(_state, _slot);
+    (void)UpdateDebrisAi(_slot);
     return;
   default:
     return;
@@ -828,9 +827,9 @@ void UpdateStationAi(GameState& _state, SpaceObject& _station)
   (void)CheckMissilesAtStation(_state, _station);
 }
 
-MovedObject UpdateDriftingObjectAi(GameState& _state, SpaceObject& _slot)
+MovedObject UpdateDriftingObjectAi(SpaceObject& _slot)
 {
-  const MovedObject moved = MoveObject(_state, _slot);
+  const MovedObject moved = MoveObject(_slot);
   if (!IsDebrisType(_slot))
   {
     return moved;
@@ -853,13 +852,13 @@ MovedObject UpdateTraderOrPoliceAi(GameState& _state, SpaceObject& _slot)
     // A rock only spins. The split (LaunchShipFromObject with a _kind of 5) never runs: one jump passes it when bit 0 of the
     // flags byte (+1Eh) is clear, and another when it is set.
     _slot.roll = Offset(_slot.roll, ROCK_SPIN);
-    return MoveObject(_state, _slot);
+    return MoveObject(_slot);
   }
   switch (_slot.aiState)
   {
   case STATE_IDLE:
     _slot.aiState = TRADER_DECIDING;
-    return MoveObject(_state, _slot);
+    return MoveObject(_slot);
   case TRADER_DECIDING:
     return TraderDecide(_state, _slot);
   case TRADER_ATTACKING:
@@ -894,7 +893,7 @@ MovedObject UpdateWolfAi(GameState& _state, SpaceObject& _slot)
   {
   case STATE_IDLE:
     _slot.aiState = STATE_ATTACK;
-    return MoveObject(_state, _slot);
+    return MoveObject(_slot);
   case STATE_ATTACK:
     // Resting: a new set of 2-5 passes, from two bits of the random word's high byte, once it is not hostile, or calm no more.
     if ((_slot.flags & FLAG_HOSTILE) == 0 || _slot.aggression >= CALM)
@@ -902,20 +901,20 @@ MovedObject UpdateWolfAi(GameState& _state, SpaceObject& _slot)
       _slot.passes = static_cast<std::uint8_t>((High(NextRandom(_state)) & PASS_COUNT_MASK) + FEWEST_PASSES);
       _slot.aiState = STATE_ATTACK_RUN;
     }
-    return MoveObject(_state, _slot);
+    return MoveObject(_slot);
   case STATE_ATTACK_RUN:
   {
     if (ObjectWithinBox(_slot, BREAK_OFF_BOX))
     {
       _slot.aiState = STATE_TURN_AWAY;
-      return MoveObject(_state, _slot);
+      return MoveObject(_slot);
     }
     const Turn turn = TurnToVector(_state, _slot, GetVectorToPlayer(_slot));
     TryFireLaserAtPlayer(_state, _slot, turn.pitch.errorMagnitude, turn.yaw.errorMagnitude);
     TryLaunchMissileAtPlayer(_state, _slot, WOLF_MISSILE_ODDS);
     TryLaunchThargon(_state, _slot);
     (void)ComputeVelocity(_state, _slot);
-    const MovedObject moved = MoveObject(_state, _slot);
+    const MovedObject moved = MoveObject(_slot);
     _slot.roll = Offset(_slot.roll, ATTACK_RUN_SPIN);
     return moved;
   }
@@ -928,7 +927,7 @@ MovedObject UpdateWolfAi(GameState& _state, SpaceObject& _slot)
       _slot.speed = static_cast<std::uint8_t>(_slot.speed - ADRIFT_SLOWING);
       (void)ComputeVelocity(_state, _slot);
     }
-    return MoveObject(_state, _slot);
+    return MoveObject(_slot);
   }
 }
 
@@ -943,14 +942,14 @@ MovedObject UpdateHunterAi(GameState& _state, SpaceObject& _slot)
     if (ObjectWithinBox(_slot, BREAK_OFF_BOX))
     {
       _slot.aiState = STATE_TURN_AWAY;
-      return MoveObject(_state, _slot);
+      return MoveObject(_slot);
     }
     const Turn turn = TurnToVector(_state, _slot, GetVectorToPlayer(_slot));
     TryFireLaserAtPlayer(_state, _slot, turn.pitch.errorMagnitude, turn.yaw.errorMagnitude);
     TryLaunchMissileAtPlayer(_state, _slot, HUNTER_MISSILE_ODDS);
     (void)ComputeVelocity(_state, _slot);
     _slot.roll = Offset(_slot.roll, HUNTER_SPIN);
-    return MoveObject(_state, _slot);
+    return MoveObject(_slot);
   }
   case STATE_FORMATION:
   {
@@ -959,11 +958,11 @@ MovedObject UpdateHunterAi(GameState& _state, SpaceObject& _slot)
     if (toMate.within)
     {
       _slot.aiState = STATE_CLOSING;
-      return MoveObject(_state, _slot);
+      return MoveObject(_slot);
     }
     (void)TurnToVector(_state, _slot, toMate.vector);
     (void)ComputeVelocity(_state, _slot);
-    return MoveObject(_state, _slot);
+    return MoveObject(_slot);
   }
   case STATE_TURN_AWAY:
     return HunterEvade(_state, _slot);
@@ -973,13 +972,13 @@ MovedObject UpdateHunterAi(GameState& _state, SpaceObject& _slot)
     if (ObjectWithinBox(_slot, CLOSING_BOX))
     {
       _slot.aiState = STATE_IDLE;
-      return MoveObject(_state, _slot);
+      return MoveObject(_slot);
     }
     const Turn turn = TurnToVector(_state, _slot, GetVectorToPlayer(_slot));
     TryFireLaserAtPlayer(_state, _slot, turn.pitch.errorMagnitude, turn.yaw.errorMagnitude);
     TryLaunchMissileAtPlayer(_state, _slot, CLOSING_MISSILE_ODDS);
     (void)ComputeVelocity(_state, _slot);
-    return MoveObject(_state, _slot);
+    return MoveObject(_slot);
   }
   }
 }

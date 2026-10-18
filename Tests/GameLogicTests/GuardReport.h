@@ -11,9 +11,8 @@
 namespace GameLogicTests
 {
 
-/// What the corpus or a twin found of the guard D33 records beside its state digests: the pictures (PictureDigest) and the
-/// outcomes (Outcome.h). A picture that differs from the one recorded fails nothing, and nor does a timing outcome: each is
-/// written to the test's log at once, naming the point and both values, and counted in the summary, which the corpus and
+/// What the corpus or a twin found of the guard D33 records beside its state digests: the outcomes (Outcome.h). A timing
+/// outcome that differs from the one recorded fails nothing: it is written to the test's log at once, naming the point and both values, and counted in the summary, which the corpus and
 /// every twin write when done. An outcome of the player's progress that differs, or one not recorded, fails the test.
 class GuardReport
 {
@@ -22,17 +21,6 @@ public:
   explicit GuardReport(std::wstring _scope)
     : m_scope(std::move(_scope))
   {
-  }
-
-  /// The picture _actual at _where against _recorded, the one recorded there.
-  void Picture(const std::wstring& _where, std::string_view _recorded, std::string_view _actual)
-  {
-    ++m_picturesChecked;
-    if (_actual != _recorded)
-    {
-      ++m_picturesDiffer;
-      Log(m_scope + L": the picture at " + _where + L" differs: it is " + Widen(_actual) + L", and was recorded as " + Widen(_recorded));
-    }
   }
 
   /// The outcomes _actual at _where against _recorded, the ones recorded there (Elite::CompareOutcomes), each difference
@@ -65,11 +53,10 @@ public:
     return failure.empty() ? failure : _where + L": outcomes of the player's progress differ: " + failure;
   }
 
-  /// "<scope> pictures: N checked, M differ; outcomes: N checked, P differ in progress, T differ in timing".
+  /// "<scope> outcomes: N checked, P differ in progress, T differ in timing".
   [[nodiscard]] std::wstring Summary() const
   {
-    return m_scope + L" pictures: " + std::to_wstring(m_picturesChecked) + L" checked, " + std::to_wstring(m_picturesDiffer) +
-           L" differ; outcomes: " + std::to_wstring(m_outcomesChecked) + L" checked, " + std::to_wstring(m_progressDiffer) +
+    return m_scope + L" outcomes: " + std::to_wstring(m_outcomesChecked) + L" checked, " + std::to_wstring(m_progressDiffer) +
            L" differ in progress, " + std::to_wstring(m_timingDiffer) + L" differ in timing";
   }
 
@@ -99,8 +86,6 @@ private:
   }
 
   std::wstring m_scope;
-  std::size_t m_picturesChecked = 0;
-  std::size_t m_picturesDiffer = 0;
   std::size_t m_outcomesChecked = 0;
   std::size_t m_progressDiffer = 0; // outcomes of the player's progress that differ, or were not recorded
   std::size_t m_timingDiffer = 0;

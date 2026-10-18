@@ -1,6 +1,7 @@
 // GameLogic/Hyperspace.h
 #pragma once
 
+#include "FlightSnapshot.h"
 #include "GameState.h"
 #include "Host.h"
 #include "Ships.h"
@@ -77,8 +78,9 @@ void ArriveInSystem(GameState& _state, Host& _host);
 [[nodiscard]] Task<void> CompleteHyperspaceJump(GameState& _state, Host& _host);
 
 /// DrawHyperspaceRings: one frame of the hyperspace rings: each counts its delay down, then grows by an eighth, at
-/// least 1, below 150, and from 20 on is drawn (DrawCircle) in its colour about the space view's centre.
-void DrawHyperspaceRings(GameState& _state);
+/// least 1, below 150, and from 20 on is drawn (DrawCircle) in its colour about the space view's centre. Returns the rings it
+/// drew, for the renderer (ADR-069).
+SnapshotTunnel DrawHyperspaceRings(GameState& _state);
 
 /// PlayHyperspaceTunnel: fifty frames of the hyperspace rings: UpdateMessageLine, DrawHyperspaceRings and
 /// FinishSpaceViewFrame. Waits, a turn of its loop for each frame after the first.

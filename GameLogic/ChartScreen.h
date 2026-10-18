@@ -19,11 +19,13 @@ class Host;
 /// The most letters Find takes: a system's name.
 inline constexpr std::size_t FIND_LETTERS_MOST = 8;
 
-/// The chart's own state, which the original has no counterpart for in this shape: Find's state and the name typed.
+/// The chart's own state, which the original has no counterpart for in this shape: Find's state and the name typed, and whether
+/// the cursor has moved since the chart opened, which makes the system nearest it the target (D124).
 struct ChartScreen
 {
   FindState find = FindState::Closed;
   std::string typed;
+  bool moved = false;
 };
 
 /// What a key asks a chart to do (D98, D99, D05).
@@ -53,14 +55,16 @@ struct ChartInput
 [[nodiscard]] ChartScreen StepFind(const ChartScreen& _screen, const ChartInput& _input);
 
 /// What the chart open in _state shows with _screen, computed on _scratch, a copy of _state's data, so that nothing of _state moves
-/// (R9): the stars, the target, the nearest system to the cursor or the locked one, and the fuel's reach.
+/// (R9): the stars, the target, and the fuel's reach. The target is the system locked for the jump while the countdown runs; the
+/// system nearest the cursor once it has moved; and otherwise the system selected, which both charts share (D124).
 [[nodiscard]] ChartView ChartViewOf(const GameState& _state, GameState& _scratch, const ChartScreen& _screen, ChartKind _kind,
                                     ScreenPlace _place);
 
 /// D04 to D07, the galactic and the short-range chart (D82), which F4 and F5 open docked and F5 and F6 in flight, in place of the
-/// original's charts and Data on System (D112). The chart is entered as the original entered it (EnterChart), then each tick
+/// original's charts and Data on System (D112). The chart is entered as the original entered it (EnterChart), its cursor on the
+/// selected system where the chart shows it (D124), then each tick
 /// the clicks the shell sent move the cursor (D99, D109), a key acts (ChartKey), and the view is published (Host::ShowChart). A
-/// key that closes it selects the system at the cursor unless the countdown runs (LeaveChart). Returns that key: Esc, or an
+/// key that closes it selects the system at the cursor, once the cursor has moved, unless the countdown runs (LeaveChart). Returns that key: Esc, or an
 /// F-key other than the chart's own.
 [[nodiscard]] Task<ScreenKey> ShowChartScreen(GameState& _state, Host& _host, ChartKind _kind, ScreenPlace _place);
 
