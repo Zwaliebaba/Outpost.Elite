@@ -366,6 +366,17 @@ MarketGoods MarketGoodsOf(const GameState& _state)
   return goods;
 }
 
+MarketView FlightMarketViewOf(const GameState& _state)
+{
+  MarketView view = MarketViewOf(MarketScreen{}, MarketGoodsOf(_state));
+  view.systemName = SystemName(_state);
+  view.dodo = _state.Data().commander.currentSystem.techLevel >= DODO_TECH_LEVEL;
+  view.flight = true;
+  view.buyAllowed = false;
+  view.sellAllowed = false;
+  return view;
+}
+
 Task<ScreenKey> ShowMarketScreen(GameState& _state, Host& _host)
 {
   // What Buy Cargo did on entry: the prices, the market's random state, and the stock rolled the first time after an arrival.

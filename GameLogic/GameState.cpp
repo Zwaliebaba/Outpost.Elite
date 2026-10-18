@@ -20,11 +20,6 @@ void GameState::Start()
   SetStartState(*m_data);
 }
 
-void GameState::RefuseVideo()
-{
-  throw std::out_of_range("GameState: an offset past the CGA's 16 KiB of video memory");
-}
-
 void GameState::RefuseSlot()
 {
   throw std::out_of_range("a slot number past shipSlots' last");

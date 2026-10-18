@@ -13,30 +13,25 @@ wait 0.5; key space; wait 3.5      # any key: the credits, then the status scree
 key Escape; wait 0.3               # D10, Disc access, on Load commander
 key 1; wait 0.3                    # Load commander: the catalogue, JAMESON.CDR selected
 key Return; wait 0.5               # loaded
-digest loaded f329dc7410a3b3dca6a95d80a635e7ef86b979e140205aed4bb22471303f461e
-picture loaded b7ee12a527ba7c2fc4299cc3a1c8065e786260b87cad506b70e2b515d759d4e5
+digest loaded 96bd640b2492efaee3e46e6127d101854241c0887ff9ee2baeadf144c35b1f21
 outcome loaded galaxy=0 system=7 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=1000 legalStatus=0 kills=20 title=ARCHANGEL cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=1 fuelScoops=0 escapePod=0 energyBomb=1 energyUnit=1 dockingComputer=0 galacticHyperdrive=0 maskingDevice=1 antiEcm=1 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=3 laserTypes=3 mission=0 missionStage=0 missionJumps=128 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=48 fuel=255 shipSlotsInUse=1 cabinTemperature=12 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 key F1; wait 1                     # launch
 down F2; wait 0.1; up F2; wait 0.3 # the rear view, the station in its sights
 down i; wait 0.1; up i; wait 0.3   # Missile Locked-on Target
 down l                             # the anti-ECM emulator, a unit of energy a frame
 down m; wait 0.1; up m; wait 0.1   # Missile Launched
-digest missile-launched 99d4d14560ac35f6da6d5c7ad35c9af55b11e943fb257d86371a8526717627ca
-picture missile-launched 2362402bd9b14b541ce54893b07a89519562c643ff80170aa3c2c0dc2f5d6275
+digest missile-launched 5f2d8a58ad0258008045da287983735adeb1e0d1fcd70dd46a9a57ed2a2df913
 outcome missile-launched galaxy=0 system=7 witchSpace=0 docked=0 inFlight=1 dead=0 creditsTenths=1000 legalStatus=120 kills=20 title=ARCHANGEL cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=2 largeCargoBay=0 ecm=1 fuelScoops=0 escapePod=0 energyBomb=1 energyUnit=1 dockingComputer=0 galacticHyperdrive=0 maskingDevice=1 antiEcm=1 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=3 laserTypes=3 mission=0 missionStage=0 missionJumps=128 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=20 fuel=255 shipSlotsInUse=4 cabinTemperature=11 laserTemperature=0 altitude=254 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 wait 0.9                           # no ECM: the missile reaches the station and explodes
 up l
-digest anti-ecm fe9b5b223b722e49ba6319ba2c878c27bf124d1458b64e804d5398bbd944bdba
-picture anti-ecm 8236e7b3fd982009e9ebb75e42b90bb1b7cbac8085e95d473b157d25865ab3e4
+digest anti-ecm ad562aea3fa9b2fd35cd72a32ff847145a8043ad7f4847a8dc39f0b900181deb
 outcome anti-ecm galaxy=0 system=7 witchSpace=0 docked=0 inFlight=1 dead=0 creditsTenths=1000 legalStatus=255 kills=20 title=ARCHANGEL cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=2 largeCargoBay=0 ecm=1 fuelScoops=0 escapePod=0 energyBomb=1 energyUnit=1 dockingComputer=0 galacticHyperdrive=0 maskingDevice=1 antiEcm=1 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=3 laserTypes=3 mission=0 missionStage=0 missionJumps=128 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=20 fuel=255 shipSlotsInUse=5 cabinTemperature=11 laserTemperature=0 altitude=254 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 down space; wait 0.5; up space     # the aft laser on the station: a police Viper launches
 wait 0.15
 down n; wait 0.75                  # the masking device: the background blue, the Viper holds its fire
-digest masked 6917c4fa67d11277d6745089c3429fb99b93d71b5463beac229e2182856311e9
-picture masked 1a05538bd79c209bcc42ccd3df9b06010db2c261533669acc450de2a736df417
+digest masked 0ba0d93f9eb40b0a5c01010a521d83b18166415b92cd42af471a144f32ff8d83
 outcome masked galaxy=0 system=7 witchSpace=0 docked=0 inFlight=1 dead=0 creditsTenths=1000 legalStatus=255 kills=20 title=ARCHANGEL cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=2 largeCargoBay=0 ecm=1 fuelScoops=0 escapePod=0 energyBomb=1 energyUnit=1 dockingComputer=0 galacticHyperdrive=0 maskingDevice=1 antiEcm=1 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=3 laserTypes=3 mission=0 missionStage=0 missionJumps=128 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=888 foreShield=255 aftShield=213 speed=20 fuel=255 shipSlotsInUse=4 cabinTemperature=11 laserTemperature=0 altitude=254 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 wait 0.75; up n
 wait 2                             # unmasked, and the Viper does not attack
-digest after-masking 1bcadc2d4261f7dfdc17aa42fae00997e2f4289c552f800fe883dcaa2fb8b472
-picture after-masking 32c5f4ac35d675558fe861c302f036d52013af0c46a85bd612cffaddf531eb42
+digest after-masking 204e4e3d13f5bfc363f8caf99187c47b8a37a47cd9268494a7c9c56c6ca7723b
 outcome after-masking galaxy=0 system=7 witchSpace=0 docked=0 inFlight=1 dead=0 creditsTenths=1000 legalStatus=255 kills=20 title=ARCHANGEL cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=2 largeCargoBay=0 ecm=1 fuelScoops=0 escapePod=0 energyBomb=1 energyUnit=1 dockingComputer=0 galacticHyperdrive=0 maskingDevice=1 antiEcm=1 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=3 laserTypes=3 mission=0 missionStage=0 missionJumps=128 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=873 foreShield=255 aftShield=213 speed=20 fuel=255 shipSlotsInUse=4 cabinTemperature=11 laserTemperature=0 altitude=254 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0

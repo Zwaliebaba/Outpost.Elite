@@ -50,10 +50,6 @@ void SetStartState(GameData& _data) noexcept
 {
   _data.combat.laserBeamColorToggle = 0x03;
   _data.combat.laserBeamColor = 0x02;
-  _data.docked.fuelUnitsDigit = 0x30;
-  _data.docked.fuelTenthsDigit = 0x30;
-  FillText(_data.docked.fuelDigits, "00000");
-  _data.docked.missileCountDigit = 0x3F;
   FillText(_data.docked.productNames, "Food         t  \0"
                                       "Textiles     t  \0"
                                       "Radioactives t  \0"
@@ -157,7 +153,6 @@ void SetStartState(GameData& _data) noexcept
   _data.playerShip.playerVelocityZ = 0x0030;
   _data.playerShip.playerSpeed = 0x0030;
   _data.messages.messagePointer = Message{0x05};
-  FillText(_data.menus.priceText, "000000");
   FillText(_data.menus.quantityText, "00000");
   _data.drawing.screenLayout = 0xFF;
   _data.world.shipSlotCount = 0x20;

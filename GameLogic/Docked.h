@@ -37,7 +37,7 @@ struct ScreenKey
 /// AwardArchangelTitle: 'ARCHANGEL' over the rank in commanderRankText.
 void AwardArchangelTitle(GameState& _state);
 
-/// WaitForScreenExitKey, the tail that ShowMarketPricesScreen, ShowCommanderStatusScreen and ShowInventoryScreen jump into:
+/// WaitForScreenExitKey, the tail that ShowMarketPricesScreen and ShowCommanderStatusScreen jump into:
 /// GetKey until a key that closes a screen at _place (ClosesScreen) other than the screen's own, _ownKey, then
 /// SelectSystemAtCursor. Waits for keys as a rule (ADR-015).
 [[nodiscard]] Task<ScreenKey> WaitForScreenExitKey(GameState& _state, Host& _host, std::uint8_t _ownKey, ScreenPlace _place);
@@ -57,10 +57,6 @@ void AwardArchangelTitle(GameState& _state);
 /// inventory lists (D75), as plain values.
 [[nodiscard]] StatusView StatusViewOf(const GameState& _state);
 
-/// ShowInventoryScreen, F10: fuel, cash and every product held, and the wait for the key that closes it, as
-/// ShowCommanderStatusScreen's.
-[[nodiscard]] Task<ScreenKey> ShowInventoryScreen(GameState& _state, Host& _host, ScreenPlace _place);
-
 /// The paragraphs of a transmission's _lines as the original prints them, a row each (ADR-068): the lines between blank ones
 /// joined by a space, or by nothing after a line that ends in a hyphen, and "Press any key to continue!" left out, as D09's
 /// button stands for it.
@@ -74,35 +70,9 @@ void AwardArchangelTitle(GameState& _state);
 /// for a key, and the reward. D09 shows it over D08 while it waits (ADR-068).
 [[nodiscard]] Task<void> ShowMissionDebriefing(GameState& _state, Host& _host);
 
-/// FormatFuelLightYears: fuel as "n.n" light years into the fuel text.
-void FormatFuelLightYears(GameState& _state);
-
-/// DrawDockedFrame, up to its title: a docked screen's text page from the first two bytes of its descriptor, the
-/// screen's attribute _screen and the frame's, _frame: the text mode set unless screenLayout says the text page shows,
-/// textAttribute the screen's attribute without its blink bit and the border its background, the page cleared, the frame's rows
-/// at lines 0, 2 and 24 and its sides in the frame's attribute, and its six corners and tees from frameCorners. The clear and the
-/// rows' fills run forwards.
-void DrawDockedFrameAt(GameState& _state, Host& _host, std::uint8_t _screen, std::uint8_t _frame);
-
-/// DrawDockedFrame: DrawDockedFrameAt from _descriptor, the bytes of GameData from where a frame's descriptor starts to the end
-/// of the member that holds it: the two attributes, then the title. The symbol table sizes a descriptor as it pleases, two bytes or the
-/// whole screen's text, so the caller passes the bytes its title is within. Returns the title.
-inline std::string_view DrawDockedFrame(GameState& _state, Host& _host, std::span<const std::uint8_t> _descriptor)
-{
-  DrawDockedFrameAt(_state, _host, ByteWithin(_descriptor, 0), ByteWithin(_descriptor, 1));
-  return TextWithin(_descriptor, 2);
-}
-
-/// DrawDockedFrame for a frame's descriptor that is a constant of the data segment (D38), its two attributes and then
-/// its title, a table of the subsystem's: DrawDockedFrameAt from the attributes. Returns the title.
-std::string_view DrawDockedFrame(GameState& _state, Host& _host, std::string_view _descriptor);
-
-/// DrawFrameSides: BAh in attribute _attribute at columns 0 and 39 of _rows rows of the text page in video memory from _cell,
-/// 65,536 for 0, as the original's count runs. The page is in video memory wherever the original calls it.
-void DrawFrameSides(GameState& _state, std::uint16_t _cell, std::uint16_t _rows, std::uint8_t _attribute);
-
-/// DrawFrameRow: the character and attribute _value in 38 cells of video memory from _cell,.
-void DrawFrameRow(GameState& _state, std::uint16_t _cell, std::uint16_t _value);
+/// What DrawDockedFrame did of a docked screen's text page, which the shell draws in its place now (ADR-069): the text layout
+/// unless it shows already (SetTextMode).
+void EnterDockedScreen(GameState& _state, Host& _host);
 
 /// RunTitleAndDocked: unless titleShown, the title (RunTitle) until a key, the credits and a new game; then the
 /// docked screens (DockedKeyDispatch) from the status screen, or from D10 after a disk request, until F1 or D10 leaves for the

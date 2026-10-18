@@ -78,12 +78,11 @@
     <ClInclude Include="AiTables.h" />
     <ClInclude Include="Arithmetic.h" />
     <ClInclude Include="AudioState.h" />
-    <ClInclude Include="Cga.h" />
-    <ClInclude Include="CgaFont.h" />
     <ClInclude Include="BriefingView.h" />
     <ClInclude Include="ChartScreen.h" />
     <ClInclude Include="ChartView.h" />
     <ClInclude Include="DiscScreen.h" />
+    <ClInclude Include="Display.h" />
     <ClInclude Include="DiscView.h" />
     <ClInclude Include="Combat.h" />
     <ClInclude Include="CombatState.h" />
@@ -182,10 +181,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Ai.cpp" />
-    <ClCompile Include="Cga.cpp" />
-    <ClCompile Include="CgaFont.cpp" />
     <ClCompile Include="ChartScreen.cpp" />
     <ClCompile Include="DiscScreen.cpp" />
+    <ClCompile Include="Display.cpp" />
     <ClCompile Include="Combat.cpp" />
     <ClCompile Include="DirectoryFileStore.cpp" />
     <ClCompile Include="Docked.cpp" />

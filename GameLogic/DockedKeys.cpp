@@ -73,7 +73,7 @@ bool ClosesScreen(std::uint8_t _scanCode, ScreenPlace _place) noexcept
     const DockedTarget target = DockedTargetOf(_scanCode);
     return target.launches || target.screen.has_value();
   }
-  return _scanCode == SCAN_ESCAPE || (_scanCode >= SCAN_F1 && _scanCode <= SCAN_F10 && _scanCode != SCAN_F7);
+  return _scanCode == SCAN_ESCAPE || (_scanCode >= SCAN_F1 && _scanCode < SCAN_F10 && _scanCode != SCAN_F7);
 }
 
 } // namespace Elite

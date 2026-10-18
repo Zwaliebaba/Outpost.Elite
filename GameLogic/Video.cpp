@@ -27,32 +27,12 @@ constexpr std::uint16_t BUFFER_ROWS = 0x80;    // rows 0-127
 constexpr std::uint8_t LEFT_PIXEL_MASK = 0xC0; // the leftmost of a byte's four pixels
 constexpr std::uint16_t DRAW_BUFFER_WORDS = 0x1000;
 
-constexpr std::uint16_t CGA_BANK_WORDS = 0xFA0; // 8000 bytes: one bank of mode 4's 200 lines
-constexpr std::uint16_t CGA_ODD_BANK = 0x2000;  // the odd lines' bank
-constexpr std::uint16_t TEXT_CELLS = 1000;      // 40x25
-constexpr std::uint8_t SPACE = 0x20;
-
 // screenLayout: 0 the cockpit, 1 the chart frame; bit 1 set while in text mode.
 constexpr std::uint8_t CHART_LAYOUT = 1;
 constexpr std::uint8_t TEXT_LAYOUT_BIT = 2;
 
-// DrawChartFrame's box. The horizontals at y=9, 39, 168 and 199 from x=32, as offsets in B800h, each 32 words of colour 3.
-constexpr std::array<std::uint16_t, 4> CHART_FRAME_LINES = {0x2148, 0x25F8, 0x1A48, 0x3EF8};
-constexpr std::uint16_t CHART_FRAME_LINE_WORDS = 0x20;
-constexpr std::uint16_t CHART_FRAME_COLOR_WORD = 0xFFFF;
-// The verticals, 192 lines from line 9: the byte that holds x=31 there, and the one 41h on that holds x=288. A line's step to the
-// next is to the even bank's next line, then to the odd bank's, in turn.
-constexpr std::uint16_t CHART_FRAME_LEFT_START = 0x2147;
-constexpr std::uint16_t CHART_FRAME_RIGHT_BYTES = 0x41;
-constexpr std::uint16_t CHART_FRAME_TO_EVEN_LINE = 0xE050;
-constexpr std::uint16_t CHART_FRAME_VERTICAL_LINES = 0xC0;
-constexpr std::uint8_t CHART_FRAME_LEFT_BYTE = 0x03;  // x=31 in colour 3
-constexpr std::uint8_t CHART_FRAME_RIGHT_BYTE = 0xC0; // x=288 in colour 3
-
-constexpr std::uint8_t BRIGHT_ON_BLACK = 0x10;    // the colour select register: the bright palette, a black background
-constexpr std::uint8_t CURSOR_OFF_PAGE = 0x0E;    // the cursor address's high byte, past the 40x25 page
-constexpr std::uint8_t VIDEO_ON_BLINK_OFF = 0x08; // the mode control register: attribute bit 7 a bright background
-constexpr std::uint16_t BLANK_TEXT_CELL = 0x0720; // a space, light gray on black
+constexpr std::uint8_t BRIGHT_ON_BLACK = 0x10;         // the colour select: the bright palette, a black background
+constexpr std::uint8_t COLOR_SELECT_AFTER_MODE = 0x30; // the colour select a mode set leaves: palette 1, bright
 
 // The triangle fillers choose each edge's step, an add or a subtract, by rewriting the step instructions in their own code from
 // tables of opcodes after them (triangleStepOpcodes, and clippedTriangleStepOpcodes). Native code holds the choice with the
@@ -65,17 +45,6 @@ constexpr std::uint16_t NO_ROW = 0x8000;
 // A row's offset, row * 64, as DrawStackedSpans works it out: bit 6 of its low byte is the row's lowest bit.
 constexpr std::uint8_t ODD_ROW_BIT = 0x40;
 
-// The frame routines wait on the CGA's status port, whose bit 3 is the vertical retrace.
-constexpr std::uint8_t STATUS_VERTICAL_RETRACE = 0x08;
-// The drawing buffer's 64-byte lines onto the screen, a pair of lines (one in each bank) a turn.
-constexpr std::uint16_t BUFFER_LINE_WORDS = 0x20;
-constexpr std::uint16_t TO_ODD_LINE = 0x1FC0;              // from the end of an even line to the odd line below it
-constexpr std::uint16_t TO_NEXT_EVEN_LINE = 0x1FF0;        // from the end of that odd line back to the next even line
-constexpr std::uint16_t SPACE_VIEW_SCREEN_OFFSET = 0x01E8; // x=32, line 12
-constexpr std::uint16_t SPACE_VIEW_LINE_PAIRS = 0x3F;
-constexpr std::uint16_t CHART_SCREEN_OFFSET = 0x0648; // x=32, line 40
-constexpr std::uint8_t CHART_LINE_PAIRS = 0x40;
-
 constexpr std::uint16_t SMALL_DISC_RADIUS = 5; // below it, DrawDisc draws a sprite
 constexpr std::uint16_t SMALL_DISC_ROWS = 4;
 constexpr std::uint8_t CLIP_SPRITE_LEFT = 0x55;  // only the sprite's right byte is drawn
@@ -86,7 +55,6 @@ static_assert(std::size(VideoState{}.circlePoints) == CIRCLE_CHORDS, "circlePoin
 // The drawing buffer, as in the original: a row, the space view's 126, and a row.
 static_assert(sizeof(DrawingState::drawingBuffer) == DRAWING_BUFFER_BYTES);
 // The space view's first byte in the drawing buffer, a row in: where PresentSpaceView's copy starts (spaceViewBuffer).
-constexpr std::uint16_t SPACE_VIEW_BUFFER_START = 64;
 
 // The word's two bytes exchanged.
 [[nodiscard]] constexpr std::uint16_t SwapBytes(std::uint16_t _word) noexcept
@@ -187,39 +155,6 @@ void Plot(GameState& _state, std::uint16_t _offset, std::uint8_t _keep, std::uin
     offset = static_cast<std::uint16_t>(offset + _step);
   }
   return offset;
-}
-
-// A repeated word store into the CGA's memory: _words words of _value from B800:_offset, _step apart.
-void RepeatStoreVideoWords(GameState& _state, std::uint16_t _offset, std::uint16_t _words, std::uint16_t _value, std::uint16_t _step)
-{
-  std::uint16_t offset = _offset;
-  for (std::uint16_t words = _words; words != 0; --words)
-  {
-    _state.SetVideoWord(offset, _value);
-    offset = static_cast<std::uint16_t>(offset + _step);
-  }
-}
-
-// Where a string copy leaves its source and its destination.
-struct StringOffsets
-{
-  std::uint16_t source;
-  std::uint16_t destination;
-};
-
-// A repeated word copy from the data segment to the CGA's memory: _words words from the drawing buffer's byte _source to
-// B800:_destination, _step apart.
-[[nodiscard]] StringOffsets RepeatMoveBufferWords(GameState& _state, std::uint16_t _source, std::uint16_t _destination,
-                                                  std::uint16_t _words, std::uint16_t _step)
-{
-  StringOffsets offsets{_source, _destination};
-  for (std::uint16_t words = _words; words != 0; --words)
-  {
-    _state.SetVideoWord(offsets.destination, WordIn(BufferWord(_state, offsets.source), 0));
-    offsets.source = static_cast<std::uint16_t>(offsets.source + _step);
-    offsets.destination = static_cast<std::uint16_t>(offsets.destination + _step);
-  }
-  return offsets;
 }
 
 // ---- Lines ----
@@ -1219,14 +1154,13 @@ void FillClippedGeneral(GameState& _state, ScreenPoint _a, ScreenPoint _b, Scree
 
 // ---- Frames ----
 
-// The CGA's status port, read until it reports a vertical retrace. A read that sees a retrace uses it up
-// (Cga::SetRetraceSeenOnce), so these are the original's reads, one a poll, and a poll that sees none waits (ADR-039).
+// The display's frame clock, polled until it reports a vertical retrace. A poll that sees a retrace uses it up
+// (Display::TakeRetrace), so these are the original's reads, one a poll, and a poll that sees none waits (ADR-039, ADR-069).
 [[nodiscard]] Task<void> WaitForRetrace(Host& _host)
 {
   for (;;)
   {
-    const auto retrace = static_cast<std::uint8_t>(_host.Video().ReadStatus() & STATUS_VERTICAL_RETRACE);
-    if (retrace != 0)
+    if (_host.Screen().TakeRetrace())
     {
       co_return;
     }
@@ -1234,47 +1168,19 @@ void FillClippedGeneral(GameState& _state, ScreenPoint _a, ScreenPoint _b, Scree
   }
 }
 
-// The copy loop: _linePairs line pairs of a 64-byte buffer line from the drawing buffer's byte _source to B800:_destination,
-// the even line, then the odd one below it, then back to the next even line, by the steps SetLinePairSteps gives.
-void CopyLinePairs(GameState& _state, std::uint16_t _source, std::uint16_t _destination, std::uint16_t _linePairs)
-{
-  StringOffsets at{_source, _destination};
-  std::uint16_t pairs = _linePairs;
-  for (;;)
-  {
-    at = RepeatMoveBufferWords(_state, at.source, at.destination, BUFFER_LINE_WORDS, 2);
-    at.destination = static_cast<std::uint16_t>(at.destination + TO_ODD_LINE);
-    at = RepeatMoveBufferWords(_state, at.source, at.destination, BUFFER_LINE_WORDS, 2);
-    at.destination = static_cast<std::uint16_t>(at.destination - TO_NEXT_EVEN_LINE);
-    if (--pairs == 0)
-    {
-      return;
-    }
-  }
-}
-
 // ---- Screens ----
 
-// screenLayout's text bit, for a screen that is not the one wanted: from text, mode 4 through the BIOS
-// (SetGraphicsMode); from graphics, both banks cleared, forwards (ClearCgaScreen).
+// screenLayout's text bit, for a screen that is not the one wanted: from text, the graphics mode (SetGraphicsMode); from
+// graphics, the screen cleared, which the original did in video memory. Either way the space view no longer shows.
 ScreenChange MakeGraphicsScreen(GameState& _state, Host& _host, std::uint8_t _layout)
 {
+  _host.LeaveSpaceView();
   if ((_layout & TEXT_LAYOUT_BIT) != 0)
   {
     SetGraphicsMode(_state, _host);
     return ScreenChange::ModeSet;
   }
-  ClearCgaScreen(_state);
   return ScreenChange::Cleared;
-}
-
-// What a mode set leaves in video memory: all 16 KiB words of _fill.
-void FillVideoMemory(GameState& _state, std::uint16_t _fill)
-{
-  for (std::uint32_t offset = 0; offset < Cga::VIDEO_MEMORY_BYTES; offset += 2)
-  {
-    _state.SetVideoWord(static_cast<std::uint16_t>(offset), _fill);
-  }
 }
 
 } // namespace
@@ -1295,13 +1201,6 @@ std::span<std::uint8_t, DRAWING_BUFFER_BYTES> DrawingBuffer(GameState& _state) n
   ClearDrawBuffer(_state);
 }
 
-[[nodiscard]] Task<void> PresentChartFrame(GameState& _state, Host& _host)
-{
-  // The bands CopyChartBufferToScreen skips are 0 whatever the caller passed, and both run forwards.
-  co_await CopyChartBufferToScreen(_state, _host, 0);
-  ClearDrawBuffer(_state);
-}
-
 [[nodiscard]] Task<void> PresentSpaceView(GameState& _state, Host& _host)
 {
   // msSinceFrame, compared with minimumFrameMs until it is no longer below it, while the timer interrupt counts
@@ -1312,19 +1211,8 @@ std::span<std::uint8_t, DRAWING_BUFFER_BYTES> DrawingBuffer(GameState& _state) n
   }
   _state.Data().flow.msSinceFrame = 0;
   co_await WaitRetraceThenDelay(_host);
-  CopyLinePairs(_state, SPACE_VIEW_BUFFER_START, SPACE_VIEW_SCREEN_OFFSET, SPACE_VIEW_LINE_PAIRS);
-}
-
-[[nodiscard]] Task<void> CopyChartBufferToScreen(GameState& _state, Host& _host, std::uint8_t _bandsSkipped)
-{
-  // The retrace's loop on port 3DAh and the delay's, the bands kept across them: a value here, not a word on
-  // the stack. The delay, a count down from 2BCh, is the 8088's speed and takes no paced time.
-  co_await WaitForRetrace(_host);
-  // _bandsSkipped bands of 8 lines: 64 - 4 * the bands line pairs, worked in a byte, from the drawing buffer's byte
-  // the bands * 512, the bands doubled in the offset's high byte.
-  const auto linePairs = static_cast<std::uint8_t>(CHART_LINE_PAIRS - static_cast<std::uint8_t>(_bandsSkipped << 2));
-  const std::uint16_t source = Join(static_cast<std::uint8_t>(_bandsSkipped << 1), 0);
-  CopyLinePairs(_state, source, CHART_SCREEN_OFFSET, linePairs);
+  // The view presented, where the original copied the buffer's line pairs to video memory (ADR-069).
+  _host.PresentSpaceView(DrawingBuffer(_state));
 }
 
 void ClearDrawBuffer(GameState& _state)
@@ -1774,29 +1662,7 @@ ScreenChange ShowCockpitScreen(GameState& _state, Host& _host)
   }
   const ScreenChange change = MakeGraphicsScreen(_state, _host, layout);
   _state.Data().drawing.screenLayout = 0;
-  // cockpitImage from its start into both banks, a word at a time, forwards: the even lines' 8000 bytes
-  // and the odd lines' after them.
-  const std::span<const std::uint8_t> cockpit(COCKPIT_IMAGE);
-  for (std::uint16_t word = 0; word < CGA_BANK_WORDS; ++word)
-  {
-    _state.SetVideoWord(static_cast<std::uint16_t>(word * 2), WordIn(cockpit, std::size_t{word} * 2));
-  }
-  for (std::uint16_t word = 0; word < CGA_BANK_WORDS; ++word)
-  {
-    _state.SetVideoWord(static_cast<std::uint16_t>(CGA_ODD_BANK + word * 2), WordIn(cockpit, (std::size_t{CGA_BANK_WORDS} + word) * 2));
-  }
   return change;
-}
-
-void ClearCgaScreen(GameState& _state)
-{
-  RepeatStoreVideoWords(_state, 0, CGA_BANK_WORDS, 0, 2);
-  RepeatStoreVideoWords(_state, CGA_ODD_BANK, CGA_BANK_WORDS, 0, 2);
-}
-
-void ClearTextScreen(GameState& _state)
-{
-  RepeatStoreVideoWords(_state, 0, TEXT_CELLS, Join(_state.Data().drawing.textAttribute, SPACE), 2);
 }
 
 ScreenChange DrawChartFrame(GameState& _state, Host& _host)
@@ -1808,39 +1674,20 @@ ScreenChange DrawChartFrame(GameState& _state, Host& _host)
   }
   const ScreenChange change = MakeGraphicsScreen(_state, _host, layout);
   _state.Data().drawing.screenLayout = CHART_LAYOUT;
-  // The horizontals at y=9, 39, 168 and 199, x 32-287: 32 words of colour 3 each into B800h, a word at a time, forwards.
-  for (const std::uint16_t line : CHART_FRAME_LINES)
-  {
-    RepeatStoreVideoWords(_state, line, CHART_FRAME_LINE_WORDS, CHART_FRAME_COLOR_WORD, 2);
-  }
-  // The verticals at x=31 and x=288 from line 9, a line a turn, alternating banks: the step to the next
-  // line and the one after it swap each turn.
-  std::uint16_t at = CHART_FRAME_LEFT_START;
-  std::uint16_t step = CHART_FRAME_TO_EVEN_LINE;
-  std::uint16_t nextStep = CGA_ODD_BANK;
-  for (std::uint16_t lines = CHART_FRAME_VERTICAL_LINES; lines != 0; --lines)
-  {
-    _state.SetVideoByte(at, CHART_FRAME_LEFT_BYTE);
-    _state.SetVideoByte(static_cast<std::uint16_t>(at + CHART_FRAME_RIGHT_BYTES), CHART_FRAME_RIGHT_BYTE);
-    at = static_cast<std::uint16_t>(at + step);
-    std::swap(step, nextStep);
-  }
   return change;
 }
 
 void SetGraphicsMode(GameState& _state, Host& _host)
 {
-  _host.Video().SetMode(CgaMode::Graphics320);
-  FillVideoMemory(_state, 0);
-  _host.Video().SetColorSelect(BRIGHT_ON_BLACK);
+  (void)_state;
+  _host.Screen().SetColorSelect(BRIGHT_ON_BLACK);
 }
 
 void SetTextMode(GameState& _state, Host& _host)
 {
-  _host.Video().SetMode(CgaMode::Text40Columns);
-  FillVideoMemory(_state, BLANK_TEXT_CELL);
-  _host.Video().WriteCrtc(static_cast<std::uint8_t>(CrtcRegister::CursorAddressHigh), CURSOR_OFF_PAGE);
-  _host.Video().SetModeControl(VIDEO_ON_BLINK_OFF);
+  (void)_state;
+  _host.LeaveSpaceView();
+  _host.Screen().SetColorSelect(COLOR_SELECT_AFTER_MODE);
 }
 
 void DrawTitlePlanet(GameState& _state, std::uint16_t _radius, std::uint16_t _centerX, std::uint16_t _centerRow)

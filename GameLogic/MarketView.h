@@ -68,6 +68,7 @@ struct MarketView
 {
   std::uint64_t sequence = 0;                              ///< from 1, one more for each view published
   std::string systemName;                                  ///< the current system's name, as the game stores it
+  bool flight = false;                                     ///< F8 in flight: the prices only, nothing traded (ADR-069)
   bool dodo = false;                                       ///< the station is a Dodo, not a Coriolis
   std::uint32_t creditsTenths = 0;                         ///< the commander's credits
   std::array<std::uint16_t, COMMODITY_KINDS> buyTenths{};  ///< what the market sells each for, in tenths of a credit

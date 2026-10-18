@@ -109,15 +109,6 @@ std::uint16_t DrawViewChar(GameState& _state, std::uint8_t _character, std::uint
 /// DrawViewString: DrawViewChar for each character of _text, from byte _at of the drawing buffer.
 void DrawViewString(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _at);
 
-/// DrawScreenChar: the 8x8 glyph of _character, in _ink on textPaperPattern, at B800:_cell, an even line
-/// of the CGA's memory: every screen print goes to the CGA (ADR-046). Returns the place of the next
-/// character, two bytes on.
-std::uint16_t DrawScreenChar(GameState& _state, std::uint8_t _character, std::uint16_t _ink, std::uint16_t _cell);
-
-/// DrawScreenString: DrawScreenChar for each character of _text, from B800:_cell. Returns the place after the
-/// last.
-std::uint16_t DrawScreenString(GameState& _state, std::string_view _text, std::uint16_t _ink, std::uint16_t _cell);
-
 /// FormatDecimal5: _value as five ASCII digits into the first five of _digits, a buffer of the data segment.
 void FormatDecimal5(std::uint16_t _value, std::span<std::uint8_t> _digits);
 
@@ -143,13 +134,8 @@ void FormatCredits(GameState& _state);
 [[nodiscard]] std::string MessageText(const GameState& _state, Message _message);
 
 /// UpdateMessageLine: the message line's work for a frame: UpdateWarnings; then while the message drawn has frames
-/// left, one fewer; else, once they run out, the view's name as the message, and the message shown, the line cleared a row at a
-/// time, unless it is shown already.
+/// left, one fewer; else, once they run out, the view's name as the message; and the message shown.
 void UpdateMessageLine(GameState& _state);
-
-/// ClearMessageLine: zeroes the message line's eight rows of 32 words from B800:0058, each row forwards, a word
-/// at a time.
-void ClearMessageLine(GameState& _state);
 
 /// ShowBountyMessage: _tenths of a credit into bountyText as "nnnn.n", shown for 20 frames.
 void ShowBountyMessage(GameState& _state, std::uint16_t _tenths);
@@ -159,30 +145,7 @@ void ShowBountyMessage(GameState& _state, std::uint16_t _tenths);
 /// the police.
 void ShowShipIdentity(GameState& _state, std::uint8_t _type, std::uint8_t _class, const SpaceObject& _slot);
 
-/// PrintTextModeString: _text to the text page at B800:_cell, in textAttribute. Returns the cell after its last.
-std::uint16_t PrintTextModeString(GameState& _state, std::string_view _text, std::uint16_t _cell);
-
-/// SwapTextAttributeNibbles: textAttribute's nibbles exchanged, and the attribute that makes.
-std::uint8_t SwapTextAttributeNibbles(GameState& _state);
-
-/// PrintCountedTextLines: PrintTextLines for the lines after a count byte, as many as it says: _lines, the
-/// generated lines of such a text (a subsystem's tables).
-void PrintCountedTextLines(GameState& _state, std::span<const std::string_view> _lines, std::uint16_t _cell);
-
-/// FormatTenths: _tenths into priceText as "nnnn.n".
-void FormatTenths(GameState& _state, std::uint16_t _tenths);
-
-/// PrintTextLines: each of _lines by PrintTextModeString a row of the text page below the one before, from
-/// B800:_cell.
-void PrintTextLines(GameState& _state, std::span<const std::string_view> _lines, std::uint16_t _cell);
-
-/// PrintTextLines for _lines texts that follow one another in _texts, each after the NUL of the one before, as the original
-/// steps past a NUL to the next: texts the game writes into, or composes from constants and what it writes (JoinTexts). Every text's
-/// NUL but the last's must be within _texts; the last may end at _texts' end. _lines is not 0, which the original's loop would
-/// count as 65,536.
-void PrintTextLines(GameState& _state, std::string_view _texts, std::uint16_t _cell, std::uint16_t _lines);
-
-/// _bytes, a member of texts the game writes into, as PrintTextLines reads them.
+/// _bytes, a member of texts the game writes into, its texts each after the NUL of the one before.
 [[nodiscard]] inline std::string_view TextsOf(std::span<const std::uint8_t> _bytes) noexcept
 {
   return std::string_view(reinterpret_cast<const char*>(_bytes.data()), _bytes.size());

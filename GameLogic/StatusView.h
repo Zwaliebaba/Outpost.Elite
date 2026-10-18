@@ -56,6 +56,7 @@ struct StatusView
 {
   std::uint64_t sequence = 0;   ///< one more for each view published
   std::string systemName;       ///< where the ship is docked, for the frame's top bar
+  bool flight = false;          ///< F9 in flight (ADR-069), otherwise docked
   bool dodo = false;            ///< a Dodo station, of tech level 9 and above; otherwise a Coriolis
   std::string title;            ///< COMMANDER, or ARCHANGEL once the third mission is done
   std::string commanderName;    ///< JAMESON

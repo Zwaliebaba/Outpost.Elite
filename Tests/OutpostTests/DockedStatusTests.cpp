@@ -86,6 +86,15 @@ public:
     GoldenImage::Check("D08-Status-Fugitive", Drawn(view));
   }
 
+  // F9 in flight (ADR-069): the same screen, where the ship is in the top bar, and the key bar the flight's, F1 FRONT, with ESC DISC
+  // and F3 EQUIP off.
+  TEST_METHOD(TheStatusInFlight)
+  {
+    Elite::StatusView view = AsDrawn();
+    view.flight = true;
+    GoldenImage::Check("D08-Status-InFlight", Drawn(view));
+  }
+
   // The equipment list's words: the missiles with their count, a laser with its mounts in D03's order, front, left, right and
   // rear (D104), and an item with none.
   TEST_METHOD(EachItemIsWorded)

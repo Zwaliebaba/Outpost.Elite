@@ -266,13 +266,13 @@ void SpawnFragments(GameState& _state, const SpaceObject& _object, std::uint16_t
     }
     debris.lifetime = static_cast<std::uint8_t>(lifetime + FRAGMENT_LIFETIME);
     debris.type = SPLINTER_ACTIVE;
-    (void)UpdateDebrisAi(_state, debris);
+    (void)UpdateDebrisAi(debris);
     if (_state.Data().combat.explodingStation == 1)
     {
       // A station's fragments are flung ten frames further at once.
       for (std::uint16_t steps = STATION_FRAGMENT_STEPS; steps != 0; --steps)
       {
-        (void)UpdateDebrisAi(_state, debris);
+        (void)UpdateDebrisAi(debris);
       }
     }
   }
@@ -318,7 +318,7 @@ void DropCargo(GameState& _state, const SpaceObject& _object)
     barrel.pitch = heading;
     barrel.yaw = Swap(heading);
     (void)ComputeVelocity(_state, barrel);
-    (void)MoveObject(_state, barrel);
+    (void)MoveObject(barrel);
   }
 }
 
@@ -518,7 +518,7 @@ void ExplodeObject(GameState& _state, SpaceObject& _object)
   TallyMaskMissionKill(_state, _object);
   const bool drawn = (_object.type & SLOT_DRAWN) != 0;
   // RemoveObject, whether or not it was drawn.
-  (void)RemoveObject(_state, _object);
+  (void)RemoveObject(_object);
   if (!drawn)
   {
     return;
@@ -891,7 +891,7 @@ void SpawnPlayerWreckage(GameState& _state)
     splinter.behaviorClass = DEBRIS_CLASS;
     splinter.lifetime = WRECK_LIFETIME;
     splinter.type = SPLINTER_ACTIVE;
-    (void)UpdateDebrisAi(_state, splinter);
+    (void)UpdateDebrisAi(splinter);
   }
   if (_state.Data().commander.cargoHold.cargoUsedTonnes == 0)
   {
@@ -947,7 +947,7 @@ std::optional<DashboardPixel> RemoveAllMissiles(GameState& _state)
     SpaceObject& object = _state.Slot(slot);
     if ((object.type & SpaceObject::ACTIVE) != 0 && TypeOf(object) == TYPE_MISSILE)
     {
-      if (const std::optional<DashboardPixel> erased = RemoveObject(_state, object))
+      if (const std::optional<DashboardPixel> erased = RemoveObject(object))
       {
         lastErased = erased;
       }
@@ -979,8 +979,8 @@ void LaunchPlayerMissile(GameState& _state)
   missile.pitch = heading.first;
   missile.yaw = heading.second;
   (void)ComputeVelocity(_state, missile);
-  (void)MoveObject(_state, missile);
-  (void)MoveObject(_state, missile);
+  (void)MoveObject(missile);
+  (void)MoveObject(missile);
 }
 
 std::optional<SlotIndex> LaunchShipFromObject(GameState& _state, const SpaceObject& _launcher, std::uint8_t _kind)
@@ -1002,17 +1002,17 @@ std::optional<SlotIndex> LaunchShipFromObject(GameState& _state, const SpaceObje
   if (_kind == MISSILE_LAUNCH)
   {
     InitMissile(ship);
-    (void)MoveObject(_state, ship);
-    (void)MoveObject(_state, ship);
-    (void)MoveObject(_state, ship);
+    (void)MoveObject(ship);
+    (void)MoveObject(ship);
+    (void)MoveObject(ship);
     ship.target = SlotIndex::Player;
   }
   else
   {
     InitThargon(ship);
     (void)ComputeVelocity(_state, ship);
-    (void)MoveObject(_state, ship);
-    (void)MoveObject(_state, ship);
+    (void)MoveObject(ship);
+    (void)MoveObject(ship);
     ship.owner = _state.IndexOf(_launcher);
   }
   return free.slot;
@@ -1047,7 +1047,7 @@ void UpdateMissileAi(GameState& _state, SpaceObject& _missile)
   {
     (void)TurnTowardAngles(_missile, ConvertVectorToAngles(_state, toTarget));
     (void)ComputeVelocity(_state, _missile);
-    (void)MoveObject(_state, _missile);
+    (void)MoveObject(_missile);
     return;
   }
   // It explodes, and strikes its target.

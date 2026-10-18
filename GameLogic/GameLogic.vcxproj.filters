@@ -93,12 +93,6 @@
     <ClInclude Include="AudioState.h">
       <Filter>State</Filter>
     </ClInclude>
-    <ClInclude Include="Cga.h">
-      <Filter>Platform</Filter>
-    </ClInclude>
-    <ClInclude Include="CgaFont.h">
-      <Filter>Platform</Filter>
-    </ClInclude>
     <ClInclude Include="ChartScreen.h">
       <Filter>Galaxy</Filter>
     </ClInclude>
@@ -294,6 +288,9 @@
     <ClInclude Include="SaveLoadState.h">
       <Filter>SaveLoad</Filter>
     </ClInclude>
+    <ClInclude Include="Display.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
     <ClInclude Include="DiscScreen.h">
       <Filter>SaveLoad</Filter>
     </ClInclude>
@@ -401,14 +398,11 @@
     <ClCompile Include="Ai.cpp">
       <Filter>Ai</Filter>
     </ClCompile>
-    <ClCompile Include="Cga.cpp">
-      <Filter>Platform</Filter>
-    </ClCompile>
-    <ClCompile Include="CgaFont.cpp">
-      <Filter>Platform</Filter>
-    </ClCompile>
     <ClCompile Include="ChartScreen.cpp">
       <Filter>Galaxy</Filter>
+    </ClCompile>
+    <ClCompile Include="Display.cpp">
+      <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="DiscScreen.cpp">
       <Filter>SaveLoad</Filter>

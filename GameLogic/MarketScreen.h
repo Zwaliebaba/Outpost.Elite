@@ -99,4 +99,7 @@ struct MarketStep
 /// Returns the screen key that closes it: Esc, or an F-key other than F2, F3 and F8.
 [[nodiscard]] Task<ScreenKey> ShowMarketScreen(GameState& _state, Host& _host);
 
+/// What F8 shows in flight (ADR-069): D01 with the prices _state's market holds, and nothing to trade.
+[[nodiscard]] MarketView FlightMarketViewOf(const GameState& _state);
+
 } // namespace Elite

@@ -37,11 +37,11 @@ std::string ReadText(const std::filesystem::path& _path)
 using Checkpoints = std::map<std::filesystem::path, std::map<std::size_t, Elite::Checkpoint>>;
 
 // Every Replays/*.replay, played on the native routines (GameRig). Every digest it names must come out as
-// recorded, and each is kept in _checkpoints. Unless _recording, each digest's picture and outcomes are checked against
-// the ones recorded on the lines after it (_report): a picture or a timing outcome that differs fails nothing, and an
-// outcome of the player's progress that differs, or a picture or outcomes not recorded, fails. While the state is
-// dumped or the digests re-based (StateDumps), each digest point's state is dumped or held to the dump before the
-// change instead of its digest to the one recorded, and a re-base fails on any picture or outcome that differs.
+// recorded, and each is kept in _checkpoints. Unless _recording, each digest's outcomes are checked against the ones
+// recorded on the line after it (_report): a timing outcome that differs fails nothing, and an outcome of the player's
+// progress that differs, or outcomes not recorded, fails. While the state is dumped or the digests re-based (StateDumps),
+// each digest point's state is dumped or held to the dump before the change instead of its digest to the one recorded,
+// and a re-base fails on any outcome that differs.
 // _check then looks at the machine after each replay.
 template <typename Check> void PlayEveryReplay(bool _recording, GuardReport& _report, Checkpoints& _checkpoints, Check _check)
 {
@@ -91,25 +91,20 @@ template <typename Check> void PlayEveryReplay(bool _recording, GuardReport& _re
       _checkpoints[path][step.line] = checkpoint;
       if (_recording)
         continue;
-      if (step.expectedPicture.empty())
-        Assert::Fail(
-          (where + L": digest " + Widen(step.name) + L" has no recorded picture, and its picture is " + Widen(checkpoint.picture)).c_str());
       const std::wstring point = where + L" (digest " + Widen(step.name) + L")";
-      _report.Picture(point, step.expectedPicture, checkpoint.picture);
       if (step.expectedOutcomes.empty())
         Assert::Fail((point + L": no outcomes are recorded, and its outcomes are " + Widen(checkpoint.outcomes)).c_str());
       if (const std::wstring failure = _report.Outcomes(point, step.expectedOutcomes, checkpoint.outcomes); !failure.empty())
         Assert::Fail(failure.c_str());
-      if (dumps.Mode() == DigestMode::Rebase &&
-          (checkpoint.picture != step.expectedPicture || checkpoint.outcomes != step.expectedOutcomes))
-        Assert::Fail((point + L": the picture or the outcomes differ, and a re-base needs every one as recorded").c_str());
+      if (dumps.Mode() == DigestMode::Rebase && checkpoint.outcomes != step.expectedOutcomes)
+        Assert::Fail((point + L": the outcomes differ, and a re-base needs every one as recorded").c_str());
     }
     Assert::IsTrue(checked > 0, (name + L": checks no digest").c_str());
     _check(name, rig.Host());
   }
 }
 
-// Writes every replay of _checkpoints again with each digest's picture and outcome lines recorded from its checkpoint
+// Writes every replay of _checkpoints again with each digest's outcome line recorded from its checkpoint
 // (RecordCheckpoints), keeping every other line. Called only once every digest of every replay has met its recorded value.
 void RecordEveryCheckpoint(const Checkpoints& _checkpoints)
 {
@@ -156,10 +151,10 @@ public:
   // no instruction of the original runs. Since D7 deleted the interpreter, the corpus and the twins' known answers are what
   // the port is held to (ADR-003 item 5).
   //
-  // Each digest's picture and outcomes (D33) are checked beside it. A picture, or an outcome that moves with the exact
-  // timing of flight, reports: the log names each that differs, with both values, and ends with how many were checked and
-  // how many differ. An outcome of the player's progress gates. While the guard is recorded (RecordingGuard), the pictures
-  // and outcomes are written into the replays instead, and only once every digest of the corpus has met its recorded value.
+  // Each digest's outcomes (D33) are checked beside it. An outcome that moves with the exact timing of flight reports: the
+  // log names each that differs, with both values, and ends with how many were checked and how many differ. An outcome of
+  // the player's progress gates. While the guard is recorded (RecordingGuard), the outcomes are written into the replays
+  // instead, and only once every digest of the corpus has met its recorded value.
   // While the digests are re-based (StateDumps), they are written into the replays once every point has met the gate.
   TEST_METHOD(NativeCodeKeepsEveryDigest)
   {

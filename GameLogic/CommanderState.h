@@ -206,7 +206,7 @@ struct CommanderState
 
     /// per commodity, in the market's order; slaves are escape pods scooped, alien items Thargons
     Lot lots[COMMODITY_KINDS];
-    /// mission 1 refugees aboard (20 or 35), shown as "Refugees" by ShowInventoryScreen
+    /// mission 1 refugees aboard (20 or 35), shown as "Refugees" by the status screen's cargo
     std::uint8_t refugeesTonnes;
     /// tonnes in the hold (gold, platinum and gems excluded); capacity 20, 35 with the extension
     std::uint8_t cargoUsedTonnes;

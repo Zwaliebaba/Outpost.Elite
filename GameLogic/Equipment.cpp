@@ -150,7 +150,7 @@ void TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
   {
     if ((flags & FLAG_MASKING_DEVICE) != 0)
     {
-      (void)RemoveObject(_state, _slot);
+      (void)RemoveObject(_slot);
       _state.Data().commander.maskingDeviceRecovered = 1;
       message = Message::MaskingDevice;
     }
@@ -161,7 +161,7 @@ void TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
     else
     {
       // A random product 0-10, furs for slaves, into the hold, and its name for the message. The divide cannot overflow.
-      (void)RemoveObject(_state, _slot);
+      (void)RemoveObject(_slot);
       const std::uint8_t random = Low(NextRandom(_state));
       std::uint8_t product = DivideByte(random, RANDOM_PRODUCT_DIVISOR).quotient;
       if (product == PRODUCT_SLAVES)
@@ -184,7 +184,7 @@ void TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
   else if (type == TYPE_SPLINTER && (flags & FLAG_PRECIOUS) != 0)
   {
     // Gems, gold and platinum always; minerals or alloys too if there is room. Gold gets the gems' amount, as the original adds it.
-    (void)RemoveObject(_state, _slot);
+    (void)RemoveObject(_slot);
     const std::uint8_t gems = Low(NextRandom(_state)) & 7;
     AddPrecious(_state.Data().commander.cargoHold.lots[COMMODITY_GEM_STONES].held, gems);
     AddPrecious(_state.Data().commander.cargoHold.lots[COMMODITY_GOLD].held, gems);
@@ -206,7 +206,7 @@ void TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
     }
     else
     {
-      (void)RemoveObject(_state, _slot);
+      (void)RemoveObject(_slot);
       CommanderState::CargoHold& hold = _state.Data().commander.cargoHold;
       std::uint8_t& held = type == TYPE_SPLINTER     ? hold.lots[COMMODITY_ALLOYS].held
                            : type == TYPE_ESCAPE_POD ? hold.lots[COMMODITY_SLAVES].held
@@ -218,14 +218,6 @@ void TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view)
   }
   _state.Data().messages.messagePointer = message;
   _state.Data().messages.messageFrames = SCOOP_MESSAGE_FRAMES;
-}
-
-bool SelectLaserType(GameState& _state)
-{
-  // The original counts selectedLaserType up a type at a time, and stops at the last when the row is no laser's.
-  const std::optional<std::uint8_t> type = LaserTypeOfRow(_state.Data().menus.menuSelectedRow);
-  _state.Data().equipment.selectedLaserType = type.value_or(static_cast<std::uint8_t>(LASER_ROWS.size() - 1));
-  return type.has_value();
 }
 
 // ── The shipyard's rules ──

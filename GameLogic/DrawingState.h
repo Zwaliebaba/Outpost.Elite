@@ -20,10 +20,8 @@ struct DrawingState
   std::uint8_t sunFringeMask;
   /// pixel pattern behind each glyph in the graphics printer (DrawViewChar: ink from _ink where the glyph is set, this word where it is clear); 0...
   std::uint16_t textPaperPattern;
-  /// FFh in the file; 0 cockpit (ShowCockpitScreen), 1 chart frame (DrawChartFrame), 2 text mode (DrawDockedFrame); also selects the tex...
+  /// FFh in the file; 0 cockpit (ShowCockpitScreen), 1 chart frame (DrawChartFrame), 2 text mode (EnterDockedScreen); also selects the tex...
   std::uint8_t screenLayout;
-  /// CGA text attribute for PrintTextModeString; DrawDockedFrame sets it from the frame's first byte
-  std::uint8_t textAttribute;
   /// colour-select value UpdateDamageFlash writes each frame: 9 (bright blue) while the masking device runs, else 0 (cleared); e...
   std::uint8_t maskingBackgroundColor;
 
@@ -35,7 +33,6 @@ struct DrawingState
     _visitor("sunFringeMask", _self.sunFringeMask);
     _visitor("textPaperPattern", _self.textPaperPattern);
     _visitor("screenLayout", _self.screenLayout);
-    _visitor("textAttribute", _self.textAttribute);
     _visitor("maskingBackgroundColor", _self.maskingBackgroundColor);
   }
 

@@ -118,6 +118,16 @@ public:
     GoldenImage::Check("D01-Market-Bought", Drawn(view, Engine::Point{.x = 300.0f, .y = 400.0f}));
   }
 
+  // F8 in flight (ADR-069): the prices and the hold, read only: no selected panel, no trade, and the key bar the flight's.
+  TEST_METHOD(TheMarketInFlight)
+  {
+    Elite::MarketView view = AsDrawn();
+    view.flight = true;
+    view.buyAllowed = false;
+    view.sellAllowed = false;
+    GoldenImage::Check("D01-Market-InFlight", Drawn(view, std::nullopt));
+  }
+
   // T1's modal over the market, where `docked/10-disc-menu.png` draws D10's: the market dimmed, and the panel with its full
   // amber border and its two chamfers.
   TEST_METHOD(TheModalOverTheMarket)

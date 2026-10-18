@@ -32,10 +32,6 @@ void TryScoopObject(GameState& _state, SpaceObject& _slot, const Vector& _view);
 /// at speed 20 and moved 12 frames, the escape pod and the cargo hold gone.
 void LaunchEscapePod(GameState& _state);
 
-/// SelectLaserType: selectedLaserType 0-3 for the laser at menuSelectedRow (LaserTypeOfRow), or 3, where the
-/// original's count up a type at a time stops, for a row that is no laser's. Returns whether the row is a laser's.
-[[nodiscard]] bool SelectLaserType(GameState& _state);
-
 // ── The shipyard's rules (D53, D74): values in, values out, no state and no screen ──
 //
 // What the original's equipment screen decided, apart from what it drew and where the game keeps it (ADR-043), as the market's
@@ -124,7 +120,7 @@ enum class MountRefusal : std::uint8_t
 /// byte of the price, at least a tenth.
 [[nodiscard]] std::uint16_t FuelPriceTenths(std::uint8_t _fuel, std::uint16_t _fuelPriceTenths);
 
-/// SelectLaserType's rule: the laser type row _row sells, 0 to 3, pulse, beam, mining and military, or nothing.
+/// The laser type row _row sells, 0 to 3, pulse, beam, mining and military, or nothing.
 [[nodiscard]] std::optional<std::uint8_t> LaserTypeOfRow(std::uint8_t _row) noexcept;
 
 /// Why row _row cannot be fitted to _fitting, before it is paid for. EquipmentRefusal::None when it can.

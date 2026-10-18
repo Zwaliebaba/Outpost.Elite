@@ -106,7 +106,7 @@ Elite::SlotIndex SpawnAhead(TwinRig& _rig, Spawner _spawner, std::uint8_t _recor
 void RemoveShip(TwinRig& _rig, Elite::SlotIndex _slot)
 {
   Elite::GameState& state = _rig.State();
-  (void)Elite::RemoveObject(state, state.Slot(_slot));
+  (void)Elite::RemoveObject(state.Slot(_slot));
 }
 
 // A missile launched at the player by the ship at _launcher in the twin, as TryLaunchMissileAtPlayer launches one

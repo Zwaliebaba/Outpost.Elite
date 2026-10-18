@@ -90,7 +90,7 @@ void AddToCoordinate(SpaceObject& _slot, int _axis, std::int16_t _value);
 void ClearObjectSlot(SpaceObject& _slot);
 
 /// IsObjectNear: whether each 24-bit coordinate of _slot fits a signed word; when one does not, EraseScannerBlip.
-NearTest IsObjectNear(GameState& _state, SpaceObject& _slot);
+NearTest IsObjectNear(SpaceObject& _slot);
 
 /// IsSunOrPlanet: whether _slot is the sun (type 1Eh) or the planet (1Fh).
 [[nodiscard]] bool IsSunOrPlanet(const SpaceObject& _slot);
@@ -174,10 +174,10 @@ Velocity ComputeVelocity(GameState& _state, SpaceObject& _slot);
 
 /// MoveObject: _slot's velocity bytes, sign-extended, added to its 24-bit position, x, y then z, each to the low word and
 /// then, with its carry, to the high byte; then IsObjectNear, and RemoveObject when it is not near.
-MovedObject MoveObject(GameState& _state, SpaceObject& _slot);
+MovedObject MoveObject(SpaceObject& _slot);
 
 /// RemoveObject: _slot's active bit cleared, then EraseScannerBlip. Returns the blip's last pixel, when it erased one.
-std::optional<DashboardPixel> RemoveObject(GameState& _state, SpaceObject& _slot);
+std::optional<DashboardPixel> RemoveObject(SpaceObject& _slot);
 
 /// FacePlayer: _slot's heading turned to the player: ConvertVectorToAngles of GetVectorToPlayer, as its pitch, then
 /// its yaw.
@@ -204,7 +204,7 @@ void CopyObject(const SpaceObject& _source, SpaceObject& _destination);
 /// UpdateDebrisAi: a fragment's frame: its lifetime counted down, and at 0 its active bit cleared; otherwise its age
 /// counted up, its spin bytes, sign-extended, added to its roll and then its pitch, and MoveObject. Returns what MoveObject
 /// did, when it ran.
-std::optional<MovedObject> UpdateDebrisAi(GameState& _state, SpaceObject& _slot);
+std::optional<MovedObject> UpdateDebrisAi(SpaceObject& _slot);
 
 /// IsDebrisType: whether _slot is a rock: a plate (0Ch), a boulder (6), an asteroid (5) or a splinter (0Bh).
 [[nodiscard]] bool IsDebrisType(const SpaceObject& _slot);

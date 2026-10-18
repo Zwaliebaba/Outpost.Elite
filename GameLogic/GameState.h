@@ -1,7 +1,6 @@
 // GameLogic/GameState.h
 #pragma once
 
-#include "Cga.h"
 #include "GameData.h"
 #include "SpaceObject.h"
 
@@ -17,8 +16,8 @@ namespace Elite
 
 class Game;
 
-/// The game's memory (ADR-012, D19, D38): the game's state as its struct (GameData), by member (Data()), and the CGA's video memory. It
-/// owns both, and it has no registers: a routine that takes a GameState takes its inputs as parameters and gives its results back.
+/// The game's memory (ADR-012, D19, D38): the game's state as its struct (GameData), by member (Data()). It owns it, and it has no
+/// registers: a routine that takes a GameState takes its inputs as parameters and gives its results back.
 ///
 /// The host makes one for the whole run, inside a Game, which starts it (Game::Start). Since change 3c of D38
 /// nothing reaches the state by the original's addresses: native code names a member, a run of members that followed one another in the
@@ -31,9 +30,6 @@ class Game;
 class GameState
 {
 public:
-  /// The CGA's video memory, which the reference writes directly.
-  static constexpr std::uint16_t VIDEO_SEGMENT = 0xB800;
-
   /// Allocates GameData, zeroed.
   GameState();
   GameState(const GameState&) = delete;
@@ -74,50 +70,12 @@ public:
     return static_cast<SlotIndex>((address - first) / sizeof(SpaceObject));
   }
 
-  /// The byte at B800:_offset, in the CGA's video memory, which must be in its 16 KiB; any other throws std::out_of_range.
-  [[nodiscard]] std::uint8_t VideoByte(std::uint16_t _offset) const
-  {
-    return m_video[CheckedVideo(_offset)];
-  }
-
-  /// _value into the byte at B800:_offset.
-  void SetVideoByte(std::uint16_t _offset, std::uint8_t _value)
-  {
-    m_video[CheckedVideo(_offset)] = _value;
-  }
-
-  /// _value into the word at B800:_offset, low byte first; at offset FFFFh its high byte is at offset 0, as on the 8088.
-  void SetVideoWord(std::uint16_t _offset, std::uint16_t _value)
-  {
-    SetVideoByte(_offset, static_cast<std::uint8_t>(_value & 0xFF));
-    SetVideoByte(static_cast<std::uint16_t>(_offset + 1), static_cast<std::uint8_t>(_value >> 8));
-  }
-
-  /// The CGA's 16 KiB of video memory.
-  [[nodiscard]] Cga::VideoMemory VideoBytes() const noexcept
-  {
-    return m_video;
-  }
-
 private:
   // Only a Game starts a GameState.
   friend class Game;
 
-  /// Takes the game's state as the program starts (SetStartState). Video memory is left as it is.
+  /// Takes the game's state as the program starts (SetStartState).
   void Start();
-
-  /// _offset, when it is in video memory; otherwise throws std::out_of_range.
-  [[nodiscard]] static std::uint16_t CheckedVideo(std::uint16_t _offset)
-  {
-    if (_offset >= Cga::VIDEO_MEMORY_BYTES)
-    {
-      RefuseVideo();
-    }
-    return _offset;
-  }
-
-  /// Throws the std::out_of_range of an offset past video memory's end.
-  [[noreturn]] static void RefuseVideo();
 
   /// _slot, when it is one of shipSlots' 36; otherwise throws std::out_of_range.
   [[nodiscard]] static SlotIndex CheckedSlot(SlotIndex _slot)
@@ -133,7 +91,6 @@ private:
   [[noreturn]] static void RefuseSlot();
 
   std::unique_ptr<GameData> m_data;
-  std::array<std::uint8_t, Cga::VIDEO_MEMORY_BYTES> m_video{};
 };
 
 /// The little-endian word at _bytes[_at] and _bytes[_at + 1].
@@ -142,7 +99,7 @@ private:
   return static_cast<std::uint16_t>(_bytes[_at] | (_bytes[_at + 1] << 8));
 }
 
-/// _value into _bytes[_at] and _bytes[_at + 1], low byte first, as GameState::SetVideoWord writes a word.
+/// _value into _bytes[_at] and _bytes[_at + 1], low byte first.
 inline void SetWordIn(std::span<std::uint8_t> _bytes, std::size_t _at, std::uint16_t _value) noexcept
 {
   _bytes[_at] = static_cast<std::uint8_t>(_value & 0xFF);

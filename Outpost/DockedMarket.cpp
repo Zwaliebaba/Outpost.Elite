@@ -118,8 +118,9 @@ void Table(const Elite::MarketView& _view, std::optional<Engine::Point> _pointer
   for (std::uint8_t row = 0; row < Elite::COMMODITY_KINDS; ++row)
   {
     const Engine::Rect rect = RowRect(row);
-    const bool selected = row == _view.selected;
-    const DockedFrame::RowLook look = DockedFrame::RowLookOf(row, selected, _pointer && DockedFrame::Contains(rect, *_pointer), true);
+    const bool selected = !_view.flight && row == _view.selected; // nothing is selected in flight (ADR-069)
+    const DockedFrame::RowLook look =
+      DockedFrame::RowLookOf(row, selected, !_view.flight && _pointer && DockedFrame::Contains(rect, *_pointer), true);
     DockedFrame::Row(rect, look, _canvas);
     const float y = rect.top + ROW_TEXT;
     const std::uint32_t text = DockedFrame::RowText(look);
@@ -215,15 +216,24 @@ void DockedMarket::Draw(const Elite::MarketView& _view, std::optional<Engine::Po
 {
   _canvas.Clear();
   const std::wstring system = Upper(std::wstring(_view.systemName.begin(), _view.systemName.end()));
-  DockedFrame::Draw(
-    DockedFrame::Desc{.location = std::format(L"DOCKED \u00B7 {} STATION \u00B7 {}", _view.dodo ? L"DODO" : L"CORIOLIS", system),
-                      .title = system + L" MARKET",
-                      .creditsTenths = _view.creditsTenths,
-                      .lit = DockedKey::Market},
-    _pointer, _measure, _canvas);
+  // In flight, F8 shows the prices only (ADR-069): where the ship is, no selection and no trade.
+  DockedFrame::Draw(DockedFrame::Desc{.location = _view.flight ? std::format(L"IN FLIGHT \u00B7 {} SYSTEM", system)
+                                                               : std::format(L"DOCKED \u00B7 {} STATION \u00B7 {}",
+                                                                             _view.dodo ? L"DODO" : L"CORIOLIS", system),
+                                      .title = system + L" MARKET",
+                                      .creditsTenths = _view.creditsTenths,
+                                      .lit = DockedKey::Market,
+                                      .flight = _view.flight},
+                    _pointer, _measure, _canvas);
   Table(_view, _pointer, _canvas);
-  SelectedPanel(_view, _pointer, _canvas);
   HoldPanel(_view, _canvas);
+  if (_view.flight)
+  {
+    _canvas.Text(L"IN FLIGHT \u00B7 PRICES ONLY \u00B7 DOCK TO TRADE", Engine::Font::Label, 17.0f, 0.0f, FOOTER, Engine::Align::Left,
+                 LABEL);
+    return;
+  }
+  SelectedPanel(_view, _pointer, _canvas);
   if (_view.message.notice != Elite::MarketNotice::None)
   {
     const Words words = WordsOf(_view.message);

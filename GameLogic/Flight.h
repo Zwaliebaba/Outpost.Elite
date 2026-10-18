@@ -20,8 +20,8 @@ namespace Elite
 // ── The routines (ADR-012): values in, values out, on the GameState ──
 //
 // Each is what the original's routine of its name computes, with no register in sight, and every byte it writes is
-// written as the original writes it, in the same order and at the same width. The dashboard's routines draw into
-// the CGA's video memory.
+// written as the original writes it, in the same order and at the same width. The dashboard's keep its rules and the
+// cache of what each gauge shows, which the snapshot reads; the shell draws it (ADR-069).
 
 /// A stardust particle's position: signed 8.8 words, whose high bytes are its offsets from the centre of the
 /// view, x -20h to 1Fh and y -10h to 0Fh while it is on screen.
@@ -52,8 +52,7 @@ struct SafeZone
   bool inside; ///< bit 0: inside the station's safe zone
 };
 
-/// The last pixel a dashboard routine XORed through XorDashboardPixel: where it is from the dashboard's origin, and
-/// the mask it XORed.
+/// The last pixel of a scanner blip (ScannerBlipEnd): where it is from the dashboard's origin, and its mask.
 struct DashboardPixel
 {
   std::uint8_t x;
@@ -160,23 +159,14 @@ void ComputeStardustShift(GameState& _state);
 /// (InvalidateDashboard), a beep, and messageShown cleared. Returns what ShowCockpitScreen did.
 ScreenChange RestoreFlightScreen(GameState& _state, Host& _host);
 
-/// UpdateDashboard: once a frame, in the CGA's video memory: the condition light, the energy and the laser's heat
-/// (UpdateEnergyAndLaserHeat), the safe zone's S and the ECM's E, the energy banks, the missiles, the pitch and roll
-/// indicators, then the bars for the laser's temperature, the altitude, the cabin's temperature, the fuel, the shields and the
-/// speed, each redrawn only when its value changed, the shields every frame.
+/// UpdateDashboard: once a frame, the dashboard's rules: the condition colour, the energy and the laser's heat
+/// (UpdateEnergyAndLaserHeat), the safe zone, the ECM's E cleared after its frame and the energy banks, with the cache of what
+/// each gauge shows, which the snapshot reads for the S and the E.
 void UpdateDashboard(GameState& _state);
 
-/// DrawFiveLineBar: _value * 12 / 63, 0-48 pixels, as a bar 5 scanlines high on the dashboard line at B800:_line:
-/// colour 1, a partial byte from barPartialBytes, then colour 2 to the 48th pixel. For a value of fewer than 4 pixels the second
-/// run counts _countHigh, as the caller leaves it, in its high byte.
-void DrawFiveLineBar(GameState& _state, std::uint16_t _line, std::uint8_t _value, std::uint8_t _countHigh);
-
-/// DrawThreeLineBar: DrawFiveLineBar's bar 3 scanlines high.
-void DrawThreeLineBar(GameState& _state, std::uint16_t _line, std::uint8_t _value, std::uint8_t _countHigh);
-
-/// DrawEnergyBanks: playerEnergy split into the four bank bytes of energyBankFill, FFh full, the rest, then 0, and
-/// each bank that changed redrawn (DrawFiveLineBar) from B800:3E38 upwards.
-void DrawEnergyBanks(GameState& _state);
+/// SplitEnergyBanks: playerEnergy split into the four bank bytes of energyBankFill, FFh full, the rest, then 0, and
+/// copied to energyBanksShown.
+void SplitEnergyBanks(GameState& _state);
 
 /// UpdateEnergyAndLaserHeat: unless the game is over or the escape pod flies, the laser cooled by 2 to 0, and the
 /// shields up by 1 to FFh at full energy, or the energy up by 1, or 3 with the energy unit, to 3FFh, each written and then
@@ -201,22 +191,6 @@ void UpdatePlayerMotion(GameState& _state, Host& _host);
 /// UpdateDashboard redraws every gauge.
 void InvalidateDashboard(GameState& _state);
 
-/// DrawSignedIndicator: the roll or pitch indicator for _value, held to -23..23, on the five scanlines of the
-/// dashboard line at B800:_line: the strip in colour 2, then the marker from indicatorMarkers.
-void DrawSignedIndicator(GameState& _state, std::uint16_t _line, std::int8_t _value);
-
-/// DrawMissileIcons: when missileCount changed, that many missileIcon cells at B800:3E0C and the background
-/// up to four.
-void DrawMissileIcons(GameState& _state);
-
-/// DrawMissileLockIndicator: when missileState changed, the 12x6-pixel block at B800:1E15 in
-/// colorFillBytes[missileState].
-void DrawMissileLockIndicator(GameState& _state);
-
-/// DrawConditionLight: when it changed, conditionLightBitmap at B800:176C in conditionColor, which
-/// flashes black and red on bit 9 of millisecondCounter while it is 0.
-void DrawConditionLight(GameState& _state);
-
 /// UpdateConditionColor: conditionColor from the ship's state: 0 flashing, 2 red, 3 yellow or 1 green.
 void UpdateConditionColor(GameState& _state);
 
@@ -240,37 +214,30 @@ void CheckCollisions(GameState& _state);
 void UpdateWarnings(GameState& _state);
 
 /// UpdateScannerBlip: unless _slot is debris, a station, the sun or the planet, its scanner blip moved to the
-/// camera-frame position _camera, y and z scaled by 1.25: the slot marked scanned, the old blip XORed out if one is drawn
-/// and the new one in.
+/// camera-frame position _camera, y and z scaled by 1.25: the slot marked scanned and its blip drawn.
 void UpdateScannerBlip(GameState& _state, SpaceObject& _slot, Vector _camera);
 
 /// UpdateCompass: while titleShown, the compass dot moved to the station when the planet is near
 /// (IsObjectNearKeepBlip), else to the planet (compassTargetIsStation 1 or 0). The target's and the station's scale shifts go to
 /// their depth bytes (+3Dh); the target's scaled position turned to the view goes to the station's compass words and, turned to
 /// the camera's frame, gives the dot: x and y as 8 * |c| / (|z| + 1000), at most 7, normalised by sqrtTable when their squares
-/// reach 41h, at (CFh + x, 27h + y). The old dot, kept in the station's blip bytes, is XORed out if drawn and the new one in.
+/// reach 41h, at (CFh + x, 27h + y). The dot goes to the station's blip bytes, marked drawn.
 /// Returns whether it ran: false, doing nothing, unless titleShown.
 bool UpdateCompass(GameState& _state);
 
-/// XorCompassDot: the compass dot at _x, _y from the dashboard's origin XORed into video memory: its eight
-/// neighbours, a ring, and the centre too while _inFront, solid.
-void XorCompassDot(GameState& _state, std::uint8_t _x, std::uint8_t _y, bool _inFront);
-
-/// EraseScannerBlip: unless _slot is a station's, its scanner blip XORed out when one is drawn, and the flag that
+/// EraseScannerBlip: unless _slot is a station's, its scanner blip taken off when one is drawn, and the flag that
 /// says so cleared. Returns the blip's last pixel, when it erased one.
-std::optional<DashboardPixel> EraseScannerBlip(GameState& _state, SpaceObject& _slot);
+std::optional<DashboardPixel> EraseScannerBlip(SpaceObject& _slot);
 
-/// EraseCompassAndBlips: the compass dot XORed out of video memory when stationSlot's blip flag says it is drawn, the
-/// flag cleared first, and then each ship slot's scanner blip, EraseScannerBlip. Returns whether it erased anything.
+/// EraseCompassAndBlips: the compass dot taken off when stationSlot's blip flag says it is drawn, the flag cleared, and then each ship slot's scanner blip, EraseScannerBlip. Returns whether it erased anything.
 bool EraseCompassAndBlips(GameState& _state);
 
-/// XorScannerBlip: the scanner blip for the scanner bytes _x, _y and _z XORed into video memory: a stick from
-/// (3Dh + _x, 1Fh - _z / 4) of |_y / 4| pixels, up or down, and a pixel right of its end. Returns that last pixel.
-DashboardPixel XorScannerBlip(GameState& _state, std::uint8_t _x, std::uint8_t _y, std::uint8_t _z);
+/// ScannerBlipEnd: the last pixel of the scanner blip for the scanner bytes _x, _y and _z: a stick from
+/// (3Dh + _x, 1Fh - _z / 4) of |_y / 4| pixels, up or down, and a pixel right of its end, with its mask.
+[[nodiscard]] DashboardPixel ScannerBlipEnd(std::uint8_t _x, std::uint8_t _y, std::uint8_t _z) noexcept;
 
-/// XorDashboardPixel: the colour-2 pixel at _x, _y from the dashboard's origin (96, 144) XORed into
-/// video memory. Returns the mask, from dashboardPixelMasks.
-std::uint8_t XorDashboardPixel(GameState& _state, std::uint8_t _x, std::uint8_t _y);
+/// DashboardPixelMask: the mask of the colour-2 pixel at column _x in a byte of four, from dashboardPixelMasks.
+[[nodiscard]] std::uint8_t DashboardPixelMask(std::uint8_t _x) noexcept;
 
 /// UpdateFuelLeak: a fuel leak's delay counted down, then its frames, each taking 5 fuel and posting fuelLeakText;
 /// the border red while it leaks and maskingBackgroundColor otherwise, with the bright palette, unless the delay has just run out.

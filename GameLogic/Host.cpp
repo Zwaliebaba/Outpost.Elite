@@ -32,7 +32,7 @@ struct ProgramStopped
 Host::Host(GameState& _state, FileStore& _files, const Desc& _desc)
   : m_state(_state),
     m_speaker(m_clock),
-    m_cga(m_clock),
+    m_display(m_clock),
     m_mouse(_desc.mousePresent),
     m_files(_files),
     m_startMoment(_desc.startMoment),
@@ -173,7 +173,7 @@ void Host::SetSpeakerBits(std::uint8_t _bits)
 
 void Host::Idle(Milliseconds _limit)
 {
-  Milliseconds next = std::min({m_nextTickAt, m_nextKeyAt, m_cga.NextStatusChangeAt(), _limit});
+  Milliseconds next = std::min({m_nextTickAt, m_nextKeyAt, m_display.NextChangeAt(), _limit});
   if (next <= m_clock)
   {
     next = m_clock + 1;
@@ -419,7 +419,7 @@ void Host::PublishFlightSnapshot(const FlightSnapshot& _snapshot, bool _continue
   latest = _snapshot;
   latest.sequence = m_flightSnapshots[0].sequence + 1;
   latest.pacedTime = m_clock;
-  m_spaceView.Finish(m_state);
+  m_spaceView.Finish();
   for (std::size_t index = 0; index < latest.objectCount; ++index)
   {
     latest.objects[index].model = m_spaceView.DrawnAsModel(latest.objects[index].slot);
@@ -432,7 +432,7 @@ void Host::PublishFlightSnapshot(const FlightSnapshot& _snapshot, bool _continue
   }
 }
 
-void Host::PublishSpaceViewPicture(const FlightSnapshot& _snapshot) noexcept
+void Host::PublishTunnel(const FlightSnapshot& _snapshot, const SnapshotTunnel& _tunnel) noexcept
 {
   m_flightSnapshots[0] = m_flightSnapshots[1];
   FlightSnapshot& latest = m_flightSnapshots[1];
@@ -441,13 +441,8 @@ void Host::PublishSpaceViewPicture(const FlightSnapshot& _snapshot) noexcept
   latest.pacedTime = m_clock;
   latest.objectCount = 0;
   latest.beamCount = 0;
-  latest.picture = true;
-  m_spaceView.FinishPicture(m_state);
-}
-
-void Host::Render(FrameImage& _image) const noexcept
-{
-  m_cga.Render(m_state.VideoBytes(), _image);
+  latest.tunnel = _tunnel;
+  m_spaceView.FinishTunnel();
 }
 
 } // namespace Elite

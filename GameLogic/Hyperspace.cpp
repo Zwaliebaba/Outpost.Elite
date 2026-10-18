@@ -199,12 +199,12 @@ MassLock IsMassLocked(GameState& _state)
   {
     return lock;
   }
-  lock.sun = IsObjectNear(_state, _state.Slot(SlotIndex::Sun));
+  lock.sun = IsObjectNear(_state.Slot(SlotIndex::Sun));
   if (lock.sun->nearby)
   {
     return lock;
   }
-  lock.planet = IsObjectNear(_state, _state.Slot(SlotIndex::Planet));
+  lock.planet = IsObjectNear(_state.Slot(SlotIndex::Planet));
   if (lock.planet->nearby)
   {
     return lock;
@@ -327,8 +327,9 @@ void ResetHyperspaceRings(GameState& _state)
   }
 }
 
-void DrawHyperspaceRings(GameState& _state)
+SnapshotTunnel DrawHyperspaceRings(GameState& _state)
 {
+  SnapshotTunnel drawn{.kind = TunnelKind::Hyperspace, .centerX = SPACE_VIEW_CENTER_X, .centerRow = SPACE_VIEW_CENTER_ROW};
   // The ten rings, three bytes each: the delay, the radius and the colour.
   for (std::uint8_t(&ring)[HYPERSPACE_RING_BYTES] : _state.Data().hyperspace.hyperspaceRings)
   {
@@ -347,9 +348,14 @@ void DrawHyperspaceRings(GameState& _state)
       {
         _state.Data().drawing.drawColor = std::uint8_t{ring[2]};
         DrawCircle(_state, grown, SPACE_VIEW_CENTER_X, SPACE_VIEW_CENTER_ROW);
+        if (drawn.shapeCount < drawn.shapes.size())
+        {
+          drawn.shapes[drawn.shapeCount++] = SnapshotTunnelShape{.halfWidth = grown, .halfHeight = grown, .color = std::uint8_t{ring[2]}};
+        }
       }
     }
   }
+  return drawn;
 }
 
 [[nodiscard]] Task<void> PlayHyperspaceTunnel(GameState& _state, Host& _host)
@@ -358,10 +364,10 @@ void DrawHyperspaceRings(GameState& _state)
   for (std::uint16_t frames = HYPERSPACE_TUNNEL_FRAMES;;)
   {
     UpdateMessageLine(_state);
-    DrawHyperspaceRings(_state);
+    const SnapshotTunnel rings = DrawHyperspaceRings(_state);
     co_await FinishSpaceViewFrame(_state, _host);
-    // The frame as the game drew it, for a renderer that shows it in the cockpit (D68).
-    _host.PublishSpaceViewPicture(WithoutScene(TakeFlightSnapshot(_state)));
+    // The frame's rings, which the renderer draws in the cockpit (ADR-069).
+    _host.PublishTunnel(WithoutScene(TakeFlightSnapshot(_state)), rings);
     if (--frames == 0)
     {
       co_return;

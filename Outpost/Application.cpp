@@ -34,8 +34,9 @@ namespace
 {
 
 constexpr wchar_t TITLE[] = L"Outpost.Elite";
-constexpr std::uint32_t LOGICAL_WIDTH = 640;  // the CGA's 640 dots across...
-constexpr std::uint32_t LOGICAL_HEIGHT = 480; // ...shown at 4:3 (D8)
+constexpr std::uint32_t LOGICAL_WIDTH = 640; // the window's first size, 4:3 (D8), START_SCALE times over
+constexpr std::uint32_t LOGICAL_HEIGHT = 480;
+constexpr std::uint32_t PICTURE_PIXELS = 1; // the renderer's picture, which nothing draws into since the CGA went (ADR-069)
 constexpr int START_SCALE = 2;
 constexpr bool START_FULL_SCREEN = true; // borderless over the whole screen, F11 returning to a window START_SCALE times (D42)
 constexpr std::uint32_t SAMPLE_RATE = 44'100;
@@ -82,6 +83,10 @@ bool ClickDocked(Elite::Host& _host, Engine::Point _point)
     return false;
   }
   const Elite::ChartView* const chart = _host.ShownChart();
+  const Elite::MarketView* const market = _host.ShownMarket();
+  const Elite::StatusView* const status = _host.ShownStatus();
+  // In flight a chart, the market's prices and the status (ADR-069) map the bar to the flight's keys (D110).
+  const bool flight = (chart != nullptr && chart->flight) || (market != nullptr && market->flight) || (status != nullptr && status->flight);
   if (const std::optional<DockedKey> key = DockedFrame::KeyAt(_point))
   {
     if (*key == DockedKey::Disc && _host.ShownDisc() != nullptr)
@@ -89,7 +94,7 @@ bool ClickDocked(Elite::Host& _host, Engine::Point _point)
       // D10's own key, lit: Esc would close it.
       return false;
     }
-    const std::optional<std::uint8_t> code = chart != nullptr && chart->flight ? DockedChart::FlightScanCodeOf(*key) : ScanCodeOf(*key);
+    const std::optional<std::uint8_t> code = flight ? DockedChart::FlightScanCodeOf(*key) : ScanCodeOf(*key);
     if (code)
     {
       _host.Inject(Elite::KeyEvent{.key = *code, .down = true});
@@ -106,8 +111,13 @@ bool ClickDocked(Elite::Host& _host, Engine::Point _point)
     }
     return click.has_value();
   }
-  if (_host.ShownMarket() != nullptr)
+  if (market != nullptr)
   {
+    if (market->flight)
+    {
+      // Nothing is traded in flight.
+      return false;
+    }
     if (const std::optional<Elite::MarketClick> click = DockedMarket::ControlAt(_point))
     {
       _host.Click(*click);
@@ -210,8 +220,8 @@ int Application::Run(HINSTANCE _instance, bool _cheat)
   m_window = window.Handle();
   Engine::Renderer renderer;
   if (!renderer.Create(Engine::Renderer::Desc{.warp = false,
-                                              .sourceWidth = Elite::FrameImage::WIDTH_PIXELS,
-                                              .sourceHeight = Elite::FrameImage::HEIGHT_PIXELS,
+                                              .sourceWidth = PICTURE_PIXELS,
+                                              .sourceHeight = PICTURE_PIXELS,
                                               .logicalWidth = LOGICAL_WIDTH,
                                               .logicalHeight = LOGICAL_HEIGHT}) ||
       !renderer.AttachWindow(window.Handle()))
@@ -244,15 +254,7 @@ int Application::Run(HINSTANCE _instance, bool _cheat)
   std::uint64_t elapsedMilliseconds = 0;
   Elite::Milliseconds audioTime = start;
   auto wallStart = std::chrono::steady_clock::now();
-  const auto frame = std::make_unique<Elite::FrameImage>();
-  std::vector<std::uint32_t> pixels(frame->pixels.size());
   std::vector<std::int16_t> samples;
-  const auto palette = Elite::CgaPalette();
-  const auto rgb = [&](std::uint8_t _index)
-  {
-    const Elite::RgbColor& color = palette[_index & 0x0F];
-    return (std::uint32_t{color.red} << 16) | (std::uint32_t{color.green} << 8) | color.blue;
-  };
 
   const TextMeasure measure = [&renderer](const Engine::CanvasText& _text) { return renderer.MeasureText(_text); };
   std::optional<Engine::Point> pointer;     // the mouse, in design units, while it is over the window
@@ -341,7 +343,8 @@ int Application::Run(HINSTANCE _instance, bool _cheat)
 
     // On the market, D01 (ADR-058); on the shipyard, D02 and D03 (ADR-064); on the status screen, D08 (ADR-063); on a chart, docked
     // or in flight, D04 to D07 (ADR-065); a briefing over D08, D09 (ADR-068); on Disc access, D10 (ADR-067); in flight and on the title, the cockpit with the space view
-    // in its window (ADR-034, D63, D64); on every other screen, the CGA picture.
+    // in its window (ADR-034, D63, D64), a tunnel's frame too (ADR-069); between them, while the game shows none of these, the last
+    // canvas drawn again, with no scene.
     bool presented = false;
     const Elite::FlightSnapshot& latest = platform->LatestFlightSnapshot();
     if (const Elite::MarketView* const market = platform->ShownMarket())
@@ -382,12 +385,7 @@ int Application::Run(HINSTANCE _instance, bool _cheat)
     }
     else
     {
-      platform->Render(*frame);
-      for (std::size_t index = 0; index < pixels.size(); ++index)
-      {
-        pixels[index] = rgb(frame->pixels[index]);
-      }
-      presented = renderer.Present(pixels, rgb(frame->borderColor), nullptr);
+      presented = renderer.Present({}, COCKPIT_BACKGROUND, nullptr, &canvas);
     }
     if (!presented)
     {

@@ -9,17 +9,14 @@ key space; wait 4
 key F5; wait 1
 click 20 78; wait 0.799                  # Riedquat, 6.8 light years, clicked on the short-range chart (D111)
 key F1; wait 7.901
-digest launched 277e09ffa3fd5c149c3d55810711f54327eeb996357af8b407a4fa416bd9e9d4
-picture launched 205a705c390a662ade37a4c3597276aa26bd7a4ef56a70c3e2a1720e034cb957
+digest launched 31633a08364d4995b1dd2994279a276f6d4c273578b17a9316cc244b6d4465ff
 outcome launched galaxy=0 system=7 witchSpace=0 docked=0 inFlight=1 dead=0 creditsTenths=1000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=0 laserMounts=1 laserTypes=0 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=20 fuel=255 shipSlotsInUse=3 cabinTemperature=11 laserTemperature=0 altitude=254 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 down h; wait 0.2; up h                   # hyperspace: the countdown, then the jump
 wait 6
-digest arrived caf9b0392f7db38a1ebf39e6ae8445709843f49eedfbfd815fa5ab16d6e5e1ed
-picture arrived fd6ecd26fb875d4b473209d6502054a2963f9f2108cd4a976596560306f07f1d
+digest arrived a3c4f0ad4b40fbbbe27487c1c0c18037df301f65a3314f76c6824f4789da288d
 outcome arrived galaxy=0 system=46 witchSpace=0 docked=0 inFlight=1 dead=0 creditsTenths=1000 legalStatus=0 kills=0 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=0 laserMounts=1 laserTypes=0 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=20 fuel=11 shipSlotsInUse=3 cabinTemperature=11 laserTemperature=0 altitude=232 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 wait 34
-digest pirates 10795d522fa9baeee12ead2e167dd7bd0b098ac478b3e4fbd26ab6c8d470ad34
-picture pirates b75912bd9b361217bf30dd687780c4ead11a9495240f82430085bfc191eac42f
+digest pirates d6aaad1434fb195bd695df1a64781a64d370795c78a2b3d0a7d4507bcfa56096
 outcome pirates galaxy=0 system=46 witchSpace=0 docked=0 inFlight=1 dead=0 creditsTenths=1200 legalStatus=0 kills=1 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=0 laserMounts=1 laserTypes=0 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=1 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=866 foreShield=0 aftShield=255 speed=20 fuel=11 shipSlotsInUse=3 cabinTemperature=7 laserTemperature=0 altitude=254 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 # The fight, as recorded.
 down Right
@@ -820,7 +817,6 @@ wait 0.05
 up space
 wait 0.05
 up Left
-digest after-the-fight ceca69d903345ce603df68f7e544f5d5f581bf0e82ba68ce49a8113cdc7aeb34
-picture after-the-fight 03d1ca10e04e61370d712de825c469b316ae54fdb9b84b487e082e3c91e0ef49
+digest after-the-fight 3d7a216061b3a4ffabf25f4fcc0e9fb76dcd2a0a07e65044a0a4f8bf6d87a0ee
 outcome after-the-fight galaxy=0 system=46 witchSpace=0 docked=0 inFlight=1 dead=0 creditsTenths=1200 legalStatus=0 kills=1 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=0 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=0 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=1 beamLasers=0 miningLasers=0 militaryLasers=0 laserMounts=1 laserTypes=0 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=1 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=182 aftShield=146 speed=20 fuel=11 shipSlotsInUse=6 cabinTemperature=7 laserTemperature=178 altitude=254 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 shot after-the-fight

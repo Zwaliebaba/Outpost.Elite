@@ -199,12 +199,14 @@ void DockedStatus::Draw(const Elite::StatusView& _view, std::optional<Engine::Po
 {
   _canvas.Clear();
   const std::wstring system = Wide(_view.systemName);
-  DockedFrame::Draw(
-    DockedFrame::Desc{.location = std::format(L"DOCKED \u00B7 {} STATION \u00B7 {}", _view.dodo ? L"DODO" : L"CORIOLIS", system),
-                      .title = L"COMMANDER STATUS",
-                      .creditsTenths = _view.creditsTenths,
-                      .lit = DockedKey::Status},
-    _pointer, _measure, _canvas);
+  DockedFrame::Draw(DockedFrame::Desc{.location = _view.flight ? std::format(L"IN FLIGHT \u00B7 {} SYSTEM", system)
+                                                               : std::format(L"DOCKED \u00B7 {} STATION \u00B7 {}",
+                                                                             _view.dodo ? L"DODO" : L"CORIOLIS", system),
+                                      .title = L"COMMANDER STATUS",
+                                      .creditsTenths = _view.creditsTenths,
+                                      .lit = DockedKey::Status,
+                                      .flight = _view.flight},
+                    _pointer, _measure, _canvas);
   Commander(_view, _canvas);
   Equipment(_view, _canvas);
   Cargo(_view, _canvas);

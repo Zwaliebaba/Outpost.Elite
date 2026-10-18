@@ -122,7 +122,7 @@ void DrawVisibleFaces(GameState& _state, const Blueprint& _blueprint, std::uint1
 /// CheckShipInRange: IsObjectNear, then |x|, |y| and |z| of _slot's position below maxAxisDistance and the high words
 /// of their squares, summed, below maxDistanceSquaredHigh after the second and the third. In range, _slot's size (+3Eh) is that
 /// sum shifted right 6 and its in-range bit (byte 0 bit 6) is set; out of range, EraseScannerBlip.
-ShipRangeCheck CheckShipInRange(GameState& _state, SpaceObject& _slot);
+ShipRangeCheck CheckShipInRange(SpaceObject& _slot);
 
 /// TransformSunOrPlanet: _slot's position scaled down by its GetPositionScaleShift, which becomes its disc scale
 /// (+0Ah) and depth (+3Dh), turned to the view (TransformToViewWithBlip) and stored at +10h/+12h/+14h, and byte 0 bit 7 set.

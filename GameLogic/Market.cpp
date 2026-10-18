@@ -5,6 +5,7 @@
 
 #include "Arithmetic.h"
 #include "Equipment.h"
+#include "MarketScreen.h"
 #include "MarketTables.h"
 #include "Text.h"
 
@@ -16,16 +17,7 @@ namespace
 
 constexpr std::uint8_t SCAN_F8 = 0x42;
 
-// The text page: offsets in B800, 80 bytes a row.
-constexpr std::uint16_t ROW_BYTES = 0x50;
-constexpr std::uint16_t TITLE_OFFSET = 0x54;
-constexpr std::uint16_t PRICES_HEADER_OFFSET = 0x144;
-constexpr std::uint16_t FIRST_PRODUCT_OFFSET = 0x1E4;
-constexpr std::uint16_t BUY_PRICE_COLUMN = 4;
-constexpr std::uint16_t SELL_PRICE_COLUMN = 2;
-
 constexpr std::uint16_t RESALE_PRICE_CEILING = 100;
-constexpr std::uint16_t PRODUCT_NAME_BYTES = 0x11;
 constexpr std::size_t LEGAL_PENALTY = 2; // a trade record's third byte
 // A price factor of 1.0, in 256ths.
 constexpr std::uint16_t UNIT_FACTOR = 0x100;
@@ -56,12 +48,6 @@ constexpr std::uint8_t ALIEN_ITEMS = 0x10;
   return _state.Data().menus.screenPrices;
 }
 
-// Product _product's name and unit, up to its NUL.
-[[nodiscard]] std::string_view ProductName(const GameState& _state, std::uint16_t _product)
-{
-  return TextWithin(BytesOf(_state.Data().docked.productNames), std::size_t{_product} * PRODUCT_NAME_BYTES);
-}
-
 // The commander's credits, in tenths: the low word, then the high.
 [[nodiscard]] std::uint32_t Credits(const GameState& _state)
 {
@@ -75,11 +61,32 @@ void StoreCredits(GameState& _state, std::uint32_t _tenths)
   FormatCredits(_state);
 }
 
+// D01 published to the host while F8 waits in flight, and taken down after.
+class FlightMarketShown
+{
+public:
+  FlightMarketShown(Host& _host, MarketView _view)
+    : m_host(_host)
+  {
+    m_host.ShowMarket(std::move(_view));
+  }
+
+  FlightMarketShown(const FlightMarketShown&) = delete;
+  FlightMarketShown& operator=(const FlightMarketShown&) = delete;
+
+  ~FlightMarketShown()
+  {
+    m_host.HideMarket();
+  }
+
+private:
+  Host& m_host;
+};
+
 } // namespace
 
 [[nodiscard]] Task<ScreenKey> ShowMarketPricesScreen(GameState& _state, Host& _host)
 {
-  const std::string_view title = DrawDockedFrame(_state, _host, MARKET_PRICES_FRAME);
   // The system's name, cut for good at its first space after the first letter.
   const std::span<std::uint8_t> name(_state.Data().commander.currentSystem.name);
   for (std::size_t letter = 1;; ++letter)
@@ -95,28 +102,9 @@ void StoreCredits(GameState& _state, std::uint32_t _tenths)
       break;
     }
   }
-  const std::uint16_t named = PrintTextModeString(_state, TextIn(name), TITLE_OFFSET);
-  PrintTextModeString(_state, title, named);
-  PrintTextModeString(_state, PRICES_HEADER_TEXT, PRICES_HEADER_OFFSET);
   ComputeMarketPrices(_state);
-
-  // Each commodity's name, buy price and sell price.
-  const std::span<const MenusState::ScreenPrice> prices = ScreenPrices(_state);
-  std::uint16_t row = FIRST_PRODUCT_OFFSET;
-  for (std::uint16_t product = 0, left = COMMODITY_KINDS;;)
-  {
-    const std::uint16_t nameEnd = PrintTextModeString(_state, ProductName(_state, product), row);
-    FormatTenths(_state, prices[product].price);
-    const std::uint16_t buy = PrintTextModeString(_state, TextWithin(_state.Data().menus.priceText, 0), Offset(nameEnd, BUY_PRICE_COLUMN));
-    FormatTenths(_state, prices[product].resale);
-    PrintTextModeString(_state, TextWithin(_state.Data().menus.priceText, 0), Offset(buy, SELL_PRICE_COLUMN));
-    row = Offset(row, ROW_BYTES);
-    ++product;
-    if (--left == 0)
-    {
-      break;
-    }
-  }
+  // D01's prices, shown while the screen waits for its key (ADR-069).
+  const FlightMarketShown shown(_host, FlightMarketViewOf(_state));
   co_return co_await WaitForScreenExitKey(_state, _host, SCAN_F8, ScreenPlace::Flight);
 }
 

@@ -11,8 +11,8 @@
 namespace Elite
 {
 
-// The reference's video routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): drawing: lines, spans, the space view and
-// the dashboard into CGA memory. Each takes values and gives values back, on the GameState and, where it drives a device, the devices
+// The reference's video routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): drawing: lines, spans and the space view
+// into the drawing buffer, which the space view presents (ADR-069). Each takes values and gives values back, on the GameState and, where it drives a device, the devices
 // (ADR-014).
 
 /// The drawing buffer's bytes: 128 rows of 64, 256 pixels of 2 bits each.
@@ -46,18 +46,10 @@ struct Triangle
 /// FinishSpaceViewFrame: DrawLaserSights, then PresentSpaceView and ClearDrawBuffer, both forwards. It waits.
 [[nodiscard]] Task<void> FinishSpaceViewFrame(GameState& _state, Host& _host);
 
-/// PresentChartFrame: CopyChartBufferToScreen of the whole chart, with no bands skipped whatever the caller passed, then
-/// ClearDrawBuffer, both forwards. It waits.
-[[nodiscard]] Task<void> PresentChartFrame(GameState& _state, Host& _host);
-
-/// PresentSpaceView: waits until msSinceFrame reaches minimumFrameMs and clears it, WaitRetraceThenDelay, then copies
-/// spaceViewBuffer's 63 line pairs to the screen at B800:01E8. Its loops turn through _host.
+/// PresentSpaceView: waits until msSinceFrame reaches minimumFrameMs and clears it, WaitRetraceThenDelay, then presents the
+/// drawing buffer as the screen's view (Host::PresentSpaceView), where the original copied its 63 line pairs to video memory
+/// (ADR-069). Its loops turn through _host.
 [[nodiscard]] Task<void> PresentSpaceView(GameState& _state, Host& _host);
-
-/// CopyChartBufferToScreen: waits for a vertical retrace and a delay, then copies 64 - 4 * _bandsSkipped line pairs, as
-/// a byte, of the drawing buffer from its byte _bandsSkipped * 512 to the chart's place on the screen, at B800:0648. Its loops turn
-/// through _host.
-[[nodiscard]] Task<void> CopyChartBufferToScreen(GameState& _state, Host& _host, std::uint8_t _bandsSkipped);
 
 /// ClearDrawBuffer: the drawing buffer (DrawingBuffer) zeroed a word at a time, forwards.
 void ClearDrawBuffer(GameState& _state);
@@ -130,39 +122,31 @@ void FillTriangle(GameState& _state, Triangle _triangle);
 /// buffer kept and each span held to 0-255.
 void FillClippedTriangle(GameState& _state, Triangle _doubled);
 
-/// WaitRetraceThenDelay: waits for a vertical retrace on the CGA's status port, then spins 2000 turns, a delay the
-/// 8088's speed made. Its loops turn through _host.
+/// WaitRetraceThenDelay: waits for a vertical retrace of the display's frame clock (Display::TakeRetrace), then the delay the
+/// 8088's speed made, which takes no paced time. Its loops turn through _host.
 [[nodiscard]] Task<void> WaitRetraceThenDelay(Host& _host);
 
 /// How ShowCockpitScreen and DrawChartFrame made the screen ready for what they draw.
 enum class ScreenChange : std::uint8_t
 {
   None,    ///< their screen showed already, and they drew nothing
-  Cleared, ///< a graphics screen, cleared (ClearCgaScreen)
+  Cleared, ///< a graphics screen, cleared
   ModeSet, ///< a text screen, put into graphics mode (SetGraphicsMode)
 };
 
 /// ShowCockpitScreen: unless the cockpit shows already (screenLayout 0), graphics mode from text or a clear screen from
-/// graphics, screenLayout 0, and cockpitImage copied into both banks of the screen with the direction flag clear.
+/// graphics, and screenLayout 0. The cockpit is the shell's to draw; the space view no longer shows until a frame finishes.
 ScreenChange ShowCockpitScreen(GameState& _state, Host& _host);
 
-/// ClearCgaScreen: both banks of CGA memory, B800:0000-1F3F and B800:2000-3F3F, zeroed a word at a time.
-void ClearCgaScreen(GameState& _state);
-
-/// ClearTextScreen: the 40x25 text page filled with spaces in textAttribute, a cell at a time.
-void ClearTextScreen(GameState& _state);
-
-/// DrawChartFrame: unless the chart frame shows already (screenLayout 1), graphics mode from text or a clear screen from
-/// graphics, screenLayout 1, and the frame's box in colour 3: four horizontal lines a word at a time, forwards, then
-/// the two verticals a byte at a time.
+/// DrawChartFrame: unless the chart's screen shows already (screenLayout 1), graphics mode from text or a clear screen from
+/// graphics, and screenLayout 1. The chart is the shell's to draw (ADR-065).
 ScreenChange DrawChartFrame(GameState& _state, Host& _host);
 
-/// SetGraphicsMode: the CGA in 320x200 graphics, video memory cleared, and the colour select register bright on
-/// black.
+/// SetGraphicsMode: the graphics screen, its colour select bright on black.
 void SetGraphicsMode(GameState& _state, Host& _host);
 
-/// SetTextMode: the CGA in 40x25 text, video memory blank, the cursor's address off the page, and the mode control
-/// register with blinking off, so that attribute bit 7 is a bright background.
+/// SetTextMode: a docked screen's text page, which the shell draws in its place: the space view no longer shows, and the colour
+/// select as a mode set leaves it.
 void SetTextMode(GameState& _state, Host& _host);
 
 /// DrawTitlePlanet: DrawDisc with sunFringeMask 1, then sunFringeMask 0.
