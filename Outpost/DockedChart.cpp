@@ -33,8 +33,6 @@ constexpr std::uint32_t ALERT_FILL = 0xFF29160F;
 constexpr std::uint32_t LINE = 0xB3FFC04A;
 constexpr std::uint32_t RULE = 0xFF64491D;
 constexpr std::uint32_t FOOTER_RULE = 0xFF3B2A11;
-constexpr std::uint32_t LEGEND_FILL = 0xFF0E0C09;
-constexpr std::uint32_t LEGEND_EDGE = 0xFF473313;
 constexpr std::uint32_t BAR_TRACK = 0xFF2A2116;
 constexpr std::uint32_t BAR_FILL = 0xFFC9973C;
 constexpr std::uint32_t FIND_FILL = 0xFF0C0A08;
@@ -59,11 +57,7 @@ constexpr float SHORT_RANGE_UNIT = 340.0f / 61.25f;
 constexpr float SHORT_RANGE_CENTER_X = 80.0f;
 constexpr float SHORT_RANGE_CENTER_ROW = 64.0f;
 
-// The legend, its three rows, and the countdown's banner beside it in flight.
-constexpr Engine::Rect LEGEND{.left = 819.0f, .top = 131.0f, .width = 497.0f, .height = 121.0f};
-constexpr float LEGEND_ICON_X = 848.0f;
-constexpr float LEGEND_TEXT_X = 872.0f;
-constexpr std::array<float, 3> LEGEND_ROWS = {157.5f, 190.5f, 224.0f};
+// The countdown's banner in flight.
 constexpr Engine::Rect LOCKED_BANNER{.left = 430.0f, .top = 131.0f, .width = 375.0f, .height = 57.0f};
 
 // Find, under the chart.
@@ -304,31 +298,7 @@ void Marks(const Elite::ChartView& _view, std::optional<Engine::Point> _pointer,
   Cursor(cross, red ? ALERT : STAR, CURSOR_GAP, CURSOR_ARM, _canvas);
 }
 
-void Legend(const Elite::ChartView& _view, Engine::Canvas& _canvas)
-{
-  _canvas.Box(LEGEND, LEGEND_FILL);
-  DockedFrame::Edge(LEGEND, LEGEND_EDGE, _canvas);
-  _canvas.Ring(Engine::Point{.x = LEGEND_ICON_X, .y = LEGEND_ROWS[0]}, 9.0f, 9.0f, 1.5f, GREEN);
-  Cursor(Engine::Point{.x = LEGEND_ICON_X + 1.0f, .y = LEGEND_ROWS[1]}, STAR, 0.0f, 10.0f, _canvas);
-  const Engine::Rect box{.left = LEGEND_ICON_X - 10.0f, .top = LEGEND_ROWS[2] - 10.0f, .width = 20.0f, .height = 20.0f};
-  _canvas.Line(Engine::Point{.x = box.left, .y = box.top}, Engine::Point{.x = box.left + box.width, .y = box.top}, 1.0f, LABEL, 3.0f, 3.0f);
-  _canvas.Line(Engine::Point{.x = box.left, .y = box.top + box.height}, Engine::Point{.x = box.left + box.width, .y = box.top + box.height},
-               1.0f, LABEL, 3.0f, 3.0f);
-  _canvas.Line(Engine::Point{.x = box.left, .y = box.top}, Engine::Point{.x = box.left, .y = box.top + box.height}, 1.0f, LABEL, 3.0f,
-               3.0f);
-  _canvas.Line(Engine::Point{.x = box.left + box.width, .y = box.top}, Engine::Point{.x = box.left + box.width, .y = box.top + box.height},
-               1.0f, LABEL, 3.0f, 3.0f);
-  const std::array<const wchar_t*, 3> rows = {L"CURRENT SYSTEM \u2014 FIXED, CENTRE OF FUEL RING", L"CURSOR \u2014 MOVES FREELY",
-                                              _view.locked ? L"TARGET LOCKED \u2014 FIXED UNTIL THE JUMP"
-                                                           : L"NEAREST SYSTEM \u2014 LIVE, TARGETED ON CLOSE"};
-  for (std::size_t row = 0; row < rows.size(); ++row)
-  {
-    _canvas.Text(rows[row], Engine::Font::Label, 15.0f, 2.0f, Engine::Point{.x = LEGEND_TEXT_X, .y = LEGEND_ROWS[row]}, Engine::Align::Left,
-                 LABEL);
-  }
-}
-
-// `HYPERSPACE 7 TARGET LOCKED`, in flight while the countdown runs (D07), between the header and the legend.
+// `HYPERSPACE 7 TARGET LOCKED`, in flight while the countdown runs (D07), beside the header.
 void LockedBanner(const Elite::ChartView& _view, const TextMeasure& _measure, Engine::Canvas& _canvas)
 {
   _canvas.Box(LOCKED_BANNER, ALERT_FILL);
@@ -497,7 +467,6 @@ void DockedChart::Draw(const Elite::ChartView& _view, std::optional<Engine::Poin
                         : std::wstring(L"LOCAL SPACE \u00B7 RING = FUEL RANGE"),
                Engine::Font::Label, 15.0f, 4.0f, HEADER, Engine::Align::Left, LABEL);
   Marks(_view, _pointer, _canvas);
-  Legend(_view, _canvas);
   if (_view.flight && _view.locked)
   {
     LockedBanner(_view, _measure, _canvas);

@@ -161,8 +161,9 @@ FindResult FindTypedSystem(GameState& _state);
 void EnterChart(GameState& _state, Host& _host, ChartKind _kind);
 
 /// What the original's chart did as a key closed it: unless the hyperspace countdown runs, the system at the cursor selected
-/// (SelectSystemAtCursor) and the cursor kept for the chart open, as chartIsShortRange says.
-void LeaveChart(GameState& _state);
+/// (SelectSystemAtCursor) when the cursor was _moved on this chart, and the cursor kept for the chart open, as chartIsShortRange
+/// says. A chart closed with its cursor where it opened keeps the system selected before (D124).
+void LeaveChart(GameState& _state, bool _moved);
 
 /// Keypad 5's: the cursor back on the current system, the galactic chart's on it and the short-range chart's on its centre.
 void RecenterChartCursor(GameState& _state);

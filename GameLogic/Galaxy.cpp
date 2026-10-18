@@ -257,13 +257,16 @@ void EnterChart(GameState& _state, Host& _host, ChartKind _kind)
   commander.chartIsShortRange = 1;
 }
 
-void LeaveChart(GameState& _state)
+void LeaveChart(GameState& _state, bool _moved)
 {
   if (_state.Data().jump.hyperspaceCountdown != 0)
   {
     return;
   }
-  SelectSystemAtCursor(_state);
+  if (_moved)
+  {
+    SelectSystemAtCursor(_state);
+  }
   CommanderState& commander = _state.Data().commander;
   const bool shortRange = commander.chartIsShortRange == 1;
   (shortRange ? commander.shortRangeCursorX : commander.galacticCursorX) = std::uint8_t{commander.chartCursorX};

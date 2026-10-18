@@ -14,7 +14,7 @@ namespace Outpost
 
 /// D04 to D07, the galactic and the short-range chart (ADR-065, D82, `Design/Canvas/docked/04-…` to `07-…`), drawn from the game's
 /// ChartView in the docked frame, in 1920 x 1080 design units: the systems, the current one at the centre of the fuel ring, the
-/// cursor, the target bracketed with the line to it, the legend, Find, the countdown's lock in flight, the footer, and Data on
+/// cursor, the target bracketed with the line to it, Find, the countdown's lock in flight, the footer, and Data on
 /// System as the side panel. A click or a drag on the chart is found here as a point in the chart's units (D99, D109), which the
 /// game is sent (Elite::ChartClick).
 class DockedChart

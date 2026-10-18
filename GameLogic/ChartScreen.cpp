@@ -60,6 +60,21 @@ void TypeFindInput(GameState& _state, const std::string& _typed)
   }
 }
 
+// The open chart's cursor on the selected system, where the chart shows it, as _scratch finds it (D124): the galactic chart shows
+// every system; the short-range chart only those near the current one, and leaves its cursor where it was for another.
+void CursorOnSelected(GameState& _state, GameState& _scratch)
+{
+  _scratch.Data() = _state.Data();
+  LoadSystemSeeds(_scratch, _state.Data().commander.selectedSystem.index);
+  if (!GetShortRangeOffset(_scratch).onChart)
+  {
+    return;
+  }
+  MoveCursorToSystem(_scratch);
+  _state.Data().commander.chartCursorX = _scratch.Data().commander.chartCursorX;
+  _state.Data().commander.chartCursorY = _scratch.Data().commander.chartCursorY;
+}
+
 // Hides the chart when its routine ends, however it ends.
 class ChartShown
 {
@@ -126,7 +141,7 @@ ChartScreen StepFind(const ChartScreen& _screen, const ChartInput& _input)
   switch (_input.action)
   {
   case ChartAction::OpenFind:
-    screen = ChartScreen{.find = FindState::Typing, .typed = {}};
+    screen = ChartScreen{.find = FindState::Typing, .typed = {}, .moved = screen.moved};
     break;
   case ChartAction::Type:
     if (screen.typed.size() < FIND_LETTERS_MOST)
@@ -141,7 +156,7 @@ ChartScreen StepFind(const ChartScreen& _screen, const ChartInput& _input)
     }
     break;
   case ChartAction::CloseFind:
-    screen = ChartScreen{};
+    screen = ChartScreen{.find = FindState::Closed, .typed = {}, .moved = screen.moved};
     break;
   case ChartAction::None:
   case ChartAction::Recenter:
@@ -174,16 +189,17 @@ ChartView ChartViewOf(const GameState& _state, GameState& _scratch, const ChartS
   _scratch.Data() = _state.Data();
   view.stars = ChartStars(_scratch);
 
-  // The target: the system latched for the jump while the countdown runs, otherwise the one the cursor selects as the chart
-  // closes.
+  // The target: the system latched for the jump while the countdown runs; the one the cursor selects as the chart closes, once it
+  // has moved; otherwise the one selected, which both charts share (D124).
   _scratch.Data() = _state.Data();
   view.countdown = _state.Data().jump.hyperspaceCountdown;
   view.locked = view.countdown != 0;
-  if (view.locked)
+  if (view.locked || !_screen.moved)
   {
-    const std::uint8_t latched = _state.Data().hyperspace.hyperspaceTarget.index;
-    _scratch.Data().commander.selectedSystem.index = latched;
-    LoadSystemSeeds(_scratch, latched);
+    const std::uint8_t system =
+      view.locked ? _state.Data().hyperspace.hyperspaceTarget.index : _state.Data().commander.selectedSystem.index;
+    _scratch.Data().commander.selectedSystem.index = system;
+    LoadSystemSeeds(_scratch, system);
     ComputeDistanceToSystem(_scratch);
     DescribeSystem(_scratch);
   }
@@ -211,6 +227,7 @@ Task<ScreenKey> ShowChartScreen(GameState& _state, Host& _host, ChartKind _kind,
   EnterChart(_state, _host, _kind);
   const ChartShown shown(_host);
   GameState scratch;
+  CursorOnSelected(_state, scratch);
   ChartScreen screen;
   const std::uint8_t ownKey = OwnKey(_kind, _place);
   const auto publish = [&]() { _host.ShowChart(ChartViewOf(_state, scratch, screen, _kind, _place)); };
@@ -226,6 +243,7 @@ Task<ScreenKey> ShowChartScreen(GameState& _state, Host& _host, ChartKind _kind,
       {
         screen = ChartScreen{};
       }
+      screen.moved = true;
       changed = true;
     }
     const KeyPress key = GetKey(_state);
@@ -237,25 +255,27 @@ Task<ScreenKey> ShowChartScreen(GameState& _state, Host& _host, ChartKind _kind,
       case ChartAction::None:
         if (screen.find != FindState::Typing && key.scanCode != ownKey && ClosesScreen(key.scanCode, _place))
         {
-          LeaveChart(_state);
+          LeaveChart(_state, screen.moved);
           co_return ScreenKey{key.scanCode};
         }
         break;
       case ChartAction::Recenter:
         RecenterChartCursor(_state);
-        screen = ChartScreen{};
+        screen = ChartScreen{.find = FindState::Closed, .typed = {}, .moved = true};
         changed = true;
         break;
       case ChartAction::Nearest:
         NoteNearestSystem(_state);
-        screen = ChartScreen{};
+        screen = ChartScreen{.find = FindState::Closed, .typed = {}, .moved = true};
         changed = true;
         break;
       case ChartAction::Submit:
       {
         TypeFindInput(_state, screen.typed);
         const FindResult outcome = FindTypedSystem(_state);
-        screen = outcome == FindResult::NotOnChart ? ChartScreen{.find = FindState::NotOnChart, .typed = screen.typed} : ChartScreen{};
+        const bool moved = screen.moved || outcome != FindResult::NotOnChart;
+        screen = outcome == FindResult::NotOnChart ? ChartScreen{.find = FindState::NotOnChart, .typed = screen.typed, .moved = moved}
+                                                   : ChartScreen{.find = FindState::Closed, .typed = {}, .moved = moved};
         changed = true;
         break;
       }
