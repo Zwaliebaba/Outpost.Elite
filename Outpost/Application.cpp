@@ -36,7 +36,6 @@ namespace
 constexpr wchar_t TITLE[] = L"Outpost.Elite";
 constexpr std::uint32_t LOGICAL_WIDTH = 640; // the window's first size, 4:3 (D8), START_SCALE times over
 constexpr std::uint32_t LOGICAL_HEIGHT = 480;
-constexpr std::uint32_t PICTURE_PIXELS = 1; // the renderer's picture, which nothing draws into since the CGA went (ADR-069)
 constexpr int START_SCALE = 2;
 constexpr bool START_FULL_SCREEN = true; // borderless over the whole screen, F11 returning to a window START_SCALE times (D42)
 constexpr std::uint32_t SAMPLE_RATE = 44'100;
@@ -219,12 +218,7 @@ int Application::Run(HINSTANCE _instance, bool _cheat)
   }
   m_window = window.Handle();
   Engine::Renderer renderer;
-  if (!renderer.Create(Engine::Renderer::Desc{.warp = false,
-                                              .sourceWidth = PICTURE_PIXELS,
-                                              .sourceHeight = PICTURE_PIXELS,
-                                              .logicalWidth = LOGICAL_WIDTH,
-                                              .logicalHeight = LOGICAL_HEIGHT}) ||
-      !renderer.AttachWindow(window.Handle()))
+  if (!renderer.Create(Engine::Renderer::Desc{.warp = false}) || !renderer.AttachWindow(window.Handle()))
   {
     Fail(L"Direct3D 12 is not available on this machine.");
     return 1;
@@ -350,42 +344,42 @@ int Application::Run(HINSTANCE _instance, bool _cheat)
     if (const Elite::MarketView* const market = platform->ShownMarket())
     {
       DockedMarket::Draw(*market, pointer, measure, canvas);
-      presented = renderer.Present({}, DOCKED_BACKGROUND, nullptr, &canvas);
+      presented = renderer.Present(DOCKED_BACKGROUND, nullptr, &canvas);
     }
     else if (const Elite::BriefingView* const briefing = platform->ShownBriefing())
     {
       DockedBriefing::Draw(*briefing, pointer, measure, canvas);
-      presented = renderer.Present({}, DOCKED_BACKGROUND, nullptr, &canvas);
+      presented = renderer.Present(DOCKED_BACKGROUND, nullptr, &canvas);
     }
     else if (const Elite::EquipView* const equip = platform->ShownEquip())
     {
       DockedEquip::Draw(*equip, pointer, measure, canvas);
-      presented = renderer.Present({}, DOCKED_BACKGROUND, nullptr, &canvas);
+      presented = renderer.Present(DOCKED_BACKGROUND, nullptr, &canvas);
     }
     else if (const Elite::StatusView* const status = platform->ShownStatus())
     {
       DockedStatus::Draw(*status, pointer, measure, canvas);
-      presented = renderer.Present({}, DOCKED_BACKGROUND, nullptr, &canvas);
+      presented = renderer.Present(DOCKED_BACKGROUND, nullptr, &canvas);
     }
     else if (const Elite::ChartView* const chart = platform->ShownChart())
     {
       DockedChart::Draw(*chart, pointer, measure, canvas);
-      presented = renderer.Present({}, DOCKED_BACKGROUND, nullptr, &canvas);
+      presented = renderer.Present(DOCKED_BACKGROUND, nullptr, &canvas);
     }
     else if (const Elite::DiscView* const disc = platform->ShownDisc())
     {
       DockedDisc::Draw(*disc, pointer, measure, canvas);
-      presented = renderer.Present({}, DOCKED_BACKGROUND, nullptr, &canvas);
+      presented = renderer.Present(DOCKED_BACKGROUND, nullptr, &canvas);
     }
     else if (latest.sequence != 0 && platform->SpaceViewShown())
     {
       Cockpit::Draw(latest.dashboard, latest.sight, elapsedMilliseconds, renderer, canvas);
       SpaceView::DrawWords(*platform, Cockpit::VIEW, canvas);
-      presented = renderer.Present({}, COCKPIT_BACKGROUND, spaceView.Frame(*platform, Cockpit::VIEW, Cockpit::WINDOW), &canvas);
+      presented = renderer.Present(COCKPIT_BACKGROUND, spaceView.Frame(*platform, Cockpit::VIEW, Cockpit::WINDOW), &canvas);
     }
     else
     {
-      presented = renderer.Present({}, COCKPIT_BACKGROUND, nullptr, &canvas);
+      presented = renderer.Present(COCKPIT_BACKGROUND, nullptr, &canvas);
     }
     if (!presented)
     {

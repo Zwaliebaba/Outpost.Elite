@@ -536,7 +536,8 @@ After D44, no replay reaches the docked screens. Their rules are functions with 
 | D124 | The galactic and the short-range chart each pick their own target: a system selected on one is not the other's (raised by the owner, 2026-10-18) | Share it: a chart opens on the selected system, and closing it selects the cursor's system only if the cursor moved. | **As recommended** (2026-10-18), with the charts' legend box removed. ADR-069 records it. |
 | D125 | What F8, F9 and F10 show in flight, which still printed the market's prices, the status and the inventory on the CGA's text page (raised with the CGA's removal, 2026-10-18) | Reuse D01 read only and D08, each with the flight's key bar; F10 does nothing, as docked (D96). | **As recommended** (2026-10-18). ADR-069 records it. |
 | D126 | How the station tunnel and the hyperspace rings are drawn once the CGA's picture goes (raised with the CGA's removal, 2026-10-18) | The owner's design, or one of the change's. | **The change's own design** (2026-10-18): the snapshot carries the frame's rectangles or rings, which the renderer draws as glowing strokes, a corridor with rails or loops, across the wider window. ADR-069 records it. |
-| D127 | Whether the CGA goes once nothing draws with it, and with it the picture digests of D33 (raised with the CGA's removal, 2026-10-18) | Remove it, and retire the pictures, the outcomes staying the guard. | **As recommended** (2026-10-18). ADR-069 records it; the renderer's own picture path is left to a change of its own. |
+| D127 | Whether the CGA goes once nothing draws with it, and with it the picture digests of D33 (raised with the CGA's removal, 2026-10-18) | Remove it, and retire the pictures, the outcomes staying the guard. | **As recommended** (2026-10-18). ADR-069 records it; ADR-070 removes the renderer's picture path it left. |
+| D128 | Whether to remove what ADR-069 left unused: the renderer's picture path, and the state members and constants nothing references (raised with ADR-069, 2026-10-18) | Remove both, keeping the commander file's members, which are its format. | **As recommended** (2026-10-18). ADR-070 records it. |
 
 ## 9. ADRs this plan produces
 
@@ -612,4 +613,5 @@ After D44, no replay reaches the docked screens. Their rules are functions with 
 | [ADR-067](ADR/ADR-067-disc-access.md) | D10, Disc access: the catalogue to pick from, a name typed on the screen, the disk work still Start's (D82, D102, D117 to D120) | Phase 6, piece 5 — written |
 | [ADR-068](ADR/ADR-068-mission-briefing.md) | D09, a mission's briefing and debriefing: a view over D08 while the original routines wait (D82, D101, D105, D121 to D123) | Phase 6, piece 5 — written |
 | [ADR-069](ADR/ADR-069-the-cga-removed.md) | The CGA removed: the tunnels drawn by the renderer, D01 and D08 in flight, the pictures retired (D124 to D127) | Phase 6, piece 5 — written |
+| [ADR-070](ADR/ADR-070-unused-parts-removed.md) | Unused parts removed: the renderer's picture path and the state nothing reads (D128) | Phase 6, piece 5 — written |
 | — | Wholly native: the other steps after the state (D76–D80) | Phase 7 — to write |

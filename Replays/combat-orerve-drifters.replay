@@ -12,14 +12,14 @@ wait 0.5; key space; wait 3.5      # any key: the credits, then the status scree
 key Escape; wait 0.3               # D10, Disc access, on Load commander
 key 1; wait 0.3                    # Load commander: the catalogue, JAMESON.CDR selected
 key Return; wait 0.5               # loaded
-digest loaded 8c1acee6806f6cdc8a1ed2740086893843a030b5a626a6cd21710596aeee2259
+digest loaded 83969916cdb9dc15325f86eaa4c689277409d67f8f6e2ba4164a0678566d2c9a
 outcome loaded galaxy=0 system=7 witchSpace=0 docked=0 inFlight=0 dead=0 creditsTenths=1000 legalStatus=0 kills=20 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=1 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=1 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=0 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=1 laserTypes=3 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=0 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=48 fuel=255 shipSlotsInUse=1 cabinTemperature=12 laserTemperature=0 altitude=255 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 key F5; wait 0.5                   # the short-range chart: F finds a system by name
 key f; wait 0.3; key o; key r; key e; key r; key v; key e; key Return; wait 0.399
 key F1; wait 0.401                   # launch
 down h; wait 1; up h               # the countdown to Orerve
 wait 8
-digest orerve b08d559866b66d05e1e88b50adc0182c47726d62a6ea86e56811f5a69dce6533
+digest orerve 6de3a68138d3dd20b6792077d9ef3d6d38fdda0b628961b941d3d6d2743fc29a
 outcome orerve galaxy=0 system=255 witchSpace=0 docked=0 inFlight=1 dead=0 creditsTenths=1000 legalStatus=0 kills=20 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=1 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=1 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=0 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=1 laserTypes=3 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=1 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=255 aftShield=255 speed=20 fuel=11 shipSlotsInUse=3 cabinTemperature=10 laserTemperature=0 altitude=254 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0
 # The fight, as recorded: a step for each change of the keys, and the frames between.
 down period; down j; wait 0.350
@@ -155,5 +155,5 @@ down Up; wait 0.100
 up Right; wait 0.100
 down Left; wait 0.050
 up Left; up Up
-digest after-the-fight 3334bce35fed395b90dfe48bc43736bc05f8b3d414637f52f9723a4a66379ad6
+digest after-the-fight 650cc98fa70764885aab935da7a883e8882bda57bf8f35a9e5e2d9c705cacb42
 outcome after-the-fight galaxy=0 system=255 witchSpace=0 docked=0 inFlight=1 dead=0 creditsTenths=1000 legalStatus=0 kills=22 title=COMMANDER cargo=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 refugeesTonnes=0 missiles=3 largeCargoBay=0 ecm=1 fuelScoops=0 escapePod=0 energyBomb=0 energyUnit=1 dockingComputer=0 galacticHyperdrive=0 maskingDevice=0 antiEcm=0 pulseLasers=0 beamLasers=0 miningLasers=0 militaryLasers=1 laserMounts=1 laserTypes=3 mission=0 missionStage=0 missionJumps=0 jumpedSinceBriefing=1 maskShipsLeft=0 maskShipDestroyed=0 maskingDeviceRecovered=0 fledMaskShip=0 maskSystemJumps=0 invasion=0 invadedStationDestroyed=0 energy=1023 foreShield=254 aftShield=243 speed=48 fuel=11 shipSlotsInUse=6 cabinTemperature=11 laserTemperature=0 altitude=254 fuelLeakDelayFrames=0 fuelLeakFrames=0 supernovaFrames=0 supernovaHeat=0

@@ -22,8 +22,7 @@ constexpr std::uint8_t FLAG_HOSTILE = 0x01;
 constexpr std::uint8_t FLAG_BLIP_DRAWN = 0x02;
 constexpr std::uint8_t FLAG_DEVICE = 0x20;
 
-// The behaviour classes, behaviorHandlers' indexes.
-constexpr std::uint8_t INERT_CLASS = 0;
+// The behaviour classes, behaviorHandlers' indexes; class 0 is inert.
 constexpr std::uint8_t STATION_CLASS = 1;
 constexpr std::uint8_t MISSILE_CLASS = 2;
 constexpr std::uint8_t DRIFTING_CLASS = 3;

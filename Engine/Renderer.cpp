@@ -6,8 +6,7 @@
 #include "CompiledShader/CanvasPS.h"
 #include "CompiledShader/CanvasVS.h"
 #include "CompiledShader/CompositePS.h"
-#include "CompiledShader/PresentPS.h"
-#include "CompiledShader/PresentVS.h"
+#include "CompiledShader/FullScreenVS.h"
 #include "CompiledShader/ScenePS.h"
 #include "CompiledShader/SceneVS.h"
 #include "CompiledShader/SphereGlowPS.h"
@@ -30,7 +29,6 @@ namespace
 constexpr DXGI_FORMAT TARGET_FORMAT = DXGI_FORMAT_R8G8B8A8_UNORM;
 constexpr DXGI_FORMAT TARGET_SRGB_FORMAT = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;   // the canvas's view of the same target (D47)
 constexpr DXGI_FORMAT TARGET_TYPELESS_FORMAT = DXGI_FORMAT_R8G8B8A8_TYPELESS; // a capture's target, which has both views
-constexpr DXGI_FORMAT PICTURE_FORMAT = DXGI_FORMAT_B8G8R8A8_UNORM;            // a 0x00RRGGBB word, little-endian
 constexpr UINT PRESENT_SYNC_INTERVAL = 1;
 constexpr UINT FRAME_LATENCY = 1;
 constexpr UINT SWAP_CHAIN_FLAGS = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
@@ -41,9 +39,6 @@ constexpr DWORD LONGEST_FRAME_WAIT_MILLISECONDS = 1000; // a swap chain that nev
 constexpr std::uint32_t DEFAULT_REFRESH_HERTZ = 60;
 constexpr std::int64_t REFRESH_CHECKS_PER_SECOND = 1;
 constexpr std::int64_t HUNDRED_NANOSECONDS_PER_SECOND = 10'000'000;
-constexpr UINT ROOT_PARAMETER_PICTURE = 0;
-constexpr UINT ROOT_PARAMETER_SCALE = 1;
-constexpr UINT SCALE_CONSTANT_COUNT = 4;
 
 // The scene (ADR-033).
 constexpr DXGI_FORMAT SCENE_FORMAT = DXGI_FORMAT_R16G16B16A16_FLOAT;
@@ -61,12 +56,12 @@ constexpr UINT PALETTE_CONSTANT_COUNT = 16;
 constexpr UINT ROOT_PARAMETER_COMPOSITE_TEXTURES = 0;
 constexpr UINT ROOT_PARAMETER_COMPOSITE_CONSTANTS = 1;
 constexpr UINT COMPOSITE_CONSTANT_COUNT = 48;
-constexpr UINT DESCRIPTOR_SCENE = 1; // then the layers and the bloom, the composite's table
-constexpr UINT DESCRIPTOR_LAYERS = 2;
-constexpr UINT DESCRIPTOR_BLOOM = 3; // the bloom, then its blur
+constexpr UINT DESCRIPTOR_SCENE = 0; // then the layers and the bloom, the composite's table
+constexpr UINT DESCRIPTOR_LAYERS = 1;
+constexpr UINT DESCRIPTOR_BLOOM = 2; // the bloom, then its blur
 constexpr UINT COMPOSITE_TEXTURES = 3;
-constexpr UINT DESCRIPTOR_ATLAS = 5;
-constexpr UINT DESCRIPTOR_SHAPES = 6; // one for each frame in flight
+constexpr UINT DESCRIPTOR_ATLAS = 4;
+constexpr UINT DESCRIPTOR_SHAPES = 5; // one for each frame in flight
 constexpr UINT DESCRIPTOR_COUNT = DESCRIPTOR_SHAPES + Renderer::FRAME_COUNT;
 // The spheres (ADR-035): SpherePS's and SphereGlowPS's constants.
 constexpr UINT ROOT_PARAMETER_SPHERE_FRAME = 0;
@@ -315,29 +310,6 @@ DesignPlacement PlaceDesign(std::uint32_t _width, std::uint32_t _height) noexcep
                          .top = (static_cast<float>(_height) - DESIGN_HEIGHT * scale) / 2.0f};
 }
 
-ScreenRect PlacePicture(std::uint32_t _targetWidth, std::uint32_t _targetHeight, std::uint32_t _logicalWidth,
-                        std::uint32_t _logicalHeight) noexcept
-{
-  const std::uint32_t scale = std::min(_targetWidth / _logicalWidth, _targetHeight / _logicalHeight);
-  std::uint32_t width = _logicalWidth * scale;
-  std::uint32_t height = _logicalHeight * scale;
-  if (scale == 0)
-  {
-    // The largest fit, by whichever side runs out first, the other side rounded down.
-    if (std::uint64_t{_targetWidth} * _logicalHeight <= std::uint64_t{_targetHeight} * _logicalWidth)
-    {
-      width = _targetWidth;
-      height = static_cast<std::uint32_t>(std::uint64_t{_targetWidth} * _logicalHeight / _logicalWidth);
-    }
-    else
-    {
-      height = _targetHeight;
-      width = static_cast<std::uint32_t>(std::uint64_t{_targetHeight} * _logicalWidth / _logicalHeight);
-    }
-  }
-  return ScreenRect{.left = (_targetWidth - width) / 2, .top = (_targetHeight - height) / 2, .width = width, .height = height};
-}
-
 Renderer::~Renderer()
 {
   if (m_queue && m_fence)
@@ -360,11 +332,7 @@ Renderer::~Renderer()
 
 bool Renderer::Create(const Desc& _desc)
 {
-  m_sourceWidth = _desc.sourceWidth;
-  m_sourceHeight = _desc.sourceHeight;
-  m_logicalWidth = _desc.logicalWidth;
-  m_logicalHeight = _desc.logicalHeight;
-  return CreateDevice(_desc.warp) && CreatePipeline() && CreateScenePipelines() && CreatePicture() && CreateCanvasPipeline();
+  return CreateDevice(_desc.warp) && CreateResourceHeap() && CreateScenePipelines() && CreateCanvasPipeline();
 }
 
 bool Renderer::CreateDevice(bool _warp)
@@ -417,97 +385,6 @@ bool Renderer::CreateDevice(bool _warp)
   }
   m_fenceEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
   return m_fenceEvent != nullptr;
-}
-
-bool Renderer::CreatePipeline()
-{
-  D3D12_DESCRIPTOR_RANGE pictureRange{};
-  pictureRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-  pictureRange.NumDescriptors = 1;
-  pictureRange.BaseShaderRegister = 0;
-  pictureRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-
-  std::array<D3D12_ROOT_PARAMETER, 2> parameters{};
-  parameters[ROOT_PARAMETER_PICTURE].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-  parameters[ROOT_PARAMETER_PICTURE].DescriptorTable.NumDescriptorRanges = 1;
-  parameters[ROOT_PARAMETER_PICTURE].DescriptorTable.pDescriptorRanges = &pictureRange;
-  parameters[ROOT_PARAMETER_PICTURE].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-  parameters[ROOT_PARAMETER_SCALE].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-  parameters[ROOT_PARAMETER_SCALE].Constants.ShaderRegister = 0;
-  parameters[ROOT_PARAMETER_SCALE].Constants.Num32BitValues = SCALE_CONSTANT_COUNT;
-  parameters[ROOT_PARAMETER_SCALE].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-
-  const D3D12_STATIC_SAMPLER_DESC sampler{.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR,
-                                          .AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
-                                          .AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
-                                          .AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
-                                          .MipLODBias = 0.0f,
-                                          .MaxAnisotropy = 1,
-                                          .ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER,
-                                          .BorderColor = D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK,
-                                          .MinLOD = 0.0f,
-                                          .MaxLOD = D3D12_FLOAT32_MAX,
-                                          .ShaderRegister = 0,
-                                          .RegisterSpace = 0,
-                                          .ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL};
-
-  D3D12_ROOT_SIGNATURE_DESC rootDesc{};
-  rootDesc.NumParameters = static_cast<UINT>(parameters.size());
-  rootDesc.pParameters = parameters.data();
-  rootDesc.NumStaticSamplers = 1;
-  rootDesc.pStaticSamplers = &sampler;
-  rootDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
-  Microsoft::WRL::ComPtr<ID3DBlob> serialized;
-  Microsoft::WRL::ComPtr<ID3DBlob> errors;
-  if (FAILED(D3D12SerializeRootSignature(&rootDesc, D3D_ROOT_SIGNATURE_VERSION_1, &serialized, &errors)) ||
-      FAILED(m_device->CreateRootSignature(0, serialized->GetBufferPointer(), serialized->GetBufferSize(), IID_PPV_ARGS(&m_rootSignature))))
-  {
-    return false;
-  }
-
-  const D3D12_GRAPHICS_PIPELINE_STATE_DESC pipelineDesc{
-    .pRootSignature = m_rootSignature.Get(),
-    .VS = {g_PresentVS, sizeof(g_PresentVS)},
-    .PS = {g_PresentPS, sizeof(g_PresentPS)},
-    .DS = {},
-    .HS = {},
-    .GS = {},
-    .StreamOutput = {},
-    .BlendState = {.AlphaToCoverageEnable = FALSE,
-                   .IndependentBlendEnable = FALSE,
-                   .RenderTarget = {REPLACE_TARGET, REPLACE_TARGET, REPLACE_TARGET, REPLACE_TARGET, REPLACE_TARGET, REPLACE_TARGET,
-                                    REPLACE_TARGET, REPLACE_TARGET}},
-    .SampleMask = UINT_MAX,
-    .RasterizerState = {.FillMode = D3D12_FILL_MODE_SOLID,
-                        .CullMode = D3D12_CULL_MODE_NONE,
-                        .FrontCounterClockwise = FALSE,
-                        .DepthBias = 0,
-                        .DepthBiasClamp = 0.0f,
-                        .SlopeScaledDepthBias = 0.0f,
-                        .DepthClipEnable = TRUE,
-                        .MultisampleEnable = FALSE,
-                        .AntialiasedLineEnable = FALSE,
-                        .ForcedSampleCount = 0,
-                        .ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF},
-    .DepthStencilState = {.DepthEnable = FALSE,
-                          .DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO,
-                          .DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS,
-                          .StencilEnable = FALSE,
-                          .StencilReadMask = D3D12_DEFAULT_STENCIL_READ_MASK,
-                          .StencilWriteMask = D3D12_DEFAULT_STENCIL_WRITE_MASK,
-                          .FrontFace = KEEP_STENCIL,
-                          .BackFace = KEEP_STENCIL},
-    .InputLayout = {},
-    .IBStripCutValue = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED,
-    .PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE,
-    .NumRenderTargets = 1,
-    .RTVFormats = {TARGET_FORMAT},
-    .DSVFormat = DXGI_FORMAT_UNKNOWN,
-    .SampleDesc = {.Count = 1, .Quality = 0},
-    .NodeMask = 0,
-    .CachedPSO = {},
-    .Flags = D3D12_PIPELINE_STATE_FLAG_NONE};
-  return SUCCEEDED(m_device->CreateGraphicsPipelineState(&pipelineDesc, IID_PPV_ARGS(&m_pipeline)));
 }
 
 bool Renderer::CreateScenePipelines()
@@ -601,7 +478,7 @@ bool Renderer::CreateScenePipelines()
   }
   const D3D12_GRAPHICS_PIPELINE_STATE_DESC compositePipelineDesc{
     .pRootSignature = m_compositeSignature.Get(),
-    .VS = {g_PresentVS, sizeof(g_PresentVS)},
+    .VS = {g_FullScreenVS, sizeof(g_FullScreenVS)},
     .PS = {g_CompositePS, sizeof(g_CompositePS)},
     .DS = {},
     .HS = {},
@@ -663,7 +540,7 @@ bool Renderer::CreateScenePipelines()
 bool Renderer::CreateSpherePipelines(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& _modelDesc)
 {
   // The spheres and their glow (ADR-035): two sets of constants for the pixel shader, which traces the sphere over the whole
-  // inset, PresentVS's triangle. A sphere writes its depth; its glow tests against it and adds to the target.
+  // inset, FullScreenVS's triangle. A sphere writes its depth; its glow tests against it and adds to the target.
   const std::array<D3D12_ROOT_PARAMETER, 2> sphereParameters = {Constants(0, SPHERE_FRAME_CONSTANT_COUNT, D3D12_SHADER_VISIBILITY_PIXEL),
                                                                 Constants(1, SPHERE_CONSTANT_COUNT, D3D12_SHADER_VISIBILITY_PIXEL)};
   D3D12_ROOT_SIGNATURE_DESC sphereDesc{};
@@ -677,7 +554,7 @@ bool Renderer::CreateSpherePipelines(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& _
   D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = _modelDesc;
   desc.pRootSignature = m_sphereSignature.Get();
   desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-  desc.VS = {g_PresentVS, sizeof(g_PresentVS)};
+  desc.VS = {g_FullScreenVS, sizeof(g_FullScreenVS)};
   desc.PS = {g_SpherePS, sizeof(g_SpherePS)};
   desc.InputLayout = {};
   if (FAILED(m_device->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&m_spherePipeline))))
@@ -743,45 +620,17 @@ bool Renderer::CreateBloomPipeline(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& _co
   return SUCCEEDED(m_device->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&m_bloomPipeline)));
 }
 
-bool Renderer::CreatePicture()
+bool Renderer::CreateResourceHeap()
 {
-  const D3D12_RESOURCE_DESC textureDesc = TextureOfSize(m_sourceWidth, m_sourceHeight, PICTURE_FORMAT, D3D12_RESOURCE_FLAG_NONE);
-  const D3D12_HEAP_PROPERTIES defaultHeap = HeapOfType(D3D12_HEAP_TYPE_DEFAULT);
-  if (FAILED(m_device->CreateCommittedResource(&defaultHeap, D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
-                                               IID_PPV_ARGS(&m_picture))))
-  {
-    return false;
-  }
-
-  UINT64 uploadBytes = 0;
-  m_device->GetCopyableFootprints(&textureDesc, 0, 1, 0, &m_footprint, nullptr, nullptr, &uploadBytes);
-  m_uploadBytes = uploadBytes;
-  const D3D12_RESOURCE_DESC bufferDesc = BufferOfBytes(m_uploadBytes);
-  const D3D12_HEAP_PROPERTIES uploadHeap = HeapOfType(D3D12_HEAP_TYPE_UPLOAD);
-  for (Frame& frame : m_frames)
-  {
-    if (FAILED(m_device->CreateCommittedResource(&uploadHeap, D3D12_HEAP_FLAG_NONE, &bufferDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
-                                                 IID_PPV_ARGS(&frame.upload))))
-    {
-      return false;
-    }
-  }
-
   D3D12_DESCRIPTOR_HEAP_DESC resourceHeap{};
   resourceHeap.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-  resourceHeap.NumDescriptors = DESCRIPTOR_COUNT; // the picture, then the scene and its layers
+  resourceHeap.NumDescriptors = DESCRIPTOR_COUNT; // the scene and its layers, the bloom, the atlas and the shapes
   resourceHeap.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
   if (FAILED(m_device->CreateDescriptorHeap(&resourceHeap, IID_PPV_ARGS(&m_shaderResourceHeap))))
   {
     return false;
   }
   m_resourceStride = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-  D3D12_SHADER_RESOURCE_VIEW_DESC viewDesc{};
-  viewDesc.Format = PICTURE_FORMAT;
-  viewDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-  viewDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-  viewDesc.Texture2D.MipLevels = 1;
-  m_device->CreateShaderResourceView(m_picture.Get(), &viewDesc, m_shaderResourceHeap->GetCPUDescriptorHandleForHeapStart());
   return true;
 }
 
@@ -1137,12 +986,13 @@ bool Renderer::Drawable(const SceneFrame* _scene) noexcept
 
 ScreenRect Renderer::InsetPlace(const SceneInset& _inset, std::uint32_t _width, std::uint32_t _height, bool _design) const noexcept
 {
+  // In design units, or in the target's own pixels.
   float originX = 0.0f;
   float originY = 0.0f;
-  float across = 0.0f;
-  float down = 0.0f;
-  std::uint32_t limitX = _width;
-  std::uint32_t limitY = _height;
+  float across = 1.0f;
+  float down = 1.0f;
+  const std::uint32_t limitX = _width;
+  const std::uint32_t limitY = _height;
   if (_design)
   {
     const DesignPlacement design = PlaceDesign(_width, _height);
@@ -1150,16 +1000,6 @@ ScreenRect Renderer::InsetPlace(const SceneInset& _inset, std::uint32_t _width, 
     originY = design.top;
     across = design.scale;
     down = design.scale;
-  }
-  else
-  {
-    const ScreenRect picture = PlacePicture(_width, _height, m_logicalWidth, m_logicalHeight);
-    originX = static_cast<float>(picture.left);
-    originY = static_cast<float>(picture.top);
-    across = static_cast<float>(picture.width) / static_cast<float>(m_sourceWidth);
-    down = static_cast<float>(picture.height) / static_cast<float>(m_sourceHeight);
-    limitX = picture.left + picture.width;
-    limitY = picture.top + picture.height;
   }
   const auto edge = [](float _origin, float _at, float _scale)
   { return static_cast<std::uint32_t>(std::max(std::lround(_origin + _at * _scale), 0L)); };
@@ -1170,13 +1010,8 @@ ScreenRect Renderer::InsetPlace(const SceneInset& _inset, std::uint32_t _width, 
   return ScreenRect{.left = left, .top = top, .width = right > left ? right - left : 0, .height = bottom > top ? bottom - top : 0};
 }
 
-bool Renderer::Present(std::span<const std::uint32_t> _pixels, std::uint32_t _border, const SceneFrame* _scene, const Canvas* _canvas)
+bool Renderer::Present(std::uint32_t _background, const SceneFrame* _scene, const Canvas* _canvas)
 {
-  const bool picture = _canvas == nullptr;
-  if (picture && _pixels.size() < std::size_t{m_sourceWidth} * m_sourceHeight)
-  {
-    return true;
-  }
   if (IsIconic(m_window))
   {
     Sleep(UNSEEN_FRAME_MILLISECONDS); // nothing to wait for the display on, so the caller is paced here
@@ -1193,7 +1028,7 @@ bool Renderer::Present(std::span<const std::uint32_t> _pixels, std::uint32_t _bo
   targetView.ptr += std::size_t{index} * m_renderTargetStride;
   D3D12_CPU_DESCRIPTOR_HANDLE srgbView = m_srgbTargetHeap->GetCPUDescriptorHandleForHeapStart();
   srgbView.ptr += std::size_t{index} * m_renderTargetStride;
-  if (!DrawFrame(frame, targetView, srgbView, m_clientWidth, m_clientHeight, _border, _scene, _canvas, _pixels, target,
+  if (!DrawFrame(frame, targetView, srgbView, m_clientWidth, m_clientHeight, _background, _scene, _canvas, target,
                  D3D12_RESOURCE_STATE_PRESENT))
   {
     return false;
@@ -1261,16 +1096,14 @@ void Renderer::PaceToRefresh() noexcept
 }
 
 bool Renderer::DrawFrame(Frame& _frame, D3D12_CPU_DESCRIPTOR_HANDLE _targetView, D3D12_CPU_DESCRIPTOR_HANDLE _srgbView,
-                         std::uint32_t _width, std::uint32_t _height, std::uint32_t _border, const SceneFrame* _scene,
-                         const Canvas* _canvas, std::span<const std::uint32_t> _pixels, ID3D12Resource* _target,
-                         D3D12_RESOURCE_STATES _targetState)
+                         std::uint32_t _width, std::uint32_t _height, std::uint32_t _background, const SceneFrame* _scene,
+                         const Canvas* _canvas, ID3D12Resource* _target, D3D12_RESOURCE_STATES _targetState)
 {
-  const bool picture = _canvas == nullptr;
   const SceneFrame* scene = Drawable(_scene) ? _scene : nullptr;
   ScreenRect inset{};
   if (scene != nullptr)
   {
-    inset = InsetPlace(scene->inset, _width, _height, !picture);
+    inset = InsetPlace(scene->inset, _width, _height, _canvas != nullptr);
     if (inset.width == 0 || inset.height == 0)
     {
       scene = nullptr;
@@ -1280,7 +1113,7 @@ bool Renderer::DrawFrame(Frame& _frame, D3D12_CPU_DESCRIPTOR_HANDLE _targetView,
       return false;
     }
   }
-  if (!BeginFrame(_frame, _pixels, scene, picture))
+  if (!BeginFrame(_frame, scene))
   {
     return false;
   }
@@ -1289,21 +1122,14 @@ bool Renderer::DrawFrame(Frame& _frame, D3D12_CPU_DESCRIPTOR_HANDLE _targetView,
     const D3D12_RESOURCE_BARRIER toTarget = Transition(_target, _targetState, D3D12_RESOURCE_STATE_RENDER_TARGET);
     m_commands->ResourceBarrier(1, &toTarget);
   }
-  if (picture)
-  {
-    DrawPicture(_targetView, _width, _height, _border);
-  }
-  else
-  {
-    m_commands->OMSetRenderTargets(1, &_targetView, FALSE, nullptr);
-    const std::array<float, 4> border = {Channel(_border, 16), Channel(_border, 8), Channel(_border, 0), 1.0f};
-    m_commands->ClearRenderTargetView(_targetView, border.data(), 0, nullptr);
-  }
+  m_commands->OMSetRenderTargets(1, &_targetView, FALSE, nullptr);
+  const std::array<float, 4> background = {Channel(_background, 16), Channel(_background, 8), Channel(_background, 0), 1.0f};
+  m_commands->ClearRenderTargetView(_targetView, background.data(), 0, nullptr);
   if (scene != nullptr && !DrawScene(_targetView, inset, *scene))
   {
     return false;
   }
-  if (!picture && !DrawCanvas(_frame, _srgbView, _width, _height, *_canvas))
+  if (_canvas != nullptr && !DrawCanvas(_frame, _srgbView, _width, _height, *_canvas))
   {
     return false;
   }
@@ -1315,10 +1141,10 @@ bool Renderer::DrawFrame(Frame& _frame, D3D12_CPU_DESCRIPTOR_HANDLE _targetView,
   return true;
 }
 
-std::vector<std::uint32_t> Renderer::Capture(std::span<const std::uint32_t> _pixels, std::uint32_t _border, std::uint32_t _width,
-                                             std::uint32_t _height, const SceneFrame* _scene, const Canvas* _canvas)
+std::vector<std::uint32_t> Renderer::Capture(std::uint32_t _background, std::uint32_t _width, std::uint32_t _height,
+                                             const SceneFrame* _scene, const Canvas* _canvas)
 {
-  if ((_canvas == nullptr && _pixels.size() < std::size_t{m_sourceWidth} * m_sourceHeight) || _width == 0 || _height == 0)
+  if (_width == 0 || _height == 0)
   {
     return {};
   }
@@ -1360,7 +1186,7 @@ std::vector<std::uint32_t> Renderer::Capture(std::span<const std::uint32_t> _pix
   m_device->CreateRenderTargetView(target.Get(), &srgbDesc, srgbView);
 
   Frame& frame = m_frames[m_nextFrame];
-  if (!DrawFrame(frame, targetView, srgbView, _width, _height, _border, _scene, _canvas, _pixels, target.Get(),
+  if (!DrawFrame(frame, targetView, srgbView, _width, _height, _background, _scene, _canvas, target.Get(),
                  D3D12_RESOURCE_STATE_RENDER_TARGET))
   {
     return {};
@@ -1410,9 +1236,9 @@ std::vector<std::uint32_t> Renderer::Capture(std::span<const std::uint32_t> _pix
   return pixels;
 }
 
-bool Renderer::BeginFrame(Frame& _frame, std::span<const std::uint32_t> _pixels, const SceneFrame* _scene, bool _picture)
+bool Renderer::BeginFrame(Frame& _frame, const SceneFrame* _scene)
 {
-  // The frame's allocator and upload buffer are the GPU's until the frame it last drew is done.
+  // The frame's allocator and upload buffers are the GPU's until the frame it last drew is done.
   if (!WaitForFrame(_frame))
   {
     return false;
@@ -1456,49 +1282,11 @@ bool Renderer::BeginFrame(Frame& _frame, std::span<const std::uint32_t> _pixels,
     view.ptr += std::size_t{DESCRIPTOR_LAYERS} * m_resourceStride;
     m_device->CreateShaderResourceView(m_layers.Get(), &viewDesc, view);
   }
-  void* mapped = nullptr;
-  const D3D12_RANGE nothingRead{0, 0};
-  if (_picture)
-  {
-    if (FAILED(_frame.upload->Map(0, &nothingRead, &mapped)))
-    {
-      return false;
-    }
-    auto* rows = static_cast<std::byte*>(mapped) + m_footprint.Offset;
-    for (std::uint32_t row = 0; row < m_sourceHeight; ++row)
-    {
-      std::memcpy(rows + std::size_t{row} * m_footprint.Footprint.RowPitch, _pixels.data() + std::size_t{row} * m_sourceWidth,
-                  std::size_t{m_sourceWidth} * sizeof(std::uint32_t));
-    }
-    _frame.upload->Unmap(0, nullptr);
-  }
-
-  if (FAILED(_frame.allocator->Reset()) || FAILED(m_commands->Reset(_frame.allocator.Get(), m_pipeline.Get())))
-  {
-    return false;
-  }
-  if (_picture && !CopyPicture(_frame))
+  if (FAILED(_frame.allocator->Reset()) || FAILED(m_commands->Reset(_frame.allocator.Get(), nullptr)))
   {
     return false;
   }
   return _scene == nullptr || UploadLayers(_frame, *_scene);
-}
-
-bool Renderer::CopyPicture(Frame& _frame)
-{
-  D3D12_TEXTURE_COPY_LOCATION destination{};
-  destination.pResource = m_picture.Get();
-  destination.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-  destination.SubresourceIndex = 0;
-  D3D12_TEXTURE_COPY_LOCATION source{};
-  source.pResource = _frame.upload.Get();
-  source.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-  source.PlacedFootprint = m_footprint;
-  m_commands->CopyTextureRegion(&destination, 0, 0, 0, &source, nullptr);
-  const D3D12_RESOURCE_BARRIER toRead =
-    Transition(m_picture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-  m_commands->ResourceBarrier(1, &toRead);
-  return true;
 }
 
 bool Renderer::UploadLayers(Frame& _frame, const SceneFrame& _scene)
@@ -1536,41 +1324,6 @@ bool Renderer::UploadLayers(Frame& _frame, const SceneFrame& _scene)
     Transition(m_layers.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
   m_commands->ResourceBarrier(1, &layersToRead);
   return true;
-}
-
-void Renderer::DrawPicture(D3D12_CPU_DESCRIPTOR_HANDLE _targetView, std::uint32_t _width, std::uint32_t _height, std::uint32_t _border)
-{
-  m_commands->OMSetRenderTargets(1, &_targetView, FALSE, nullptr);
-  const std::array<float, 4> border = {Channel(_border, 16), Channel(_border, 8), Channel(_border, 0), 1.0f};
-  m_commands->ClearRenderTargetView(_targetView, border.data(), 0, nullptr);
-
-  const ScreenRect place = PlacePicture(_width, _height, m_logicalWidth, m_logicalHeight);
-  D3D12_VIEWPORT viewport{};
-  viewport.TopLeftX = static_cast<float>(place.left);
-  viewport.TopLeftY = static_cast<float>(place.top);
-  viewport.Width = static_cast<float>(place.width);
-  viewport.Height = static_cast<float>(place.height);
-  viewport.MaxDepth = 1.0f;
-  const D3D12_RECT scissor{static_cast<LONG>(place.left), static_cast<LONG>(place.top), static_cast<LONG>(place.left + place.width),
-                           static_cast<LONG>(place.top + place.height)};
-  m_commands->RSSetViewports(1, &viewport);
-  m_commands->RSSetScissorRects(1, &scissor);
-
-  m_commands->SetGraphicsRootSignature(m_rootSignature.Get());
-  ID3D12DescriptorHeap* heaps[] = {m_shaderResourceHeap.Get()};
-  m_commands->SetDescriptorHeaps(1, heaps);
-  m_commands->SetGraphicsRootDescriptorTable(ROOT_PARAMETER_PICTURE, m_shaderResourceHeap->GetGPUDescriptorHandleForHeapStart());
-  const std::array<std::uint32_t, SCALE_CONSTANT_COUNT> constants = {
-    std::bit_cast<std::uint32_t>(static_cast<float>(m_sourceWidth)), std::bit_cast<std::uint32_t>(static_cast<float>(m_sourceHeight)),
-    std::bit_cast<std::uint32_t>(viewport.Width / static_cast<float>(m_sourceWidth)),
-    std::bit_cast<std::uint32_t>(viewport.Height / static_cast<float>(m_sourceHeight))};
-  m_commands->SetGraphicsRoot32BitConstants(ROOT_PARAMETER_SCALE, SCALE_CONSTANT_COUNT, constants.data(), 0);
-  m_commands->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-  m_commands->DrawInstanced(3, 1, 0, 0);
-
-  const D3D12_RESOURCE_BARRIER toWrite =
-    Transition(m_picture.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
-  m_commands->ResourceBarrier(1, &toWrite);
 }
 
 bool Renderer::DrawScene(D3D12_CPU_DESCRIPTOR_HANDLE _targetView, const ScreenRect& _place, const SceneFrame& _scene)

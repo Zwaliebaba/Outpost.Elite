@@ -29,12 +29,6 @@ struct ScreenRect
   friend bool operator==(const ScreenRect&, const ScreenRect&) = default;
 };
 
-/// Where a picture of _logicalWidth x _logicalHeight at scale 1 goes on a target of _targetWidth x _targetHeight physical
-/// pixels (D46): the largest whole-number multiple of its logical size that fits, centred, the odd pixel right of and below
-/// it; or, on a target smaller than the logical size, the largest fit that keeps its shape. The logical size is not 0.
-[[nodiscard]] ScreenRect PlacePicture(std::uint32_t _targetWidth, std::uint32_t _targetHeight, std::uint32_t _logicalWidth,
-                                      std::uint32_t _logicalHeight) noexcept;
-
 /// Where design units go on a target (D48): scale screen pixels to a unit, the smaller of the target's width over 1920 and its
 /// height over 1080, with design (0, 0) at (left, top), so that the 1920 x 1080 design is centred.
 struct DesignPlacement
@@ -101,26 +95,27 @@ struct SceneSky
   float starDensity = 0.0f;              ///< 0 to 1
 };
 
-/// Where a scene is drawn over the picture and how (ADR-033): an inset rectangle of the picture, in its source pixels, or of the
-/// design, in design units, when the frame draws a canvas in place of the picture (ADR-034), which the scene replaces; the camera's projection onto it; the light; the four palette colours its models and layers are drawn in; and
-/// two layers of the inset's own pixels, under and over the scene, each a palette index or SCENE_LAYER_CLEAR.
+/// Where a scene is drawn and how (ADR-033): an inset rectangle of the target, in design units when the frame draws a canvas
+/// (ADR-034), or in the target's own pixels when it draws none (ADR-070); the camera's projection onto it; the light; the four
+/// palette colours its models and layers are drawn in; and two layers of the inset's own pixels, under and over the scene, each a
+/// palette index or SCENE_LAYER_CLEAR.
 ///
 /// The camera looks along its z, x right and y down: a point (x, y, z) of the camera's frame is drawn centerX + focalX x / z
-/// source pixels right of the inset's left edge and centerY + focalY y / z below its top, and nothing nearer than nearUnits.
+/// of the inset's units right of the inset's left edge and centerY + focalY y / z below its top, and nothing nearer than nearUnits.
 /// The scene's frame is SceneSnapshot's: its camera orientation takes a direction of the scene into the camera's frame.
 struct SceneInset
 {
-  float left = 0.0f; ///< in the picture's source pixels, or in design units under a canvas
+  float left = 0.0f; ///< in design units under a canvas, or in the target's pixels
   float top = 0.0f;
   float width = 0.0f;
   float height = 0.0f;
-  float focalX = 0.0f; ///< source pixels per unit of x / z
+  float focalX = 0.0f; ///< the inset's units per unit of x / z
   float focalY = 0.0f;
-  float centerX = 0.0f; ///< where the camera's axis meets the inset, in source pixels from its top left corner
+  float centerX = 0.0f; ///< where the camera's axis meets the inset, in its units from its top left corner
   float centerY = 0.0f;
   float nearUnits = 1.0f;
   Vector3 towardsLight{.x = 0.0f, .y = 0.0f, .z = -1.0f}; ///< a unit vector towards the light, in the scene's frame
-  std::array<std::uint32_t, 4> palette{};                 ///< 0x00RRGGBB, as the picture's pixels
+  std::array<std::uint32_t, 4> palette{};                 ///< 0x00RRGGBB
   std::uint32_t layerWidth = 0;                           ///< the layers' size in their own pixels
   std::uint32_t layerHeight = 0;
   float layersLeft = 0.0f; ///< where the layers lie in the inset, in its units from its top left; a width of 0 for all of it (D69)
@@ -135,20 +130,18 @@ struct SceneInset
   float bloom = 0.0f; ///< how much of the scene's light past 1 is spread round it, 0 for none
 };
 
-/// A scene to draw over the picture: what is in it and where it goes.
+/// A scene to draw: what is in it and where it goes.
 struct SceneFrame
 {
   const SceneSnapshot* scene = nullptr;
   SceneInset inset;
 };
 
-/// Draws the game with Direct3D 12 (ADR-031, after D47): the picture, a fixed grid of source pixels with a display shape of its
-/// own, at the place PlacePicture gives it, on a border of one colour. Inside the picture each source pixel covers the same
-/// rectangle of screen pixels, sharp at its edges (ADR-009's sharp bilinear filter). Over it, when a frame has one, a scene in an
-/// inset of the picture (ADR-033, ADR-035), drawn in a linear FP16 target with 4x MSAA and a D32_FLOAT depth buffer in reversed Z
+/// Draws the game with Direct3D 12 (ADR-031, after D47): a target of one background colour; over it, when a frame has one, a
+/// scene in an inset of the target (ADR-033, ADR-035), drawn in a linear FP16 target with 4x MSAA and a D32_FLOAT depth buffer in reversed Z
 /// at the inset's size on screen: its spheres, traced through each pixel, and the light round them; its dust; its models, flat
 /// and lit; and its beams. It is resolved, its light past 1 bloomed at a quarter of its size, and laid between the inset's two
-/// layers, with the sky behind the under one.
+/// layers, with the sky behind the under one; and over both, when a frame has one, a canvas (ADR-034).
 ///
 /// It draws into a window's swap chain (AttachWindow, Present), or, with no window, into a target of its own that it reads
 /// back (Capture), on any device, WARP included, which is how the tests see what it draws. Two frames are in flight: the CPU
@@ -157,14 +150,10 @@ struct SceneFrame
 class Renderer
 {
 public:
-  /// The device to draw on, and the picture's grid and logical size.
+  /// The device to draw on.
   struct Desc
   {
-    bool warp = false;             ///< WARP, Direct3D 12's software device, rather than the hardware's
-    std::uint32_t sourceWidth = 0; ///< the picture's grid, in source pixels
-    std::uint32_t sourceHeight = 0;
-    std::uint32_t logicalWidth = 0; ///< the picture's size on screen at scale 1
-    std::uint32_t logicalHeight = 0;
+    bool warp = false; ///< WARP, Direct3D 12's software device, rather than the hardware's
   };
 
   Renderer() = default; // not noexcept: a debug std::map allocates as it is made
@@ -172,7 +161,7 @@ public:
   Renderer& operator=(const Renderer&) = delete;
   ~Renderer();
 
-  /// Sets up the device, the queue, the frames and the picture. Returns false if Direct3D 12 is not available.
+  /// Sets up the device, the queue, the frames and the pipelines. Returns false if Direct3D 12 is not available.
   [[nodiscard]] bool Create(const Desc& _desc);
 
   /// A swap chain on _window's client area, which Present draws into. Returns false if Windows refuses it.
@@ -185,19 +174,16 @@ public:
   /// the GPU is done with it. An object of a scene whose model was never added is not drawn. Returns false if the device fails.
   [[nodiscard]] bool AddModel(std::uint32_t _model, const SceneModelDesc& _desc);
 
-  /// Draws one frame into the window and shows it. _pixels holds the grid row by row, each pixel 0x00RRGGBB; _border is the
-  /// colour around the picture, in the same form; _scene, when there is one, is drawn over it. With _canvas (ADR-034) the
-  /// picture is not drawn: the target is _border, the scene's inset is in design units, and the canvas is drawn over both, so
-  /// _pixels may be empty. It waits for the swap chain before it records, so it paces its caller at the display's refresh, or at
+  /// Draws one frame into the window and shows it: the target cleared to _background, 0x00RRGGBB; _scene, when there is one,
+  /// over it; and _canvas (ADR-034), when there is one, over both, the scene's inset then in design units, else in the target's
+  /// pixels. It waits for the swap chain before it records, so it paces its caller at the display's refresh, or at
   /// a frame's time when the window is minimised or hidden. Returns false if the device was lost.
-  [[nodiscard]] bool Present(std::span<const std::uint32_t> _pixels, std::uint32_t _border, const SceneFrame* _scene = nullptr,
-                             const Canvas* _canvas = nullptr);
+  [[nodiscard]] bool Present(std::uint32_t _background, const SceneFrame* _scene = nullptr, const Canvas* _canvas = nullptr);
 
   /// Draws one frame as Present would into a window whose client area is _width x _height, and returns it, row by row, each
   /// pixel 0x00RRGGBB; empty if the device fails. It needs no window, and waits for the GPU before it returns.
-  [[nodiscard]] std::vector<std::uint32_t> Capture(std::span<const std::uint32_t> _pixels, std::uint32_t _border, std::uint32_t _width,
-                                                   std::uint32_t _height, const SceneFrame* _scene = nullptr,
-                                                   const Canvas* _canvas = nullptr);
+  [[nodiscard]] std::vector<std::uint32_t> Capture(std::uint32_t _background, std::uint32_t _width, std::uint32_t _height,
+                                                   const SceneFrame* _scene = nullptr, const Canvas* _canvas = nullptr);
 
   /// The width of _text as a canvas draws it, in design units (GlyphAtlas::Measure).
   [[nodiscard]] float MeasureText(const CanvasText& _text);
@@ -215,7 +201,6 @@ private:
   struct Frame
   {
     Microsoft::WRL::ComPtr<ID3D12CommandAllocator> allocator;
-    Microsoft::WRL::ComPtr<ID3D12Resource> upload;
     Microsoft::WRL::ComPtr<ID3D12Resource> layerUpload; // the scene's layers, once a scene is drawn
     Microsoft::WRL::ComPtr<ID3D12Resource> shapeUpload; // the canvas's shapes, as many as it has held at most
     std::size_t shapeCapacity = 0;
@@ -234,32 +219,27 @@ private:
   };
 
   [[nodiscard]] bool CreateDevice(bool _warp);
-  [[nodiscard]] bool CreatePipeline();
+  [[nodiscard]] bool CreateResourceHeap();
   [[nodiscard]] bool CreateScenePipelines();
   [[nodiscard]] bool CreateSpherePipelines(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& _modelDesc);
   [[nodiscard]] bool CreateBloomPipeline(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& _compositeDesc);
   [[nodiscard]] bool CreateCanvasPipeline();
-  [[nodiscard]] bool CreatePicture();
   [[nodiscard]] bool CreateWindowTargets();
   // The scene's targets at _width x _height, made again only when the size changes, after the GPU is done with the old.
   [[nodiscard]] bool SizeSceneTargets(std::uint32_t _width, std::uint32_t _height);
-  // The frame's allocator reset and its commands begun: the picture's pixels copied when _picture, and _scene's layers.
-  [[nodiscard]] bool BeginFrame(Frame& _frame, std::span<const std::uint32_t> _pixels, const SceneFrame* _scene, bool _picture);
-  [[nodiscard]] bool CopyPicture(Frame& _frame);
+  // The frame's allocator reset and its commands begun, and _scene's layers uploaded.
+  [[nodiscard]] bool BeginFrame(Frame& _frame, const SceneFrame* _scene);
   [[nodiscard]] bool UploadLayers(Frame& _frame, const SceneFrame& _scene);
   // What Present and Capture draw into _target, a target of _width x _height in _targetState, which it is left in:
-  // _targetView its view and _srgbView its sRGB view. The picture and the scene, or the border, the scene and the canvas.
+  // _targetView its view and _srgbView its sRGB view. The background, the scene and the canvas.
   [[nodiscard]] bool DrawFrame(Frame& _frame, D3D12_CPU_DESCRIPTOR_HANDLE _targetView, D3D12_CPU_DESCRIPTOR_HANDLE _srgbView,
-                               std::uint32_t _width, std::uint32_t _height, std::uint32_t _border, const SceneFrame* _scene,
-                               const Canvas* _canvas, std::span<const std::uint32_t> _pixels, ID3D12Resource* _target,
-                               D3D12_RESOURCE_STATES _targetState);
+                               std::uint32_t _width, std::uint32_t _height, std::uint32_t _background, const SceneFrame* _scene,
+                               const Canvas* _canvas, ID3D12Resource* _target, D3D12_RESOURCE_STATES _targetState);
   // _canvas into _srgbView, over what is there, its text laid out and its shapes uploaded through _frame.
   [[nodiscard]] bool DrawCanvas(Frame& _frame, D3D12_CPU_DESCRIPTOR_HANDLE _srgbView, std::uint32_t _width, std::uint32_t _height,
                                 const Canvas& _canvas);
-  // The border and the picture into _targetView, a target of _width x _height in the render-target state.
-  void DrawPicture(D3D12_CPU_DESCRIPTOR_HANDLE _targetView, std::uint32_t _width, std::uint32_t _height, std::uint32_t _border);
-  // The inset's place on a target of _width x _height, in whole screen pixels: in the picture's source pixels, or in design
-  // units when _design.
+  // The inset's place on a target of _width x _height, in whole screen pixels: in design units when _design, else in the
+  // target's pixels.
   [[nodiscard]] ScreenRect InsetPlace(const SceneInset& _inset, std::uint32_t _width, std::uint32_t _height, bool _design) const noexcept;
   // _scene into the scene's targets, resolved and bloomed, and then laid with its layers into _targetView's inset, _place.
   [[nodiscard]] bool DrawScene(D3D12_CPU_DESCRIPTOR_HANDLE _targetView, const ScreenRect& _place, const SceneFrame& _scene);
@@ -286,16 +266,7 @@ private:
   std::array<Frame, FRAME_COUNT> m_frames;
   std::uint32_t m_nextFrame = 0;
 
-  Microsoft::WRL::ComPtr<ID3D12RootSignature> m_rootSignature;
-  Microsoft::WRL::ComPtr<ID3D12PipelineState> m_pipeline;
-  Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> m_shaderResourceHeap;
-  Microsoft::WRL::ComPtr<ID3D12Resource> m_picture;
-  D3D12_PLACED_SUBRESOURCE_FOOTPRINT m_footprint{};
-  std::uint64_t m_uploadBytes = 0;
-  std::uint32_t m_sourceWidth = 0;
-  std::uint32_t m_sourceHeight = 0;
-  std::uint32_t m_logicalWidth = 0;
-  std::uint32_t m_logicalHeight = 0;
+  Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> m_shaderResourceHeap; // the scene's, its layers', the bloom's, the atlas's, the shapes'
 
   // The scene (ADR-033).
   Microsoft::WRL::ComPtr<ID3D12RootSignature> m_sceneSignature;

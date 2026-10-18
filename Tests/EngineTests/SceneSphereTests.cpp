@@ -16,16 +16,16 @@ namespace EngineTests
 namespace
 {
 
-// A picture of 128 x 128 source pixels at scale 2 on a target of 256 x 256, the inset the whole of it, with layers of 128 x 128
-// pixels of its own: a layer pixel is 2 x 2 on screen. The camera's axis meets the inset's middle, screen (128, 128), and a point
-// at x / z = 1 is at its right edge.
+// A target of 256 x 256 with no canvas, the inset the whole of it in its pixels (ADR-070), with layers of 128 x 128 pixels of its
+// own: a layer pixel is 2 x 2 on screen. The camera's axis meets the inset's middle, screen (128, 128), and a point at x / z = 1 is
+// at its right edge.
 constexpr std::uint32_t SIDE = 128;
 constexpr std::uint32_t TARGET_SIDE = 256;
 constexpr std::uint32_t MIDDLE = TARGET_SIDE / 2;
-constexpr float FOCAL = 64.0f;
+constexpr float FOCAL = 128.0f;
 constexpr std::array<std::uint32_t, 4> PALETTE = {0x000000, 0x00AAAA, 0xAA00AA, 0xFFFFFF};
 
-// A planet of radius 2, 10 units ahead: it spans 64 x 2 / sqrt(96) = 13.06 source pixels, 26.1 screen pixels, about the middle.
+// A planet of radius 2, 10 units ahead: it spans 128 x 2 / sqrt(96) = 26.1 screen pixels about the middle.
 constexpr float PLANET_RADIUS = 2.0f;
 constexpr float PLANET_DEPTH = 10.0f;
 constexpr std::uint32_t PLANET_COLOR = 0x3060C0;
@@ -75,13 +75,10 @@ struct Rig
   Engine::Renderer renderer;
   std::vector<std::uint8_t> under = std::vector<std::uint8_t>(std::size_t{SIDE} * SIDE, Engine::SCENE_LAYER_CLEAR);
   std::vector<std::uint8_t> over = std::vector<std::uint8_t>(std::size_t{SIDE} * SIDE, Engine::SCENE_LAYER_CLEAR);
-  std::vector<std::uint32_t> picture = std::vector<std::uint32_t>(std::size_t{SIDE} * SIDE, 0x808080);
 
   Rig()
   {
-    Assert::IsTrue(renderer.Create(Engine::Renderer::Desc{
-                     .warp = true, .sourceWidth = SIDE, .sourceHeight = SIDE, .logicalWidth = SIDE, .logicalHeight = SIDE}),
-                   L"Direct3D 12 on WARP");
+    Assert::IsTrue(renderer.Create(Engine::Renderer::Desc{.warp = true}), L"Direct3D 12 on WARP");
     const Engine::SceneVertex a = Vertex(-HALF_SIDE, -HALF_SIDE);
     const Engine::SceneVertex b = Vertex(HALF_SIDE, -HALF_SIDE);
     const Engine::SceneVertex c = Vertex(HALF_SIDE, HALF_SIDE);
@@ -95,12 +92,12 @@ struct Rig
     return Engine::SceneFrame{.scene = &_scene,
                               .inset = Engine::SceneInset{.left = 0.0f,
                                                           .top = 0.0f,
-                                                          .width = static_cast<float>(SIDE),
-                                                          .height = static_cast<float>(SIDE),
+                                                          .width = static_cast<float>(TARGET_SIDE),
+                                                          .height = static_cast<float>(TARGET_SIDE),
                                                           .focalX = FOCAL,
                                                           .focalY = FOCAL,
-                                                          .centerX = static_cast<float>(SIDE) / 2.0f,
-                                                          .centerY = static_cast<float>(SIDE) / 2.0f,
+                                                          .centerX = static_cast<float>(MIDDLE),
+                                                          .centerY = static_cast<float>(MIDDLE),
                                                           .nearUnits = 1.0f,
                                                           .towardsLight = {.x = 0.0f, .y = 0.0f, .z = -1.0f},
                                                           .palette = PALETTE,
@@ -120,7 +117,7 @@ struct Rig
 
   [[nodiscard]] std::vector<std::uint32_t> Capture(const Engine::SceneFrame& _frame)
   {
-    std::vector<std::uint32_t> pixels = renderer.Capture(picture, 0, TARGET_SIDE, TARGET_SIDE, &_frame);
+    std::vector<std::uint32_t> pixels = renderer.Capture(0, TARGET_SIDE, TARGET_SIDE, &_frame);
     Assert::AreEqual(std::size_t{TARGET_SIDE} * TARGET_SIDE, pixels.size(), L"a pixel for each of the target's");
     return pixels;
   }
@@ -255,8 +252,8 @@ public:
   // at its corners, the under layer filling it and nothing beside it, and a stroke on their grid.
   TEST_METHOD(TheLayersLieWhereTheInsetPutsThem)
   {
-    constexpr float LAYERS_FROM = 32.0f; // in the inset's units, two screen pixels each
-    constexpr float LAYERS_SIDE = 64.0f;
+    constexpr float LAYERS_FROM = 64.0f; // in the inset's units, a screen pixel each
+    constexpr float LAYERS_SIDE = 128.0f;
     constexpr std::uint32_t FIRST = 64; // the screen pixels the layers cover, one a layer pixel
     constexpr std::uint32_t LAST = FIRST + SIDE - 1;
     Rig rig;

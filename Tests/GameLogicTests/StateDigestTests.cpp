@@ -21,8 +21,8 @@ namespace
 // The .cdr file's size: the commander's bytes (D78).
 constexpr std::size_t COMMANDER_FILE_BYTES = 208;
 // The state's bytes as its members write them: what the original data segment's members took, less the joystick's ten (D81), the Amstrad's flag (D12), the
-// screenshots' 24 (D86) and the text page's 17, its attribute and the working texts the status and price screens printed (ADR-069).
-constexpr std::size_t STATE_BYTES = 14'322;
+// screenshots' 24 (D86), the text page's 17 (ADR-069) and the 934 of the original's working fields that nothing reads (ADR-070).
+constexpr std::size_t STATE_BYTES = 13'388;
 
 // A byte unlike its neighbours for every place in a struct of _bytes bytes: what fills one before it is written by its members.
 [[nodiscard]] std::vector<std::uint8_t> Pattern(std::size_t _bytes)
@@ -40,7 +40,7 @@ constexpr std::size_t STATE_BYTES = 14'322;
 TEST_CLASS(StateDigestTests)
 {
 public:
-  // The state written by its members (StateWriter, D76) is 14,322 bytes, every member once, in its order, at its width,
+  // The state written by its members (StateWriter, D76) is 13,388 bytes, every member once, in its order, at its width,
   // whatever the structs' layout. Read back from bytes and written again, the state gives the same bytes.
   TEST_METHOD(TheStateWrittenByItsMembersIsItsBytes)
   {
@@ -86,10 +86,10 @@ public:
   {
     GameRig rig("GameState");
     Elite::GameState& state = rig.State();
-    // The state as the original's image loaded it, less the joystick's members (D81), the Amstrad's flag (D12), the screenshots' (D86) and the text page's (ADR-069).
+    // The state as the original's image loaded it, less the joystick's members (D81), the Amstrad's flag (D12), the screenshots' (D86), the text page's (ADR-069) and the working fields nothing reads (ADR-070).
     Elite::Sha256 start;
     start.Update(Elite::StateBytes(std::as_const(state).Data()));
-    Assert::AreEqual("cb198987133eb299765a5787b43d338a500fe36d923c0cb49dda403e581196f7", Elite::Sha256::ToHex(start.Finish()).c_str(),
+    Assert::AreEqual("432503b7e0d2eed97b97eef03603e02730a6b06417c9e84a4abf384d4749340c", Elite::Sha256::ToHex(start.Finish()).c_str(),
                      L"the start state, as the image loaded it");
 
     const std::uint8_t fuel = state.Data().commander.fuel;

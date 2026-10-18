@@ -15,15 +15,12 @@ struct EquipmentState
   std::uint8_t scoopedCargoText[14];
   /// TryScoopObject
   std::uint8_t freeCargoTonnes;
-  /// 0 fore, 1 aft, 2 right, 3 left
-  std::uint8_t selectedLaserMount;
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
   {
     _visitor("scoopedCargoText", _self.scoopedCargoText);
     _visitor("freeCargoTonnes", _self.freeCargoTonnes);
-    _visitor("selectedLaserMount", _self.selectedLaserMount);
   }
 
   template <typename Visitor> void Visit(Visitor& _visitor)

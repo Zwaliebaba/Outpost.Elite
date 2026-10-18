@@ -1,6 +1,6 @@
 # ADR-069 — The CGA removed: the tunnels drawn by the renderer, D01 and D08 in flight, the pictures retired
 
-**Status:** accepted 2026-10-18, with the change that implements it. It follows the owner's rulings:
+**Status:** accepted 2026-10-18, with the change that implements it. Amended 2026-10-18 by [ADR-070](ADR-070-unused-parts-removed.md), which removes the renderer's picture path it left. It follows the owner's rulings:
 - D124, the charts sharing the selected system;
 - D125, F8, F9 and F10 in flight;
 - D126, the tunnels and the hyperspace rings in a design of this ADR's;
@@ -68,6 +68,6 @@ The suite passes, 167 tests under g++, on two runs in check mode. `DisplayTests`
 
 ## What this forecloses
 
-- The renderer keeps its picture path (`Present` with pixels, `PlacePicture`, `PresentPS.hlsl`). Nothing in the game or the shell draws into it now, and the shell creates it 1 by 1. Removing it reshapes the renderer's root signature, its descriptor heap and four test suites, which cannot be built here; it is left to its own change.
+- The renderer kept its picture path (`Present` with pixels, `PlacePicture`, `PresentPS.hlsl`), which nothing drew into. ADR-070 removes it.
 - The state no longer holds what the player saw. A change that moves only the picture is caught by the shell's golden images, not by the digests.
 - The tunnels' look is this ADR's, for the owner to replace.

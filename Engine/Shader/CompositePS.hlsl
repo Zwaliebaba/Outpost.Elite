@@ -2,7 +2,7 @@
 // The scene's inset (ADR-033, ADR-035): the over layer's pixel where it holds one; else the resolved scene over the under layer by
 // the scene's coverage, in linear light, the under layer's pixel where it holds one or else the sky, with the scene's bloom added
 // over all of it. The layers lie in a rectangle of the inset (D69), all of it by default, each layer pixel its share of it,
-// nearest; beside them only the scene and the sky. The scene is the inset's size on screen, a pixel each. PresentVS covers the
+// nearest; beside them only the scene and the sky. The scene is the inset's size on screen, a pixel each. FullScreenVS covers the
 // inset.
 //
 // The sky is fixed in the scene's frame: a star in a cell of a cube round the camera where the seed's hash says, a dot a pixel or

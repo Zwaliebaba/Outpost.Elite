@@ -38,7 +38,6 @@ constexpr std::uint8_t ESCAPE_POD_FRAMES = 0x50;
 constexpr std::uint16_t HALF_TURN = 0x400;
 constexpr std::uint16_t ESCAPE_POD_SPEED = 0x14;
 constexpr std::uint16_t ESCAPE_POD_MOVES = 12;
-constexpr std::uint16_t CARGO_KINDS = 0x11;
 
 // TryScoopObject: the scoop's box in view coordinates, and what is scooped.
 constexpr std::uint16_t SCOOP_LOWEST = 0x1E;

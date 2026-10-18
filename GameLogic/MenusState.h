@@ -13,10 +13,6 @@ struct MenusState
 {
   /// the price ComputeResalePrice reads
   std::uint16_t resalePriceInput;
-  /// rows in the current cursor menu (17 for cargo, the listed equipment)
-  std::uint8_t menuRowCount;
-  /// text-memory address of the first row's first attribute byte
-  std::uint16_t menuFirstRowAttr;
   /// A row's two prices on a trade screen or the shipyard's, in tenths of credits.
   struct ScreenPrice
   {
@@ -44,17 +40,12 @@ struct MenusState
   };
   /// cargo rows from 0; equipment rows from index 1
   ScreenPrice screenPrices[17];
-  /// number text for the trade screens and the typed quantity
-  std::uint8_t quantityText[6];
 
   /// Each member, by its name, in its order (D76): what the state's digest and the commander file are written from.
   template <typename Self, typename Visitor> static void VisitMembers(Self& _self, Visitor& _visitor)
   {
     _visitor("resalePriceInput", _self.resalePriceInput);
-    _visitor("menuRowCount", _self.menuRowCount);
-    _visitor("menuFirstRowAttr", _self.menuFirstRowAttr);
     _visitor("screenPrices", _self.screenPrices);
-    _visitor("quantityText", _self.quantityText);
   }
 
   template <typename Visitor> void Visit(Visitor& _visitor)

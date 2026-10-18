@@ -1,7 +1,7 @@
 // Engine/Shader/BloomPS.hlsl
 // The scene's bloom (ADR-035, D47), at a quarter of its size: first the light past 1 of each 4 x 4 block of the resolved scene,
 // four bilinear taps of it; then a Gaussian of nine texels in five bilinear taps, across and then down, g_direction's texels a step.
-// PresentVS covers the target.
+// FullScreenVS covers the target.
 
 Texture2D<float4> g_source : register(t0);
 SamplerState g_linear : register(s0);

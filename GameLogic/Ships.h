@@ -15,9 +15,6 @@ namespace Elite
 // The reference's ships routines, ported (plan §5 Phase 3, ADR-010) and de-assembled (ADR-012): the ship slots, blueprints and their vertex
 // programs. Each takes values and gives values back, on the GameState and, where it drives a device, the devices (ADR-014).
 
-// The size of shipSlots' object record, SpaceObject.
-inline constexpr std::uint16_t SLOT_BYTES = 0x40;
-
 // A slot's type byte: the active bit, and the types the ported routines name (bits 1-5).
 inline constexpr std::uint8_t SLOT_ACTIVE = 0x01;
 inline constexpr std::uint8_t TYPE_MASK = 0x1F;
