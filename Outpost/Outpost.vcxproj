@@ -85,6 +85,7 @@
   <ItemGroup>
     <ClInclude Include="Application.h" />
     <ClInclude Include="Cockpit.h" />
+    <ClInclude Include="DockedBriefing.h" />
     <ClInclude Include="DockedChart.h" />
     <ClInclude Include="DockedDisc.h" />
     <ClInclude Include="DockedEquip.h" />
@@ -98,6 +99,7 @@
   <ItemGroup>
     <ClCompile Include="Application.cpp" />
     <ClCompile Include="Cockpit.cpp" />
+    <ClCompile Include="DockedBriefing.cpp" />
     <ClCompile Include="DockedChart.cpp" />
     <ClCompile Include="DockedDisc.cpp" />
     <ClCompile Include="DockedEquip.cpp" />

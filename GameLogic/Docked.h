@@ -1,6 +1,7 @@
 // GameLogic/Docked.h
 #pragma once
 
+#include "BriefingView.h"
 #include "DockedKeys.h"
 #include "GameState.h"
 #include "Host.h"
@@ -10,6 +11,10 @@
 
 #include <cstdint>
 #include <optional>
+#include <span>
+#include <string>
+#include <string_view>
+#include <vector>
 
 namespace Elite
 {
@@ -56,12 +61,17 @@ void AwardArchangelTitle(GameState& _state);
 /// ShowCommanderStatusScreen's.
 [[nodiscard]] Task<ScreenKey> ShowInventoryScreen(GameState& _state, Host& _host, ScreenPlace _place);
 
+/// The paragraphs of a transmission's _lines as the original prints them, a row each (ADR-068): the lines between blank ones
+/// joined by a space, or by nothing after a line that ends in a hyphen, and "Press any key to continue!" left out, as D09's
+/// button stands for it.
+[[nodiscard]] std::vector<std::string> BriefingParagraphs(std::span<const std::string_view> _lines);
+
 /// ShowMissionBriefing: missionStage=1, and the EMERGENCY screen of missionNumber, which waits for a key (Y or N
-/// for the supernova's refugees, who take the hold).
+/// for the supernova's refugees, who take the hold). Docked, D09 shows it over D08 while it waits (ADR-068).
 [[nodiscard]] Task<void> ShowMissionBriefing(GameState& _state, Host& _host);
 
 /// ShowMissionDebriefing: nothing while the mission is not done; otherwise the TASK COMPLETE screen, which waits
-/// for a key, and the reward.
+/// for a key, and the reward. D09 shows it over D08 while it waits (ADR-068).
 [[nodiscard]] Task<void> ShowMissionDebriefing(GameState& _state, Host& _host);
 
 /// FormatFuelLightYears: fuel as "n.n" light years into the fuel text.

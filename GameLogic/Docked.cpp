@@ -359,6 +359,64 @@ private:
   bool m_shown;
 };
 
+// D09 published to the host while a briefing or a debriefing waits for its key, and taken down after.
+class BriefingShown
+{
+public:
+  explicit BriefingShown(Host& _host) noexcept
+    : m_host(_host)
+  {
+  }
+
+  BriefingShown(const BriefingShown&) = delete;
+  BriefingShown& operator=(const BriefingShown&) = delete;
+
+  ~BriefingShown()
+  {
+    m_host.HideBriefing();
+  }
+
+private:
+  Host& m_host;
+};
+
+// D09 as _state stands: mission missionNumber's _kind, with _paragraphs, waiting for _answer, and _reward of _rewardTenths.
+[[nodiscard]] BriefingView BriefingOf(const GameState& _state, BriefingKind _kind, std::vector<std::string> _paragraphs,
+                                      BriefingAnswer _answer, BriefingReward _reward = BriefingReward::None,
+                                      std::uint32_t _rewardTenths = 0)
+{
+  BriefingView view;
+  view.status = StatusViewOf(_state);
+  view.mission = _state.Data().commander.missionNumber;
+  view.kind = _kind;
+  view.paragraphs = std::move(_paragraphs);
+  view.answer = _answer;
+  view.reward = _reward;
+  view.rewardTenths = _rewardTenths;
+  return view;
+}
+
+// _lines texts of _texts, each after the NUL of the one before, as PrintTextLines reads them.
+[[nodiscard]] std::vector<std::string_view> LinesOf(std::string_view _texts, std::uint16_t _lines)
+{
+  std::vector<std::string_view> lines;
+  std::string_view rest = _texts;
+  for (std::uint16_t line = 0; line < _lines; ++line)
+  {
+    const std::size_t nul = rest.find('\0');
+    lines.push_back(rest.substr(0, nul));
+    rest = nul == std::string_view::npos ? std::string_view{} : rest.substr(nul + 1);
+  }
+  return lines;
+}
+
+// _first's paragraphs, then _second's.
+[[nodiscard]] std::vector<std::string> Joined(std::vector<std::string> _first, const std::vector<std::string>& _second)
+{
+  _first.insert(_first.end(), _second.begin(), _second.end());
+  return _first;
+}
+
 class DockedScreenShown
 {
 public:
@@ -728,14 +786,49 @@ StatusView StatusViewOf(const GameState& _state)
   co_return co_await WaitForScreenExitKey(_state, _host, SCAN_F10, _place);
 }
 
+std::vector<std::string> BriefingParagraphs(std::span<const std::string_view> _lines)
+{
+  constexpr std::string_view PRESS_ANY_KEY = "Press any key to continue!";
+  std::vector<std::string> paragraphs;
+  std::string paragraph;
+  const auto finish = [&]()
+  {
+    if (!paragraph.empty())
+    {
+      paragraphs.push_back(std::move(paragraph));
+      paragraph.clear();
+    }
+  };
+  for (const std::string_view line : _lines)
+  {
+    const std::size_t first = line.find_first_not_of(' ');
+    if (first == std::string_view::npos || line == PRESS_ANY_KEY)
+    {
+      finish();
+      continue;
+    }
+    const std::string_view text = line.substr(first, line.find_last_not_of(' ') - first + 1);
+    if (!paragraph.empty() && paragraph.back() != '-')
+    {
+      paragraph.push_back(' ');
+    }
+    paragraph.append(text);
+  }
+  finish();
+  return paragraphs;
+}
+
 [[nodiscard]] Task<void> ShowMissionBriefing(GameState& _state, Host& _host)
 {
   _state.Data().commander.missionStage = STAGE_BRIEFED;
   PrintTextModeString(_state, DrawDockedFrame(_state, _host, EMERGENCY_FRAME), TITLE_CELL);
+  const BriefingShown shown(_host);
   const std::uint8_t mission = _state.Data().commander.missionNumber;
   if (mission == MISSION_SUPERNOVA)
   {
     PrintTextLines(_state, SUPERNOVA_BRIEFING_TEXT, LINE_4);
+    const std::vector<std::string> question = BriefingParagraphs(SUPERNOVA_BRIEFING_TEXT);
+    _host.ShowBriefing(BriefingOf(_state, BriefingKind::Briefing, question, BriefingAnswer::YesOrNo));
     // Y takes the refugees, N refuses; every other key goes back to the GetKey, as an empty one does.
     std::uint8_t answer = 0;
     for (;;)
@@ -768,6 +861,8 @@ StatusView StatusViewOf(const GameState& _state)
       reply = SUPERNOVA_ACCEPTED_LINES;
     }
     PrintTextLines(_state, reply, LINE_10);
+    _host.ShowBriefing(
+      BriefingOf(_state, BriefingKind::Briefing, Joined(question, BriefingParagraphs(reply)), BriefingAnswer::Acknowledge));
     co_await WaitForKeyPress(_state, _host);
     _state.Data().commander.supernovaFrames = SUPERNOVA_DELAY_FRAMES;
     _state.Data().commander.jumpedSinceBriefing = 0;
@@ -776,12 +871,14 @@ StatusView StatusViewOf(const GameState& _state)
   if (mission == MISSION_MASK_SHIP)
   {
     PrintTextLines(_state, MASK_BRIEFING_TEXT, LINE_4);
+    _host.ShowBriefing(BriefingOf(_state, BriefingKind::Briefing, BriefingParagraphs(MASK_BRIEFING_TEXT), BriefingAnswer::Acknowledge));
     co_await WaitForKeyPress(_state, _host);
     _state.Data().commander.maskMissionShipsLeft = MASK_SHIPS;
     _state.Data().commander.maskSystemJumps = MASK_SYSTEM_JUMPS;
     co_return;
   }
   PrintTextLines(_state, INVASION_BRIEFING_TEXT, LINE_4);
+  _host.ShowBriefing(BriefingOf(_state, BriefingKind::Briefing, BriefingParagraphs(INVASION_BRIEFING_TEXT), BriefingAnswer::Acknowledge));
   co_await WaitForKeyPress(_state, _host);
   _state.Data().commander.thargoidInvasionActive = 1;
   _state.Data().commander.jumpedSinceBriefing = 0;
@@ -797,6 +894,7 @@ StatusView StatusViewOf(const GameState& _state)
     co_return;
   }
   PrintTextModeString(_state, DrawDockedFrame(_state, _host, TASK_COMPLETE_FRAME), TITLE_CELL);
+  const BriefingShown shown(_host);
   _state.Data().commander.missionStage = STAGE_DEBRIEFED;
   const std::uint8_t mission = _state.Data().commander.missionNumber;
   if (mission == MISSION_SUPERNOVA)
@@ -805,11 +903,14 @@ StatusView StatusViewOf(const GameState& _state)
     _state.Data().docked.refugeeRewardDigit = fullHold ? REWARD_DIGIT_FULL_HOLD : REWARD_DIGIT_OTHERWISE;
     _state.Data().commander.cargoHold.refugeesTonnes = 0;
     _state.Data().commander.cargoHold.cargoUsedTonnes = 0;
-    AddCredits(_state, fullHold ? REWARD_FULL_HOLD_TENTHS : REWARD_OTHERWISE_TENTHS);
+    const std::uint16_t rewardTenths = fullHold ? REWARD_FULL_HOLD_TENTHS : REWARD_OTHERWISE_TENTHS;
+    AddCredits(_state, rewardTenths);
     // 'Thank you for saving us.' and three lines more, the reward's digit inside the second, which the original writes into it.
     const std::string debriefing =
       JoinTexts({SUPERNOVA_DEBRIEF_OPEN, CharText(_state.Data().docked.refugeeRewardDigit), SUPERNOVA_DEBRIEF_CLOSE});
     PrintTextLines(_state, debriefing, LINE_4, SUPERNOVA_DEBRIEFING_LINES);
+    _host.ShowBriefing(BriefingOf(_state, BriefingKind::Debriefing, BriefingParagraphs(LinesOf(debriefing, SUPERNOVA_DEBRIEFING_LINES)),
+                                  BriefingAnswer::Acknowledge, BriefingReward::Credits, rewardTenths));
     co_await WaitForKeyPress(_state, _host);
     _state.Data().commander.missionNumber = 0;
     _state.Data().commander.missionStage = 0;
@@ -828,6 +929,9 @@ StatusView StatusViewOf(const GameState& _state)
       text = MASK_FLED_LINES;
     }
     PrintTextLines(_state, text, LINE_4);
+    _host.ShowBriefing(
+      BriefingOf(_state, BriefingKind::Debriefing, BriefingParagraphs(text), BriefingAnswer::Acknowledge,
+                 _state.Data().commander.maskingDeviceRecovered == 1 ? BriefingReward::MaskingDevice : BriefingReward::None));
     co_await WaitForKeyPress(_state, _host);
     _state.Data().commander.maskMissionShipsLeft = 0;
     _state.Data().commander.maskShipDestroyed = 0;
@@ -839,6 +943,10 @@ StatusView StatusViewOf(const GameState& _state)
     co_return;
   }
   PrintTextLines(_state, TextsOf(BytesOf(_state.Data().galaxy.invasionDebriefText)), LINE_4, INVASION_DEBRIEFING_LINES);
+  _host.ShowBriefing(
+    BriefingOf(_state, BriefingKind::Debriefing,
+               BriefingParagraphs(LinesOf(TextsOf(BytesOf(_state.Data().galaxy.invasionDebriefText)), INVASION_DEBRIEFING_LINES)),
+               BriefingAnswer::Acknowledge, BriefingReward::AntiEcmAndArchangel));
   co_await WaitForKeyPress(_state, _host);
   AwardArchangelTitle(_state);
   _state.Data().commander.antiEcmEmulatorFitted = 1;

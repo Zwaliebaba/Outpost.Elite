@@ -126,6 +126,9 @@
     <ClInclude Include="Docked.h">
       <Filter>Docked</Filter>
     </ClInclude>
+    <ClInclude Include="BriefingView.h">
+      <Filter>Docked</Filter>
+    </ClInclude>
     <ClInclude Include="StatusView.h">
       <Filter>Docked</Filter>
     </ClInclude>
